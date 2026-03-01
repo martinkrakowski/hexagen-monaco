@@ -52,10 +52,15 @@ modules:
       - UseCase
       - Adapter
       - Driver
+    value_objects:
+      - FileTreeNode
     use_cases:
       - GenerateProject
       - ValidateSpec
       - RenderManifest
+    ports:
+      - ProjectGeneratorPort
+      - DownloadProviderPort
     infrastructure:
       - persistence: drizzle
       - messaging: bull-mq
@@ -70,7 +75,8 @@ modules:
           - ai-provider-port
           - git-provider-port
           - preview-provider-port
-      - ports: # New array for entity-specific repository ports
+          - jszip
+      - ports:
           - adapter-repository
           - bounded-context-repository
           - driver-repository

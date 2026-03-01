@@ -1,16 +1,22 @@
 {
   "name": "@hexagen/shared",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.0.1",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
-    "build": "tsc -b",
-    "build:watch": "tsc -b -w",
-    "lint": "eslint .",
-    "test": "jest"
+    "build": "tsc",
+    "lint": "eslint . --ext .ts,.tsx",
+    "build:watch": "tsc -b -w"
+  },
+  "dependencies": {
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "prettier": "^3.5.3"
   }
 }
