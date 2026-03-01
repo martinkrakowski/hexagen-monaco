@@ -1,0 +1,38 @@
+{
+  "name": "@hexagen/project-configuration",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./domain": {
+      "types": "./src/domain/index.ts",
+      "default": "./dist/domain/index.js"
+    },
+    "./application": {
+      "types": "./src/application/index.ts",
+      "default": "./dist/application/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b -w",
+    "lint": "eslint .",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@hexagen/shared": "workspace:*",
+    "@opentelemetry/api": "^1.8.0",
+    "bullmq": "^5.8.2",
+    "drizzle-orm": "^0.30.10",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.20.17",
+    "typescript": "^5.4.5"
+  }
+}

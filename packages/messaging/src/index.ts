@@ -1,0 +1,1 @@
+// Handles cross-module communication.

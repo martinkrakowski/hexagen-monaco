@@ -1,0 +1,16 @@
+{
+  "name": "@hexagen/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "build:watch": "tsc -b -w",
+    "lint": "eslint .",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

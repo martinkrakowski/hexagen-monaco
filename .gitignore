@@ -1,0 +1,102 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Yarn Berry (with nodeLinker: node-modules)
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+.yarnrc.yml
+
+# Dependencies
+node_modules/
+
+# Turbo cache
+.turbo/
+
+# Next.js
+.next/
+out/
+.next.cache/
+
+# Production / build outputs
+dist/
+build/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs & debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editors & IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary / generated files (HexaGen / Monaco)
+*.zip
+generated-*.zip
+temp-*
+.webcontainer/
+downloads/
+.cache/
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# HexaGen internal (protect the source of truth)
+# .architecture.yaml is committed on purpose
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# build cache
+.turbo
+
+# build output
+dist
+.next
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env
+.env*.local
+
+# Prisma
+.env

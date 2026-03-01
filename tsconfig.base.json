@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "es2021",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@hexagen/shared": [
+        "packages/shared/src/index.ts"
+      ],
+      "@hexagen/shared/*": [
+        "packages/shared/src/*"
+      ],
+      "@hexagen/project-configuration": [
+        "packages/project-configuration/src/index.ts"
+      ],
+      "@hexagen/project-configuration/*": [
+        "packages/project-configuration/src/*"
+      ],
+      "@hexagen/messaging": [
+        "packages/messaging/src/index.ts"
+      ]
+    },
+    "resolveJsonModule": true
+  },
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

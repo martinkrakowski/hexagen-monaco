@@ -1,0 +1,34 @@
+{
+  "name": "hexagen-monaco",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "yarn@4.12.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "dev:api": "yarn workspace @hexagen/api-gateway dev",
+    "dev:web": "yarn workspace web dev",
+    "lint": "turbo lint && yarn lint:arch",
+    "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",
+    "sync": "yarn workspace @hexagen/arch-linter sync",
+    "test": "turbo test",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@typescript-eslint/eslint-plugin": "^7.8.0",
+    "@typescript-eslint/parser": "^7.8.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-config-turbo": "^1.13.3",
+    "eslint-plugin-import": "^2.29.1",
+    "prettier": "^3.2.5",
+    "turbo": "^1.13.3",
+    "typescript": "^5.4.5"
+  }
+}

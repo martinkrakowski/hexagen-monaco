@@ -1,0 +1,20 @@
+{
+  "name": "@hexagen/api-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "fastify start -w -l info -P app.js -p 3001",
+    "build": "echo \"No build step for Fastify\"",
+    "test": "echo \"No tests configured\""
+  },
+  "dependencies": {
+    "@fastify/autoload": "^5.9.0",
+    "@hexagen/messaging": "workspace:*",
+    "@hexagen/project-configuration": "workspace:*",
+    "@hexagen/shared": "workspace:*",
+    "fastify": "^4.27.0"
+  },
+  "devDependencies": {
+    "fastify-cli": "^6.1.1"
+  }
+}
