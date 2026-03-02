@@ -13,14 +13,22 @@
     "@hexagen/shared": "workspace:*",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
+    "lucide-react": "^0.576.0",
     "next": "14.2.3",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/file-saver": "^2",
-    "@types/node": "^20",
+    "@types/node": "^25.3.3",
     "@types/react": "^18",
+    "autoprefixer": "^10.4.27",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "postcss": "^8.5.6",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.1",
     "typescript": "^5.4.5"
   }
 }
