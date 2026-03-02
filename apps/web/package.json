@@ -11,14 +11,17 @@
   "dependencies": {
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
+    "@hookform/resolvers": "^5.2.2",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
     "lucide-react": "^0.576.0",
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",
+    "react-hook-form": "^7.71.2",
     "react-resizable-panels": "2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/file-saver": "^2",

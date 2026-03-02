@@ -7,31 +7,61 @@ import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { cn } from '@/lib/utils';
+import {
+  projectConfigSchema,
+  emptyFormValues,
+  wizardSteps,
+  projectAddons,
+} from '@/components/project-wizard/config';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+type ProjectConfig = z.infer<typeof projectConfigSchema>;
 
 export default function Home() {
-  const [step, setStep] = useState(1);
-  const [projectName, setProjectName] = useState('MyHexaGenProject');
-  const [description, setDescription] = useState('AI-powered monorepo');
-  const [boundedContexts, setBoundedContexts] = useState<string[]>([
-    'User',
-    'Order',
-    'Payment',
-  ]);
-  const [newContext, setNewContext] = useState('');
+  const form = useForm<ProjectConfig>({
+    resolver: zodResolver(projectConfigSchema),
+    defaultValues: emptyFormValues,
+  });
 
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [tree, setTree] = useState<FileTreeNode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAddContext = () => {
-    if (newContext.trim()) {
-      setBoundedContexts([...boundedContexts, newContext.trim()]);
-      setNewContext('');
+  const currentStep = wizardSteps[step];
+  const isLastStep = step === wizardSteps.length - 1;
+  const isFirstStep = step === 0;
+
+  const handleNext = async () => {
+    const isValid = await form.trigger(currentStep.fields as any[]);
+    if (!isValid) return;
+
+    if (isLastStep) {
+      await handleGenerate();
+    } else {
+      setStep(step + 1);
     }
   };
 
-  const handleRemoveContext = (index: number) => {
-    setBoundedContexts(boundedContexts.filter((_, i) => i !== index));
+  const handleBack = () => {
+    if (!isFirstStep) setStep(step - 1);
+  };
+
+  const handleCancel = () => {
+    form.reset(emptyFormValues);
+    setStep(0);
+    setTree(null);
+    setError(null);
+  };
+
+  const handleReset = () => {
+    form.reset(emptyFormValues);
+    setStep(0);
+    setTree(null);
+    setError(null);
   };
 
   const handleGenerate = async () => {
@@ -39,19 +69,13 @@ export default function Home() {
     setError(null);
     setTree(null);
 
-    const spec = {
-      id: 'test-' + Date.now(),
-      name: projectName,
-      description,
-      boundedContexts,
-      version: '1.0.0',
-    };
+    const values = form.getValues();
 
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(spec),
+        body: JSON.stringify(values),
       });
 
       if (!res.ok) {
@@ -61,7 +85,7 @@ export default function Home() {
 
       const data = await res.json();
       setTree(data.tree);
-      setStep(4);
+      setStep(wizardSteps.length);
     } catch (err) {
       setError((err as Error).message || 'Generation failed');
     } finally {
@@ -105,123 +129,145 @@ export default function Home() {
 
   const LeftPane = () => (
     <Card className="h-full border-0 rounded-none overflow-hidden">
-      {error && (
-        <div className="m-4 p-4 bg-destructive text-destructive-foreground rounded-md">
-          <p className="font-medium">Error: {error}</p>
-        </div>
-      )}
       <CardHeader>
         <CardTitle>Wizard</CardTitle>
       </CardHeader>
       <CardContent className="p-6 overflow-y-auto h-[calc(100%-4rem)]">
-        {step === 1 && (
+        {/* Step indicator */}
+        <div className="flex justify-between mb-6">
+          {wizardSteps.map((s, i) => (
+            <div
+              key={s.id}
+              className={cn(
+                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium',
+                step >= i
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+
+        <h2 className="text-lg font-semibold mb-4">{currentStep.title}</h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          {currentStep.description}
+        </p>
+
+        {/* Project Type Step */}
+        {currentStep.id === 'project_type' && (
+          <div className="space-y-6">
+            {projectAddons.map((addon) => (
+              <div key={addon.id} className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  id={addon.id}
+                  checked={form.watch(addon.id)}
+                  onChange={(e) => form.setValue(addon.id, e.target.checked)}
+                  className="mt-1"
+                />
+                <div>
+                  <label htmlFor={addon.id} className="font-medium">
+                    {addon.title}
+                  </label>
+                  <p className="text-sm text-muted-foreground">
+                    {addon.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Workspace Step */}
+        {currentStep.id === 'workspace' && (
           <div className="space-y-6">
             <div>
               <label className="text-sm font-medium block mb-2">
                 Project Name
               </label>
-              <Input
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+              <Input {...form.register('rootName')} />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                Workspace Scope
+              </label>
+              <Input {...form.register('workspaceScope')} />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                Context Name
+              </label>
+              <Input {...form.register('contextName')} />
+            </div>
+          </div>
+        )}
+
+        {/* Core Step */}
+        {currentStep.id === 'core' && (
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-medium block mb-2">Entities</label>
+              <Textarea
+                {...form.register('entities')}
+                rows={3}
+                placeholder="One per line"
               />
             </div>
             <div>
               <label className="text-sm font-medium block mb-2">
-                Description
+                Use Cases
               </label>
               <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={4}
+                {...form.register('useCases')}
+                rows={3}
+                placeholder="One per line"
               />
             </div>
-            <PrimaryButton onClick={() => setStep(2)} className="w-full">
-              Next: Bounded Contexts
-            </PrimaryButton>
           </div>
         )}
 
-        {step === 2 && (
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Bounded Contexts
-              </label>
-              <div className="flex gap-2 mb-4">
-                <Input
-                  value={newContext}
-                  onChange={(e) => setNewContext(e.target.value)}
-                  placeholder="Add context..."
-                />
-                <PrimaryButton onClick={handleAddContext}>Add</PrimaryButton>
-              </div>
-              <div className="space-y-2">
-                {boundedContexts.map((ctx, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between bg-muted p-3 rounded-md"
-                  >
-                    <span>{ctx}</span>
-                    <PrimaryButton
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleRemoveContext(i)}
-                    >
-                      Remove
-                    </PrimaryButton>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <PrimaryButton onClick={() => setStep(1)} variant="outline">
-                Back
-              </PrimaryButton>
-              <PrimaryButton onClick={() => setStep(3)} className="flex-1">
-                Next: Tech Stack
-              </PrimaryButton>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Tech stack selection coming soon (Prisma, BullMQ, Grok, etc.)
-            </p>
-            <div className="flex gap-4">
-              <PrimaryButton onClick={() => setStep(2)} variant="outline">
-                Back
-              </PrimaryButton>
-              <PrimaryButton
-                onClick={handleGenerate}
-                disabled={loading}
-                className="flex-1"
-              >
-                Generate Project
-              </PrimaryButton>
-            </div>
-          </div>
-        )}
-
-        {step === 4 && tree && (
-          <div className="space-y-6">
+        {/* Navigation */}
+        <div className="flex gap-4 mt-8">
+          {!isFirstStep && (
             <PrimaryButton
-              onClick={handleDownload}
-              disabled={loading}
-              className="w-full"
-            >
-              Download ZIP
-            </PrimaryButton>
-            <PrimaryButton
-              onClick={() => setStep(1)}
               variant="outline"
-              className="w-full"
+              onClick={handleBack}
+              className="flex-1"
             >
-              Start New Project
+              Back
             </PrimaryButton>
-          </div>
-        )}
+          )}
+          <PrimaryButton
+            onClick={handleNext}
+            disabled={loading}
+            className="flex-1"
+          >
+            {loading
+              ? 'Generating...'
+              : isLastStep
+                ? 'Generate Project'
+                : 'Next'}
+          </PrimaryButton>
+        </div>
+
+        <div className="flex gap-4 mt-4">
+          <PrimaryButton
+            variant="ghost"
+            onClick={handleCancel}
+            className="flex-1"
+          >
+            Cancel
+          </PrimaryButton>
+          <PrimaryButton
+            variant="ghost"
+            onClick={handleReset}
+            className="flex-1"
+          >
+            Reset
+          </PrimaryButton>
+        </div>
       </CardContent>
     </Card>
   );
