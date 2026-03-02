@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateProjectAction } from '../../../src/lib/wire';
+import { generateProjectAction } from '@/lib/wire';
 import type { ProjectSpec } from '@hexagen/project-configuration';
 
 export async function POST(request: Request) {

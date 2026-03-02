@@ -17,9 +17,11 @@
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",
+    "react-resizable-panels": "2",
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
     "@types/file-saver": "^2",
     "@types/node": "^25.3.3",
     "@types/react": "^18",

@@ -1,6 +1,5 @@
-// apps/web/app/api/download/route.ts
 import { NextResponse } from 'next/server';
-import { downloadProjectAction } from '../../../src/lib/wire';
+import { downloadProjectAction } from '@/lib/wire';
 import type { FileTreeNode } from '@hexagen/project-configuration';
 
 export async function POST(request: Request) {
