@@ -21,7 +21,6 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.1",
     "@types/file-saver": "^2",
     "@types/node": "^25.3.3",
     "@types/react": "^18",
@@ -30,7 +29,7 @@
     "clsx": "^2.1.1",
     "postcss": "^8.5.6",
     "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.2.1",
+    "tailwindcss": "^3.4.0",
     "typescript": "^5.4.5"
   }
 }

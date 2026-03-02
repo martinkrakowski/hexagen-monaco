@@ -2,54 +2,66 @@
 
 import { useState } from 'react';
 import type { FileTreeNode } from '@hexagen/project-configuration';
+import { ResizableLayout } from '@/components/layout/ResizableLayout';
+import { PrimaryButton } from '@/components/ui/PrimaryButton';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 
 export default function Home() {
-  const [specJson, setSpecJson] = useState(`{
-  "id": "test-123",
-  "name": "MyHexaGenProject",
-  "description": "AI-powered monorepo",
-  "boundedContexts": ["User", "Order", "Payment"],
-  "version": "1.0.0"
-}`);
+  const [step, setStep] = useState(1);
+  const [projectName, setProjectName] = useState('MyHexaGenProject');
+  const [description, setDescription] = useState('AI-powered monorepo');
+  const [boundedContexts, setBoundedContexts] = useState<string[]>([
+    'User',
+    'Order',
+    'Payment',
+  ]);
+  const [newContext, setNewContext] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [tree, setTree] = useState<FileTreeNode | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleAddContext = () => {
+    if (newContext.trim()) {
+      setBoundedContexts([...boundedContexts, newContext.trim()]);
+      setNewContext('');
+    }
+  };
+
+  const handleRemoveContext = (index: number) => {
+    setBoundedContexts(boundedContexts.filter((_, i) => i !== index));
+  };
 
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
     setTree(null);
 
-    try {
-      let spec;
-      try {
-        spec = JSON.parse(specJson);
-      } catch {
-        throw new Error('Invalid JSON in spec input');
-      }
+    const spec = {
+      id: 'test-' + Date.now(),
+      name: projectName,
+      description,
+      boundedContexts,
+      version: '1.0.0',
+    };
 
+    try {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(spec),
       });
 
-      const bodyText = await res.text();
-
       if (!res.ok) {
-        let errMsg = `HTTP ${res.status}`;
-        try {
-          const errData = JSON.parse(bodyText);
-          errMsg = errData.error || errMsg;
-        } catch {
-          errMsg += ` - ${bodyText.substring(0, 100)}`;
-        }
-        throw new Error(errMsg);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
       }
 
-      const data = JSON.parse(bodyText);
+      const data = await res.json();
       setTree(data.tree);
+      setStep(4);
     } catch (err) {
       setError((err as Error).message || 'Generation failed');
     } finally {
@@ -69,13 +81,12 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        const errorText = await res.text();
+        const errData = await res.json().catch(() => ({}));
         throw new Error(
-          `Download failed: ${res.status} - ${errorText.substring(0, 100)}`
+          errData.error || `Download failed (HTTP ${res.status})`
         );
       }
 
-      // Body is Blob — consume it once
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -92,98 +103,167 @@ export default function Home() {
     }
   };
 
-  return (
-    <main
-      style={{
-        padding: '2rem',
-        maxWidth: '900px',
-        margin: '0 auto',
-        fontFamily: 'system-ui, sans-serif',
-      }}
-    >
-      <h1>Hexagen Monaco v2 – Wizard</h1>
-      <p>Edit spec → Generate tree → Download zip</p>
-
-      <textarea
-        value={specJson}
-        onChange={(e) => setSpecJson(e.target.value)}
-        rows={12}
-        style={{
-          width: '100%',
-          fontFamily: 'monospace',
-          padding: '1rem',
-          borderRadius: '8px',
-          border: '1px solid #ddd',
-          background: '#f9f9f9',
-          marginTop: '1rem',
-        }}
-      />
-
-      <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: loading ? '#ccc' : '#0070f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {loading ? 'Generating...' : 'Generate Tree'}
-        </button>
-
-        {tree && (
-          <button
-            onClick={handleDownload}
-            disabled={loading}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: loading ? '#ccc' : '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading ? 'Zipping...' : 'Download ZIP'}
-          </button>
-        )}
-      </div>
-
+  const LeftPane = () => (
+    <Card className="h-full border-0 rounded-none overflow-hidden">
       {error && (
-        <div
-          style={{
-            marginTop: '1.5rem',
-            padding: '1rem',
-            background: '#ffebee',
-            borderRadius: '8px',
-            color: '#c62828',
-          }}
-        >
-          <strong>Error:</strong> {error}
+        <div className="m-4 p-4 bg-destructive text-destructive-foreground rounded-md">
+          <p className="font-medium">Error: {error}</p>
         </div>
       )}
+      <CardHeader>
+        <CardTitle>Wizard</CardTitle>
+      </CardHeader>
+      <CardContent className="p-6 overflow-y-auto h-[calc(100%-4rem)]">
+        {step === 1 && (
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                Project Name
+              </label>
+              <Input
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                Description
+              </label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <PrimaryButton onClick={() => setStep(2)} className="w-full">
+              Next: Bounded Contexts
+            </PrimaryButton>
+          </div>
+        )}
 
-      {tree && (
-        <div style={{ marginTop: '2rem' }}>
-          <h2>Generated Tree:</h2>
-          <pre
-            style={{
-              background: '#f5f5f5',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              overflow: 'auto',
-              maxHeight: '500px',
-              fontSize: '0.9rem',
-            }}
-          >
+        {step === 2 && (
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                Bounded Contexts
+              </label>
+              <div className="flex gap-2 mb-4">
+                <Input
+                  value={newContext}
+                  onChange={(e) => setNewContext(e.target.value)}
+                  placeholder="Add context..."
+                />
+                <PrimaryButton onClick={handleAddContext}>Add</PrimaryButton>
+              </div>
+              <div className="space-y-2">
+                {boundedContexts.map((ctx, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between bg-muted p-3 rounded-md"
+                  >
+                    <span>{ctx}</span>
+                    <PrimaryButton
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveContext(i)}
+                    >
+                      Remove
+                    </PrimaryButton>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <PrimaryButton onClick={() => setStep(1)} variant="outline">
+                Back
+              </PrimaryButton>
+              <PrimaryButton onClick={() => setStep(3)} className="flex-1">
+                Next: Tech Stack
+              </PrimaryButton>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground">
+              Tech stack selection coming soon (Prisma, BullMQ, Grok, etc.)
+            </p>
+            <div className="flex gap-4">
+              <PrimaryButton onClick={() => setStep(2)} variant="outline">
+                Back
+              </PrimaryButton>
+              <PrimaryButton
+                onClick={handleGenerate}
+                disabled={loading}
+                className="flex-1"
+              >
+                Generate Project
+              </PrimaryButton>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && tree && (
+          <div className="space-y-6">
+            <PrimaryButton
+              onClick={handleDownload}
+              disabled={loading}
+              className="w-full"
+            >
+              Download ZIP
+            </PrimaryButton>
+            <PrimaryButton
+              onClick={() => setStep(1)}
+              variant="outline"
+              className="w-full"
+            >
+              Start New Project
+            </PrimaryButton>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const MiddlePane = () => (
+    <Card className="h-full border-0 rounded-none overflow-hidden">
+      <CardHeader>
+        <CardTitle>Generated Tree Preview</CardTitle>
+      </CardHeader>
+      <CardContent className="p-6 overflow-y-auto h-[calc(100%-4rem)]">
+        {tree ? (
+          <pre className="bg-muted p-4 rounded-md overflow-auto text-sm font-mono max-h-[calc(100vh-120px)]">
             {JSON.stringify(tree, null, 2)}
           </pre>
-        </div>
-      )}
-    </main>
+        ) : (
+          <p className="text-muted-foreground">
+            Generate a project to see the tree here.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const RightPane = () => (
+    <Card className="h-full border-0 rounded-none overflow-hidden">
+      <CardHeader>
+        <CardTitle>Monaco AI Assistant</CardTitle>
+      </CardHeader>
+      <CardContent className="p-6">
+        <p className="text-muted-foreground">
+          Grok-powered chat for architecture reviews, suggestions, and code
+          generation coming soon.
+        </p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <ResizableLayout
+      left={<LeftPane />}
+      middle={<MiddlePane />}
+      right={<RightPane />}
+    />
   );
 }

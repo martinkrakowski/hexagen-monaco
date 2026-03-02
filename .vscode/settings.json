@@ -60,7 +60,15 @@
   "[markdown]": {
     "editor.tabSize": 2
   },
-
+  "css.customData": [],
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "tailwindCSS.experimental.classRegex": [
+    ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*)\"']"]
+  ],
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
   "editor.rulers": [100]
