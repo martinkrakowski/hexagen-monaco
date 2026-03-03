@@ -9,7 +9,7 @@
     "build:watch": "tsc -b -w"
   },
   "dependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.4.5"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.18.0",

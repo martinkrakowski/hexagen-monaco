@@ -1,15 +1,17 @@
+// apps/web/app/api/generate/route.ts
 import { NextResponse } from 'next/server';
 import { generateProjectAction } from '@/lib/wire';
-import type { ProjectSpec } from '@hexagen/project-configuration';
+import type { ProjectConfig } from '@hexagen/project-configuration';
 
 export async function POST(request: Request) {
   try {
-    const spec: ProjectSpec = await request.json();
+    const spec = (await request.json()) as ProjectConfig;
     const tree = await generateProjectAction(spec);
-    return NextResponse.json({ success: true, tree });
-  } catch (error) {
+
+    return NextResponse.json({ tree });
+  } catch (err) {
     return NextResponse.json(
-      { success: false, error: (error as Error).message || 'Internal error' },
+      { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
     );
   }

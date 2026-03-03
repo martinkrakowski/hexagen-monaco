@@ -13,31 +13,31 @@ interface ResizableLayoutProps {
 
 export function ResizableLayout({ left, middle, right }: ResizableLayoutProps) {
   return (
-    <div className="h-screen w-full overflow-hidden bg-background">
+    <div className="h-screen w-full overflow-hidden p-5 bg-background">
       <PanelGroup direction="horizontal" className="h-full">
         {/* Left Sidebar - Wizard */}
         <Panel defaultSize={25} minSize={15} maxSize={35}>
-          <Card className="h-full overflow-auto border-r rounded-none">
-            {left}
-          </Card>
+          <Card className="h-full overflow-auto border rounded-lg">{left}</Card>
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize" />
+        <PanelResizeHandle className="w-1 bg-blue transition-colors cursor-col-resize p-2" />
 
         {/* Middle Pane - Main Content / Preview */}
         <Panel defaultSize={50} minSize={30}>
-          <Card className="h-full overflow-auto rounded-none border-r">
+          <Card className="h-full overflow-auto border rounded-lg">
             {middle}
           </Card>
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors cursor-col-resize" />
+        <PanelResizeHandle className="w-1 bg-blue transition-colors cursor-col-resize p-2" />
 
         {/* Right Sidebar - AI / Monaco */}
         <Panel defaultSize={25} minSize={15} maxSize={40}>
-          <Card className="h-full overflow-auto rounded-none">{right}</Card>
+          <Card className="h-full overflow-auto border rounded-lg">
+            {right}
+          </Card>
         </Panel>
       </PanelGroup>
     </div>

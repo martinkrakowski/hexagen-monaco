@@ -2,11 +2,10 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Hexagen Monaco v2',
-  description: 'AI-powered hexagonal monorepo generator',
-  icons: {
-    icon: '/favicon.ico',
-  },
+  title: 'HexaGen Monaco — Hexagonal Generator',
+  description:
+    'Production-ready hexagonal monorepo generator with DDD & Agentic UI',
+  icons: { icon: '/favicon.ico' },
 };
 
 export default function RootLayout({
@@ -15,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased">{children}</body>
     </html>
   );

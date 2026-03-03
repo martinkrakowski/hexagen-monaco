@@ -1,3 +1,4 @@
+// apps/web/src/app/components/project-wizard/config.ts
 import { z } from 'zod';
 
 export const persistenceAdapterOptions = [
@@ -25,11 +26,21 @@ export const uiFrameworkOptions = [
   'Angular',
 ] as const;
 
+// Helper to handle textarea string-to-array conversion
+const stringToArray = z.preprocess((val) => {
+  if (typeof val !== 'string') return val;
+  return val
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+}, z.array(z.string()));
+
 export const projectConfigSchema = z.object({
-  withLlm: z.boolean(),
-  withBlockchain: z.boolean(),
-  llmProviders: z.array(z.string()),
-  blockchainNetworks: z.array(z.string()),
+  withLlm: z.boolean().default(false),
+  withBlockchain: z.boolean().default(false),
+  // Preprocess select-multiple values to ensure they stay as arrays
+  llmProviders: z.array(z.string()).default([]),
+  blockchainNetworks: z.array(z.string()).default([]),
   rootName: z
     .string()
     .min(2, { message: 'Project name must be at least 2 characters.' }),
@@ -39,12 +50,12 @@ export const projectConfigSchema = z.object({
   contextName: z
     .string()
     .min(2, { message: 'Context name must be at least 2 characters.' }),
-  entities: z
-    .array(z.string())
-    .min(1, { message: 'Please define at least one entity.' }),
-  useCases: z
-    .array(z.string())
-    .min(1, { message: 'Please define at least one use case.' }),
+  entities: stringToArray.refine((arr) => arr.length > 0, {
+    message: 'Please define at least one entity.',
+  }),
+  useCases: stringToArray.refine((arr) => arr.length > 0, {
+    message: 'Please define at least one use case.',
+  }),
   externalApiPorts: z.array(z.string()).optional().default([]),
   persistenceAdapter: z.enum(persistenceAdapterOptions),
   messagingAdapter: z.enum(messagingAdapterOptions),
@@ -60,7 +71,7 @@ export const emptyFormValues: ProjectConfig = {
   withBlockchain: false,
   llmProviders: [],
   blockchainNetworks: [],
-  rootName: '',
+  rootName: 'HexagenProject',
   workspaceScope: '',
   contextName: '',
   entities: [],
@@ -89,14 +100,12 @@ export const projectAddons = [
 ];
 
 export const llmProviderOptions = [
-  // Cloud APIs
   'OpenAI',
   'Anthropic',
   'Grok',
   'Gemini',
   'MistralAI',
   'Replicate',
-  // Local Servers
   'Ollama',
   'LocalAI',
   'vLLM',
@@ -104,7 +113,6 @@ export const llmProviderOptions = [
   'Jan',
   'AnythingLLM',
   'llamafile',
-  // In-Process Libraries
   'llama.cpp',
   'node-llama-cpp',
   'llama-node',
@@ -112,9 +120,7 @@ export const llmProviderOptions = [
   'WebLLM',
   'Transformers.js',
   'GPT4All',
-  // Proxies / Unifiers
   'LiteLLM',
-  // Hardware Specific
   'TensorRT-LLM',
   'mistral.rs',
 ];
@@ -144,18 +150,18 @@ export const wizardSteps = [
   {
     id: 'llm_config',
     title: 'LLM Provider Configuration',
-    description:
-      'Choose the LLM providers you want to integrate. Ports and adapters will be generated.',
+    description: 'Choose the LLM providers you want to integrate.',
     fields: ['llmProviders'],
-    condition: (form: any) => form.getValues('withLlm'),
+    // --- FIX: Accept ProjectConfig instead of any ---
+    condition: (values: ProjectConfig) => values.withLlm,
   },
   {
     id: 'blockchain_config',
     title: 'Blockchain Network Configuration',
-    description:
-      'Choose the blockchain networks you want to support. Ports and adapters will be generated.',
+    description: 'Choose the blockchain networks you want to support.',
     fields: ['blockchainNetworks'],
-    condition: (form: any) => form.getValues('withBlockchain'),
+    // --- FIX: Accept ProjectConfig instead of any ---
+    condition: (values: ProjectConfig) => values.withBlockchain,
   },
   {
     id: 'workspace',
