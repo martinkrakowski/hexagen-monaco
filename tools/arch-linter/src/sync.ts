@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { kebabCase } from 'lodash';
+import lodash from 'lodash';
+const { kebabCase } = lodash;
+import { fileURLToPath } from 'node:url';
 
 const toPascalCase = (s: string) =>
   s
@@ -29,6 +31,9 @@ const updateBarrelFile = (barrelPath: string, moduleExportPath: string) => {
 
 function syncArchitecture() {
   console.log('🔄 Synchronizing architecture from manifest...');
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
 
   const rootDir = path.resolve(__dirname, '..', '..', '..');
   const manifestPath = path.join(rootDir, '.architecture.yaml');

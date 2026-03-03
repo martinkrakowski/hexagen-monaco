@@ -5,14 +5,16 @@
       "@/*": ["./app/*"],
       "@hexagen/*": ["../../packages/*/src"]
     },
+    "rootDir": "./src",
     "outDir": "./dist",
+    "declaration": true,
+    "emitDeclarationOnly": true,
     "rootDirs": ["."],
     "composite": true,
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "noEmit": true,
     "incremental": true,
-    "moduleResolution": "node",
     "isolatedModules": true,
     "jsx": "preserve",
     "plugins": [
@@ -21,12 +23,7 @@
       }
     ]
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    "../../packages/*/src/**/*.ts"
-  ],
-  "exclude": ["node_modules", ".next"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": []
 }

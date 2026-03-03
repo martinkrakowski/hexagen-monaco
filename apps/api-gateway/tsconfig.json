@@ -1,3 +1,13 @@
 {
-  "extends": "../../tsconfig.base.json"
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": true // Override for this app if no declarations needed
+  },
+  "include": ["app.js", "routes/**/*.js", "**/*.ts"], // Adjust to actual files
+  "exclude": ["node_modules", "dist"],
+  "references": []
 }

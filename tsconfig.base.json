@@ -1,25 +1,35 @@
 {
   "compilerOptions": {
     "target": "es2021",
-    "module": "commonjs",
+    "lib": ["es2021", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "composite": true,
+    "baseUrl": ".",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "declaration": true,
+    "emitDeclarationOnly": true, // Emit only .d.ts (no .js during typecheck/build if not needed)
     "paths": {
-      "@hexagen/project-configuration/*": [
-        "packages/project-configuration/src/*"
-      ],
       "@hexagen/project-configuration": [
         "packages/project-configuration/src/index.ts"
       ],
-      "@hexagen/shared/*": ["packages/shared/src/*"],
+      "@hexagen/project-configuration/*": [
+        "packages/project-configuration/src/*"
+      ],
       "@hexagen/shared": ["packages/shared/src/index.ts"],
-
+      "@hexagen/shared/*": ["packages/shared/src/*"],
       "@hexagen/messaging": ["packages/messaging/src/index.ts"],
+      "@hexagen/messaging/*": ["packages/messaging/src/*"],
+      "@hexagen/*": ["packages/*/src"],
       "@/*": ["apps/web/src/*"]
-    },
-    "resolveJsonModule": true
+    }
   },
-  "exclude": ["node_modules", "dist"]
+  "include": [],
+  "exclude": ["node_modules", "dist", ".next"]
 }
