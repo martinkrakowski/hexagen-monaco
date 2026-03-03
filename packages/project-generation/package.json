@@ -10,8 +10,8 @@
     "build": "tsc --build"
   },
   "dependencies": {
-    "zod": "^3.x.x",
-    "@hexagen/project-configuration": "workspace:*"
+    "@hexagen/project-configuration": "workspace:*",
+    "zod": "^3.x.x"
   },
   "devDependencies": {
     "typescript": "^5.4.5"
