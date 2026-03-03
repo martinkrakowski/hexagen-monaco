@@ -15,6 +15,7 @@
     "dev:web": "yarn workspace web dev",
     "lint": "turbo lint && yarn lint:arch",
     "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",
+    "typecheck": "turbo run typecheck --filter=./packages/* --filter=./apps/*",
     "sync": "yarn workspace @hexagen/arch-linter sync",
     "test": "turbo test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
