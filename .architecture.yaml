@@ -29,7 +29,7 @@ monorepo:
       target: es2021
       lib: [es2021, dom, dom.iterable]
       module: esnext
-      moduleResolution: node
+      moduleResolution: bundler
       strict: true
       esModuleInterop: true
       skipLibCheck: true
@@ -93,6 +93,12 @@ apps:
       - project-configuration
       - messaging
       - shared
+    tsConfig:
+      compilerOptions:
+        rootDir: '.'
+        noEmit: true
+      include: ['app.js', 'routes/**/*.js', '**/*.ts']
+      exclude: ['node_modules', 'dist']
 
   - name: web
     driver: next.js
@@ -101,6 +107,14 @@ apps:
       - shared
       - project-configuration
       - wizard-orchestration
+    tsConfig:
+      compilerOptions:
+        rootDir: '.' # Explicit to include root-level generated files
+        jsx: 'preserve'
+        incremental: true
+        noEmit: true
+      include: ['next-env.d.ts', '**/*.ts', '**/*.tsx', '.next/types/**/*.ts']
+      exclude: ['node_modules', '.next']
 
 modules:
   - name: project-configuration

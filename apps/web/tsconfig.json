@@ -1,29 +1,26 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "paths": {
-      "@/*": ["./app/*"],
-      "@hexagen/*": ["../../packages/*/src"]
-    },
-    "rootDir": "./src",
-    "outDir": "./dist",
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "rootDirs": ["."],
-    "composite": true,
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "noEmit": true,
-    "incremental": true,
-    "isolatedModules": true,
     "jsx": "preserve",
+    "incremental": true,
+    "noEmit": true,
+    "allowJs": true,
     "plugins": [
       {
         "name": "next"
       }
     ]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": []
+  "include": [
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
 }

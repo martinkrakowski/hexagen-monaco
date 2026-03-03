@@ -80,7 +80,7 @@ export default function Home() {
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === wizardSteps.length - 1;
 
-  const defaultProjectValues: ProjectConfig = {
+  const defaultProjectValues: Partial<ProjectConfig> = {
     ...emptyFormValues,
     workspaceScope: '@hexagen',
     contextName: 'core',
@@ -88,7 +88,7 @@ export default function Home() {
     telemetryProvider: 'OpenTelemetry',
     uiFramework: 'Next.js',
     apiFramework: 'Fastify',
-    persistenceAdapter: 'Prisma',
+    persistenceAdapter: {},
     entities: [],
     useCases: [],
     externalApiPorts: [],

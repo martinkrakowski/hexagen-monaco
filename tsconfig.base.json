@@ -3,7 +3,7 @@
     "target": "es2021",
     "lib": ["es2021", "dom", "dom.iterable"],
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,7 +14,8 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "declaration": true,
-    "emitDeclarationOnly": true, // Emit only .d.ts (no .js during typecheck/build if not needed)
+    "emitDeclarationOnly": true,
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@hexagen/project-configuration": [
         "packages/project-configuration/src/index.ts"
@@ -27,7 +28,10 @@
       "@hexagen/messaging": ["packages/messaging/src/index.ts"],
       "@hexagen/messaging/*": ["packages/messaging/src/*"],
       "@hexagen/*": ["packages/*/src"],
-      "@/*": ["apps/web/src/*"]
+      "@/*": [
+        "apps/web/src/*",
+        "apps/web/app/*" // covers app/page.tsx, app/layout.tsx, app/api/*, etc.
+      ]
     }
   },
   "include": [],

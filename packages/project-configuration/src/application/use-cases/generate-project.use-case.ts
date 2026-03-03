@@ -1,11 +1,19 @@
-// packages/project-configuration/src/application/use-cases/generate-project.use-case.ts
 import type { IGenerateProjectPort } from '../ports/in/generate-project.port';
 import type { FileTreeNode } from '../../domain/model/file-tree-node/file-tree-node';
 
+// Local interface for the incoming spec (replaces `any`)
+interface ProjectSpec {
+  rootName?: string;
+  name?: string;
+  version?: string;
+  description?: string;
+  boundedContexts?: string[];
+}
+
 export class GenerateProjectUseCase implements IGenerateProjectPort {
-  async execute(spec: any): Promise<FileTreeNode> {
+  async execute(spec: ProjectSpec): Promise<FileTreeNode> {
     const name = spec?.rootName || spec?.name || 'untitled-project';
-    `🚀 GenerateProjectUseCase called for: ${name}`;
+    console.log(`🚀 GenerateProjectUseCase called for: ${name}`); // fixed missing console.log
 
     const projectName = name.toLowerCase().replace(/\s+/g, '-');
 
@@ -59,7 +67,6 @@ export class GenerateProjectUseCase implements IGenerateProjectPort {
         },
       ],
     };
-
     return root;
   }
 }
