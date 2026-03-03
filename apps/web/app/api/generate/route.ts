@@ -1,4 +1,3 @@
-// apps/web/app/api/generate/route.ts
 import { NextResponse } from 'next/server';
 import { generateProjectAction } from '@/lib/wire';
 import type { ProjectConfig } from '@hexagen/project-configuration';

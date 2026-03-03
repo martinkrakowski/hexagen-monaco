@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-// ──────────────────────────────────────────────────────────────────────────────
 // WizardStep — Value Object (enum + helper)
 export enum WizardStep {
   Basics = 'basics',
@@ -14,8 +13,7 @@ export enum WizardStep {
 
 export const WizardStepSchema = z.nativeEnum(WizardStep);
 
-// ──────────────────────────────────────────────────────────────────────────────
-// WizardIntent — Discriminated Union (single source of truth for state changes)
+// WizardIntent — Discriminated Union
 export type WizardIntent =
   | {
       type: 'START_WIZARD';
@@ -41,7 +39,6 @@ export type WizardIntent =
     }
   | { type: 'GENERATION_FAILED'; payload: { error: Error } }; // temporary Error, will use domain error
 
-// ──────────────────────────────────────────────────────────────────────────────
 // WizardSession — Aggregate Root (immutable state)
 export interface WizardSession {
   readonly step: WizardStep;
@@ -66,7 +63,6 @@ export type GeneratedProject = {
   // full shape defined later in project-generation
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
 // Factory for initial state
 export function createInitialWizardSession(
   initialConfig: Partial<ProjectConfig> = {}
@@ -84,7 +80,6 @@ export function createInitialWizardSession(
   };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
 // Pure reducer (core domain logic — temporary inline version)
 export function reduceWizardSession(
   state: WizardSession,
@@ -138,7 +133,6 @@ export function reduceWizardSession(
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
 // Local domain errors (temporary — will move to src/domain/errors.ts later)
 export class WizardDomainError extends Error {
   constructor(
@@ -151,7 +145,6 @@ export class WizardDomainError extends Error {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
 // Helper to check if current step is valid for progression
 export function canProceedFromStep(session: WizardSession): boolean {
   // Placeholder — real validation later in ValidateStep use-case

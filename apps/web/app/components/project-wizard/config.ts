@@ -1,4 +1,3 @@
-// apps/web/src/app/components/project-wizard/config.ts
 import { z } from 'zod';
 
 export const persistenceAdapterOptions = [

@@ -1,4 +1,3 @@
-// packages/project-configuration/src/schema.ts
 import { z } from 'zod';
 
 export const projectConfigSchema = z

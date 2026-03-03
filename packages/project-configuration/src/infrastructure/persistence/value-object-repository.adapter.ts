@@ -1,5 +1,5 @@
 import type { IValueObjectRepository } from '../../application/ports/out/value-object-repository.port';
-import type { ValueObject } from '../../domain/model/value-object/value-object'; // adjust path if barrel is different
+import type { ValueObject } from '../../domain/model/value-object/value-object';
 
 /**
  * Concrete adapter implementing the outbound port IValueObjectRepository.
