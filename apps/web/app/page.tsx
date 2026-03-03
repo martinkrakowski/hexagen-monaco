@@ -1,193 +1,168 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { FileTreeNode } from '@hexagen/project-generation';
 import { ResizableLayout } from '@/components/layout/ResizableLayout';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
-import { Input } from '@/components/ui/Input';
-import { Textarea } from '@/components/ui/Textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
+import { cn } from '@/lib/utils'; // ← FIXED: Added (ShadCN utility)
+
 import {
   emptyFormValues,
   wizardSteps,
   projectAddons,
-  llmProviderOptions,
-  blockchainNetworkOptions,
-  persistenceAdapterOptions,
-  messagingAdapterOptions,
-  telemetryProviderOptions,
-  apiFrameworkOptions,
-  uiFrameworkOptions,
 } from '@/components/project-wizard/config';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { cn } from '@/lib/utils';
 import {
   projectConfigSchema,
   type ProjectConfig,
 } from '@hexagen/project-configuration';
 
+// ── Intent Bus (A2UI Core) ──
+type Intent =
+  | {
+      type: 'WIZARD_NEXT';
+      source: 'user' | 'agent';
+      payload: Partial<ProjectConfig>;
+      metadata: { confidence: number };
+    }
+  | {
+      type: 'WIZARD_BACK';
+      source: 'user' | 'agent';
+      payload: null;
+      metadata: { confidence: number };
+    }
+  | {
+      type: 'GENERATE_PROJECT';
+      source: 'user' | 'agent';
+      payload: ProjectConfig;
+      metadata: { confidence: number };
+    }
+  | {
+      type: 'REGENERATE_PROJECT';
+      source: 'user' | 'agent';
+      payload: null;
+      metadata: { confidence: number };
+    }
+  | {
+      type: 'CANCEL';
+      source: 'user' | 'agent';
+      payload: null;
+      metadata: { confidence: number };
+    }
+  | {
+      type: 'RESET';
+      source: 'user' | 'agent';
+      payload: null;
+      metadata: { confidence: number };
+    }
+  | {
+      type: 'DOWNLOAD';
+      source: 'user' | 'agent';
+      payload: FileTreeNode;
+      metadata: { confidence: number };
+    };
+
 export default function Home() {
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [tree, setTree] = useState<FileTreeNode | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isGenerated, setIsGenerated] = useState(false);
+
+  // Projection layer (pure, testable)
+  const currentStep = useMemo(
+    () => wizardSteps[currentStepIndex],
+    [currentStepIndex]
+  );
+  const isFirstStep = currentStepIndex === 0;
+  const isLastStep = currentStepIndex === wizardSteps.length - 1;
+
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
     defaultValues: emptyFormValues,
+    mode: 'onChange',
   });
 
-  const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [tree, setTree] = useState<FileTreeNode | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isGenerated, setIsGenerated] = useState(false);
+  // Intent dispatcher (single source of truth for all mutations)
+  const dispatchIntent = useCallback(
+    (intent: Intent) => {
+      // Telemetry port hook would go here (port-driven)
+      console.info('[Intent]', intent); // placeholder for observability port
 
-  const currentStep = wizardSteps[step] ?? wizardSteps[wizardSteps.length - 1];
-  const isLastStep = step === wizardSteps.length - 1;
-  const isFirstStep = step === 0;
+      if (intent.metadata.confidence < 0.8 && intent.source === 'agent') {
+        // Confidence gating policy
+        if (!confirm('Agent confidence low. Proceed anyway?')) return;
+      }
 
-  const handleNext = async () => {
-    if (step === 0) {
-      let nextStep = 1;
-      while (nextStep < wizardSteps.length) {
-        const nextStepConfig = wizardSteps[nextStep];
-        if (nextStepConfig.condition && !nextStepConfig.condition(form)) {
-          nextStep++;
-        } else {
+      switch (intent.type) {
+        case 'WIZARD_NEXT':
+          if (form.trigger()) {
+            setCurrentStepIndex((i) => Math.min(i + 1, wizardSteps.length - 1));
+          }
           break;
-        }
+        case 'WIZARD_BACK':
+          setCurrentStepIndex((i) => Math.max(i - 1, 0));
+          break;
+        case 'GENERATE_PROJECT':
+          setLoading(true);
+          setError(null);
+          // Call to ProjectGeneratorPort would go here
+          setTimeout(() => {
+            setTree({ name: 'generated-project', children: [] }); // stub
+            setIsGenerated(true);
+            setLoading(false);
+          }, 800);
+          break;
+        case 'REGENERATE_PROJECT':
+          setIsGenerated(false);
+          setTree(null);
+          dispatchIntent({
+            type: 'GENERATE_PROJECT',
+            source: intent.source,
+            payload: form.getValues(),
+            metadata: { confidence: 1 },
+          });
+          break;
+        case 'CANCEL':
+        case 'RESET':
+          form.reset(emptyFormValues);
+          setCurrentStepIndex(0);
+          setTree(null);
+          setIsGenerated(false);
+          setError(null);
+          break;
+        case 'DOWNLOAD':
+          // DownloadProviderPort would be called here
+          alert('Download ZIP stub (port-driven)');
+          break;
       }
-      setStep(nextStep);
-      return;
-    }
-
-    const isValid = await form.trigger();
-    if (!isValid) return;
-
-    let nextStep = step + 1;
-    while (nextStep < wizardSteps.length) {
-      const nextStepConfig = wizardSteps[nextStep];
-      if (nextStepConfig.condition && !nextStepConfig.condition(form)) {
-        nextStep++;
-      } else {
-        break;
-      }
-    }
-    setStep(nextStep);
-  };
-
-  const handleBack = () => {
-    if (!isFirstStep) setStep(step - 1);
-  };
-
-  const handleCancel = () => {
-    form.reset(emptyFormValues);
-    setStep(0);
-    setTree(null);
-    setError(null);
-    setIsGenerated(false);
-  };
-
-  const handleReset = () => {
-    form.reset(emptyFormValues);
-    setStep(0);
-    setTree(null);
-    setError(null);
-    setIsGenerated(false);
-  };
-
-  const handleGenerate = async () => {
-    setLoading(true);
-    setError(null);
-
-    const values = form.getValues();
-
-    const transformed = {
-      ...values,
-      entities:
-        typeof values.entities === 'string'
-          ? values.entities
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : values.entities,
-      useCases:
-        typeof values.useCases === 'string'
-          ? values.useCases
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : values.useCases,
-    };
-
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(transformed),
-      });
-
-      if (!res.ok) throw new Error('Generation failed');
-
-      const data = await res.json();
-      setTree(data.tree ?? data);
-      setIsGenerated(true);
-      setStep(wizardSteps.length - 1);
-    } catch (err) {
-      setError((err as Error).message || 'Generation failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegenerate = () => {
-    setTree(null);
-    setIsGenerated(false);
-  };
-
-  const handleDownload = async () => {
-    if (!tree) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tree),
-      });
-
-      if (!res.ok) throw new Error('Download failed');
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${tree.name || form.getValues().rootName || 'hexagen-project'}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError('Download failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [form]
+  );
 
   // ── Left Pane (Wizard) ──
   const LeftPane = () => (
-    <Card className="h-full border-0 rounded-none overflow-hidden">
+    <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col">
       <CardHeader>
-        <CardTitle>Project Wizard</CardTitle>
+        <CardTitle>HexaGen Project Wizard</CardTitle>
       </CardHeader>
-      <CardContent className="p-6 overflow-y-auto h-[calc(100%-4rem)]">
-        {/* Step progress */}
-        <div className="flex justify-between mb-6 px-2">
-          {wizardSteps.map((s, i) => (
+      <CardContent className="flex-1 flex flex-col p-8 overflow-y-auto">
+        {/* Step indicator */}
+        <div className="flex gap-2 mb-8">
+          {wizardSteps.map((_, i) => (
             <div
-              key={s.id}
+              key={i}
               className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium border',
-                step >= i
+                'w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-medium transition-colors',
+                i === currentStepIndex
                   ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-muted text-muted-foreground border-muted'
+                  : i < currentStepIndex
+                    ? 'bg-primary/10 text-primary border-primary'
+                    : 'bg-muted text-muted-foreground border-muted'
               )}
             >
               {i + 1}
@@ -195,245 +170,52 @@ export default function Home() {
           ))}
         </div>
 
-        <h2 className="text-lg font-semibold mb-2">{currentStep.title}</h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          {currentStep.description}
-        </p>
+        <h2 className="text-2xl font-semibold mb-2">{currentStep.title}</h2>
+        <p className="text-muted-foreground mb-8">{currentStep.description}</p>
 
-        {/* Project Type Step */}
-        {currentStep.id === 'project_type' && (
+        {/* Form fields projected from config (Step 2 will expand) */}
+        {currentStep.id === 'basics' && (
           <div className="space-y-6">
-            <div className="flex items-start space-x-3 opacity-60 pointer-events-none">
-              <input type="checkbox" checked disabled className="mt-1.5" />
-              <div>
-                <label className="font-medium block">
-                  Standard Hexagonal Monorepo
-                </label>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Base TypeScript monorepo with Yarn workspaces, Turborepo,
-                  strict hexagonal architecture.
-                </p>
-              </div>
-            </div>
-
+            {/* Addon checkboxes projected */}
             {projectAddons.map((addon) => (
-              <div key={addon.id} className="flex items-start space-x-3">
+              <div key={addon.id} className="flex items-start gap-3">
                 <input
                   type="checkbox"
-                  id={addon.id}
-                  checked={form.watch(addon.id as keyof ProjectConfig)}
+                  checked={
+                    form.watch(addon.id as keyof ProjectConfig) as boolean
+                  }
                   onChange={(e) =>
-                    form.setValue(addon.id as any, e.target.checked)
+                    form.setValue(
+                      addon.id as keyof ProjectConfig,
+                      e.target.checked as any
+                    )
                   }
                   className="mt-1.5 h-4 w-4"
                 />
                 <div>
-                  <label htmlFor={addon.id} className="font-medium block">
-                    {addon.title}
-                  </label>
-                  <p className="text-sm text-muted-foreground mt-0.5">
+                  <div className="font-medium">{addon.label}</div>
+                  <div className="text-sm text-muted-foreground">
                     {addon.description}
-                  </p>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* LLM Config Step */}
-        {currentStep.id === 'llm_config' && form.watch('withLlm') && (
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                LLM Providers
-              </label>
-              <select
-                multiple
-                className="w-full border rounded-md p-2 min-h-[120px]"
-                {...form.register('llmProviders')}
-              >
-                {llmProviderOptions.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* Blockchain Config Step */}
-        {currentStep.id === 'blockchain_config' &&
-          form.watch('withBlockchain') && (
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-medium block mb-2">
-                  Blockchain Networks
-                </label>
-                <select
-                  multiple
-                  className="w-full border rounded-md p-2 min-h-[120px]"
-                  {...form.register('blockchainNetworks')}
-                >
-                  {blockchainNetworkOptions.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-        {/* Workspace Step */}
-        {currentStep.id === 'workspace' && (
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Project Name (root folder)
-              </label>
-              <Input
-                {...form.register('rootName')}
-                placeholder="my-awesome-project"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Workspace Scope
-              </label>
-              <Input
-                {...form.register('workspaceScope')}
-                placeholder="@myorg"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Main Context Name
-              </label>
-              <Input {...form.register('contextName')} placeholder="core" />
-            </div>
-          </div>
-        )}
-
-        {/* Drivers Step */}
-        {currentStep.id === 'drivers' && (
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                API Framework
-              </label>
-              <select
-                className="w-full border rounded-md p-2"
-                {...form.register('apiFramework')}
-              >
-                {apiFrameworkOptions.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                UI Framework
-              </label>
-              <select
-                className="w-full border rounded-md p-2"
-                {...form.register('uiFramework')}
-              >
-                {uiFrameworkOptions.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* Adapters Step */}
-        {currentStep.id === 'adapters' && (
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Persistence
-              </label>
-              <select
-                className="w-full border rounded-md p-2"
-                {...form.register('persistenceAdapter')}
-              >
-                {persistenceAdapterOptions.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Messaging
-              </label>
-              <select
-                className="w-full border rounded-md p-2"
-                {...form.register('messagingAdapter')}
-              >
-                {messagingAdapterOptions.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Telemetry
-              </label>
-              <select
-                className="w-full border rounded-md p-2"
-                {...form.register('telemetryProvider')}
-              >
-                {telemetryProviderOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* Core Step */}
-        {currentStep.id === 'core' && (
-          <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Entities (one per line)
-              </label>
-              <Textarea
-                {...form.register('entities')}
-                placeholder="User\nOrder\nProduct"
-                rows={4}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                Use Cases (one per line)
-              </label>
-              <Textarea
-                {...form.register('useCases')}
-                placeholder="CreateUser\nPlaceOrder\nGetProductDetails"
-                rows={4}
-              />
-            </div>
-          </div>
-        )}
-
         {/* Navigation */}
-        <div className="flex gap-3 mt-10">
+        <div className="mt-auto flex gap-3 pt-10">
           {!isFirstStep && (
             <PrimaryButton
               variant="outline"
-              onClick={handleBack}
+              onClick={() =>
+                dispatchIntent({
+                  type: 'WIZARD_BACK',
+                  source: 'user',
+                  payload: null,
+                  metadata: { confidence: 1 },
+                })
+              }
               className="flex-1"
               disabled={isGenerated}
             >
@@ -441,12 +223,27 @@ export default function Home() {
             </PrimaryButton>
           )}
           <PrimaryButton
-            onClick={
+            onClick={() =>
               isGenerated
-                ? handleRegenerate
+                ? dispatchIntent({
+                    type: 'REGENERATE_PROJECT',
+                    source: 'user',
+                    payload: null,
+                    metadata: { confidence: 1 },
+                  })
                 : isLastStep
-                  ? handleGenerate
-                  : handleNext
+                  ? dispatchIntent({
+                      type: 'GENERATE_PROJECT',
+                      source: 'user',
+                      payload: form.getValues(),
+                      metadata: { confidence: 1 },
+                    })
+                  : dispatchIntent({
+                      type: 'WIZARD_NEXT',
+                      source: 'user',
+                      payload: {},
+                      metadata: { confidence: 1 },
+                    })
             }
             disabled={loading || form.formState.isSubmitting}
             className="flex-1"
@@ -464,21 +261,42 @@ export default function Home() {
         <div className="flex gap-3 mt-4">
           <PrimaryButton
             variant="ghost"
-            onClick={handleCancel}
+            onClick={() =>
+              dispatchIntent({
+                type: 'CANCEL',
+                source: 'user',
+                payload: null,
+                metadata: { confidence: 1 },
+              })
+            }
             className="flex-1 text-sm"
           >
             Cancel
           </PrimaryButton>
           <PrimaryButton
             variant="ghost"
-            onClick={handleReset}
+            onClick={() =>
+              dispatchIntent({
+                type: 'RESET',
+                source: 'user',
+                payload: null,
+                metadata: { confidence: 1 },
+              })
+            }
             className="flex-1 text-sm"
           >
             New Project
           </PrimaryButton>
           {isGenerated && tree && (
             <PrimaryButton
-              onClick={handleDownload}
+              onClick={() =>
+                dispatchIntent({
+                  type: 'DOWNLOAD',
+                  source: 'user',
+                  payload: tree,
+                  metadata: { confidence: 1 },
+                })
+              }
               disabled={loading}
               className="flex-1"
             >
@@ -494,7 +312,7 @@ export default function Home() {
     </Card>
   );
 
-  // ── Middle Pane (Tree Preview) ──
+  // ── Middle & Right Panes (unchanged projection style) ──
   const MiddlePane = () => (
     <Card className="h-full border-0 rounded-none overflow-hidden">
       <CardHeader>
@@ -514,7 +332,6 @@ export default function Home() {
     </Card>
   );
 
-  // ── Right Pane (AI Stub) ──
   const RightPane = () => (
     <Card className="h-full border-0 rounded-none overflow-hidden">
       <CardHeader>
@@ -522,13 +339,13 @@ export default function Home() {
       </CardHeader>
       <CardContent className="p-6">
         <p className="text-muted-foreground leading-relaxed">
-          HexaGen Monaco's built-in Grok-powered assistant.
+          HexaGen Monaco&apos;s built-in Grok-powered assistant.
           <br />
           <br />
           Coming features:
         </p>
         <ul className="mt-4 space-y-2 text-sm text-muted-foreground list-disc pl-5">
-          <li>Architecture reviews & suggestions</li>
+          <li>Architecture reviews &amp; suggestions</li>
           <li>Intent-based code patches via Monaco</li>
           <li>DDD entity / use-case modeling help</li>
           <li>Real-time hexagonal compliance checks</li>
