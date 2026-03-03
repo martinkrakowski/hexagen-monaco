@@ -21,7 +21,6 @@ import {
   type ProjectConfig,
 } from '@hexagen/project-configuration';
 
-// ── Intent Bus Type ──
 type Intent =
   | {
       type: 'WIZARD_NEXT';
@@ -88,7 +87,7 @@ export default function Home() {
     telemetryProvider: 'OpenTelemetry',
     uiFramework: 'Next.js',
     apiFramework: 'Fastify',
-    persistenceAdapter: {},
+    persistenceAdapter: undefined,
     entities: [],
     useCases: [],
     externalApiPorts: [],
@@ -104,7 +103,6 @@ export default function Home() {
 
   const watchedValues = useWatch({
     control: form.control,
-    defaultValue: defaultProjectValues,
   });
 
   const currentStep = wizardSteps[currentStepIndex];
@@ -145,7 +143,7 @@ export default function Home() {
           break;
       }
     },
-    [form, currentStepIndex, watchedValues]
+    [form, currentStepIndex, defaultProjectValues]
   );
 
   return (

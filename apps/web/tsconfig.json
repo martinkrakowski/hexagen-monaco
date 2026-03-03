@@ -1,26 +1,34 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "preserve",
-    "incremental": true,
-    "noEmit": true,
-    "allowJs": true,
+    "rootDir": ".",
     "plugins": [
       {
         "name": "next"
       }
-    ]
+    ],
+    "allowJs": true,
+    "incremental": true
   },
   "include": [
     "next-env.d.ts",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "src/**/*.ts",
-    "src/**/*.tsx",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.d.ts",
     ".next/types/**/*.ts"
   ],
+  "references": [
+    {
+      "path": "../../packages/project-generation"
+    },
+    {
+      "path": "../../packages/project-configuration"
+    },
+    {
+      "path": "../../packages/wizard-orchestration"
+    }
+  ],
   "exclude": [
-    "node_modules",
-    ".next"
+    "node_modules"
   ]
 }

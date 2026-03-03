@@ -1,39 +1,29 @@
 {
   "compilerOptions": {
-    "target": "es2021",
-    "lib": ["es2021", "dom", "dom.iterable"],
-    "module": "esnext",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
     "moduleResolution": "bundler",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "composite": true,
-    "baseUrl": ".",
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
     "paths": {
-      "@hexagen/project-configuration": [
-        "packages/project-configuration/src/index.ts"
-      ],
+      "@/*": ["./apps/web/app/*"],
       "@hexagen/project-configuration/*": [
-        "packages/project-configuration/src/*"
+        "./packages/project-configuration/src/*"
       ],
-      "@hexagen/shared": ["packages/shared/src/index.ts"],
-      "@hexagen/shared/*": ["packages/shared/src/*"],
-      "@hexagen/messaging": ["packages/messaging/src/index.ts"],
-      "@hexagen/messaging/*": ["packages/messaging/src/*"],
-      "@hexagen/*": ["packages/*/src"],
-      "@/*": [
-        "apps/web/src/*",
-        "apps/web/app/*" // covers app/page.tsx, app/layout.tsx, app/api/*, etc.
-      ]
+      "@hexagen/project-generation/*": ["./packages/project-generation/src/*"],
+      "@hexagen/wizard-orchestration/*": [
+        "./packages/wizard-orchestration/src/*"
+      ],
+      "@hexagen/shared/*": ["./packages/shared/src/*"]
     }
-  },
-  "include": [],
-  "exclude": ["node_modules", "dist", ".next"]
+  }
 }
