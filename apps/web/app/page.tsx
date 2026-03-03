@@ -7,7 +7,7 @@ import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
-import { cn } from '@/lib/utils'; // ← FIXED: Added (ShadCN utility)
+import { cn } from '@/lib/utils';
 
 import {
   emptyFormValues,
@@ -21,7 +21,7 @@ import {
   type ProjectConfig,
 } from '@hexagen/project-configuration';
 
-// ── Intent Bus (A2UI Core) ──
+// Intent Bus, A2UI Core
 type Intent =
   | {
       type: 'WIZARD_NEXT';
@@ -73,7 +73,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
 
-  // Projection layer (pure, testable)
+  // Projection layer
   const currentStep = useMemo(
     () => wizardSteps[currentStepIndex],
     [currentStepIndex]
@@ -81,28 +81,37 @@ export default function Home() {
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === wizardSteps.length - 1;
 
+  const defaultProjectValues = {
+    ...emptyFormValues,
+    messagingAdapter: 'BullMQ',
+    telemetryProvider: 'OpenTelemetry',
+    uiFramework: 'Next.js',
+  } satisfies ProjectConfig;
+
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
-    defaultValues: emptyFormValues,
+    defaultValues: defaultProjectValues,
     mode: 'onChange',
+    reValidateMode: 'onChange',
+    criteriaMode: 'all',
   });
 
-  // Intent dispatcher (single source of truth for all mutations)
+  // Intent dispatcher
   const dispatchIntent = useCallback(
     (intent: Intent) => {
-      // Telemetry port hook would go here (port-driven)
-      console.info('[Intent]', intent); // placeholder for observability port
-
       if (intent.metadata.confidence < 0.8 && intent.source === 'agent') {
-        // Confidence gating policy
         if (!confirm('Agent confidence low. Proceed anyway?')) return;
       }
 
       switch (intent.type) {
         case 'WIZARD_NEXT':
-          if (form.trigger()) {
-            setCurrentStepIndex((i) => Math.min(i + 1, wizardSteps.length - 1));
-          }
+          form.trigger().then((isValid) => {
+            if (isValid) {
+              setCurrentStepIndex((i) =>
+                Math.min(i + 1, wizardSteps.length - 1)
+              );
+            }
+          });
           break;
         case 'WIZARD_BACK':
           setCurrentStepIndex((i) => Math.max(i - 1, 0));
@@ -110,9 +119,13 @@ export default function Home() {
         case 'GENERATE_PROJECT':
           setLoading(true);
           setError(null);
-          // Call to ProjectGeneratorPort would go here
+          // ProjectGeneratorPort call will go here
           setTimeout(() => {
-            setTree({ name: 'generated-project', children: [] }); // stub
+            setTree({
+              name: 'generated-project',
+              type: 'directory',
+              children: [],
+            });
             setIsGenerated(true);
             setLoading(false);
           }, 800);
@@ -129,14 +142,13 @@ export default function Home() {
           break;
         case 'CANCEL':
         case 'RESET':
-          form.reset(emptyFormValues);
+          form.reset(defaultProjectValues);
           setCurrentStepIndex(0);
           setTree(null);
           setIsGenerated(false);
           setError(null);
           break;
         case 'DOWNLOAD':
-          // DownloadProviderPort would be called here
           alert('Download ZIP stub (port-driven)');
           break;
       }
@@ -144,7 +156,7 @@ export default function Home() {
     [form]
   );
 
-  // ── Left Pane (Wizard) ──
+  // Wizard
   const LeftPane = () => (
     <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col">
       <CardHeader>
@@ -173,27 +185,26 @@ export default function Home() {
         <h2 className="text-2xl font-semibold mb-2">{currentStep.title}</h2>
         <p className="text-muted-foreground mb-8">{currentStep.description}</p>
 
-        {/* Form fields projected from config (Step 2 will expand) */}
+        {/* Form fields projected */}
         {currentStep.id === 'basics' && (
           <div className="space-y-6">
-            {/* Addon checkboxes projected */}
             {projectAddons.map((addon) => (
               <div key={addon.id} className="flex items-start gap-3">
                 <input
                   type="checkbox"
-                  checked={
-                    form.watch(addon.id as keyof ProjectConfig) as boolean
-                  }
+                  checked={!!form.watch(addon.id as keyof ProjectConfig)}
                   onChange={(e) =>
                     form.setValue(
                       addon.id as keyof ProjectConfig,
-                      e.target.checked as any
+                      e.target.checked,
+                      { shouldValidate: true }
                     )
                   }
-                  className="mt-1.5 h-4 w-4"
+                  className="mt-1.5 h-4 w-4 accent-primary"
                 />
                 <div>
-                  <div className="font-medium">{addon.label}</div>
+                  <div className="font-medium">{addon.title}</div>{' '}
+                  {/* ← FIXED: label → title */}
                   <div className="text-sm text-muted-foreground">
                     {addon.description}
                   </div>
@@ -312,7 +323,7 @@ export default function Home() {
     </Card>
   );
 
-  // ── Middle & Right Panes (unchanged projection style) ──
+  // Middle & Right Panes
   const MiddlePane = () => (
     <Card className="h-full border-0 rounded-none overflow-hidden">
       <CardHeader>
