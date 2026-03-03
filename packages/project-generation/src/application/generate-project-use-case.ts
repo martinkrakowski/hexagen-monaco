@@ -12,7 +12,7 @@ export const generateProjectUseCase = {
       // ... other fields
     };
 
-    console.log('🏗️ Generating project structure for:', minimalSpec.rootName);
+    void minimalSpec;
 
     // 2. Return a valid FileTreeNode (The actual "output" of this port)
     // In a real scenario, this is where your generation logic would go.
