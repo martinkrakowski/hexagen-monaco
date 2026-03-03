@@ -30,6 +30,7 @@ const updateBarrelFile = (barrelPath: string, moduleExportPath: string) => {
 };
 
 function syncArchitecture() {
+  // eslint-disable-next-line no-console
   console.log('🔄 Synchronizing architecture from manifest...');
 
   const __filename = fileURLToPath(import.meta.url);
@@ -42,6 +43,7 @@ function syncArchitecture() {
   try {
     manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error(
       `❌ Could not load architecture manifest from ${manifestPath}`
     );
@@ -49,6 +51,7 @@ function syncArchitecture() {
   }
 
   const modules = manifest.modules || [];
+  // eslint-disable-next-line no-console
   console.log(`Found ${modules.length} modules to sync:`);
 
   modules.forEach((moduleInfo: any) => {
@@ -65,7 +68,7 @@ function syncArchitecture() {
     const useCasesBarrel = path.join(useCasesPath, 'index.ts');
     const inboundBarrel = path.join(inboundPortsPath, 'index.ts');
     const outboundBarrel = path.join(outboundPortsPath, 'index.ts');
-
+    // eslint-disable-next-line no-console
     console.log(`  • Syncing ${moduleName}...`);
 
     // 1. Entities + Domain Barrels
@@ -85,6 +88,7 @@ function syncArchitecture() {
   ) {}
 }\n`;
         fs.writeFileSync(entityPath, template);
+        // eslint-disable-next-line no-console
         console.log(
           `    ✨ Generated Entity: ${path.relative(rootDir, entityPath)}`
         );
@@ -109,6 +113,7 @@ function syncArchitecture() {
         ensureDirExists(useCasesPath);
         const template = `import type { I${pascal}Port } from '../ports/in/${kebab}.port';\n\nexport class ${pascal}UseCase implements I${pascal}Port {\n  async execute(_data: unknown): Promise<unknown> {\n    void _data; // TODO: Implement use case logic\n    return {};\n  }\n}\n`;
         fs.writeFileSync(useCasePath, template);
+        // eslint-disable-next-line no-console
         console.log(
           `    ✨ Generated Use Case: ${path.relative(rootDir, useCasePath)}`
         );
@@ -120,6 +125,7 @@ function syncArchitecture() {
         ensureDirExists(inboundPortsPath);
         const template = `// Inbound port for ${useCaseName}\nexport interface I${pascal}Port {\n  execute(data: unknown): Promise<unknown>;\n}\n`;
         fs.writeFileSync(inboundPortPath, template);
+        // eslint-disable-next-line no-console
         console.log(
           `    ✨ Generated Inbound Port: ${path.relative(rootDir, inboundPortPath)}`
         );
@@ -144,6 +150,7 @@ export interface I${pascal}Repository {
   findById(_id: string): Promise<${pascal} | null>;
 }\n`;
         fs.writeFileSync(portPath, template);
+        // eslint-disable-next-line no-console
         console.log(
           `    ✨ Generated Outbound Port: ${path.relative(rootDir, portPath)}`
         );
@@ -177,6 +184,7 @@ export interface I${pascal}Repository {
   // TODO: Define methods for ${infraName} infrastructure
 }\n`;
         fs.writeFileSync(portPath, template);
+        // eslint-disable-next-line no-console
         console.log(
           `    ✨ Generated Outbound Port: ${path.relative(rootDir, portPath)}`
         );
@@ -209,6 +217,7 @@ export interface I${pascal}Repository {
   findById(_id: string): Promise<${pascal} | null>;
 }\n`;
         fs.writeFileSync(portPath, template);
+        // eslint-disable-next-line no-console
         console.log(
           `    ✨ Generated Outbound Port: ${path.relative(rootDir, portPath)}`
         );
@@ -216,7 +225,7 @@ export interface I${pascal}Repository {
       updateBarrelFile(outboundBarrel, `./${kebab}.port`);
     });
   });
-
+  // eslint-disable-next-line no-console
   console.log('✅ Architecture sync complete.');
 }
 
