@@ -2,7 +2,12 @@
 import * as fs from 'fs';
 import { Project } from 'ts-morph';
 import * as yaml from 'js-yaml';
-import path from 'path';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// ESM polyfill for __dirname / __filename
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- CONFIGURATION ---
 const ROOT_DIR = path.resolve(__dirname, '..', '..', '..');
