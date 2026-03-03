@@ -39,6 +39,7 @@ apps:
     depends_on:
       - shared
       - project-configuration
+      - wizard-orchestration # New dependency for wizard isolation
 
 modules:
   - name: project-configuration
@@ -91,6 +92,30 @@ modules:
 
   - name: messaging
     description: 'Handles cross-module communication via message queues.'
+
+  - name: wizard-orchestration # New bounded context for agentic wizard management
+    description: 'Orchestrates wizard sessions, intents, and projections for agentic UI'
+    entities:
+      - WizardSession # Root aggregate for session state
+    value_objects:
+      - WizardStep
+      - IntentPayload
+      - ProjectionViewModel
+    use_cases:
+      - ProcessIntent
+      - ProjectWizardState
+      - ValidateStep
+    ports:
+      - WizardPersistencePort # For session storage/retrieval
+      - WizardTelemetryPort # For observability
+      - IntentBusPort # For dispatching/emitting intents
+      - MonacoSyncPort # For future editor integration
+    infrastructure:
+      - persistence: local-storage # Initial adapter (upgradable to IndexedDB)
+      - telemetry: open-telemetry
+      - messaging: intent-bus # In-memory or queue-based
+      - external_apis:
+          - monaco-editor # Buffer projections
 
 drivers:
   api-gateway: fastify
