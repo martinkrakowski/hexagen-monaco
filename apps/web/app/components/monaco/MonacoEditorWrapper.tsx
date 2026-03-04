@@ -95,6 +95,7 @@ export function MonacoEditorWrapper({
         editorRef.current?.setValue(currentState.content);
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Undo failed:', err);
     }
   };

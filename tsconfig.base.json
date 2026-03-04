@@ -1,19 +1,20 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "allowImportingTsExtensions": true, // now allowed because emitDeclarationOnly is true
+    "noEmit": false, // keep false for .d.ts output
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
+    "module": "ESNext",
+    "target": "ES2022",
     "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
+    "esModuleInterop": true,
+    "isolatedModules": true,
     "paths": {
       "@/*": ["./apps/web/app/*"],
       "@hexagen/project-configuration/*": [
