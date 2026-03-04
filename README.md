@@ -78,15 +78,36 @@ The system treats architecture as a time-evolving asset. Unlike static generator
 ## Example Manifest
 
 ```yaml
+# .architecture.yaml (excerpt)
+
+system: hexagen-monaco
 architecture: modular-monolith
-schemaVersion: 1
 
 modules:
-  - name: wizard-orchestration
-    entities: [WizardSession]
-    use_cases: [ProcessIntent]
-    ports: [WizardPersistencePort]
-    adapters: [LocalStorageWizardAdapter]
+  - name: project-configuration
+    description: Primary feature module for project generation & manifest handling
+    entities:
+      - ProjectSpec
+      - BoundedContext
+      - Entity
+      - ValueObject
+      - Port
+      - UseCase
+      - Adapter
+    value_objects:
+      - FileTreeNode
+    use_cases:
+      - GenerateProject
+      - ValidateSpec
+    ports:
+      - ProjectGeneratorPort
+    infrastructure:
+      - persistence: drizzle
+      - llm_providers:
+          - Grok
+      - external_apis:
+          - grok
+          - git-provider-port
 ```
 
 ## Quick Start
