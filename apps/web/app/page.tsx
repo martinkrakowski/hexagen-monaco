@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { cn } from '@/lib/utils';
+import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
 
 import {
   emptyFormValues,
@@ -21,6 +22,7 @@ import {
   type ProjectConfig,
 } from '@hexagen/project-configuration';
 
+// Intent Bus type
 type Intent =
   | {
       type: 'WIZARD_NEXT';
@@ -143,8 +145,11 @@ export default function Home() {
           break;
       }
     },
-    [form, currentStepIndex, defaultProjectValues]
+    [form, currentStepIndex]
   );
+
+  const initialManifest = JSON.stringify(watchedValues, null, 2);
+  const sessionId = 'wizard-session-1'; // Dummy – persist later
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
@@ -436,8 +441,16 @@ export default function Home() {
           }
           right={
             <Card className="h-full border-0 rounded-none">
-              <CardContent className="p-6 text-sm">
-                Grok AI Architect
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">
+                  Grok AI Architect
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 flex-1 overflow-hidden">
+                <MonacoEditorWrapper
+                  initialBuffer={initialManifest}
+                  sessionId={sessionId}
+                />
               </CardContent>
             </Card>
           }

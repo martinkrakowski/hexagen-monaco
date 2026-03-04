@@ -46,14 +46,26 @@ monorepo:
           ['packages/project-configuration/src/index.ts']
         '@hexagen/project-configuration/*':
           ['packages/project-configuration/src/*']
+        '@hexagen/project-generation':
+          ['packages/project-generation/src/index.ts']
+        '@hexagen/project-generation/*': ['packages/project-generation/src/*']
+        '@hexagen/wizard-orchestration':
+          ['packages/wizard-orchestration/src/index.ts']
+        '@hexagen/wizard-orchestration/*':
+          ['packages/wizard-orchestration/src/*']
+        '@hexagen/monaco-orchestration':
+          ['packages/monaco-orchestration/src/index.ts']
+        '@hexagen/monaco-orchestration/*':
+          ['packages/monaco-orchestration/src/*']
         '@hexagen/shared': ['packages/shared/src/index.ts']
         '@hexagen/shared/*': ['packages/shared/src/*']
         '@hexagen/messaging': ['packages/messaging/src/index.ts']
         '@hexagen/messaging/*': ['packages/messaging/src/*']
         '@hexagen/*': ['packages/*/src']
-        '@/*': ['apps/web/src/*']
+        '@/*': ['apps/web/src/*', 'apps/web/app/*']
     include: []
     exclude: [node_modules, dist, .next]
+
   workspaceDefaults:
     tsConfig:
       extends: '../../tsconfig.base.json'
@@ -67,6 +79,16 @@ monorepo:
       build: 'tsc --build'
       lint: 'eslint . --ext .ts,.tsx'
       test: 'jest'
+    barrelGeneration:
+      enabled: true
+      exportStrategy: all-public
+      filesToExport:
+        - domain/model/**/*.ts
+        - application/use-cases/**/*.use-case.ts
+        - application/ports/**/*.port.ts
+      barrelFile: index.ts
+      reexportStyle: named
+
   turboConfig:
     globalDependencies:
       - '**/.env.*'
@@ -102,11 +124,12 @@ apps:
 
   - name: web
     driver: next.js
-    description: 'Frontend application (wizard + editor)'
+    description: 'Frontend application (wizard + monaco editor + agentic UI)'
     depends_on:
       - shared
       - project-configuration
       - wizard-orchestration
+      - monaco-orchestration
     tsConfig:
       compilerOptions:
         rootDir: '.' # Explicit to include root-level generated files
@@ -191,6 +214,30 @@ modules:
       - messaging: intent-bus
       - external_apis:
           - monaco-editor
+    optionalReferences:
+      - monacoSession: monaco-orchestration#MonacoSession
+
+  - name: monaco-orchestration
+    description: 'Agentic Monaco-based semantic code editing with patch-based mutations and confidence gating'
+    entities:
+      - MonacoSession
+    value_objects:
+      - SemanticPatch
+      - ConfidenceScore
+      - PatchIntentMetadata
+    use_cases:
+      - ApplySemanticPatch
+      - ValidatePatchIntent
+      - UndoLastPatch
+      - ProjectCurrentBufferState
+    ports:
+      - MonacoPersistencePort
+      - SemanticModelAdapterPort
+      - PatchApplicationPort
+    infrastructure:
+      - monaco-editor/react
+      - ts-morph
+      - local-storage
 
 drivers:
   api-gateway: fastify
