@@ -1,20 +1,21 @@
-// Domain models (entities & value objects)
-export * from './src/domain/model/monaco-session/monaco-session';
+// ============================================================================
+// Minimal barrel – public API of monaco-orchestration bounded context
+// TEMPORARY: only exports what MonacoEditorWrapper.tsx currently needs.
+// Will be expanded and managed by generator later.
+// ============================================================================
 
-// Application layer – use cases
-export * from './src/application/use-cases/apply-semantic-patch.use-case';
-export * from './src/application/use-cases/validate-patch-intent.use-case';
-export * from './src/application/use-cases/undo-last-patch.use-case';
-export * from './src/application/use-cases/project-current-buffer-state.use-case';
+// Use Cases – VALUE exports (classes, to allow instantiation new UndoLastPatchUseCase())
+export { UndoLastPatchUseCase } from './src/application/use-cases/undo-last-patch.use-case';
+export { ProjectCurrentBufferStateUseCase } from './src/application/use-cases/project-current-buffer-state.use-case';
 
-// Ports (outbound)
-export * from './src/application/ports/out/monaco-session-repository.port';
-export * from './src/application/ports/out/monaco-editor-react.port';
-export * from './src/application/ports/out/ts-morph.port';
-export * from './src/application/ports/out/local-storage.port';
+// Out Port – type export (interface)
+export type { MonacoPersistencePort } from './src/application/ports/out/monaco-persistence.port';
 
-// Inbound ports
-export * from './src/application/ports/in/apply-semantic-patch.port';
-export * from './src/application/ports/in/validate-patch-intent.port';
-export * from './src/application/ports/in/undo-last-patch.port';
-export * from './src/application/ports/in/project-current-buffer-state.port';
+// Session State type (needed for loadSession return type)
+export type { MonacoSessionState } from './src/application/ports/out/monaco-persistence.port';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Future expansion (uncomment as needed):
+// export * from './src/domain/model/monaco-session/monaco-session';
+// export * from './src/domain/model/confidence-score/confidence-score';
+// ...

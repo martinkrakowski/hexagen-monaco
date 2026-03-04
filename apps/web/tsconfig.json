@@ -14,8 +14,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.d.ts",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "src/types/**/*.d.ts"
   ],
   "references": [
     {
@@ -26,9 +26,13 @@
     },
     {
       "path": "../../packages/wizard-orchestration"
+    },
+    {
+      "path": "../../packages/monaco-orchestration"
     }
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "paths": {
+    "monaco-editor": ["./node_modules/monaco-editor"]
+  },
+  "exclude": ["node_modules"]
 }

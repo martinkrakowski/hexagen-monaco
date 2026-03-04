@@ -950,14 +950,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hookform/resolvers@npm:^5.2.2":
-  version: 5.2.2
-  resolution: "@hookform/resolvers@npm:5.2.2"
-  dependencies:
-    "@standard-schema/utils": "npm:^0.3.0"
+"@hookform/resolvers@npm:^3.9.0":
+  version: 3.10.0
+  resolution: "@hookform/resolvers@npm:3.10.0"
   peerDependencies:
-    react-hook-form: ^7.55.0
-  checksum: 10c0/0692cd61dcc2a70cbb27b88a37f733c39e97f555c036ba04a81bd42b0467461cfb6bafacb46c16f173672f9c8a216bd7928a2330d4e49c700d130622bf1defaf
+    react-hook-form: ^7.0.0
+  checksum: 10c0/7ee44533b4cdc28c4fa2a94894c735411e5a1f830f4a617c580533321a9b901df0cc8c1e2fad81ad8d55154ebc5cb844cf9c116a3148ffae2bc48758c33cbb8e
   languageName: node
   linkType: hard
 
@@ -1322,7 +1320,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@monaco-editor/react@npm:^4.7.0":
+"@monaco-editor/react@npm:^4.6.0":
   version: 4.7.0
   resolution: "@monaco-editor/react@npm:4.7.0"
   dependencies:
@@ -1549,13 +1547,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@standard-schema/utils@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@standard-schema/utils@npm:0.3.0"
-  checksum: 10c0/6eb74cd13e52d5fc74054df51e37d947ef53f3ab9e02c085665dcca3c38c60ece8d735cebbdf18fbb13c775fbcb9becb3f53109b0e092a63f0f7389ce0993fd0
-  languageName: node
-  linkType: hard
-
 "@swc/counter@npm:^0.1.3":
   version: 0.1.3
   resolution: "@swc/counter@npm:0.1.3"
@@ -1654,7 +1645,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/file-saver@npm:^2":
+"@types/file-saver@npm:^2.0.7":
   version: 2.0.7
   resolution: "@types/file-saver@npm:2.0.7"
   checksum: 10c0/c6b88a1aea8eec58469da2a90828fef6e9d5d590c7094fb959783d7c32878af80d39439734f3d41b78355dadb507f606e3d04a29a160c85411c65251e58df847
@@ -1726,7 +1717,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:^25.3.3":
+"@types/node@npm:*":
   version: 25.3.3
   resolution: "@types/node@npm:25.3.3"
   dependencies:
@@ -1735,7 +1726,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.12.12, @types/node@npm:^20.12.7":
+"@types/node@npm:^20.12.12, @types/node@npm:^20.12.7, @types/node@npm:^20.14.10":
   version: 20.19.35
   resolution: "@types/node@npm:20.19.35"
   dependencies:
@@ -1751,7 +1742,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/react@npm:^18":
+"@types/react@npm:^18.3.3":
   version: 18.3.28
   resolution: "@types/react@npm:18.3.28"
   dependencies:
@@ -2205,7 +2196,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"autoprefixer@npm:^10.4.27":
+"autoprefixer@npm:^10.4.19":
   version: 10.4.27
   resolution: "autoprefixer@npm:10.4.27"
   dependencies:
@@ -2625,7 +2616,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"class-variance-authority@npm:^0.7.1":
+"class-variance-authority@npm:^0.7.0":
   version: 0.7.1
   resolution: "class-variance-authority@npm:0.7.1"
   dependencies:
@@ -5962,12 +5953,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lucide-react@npm:^0.576.0":
-  version: 0.576.0
-  resolution: "lucide-react@npm:0.576.0"
+"lucide-react@npm:^0.453.0":
+  version: 0.453.0
+  resolution: "lucide-react@npm:0.453.0"
   peerDependencies:
-    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-  checksum: 10c0/316301dd4331d99ec6923d5e7e7ec48d57309738fa29b2e993fd4f4f9db73a22e820b9bf586831b2bb48ddbd0a7c56f6a6f130b2a5b718df5301395290b99e90
+    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
+  checksum: 10c0/eec257049609eff958329943da6e129c8db1969aa789c6e922f59418d7b6f6913c22e971ac7885efc80eeb3e41e180c48afdee92738a63a31ef5a39836037b7e
   languageName: node
   linkType: hard
 
@@ -6210,6 +6201,13 @@ __metadata:
   bin:
     mkdirp: dist/cjs/src/bin.js
   checksum: 10c0/9f2b975e9246351f5e3a40dcfac99fcd0baa31fbfab615fe059fb11e51f10e4803c63de1f384c54d656e4db31d000e4767e9ef076a22e12a641357602e31d57d
+  languageName: node
+  linkType: hard
+
+"monaco-editor@npm:^0.52.0":
+  version: 0.52.2
+  resolution: "monaco-editor@npm:0.52.2"
+  checksum: 10c0/5a92da64f1e2ab375c0ce99364137f794d057c97bed10ecc65a08d6e6846804b8ecbd377eacf01e498f7dfbe1b21e8be64f728256681448f0484df90e767b435
   languageName: node
   linkType: hard
 
@@ -6930,7 +6928,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"postcss@npm:^8.4.47, postcss@npm:^8.5.8":
+"postcss@npm:^8.4.39, postcss@npm:^8.4.47":
   version: 8.5.8
   resolution: "postcss@npm:8.5.8"
   dependencies:
@@ -7082,7 +7080,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-hook-form@npm:^7.71.2":
+"react-hook-form@npm:^7.53.0":
   version: 7.71.2
   resolution: "react-hook-form@npm:7.71.2"
   peerDependencies:
@@ -7098,7 +7096,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-resizable-panels@npm:2":
+"react-resizable-panels@npm:^2.1.4":
   version: 2.1.9
   resolution: "react-resizable-panels@npm:2.1.9"
   peerDependencies:
@@ -7927,10 +7925,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tailwind-merge@npm:^3.5.0":
-  version: 3.5.0
-  resolution: "tailwind-merge@npm:3.5.0"
-  checksum: 10c0/4dc588f5b5296ba3f38e1ebb41f02b6d24a8c5bb45e44b33748c118fb4b5767dd0efc464431ca3e75404056b618b5f67bec3708158baa65fed8a2fc9201e0c53
+"tailwind-merge@npm:^2.5.2":
+  version: 2.6.1
+  resolution: "tailwind-merge@npm:2.6.1"
+  checksum: 10c0/f9b5d7ba37f6c6dc7bb7a090f08252e8d827b5abfc1031bf468c5274ce104409e7952a0075a3e009aab53adda8c6d133bc1dd9d3427e2ae5bc00306f9ce1fbff
   languageName: node
   linkType: hard
 
@@ -7943,7 +7941,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tailwindcss@npm:^3.4.14":
+"tailwindcss@npm:^3.4.6":
   version: 3.4.19
   resolution: "tailwindcss@npm:3.4.19"
   dependencies:
@@ -8368,7 +8366,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5.4.5, typescript@npm:^5.9.3":
+"typescript@npm:^5.4.5, typescript@npm:^5.5.3, typescript@npm:^5.9.3":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
   bin:
@@ -8378,7 +8376,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5.4.5#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.9.3#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@npm%3A^5.4.5#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.5.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.9.3#optional!builtin<compat/typescript>":
   version: 5.9.3
   resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
   bin:
@@ -8514,28 +8512,29 @@ __metadata:
     "@hexagen/project-configuration": "workspace:*"
     "@hexagen/project-generation": "workspace:*"
     "@hexagen/shared": "workspace:*"
-    "@hookform/resolvers": "npm:^5.2.2"
-    "@monaco-editor/react": "npm:^4.7.0"
-    "@types/file-saver": "npm:^2"
-    "@types/node": "npm:^25.3.3"
-    "@types/react": "npm:^18"
-    autoprefixer: "npm:^10.4.27"
-    class-variance-authority: "npm:^0.7.1"
+    "@hookform/resolvers": "npm:^3.9.0"
+    "@monaco-editor/react": "npm:^4.6.0"
+    "@types/file-saver": "npm:^2.0.7"
+    "@types/node": "npm:^20.14.10"
+    "@types/react": "npm:^18.3.3"
+    autoprefixer: "npm:^10.4.19"
+    class-variance-authority: "npm:^0.7.0"
     clsx: "npm:^2.1.1"
     file-saver: "npm:^2.0.5"
     jszip: "npm:^3.10.1"
-    lucide-react: "npm:^0.576.0"
+    lucide-react: "npm:^0.453.0"
+    monaco-editor: "npm:^0.52.0"
     next: "npm:14.2.3"
-    postcss: "npm:^8.5.8"
+    postcss: "npm:^8.4.39"
     react: "npm:^18"
     react-dom: "npm:^18"
-    react-hook-form: "npm:^7.71.2"
-    react-resizable-panels: "npm:2"
-    tailwind-merge: "npm:^3.5.0"
-    tailwindcss: "npm:^3.4.14"
+    react-hook-form: "npm:^7.53.0"
+    react-resizable-panels: "npm:^2.1.4"
+    tailwind-merge: "npm:^2.5.2"
+    tailwindcss: "npm:^3.4.6"
     tailwindcss-animate: "npm:^1.0.7"
-    typescript: "npm:^5.4.5"
-    zod: "npm:^4.3.6"
+    typescript: "npm:^5.5.3"
+    zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
 
@@ -8728,16 +8727,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.20.2, zod@npm:^3.x.x":
+"zod@npm:^3.20.2, zod@npm:^3.23.8, zod@npm:^3.x.x":
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c
-  languageName: node
-  linkType: hard
-
-"zod@npm:^4.3.6":
-  version: 4.3.6
-  resolution: "zod@npm:4.3.6"
-  checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307
   languageName: node
   linkType: hard
