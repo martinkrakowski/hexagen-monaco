@@ -2,6 +2,7 @@
   "name": "@hexagen/arch-linter",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "sync": "tsx src/sync.ts",
     "sync:quiet": "tsx src/sync.ts --quiet",
@@ -14,9 +15,11 @@
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
-    "lodash": "^4.17.21"
+    "lodash": "^4.17.21",
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.2",
