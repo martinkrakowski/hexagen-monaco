@@ -2,28 +2,18 @@
   "name": "@hexagen/wizard-orchestration",
   "version": "0.1.0",
   "private": true,
-  "description": "Wizard orchestration bounded context - manages agentic wizard sessions, intents, projections and state transitions",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "license": "MIT",
   "scripts": {
     "build": "tsc --build",
-    "build:watch": "tsc --build --watch",
-    "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@hexagen/shared": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.12.7",
-    "eslint": "^8.57.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.5.4",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0"
   }
 }

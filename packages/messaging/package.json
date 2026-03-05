@@ -2,19 +2,18 @@
   "name": "@hexagen/messaging",
   "version": "0.1.0",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "license": "MIT",
   "scripts": {
-    "build": "tsc -b",
-    "build:watch": "tsc -b -w",
-    "lint": "eslint .",
-    "test": "jest",
+    "build": "tsc --build",
+    "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@hexagen/shared": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "typescript": "^5.5.4",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0"
   }
 }

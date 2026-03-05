@@ -6,8 +6,6 @@
     "emitDeclarationOnly": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "allowImportingTsExtensions": true, // now allowed because emitDeclarationOnly is true
-    "noEmit": false, // keep false for .d.ts output
     "moduleResolution": "bundler",
     "module": "ESNext",
     "target": "ES2022",
@@ -16,15 +14,61 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "paths": {
-      "@/*": ["./apps/web/app/*"],
+      "@hexagen/project-configuration": [
+        "./packages/project-configuration/src/index.ts"
+      ],
       "@hexagen/project-configuration/*": [
         "./packages/project-configuration/src/*"
       ],
-      "@hexagen/project-generation/*": ["./packages/project-generation/src/*"],
+      "@hexagen/shared": ["./packages/shared/src/index.ts"],
+      "@hexagen/shared/*": ["./packages/shared/src/*"],
+      "@hexagen/messaging": ["./packages/messaging/src/index.ts"],
+      "@hexagen/messaging/*": ["./packages/messaging/src/*"],
+      "@hexagen/wizard-orchestration": [
+        "./packages/wizard-orchestration/src/index.ts"
+      ],
       "@hexagen/wizard-orchestration/*": [
         "./packages/wizard-orchestration/src/*"
       ],
-      "@hexagen/shared/*": ["./packages/shared/src/*"]
+      "@hexagen/monaco-orchestration": [
+        "./packages/monaco-orchestration/src/index.ts"
+      ],
+      "@hexagen/monaco-orchestration/*": [
+        "./packages/monaco-orchestration/src/*"
+      ],
+      "@hexagen/visualization": ["./packages/visualization/src/index.ts"],
+      "@hexagen/visualization/*": ["./packages/visualization/src/*"],
+      "@hexagen/code-generation": ["./packages/code-generation/src/index.ts"],
+      "@hexagen/code-generation/*": ["./packages/code-generation/src/*"],
+      "@hexagen/architectural-enforcement": [
+        "./packages/architectural-enforcement/src/index.ts"
+      ],
+      "@hexagen/architectural-enforcement/*": [
+        "./packages/architectural-enforcement/src/*"
+      ],
+      "@hexagen/persistence": ["./packages/persistence/src/index.ts"],
+      "@hexagen/persistence/*": ["./packages/persistence/src/*"],
+      "@hexagen/agentic-interaction": [
+        "./packages/agentic-interaction/src/index.ts"
+      ],
+      "@hexagen/agentic-interaction/*": [
+        "./packages/agentic-interaction/src/*"
+      ],
+      "@hexagen/deployment": ["./packages/deployment/src/index.ts"],
+      "@hexagen/deployment/*": ["./packages/deployment/src/*"]
     }
-  }
+  },
+  "references": [
+    { "path": "./packages/project-configuration" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/messaging" },
+    { "path": "./packages/wizard-orchestration" },
+    { "path": "./packages/monaco-orchestration" },
+    { "path": "./packages/visualization" },
+    { "path": "./packages/code-generation" },
+    { "path": "./packages/architectural-enforcement" },
+    { "path": "./packages/persistence" },
+    { "path": "./packages/agentic-interaction" },
+    { "path": "./packages/deployment" }
+  ]
 }

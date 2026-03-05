@@ -1,21 +1,22 @@
 {
   "name": "@hexagen/monaco-orchestration",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
-  "main": "./index.ts",
-  "types": "./index.ts",
-  "exports": {
-    ".": {
-      "types": "./index.ts",
-      "default": "./index.ts"
-    }
-  },
+  "license": "MIT",
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc --build",
-    "lint": "eslint . --ext .ts,.tsx"
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.51.0",
+    "ts-morph": "^22.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.5.4",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0"
   }
 }
