@@ -424,25 +424,11 @@ async function generateBarrelsForModule(
   for (const [layerName, folderName] of Object.entries(layers)) {
     const layerPath = path.join(moduleDir, 'src', folderName);
     if (barrelsConfig.perLayer) {
-      await generateLayerBarrel(
-        layerPath,
-        layerName,
-        barrelsConfig.reexportStyle,
-        force,
-        dryRun
-      );
+      await generateLayerBarrel(layerPath, layerName, force, dryRun);
     }
   }
 
-  const status = await generateModuleRootBarrel(
-    moduleDir,
-    layers,
-    force,
-    dryRun
-  );
-  if (status !== 'unchanged' && status !== 'skipped') {
-    logger.info(`Module root barrel ${status}`);
-  }
+  await generateModuleRootBarrel(moduleDir, layers, force, dryRun);
 }
 
 // Entity / Value Object stub generator
