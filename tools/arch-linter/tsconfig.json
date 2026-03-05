@@ -4,7 +4,16 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "declaration": true,
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "./*.js": ["./src/*.ts"],
+      "./*": ["./src/*"]
+    },
+    "ignoreDeprecations": "5.0" // silences baseUrl deprecation until you migrate
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],

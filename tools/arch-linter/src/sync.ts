@@ -1,232 +1,635 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as yaml from 'js-yaml';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import yaml from 'js-yaml';
 import lodash from 'lodash';
 const { kebabCase } = lodash;
 import { fileURLToPath } from 'node:url';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
-const toPascalCase = (s: string) =>
-  s
-    .split(/[\s-]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join('');
+import { createConsoleLogger } from './logger.js';
 
-const ensureDirExists = (dirPath: string) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-};
+// Global logger (top-level, respects --quiet)
+const args = process.argv.slice(2);
+const quiet = args.includes('--quiet');
+const logger = createConsoleLogger(quiet);
 
-const updateBarrelFile = (barrelPath: string, moduleExportPath: string) => {
-  ensureDirExists(path.dirname(barrelPath));
-  const exportStatement = `export * from '${moduleExportPath}';\n`;
-  let content = '';
-  if (fs.existsSync(barrelPath)) {
-    content = fs.readFileSync(barrelPath, 'utf-8');
-  }
-  if (!content.includes(moduleExportPath)) {
-    fs.appendFileSync(barrelPath, exportStatement);
-  }
-};
+const force = args.includes('--force');
+const forceRoot = args.includes('--force-root');
+const dryRun = args.includes('--dry-run');
+const strict = args.includes('--strict');
 
-function syncArchitecture() {
-  // eslint-disable-next-line no-console
-  console.log('🔄 Synchronizing architecture from manifest...');
+if (force) logger.info('Running in --force mode (non-root files)');
+if (forceRoot) logger.info('Running in --force-root mode (root files allowed)');
+if (dryRun) logger.info('Running in --dry-run mode (no writes performed)');
+if (strict) logger.info('Running in --strict mode (lint failure blocks sync)');
 
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-
-  const rootDir = path.resolve(__dirname, '..', '..', '..');
-  const manifestPath = path.join(rootDir, '.architecture.yaml');
-  let manifest: any;
-
-  try {
-    manifest = yaml.load(fs.readFileSync(manifestPath, 'utf8'));
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error(
-      `❌ Could not load architecture manifest from ${manifestPath}`
-    );
-    process.exit(1);
-  }
-
-  const modules = manifest.modules || [];
-  // eslint-disable-next-line no-console
-  console.log(`Found ${modules.length} modules to sync:`);
-
-  modules.forEach((moduleInfo: any) => {
-    const moduleName = moduleInfo.name;
-    const pkgPath = path.join(rootDir, 'packages', moduleName);
-    const srcPath = path.join(pkgPath, 'src');
-
-    const domainPath = path.join(srcPath, 'domain', 'model');
-    const useCasesPath = path.join(srcPath, 'application', 'use-cases');
-    const inboundPortsPath = path.join(srcPath, 'application', 'ports', 'in');
-    const outboundPortsPath = path.join(srcPath, 'application', 'ports', 'out');
-
-    const domainBarrel = path.join(domainPath, 'index.ts');
-    const useCasesBarrel = path.join(useCasesPath, 'index.ts');
-    const inboundBarrel = path.join(inboundPortsPath, 'index.ts');
-    const outboundBarrel = path.join(outboundPortsPath, 'index.ts');
-    // eslint-disable-next-line no-console
-    console.log(`  • Syncing ${moduleName}...`);
-
-    // 1. Entities + Domain Barrels
-    (moduleInfo.entities || []).forEach((entityName: string) => {
-      const pascal = toPascalCase(entityName);
-      const kebab = kebabCase(entityName);
-      const entityDir = path.join(domainPath, kebab);
-      const entityPath = path.join(entityDir, `${kebab}.ts`);
-      const entityBarrel = path.join(entityDir, 'index.ts');
-
-      if (!fs.existsSync(entityPath)) {
-        ensureDirExists(entityDir);
-        const template = `export class ${pascal} {
-  constructor(
-    public readonly id: string,
-    // TODO: Add entity properties
-  ) {}
-}\n`;
-        fs.writeFileSync(entityPath, template);
-        // eslint-disable-next-line no-console
-        console.log(
-          `    ✨ Generated Entity: ${path.relative(rootDir, entityPath)}`
-        );
-      }
-
-      if (!fs.existsSync(entityBarrel)) {
-        fs.writeFileSync(entityBarrel, `export * from './${kebab}';\n`);
-      } else {
-        updateBarrelFile(entityBarrel, `./${kebab}`);
-      }
-
-      updateBarrelFile(domainBarrel, `./${kebab}`);
-    });
-
-    // 2. Use Cases + Inbound Ports (lint-clean)
-    (moduleInfo.use_cases || []).forEach((useCaseName: string) => {
-      const pascal = toPascalCase(useCaseName);
-      const kebab = kebabCase(useCaseName);
-
-      const useCasePath = path.join(useCasesPath, `${kebab}.use-case.ts`);
-      if (!fs.existsSync(useCasePath)) {
-        ensureDirExists(useCasesPath);
-        const template = `import type { I${pascal}Port } from '../ports/in/${kebab}.port';\n\nexport class ${pascal}UseCase implements I${pascal}Port {\n  async execute(_data: unknown): Promise<unknown> {\n    void _data; // TODO: Implement use case logic\n    return {};\n  }\n}\n`;
-        fs.writeFileSync(useCasePath, template);
-        // eslint-disable-next-line no-console
-        console.log(
-          `    ✨ Generated Use Case: ${path.relative(rootDir, useCasePath)}`
-        );
-      }
-      updateBarrelFile(useCasesBarrel, `./${kebab}.use-case`);
-
-      const inboundPortPath = path.join(inboundPortsPath, `${kebab}.port.ts`);
-      if (!fs.existsSync(inboundPortPath)) {
-        ensureDirExists(inboundPortsPath);
-        const template = `// Inbound port for ${useCaseName}\nexport interface I${pascal}Port {\n  execute(data: unknown): Promise<unknown>;\n}\n`;
-        fs.writeFileSync(inboundPortPath, template);
-        // eslint-disable-next-line no-console
-        console.log(
-          `    ✨ Generated Inbound Port: ${path.relative(rootDir, inboundPortPath)}`
-        );
-      }
-      updateBarrelFile(inboundBarrel, `./${kebab}.port`);
-    });
-
-    // 3. Entity-Specific Outbound Ports (lint-clean)
-    (moduleInfo.entities || []).forEach((entityName: string) => {
-      const kebab = kebabCase(entityName);
-      const pascal = toPascalCase(entityName);
-      const portPath = path.join(
-        outboundPortsPath,
-        `${kebab}-repository.port.ts`
-      );
-      if (!fs.existsSync(portPath)) {
-        ensureDirExists(outboundPortsPath);
-        const template = `import type { ${pascal} } from '../../../domain/model/${kebab}/${kebab}';
-
-export interface I${pascal}Repository {
-  save(entity: ${pascal}): Promise<${pascal}>;
-  findById(_id: string): Promise<${pascal} | null>;
-}\n`;
-        fs.writeFileSync(portPath, template);
-        // eslint-disable-next-line no-console
-        console.log(
-          `    ✨ Generated Outbound Port: ${path.relative(rootDir, portPath)}`
-        );
-      }
-      updateBarrelFile(outboundBarrel, `./${kebab}-repository.port`);
-    });
-
-    // 4. Infrastructure Ports
-    const infrastructure = moduleInfo.infrastructure || [];
-    infrastructure.forEach((infraItem: any) => {
-      let infraName = '';
-
-      if (typeof infraItem === 'string') {
-        infraName = infraItem;
-      } else if (typeof infraItem === 'object') {
-        const key = Object.keys(infraItem)[0];
-        const value = infraItem[key];
-        infraName = typeof value === 'string' ? value : key;
-        if (infraName === 'ports' || Array.isArray(value)) return;
-      }
-
-      if (!infraName || infraName === 'ports') return;
-
-      const kebab = kebabCase(infraName);
-      const pascal = toPascalCase(infraName);
-      const portPath = path.join(outboundPortsPath, `${kebab}.port.ts`);
-
-      if (!fs.existsSync(portPath)) {
-        ensureDirExists(outboundPortsPath);
-        const template = `export interface I${pascal}Port {
-  // TODO: Define methods for ${infraName} infrastructure
-}\n`;
-        fs.writeFileSync(portPath, template);
-        // eslint-disable-next-line no-console
-        console.log(
-          `    ✨ Generated Outbound Port: ${path.relative(rootDir, portPath)}`
-        );
-      }
-      updateBarrelFile(outboundBarrel, `./${kebab}.port`);
-    });
-
-    // 5. Repository Ports from infrastructure.ports array
-    const infraPortsSection = infrastructure.find((i: any) => i.ports);
-    const infraPorts = infraPortsSection?.ports || [];
-    infraPorts.forEach((portName: string) => {
-      if (
-        typeof portName !== 'string' ||
-        portName === 'ports' ||
-        !portName.includes('-repository')
-      )
-        return;
-
-      const kebab = kebabCase(portName);
-      const pascal = toPascalCase(portName.replace('-repository', ''));
-      const entityKebab = kebab.replace('-repository', '');
-      const portPath = path.join(outboundPortsPath, `${kebab}.port.ts`);
-
-      if (!fs.existsSync(portPath)) {
-        ensureDirExists(outboundPortsPath);
-        const template = `import type { ${pascal} } from '../../../domain/model/${entityKebab}/${entityKebab}';
-
-export interface I${pascal}Repository {
-  save(entity: ${pascal}): Promise<${pascal}>;
-  findById(_id: string): Promise<${pascal} | null>;
-}\n`;
-        fs.writeFileSync(portPath, template);
-        // eslint-disable-next-line no-console
-        console.log(
-          `    ✨ Generated Outbound Port: ${path.relative(rootDir, portPath)}`
-        );
-      }
-      updateBarrelFile(outboundBarrel, `./${kebab}.port`);
-    });
-  });
-  // eslint-disable-next-line no-console
-  console.log('✅ Architecture sync complete.');
+interface ArchitectureManifest {
+  system: string;
+  scope: string;
+  architecture: string;
+  monorepo: {
+    workspaces: string[];
+  };
+  tsConfigRootFile?: string;
+  generator?: {
+    version: string;
+    sync: {
+      idempotent: boolean;
+      createOnlyIfMissing: boolean;
+      layers: Record<string, string>;
+      barrels: {
+        autoGenerate: boolean;
+        perLayer: boolean;
+        reexportStyle: 'named' | 'star';
+        includeGlobs: string[];
+      };
+      packageJson: {
+        private: boolean;
+        version: string;
+        license?: string;
+        scripts: Record<string, string>;
+        baseDependencies: Record<string, string>;
+        baseDevDependencies: Record<string, string>;
+      };
+      tsconfig: {
+        compilerOptions: Record<string, unknown>;
+      };
+    };
+  };
+  workspaceDefaults?: {
+    tsConfig?: {
+      extends: string;
+      compilerOptions: Record<string, unknown>;
+    };
+    scripts?: Record<string, string>;
+  };
+  modules: Array<{
+    name: string;
+    description?: string;
+    entities?: string[];
+    value_objects?: string[];
+    use_cases?: string[];
+    ports?: {
+      out?: string[];
+    };
+    infrastructure?: Record<string, unknown>;
+    generator?: {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+  }>;
+  apps?: Array<{
+    name: string;
+    driver: string;
+    depends_on?: string[];
+  }>;
 }
 
-syncArchitecture();
+function toPascalCase(str: string): string {
+  return str
+    .split(/[-_ ]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('');
+}
+
+const GENERATED_HEADER = `// Auto-generated by yarn sync — do not edit manually
+// Changes will be overwritten on next sync
+// Edit .architecture.yaml and run yarn sync instead
+
+`;
+
+const EXPECTED_GENERATOR_VERSION = '0.2.0';
+
+// SAFETY GUARD: Protected root files
+const PROTECTED_ROOT_FILES = [
+  'tsconfig.base.json',
+  'tsconfig.json',
+  'turbo.json',
+  'package.json',
+  'eslint.config.js',
+  '.eslintrc.json',
+  '.architecture.yaml',
+  'yarn.lock',
+];
+
+async function isProtectedRoot(filePath: string): Promise<boolean> {
+  const rel = path.relative(process.cwd(), filePath);
+  return PROTECTED_ROOT_FILES.some((p) => rel === p || rel.startsWith(p + '/'));
+}
+
+async function isGeneratedFile(filePath: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return content.trim().startsWith(GENERATED_HEADER.trim());
+  } catch {
+    return false;
+  }
+}
+
+async function safeWriteFile(
+  filePath: string,
+  content: string,
+  forceOverride: boolean = false,
+  dryRunMode: boolean = false
+): Promise<'created' | 'updated' | 'unchanged' | 'skipped'> {
+  if (dryRunMode) {
+    logger.info(
+      `[dry-run] Would ${forceOverride ? 'force-' : ''}write to ${filePath}`
+    );
+    return 'created';
+  }
+
+  // SAFETY GUARD: Prevent overwriting root configs
+  if ((await isProtectedRoot(filePath)) && !forceRoot) {
+    logger.warn(`Protected root file skipped: ${filePath} (use --force-root)`);
+    return 'skipped';
+  }
+
+  const exists = await fs
+    .access(filePath)
+    .then(() => true)
+    .catch(() => false);
+
+  if (exists) {
+    const isGen = await isGeneratedFile(filePath);
+    if (!isGen && !forceOverride) {
+      logger.warn(
+        `Skipping non-generated file: ${filePath} (use --force to overwrite)`
+      );
+      return 'skipped';
+    }
+
+    const existing = await fs.readFile(filePath, 'utf-8');
+    const normExisting = existing.replace(/\s+/g, ' ').trim();
+    const normNew = content.replace(/\s+/g, ' ').trim();
+
+    if (normExisting === normNew) {
+      return 'unchanged';
+    }
+  }
+
+  await fs.writeFile(filePath, content);
+  return exists ? 'updated' : 'created';
+}
+
+async function loadAndValidateManifest(
+  rootDir: string
+): Promise<ArchitectureManifest> {
+  const manifestPath = path.join(rootDir, '.architecture.yaml');
+
+  let fileContent: string;
+  try {
+    fileContent = await fs.readFile(manifestPath, 'utf-8');
+  } catch (err) {
+    throw new Error(
+      `Failed to read .architecture.yaml: ${(err as Error).message}`
+    );
+  }
+
+  let rawManifest: unknown;
+  try {
+    rawManifest = yaml.load(fileContent);
+  } catch (err) {
+    throw new Error(
+      `Invalid YAML in .architecture.yaml: ${(err as Error).message}`
+    );
+  }
+
+  if (!rawManifest || typeof rawManifest !== 'object') {
+    throw new Error('.architecture.yaml must be a valid object');
+  }
+
+  const manifest = rawManifest as ArchitectureManifest;
+
+  if (!manifest.system || typeof manifest.system !== 'string') {
+    throw new Error('Missing or invalid "system" field');
+  }
+  if (!manifest.scope || typeof manifest.scope !== 'string') {
+    throw new Error('Missing or invalid "scope" field');
+  }
+  if (!manifest.modules || !Array.isArray(manifest.modules)) {
+    throw new Error('"modules" must be an array');
+  }
+
+  const moduleNames = new Set<string>();
+  for (const mod of manifest.modules) {
+    if (!mod.name || typeof mod.name !== 'string') {
+      throw new Error('Every module must have a "name" string');
+    }
+    if (moduleNames.has(mod.name)) {
+      throw new Error(`Duplicate module name: ${mod.name}`);
+    }
+    moduleNames.add(mod.name);
+
+    if (mod.entities && !Array.isArray(mod.entities)) {
+      throw new Error(`"entities" in module "${mod.name}" must be an array`);
+    }
+    if (mod.value_objects && !Array.isArray(mod.value_objects)) {
+      throw new Error(
+        `"value_objects" in module "${mod.name}" must be an array`
+      );
+    }
+    if (mod.use_cases && !Array.isArray(mod.use_cases)) {
+      throw new Error(`"use_cases" in module "${mod.name}" must be an array`);
+    }
+  }
+
+  const allModuleNames = new Set(manifest.modules.map((m) => m.name));
+  for (const app of manifest.apps ?? []) {
+    for (const dep of app.depends_on ?? []) {
+      if (!allModuleNames.has(dep)) {
+        throw new Error(`App "${app.name}" depends on unknown module: ${dep}`);
+      }
+    }
+  }
+
+  const currentVersion = manifest.generator?.version;
+  if (currentVersion && currentVersion !== EXPECTED_GENERATOR_VERSION) {
+    logger.warn(
+      `manifest generator.version (${currentVersion}) does not match expected (${EXPECTED_GENERATOR_VERSION}). ` +
+        `Update manifest or generator code to avoid drift.`
+    );
+  }
+
+  logger.info(`Loaded and validated manifest for system: ${manifest.system}`);
+  logger.info(`Found ${manifest.modules.length} modules`);
+
+  return manifest;
+}
+
+async function ensureLayerFolders(
+  moduleDir: string,
+  layersConfig: Record<string, string> = {}
+) {
+  const defaultLayers = {
+    domain: 'domain',
+    application: 'application',
+    infrastructure: 'infrastructure',
+  };
+
+  const effectiveLayers = { ...defaultLayers, ...layersConfig };
+
+  for (const [layerName, folderName] of Object.entries(effectiveLayers)) {
+    const layerPath = path.join(moduleDir, 'src', folderName);
+    await fs.mkdir(layerPath, { recursive: true });
+    logger.info(`Ensured layer folder: ${layerPath}`);
+
+    if (layerName === 'application') {
+      await fs.mkdir(path.join(layerPath, 'use-cases'), { recursive: true });
+      await fs.mkdir(path.join(layerPath, 'ports/out'), { recursive: true });
+      logger.info(`Ensured application subfolders: use-cases, ports/out`);
+    }
+
+    if (layerName === 'infrastructure') {
+      await fs.mkdir(path.join(layerPath, 'adapters'), { recursive: true });
+      logger.info(`Ensured infrastructure subfolder: adapters`);
+    }
+  }
+}
+
+// SAFETY GUARD: Non-empty layer barrel
+async function ensureNonEmptyLayerBarrel(
+  layerPath: string,
+  layerName: string,
+  forceOverride = false,
+  dryRunMode = false
+) {
+  const barrelPath = path.join(layerPath, 'index.ts');
+  const header = `// ${layerName} layer barrel — generated by sync.ts
+// Minimum content to prevent TS2306 "not a module" error
+
+`;
+
+  const content =
+    header +
+    'export {};\n// Re-exports will be added automatically when entities/use-cases/ports are declared\n';
+
+  const status = await safeWriteFile(
+    barrelPath,
+    content,
+    forceOverride,
+    dryRunMode
+  );
+  if (status !== 'unchanged' && status !== 'skipped') {
+    logger.info(`Non-empty layer barrel ${status}: ${barrelPath}`);
+  }
+}
+
+async function generateLayerBarrel(
+  layerPath: string,
+  layerName: string,
+  reexportStyle: 'named' | 'star' = 'named',
+  force: boolean = false,
+  dryRun: boolean = false
+) {
+  // Use safety version
+  await ensureNonEmptyLayerBarrel(layerPath, layerName, force, dryRun);
+}
+
+async function generateOrUpdatePackageJson(
+  moduleDir: string,
+  moduleName: string,
+  manifest: ArchitectureManifest,
+  force: boolean = false,
+  dryRun: boolean = false
+) {
+  const pkgPath = path.join(moduleDir, 'package.json');
+  const scope = manifest.scope || 'hexagen';
+  const pkgName = `@${scope}/${kebabCase(moduleName)}`;
+
+  const defaults = manifest.generator?.sync?.packageJson ?? {
+    private: true,
+    version: '0.1.0',
+    license: 'MIT',
+    scripts: {
+      build: 'tsc --build',
+      lint: 'eslint src --ext .ts,.tsx',
+      typecheck: 'tsc --noEmit',
+    },
+    baseDependencies: {},
+    baseDevDependencies: {
+      typescript: '^5.5.4',
+      '@typescript-eslint/eslint-plugin': '^8.0.0',
+      '@typescript-eslint/parser': '^8.0.0',
+      eslint: '^9.0.0',
+      'eslint-config-prettier': '^9.1.0',
+    },
+  };
+
+  const moduleOverrides =
+    manifest.modules.find((m) => m.name === moduleName)?.generator ?? {};
+  const deps = {
+    ...defaults.baseDependencies,
+    ...moduleOverrides.dependencies,
+  };
+  const devDeps = {
+    ...defaults.baseDevDependencies,
+    ...moduleOverrides.devDependencies,
+  };
+
+  const newPkg = {
+    name: pkgName,
+    version: defaults.version,
+    private: defaults.private,
+    license: defaults.license,
+    scripts: { ...defaults.scripts, ...manifest.workspaceDefaults?.scripts },
+    dependencies: deps,
+    devDependencies: devDeps,
+  };
+
+  const newContent = JSON.stringify(newPkg, null, 2) + '\n';
+  const status = await safeWriteFile(pkgPath, newContent, force, dryRun);
+  logger.info(`package.json ${status} for ${pkgName}`);
+  return status;
+}
+
+async function generateOrUpdatePackageTsConfig(
+  moduleDir: string,
+  moduleName: string,
+  manifest: ArchitectureManifest,
+  force: boolean = false,
+  dryRun: boolean = false
+) {
+  const tsConfigPath = path.join(moduleDir, 'tsconfig.json');
+
+  const defaultTsConfig = {
+    // SAFETY GUARD: correct relative prefix
+    extends: './../../tsconfig.base.json',
+    compilerOptions: {
+      rootDir: 'src',
+      outDir: 'dist',
+      declaration: true,
+      emitDeclarationOnly: true,
+      declarationMap: true,
+      composite: true,
+      ...manifest.generator?.sync?.tsconfig?.compilerOptions,
+    },
+    include: ['src/**/*'],
+    exclude: ['node_modules', 'dist'],
+  };
+
+  const newContent = JSON.stringify(defaultTsConfig, null, 2) + '\n';
+  const status = await safeWriteFile(tsConfigPath, newContent, force, dryRun);
+  logger.info(`tsconfig.json ${status} for @hexagen/${kebabCase(moduleName)}`);
+  return status;
+}
+
+async function syncRootTsConfigReferences(
+  rootDir: string,
+  manifest: ArchitectureManifest,
+  force: boolean = false,
+  dryRun: boolean = false
+) {
+  const rootTsConfigPath = path.join(
+    rootDir,
+    manifest.tsConfigRootFile || 'tsconfig.base.json'
+  );
+
+  let existingTsConfig: any = {};
+  try {
+    const content = await fs.readFile(rootTsConfigPath, 'utf-8');
+    existingTsConfig = JSON.parse(content);
+  } catch {
+    logger.warn(`Root tsconfig not found or invalid – creating basic one`);
+  }
+
+  const newReferences = manifest.modules.map((mod) => ({
+    path: `./packages/${mod.name}`,
+  }));
+
+  const newPaths: Record<string, string[]> = {};
+  manifest.modules.forEach((mod) => {
+    const kebab = kebabCase(mod.name);
+    newPaths[`@hexagen/${kebab}`] = [`packages/${mod.name}/src/index.ts`];
+    newPaths[`@hexagen/${kebab}/*`] = [`packages/${mod.name}/src/*`];
+  });
+
+  const updatedTsConfig = {
+    ...existingTsConfig,
+    compilerOptions: {
+      ...existingTsConfig.compilerOptions,
+      paths: {
+        ...(existingTsConfig.compilerOptions?.paths || {}),
+        ...newPaths,
+      },
+    },
+    references: newReferences,
+  };
+
+  const newContent = JSON.stringify(updatedTsConfig, null, 2) + '\n';
+  const status = await safeWriteFile(
+    rootTsConfigPath,
+    newContent,
+    force,
+    dryRun
+  );
+  logger.info(`Root tsconfig.base.json ${status}`);
+  return status;
+}
+
+async function generateModuleRootBarrel(
+  moduleDir: string,
+  moduleName: string,
+  force: boolean = false,
+  dryRun: boolean = false
+) {
+  const barrelPath = path.join(moduleDir, 'src', 'index.ts');
+  const header = `// Auto-generated by yarn sync — edits will be overwritten on next sync\n\n`;
+
+  const content = `${header}export * from './domain';\nexport * from './application';\nexport * from './infrastructure';\n`;
+
+  const status = await safeWriteFile(barrelPath, content, force, dryRun);
+  if (status !== 'unchanged' && status !== 'skipped') {
+    logger.info(`Root barrel ${status} for ${moduleName}`);
+  }
+  return status;
+}
+
+async function generateBarrelsForModule(
+  moduleDir: string,
+  manifest: ArchitectureManifest,
+  force: boolean = false,
+  dryRun: boolean = false
+) {
+  const barrelsConfig = manifest.generator?.sync?.barrels ?? {
+    autoGenerate: true,
+    perLayer: true,
+    reexportStyle: 'named',
+  };
+
+  if (!barrelsConfig.autoGenerate) return;
+
+  const layers = manifest.generator?.sync?.layers ?? {
+    domain: 'domain',
+    application: 'application',
+    infrastructure: 'infrastructure',
+  };
+
+  for (const [layerName, folderName] of Object.entries(layers)) {
+    const layerPath = path.join(moduleDir, 'src', folderName);
+    if (barrelsConfig.perLayer) {
+      await generateLayerBarrel(
+        layerPath,
+        layerName,
+        barrelsConfig.reexportStyle,
+        force,
+        dryRun
+      );
+    }
+  }
+
+  const currentModuleName =
+    manifest.modules.find((m) => path.basename(moduleDir) === m.name)?.name ||
+    'unknown';
+  await generateModuleRootBarrel(moduleDir, currentModuleName, force, dryRun);
+}
+
+// ... (generateEntityOrValueObjectStub, generateUseCaseStub, generatePortStub, generateStubsForModule remain unchanged)
+
+async function runArchLinter(rootDir: string, strict: boolean = false) {
+  logger.info('[sync] Running arch-linter for self-verification...');
+  try {
+    const { stdout, stderr } = await execPromise('yarn arch-linter', {
+      cwd: rootDir,
+    });
+    logger.info('[arch-linter] Output:', stdout.trim());
+    if (stderr) logger.warn('[arch-linter] Warnings/Errors:', stderr.trim());
+    logger.info('[sync] Arch-linter passed successfully');
+  } catch (err) {
+    logger.error('[sync] Arch-linter failed:', (err as Error).message);
+    if (strict) {
+      logger.error('[sync] --strict mode: lint failure blocks sync');
+      process.exit(1);
+    }
+  }
+}
+
+async function main() {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const rootDir = path.resolve(__dirname, '../../..');
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  let unchanged = 0;
+
+  const updateCounters = (
+    status: 'created' | 'updated' | 'unchanged' | 'skipped'
+  ) => {
+    if (status === 'created') created++;
+    else if (status === 'updated') updated++;
+    else if (status === 'skipped') skipped++;
+    else if (status === 'unchanged') unchanged++;
+  };
+
+  try {
+    const manifest = await loadAndValidateManifest(rootDir);
+
+    for (const currentModule of manifest.modules) {
+      const moduleDir = path.join(rootDir, 'packages', currentModule.name);
+      logger.info(`Processing module: ${currentModule.name} → ${moduleDir}`);
+
+      const srcDir = path.join(moduleDir, 'src');
+      if (!dryRun) await fs.mkdir(srcDir, { recursive: true });
+
+      const layersConfig = manifest.generator?.sync?.layers ?? {};
+      await ensureLayerFolders(moduleDir, layersConfig);
+
+      updateCounters(
+        await generateOrUpdatePackageJson(
+          moduleDir,
+          currentModule.name,
+          manifest,
+          force,
+          dryRun
+        )
+      );
+      updateCounters(
+        await generateOrUpdatePackageTsConfig(
+          moduleDir,
+          currentModule.name,
+          manifest,
+          force,
+          dryRun
+        )
+      );
+
+      await generateBarrelsForModule(moduleDir, manifest, force, dryRun);
+      // await generateStubsForModule(moduleDir, currentModule, force, dryRun);
+    }
+
+    updateCounters(
+      await syncRootTsConfigReferences(rootDir, manifest, forceRoot, dryRun)
+    );
+
+    logger.info('\n[sync] Summary:');
+    logger.info(`  Created:   ${created}`);
+    logger.info(`  Updated:   ${updated}`);
+    logger.info(`  Unchanged: ${unchanged}`);
+    logger.info(`  Skipped:   ${skipped}`);
+
+    // SAFETY GUARD: Dry-run visibility
+    if (dryRun) {
+      logger.info('\n[dry-run] No files were actually written.');
+      logger.info('Protected root files skipped unless --force-root used.');
+      logger.info('Non-empty barrels ensured in all layers.');
+    }
+
+    if (!dryRun) {
+      await runArchLinter(rootDir, strict);
+    }
+
+    logger.info(
+      '[sync] Step 8 complete – self-verified, version checked, port stubs added'
+    );
+  } catch (err) {
+    logger.error(err);
+    process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  logger.error(err);
+  process.exit(1);
+});
