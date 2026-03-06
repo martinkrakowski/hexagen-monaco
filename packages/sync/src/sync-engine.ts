@@ -1,5 +1,3 @@
-// packages/sync/src/sync-engine.ts
-
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +15,6 @@ const __dirname = path.dirname(__filename);
 
 /**
  * Central orchestrator for the entire sync process.
- * Every generator now returns structured GeneratorResult.
  */
 export class SyncEngine {
   private config: SyncConfig;
@@ -42,7 +39,7 @@ export class SyncEngine {
 
     try {
       const content = await fs.readFile(manifestPath, 'utf8');
-      this.manifest = yaml.load(content) as any;
+      this.manifest = yaml.load(content);
 
       logger.info(`Loaded manifest from ${manifestPath}`);
     } catch (err: any) {
@@ -132,6 +129,7 @@ export class SyncEngine {
         path.join(process.cwd(), 'packages', moduleName),
         this.config
       );
+
       result.created.push(...barrelResult.created);
       result.skipped.push(...barrelResult.skipped);
       result.updated.push(...barrelResult.updated);
@@ -164,16 +162,13 @@ export class SyncEngine {
       );
       logger.info(`\n=== Generator Summary ===`);
       logger.info(
-        `• Layers     : ${layerResult.created.length} created, ${layerResult.skipped.length} skipped`
+        `• Layers  : ${layerResult.created.length} created, ${layerResult.skipped.length} skipped`
       );
       logger.info(
-        `• Barrels    : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+        `• Barrels : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
       );
       logger.info(
-        `• Total ops  : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
-      );
-      logger.info(
-        `\nAll generators now return structured GeneratorResult — ready for telemetry & A2UI.`
+        `• Total ops : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
       );
     } catch (err: any) {
       logger.error(`Sync failed: ${err.message}`);

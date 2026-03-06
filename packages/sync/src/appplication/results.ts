@@ -1,5 +1,3 @@
-// packages/sync/src/results.ts
-
 /**
  * Result shape returned by each individual generator function.
  * All generators should return this instead of void to enable

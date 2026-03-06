@@ -1,5 +1,3 @@
-// packages/sync/src/generators/layer-folders.ts
-
 import path from 'node:path';
 import { SyncConfig } from '../config.js';
 import { createEmptyResult, type GeneratorResult } from '../results.js';

@@ -1,5 +1,3 @@
-// packages/sync/src/generators/package-json.ts
-
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { SyncConfig } from '../config.js';
