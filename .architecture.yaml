@@ -93,9 +93,18 @@ generator:
     idempotent: true
     createOnlyIfMissing: true
     layers:
-      domain: domain
-      application: application
-      infrastructure: infrastructure
+      domain:
+        folder: domain
+      application:
+        folder: application
+        subfolders:
+          - use-cases
+          - ports/in
+          - ports/out
+      infrastructure:
+        folder: infrastructure
+        subfolders:
+          - adapters
     barrels:
       autoGenerate: true
       perLayer: true
@@ -132,6 +141,8 @@ generator:
         declaration: true
         declarationMap: true
         emitDeclarationOnly: true
+
+bounded_contexts: [] # TODO: populate with real bounded contexts
 
 apps:
   - name: web

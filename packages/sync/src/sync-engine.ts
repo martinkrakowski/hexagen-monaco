@@ -1,19 +1,14 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import * as yaml from 'js-yaml';
+import { fileURLToPath } from 'node:url';
 import type { SyncConfig } from './config.js';
 import { safeWriteFile } from './fs-utils.js';
 import { runArchLinter } from './linter.js';
 import { ensureLayerFolders } from './generators/layer-folders.js';
-// Import generators here (once extracted)
-// import { ensureLayerFolders } from './generators/layer-folders.js';
-// import { generateBarrelsForModule } from './generators/barrels.js';
-// import { generateStubsForModule } from './generators/stubs.js';
-// import { generateOrUpdatePackageJson } from './generators/package-json.js';
-// import { generateOrUpdatePackageTsConfig, syncRootTsConfigReferences } from './generators/tsconfig.js';
 
-const ROOT_DIR = process.cwd();
-const MANIFEST_PATH = path.join(ROOT_DIR, '.architecture.yaml');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface SyncResult {
   filesCreated: number;
@@ -35,40 +30,77 @@ export class SyncEngine {
   private async loadManifest(): Promise<void> {
     const { logger, dryRun } = this.config;
 
+    // Resolve from runtime context (ESM-safe)
+    const manifestPath = path.resolve(__dirname, '../../../.architecture.yaml');
+
+    logger.info(`[debug] __dirname (ESM): ${__dirname}`);
+    logger.info(`[debug] resolved manifestPath: ${manifestPath}`);
+
     try {
-      const content = await fs.readFile(MANIFEST_PATH, 'utf8');
+      await fs.access(manifestPath);
+      logger.info('[debug] fs.access succeeded');
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        logger.error(`[debug] fs.access failed: ${e.name} – ${e.message}`);
+      } else {
+        logger.error(`[debug] fs.access failed: unknown error`);
+      }
+    }
+
+    try {
+      const content = await fs.readFile(manifestPath, 'utf8');
       this.manifest = yaml.load(content);
 
       if (!this.manifest || typeof this.manifest !== 'object') {
         throw new Error('Invalid manifest format');
       }
 
-      logger.info(`Loaded manifest from ${MANIFEST_PATH}`);
-    } catch (err: any) {
-      if (err.code === 'ENOENT') {
+      logger.info(`Loaded manifest from ${manifestPath}`);
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
         if (dryRun) {
-          logger.warn(`Manifest not found — using empty manifest for dry-run`);
+          logger.warn(
+            `Manifest not found at ${manifestPath} — using empty manifest for dry-run`
+          );
           this.manifest = { modules: [] };
           return;
         }
 
         logger.error(
-          `Manifest file missing: ${MANIFEST_PATH}. Cannot continue in real mode.`
+          `Manifest file missing: ${manifestPath}. Cannot continue in real mode.`
         );
         throw new Error('Manifest file missing');
       }
 
-      logger.error(`Failed to load manifest: ${err.message}`);
+      logger.error(
+        `Failed to load manifest from ${manifestPath}: ${(err as Error)?.message ?? String(err)}`
+      );
       throw err;
     }
   }
 
   private async ensureDirectories(): Promise<void> {
+    const { logger } = this.config;
     const layers = this.manifest.generator?.sync?.layers || {};
     const modules = this.manifest.modules || [];
 
+    logger.info(`[debug] Loaded ${modules.length} modules from manifest`);
+
     for (const mod of modules) {
+      if (
+        !mod ||
+        typeof mod !== 'object' ||
+        !mod.name ||
+        typeof mod.name !== 'string'
+      ) {
+        logger.warn(`Skipping invalid module entry: ${JSON.stringify(mod)}`);
+        continue;
+      }
+
       const moduleDir = path.join(process.cwd(), 'packages', mod.name);
+      logger.info(
+        `Ensuring directories for module: ${mod.name} at ${moduleDir}`
+      );
       await ensureLayerFolders(moduleDir, layers, this.config);
     }
   }
@@ -99,7 +131,6 @@ export class SyncEngine {
       // TODO: Delegate to extracted generators
       // await generateOrUpdatePackageJson(moduleName, module, this.config);
       // await generateOrUpdatePackageTsConfig(moduleName, module, this.config);
-      // await ensureLayerFolders(moduleName, this.config);
       // await generateBarrelsForModule(moduleName, module, this.config);
       // await generateStubsForModule(moduleName, module, this.config);
 
