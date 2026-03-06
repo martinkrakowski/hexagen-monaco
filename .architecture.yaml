@@ -10,7 +10,7 @@ monorepo:
   packageManager: yarn@4.12.0
   linker: node-modules
   buildTool: turbo
-  workspaces: ['apps/*', 'packages/*', 'tools/*']
+  workspaces: ['apps/*', 'packages/*'] # legacy 'tools/*' removed
   root:
     hoistDevDependencies: true
     noInternalDeps: true
@@ -26,8 +26,8 @@ monorepo:
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
     compilerOptions:
-      target: es2021
-      lib: [es2021, dom, dom.iterable]
+      target: es2022
+      lib: [es2022, dom, dom.iterable]
       module: esnext
       moduleResolution: bundler
       strict: true
@@ -114,6 +114,11 @@ generator:
         - application/use-cases/**/*.ts
         - application/ports/**/*.ts
         - infrastructure/**/*.ts
+    stubs:
+      enabled: true
+      ports: true
+      entities: true
+      use-cases: true
     packageJson:
       private: true
       version: '0.1.0'
@@ -186,7 +191,7 @@ modules:
         - DownloadProviderPort
     generator:
       dependencies:
-        yaml: ^2.4.0
+        js-yaml: ^4.1.0
         zod: ^3.23.8
 
   - name: shared
