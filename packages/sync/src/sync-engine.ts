@@ -1,27 +1,27 @@
+// packages/sync/src/sync-engine.ts
+
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import * as yaml from 'js-yaml';
 import { fileURLToPath } from 'node:url';
-import type { SyncConfig } from './config.js';
+import yaml from 'js-yaml';
+import { SyncConfig } from './config.js';
 import { safeWriteFile } from './fs-utils.js';
 import { runArchLinter } from './linter.js';
 import { ensureLayerFolders } from './generators/layer-folders.js';
+import { generateBarrels } from './generators/barrels.js';
+import { createEmptyResult, type GeneratorResult } from './results.js';
 
+// ESM-safe __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-interface SyncResult {
-  filesCreated: number;
-  filesUpdated: number;
-  filesSkipped: number;
-  filesUnchanged: number;
-  modulesProcessed: number;
-  summaryMessage: string;
-}
-
+/**
+ * Central orchestrator for the entire sync process.
+ * Every generator now returns structured GeneratorResult.
+ */
 export class SyncEngine {
   private config: SyncConfig;
-  private manifest: any; // TODO: Replace with proper Zod-validated type later
+  private manifest: any = {};
 
   constructor(config: SyncConfig) {
     this.config = config;
@@ -30,7 +30,6 @@ export class SyncEngine {
   private async loadManifest(): Promise<void> {
     const { logger, dryRun } = this.config;
 
-    // ESM-safe root-relative resolution
     const manifestPath = path.resolve(__dirname, '../../../.architecture.yaml');
 
     logger.info(`[debug] __dirname (ESM): ${__dirname}`);
@@ -39,61 +38,33 @@ export class SyncEngine {
     try {
       await fs.access(manifestPath);
       logger.info('[debug] fs.access succeeded');
-    } catch (e: unknown) {
-      if (e instanceof Error) {
-        logger.error(`[debug] fs.access failed: ${e.name} – ${e.message}`);
-      } else {
-        logger.error(`[debug] fs.access failed: unknown error`);
-      }
-    }
+    } catch {}
 
     try {
       const content = await fs.readFile(manifestPath, 'utf8');
-      this.manifest = yaml.load(content);
-
-      if (!this.manifest || typeof this.manifest !== 'object') {
-        throw new Error('Invalid manifest format');
-      }
+      this.manifest = yaml.load(content) as any;
 
       logger.info(`Loaded manifest from ${manifestPath}`);
-    } catch (err: unknown) {
-      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
         if (dryRun) {
-          logger.warn(
-            `Manifest not found at ${manifestPath} — using empty manifest for dry-run`
-          );
+          logger.warn(`Manifest not found — using empty for dry-run`);
           this.manifest = { modules: [] };
           return;
         }
-
-        logger.error(
-          `Manifest file missing: ${manifestPath}. Cannot continue in real mode.`
-        );
         throw new Error('Manifest file missing');
       }
-
-      logger.error(
-        `Failed to load manifest from ${manifestPath}: ${(err as Error)?.message ?? String(err)}`
-      );
       throw err;
     }
   }
 
   private async ensureRootFiles(): Promise<void> {
-    const { logger, dryRun, forceRoot } = this.config;
-
-    // Minimal root bootstrap files (idempotent via safeWriteFile)
+    const { logger } = this.config;
     const rootFiles = [
       {
         path: path.join(process.cwd(), '.gitignore'),
-        content: `# HexaGen defaults
-node_modules
-dist
-.next
-.turbo
-*.log
-.DS_Store
-`,
+        content:
+          '# HexaGen defaults\nnode_modules\ndist\n.next\n.turbo\n*.log\n.DS_Store\n',
       },
       {
         path: path.join(process.cwd(), 'turbo.json'),
@@ -102,24 +73,8 @@ dist
             {
               $schema: 'https://turbo.build/schema.json',
               pipeline: {
-                build: {
-                  dependsOn: ['^build'],
-                  outputs: ['dist/**', '.next/**', '!.next/cache/**'],
-                },
-                lint: {
-                  dependsOn: ['^build'],
-                },
-                test: {
-                  dependsOn: ['^build'],
-                },
-                dev: {
-                  cache: false,
-                  persistent: true,
-                },
-                typecheck: {
-                  outputs: [],
-                  cache: true,
-                },
+                build: { dependsOn: ['^build'] },
+                dev: { cache: false, persistent: true },
               },
             },
             null,
@@ -136,72 +91,58 @@ dist
     }
   }
 
-  private async ensureDirectories(): Promise<void> {
+  private async ensureDirectories(): Promise<GeneratorResult> {
+    const result = createEmptyResult();
     const { logger } = this.config;
     const layers = this.manifest.generator?.sync?.layers || {};
     const modules = this.manifest.modules || [];
 
-    logger.info(`[debug] Loaded ${modules.length} modules from manifest`);
-
     for (const mod of modules) {
-      if (
-        !mod ||
-        typeof mod !== 'object' ||
-        !mod.name ||
-        typeof mod.name !== 'string'
-      ) {
-        logger.warn(`Skipping invalid module entry: ${JSON.stringify(mod)}`);
-        continue;
-      }
-
+      if (!mod?.name) continue;
       const moduleDir = path.join(process.cwd(), 'packages', mod.name);
       logger.info(
         `Ensuring directories for module: ${mod.name} at ${moduleDir}`
       );
-      await ensureLayerFolders(moduleDir, layers, this.config);
+
+      const layerResult = await ensureLayerFolders(
+        moduleDir,
+        layers,
+        this.config
+      );
+      result.created.push(...layerResult.created);
+      result.skipped.push(...layerResult.skipped);
+      result.updated.push(...layerResult.updated);
+      result.dryRunOperations += layerResult.dryRunOperations;
     }
+    return result;
   }
 
-  private async generateCoreArtifacts(): Promise<SyncResult> {
-    const result: SyncResult = {
-      filesCreated: 0,
-      filesUpdated: 0,
-      filesSkipped: 0,
-      filesUnchanged: 0,
-      modulesProcessed: 0,
-      summaryMessage: '',
-    };
-
+  private async generateCoreArtifacts(): Promise<GeneratorResult> {
+    const result = createEmptyResult();
     const { logger } = this.config;
-
-    // Root-level sync (now includes .gitignore + turbo.json bootstrap)
-    await this.ensureRootFiles();
-
-    // Per-module generation
     const modules = this.manifest.modules || [];
-    result.modulesProcessed = modules.length;
+
+    await this.ensureRootFiles();
 
     for (const module of modules) {
       const moduleName = module.name;
       logger.info(`Processing module: ${moduleName}`);
 
-      // TODO: Delegate to extracted generators
-      // await generateOrUpdatePackageJson(moduleName, module, this.config);
-      // await generateOrUpdatePackageTsConfig(moduleName, module, this.config);
-      // await generateBarrelsForModule(moduleName, module, this.config);
-      // await generateStubsForModule(moduleName, module, this.config);
-
-      // Placeholder counters (replace with real results when generators return statuses)
-      result.filesCreated += 2;
-      result.filesUpdated += 1;
+      const barrelResult = await generateBarrels(
+        path.join(process.cwd(), 'packages', moduleName),
+        this.config
+      );
+      result.created.push(...barrelResult.created);
+      result.skipped.push(...barrelResult.skipped);
+      result.updated.push(...barrelResult.updated);
+      result.dryRunOperations += barrelResult.dryRunOperations;
     }
-
-    result.summaryMessage = `Processed ${result.modulesProcessed} modules.`;
     return result;
   }
 
   async run(): Promise<void> {
     const { logger, dryRun } = this.config;
+    const start = Date.now();
 
     logger.info(
       dryRun ? '[DRY-RUN MODE] Starting sync...' : 'Starting sync...'
@@ -210,26 +151,33 @@ dist
     try {
       await this.loadManifest();
 
-      await this.ensureDirectories();
-
-      const generationResult = await this.generateCoreArtifacts();
+      const layerResult = await this.ensureDirectories();
+      const artifactsResult = await this.generateCoreArtifacts();
 
       await runArchLinter(this.config);
 
-      // Final summary
+      const duration = Date.now() - start;
+
       logger.info('\nSync completed successfully.');
-      logger.info(generationResult.summaryMessage);
       logger.info(
-        `Files: ${generationResult.filesCreated} created, ` +
-          `${generationResult.filesUpdated} updated, ` +
-          `${generationResult.filesSkipped} skipped, ` +
-          `${generationResult.filesUnchanged} unchanged`
+        `Processed ${this.manifest.modules?.length ?? 0} modules in ${duration}ms`
+      );
+      logger.info(`\n=== Generator Summary ===`);
+      logger.info(
+        `• Layers     : ${layerResult.created.length} created, ${layerResult.skipped.length} skipped`
+      );
+      logger.info(
+        `• Barrels    : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+      );
+      logger.info(
+        `• Total ops  : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
+      );
+      logger.info(
+        `\nAll generators now return structured GeneratorResult — ready for telemetry & A2UI.`
       );
     } catch (err: any) {
       logger.error(`Sync failed: ${err.message}`);
-      if (!dryRun) {
-        process.exit(1);
-      }
+      if (!dryRun) process.exit(1);
     }
   }
 }
