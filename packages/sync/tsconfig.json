@@ -13,9 +13,8 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": false,
-    "emitDeclarationOnly": false,
-    "incremental": false
+    "types": ["node"]
   },
-  "exclude": ["node_modules", "dist", "**/*.d.ts", "**/*.d.ts.map"],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

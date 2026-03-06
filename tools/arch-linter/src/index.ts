@@ -4,10 +4,14 @@ import { Project } from 'ts-morph';
 import * as yaml from 'js-yaml';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createConsoleLogger } from './logger.js';
 
 // ESM polyfill for __dirname / __filename
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Local logger instance (dogfooding the logger we expose)
+const logger = createConsoleLogger();
 
 // --- CONFIGURATION ---
 const ROOT_DIR = path.resolve(__dirname, '..', '..', '..');
@@ -30,9 +34,7 @@ let manifest: any;
 try {
   manifest = yaml.load(fs.readFileSync(MANIFEST_PATH, 'utf8'));
 } catch (e) {
-  console.error(
-    `❌ Could not load architecture manifest from ${MANIFEST_PATH}`
-  );
+  logger.error(`Could not load architecture manifest from ${MANIFEST_PATH}`);
   process.exit(1);
 }
 
@@ -77,7 +79,7 @@ function checkArchitecturalIntegrity() {
 Boundary Violation in [${moduleName}]:
   File: ${path.relative(ROOT_DIR, file.getFilePath())}
   Illegal import from another module: "${moduleSpecifier}"
-            `.trim()
+              `.trim()
             );
           }
         }
@@ -96,7 +98,7 @@ Boundary Violation in [${moduleName}]:
 Domain Violation in [${moduleName}]:
   Domain file: ${path.relative(ROOT_DIR, file.getFilePath())}
   Cannot import from outside the domain layer: "${moduleSpecifier}"
-              `.trim()
+                `.trim()
               );
             }
           }
@@ -117,7 +119,7 @@ Domain Violation in [${moduleName}]:
 Application Violation in [${moduleName}]:
   Application file: ${path.relative(ROOT_DIR, file.getFilePath())}
   Cannot import from outside the application/domain layers: "${moduleSpecifier}"
-              `.trim()
+                `.trim()
               );
             }
           }
@@ -128,15 +130,17 @@ Application Violation in [${moduleName}]:
 
   // --- REPORTING ---
   if (errors.length > 0) {
-    console.error(
-      '\n❌ Architectural Integrity Check Failed. Found violations:\n'
-    );
-    errors.forEach((e) => console.error(`  - ${e}\n`));
+    logger.error('Architectural Integrity Check Failed. Found violations:');
+    errors.forEach((e) => logger.error(`  - ${e}`));
     process.exit(1);
   } else {
-    console.log('✅ Architecture is compliant with architecture.yaml.');
+    logger.info('Architecture is compliant with architecture.yaml.');
   }
 }
 
-console.log('Running Architectural Integrity Linter...');
+logger.info('Running Architectural Integrity Linter...');
 checkArchitecturalIntegrity();
+
+// Barrel re-exports – required to satisfy cross-package import rules
+export type { Logger } from './logger.js';
+export { createConsoleLogger } from './logger.js';

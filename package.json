@@ -10,13 +10,14 @@
   ],
   "scripts": {
     "build": "turbo build",
+    "build:all": "turbo build",
+    "sync": "yarn workspace @hexagen/sync sync --",
     "dev": "turbo dev",
     "dev:api": "yarn workspace @hexagen/api-gateway dev",
     "dev:web": "yarn workspace web dev",
     "lint": "turbo lint && yarn lint:arch",
     "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",
     "typecheck": "turbo run typecheck",
-    "sync": "yarn workspace @hexagen/arch-linter sync",
     "test": "turbo test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
@@ -31,5 +32,11 @@
     "prettier": "^3.2.5",
     "turbo": "^1.13.3",
     "typescript": "^5.4.5"
+  },
+  "resolutions": {
+    "js-yaml": "3.14.1",
+    "minimatch": "3.1.2",
+    "brace-expansion": "1.1.11",
+    "tinyglobby": "0.2.10"
   }
 }
