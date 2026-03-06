@@ -1,4 +1,7 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -7,10 +10,15 @@ const nextConfig = {
     '@hexagen/project-generation',
     '@hexagen/project-configuration',
   ],
+  // turbopack: {
+  //   root: __dirname, // ← apps/web itself (where next/package.json lives)
+  // },
+  experimental: {
+    turbopack: false,
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      // Ensure this points to the folder containing 'lib'
       '@': path.resolve('./app'),
     };
     return config;
