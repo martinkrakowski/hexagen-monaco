@@ -30,7 +30,7 @@ export class SyncEngine {
   private async loadManifest(): Promise<void> {
     const { logger, dryRun } = this.config;
 
-    // Resolve from runtime context (ESM-safe)
+    // ESM-safe root-relative resolution
     const manifestPath = path.resolve(__dirname, '../../../.architecture.yaml');
 
     logger.info(`[debug] __dirname (ESM): ${__dirname}`);
@@ -79,6 +79,63 @@ export class SyncEngine {
     }
   }
 
+  private async ensureRootFiles(): Promise<void> {
+    const { logger, dryRun, forceRoot } = this.config;
+
+    // Minimal root bootstrap files (idempotent via safeWriteFile)
+    const rootFiles = [
+      {
+        path: path.join(process.cwd(), '.gitignore'),
+        content: `# HexaGen defaults
+node_modules
+dist
+.next
+.turbo
+*.log
+.DS_Store
+`,
+      },
+      {
+        path: path.join(process.cwd(), 'turbo.json'),
+        content:
+          JSON.stringify(
+            {
+              $schema: 'https://turbo.build/schema.json',
+              pipeline: {
+                build: {
+                  dependsOn: ['^build'],
+                  outputs: ['dist/**', '.next/**', '!.next/cache/**'],
+                },
+                lint: {
+                  dependsOn: ['^build'],
+                },
+                test: {
+                  dependsOn: ['^build'],
+                },
+                dev: {
+                  cache: false,
+                  persistent: true,
+                },
+                typecheck: {
+                  outputs: [],
+                  cache: true,
+                },
+              },
+            },
+            null,
+            2
+          ) + '\n',
+      },
+    ];
+
+    for (const file of rootFiles) {
+      const status = await safeWriteFile(file.path, file.content, this.config);
+      if (status !== 'unchanged' && status !== 'skipped') {
+        logger.info(`Root file ${status}: ${file.path}`);
+      }
+    }
+  }
+
   private async ensureDirectories(): Promise<void> {
     const { logger } = this.config;
     const layers = this.manifest.generator?.sync?.layers || {};
@@ -117,8 +174,8 @@ export class SyncEngine {
 
     const { logger } = this.config;
 
-    // Root-level sync (tsconfig references, root package.json if needed)
-    // await syncRootTsConfigReferences(this.manifest, this.config);
+    // Root-level sync (now includes .gitignore + turbo.json bootstrap)
+    await this.ensureRootFiles();
 
     // Per-module generation
     const modules = this.manifest.modules || [];
