@@ -1,4 +1,8 @@
-// Inbound port for ValidateStep
 export interface IValidateStepPort {
-  execute(data: unknown): Promise<unknown>;
+  /**
+   * Validates the current wizard step against domain rules and invariants.
+   * Infrastructure adapters (schema validator, business rules engine, etc.)
+   * implement this contract.
+   */
+  validate(data: unknown): Promise<unknown>;
 }

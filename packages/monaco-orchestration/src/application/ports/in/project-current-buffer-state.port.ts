@@ -1,4 +1,8 @@
-// Inbound port for ProjectCurrentBufferState
 export interface IProjectCurrentBufferStatePort {
-  execute(data: unknown): Promise<unknown>;
+  /**
+   * Retrieves the current state of the Monaco buffer (content, cursor, selections, etc.).
+   * Infrastructure adapters (Monaco Editor instance, text-model wrapper, snapshot service)
+   * implement this contract.
+   */
+  getCurrentState(data: unknown): Promise<unknown>;
 }

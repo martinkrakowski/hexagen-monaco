@@ -1,8 +1,19 @@
 import type { IProjectCurrentBufferStatePort } from '../ports/in/project-current-buffer-state.port';
 
-export class ProjectCurrentBufferStateUseCase implements IProjectCurrentBufferStatePort {
-  async execute(_data: unknown): Promise<unknown> {
-    void _data; // TODO: Implement use case logic
-    return {};
+export class ProjectCurrentBufferStateUseCase {
+  constructor(private readonly port: IProjectCurrentBufferStatePort) {}
+
+  async execute(data: unknown): Promise<unknown> {
+    // Boundary validation - application layer responsibility
+    if (data === null || data === undefined) {
+      throw new Error('Buffer state query data cannot be null or undefined');
+    }
+
+    // Delegate actual buffer state retrieval (current Monaco model, cursor, selections, etc.)
+    // to infrastructure port
+    const result = await this.port.getCurrentState(data);
+
+    // Optional: post-processing, serialization, domain mapping
+    return result;
   }
 }

@@ -1,5 +1,3 @@
-// packages/sync/src/sync-engine.ts
-
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
