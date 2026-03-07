@@ -1,4 +1,13 @@
-export class ProjectSpec {
+export interface ProjectSpecification {
+  id: string;
+  name: string;
+  description?: string;
+  boundedContexts?: string[];
+  techStack?: Record<string, string>;
+  version?: string;
+}
+
+export class ProjectSpec implements ProjectSpecification {
   constructor(
     public readonly id: string,
     public readonly name: string,

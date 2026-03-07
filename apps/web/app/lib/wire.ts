@@ -1,34 +1,48 @@
 // apps/web/app/lib/wire.ts
-// Wire layer — inbound adapters for web driver (Next.js App Router)
+// Inbound driver adapter layer — orchestrates bounded contexts for web actions
 
-import { generateProjectUseCase } from '@hexagen/project-generation';
+import { createWebUseCaseFactories } from '@hexagen/web-driver';
+import type { Project as WebProject } from '@hexagen/web-driver';
+import { GenerateProjectUseCase } from '@hexagen/project-generation';
 import type { ProjectConfig } from '@hexagen/project-configuration';
-import type { Project } from '@hexagen/project-generation';
 
-// Temporary stub port — MUST match current IGenerateProjectPort contract
-const stubGeneratePort = {
-  async generate(spec: any): Promise<void> {
-    console.warn(
-      '[STUB] generateProject port called — implement real FileSystemPort'
-    );
-    // No return value needed — port returns void
-  },
-};
+// Singleton factories (web-driver context)
+const webFactories = createWebUseCaseFactories();
 
-// Inbound action (used by /api/generate/route.ts)
 export async function generateProjectAction(
-  spec: ProjectConfig
-): Promise<Project> {
-  // Create use-case instance with stub port
-  const useCase = generateProjectUseCase(stubGeneratePort);
+  rawSpec: ProjectConfig
+): Promise<WebProject> {
+  // Temp no-op port — replace with real infrastructure adapter
+  const tempPort = {
+    async generate(): Promise<void> {
+      // TODO: wire real generator
+    },
+  };
 
-  // Execute use-case (returns domain Project entity)
-  return useCase.execute(spec);
+  const useCase = new GenerateProjectUseCase(tempPort);
+  const project = await useCase.execute(rawSpec);
+
+  const webProject: WebProject = {
+    id: project.id,
+    spec: {
+      name: project.name,
+      description: '',
+    },
+    boundedContexts: [],
+    rootFiles: {},
+    lastGeneratedAt: new Date(),
+  };
+
+  const projection = webFactories.createProjectViewProjectionUseCase();
+  const tree = projection.projectTree(webProject);
+  console.debug('[DEBUG] Generated project tree nodes:', tree.totalNodes);
+
+  return webProject;
 }
 
-// Placeholder for download (not yet ported)
-export async function downloadProjectAction(project: Project): Promise<Buffer> {
-  throw new Error(
-    'downloadProjectAction not yet implemented in hexagonal architecture'
-  );
+export async function downloadProjectAction(
+  project: WebProject
+): Promise<{ success: boolean; downloadUrl?: string; message: string }> {
+  const downloadUseCase = webFactories.createDownloadProjectUseCase();
+  return downloadUseCase.execute(project);
 }

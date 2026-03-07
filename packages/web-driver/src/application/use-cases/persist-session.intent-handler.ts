@@ -1,5 +1,5 @@
-import { MonacoPersistencePort } from '../../../domain';
-import type { MonacoSessionState } from '../../../domain';
+import { MonacoPersistencePort } from '../../domain';
+import type { MonacoSessionState } from '../../domain';
 
 /**
  * Intent handler for persisting Monaco editor session state.

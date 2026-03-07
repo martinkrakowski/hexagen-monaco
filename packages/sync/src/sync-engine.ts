@@ -95,7 +95,7 @@ export class SyncEngine {
     const result = createEmptyResult();
     const { logger } = this.config;
     const layers = this.manifest.generator?.sync?.layers || {};
-    const modules = this.manifest.modules || [];
+    const modules = this.manifest.bounded_contexts || [];
 
     for (const mod of modules) {
       if (!mod?.name) continue;
@@ -120,7 +120,7 @@ export class SyncEngine {
   private async generateCoreArtifacts(): Promise<GeneratorResult> {
     const result = createEmptyResult();
     const { logger } = this.config;
-    const modules = this.manifest.modules || [];
+    const modules = this.manifest.bounded_contexts || [];
 
     await this.ensureRootFiles();
 
@@ -189,7 +189,7 @@ export class SyncEngine {
 
       logger.info('\nSync completed successfully.');
       logger.info(
-        `Processed ${this.manifest.modules?.length ?? 0} modules in ${duration}ms`
+        `Processed ${this.manifest.bounded_contexts?.length ?? 0} modules in ${duration}ms`
       );
       logger.info(`\n=== Generator Summary ===`);
       logger.info(

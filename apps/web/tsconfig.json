@@ -37,7 +37,11 @@
     },
     {
       "path": "../../packages/monaco-orchestration"
-    }
+    },
+    {
+      "path": "../../packages/web-driver"
+    },
+    { "path": "../../packages/shared" }
   ],
   "exclude": ["node_modules"]
 }

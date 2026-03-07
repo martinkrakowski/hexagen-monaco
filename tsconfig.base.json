@@ -55,7 +55,11 @@
         "./packages/agentic-interaction/src/*"
       ],
       "@hexagen/deployment": ["./packages/deployment/src/index.ts"],
-      "@hexagen/deployment/*": ["./packages/deployment/src/*"]
+      "@hexagen/deployment/*": ["./packages/deployment/src/*"],
+      "@hexagen/*": ["./packages/*/src/index.ts"],
+      "@hexagen/web-driver": ["./packages/web-driver/src/index.ts"],
+      "@hexagen/web-driver/*": ["./packages/web-driver/src/*"],
+      "@/*": ["./apps/web/src/*", "./apps/web/app/*"]
     }
   },
   "references": [

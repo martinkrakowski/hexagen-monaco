@@ -4,7 +4,7 @@ export class Project {
     public readonly name: string,
     public readonly rootName: string,
     public readonly createdAt: Date = new Date(),
-    public readonly updatedAt: Date = new Date(),
+    public readonly updatedAt: Date = new Date()
   ) {}
 
   static create(props: {
@@ -14,12 +14,13 @@ export class Project {
   }): Project {
     if (!props.id) throw new Error('Project ID is required');
     if (!props.name.trim()) throw new Error('Project name is required');
-    if (!props.rootName.trim()) throw new Error('Root name (kebab-case identifier) is required');
+    if (!props.rootName.trim())
+      throw new Error('Root name (kebab-case identifier) is required');
 
     return new Project(
       props.id,
       props.name.trim(),
-      props.rootName.trim().toLowerCase().replace(/\s+/g, '-'),
+      props.rootName.trim().toLowerCase().replace(/\s+/g, '-')
     );
   }
 
@@ -27,9 +28,10 @@ export class Project {
     return new Project(
       this.id,
       props.name?.trim() ?? this.name,
-      props.rootName?.trim().toLowerCase().replace(/\s+/g, '-') ?? this.rootName,
+      props.rootName?.trim().toLowerCase().replace(/\s+/g, '-') ??
+        this.rootName,
       this.createdAt,
-      new Date(),
+      new Date()
     );
   }
 
