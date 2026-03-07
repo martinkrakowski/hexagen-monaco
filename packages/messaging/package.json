@@ -10,6 +10,7 @@
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.0.0"
   }

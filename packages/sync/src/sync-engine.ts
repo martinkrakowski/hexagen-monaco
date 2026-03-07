@@ -22,39 +22,64 @@ const __dirname = path.dirname(__filename);
 export class SyncEngine {
   private config: SyncConfig;
   private manifest: any = {};
+  private workspaceRoot: string = '';
 
   constructor(config: SyncConfig) {
     this.config = config;
   }
 
+  private async findWorkspaceRoot(): Promise<string> {
+    let currentDir = __dirname;
+
+    while (currentDir !== path.parse(currentDir).root) {
+      try {
+        const pkgPath = path.join(currentDir, 'package.json');
+        const pkgContent = await fs.readFile(pkgPath, 'utf-8');
+        const pkg = JSON.parse(pkgContent);
+
+        if (pkg.workspaces && Array.isArray(pkg.workspaces)) {
+          return currentDir;
+        }
+      } catch {
+        // silent — not this directory
+      }
+
+      currentDir = path.dirname(currentDir);
+    }
+
+    throw new Error(
+      'Could not locate monorepo root. No package.json with "workspaces" field found.'
+    );
+  }
+
   private async loadManifest(): Promise<void> {
     const { logger, dryRun } = this.config;
 
-    const manifestPath = path.resolve(__dirname, '../../../.architecture.yaml');
+    // Use workspace root + relative path to manifest (safer than __dirname jumps)
+    const manifestPath = path.join(this.workspaceRoot, '.architecture.yaml');
 
     logger.info(`[debug] __dirname (ESM): ${__dirname}`);
+    logger.info(`[debug] resolved workspaceRoot: ${this.workspaceRoot}`);
     logger.info(`[debug] resolved manifestPath: ${manifestPath}`);
 
     try {
       await fs.access(manifestPath);
       logger.info('[debug] fs.access succeeded');
-    } catch {}
+    } catch (err: any) {
+      if (err.code === 'ENOENT' && dryRun) {
+        logger.warn(`Manifest not found — using empty for dry-run`);
+        this.manifest = { bounded_contexts: [] };
+        return;
+      }
+      throw err;
+    }
 
     try {
       const content = await fs.readFile(manifestPath, 'utf8');
       this.manifest = yaml.load(content);
-
       logger.info(`Loaded manifest from ${manifestPath}`);
     } catch (err: any) {
-      if (err.code === 'ENOENT') {
-        if (dryRun) {
-          logger.warn(`Manifest not found — using empty for dry-run`);
-          this.manifest = { modules: [] };
-          return;
-        }
-        throw new Error('Manifest file missing');
-      }
-      throw err;
+      throw new Error(`Failed to parse manifest: ${err.message}`);
     }
   }
 
@@ -62,12 +87,12 @@ export class SyncEngine {
     const { logger } = this.config;
     const rootFiles = [
       {
-        path: path.join(process.cwd(), '.gitignore'),
+        path: path.join(this.workspaceRoot, '.gitignore'),
         content:
           '# HexaGen defaults\nnode_modules\ndist\n.next\n.turbo\n*.log\n.DS_Store\n',
       },
       {
-        path: path.join(process.cwd(), 'turbo.json'),
+        path: path.join(this.workspaceRoot, 'turbo.json'),
         content:
           JSON.stringify(
             {
@@ -99,7 +124,7 @@ export class SyncEngine {
 
     for (const mod of modules) {
       if (!mod?.name) continue;
-      const moduleDir = path.join(process.cwd(), 'packages', mod.name);
+      const moduleDir = path.join(this.workspaceRoot, 'packages', mod.name);
       logger.info(
         `Ensuring directories for module: ${mod.name} at ${moduleDir}`
       );
@@ -126,7 +151,7 @@ export class SyncEngine {
 
     for (const module of modules) {
       const moduleName = module.name;
-      const moduleDir = path.join(process.cwd(), 'packages', moduleName);
+      const moduleDir = path.join(this.workspaceRoot, 'packages', moduleName);
       logger.info(`Processing module: ${moduleName}`);
 
       const barrelResult = await generateBarrels(moduleDir, this.config);
@@ -178,6 +203,7 @@ export class SyncEngine {
     );
 
     try {
+      this.workspaceRoot = await this.findWorkspaceRoot();
       await this.loadManifest();
 
       const layerResult = await this.ensureDirectories();
