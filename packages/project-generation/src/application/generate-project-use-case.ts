@@ -1,31 +1,34 @@
-import { z } from 'zod';
-import { projectConfigSchema } from '@hexagen/project-configuration';
-import type { FileTreeNode } from '../domain';
+import type { IGenerateProjectPort } from './ports/in/generate-project.port';
 
-export const generateProjectUseCase = {
-  execute: async (
-    fullSpec: z.infer<typeof projectConfigSchema>
-  ): Promise<FileTreeNode> => {
-    // 1. Prune / map to minimal shape
-    const minimalSpec = {
-      rootName: fullSpec.name,
-      // ... other fields
-    };
+import { Project } from '../domain/entities/project';
+import { ProjectSpecification } from '../domain/value-objects/project-specification';
+import type { ProjectConfig } from '@hexagen/project-configuration';
 
-    void minimalSpec;
+export class GenerateProjectUseCase {
+  constructor(private readonly port: IGenerateProjectPort) {}
 
-    // 2. Return a valid FileTreeNode (The actual "output" of this port)
-    // In a real scenario, this is where your generation logic would go.
-    return {
-      name: fullSpec.name,
-      type: 'directory',
-      children: [
-        {
-          name: 'README.md',
-          type: 'file',
-          content: `# ${fullSpec.name}\nGenerated via Hexagen.`,
-        },
-      ],
-    };
-  },
-};
+  async execute(fullSpec: ProjectConfig): Promise<Project> {
+    const rootName = fullSpec.rootName;
+
+    // Create domain value object (invariants enforced)
+    ProjectSpecification.create({
+      name: rootName,
+      rootName,
+    });
+
+    // Delegate generation to infrastructure port (port only needs spec)
+    await this.port.generate(
+      ProjectSpecification.create({
+        name: rootName,
+        rootName,
+      })
+    );
+
+    // Return minimal valid Project entity (port doesn't create it)
+    return Project.create({
+      id: crypto.randomUUID(),
+      name: rootName,
+      rootName,
+    });
+  }
+}

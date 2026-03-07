@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { FileTreeNode } from '@hexagen/project-generation';
+// import type { FileTreeNode } from '@hexagen/project-generation';
 import { ResizableLayout } from '@/components/layout/ResizableLayout';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -63,7 +63,7 @@ type Intent =
   | {
       type: 'DOWNLOAD';
       source: 'user' | 'agent';
-      payload: FileTreeNode;
+      // payload: FileTreeNode;
       metadata: { confidence: number };
     };
 
