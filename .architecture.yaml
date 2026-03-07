@@ -58,21 +58,18 @@ monorepo:
         declaration: true
         emitDeclarationOnly: true
         declarationMap: true
-    scripts:
-      typecheck: 'tsc --noEmit'
-      build: 'tsc --build'
-      lint: 'eslint src --ext .ts,.tsx --max-warnings 0'
-      test: 'jest --passWithNoTests'
-    barrelGeneration:
-      enabled: true
-      exportStrategy: named
-      barrelFile: index.ts
-      layerBarrels: true
+        composite: true
+        tsBuildInfoFile: './dist/.tsbuildinfo'
+      include: ['src/**/*']
+      exclude: ['node_modules', 'dist', '.turbo']
+      references: [] # Generator populates from depends_on
 
   turboConfig:
     globalDependencies:
       - '**/.env.*'
     pipeline:
+      clean:
+        cache: false
       build:
         dependsOn: ['^build']
         outputs: ['dist/**', '.next/**', '!.next/cache/**']
@@ -194,7 +191,7 @@ bounded_contexts:
       application:
         use_cases: [RunSyncUseCase, AggregateGeneratorResultsUseCase]
         ports:
-          in: [GeneratorPort] # Implemented by layer generators (folders, barrels, stubs, etc.)
+          in: [GeneratorPort] # Implemented by layer generators
       infrastructure:
         adapters: [FileSystemGeneratorAdapter, ArchLinterAdapter]
 
@@ -264,13 +261,34 @@ bounded_contexts:
         reactflow: ^11.11.4
         '@dagrejs/dagre': ^1.1.4
 
+  - name: messaging
+    type: supporting
+    description: Domain events, intent bus, pluggable transports
+    layers:
+      domain:
+        value_objects: [DomainEvent, Intent]
+      application:
+        ports:
+          out: [EventBusPort, IntentBusPort]
+
   - name: persistence
     type: supporting
     description: Architecture snapshots, manifest versioning, change history, evolution ledger
+    layers:
+      domain:
+        entities: [Snapshot, Version]
+      infrastructure:
+        adapters: [] # e.g. FileSystemSnapshotAdapter, GitLedgerAdapter
 
   - name: agentic-interaction
     type: supporting
     description: AI assistant integration — ports for LLM providers (Grok/xAI), suggestion engine
+    layers:
+      domain:
+        value_objects: [Suggestion, ConfidenceScore]
+      application:
+        ports:
+          out: [LLMProviderPort, SuggestionEnginePort]
 
   - name: web-driver
     type: driver
