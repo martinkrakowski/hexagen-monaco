@@ -61,7 +61,7 @@ monorepo:
         composite: true
         tsBuildInfoFile: './dist/.tsbuildinfo'
       include: ['src/**/*']
-      exclude: ['node_modules', 'dist', '.turbo']
+      exclude: [node_modules, dist, '.turbo']
       references: [] # Generator populates from depends_on
 
   turboConfig:
@@ -231,11 +231,9 @@ bounded_contexts:
           ]
         ports:
           out:
-            [
-              MonacoPersistencePort,
-              SemanticModelAdapterPort,
-              PatchApplicationPort,
-            ]
+            - MonacoPersistencePort # Canonical outbound port for persisting Monaco editor sessions (buffer, undo hints, metadata)
+            - SemanticModelAdapterPort # AST/semantic model bridge (ts-morph based)
+            # PatchApplicationPort # legacy/dead – remove after migration
     generator:
       dependencies:
         monaco-editor: ^0.51.0
@@ -297,7 +295,9 @@ bounded_contexts:
       domain:
         entities: [Project, MonacoSessionState]
         ports:
-          out: [MonacoPersistencePort, DownloadProjectPort]
+          out:
+            - MonacoPersistencePort # Consumed from monaco-orchestration (implemented by local-storage adapter)
+            - DownloadProjectPort
       application:
         use_cases:
           [
