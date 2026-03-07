@@ -10,7 +10,7 @@ monorepo:
   packageManager: yarn@4.12.0
   linker: node-modules
   buildTool: turbo
-  workspaces: ['apps/*', 'packages/*'] # legacy 'tools/*' removed
+  workspaces: ['apps/*', 'packages/*']
   root:
     hoistDevDependencies: true
     noInternalDeps: true
@@ -92,6 +92,7 @@ generator:
   sync:
     idempotent: true
     createOnlyIfMissing: true
+    nonDestructive: true # Enforced skip on existing files unless --force
     layers:
       domain:
         folder: domain
@@ -147,7 +148,151 @@ generator:
         declarationMap: true
         emitDeclarationOnly: true
 
-bounded_contexts: [] # TODO: populate with real bounded contexts
+bounded_contexts:
+  - name: shared
+    type: shared-kernel
+    description: Shared primitives, custom errors, base classes, utilities
+    layers:
+      domain:
+        value_objects: [CustomError, Identifier]
+
+  - name: project-configuration
+    type: core
+    description: Governance core — manifest parsing, validation, project topology
+    layers:
+      domain:
+        entities:
+          [
+            ProjectSpec,
+            BoundedContext,
+            Entity,
+            ValueObject,
+            Port,
+            UseCase,
+            Adapter,
+            Driver,
+          ]
+        value_objects: [] # FileTreeNode removed — use Project entity projections instead
+      application:
+        use_cases:
+          [GenerateProjectUseCase, ValidateSpecUseCase, RenderManifestUseCase]
+        ports:
+          out: [ProjectGeneratorPort, DownloadProviderPort]
+      infrastructure:
+        adapters: [] # To be populated (e.g. YamlParserAdapter)
+    generator:
+      dependencies:
+        js-yaml: ^4.1.0
+        zod: ^3.23.8
+
+  - name: sync
+    type: core
+    description: SyncEngine — idempotent regeneration, structured reporting, aggregation of generator results
+    layers:
+      domain:
+        entities: [GeneratorResult, SyncReport]
+      application:
+        use_cases: [RunSyncUseCase, AggregateGeneratorResultsUseCase]
+        ports:
+          in: [GeneratorPort] # Implemented by layer generators (folders, barrels, stubs, etc.)
+      infrastructure:
+        adapters: [FileSystemGeneratorAdapter, ArchLinterAdapter]
+
+  - name: wizard-orchestration
+    type: core
+    description: Deterministic wizard flows, intent processing, state projections
+    layers:
+      domain:
+        entities: [WizardSession]
+        value_objects: [WizardStep, IntentPayload, ProjectionViewModel]
+      application:
+        use_cases:
+          [ProcessIntentUseCase, ProjectWizardStateUseCase, ValidateStepUseCase]
+        ports:
+          out:
+            [
+              WizardPersistencePort,
+              WizardTelemetryPort,
+              IntentBusPort,
+              MonacoSyncPort,
+            ]
+
+  - name: monaco-orchestration
+    type: core
+    description: Semantic code editing with patch-based mutations, confidence gating, undo
+    layers:
+      domain:
+        entities: [MonacoSession]
+        value_objects: [SemanticPatch, ConfidenceScore, PatchIntentMetadata]
+      application:
+        use_cases:
+          [
+            ApplySemanticPatchUseCase,
+            ValidatePatchIntentUseCase,
+            UndoLastPatchUseCase,
+            ProjectCurrentBufferStateUseCase,
+          ]
+        ports:
+          out:
+            [
+              MonacoPersistencePort,
+              SemanticModelAdapterPort,
+              PatchApplicationPort,
+            ]
+    generator:
+      dependencies:
+        monaco-editor: ^0.51.0
+        ts-morph: ^22.0.0
+
+  - name: visualization
+    type: supporting
+    description: Interactive architecture graph, module dependency view, DDD canvas
+    layers:
+      domain:
+        value_objects: [GraphLayoutOptions, NodeVisualStyle]
+      application:
+        use_cases:
+          [
+            GenerateArchitectureGraphUseCase,
+            RenderGraphProjectionUseCase,
+            ExportGraphImageUseCase,
+          ]
+        ports:
+          out: [ArchitectureGraphProviderPort]
+    generator:
+      dependencies:
+        reactflow: ^11.11.4
+        '@dagrejs/dagre': ^1.1.4
+
+  - name: persistence
+    type: supporting
+    description: Architecture snapshots, manifest versioning, change history, evolution ledger
+
+  - name: agentic-interaction
+    type: supporting
+    description: AI assistant integration — ports for LLM providers (Grok/xAI), suggestion engine
+
+  - name: web-driver
+    type: driver
+    description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI
+    layers:
+      domain:
+        entities: [Project, MonacoSessionState]
+        ports:
+          out: [MonacoPersistencePort, DownloadProjectPort]
+      application:
+        use_cases:
+          [
+            ProjectViewProjectionUseCase,
+            PersistSessionIntentHandler,
+            DownloadProjectUseCase,
+          ]
+        factories: [createWebUseCaseFactories]
+      infrastructure:
+        adapters: [LocalStoragePersistenceAdapter, WebContainerPreviewAdapter]
+    driver_for: apps/web
+    wiring:
+      - Intent Bus dispatches to projections/use-case factories only
 
 apps:
   - name: web
@@ -159,6 +304,7 @@ apps:
       - wizard-orchestration
       - monaco-orchestration
       - visualization
+      - sync
   - name: api-gateway
     driver: fastify
     description: Public HTTP API + command gateway (future phase)
@@ -166,114 +312,3 @@ apps:
       - project-configuration
       - messaging
       - shared
-
-modules:
-  - name: project-configuration
-    description: Governance core — manifest parsing, validation, project topology
-    entities:
-      - ProjectSpec
-      - BoundedContext
-      - Entity
-      - ValueObject
-      - Port
-      - UseCase
-      - Adapter
-      - Driver
-    value_objects:
-      - FileTreeNode
-    use_cases:
-      - GenerateProject
-      - ValidateSpec
-      - RenderManifest
-    ports:
-      out:
-        - ProjectGeneratorPort
-        - DownloadProviderPort
-    generator:
-      dependencies:
-        js-yaml: ^4.1.0
-        zod: ^3.23.8
-
-  - name: shared
-    description: Shared primitives, custom errors, base classes, utilities
-
-  - name: messaging
-    description: Domain events, intent bus, pluggable transports
-
-  - name: wizard-orchestration
-    description: Deterministic wizard flows, intent processing, state projections
-    entities:
-      - WizardSession
-    value_objects:
-      - WizardStep
-      - IntentPayload
-      - ProjectionViewModel
-    use_cases:
-      - ProcessIntent
-      - ProjectWizardState
-      - ValidateStep
-    ports:
-      out:
-        - WizardPersistencePort
-        - WizardTelemetryPort
-        - IntentBusPort
-        - MonacoSyncPort
-
-  - name: monaco-orchestration
-    description: Semantic code editing with patch-based mutations, confidence gating, undo
-    entities:
-      - MonacoSession
-    value_objects:
-      - SemanticPatch
-      - ConfidenceScore
-      - PatchIntentMetadata
-    use_cases:
-      - ApplySemanticPatch
-      - ValidatePatchIntent
-      - UndoLastPatch
-      - ProjectCurrentBufferState
-    ports:
-      out:
-        - MonacoPersistencePort
-        - SemanticModelAdapterPort
-        - PatchApplicationPort
-    generator:
-      dependencies:
-        monaco-editor: ^0.51.0
-        ts-morph: ^22.0.0
-
-  - name: visualization
-    description: Interactive architecture graph, module dependency view, DDD canvas
-    value_objects:
-      - GraphLayoutOptions
-      - NodeVisualStyle
-    use_cases:
-      - GenerateArchitectureGraph
-      - RenderGraphProjection
-      - ExportGraphImage
-    ports:
-      out:
-        - ArchitectureGraphProviderPort
-    generator:
-      dependencies:
-        reactflow: ^11.11.4
-        '@dagrejs/dagre': ^1.1.4
-
-  - name: code-generation
-    description: Manifest-to-code compiler, template engine, self-dogfooding generator
-
-  - name: architectural-enforcement
-    description: Dependency rules, boundary checks, circular dependency detection, arch-linter core
-
-  - name: persistence
-    description: Architecture snapshots, manifest versioning, change history, evolution ledger
-
-  - name: agentic-interaction
-    description: AI assistant integration — ports for LLM providers (Grok/xAI), suggestion engine
-
-  - name: deployment
-    description: Self-dogfooding loop — WebContainer previews, GitHub Actions, live regeneration
-
-drivers:
-  web: next.js
-  api-gateway: fastify
