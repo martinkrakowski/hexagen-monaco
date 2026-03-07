@@ -1,5 +1,5 @@
-import { DownloadProjectPort } from '../../../domain';
-import type { Project } from '../../../domain';
+import { DownloadProjectPort } from '../../domain';
+import type { Project } from '../../domain';
 
 /**
  * Use case for project download / preview flow.
