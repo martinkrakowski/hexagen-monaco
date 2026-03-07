@@ -1,7 +1,9 @@
+// apps/web/next.config.mjs
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -10,16 +12,13 @@ const nextConfig = {
     '@hexagen/project-generation',
     '@hexagen/project-configuration',
   ],
-  // turbopack: {
-  //   root: __dirname, // ← apps/web itself (where next/package.json lives)
-  // },
   experimental: {
-    turbopack: false,
+    turbopack: false, // webpack = stable in monorepos
   },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve('./app'),
+      '@': path.resolve(__dirname, 'app'), // correct alias for @/components/ etc.
     };
     return config;
   },

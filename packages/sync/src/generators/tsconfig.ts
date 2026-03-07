@@ -1,36 +1,37 @@
+// packages/sync/src/generators/tsconfig.ts
+
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { SyncConfig } from '../config.js';
 import { createEmptyResult, type GeneratorResult } from '../results.js';
 
 /**
- * Generates or updates package.json for each module.
- * Data-driven from manifest.workspaceDefaults + per-module overrides.
- * Returns structured GeneratorResult.
+ * Generates or updates tsconfig.json while preserving references and composite: true.
+ * Non-destructive: skips existing files unless --force.
  */
-export async function generatePackageJson(
+export async function generateTsconfig(
   modulePath: string,
   moduleName: string,
   config: SyncConfig
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
 
-  const defaults = (config as any).manifest?.workspaceDefaults || {};
+  const defaults = (config as any).manifest?.workspaceDefaults?.tsconfig || {};
   const moduleOverrides =
     (config as any).manifest?.modules?.find((m: any) => m.name === moduleName)
-      ?.packageJson || {};
+      ?.tsconfig || {};
 
-  const pkgPath = path.join(modulePath, 'package.json');
+  const tsconfigPath = path.join(modulePath, 'tsconfig.json');
 
-  const pkgContent = generatePackageJsonContent(
+  const tsconfigContent = generateTsconfigContent(
     moduleName,
     defaults,
     moduleOverrides
   );
 
-  const fileResult = await writePackageJson(
-    pkgPath,
-    pkgContent,
+  const fileResult = await writeTsconfigFile(
+    tsconfigPath,
+    tsconfigContent,
     config.dryRun,
     config.force
   );
@@ -40,48 +41,48 @@ export async function generatePackageJson(
   result.updated.push(...(fileResult.updated ?? []));
   result.dryRunOperations += fileResult.dryRunOperations ?? 0;
 
-  result.summary = `package.json ensured for ${moduleName} (${result.created.length} created, ${result.skipped.length} skipped)`;
+  result.summary = `tsconfig.json ensured for ${moduleName}`;
   return result;
 }
 
-/** Generate consistent package.json content */
-function generatePackageJsonContent(
+function generateTsconfigContent(
   moduleName: string,
   defaults: any,
   overrides: any
 ): string {
-  const pkg = {
-    name: `@hexagen/${moduleName}`,
-    version: '0.1.0',
-    private: true,
-    type: 'module',
-    main: 'dist/index.js',
-    types: 'dist/index.d.ts',
-    scripts: {
-      build: 'tsc',
-      lint: 'eslint . --ext .ts',
-      typecheck: 'tsc --noEmit',
-      ...defaults.scripts,
-      ...overrides.scripts,
+  const tsconfig = {
+    extends: '../../tsconfig.base.json',
+    compilerOptions: {
+      composite: true,
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      declaration: true,
+      outDir: './dist',
+      rootDir: './src',
+      strict: true,
+      noImplicitAny: true,
+      strictNullChecks: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      forceConsistentCasingInFileNames: true,
+      paths: {
+        '@hexagen/*': ['../*/src'],
+      },
+      ...defaults.compilerOptions,
+      ...overrides.compilerOptions,
     },
-    dependencies: {
-      ...defaults.dependencies,
-      ...overrides.dependencies,
-    },
-    devDependencies: {
-      typescript: '^5.0.0',
-      ...defaults.devDependencies,
-      ...overrides.devDependencies,
-    },
+    include: ['src/**/*'],
+    exclude: ['node_modules', 'dist'],
+    references: overrides.references || defaults.references || [],
     ...defaults,
     ...overrides,
   };
 
-  return JSON.stringify(pkg, null, 2) + '\n';
+  return JSON.stringify(tsconfig, null, 2) + '\n';
 }
 
-/** Safe write for package.json (idempotent) */
-async function writePackageJson(
+async function writeTsconfigFile(
   filePath: string,
   content: string,
   dryRun: boolean,
@@ -100,23 +101,18 @@ async function writePackageJson(
     return r;
   }
 
+  // Non-destructive: skip if file already exists (unless --force)
   try {
-    const existing = await fs.readFile(filePath, 'utf8').catch(() => null);
+    await fs.access(filePath);
+    r.skipped = [filePath];
+    return r;
+  } catch {}
 
-    if (existing === content && !force) {
-      r.skipped = [filePath];
-      return r;
-    }
-
+  try {
     await fs.writeFile(filePath, content, 'utf8');
-    r.updated = [filePath];
+    r.created = [filePath];
     return r;
   } catch (err: any) {
-    if (err.code === 'ENOENT') {
-      await fs.writeFile(filePath, content, 'utf8');
-      r.created = [filePath];
-      return r;
-    }
     r.error = err;
     return r;
   }

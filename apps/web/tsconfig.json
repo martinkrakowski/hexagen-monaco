@@ -9,13 +9,14 @@
     ],
     "allowJs": true,
     "incremental": true,
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "resolveJsonModule": true,
-    "jsx": "preserve"
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./app/*"], // ← fix: points to app/
+      "monaco-editor": ["./node_modules/monaco-editor"]
+    }
   },
   "include": [
     "next-env.d.ts",
@@ -38,12 +39,5 @@
       "path": "../../packages/monaco-orchestration"
     }
   ],
-  "paths": {
-    "monaco-editor": [
-      "./node_modules/monaco-editor"
-    ]
-  },
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

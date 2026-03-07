@@ -8,7 +8,7 @@ export const generateProjectUseCase = {
   ): Promise<FileTreeNode> => {
     // 1. Prune / map to minimal shape
     const minimalSpec = {
-      rootName: fullSpec.rootName,
+      rootName: fullSpec.name,
       // ... other fields
     };
 
@@ -17,13 +17,13 @@ export const generateProjectUseCase = {
     // 2. Return a valid FileTreeNode (The actual "output" of this port)
     // In a real scenario, this is where your generation logic would go.
     return {
-      name: fullSpec.rootName,
+      name: fullSpec.name,
       type: 'directory',
       children: [
         {
           name: 'README.md',
           type: 'file',
-          content: `# ${fullSpec.rootName}\nGenerated via Hexagen.`,
+          content: `# ${fullSpec.name}\nGenerated via Hexagen.`,
         },
       ],
     };

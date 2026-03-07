@@ -1,3 +1,5 @@
+// packages/sync/src/sync-engine.ts
+
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +9,9 @@ import { safeWriteFile } from './fs-utils.js';
 import { runArchLinter } from './linter.js';
 import { ensureLayerFolders } from './generators/layer-folders.js';
 import { generateBarrels } from './generators/barrels.js';
+import { generateStubs } from './generators/stubs.js';
+import { generatePackageJson } from './generators/package-json.js';
+import { generateTsconfig } from './generators/tsconfig.js';
 import { createEmptyResult, type GeneratorResult } from './results.js';
 
 // ESM-safe __dirname
@@ -14,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Central orchestrator for the entire sync process.
+ * Central orchestrator — ALL generators return structured GeneratorResult.
  */
 export class SyncEngine {
   private config: SyncConfig;
@@ -123,17 +128,45 @@ export class SyncEngine {
 
     for (const module of modules) {
       const moduleName = module.name;
+      const moduleDir = path.join(process.cwd(), 'packages', moduleName);
       logger.info(`Processing module: ${moduleName}`);
 
-      const barrelResult = await generateBarrels(
-        path.join(process.cwd(), 'packages', moduleName),
+      const barrelResult = await generateBarrels(moduleDir, this.config);
+      const stubResult = await generateStubs(moduleDir, this.config);
+      const pkgResult = await generatePackageJson(
+        moduleDir,
+        moduleName,
+        this.config
+      );
+      const tsResult = await generateTsconfig(
+        moduleDir,
+        moduleName,
         this.config
       );
 
-      result.created.push(...barrelResult.created);
-      result.skipped.push(...barrelResult.skipped);
-      result.updated.push(...barrelResult.updated);
-      result.dryRunOperations += barrelResult.dryRunOperations;
+      result.created.push(
+        ...barrelResult.created,
+        ...stubResult.created,
+        ...pkgResult.created,
+        ...tsResult.created
+      );
+      result.skipped.push(
+        ...barrelResult.skipped,
+        ...stubResult.skipped,
+        ...pkgResult.skipped,
+        ...tsResult.skipped
+      );
+      result.updated.push(
+        ...barrelResult.updated,
+        ...stubResult.updated,
+        ...pkgResult.updated,
+        ...tsResult.updated
+      );
+      result.dryRunOperations +=
+        barrelResult.dryRunOperations +
+        stubResult.dryRunOperations +
+        pkgResult.dryRunOperations +
+        tsResult.dryRunOperations;
     }
     return result;
   }
@@ -162,13 +195,22 @@ export class SyncEngine {
       );
       logger.info(`\n=== Generator Summary ===`);
       logger.info(
-        `• Layers  : ${layerResult.created.length} created, ${layerResult.skipped.length} skipped`
+        `• Layers        : ${layerResult.created.length} created, ${layerResult.skipped.length} skipped`
       );
       logger.info(
-        `• Barrels : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+        `• Barrels       : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
       );
       logger.info(
-        `• Total ops : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
+        `• Stubs         : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+      );
+      logger.info(
+        `• package.json  : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+      );
+      logger.info(
+        `• tsconfig.json : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+      );
+      logger.info(
+        `• Total ops     : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
       );
     } catch (err: any) {
       logger.error(`Sync failed: ${err.message}`);

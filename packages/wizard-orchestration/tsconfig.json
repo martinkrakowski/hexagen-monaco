@@ -1,18 +1,23 @@
 {
-  "extends": "./../../tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "declarationMap": true,
-    "composite": true,
-    "strict": true,
-    "module": "esnext",
-    "target": "es2022",
+    "target": "ES2022",
+    "module": "ESNext",
     "moduleResolution": "bundler",
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@hexagen/*": [
+        "../*/src"
+      ]
+    }
   },
   "include": [
     "src/**/*"

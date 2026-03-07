@@ -24,17 +24,15 @@ export function isProtectedRoot(filePath: string, config: SyncConfig): boolean {
     'yarn.lock',
     '.gitignore',
   ];
-
   const relative = path.relative(process.cwd(), filePath);
   const isRootLevel =
     !relative.startsWith('packages/') && !relative.startsWith('tools/');
-
   return isRootLevel && protectedFiles.some((f) => relative.endsWith(f));
 }
 
 /**
  * Safe, idempotent file writer that respects dry-run, force, protected root rules.
- * Returns status for accurate counter tracking later.
+ * Returns status for accurate counter tracking.
  */
 export async function safeWriteFile(
   filePath: string,
@@ -49,7 +47,6 @@ export async function safeWriteFile(
 
   let exists = false;
   let currentContent = '';
-
   try {
     currentContent = await fs.readFile(filePath, 'utf8');
     exists = true;
@@ -87,7 +84,6 @@ export async function safeWriteFile(
 
   // Perform the write
   await fs.writeFile(filePath, content, 'utf8');
-
   const status = exists ? 'updated' : 'created';
   logger.info(`${status} ${relativePath}`);
   return status;
