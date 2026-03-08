@@ -2,11 +2,13 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { SyncConfig } from '../config.js';
 import { createEmptyResult, type GeneratorResult } from '../results.js';
+import { safeWriteFile } from '../fs-utils.js';
+import type { Manifest } from '../types/manifest.js';
 
 /**
- * Generates or updates package.json for each module.
- * Data-driven from manifest.workspaceDefaults + per-module overrides.
- * Returns structured GeneratorResult.
+ * Generates or updates package.json with merge strategy.
+ * Preserves protected keys from existing file.
+ * Uses safeWriteFile with skipGeneratedCheck=true (package.json can't carry marker).
  */
 export async function generatePackageJson(
   modulePath: string,
@@ -15,42 +17,16 @@ export async function generatePackageJson(
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
 
-  const defaults = (config as any).manifest?.workspaceDefaults || {};
+  const defaults = config.manifest?.workspaceDefaults?.packageJson ?? {};
   const moduleOverrides =
-    (config as any).manifest?.modules?.find((m: any) => m.name === moduleName)
-      ?.packageJson || {};
+    config.manifest?.bounded_contexts?.find(
+      (m): m is NonNullable<Manifest['bounded_contexts']>[number] =>
+        m.name === moduleName
+    )?.packageJson ?? {};
 
   const pkgPath = path.join(modulePath, 'package.json');
 
-  const pkgContent = generatePackageJsonContent(
-    moduleName,
-    defaults,
-    moduleOverrides
-  );
-
-  const fileResult = await writePackageJson(
-    pkgPath,
-    pkgContent,
-    config.dryRun,
-    config.force
-  );
-
-  result.created.push(...(fileResult.created ?? []));
-  result.skipped.push(...(fileResult.skipped ?? []));
-  result.updated.push(...(fileResult.updated ?? []));
-  result.dryRunOperations += fileResult.dryRunOperations ?? 0;
-
-  result.summary = `package.json ensured for ${moduleName} (${result.created.length} created, ${result.skipped.length} skipped)`;
-  return result;
-}
-
-/** Generate consistent package.json content */
-function generatePackageJsonContent(
-  moduleName: string,
-  defaults: any,
-  overrides: any
-): string {
-  const pkg = {
+  const desiredPkg: Record<string, unknown> = {
     name: `@hexagen/${moduleName}`,
     version: '0.1.0',
     private: true,
@@ -59,65 +35,73 @@ function generatePackageJsonContent(
     types: 'dist/index.d.ts',
     scripts: {
       build: 'tsc',
-      lint: 'eslint . --ext .ts',
+      lint: 'eslint . --ext .ts,.tsx',
       typecheck: 'tsc --noEmit',
-      ...defaults.scripts,
-      ...overrides.scripts,
+      ...((defaults.scripts as Record<string, string>) ?? {}),
+      ...((moduleOverrides.scripts as Record<string, string>) ?? {}),
     },
     dependencies: {
-      ...defaults.dependencies,
-      ...overrides.dependencies,
+      ...((defaults.dependencies as Record<string, string>) ?? {}),
+      ...((moduleOverrides.dependencies as Record<string, string>) ?? {}),
     },
     devDependencies: {
       typescript: '^5.0.0',
-      ...defaults.devDependencies,
-      ...overrides.devDependencies,
+      ...((defaults.devDependencies as Record<string, string>) ?? {}),
+      ...((moduleOverrides.devDependencies as Record<string, string>) ?? {}),
     },
-    ...defaults,
-    ...overrides,
   };
 
-  return JSON.stringify(pkg, null, 2) + '\n';
-}
-
-/** Safe write for package.json (idempotent) */
-async function writePackageJson(
-  filePath: string,
-  content: string,
-  dryRun: boolean,
-  force: boolean
-): Promise<Partial<GeneratorResult>> {
-  const r: Partial<GeneratorResult> = {
-    created: [],
-    skipped: [],
-    updated: [],
-    dryRunOperations: 0,
-  };
-
-  if (dryRun) {
-    r.created = [filePath];
-    r.dryRunOperations = 1;
-    return r;
-  }
-
+  // Read current if exists
+  let currentPkg: Record<string, unknown> = {};
   try {
-    const existing = await fs.readFile(filePath, 'utf8').catch(() => null);
-
-    if (existing === content && !force) {
-      r.skipped = [filePath];
-      return r;
+    const currentContent = await fs.readFile(pkgPath, 'utf8');
+    currentPkg = JSON.parse(currentContent) as Record<string, unknown>;
+  } catch (e) {
+    if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT')) {
+      throw e;
     }
-
-    await fs.writeFile(filePath, content, 'utf8');
-    r.updated = [filePath];
-    return r;
-  } catch (err: any) {
-    if (err.code === 'ENOENT') {
-      await fs.writeFile(filePath, content, 'utf8');
-      r.created = [filePath];
-      return r;
-    }
-    r.error = err;
-    return r;
   }
+
+  const protectedKeys = config.manifest?.generator?.sync?.packageJson
+    ?.protectedKeys ?? [
+    'private',
+    'version',
+    'license',
+    'scripts',
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+    'optionalDependencies',
+    'main',
+    'module',
+    'types',
+    'exports',
+    'bin',
+  ];
+
+  // Merge: preserve protected keys from current, inject missing, overwrite unprotected
+  const mergedPkg: Record<string, unknown> = { ...currentPkg };
+
+  for (const [key, value] of Object.entries(desiredPkg)) {
+    if (protectedKeys.includes(key)) {
+      if (!(key in currentPkg)) {
+        mergedPkg[key] = value;
+      }
+    } else {
+      mergedPkg[key] = value;
+    }
+  }
+
+  const mergedContent = JSON.stringify(mergedPkg, null, 2) + '\n';
+
+  // Bypass generated-file check (package.json can't carry marker)
+  const status = await safeWriteFile(pkgPath, mergedContent, config, true);
+
+  if (status === 'created') result.created.push(pkgPath);
+  if (status === 'updated') result.updated.push(pkgPath);
+  if (status === 'skipped' || status === 'protected')
+    result.skipped.push(pkgPath);
+  result.totalOps += status === 'created' || status === 'updated' ? 1 : 0;
+
+  return result;
 }

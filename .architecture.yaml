@@ -22,7 +22,8 @@ monorepo:
       no-restricted-imports:
         patterns:
           - group: ['@hexagen/*']
-            message: 'Cross-package imports must go through barrel files (@hexagen/<module>). Deep imports only allowed from shared.'
+            message: 'Cross-package imports must go through barrel files.'
+
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
     compilerOptions:
@@ -62,7 +63,7 @@ monorepo:
         tsBuildInfoFile: './dist/.tsbuildinfo'
       include: ['src/**/*']
       exclude: [node_modules, dist, '.turbo']
-      references: [] # Generator populates from depends_on
+      references: []
 
   turboConfig:
     globalDependencies:
@@ -89,61 +90,45 @@ generator:
   sync:
     idempotent: true
     createOnlyIfMissing: true
-    nonDestructive: true # Enforced skip on existing files unless --force
-    layers:
-      domain:
-        folder: domain
-      application:
-        folder: application
-        subfolders:
-          - use-cases
-          - ports/in
-          - ports/out
-      infrastructure:
-        folder: infrastructure
-        subfolders:
-          - adapters
-    barrels:
-      autoGenerate: true
-      perLayer: true
-      reexportStyle: named
-      includeGlobs:
-        - domain/**/*.ts
-        - application/use-cases/**/*.ts
-        - application/ports/**/*.ts
-        - infrastructure/**/*.ts
-    stubs:
-      enabled: true
-      ports: true
-      entities: true
-      use-cases: true
+    nonDestructive: true
+    protectedRootFiles:
+      - .gitignore
+      - turbo.json
+      - yarn.lock
+      - .architecture.yaml
+      - README.md
+      - .env
+      - .env.local
+      - .env.development
+      - .env.production
+      - .env.test
     packageJson:
-      private: true
-      version: '0.1.0'
-      license: MIT
-      scripts:
-        build: tsc --build
-        lint: eslint src --ext .ts,.tsx
-        typecheck: tsc --noEmit
-      baseDependencies: {}
-      baseDevDependencies:
-        typescript: ^5.5.4
-        '@typescript-eslint/eslint-plugin': ^8.0.0
-        '@typescript-eslint/parser': ^8.0.0
-        eslint: ^9.0.0
-        eslint-config-prettier: ^9.1.0
-    tsconfig:
-      compilerOptions:
-        strict: true
-        module: esnext
-        target: es2022
-        moduleResolution: bundler
-        esModuleInterop: true
-        skipLibCheck: true
-        composite: true
-        declaration: true
-        declarationMap: true
-        emitDeclarationOnly: true
+      mergeStrategy: preserveExisting
+      protectedKeys:
+        - private
+        - version
+        - license
+        - scripts
+        - dependencies
+        - devDependencies
+        - peerDependencies
+        - optionalDependencies
+        - main
+        - module
+        - types
+        - exports
+        - bin
+      injectIfMissing:
+        scripts:
+          build: tsc
+          lint: eslint src --ext .ts,.tsx
+          typecheck: tsc --noEmit
+        devDependencies:
+          typescript: ^5.5.4
+          eslint: ^9.0.0
+          '@typescript-eslint/parser': ^8.0.0
+          '@typescript-eslint/eslint-plugin': ^8.0.0
+          eslint-config-prettier: ^9.1.0
 
 bounded_contexts:
   - name: shared
@@ -169,14 +154,14 @@ bounded_contexts:
             Adapter,
             Driver,
           ]
-        value_objects: [] # FileTreeNode removed — use Project entity projections instead
+        value_objects: []
       application:
         use_cases:
           [GenerateProjectUseCase, ValidateSpecUseCase, RenderManifestUseCase]
         ports:
           out: [ProjectGeneratorPort, DownloadProviderPort]
       infrastructure:
-        adapters: [] # To be populated (e.g. YamlParserAdapter)
+        adapters: []
     generator:
       dependencies:
         js-yaml: ^4.1.0
@@ -191,7 +176,7 @@ bounded_contexts:
       application:
         use_cases: [RunSyncUseCase, AggregateGeneratorResultsUseCase]
         ports:
-          in: [GeneratorPort] # Implemented by layer generators
+          in: [GeneratorPort]
       infrastructure:
         adapters: [FileSystemGeneratorAdapter, ArchLinterAdapter]
 
@@ -231,9 +216,8 @@ bounded_contexts:
           ]
         ports:
           out:
-            - MonacoPersistencePort # Canonical outbound port for persisting Monaco editor sessions (buffer, undo hints, metadata)
-            - SemanticModelAdapterPort # AST/semantic model bridge (ts-morph based)
-            # PatchApplicationPort # legacy/dead – remove after migration
+            - MonacoPersistencePort
+            - SemanticModelAdapterPort
     generator:
       dependencies:
         monaco-editor: ^0.51.0
@@ -276,7 +260,7 @@ bounded_contexts:
       domain:
         entities: [Snapshot, Version]
       infrastructure:
-        adapters: [] # e.g. FileSystemSnapshotAdapter, GitLedgerAdapter
+        adapters: []
 
   - name: agentic-interaction
     type: supporting
@@ -296,7 +280,7 @@ bounded_contexts:
         entities: [Project, MonacoSessionState]
         ports:
           out:
-            - MonacoPersistencePort # Consumed from monaco-orchestration (implemented by local-storage adapter)
+            - MonacoPersistencePort
             - DownloadProjectPort
       application:
         use_cases:

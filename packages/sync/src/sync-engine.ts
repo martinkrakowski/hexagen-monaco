@@ -17,6 +17,15 @@ import type { Manifest } from './types/manifest.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Structured return type from generateCoreArtifacts
+interface GeneratorResults {
+  barrels: GeneratorResult;
+  stubs: GeneratorResult;
+  pkgs: GeneratorResult;
+  tsconfigs: GeneratorResult;
+  totalOps: number;
+}
+
 /**
  * Central orchestrator — ALL generators return structured GeneratorResult.
  */
@@ -143,6 +152,19 @@ export class SyncEngine {
 
     for (const mod of modules) {
       if (!mod?.name) continue;
+
+      // Validate moduleName (prevent path traversal)
+      if (
+        mod.name.includes('..') ||
+        mod.name.includes('/') ||
+        mod.name.startsWith('.')
+      ) {
+        logger.warn(
+          `Skipping invalid module name (potential path traversal): ${mod.name}`
+        );
+        continue;
+      }
+
       const moduleDir = path.join(this.workspaceRoot, 'packages', mod.name);
       logger.info(
         `Ensuring directories for module: ${mod.name} at ${moduleDir}`
@@ -152,22 +174,41 @@ export class SyncEngine {
       result.created.push(...layerResult.created);
       result.skipped.push(...layerResult.skipped);
       result.updated.push(...layerResult.updated);
-      result.dryRunOperations += layerResult.dryRunOperations;
+      result.totalOps += layerResult.totalOps;
     }
     return result;
   }
 
-  private async generateCoreArtifacts(): Promise<GeneratorResult> {
+  private async generateCoreArtifacts(): Promise<GeneratorResults> {
     const config = this.getConfig();
-    const result = createEmptyResult();
     const { logger } = config;
     const modules = config.manifest.bounded_contexts ?? [];
 
     await this.ensureRootFiles();
 
+    let totalOps = 0;
+
+    const barrels = createEmptyResult();
+    const stubs = createEmptyResult();
+    const pkgs = createEmptyResult();
+    const tsconfigs = createEmptyResult();
+
     for (const module of modules) {
       const moduleName = module.name;
       const moduleDir = path.join(this.workspaceRoot, 'packages', moduleName);
+
+      // Validate moduleName (prevent path traversal)
+      if (
+        moduleName.includes('..') ||
+        moduleName.includes('/') ||
+        moduleName.startsWith('.')
+      ) {
+        logger.warn(
+          `Skipping invalid module name (potential path traversal): ${moduleName}`
+        );
+        continue;
+      }
+
       logger.info(`Processing module: ${moduleName}`);
 
       const barrelResult = await generateBarrels(moduleDir, config);
@@ -179,31 +220,34 @@ export class SyncEngine {
       );
       const tsResult = await generateTsconfig(moduleDir, moduleName, config);
 
-      result.created.push(
-        ...barrelResult.created,
-        ...stubResult.created,
-        ...pkgResult.created,
-        ...tsResult.created
-      );
-      result.skipped.push(
-        ...barrelResult.skipped,
-        ...stubResult.skipped,
-        ...pkgResult.skipped,
-        ...tsResult.skipped
-      );
-      result.updated.push(
-        ...barrelResult.updated,
-        ...stubResult.updated,
-        ...pkgResult.updated,
-        ...tsResult.updated
-      );
-      result.dryRunOperations +=
-        barrelResult.dryRunOperations +
-        stubResult.dryRunOperations +
-        pkgResult.dryRunOperations +
-        tsResult.dryRunOperations;
+      barrels.created.push(...barrelResult.created);
+      barrels.skipped.push(...barrelResult.skipped);
+      barrels.updated.push(...barrelResult.updated);
+      totalOps += barrelResult.totalOps;
+
+      stubs.created.push(...stubResult.created);
+      stubs.skipped.push(...stubResult.skipped);
+      stubs.updated.push(...stubResult.updated);
+      totalOps += stubResult.totalOps;
+
+      pkgs.created.push(...pkgResult.created);
+      pkgs.skipped.push(...pkgResult.skipped);
+      pkgs.updated.push(...pkgResult.updated);
+      totalOps += pkgResult.totalOps;
+
+      tsconfigs.created.push(...tsResult.created);
+      tsconfigs.skipped.push(...tsResult.skipped);
+      tsconfigs.updated.push(...tsResult.updated);
+      totalOps += tsResult.totalOps;
     }
-    return result;
+
+    return {
+      barrels,
+      stubs,
+      pkgs,
+      tsconfigs,
+      totalOps,
+    };
   }
 
   async run(): Promise<void> {
@@ -226,7 +270,8 @@ export class SyncEngine {
       } as const;
 
       const layerResult = await this.ensureDirectories();
-      const artifactsResult = await this.generateCoreArtifacts();
+      const { barrels, stubs, pkgs, tsconfigs, totalOps } =
+        await this.generateCoreArtifacts();
 
       await runArchLinter(this.fullConfig);
 
@@ -238,23 +283,21 @@ export class SyncEngine {
       );
       logger.info(`\n=== Generator Summary ===`);
       logger.info(
-        `• Layers        : ${layerResult.created.length} created, ${layerResult.skipped.length} skipped`
+        `• Layers        : ${layerResult.created.length} created, ${layerResult.updated.length} updated, ${layerResult.skipped.length} skipped`
       );
       logger.info(
-        `• Barrels       : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+        `• Barrels       : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`
       );
       logger.info(
-        `• Stubs         : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+        `• Stubs         : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`
       );
       logger.info(
-        `• package.json  : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+        `• package.json  : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`
       );
       logger.info(
-        `• tsconfig.json : ${artifactsResult.created.length} created, ${artifactsResult.skipped.length} skipped`
+        `• tsconfig.json : ${tsconfigs.created.length} created, ${tsconfigs.updated.length} updated, ${tsconfigs.skipped.length} skipped`
       );
-      logger.info(
-        `• Total ops     : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
-      );
+      logger.info(`• Total ops     : ${totalOps}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown sync error';
       logger.error(`Sync failed: ${message}`);
