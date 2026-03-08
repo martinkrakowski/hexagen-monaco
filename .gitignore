@@ -1,52 +1,63 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Yarn Berry (with nodeLinker: node-modules)
+# ───────────────────────────────────────────────
+# Package manager (Yarn Berry / PnP)
+# ───────────────────────────────────────────────
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
-.pnp.*
 .yarnrc.yml
+.pnp.*
+.pnp.js
+/.pnp
+.yarn/install-state.gz
 
-# Dependencies
+# ───────────────────────────────────────────────
+# Dependencies & build artifacts
+# ───────────────────────────────────────────────
 node_modules/
-
-# Turbo cache
 .turbo/
-
-# Next.js
+.turbo
 .next/
-out/
 .next.cache/
-
-# Production / build outputs
 dist/
 build/
+out/
+**/dist/
+**/build/
+**/out/
 
-# TypeScript
+# ───────────────────────────────────────────────
+# TypeScript & build info
+# ───────────────────────────────────────────────
 *.tsbuildinfo
 next-env.d.ts
 
-# Logs & debug
+# ───────────────────────────────────────────────
+# Logs and debug files
+# ───────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 *.log
 
+# ───────────────────────────────────────────────
 # Environment variables (never commit secrets)
+# ───────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 !.env.example
 
-# OS generated files
+# ───────────────────────────────────────────────
+# OS / editor / IDE generated files
+# ───────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Editors & IDE
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
@@ -57,46 +68,36 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Temporary / generated files (HexaGen / Monaco)
+# ───────────────────────────────────────────────
+# Temporary / generated / project-specific files
+# ───────────────────────────────────────────────
 *.zip
 generated-*.zip
 temp-*
 .webcontainer/
 downloads/
 .cache/
+*.pem
 
+# ───────────────────────────────────────────────
 # Test coverage
+# ───────────────────────────────────────────────
 coverage/
 .nyc_output/
 *.lcov
 
-# HexaGen internal (protect the source of truth)
-# .architecture.yaml is committed on purpose
+# ───────────────────────────────────────────────
+# HexaGen generated layer barrels & index files
+# Auto-created by yarn sync — never commit them
+# Real source files (.port.ts, .use-case.ts, etc.) remain tracked
+# ───────────────────────────────────────────────
+packages/*/src/domain/index.ts
+packages/*/src/application/index.ts
+packages/*/src/application/ports/in/index.ts
+packages/*/src/application/ports/out/index.ts
+packages/*/src/application/use-cases/index.ts
+packages/*/src/infrastructure/index.ts
+packages/*/src/infrastructure/adapters/index.ts
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-.yarn/install-state.gz
-
-# build cache
-.turbo
-
-# build output
-dist
-.next
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env
-.env*.local
-
-# Prisma
-.env
+# Optional future extension if deeper barrels ever appear:
+# packages/*/src/**/index.ts
