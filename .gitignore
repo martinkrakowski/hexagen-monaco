@@ -25,10 +25,10 @@ node_modules/
 .next.cache/
 dist/
 build/
-out/
+# out/
 **/dist/
 **/build/
-**/out/
+# **/out/
 
 # ───────────────────────────────────────────────
 # TypeScript & build info
@@ -91,6 +91,7 @@ coverage/
 # Auto-created by yarn sync — never commit them
 # Real source files (.port.ts, .use-case.ts, etc.) remain tracked
 # ───────────────────────────────────────────────
+# Standard src/ layout
 packages/*/src/domain/index.ts
 packages/*/src/application/index.ts
 packages/*/src/application/ports/in/index.ts
@@ -99,5 +100,14 @@ packages/*/src/application/use-cases/index.ts
 packages/*/src/infrastructure/index.ts
 packages/*/src/infrastructure/adapters/index.ts
 
-# Optional future extension if deeper barrels ever appear:
-# packages/*/src/**/index.ts
+# Flattened layout (no src/ folder)
+packages/*/domain/index.ts
+packages/*/application/index.ts
+packages/*/application/ports/in/index.ts
+packages/*/application/ports/out/index.ts
+packages/*/application/use-cases/index.ts
+packages/*/infrastructure/index.ts
+packages/*/infrastructure/adapters/index.ts
+
+# Future-proof catch-all for any nested index.ts barrels
+# packages/**/index.ts
