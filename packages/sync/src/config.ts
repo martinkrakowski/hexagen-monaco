@@ -1,53 +1,62 @@
 import type { Logger } from '@hexagen/arch-linter';
 import { createConsoleLogger } from '@hexagen/arch-linter';
+import type { Manifest } from './types/manifest';
 
-export interface SyncConfig {
+// Flags-only (what parseArgs can provide)
+export interface SyncFlags {
+  dryRun: boolean;
   force: boolean;
   forceRoot: boolean;
-  dryRun: boolean;
   strict: boolean;
   logger: Logger;
 }
 
-export function parseArgs(rawArgs: string[]): SyncConfig {
+// Full runtime config (after augmentation)
+export interface SyncConfig extends SyncFlags {
+  manifest: Manifest;
+  workspaceRoot: string;
+}
+
+export function parseArgs(rawArgs: string[]): SyncFlags {
   const args = rawArgs.slice(2);
 
-  const config: SyncConfig = {
+  const flags: SyncFlags = {
     force: false,
     forceRoot: false,
     dryRun: false,
     strict: false,
     logger: createConsoleLogger(false),
   };
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
     switch (arg) {
       case '--force':
       case '-f':
-        config.force = true;
+        flags.force = true;
         break;
 
       case '--force-root':
-        config.forceRoot = true;
+        flags.forceRoot = true;
         break;
 
       case '--dry-run':
       case '--dry':
-        config.dryRun = true;
+        flags.dryRun = true;
         break;
 
       case '--strict':
-        config.strict = true;
+        flags.strict = true;
         break;
 
       default:
         if (arg.startsWith('-')) {
-          config.logger.warn(`Unknown flag ignored: ${arg}`);
+          flags.logger.warn(`Unknown flag ignored: ${arg}`);
         }
         break;
     }
   }
 
-  return config;
+  return flags;
 }

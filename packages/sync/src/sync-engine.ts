@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
-import { SyncConfig } from './config.js';
+import { SyncFlags, SyncConfig } from './config.js';
 import { safeWriteFile } from './fs-utils.js';
 import { runArchLinter } from './linter.js';
 import { ensureLayerFolders } from './generators/layer-folders.js';
@@ -11,6 +11,7 @@ import { generateStubs } from './generators/stubs.js';
 import { generatePackageJson } from './generators/package-json.js';
 import { generateTsconfig } from './generators/tsconfig.js';
 import { createEmptyResult, type GeneratorResult } from './results.js';
+import type { Manifest } from './types/manifest'; // ← import shared type
 
 // ESM-safe __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -20,12 +21,13 @@ const __dirname = path.dirname(__filename);
  * Central orchestrator — ALL generators return structured GeneratorResult.
  */
 export class SyncEngine {
-  private config: SyncConfig;
-  private manifest: any = {};
+  private partialConfig: SyncFlags;
+  private fullConfig: SyncConfig | null = null;
+  private manifest: Manifest = {};
   private workspaceRoot: string = '';
 
-  constructor(config: SyncConfig) {
-    this.config = config;
+  constructor(flags: SyncFlags) {
+    this.partialConfig = flags;
   }
 
   private async findWorkspaceRoot(): Promise<string> {
@@ -35,7 +37,7 @@ export class SyncEngine {
       try {
         const pkgPath = path.join(currentDir, 'package.json');
         const pkgContent = await fs.readFile(pkgPath, 'utf-8');
-        const pkg = JSON.parse(pkgContent);
+        const pkg = JSON.parse(pkgContent) as { workspaces?: unknown[] };
 
         if (pkg.workspaces && Array.isArray(pkg.workspaces)) {
           return currentDir;
@@ -53,9 +55,8 @@ export class SyncEngine {
   }
 
   private async loadManifest(): Promise<void> {
-    const { logger, dryRun } = this.config;
+    const { logger, dryRun } = this.partialConfig;
 
-    // Use workspace root + relative path to manifest (safer than __dirname jumps)
     const manifestPath = path.join(this.workspaceRoot, '.architecture.yaml');
 
     logger.info(`[debug] __dirname (ESM): ${__dirname}`);
@@ -65,8 +66,13 @@ export class SyncEngine {
     try {
       await fs.access(manifestPath);
       logger.info('[debug] fs.access succeeded');
-    } catch (err: any) {
-      if (err.code === 'ENOENT' && dryRun) {
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        'code' in err &&
+        err.code === 'ENOENT' &&
+        dryRun
+      ) {
         logger.warn(`Manifest not found — using empty for dry-run`);
         this.manifest = { bounded_contexts: [] };
         return;
@@ -76,15 +82,27 @@ export class SyncEngine {
 
     try {
       const content = await fs.readFile(manifestPath, 'utf8');
-      this.manifest = yaml.load(content);
+      const loaded = yaml.load(content);
+      this.manifest = (loaded as Manifest) ?? {};
       logger.info(`Loaded manifest from ${manifestPath}`);
-    } catch (err: any) {
-      throw new Error(`Failed to parse manifest: ${err.message}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unknown parse error';
+      throw new Error(`Failed to parse manifest: ${message}`);
     }
   }
 
+  private getConfig(): SyncConfig {
+    if (!this.fullConfig) {
+      throw new Error('SyncEngine config not initialized. Call run() first.');
+    }
+    return this.fullConfig;
+  }
+
   private async ensureRootFiles(): Promise<void> {
-    const { logger } = this.config;
+    const config = this.getConfig();
+    const { logger } = config;
+
     const rootFiles = [
       {
         path: path.join(this.workspaceRoot, '.gitignore'),
@@ -109,7 +127,7 @@ export class SyncEngine {
     ];
 
     for (const file of rootFiles) {
-      const status = await safeWriteFile(file.path, file.content, this.config);
+      const status = await safeWriteFile(file.path, file.content, config);
       if (status !== 'unchanged' && status !== 'skipped') {
         logger.info(`Root file ${status}: ${file.path}`);
       }
@@ -117,10 +135,11 @@ export class SyncEngine {
   }
 
   private async ensureDirectories(): Promise<GeneratorResult> {
+    const config = this.getConfig();
     const result = createEmptyResult();
-    const { logger } = this.config;
-    const layers = this.manifest.generator?.sync?.layers || {};
-    const modules = this.manifest.bounded_contexts || [];
+    const { logger } = config;
+    const layers = config.manifest.generator?.sync?.layers ?? {};
+    const modules = config.manifest.bounded_contexts ?? [];
 
     for (const mod of modules) {
       if (!mod?.name) continue;
@@ -129,11 +148,7 @@ export class SyncEngine {
         `Ensuring directories for module: ${mod.name} at ${moduleDir}`
       );
 
-      const layerResult = await ensureLayerFolders(
-        moduleDir,
-        layers,
-        this.config
-      );
+      const layerResult = await ensureLayerFolders(moduleDir, layers, config);
       result.created.push(...layerResult.created);
       result.skipped.push(...layerResult.skipped);
       result.updated.push(...layerResult.updated);
@@ -143,9 +158,10 @@ export class SyncEngine {
   }
 
   private async generateCoreArtifacts(): Promise<GeneratorResult> {
+    const config = this.getConfig();
     const result = createEmptyResult();
-    const { logger } = this.config;
-    const modules = this.manifest.bounded_contexts || [];
+    const { logger } = config;
+    const modules = config.manifest.bounded_contexts ?? [];
 
     await this.ensureRootFiles();
 
@@ -154,18 +170,14 @@ export class SyncEngine {
       const moduleDir = path.join(this.workspaceRoot, 'packages', moduleName);
       logger.info(`Processing module: ${moduleName}`);
 
-      const barrelResult = await generateBarrels(moduleDir, this.config);
-      const stubResult = await generateStubs(moduleDir, this.config);
+      const barrelResult = await generateBarrels(moduleDir, config);
+      const stubResult = await generateStubs(moduleDir, config);
       const pkgResult = await generatePackageJson(
         moduleDir,
         moduleName,
-        this.config
+        config
       );
-      const tsResult = await generateTsconfig(
-        moduleDir,
-        moduleName,
-        this.config
-      );
+      const tsResult = await generateTsconfig(moduleDir, moduleName, config);
 
       result.created.push(
         ...barrelResult.created,
@@ -195,7 +207,8 @@ export class SyncEngine {
   }
 
   async run(): Promise<void> {
-    const { logger, dryRun } = this.config;
+    const { logger, dryRun } = this.partialConfig;
+
     const start = Date.now();
 
     logger.info(
@@ -206,10 +219,16 @@ export class SyncEngine {
       this.workspaceRoot = await this.findWorkspaceRoot();
       await this.loadManifest();
 
+      this.fullConfig = {
+        ...this.partialConfig,
+        workspaceRoot: this.workspaceRoot,
+        manifest: this.manifest,
+      } as const;
+
       const layerResult = await this.ensureDirectories();
       const artifactsResult = await this.generateCoreArtifacts();
 
-      await runArchLinter(this.config);
+      await runArchLinter(this.fullConfig);
 
       const duration = Date.now() - start;
 
@@ -236,8 +255,9 @@ export class SyncEngine {
       logger.info(
         `• Total ops     : ${layerResult.dryRunOperations + artifactsResult.dryRunOperations}`
       );
-    } catch (err: any) {
-      logger.error(`Sync failed: ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown sync error';
+      logger.error(`Sync failed: ${message}`);
       if (!dryRun) process.exit(1);
     }
   }
