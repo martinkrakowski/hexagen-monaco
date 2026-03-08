@@ -218,6 +218,7 @@ bounded_contexts:
           out:
             - MonacoPersistencePort
             - SemanticModelAdapterPort
+            - TsMorphPort # already present in ports/out
     generator:
       dependencies:
         monaco-editor: ^0.51.0
@@ -291,10 +292,13 @@ bounded_contexts:
           ]
         factories: [createWebUseCaseFactories]
       infrastructure:
-        adapters: [LocalStoragePersistenceAdapter, WebContainerPreviewAdapter]
+        adapters:
+          - LocalStoragePersistenceAdapter
+          - WebContainerPreviewAdapter
     driver_for: apps/web
     wiring:
       - Intent Bus dispatches to projections/use-case factories only
+      - MonacoPersistencePort is implemented by LocalStoragePersistenceAdapter for browser session persistence
 
 apps:
   - name: web
