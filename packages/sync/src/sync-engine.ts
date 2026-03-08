@@ -11,7 +11,7 @@ import { generateStubs } from './generators/stubs.js';
 import { generatePackageJson } from './generators/package-json.js';
 import { generateTsconfig } from './generators/tsconfig.js';
 import { createEmptyResult, type GeneratorResult } from './results.js';
-import type { Manifest } from './types/manifest'; // ← import shared type
+import type { Manifest } from './types/manifest.js';
 
 // ESM-safe __dirname
 const __filename = fileURLToPath(import.meta.url);

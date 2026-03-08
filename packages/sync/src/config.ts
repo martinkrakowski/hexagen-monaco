@@ -1,6 +1,6 @@
 import type { Logger } from '@hexagen/arch-linter';
 import { createConsoleLogger } from '@hexagen/arch-linter';
-import type { Manifest } from './types/manifest';
+import type { Manifest } from './types/manifest.js';
 
 // Flags-only (what parseArgs can provide)
 export interface SyncFlags {
