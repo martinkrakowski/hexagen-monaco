@@ -7,10 +7,10 @@ import type * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import {
   UndoLastPatchUseCase,
   ProjectCurrentBufferStateUseCase,
+  MonacoSession,
 } from '@hexagen/monaco-orchestration';
 
 import type {
-  MonacoSessionState,
   IUndoLastPatchPort,
   IProjectCurrentBufferStatePort,
 } from '@hexagen/monaco-orchestration';
@@ -73,7 +73,7 @@ export function MonacoEditorWrapper({
             );
           }
           console.info('Session loaded successfully');
-        } else if (loadResult.error) {
+        } else if (!loadResult.success) {
           setError(loadResult.error.message);
           console.error('Session load failed:', loadResult.error);
         }
@@ -94,12 +94,8 @@ export function MonacoEditorWrapper({
     const save = async () => {
       try {
         console.debug(`Saving session for projectId: ${sessionId}`);
-        const updated = {
-          sessionId,
-          content: newValue,
-          timestamp: new Date(),
-        };
-        const result = await persistence.saveSession(updated as any);
+        const session = new MonacoSession(sessionId, newValue, language);
+        const result = await persistence.saveSession(session);
         if (!result.success) {
           setError(result.error?.message || 'Save failed');
           console.error('Session save failed:', result.error);
@@ -137,7 +133,7 @@ export function MonacoEditorWrapper({
 
       const currentState = (await projectCurrentBufferStateUseCase.execute({
         sessionId,
-      })) as MonacoSessionState | null;
+      })) as MonacoSession | null;
       const bufferContent = currentState?.content || '';
       setContent(bufferContent);
       if (editorRef.current) {

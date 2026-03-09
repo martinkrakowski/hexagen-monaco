@@ -3,3 +3,4 @@
 
 export {};
 // Re-exports will be added automatically when entities/use-cases/ports are declared
+export { MonacoSession } from './model/monaco-session/monaco-session';

@@ -1,4 +1,4 @@
-import { DownloadProjectPort } from '@hexagen/web-driver/application/ports/out';
+import type { DownloadProjectPort } from '../ports/out/download-project.port';
 import type { Project } from '../../domain/project.entity';
 
 /**

@@ -5,6 +5,7 @@
 import type { MonacoPersistencePort } from '@hexagen/monaco-orchestration';
 import type { DownloadProjectPort } from '@hexagen/web-driver';
 import { LocalStoragePersistenceAdapter } from '@hexagen/web-driver'; // same context → allowed
+import type { Project } from '@hexagen/web-driver';
 
 // Note: LocalStoragePersistenceAdapter is allowed direct import because it is in the same bounded context (web-driver).
 // All external ports must come from root barrels.
@@ -24,9 +25,9 @@ export const wireDependencies = () => {
 
   // Download project port → placeholder (to be replaced with jszip / zip adapter later)
   registry.set('DownloadProjectPort', {
-    downloadProject: async (_projectId: string) => {
-      console.warn('[DownloadProjectPort] Not implemented yet', _projectId);
-      return { success: false, error: { kind: 'NotImplemented' } };
+    downloadProject: async (_project: Project) => {
+      console.warn('[DownloadProjectPort] Not implemented yet', _project);
+      return { success: false as const, message: 'Not implemented' };
     },
   } satisfies DownloadProjectPort);
 

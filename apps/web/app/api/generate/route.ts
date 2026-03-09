@@ -2,7 +2,8 @@
 // Endpoint to generate a new project from spec
 
 import { NextResponse } from 'next/server';
-import { getMonacoPersistence } from '@/lib/wire'; // persistence for session save during generation
+import { getMonacoPersistence } from '@/lib/wire';
+import { MonacoSession } from '@hexagen/monaco-orchestration';
 import type { ProjectConfig } from '@hexagen/project-configuration';
 
 // TODO: wire real GenerateProjectUseCase here (use-case from project-generation)
@@ -18,12 +19,12 @@ export async function POST(request: Request) {
 
     // Save the spec as session content (for persistence round-trip demo)
     const persistence = getMonacoPersistence();
-    await persistence.saveSession({
+    const session = new MonacoSession(
       projectId,
-      content: JSON.stringify(rawSpec, null, 2),
-      lastModified: new Date(),
-      // Add other required fields from MonacoSession if needed (e.g. patchHistory: [], description: 'Generated spec')
-    });
+      JSON.stringify(rawSpec, null, 2),
+      'json'
+    );
+    await persistence.saveSession(session);
 
     return NextResponse.json({
       success: true,

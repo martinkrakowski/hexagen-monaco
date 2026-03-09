@@ -1,54 +1,85 @@
-import { MonacoPersistencePort } from '@hexagen/monaco-orchestration';
-import type { MonacoSessionState } from '../../domain/monaco-session-state.vo';
+// packages/web-driver/src/infrastructure/adapters/local-storage-persistence.adapter.ts
+
+import type {
+  MonacoPersistencePort,
+  MonacoSession,
+  PersistenceError,
+  SessionMetadata,
+} from '@hexagen/monaco-orchestration';
+import type { Result } from '@hexagen/shared';
 
 export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
-  private readonly STORAGE_KEY_PREFIX = 'hexagen:monaco:session:';
-
-  async saveSession(session: MonacoSessionState): Promise<void> {
+  async loadLatestSession(
+    projectId: string
+  ): Promise<Result<MonacoSession | null, PersistenceError>> {
     try {
-      const key = this.getStorageKey(session.projectId);
-      const serialized = JSON.stringify({
-        projectId: session.projectId,
-        content: session.content,
-        lastModified: session.lastModified.toISOString(),
-        // Future: add patches, undo stack reference, etc.
-      });
-
-      localStorage.setItem(key, serialized);
-    } catch (err) {
-      console.warn('Failed to persist Monaco session to localStorage', err);
-      throw err; // Let caller decide retry / fallback policy
-    }
-  }
-
-  async loadSession(projectId: string): Promise<MonacoSessionState | null> {
-    try {
-      const key = this.getStorageKey(projectId);
+      const key = `monaco-session-${projectId}`;
       const raw = localStorage.getItem(key);
+      if (!raw) return { success: true, value: null };
 
-      if (!raw) {
-        return null;
-      }
-
-      const parsed = JSON.parse(raw);
-
+      const session = JSON.parse(raw) as MonacoSession;
+      return { success: true, value: session };
+    } catch (e) {
       return {
-        projectId: parsed.projectId,
-        content: parsed.content ?? '',
-        lastModified: new Date(parsed.lastModified),
+        success: false,
+        error: {
+          kind: 'DeserializationFailed',
+          message: 'Failed to load session',
+          cause: e,
+        },
       };
-    } catch (err) {
-      console.warn('Failed to load Monaco session from localStorage', err);
-      return null;
     }
   }
 
-  async deleteSession(projectId: string): Promise<void> {
-    const key = this.getStorageKey(projectId);
-    localStorage.removeItem(key);
+  async saveSession(
+    session: MonacoSession
+  ): Promise<Result<MonacoSession, PersistenceError>> {
+    try {
+      const key = `monaco-session-${session.id}`;
+      localStorage.setItem(key, JSON.stringify(session));
+      return { success: true, value: session };
+    } catch (e) {
+      return {
+        success: false,
+        error: {
+          kind: 'SerializationFailed',
+          message: 'Failed to save session',
+          cause: e,
+        },
+      };
+    }
   }
 
-  private getStorageKey(projectId: string): string {
-    return `${this.STORAGE_KEY_PREFIX}${projectId}`;
+  async listSessions(
+    projectId: string,
+    limit?: number
+  ): Promise<Result<SessionMetadata[], PersistenceError>> {
+    // MVP stub — localStorage does not support listing
+    return { success: true, value: [] };
+  }
+
+  async deleteSession(
+    sessionId: string
+  ): Promise<Result<void, PersistenceError>> {
+    try {
+      localStorage.removeItem(`monaco-session-${sessionId}`);
+      return { success: true, value: undefined };
+    } catch (e) {
+      return {
+        success: false,
+        error: {
+          kind: 'Unknown',
+          message: 'Failed to delete session',
+          cause: e,
+        },
+      };
+    }
+  }
+
+  async clearProjectSessions(
+    projectId: string
+  ): Promise<Result<void, PersistenceError>> {
+    // MVP stub — localStorage does not support prefix delete
+    return { success: true, value: undefined };
   }
 }

@@ -1,5 +1,7 @@
-import { MonacoPersistencePort } from '@hexagen/web-driver/application/ports/out';
-import type { MonacoSessionState } from '@hexagen/web-driver/application/ports/out';
+import type {
+  MonacoPersistencePort,
+  MonacoSession,
+} from '@hexagen/monaco-orchestration';
 
 /**
  * Intent handler for persisting Monaco editor session state.
@@ -9,46 +11,34 @@ import type { MonacoSessionState } from '@hexagen/web-driver/application/ports/o
 export class PersistSessionIntentHandler {
   constructor(private readonly persistencePort: MonacoPersistencePort) {}
 
-  async handleSave(session: MonacoSessionState): Promise<{
-    success: boolean;
-    message: string;
-    requiresConfirmation?: boolean;
-  }> {
-    try {
-      await this.persistencePort.saveSession(session);
-      return {
-        success: true,
-        message: `Session for project ${session.projectId} persisted successfully`,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        message: `Failed to persist session: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        requiresConfirmation: false,
-      };
-    }
+  async handleSave(
+    session: MonacoSession
+  ): Promise<{ success: boolean; message: string }> {
+    const result = await this.persistencePort.saveSession(session);
+    return result.success
+      ? {
+          success: true,
+          message: `Session for project ${session.id} persisted`,
+        }
+      : { success: false, message: result.error.message };
   }
 
-  async handleLoad(projectId: string): Promise<{
-    session: MonacoSessionState | null;
+  async handleLoad(
+    projectId: string
+  ): Promise<{
+    session: MonacoSession | null;
     success: boolean;
     message: string;
   }> {
-    try {
-      const session = await this.persistencePort.loadSession(projectId);
-      return {
-        session,
-        success: session !== null,
-        message: session
-          ? `Session loaded for project ${projectId}`
-          : `No saved session found for project ${projectId}`,
-      };
-    } catch (err) {
-      return {
-        session: null,
-        success: false,
-        message: `Load failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      };
-    }
+    const result = await this.persistencePort.loadLatestSession(projectId); // ← loadLatestSession not loadSession
+    if (!result.success)
+      return { session: null, success: false, message: result.error.message };
+    return {
+      session: result.value,
+      success: result.value !== null,
+      message: result.value
+        ? `Session loaded for ${projectId}`
+        : `No session found for ${projectId}`,
+    };
   }
 }
