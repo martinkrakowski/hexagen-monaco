@@ -443,7 +443,7 @@ export default function Home() {
             <Card className="h-full border-0 rounded-none">
               <CardHeader>
                 <CardTitle className="text-sm text-muted-foreground">
-                  Grok AI Architect
+                  Monaco AI Architect
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-hidden">

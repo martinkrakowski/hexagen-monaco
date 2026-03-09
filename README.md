@@ -24,11 +24,7 @@ The platform favors **architectural stability, auditability, and long-term maint
 
 HexaGen Monaco is designed to reduce structural decay in large frontend codebases. The platform focuses on mitigating practical production risks, including:
 
-- **Boundary Leakage:** Preventing unauthorized cross-module imports via build-time enforcement.
-- **Contract Drift:** Maintaining Port/Adapter integrity through TypeScript project references.
-- **Dependency Graph Growth:** Restricting and visualizing uncontrolled growth in complex systems.
-- **Orchestration Fragmentation:** Consolidating business logic through a deterministic intent bus.
-- **Context Boundary Violations:** Validating domain isolation during rapid feature expansion.
+HexaGen Monaco focuses on reducing common failure modes in large frontend systems (or vertical slices). It prevents features from quietly reaching across module boundaries and creating hidden coupling. It keeps ports and adapters aligned so interfaces do not slowly diverge as the system evolves. It surfaces when the dependency graph begins expanding in ways that make the system harder to reason about. It keeps business logic from spreading across UI components by routing interactions through a consistent intent pipeline. It also protects domain boundaries as the codebase grows so one feature area does not gradually absorb responsibilities from another.
 
 ## High-Level Architecture
 
@@ -57,11 +53,11 @@ HexaGen Monaco is a modular monolith composed of strictly isolated modules defin
 
 ## Architecture Evolution Tracking
 
-The system treats architecture as a time-evolving asset. Unlike static generators, it tracks:
+The system treats architecture as something that evolves over time. Instead of generating a static structure once and leaving it to drift, it tracks how the architecture changes as the system grows:
 
-- **Module Splits:** Evolution of bounded contexts over time.
-- **Port Mutations:** Historical tracking of contract changes.
-- **Topology Shifts:** Auditable diffs of structural growth.
+- Module splits show how bounded contexts evolve as the codebase expands.
+- Port changes are tracked so interface contracts do not silently drift over time.
+- Structural changes are captured as auditable diffs, making it easier to understand how the system topology evolves.
 
 ---
 
@@ -104,9 +100,9 @@ modules:
     infrastructure:
       - persistence: drizzle
       - llm_providers:
-          - Grok
+          - Claude
       - external_apis:
-          - grok
+          - claude
           - git-provider-port
 ```
 
