@@ -1,6 +1,5 @@
-// apps/web/postcss.config.js
 /* eslint-disable */
-module.exports = {
+export default {
   plugins: {
     tailwindcss: {},
     autoprefixer: {},
