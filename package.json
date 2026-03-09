@@ -11,7 +11,9 @@
   "scripts": {
     "build": "turbo build",
     "build:all": "turbo build",
-    "sync": "yarn workspace @hexagen/sync sync --",
+    "sync": "yarn workspace @hexagen/sync cli",
+    "sync:dry": "yarn workspace @hexagen/sync cli --dry-run",
+    "sync:force": "yarn workspace @hexagen/sync cli --force",
     "dev": "turbo dev",
     "dev:api": "yarn workspace @hexagen/api-gateway dev",
     "dev:web": "yarn workspace web dev",

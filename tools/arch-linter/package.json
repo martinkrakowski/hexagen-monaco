@@ -10,7 +10,6 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "sync": "yarn workspace @hexagen/sync sync",
     "lint:arch": "node dist/index.js"
   },
   "dependencies": {

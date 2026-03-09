@@ -14,24 +14,30 @@ export function isGeneratedFile(content: string): boolean {
 
 /**
  * Checks if path is a protected monorepo root file.
+ * Uses values from manifest first, falls back to safe minimal list aligned with .architecture/manifest.yaml.
  */
 export function isProtectedRoot(filePath: string, config: SyncConfig): boolean {
   const protectedFiles: readonly string[] = config.manifest?.generator?.sync
     ?.protectedRootFiles ?? [
-    'package.json',
-    'tsconfig.json',
-    'tsconfig.base.json',
-    '.architecture.yaml',
+    '.gitignore',
     'turbo.json',
     'yarn.lock',
-    '.gitignore',
+    '.architecture/',
+    '.architecture/manifest.yaml',
+    '.architecture/generator.config.yaml',
     'README.md',
-    '.env*',
+    '.env',
+    '.env.local',
+    '.env.development',
+    '.env.production',
+    '.env.test',
   ];
 
   const relative = path.relative(config.workspaceRoot, filePath);
   const isRootLevel =
-    !relative.startsWith('packages/') && !relative.startsWith('tools/');
+    !relative.startsWith('packages/') &&
+    !relative.startsWith('tools/') &&
+    !relative.startsWith('apps/');
 
   return (
     isRootLevel &&
@@ -47,10 +53,14 @@ function contentHash(content: string): string {
 }
 
 /**
- * Safe, idempotent file writer. Strictly respects dry-run (read-only), force flags,
- * protected root rules, and non-generated file protection.
+ * Safe, idempotent file writer. Strictly respects:
+ * - dry-run (read-only simulation)
+ * - force flag override
+ * - protected root files from manifest
+ * - non-generated file protection
  *
- * @param skipGeneratedCheck - If true, bypass isGeneratedFile check (for managed files like package.json that can't carry a marker)
+ * @param skipGeneratedCheck - Bypass isGeneratedFile check (for managed files like package.json)
+ * @returns status of operation
  */
 export async function safeWriteFile(
   filePath: string,
