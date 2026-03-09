@@ -1,4 +1,4 @@
-import { MonacoPersistencePort } from '../../domain/ports/out/monaco-persistence.port';
+import { MonacoPersistencePort } from '@hexagen/monaco-orchestration';
 import type { MonacoSessionState } from '../../domain/monaco-session-state.vo';
 
 export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {

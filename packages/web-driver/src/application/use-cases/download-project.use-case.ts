@@ -1,5 +1,5 @@
-import { DownloadProjectPort } from '../../domain';
-import type { Project } from '../../domain';
+import { DownloadProjectPort } from '@hexagen/web-driver/application/ports/out';
+import type { Project } from '../../domain/project.entity';
 
 /**
  * Use case for project download / preview flow.

@@ -4,3 +4,4 @@ export * from './domain';
 export * from './application';
 export * from './infrastructure';
 export * from './domain/project-specification';
+export * from './errors';

@@ -1,4 +1,4 @@
-import { DownloadProjectPort } from '../../domain/ports/out/download-project.port';
+import { DownloadProjectPort } from '../../application/ports/out/download-project.port';
 import type { Project } from '../../domain/project.entity';
 
 /**

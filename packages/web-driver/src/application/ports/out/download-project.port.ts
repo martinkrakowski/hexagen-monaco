@@ -1,4 +1,4 @@
-import { Project } from '../../project.entity';
+import { Project } from '../../../domain/project.entity';
 
 /**
  * Port defining the contract for project download, preview, and deployment preparation.

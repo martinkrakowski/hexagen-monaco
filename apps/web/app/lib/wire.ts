@@ -1,48 +1,58 @@
 // apps/web/app/lib/wire.ts
-// Inbound driver adapter layer — orchestrates bounded contexts for web actions
+// Centralized dependency composition root for web driver
+// All cross-package imports go through root barrels only (lint-enforced)
 
-import { createWebUseCaseFactories } from '@hexagen/web-driver';
-import type { Project as WebProject } from '@hexagen/web-driver';
-import { GenerateProjectUseCase } from '@hexagen/project-generation';
-import type { ProjectConfig } from '@hexagen/project-configuration';
+import type { MonacoPersistencePort } from '@hexagen/monaco-orchestration';
+import type { DownloadProjectPort } from '@hexagen/web-driver';
+import { LocalStoragePersistenceAdapter } from '@hexagen/web-driver'; // same context → allowed
 
-// Singleton factories (web-driver context)
-const webFactories = createWebUseCaseFactories();
+// Note: LocalStoragePersistenceAdapter is allowed direct import because it is in the same bounded context (web-driver).
+// All external ports must come from root barrels.
 
-export async function generateProjectAction(
-  rawSpec: ProjectConfig
-): Promise<WebProject> {
-  // Temp no-op port — replace with real infrastructure adapter
-  const tempPort = {
-    async generate(): Promise<void> {
-      // TODO: wire real generator
+/**
+ * Simple registry-based composition for ports used by web-driver use-cases.
+ * Intent Bus / projections / components consume via typed getters.
+ */
+export const wireDependencies = () => {
+  const registry = new Map<string, unknown>();
+
+  // Monaco persistence port → concrete localStorage adapter
+  registry.set(
+    'MonacoPersistencePort',
+    new LocalStoragePersistenceAdapter() satisfies MonacoPersistencePort
+  );
+
+  // Download project port → placeholder (to be replaced with jszip / zip adapter later)
+  registry.set('DownloadProjectPort', {
+    downloadProject: async (_projectId: string) => {
+      console.warn('[DownloadProjectPort] Not implemented yet', _projectId);
+      return { success: false, error: { kind: 'NotImplemented' } };
+    },
+  } satisfies DownloadProjectPort);
+
+  // Future ports/adapters go here
+
+  return {
+    get: <T>(portName: string): T => {
+      const instance = registry.get(portName);
+      if (!instance) {
+        throw new Error(`No implementation registered for port: ${portName}`);
+      }
+      return instance as T;
+    },
+    // For tests/mocking
+    register: (portName: string, instance: unknown) => {
+      registry.set(portName, instance);
     },
   };
+};
 
-  const useCase = new GenerateProjectUseCase(tempPort);
-  const project = await useCase.execute(rawSpec);
+// Singleton instance (app-wide)
+export const dependencies = wireDependencies();
 
-  const webProject: WebProject = {
-    id: project.id,
-    spec: {
-      name: project.name,
-      description: '',
-    },
-    boundedContexts: [],
-    rootFiles: {},
-    lastGeneratedAt: new Date(),
-  };
+// Typed convenience getters
+export const getMonacoPersistence = () =>
+  dependencies.get<MonacoPersistencePort>('MonacoPersistencePort');
 
-  const projection = webFactories.createProjectViewProjectionUseCase();
-  const tree = projection.projectTree(webProject);
-  console.debug('[DEBUG] Generated project tree nodes:', tree.totalNodes);
-
-  return webProject;
-}
-
-export async function downloadProjectAction(
-  project: WebProject
-): Promise<{ success: boolean; downloadUrl?: string; message: string }> {
-  const downloadUseCase = webFactories.createDownloadProjectUseCase();
-  return downloadUseCase.execute(project);
-}
+export const getDownloadProject = () =>
+  dependencies.get<DownloadProjectPort>('DownloadProjectPort');

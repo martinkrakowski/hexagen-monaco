@@ -1,0 +1,1 @@
+{"version":3,"file":"apply-semantic-patch.use-case.d.ts","sourceRoot":"","sources":["apply-semantic-patch.use-case.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,uBAAuB,EAAE,MAAM,uCAAuC,CAAC;AAErF,qBAAa,yBAAyB;IACxB,OAAO,CAAC,QAAQ,CAAC,IAAI;gBAAJ,IAAI,EAAE,uBAAuB;IAEpD,OAAO,CAAC,IAAI,EAAE,OAAO,GAAG,OAAO,CAAC,OAAO,CAAC;CAa/C"}

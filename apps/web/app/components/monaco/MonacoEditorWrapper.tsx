@@ -10,11 +10,12 @@ import {
 } from '@hexagen/monaco-orchestration';
 
 import type {
-  MonacoPersistencePort,
   MonacoSessionState,
   IUndoLastPatchPort,
   IProjectCurrentBufferStatePort,
 } from '@hexagen/monaco-orchestration';
+
+import { getMonacoPersistence } from '@/lib/wire';
 
 interface MonacoEditorWrapperProps {
   initialBuffer: string;
@@ -29,51 +30,26 @@ export function MonacoEditorWrapper({
 }: MonacoEditorWrapperProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [content, setContent] = useState(initialBuffer);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Temporary stub ports (inside component so editorRef is accessible via closure)
-  class StubPersistencePort implements MonacoPersistencePort {
-    async saveState(data: unknown): Promise<unknown> {
-      if (typeof data !== 'object' || data === null || !('sessionId' in data)) {
-        throw new Error('Invalid saveState data format');
-      }
+  const persistence = getMonacoPersistence();
 
-      const { sessionId, state } = data as {
-        sessionId: string;
-        state: MonacoSessionState;
-      };
-      const key = `monaco-session-${sessionId}`;
-      localStorage.setItem(key, JSON.stringify(state));
-      return { success: true };
-    }
-
-    async loadState(data: unknown): Promise<unknown> {
-      if (typeof data !== 'object' || data === null || !('sessionId' in data)) {
-        throw new Error('Invalid loadState data format');
-      }
-
-      const { sessionId } = data as { sessionId: string };
-      const key = `monaco-session-${sessionId}`;
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      return JSON.parse(raw) as MonacoSessionState;
-    }
-  }
-
+  // Stub ports for undo & buffer state (keep until real ports are wired)
   class StubUndoPort implements IUndoLastPatchPort {
     async undo(data: unknown): Promise<unknown> {
-      console.log('[STUB] undo called with:', data);
+      console.info('[STUB] undo called with:', data);
       return { success: true, message: 'Undo stub executed' };
     }
   }
 
   class StubBufferStatePort implements IProjectCurrentBufferStatePort {
     async getCurrentState(data: unknown): Promise<unknown> {
-      console.log('[STUB] getCurrentState called with:', data);
+      console.info('[STUB] getCurrentState called with:', data);
       return { content: editorRef.current?.getValue() || '' };
     }
   }
 
-  // Wire use cases with stubs
   const undoPort = new StubUndoPort();
   const bufferStatePort = new StubBufferStatePort();
 
@@ -82,18 +58,64 @@ export function MonacoEditorWrapper({
     bufferStatePort
   );
 
-  const persistencePort = new StubPersistencePort();
-
+  // Load latest session on mount
   useEffect(() => {
     const load = async () => {
-      const loadedState = await persistencePort.loadState({ sessionId });
-      const session = loadedState as MonacoSessionState | null;
-      const bufferContent = session?.content || initialBuffer;
-      setContent(bufferContent);
-      editorRef.current?.setValue(bufferContent);
+      setLoading(true);
+      try {
+        console.info(`Loading latest session for projectId: ${sessionId}`);
+        const loadResult = await persistence.loadLatestSession(sessionId);
+        if (loadResult.success && loadResult.value) {
+          setContent(loadResult.value.content || initialBuffer);
+          if (editorRef.current) {
+            editorRef.current.setValue(
+              loadResult.value.content || initialBuffer
+            );
+          }
+          console.info('Session loaded successfully');
+        } else if (loadResult.error) {
+          setError(loadResult.error.message);
+          console.error('Session load failed:', loadResult.error);
+        }
+      } catch (err) {
+        const msg = (err as Error).message || 'Failed to load session';
+        setError(msg);
+        console.error('Session load exception:', err);
+      } finally {
+        setLoading(false);
+      }
     };
+
     load();
-  }, [sessionId, initialBuffer]);
+  }, [sessionId, initialBuffer, persistence]);
+
+  // Debounced save on change (simple timeout for MVP)
+  const saveSession = (newValue: string) => {
+    const save = async () => {
+      try {
+        console.debug(`Saving session for projectId: ${sessionId}`);
+        const updated = {
+          sessionId,
+          content: newValue,
+          timestamp: new Date(),
+        };
+        const result = await persistence.saveSession(updated as any);
+        if (!result.success) {
+          setError(result.error?.message || 'Save failed');
+          console.error('Session save failed:', result.error);
+        } else {
+          console.info('Session saved successfully');
+        }
+      } catch (err) {
+        const msg = (err as Error).message || 'Save error';
+        setError(msg);
+        console.error('Session save exception:', err);
+      }
+    };
+
+    const timeout = setTimeout(save, 800);
+    return () => clearTimeout(timeout);
+  };
 
   const handleEditorDidMount = (
     editorInstance: monaco.editor.IStandaloneCodeEditor
@@ -101,8 +123,16 @@ export function MonacoEditorWrapper({
     editorRef.current = editorInstance;
   };
 
+  const handleEditorChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      setContent(value);
+      saveSession(value);
+    }
+  };
+
   const handleUndo = async () => {
     try {
+      console.info(`Undo requested for sessionId: ${sessionId}`);
       await undoLastPatchUseCase.execute({ sessionId });
 
       const currentState = (await projectCurrentBufferStateUseCase.execute({
@@ -110,20 +140,29 @@ export function MonacoEditorWrapper({
       })) as MonacoSessionState | null;
       const bufferContent = currentState?.content || '';
       setContent(bufferContent);
-      editorRef.current?.setValue(bufferContent);
+      if (editorRef.current) {
+        editorRef.current.setValue(bufferContent);
+      }
+      console.info('Undo completed');
     } catch (err) {
+      const msg = (err as Error).message || 'Undo failed';
       console.error('Undo failed:', err);
-    }
-  };
-
-  const handleEditorChange = (value: string | undefined) => {
-    if (value !== undefined) {
-      setContent(value);
+      setError(msg);
     }
   };
 
   return (
     <div className="flex flex-col h-full">
+      {/* Accessibility live region */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {loading
+          ? 'Loading session...'
+          : error
+            ? `Error: ${error}`
+            : 'Session ready'}
+      </div>
+
+      {/* Header with session info & undo button */}
       <div className="flex items-center justify-between p-2 border-b bg-muted/50">
         <div className="text-sm font-medium">
           Monaco Editor — Session: {sessionId}
@@ -137,6 +176,7 @@ export function MonacoEditorWrapper({
         </button>
       </div>
 
+      {/* Editor */}
       <div className="flex-1 overflow-hidden">
         <Editor
           height="100%"

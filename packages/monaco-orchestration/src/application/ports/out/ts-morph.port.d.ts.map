@@ -1,0 +1,1 @@
+{"version":3,"file":"ts-morph.port.d.ts","sourceRoot":"","sources":["ts-morph.port.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,qDAAqD,CAAC;AAEpF,MAAM,WAAW,WAAW;IAC1B,UAAU,EAAE,CAAC,IAAI,EAAE,MAAM,KAAK,OAAO,CAAC;IACtC,oBAAoB,EAAE,CAAC,MAAM,EAAE,OAAO,EAAE,MAAM,EAAE,OAAO,KAAK,aAAa,CAAC;CAC3E"}

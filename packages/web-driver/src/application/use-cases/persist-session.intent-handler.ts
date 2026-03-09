@@ -1,5 +1,5 @@
-import { MonacoPersistencePort } from '../../domain';
-import type { MonacoSessionState } from '../../domain';
+import { MonacoPersistencePort } from '@hexagen/web-driver/application/ports/out';
+import type { MonacoSessionState } from '@hexagen/web-driver/application/ports/out';
 
 /**
  * Intent handler for persisting Monaco editor session state.
