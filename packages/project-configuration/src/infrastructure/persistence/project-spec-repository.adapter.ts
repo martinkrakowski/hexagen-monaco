@@ -3,7 +3,7 @@ import type { ProjectSpec } from '../../domain/model/project-spec/project-spec';
 
 /**
  * Concrete adapter implementing the outbound port IProjectSpecRepository.
- * Handles persistence operations for ProjectSpec entities (the .architecture.yaml representation).
+ * * Handles persistence operations for ProjectSpec entities (the .architecture/manifest.yaml representation).
  */
 export class ProjectSpecRepositoryAdapter implements IProjectSpecRepository {
   async save(entity: ProjectSpec): Promise<ProjectSpec> {

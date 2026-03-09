@@ -4,7 +4,7 @@ import { SyncConfig } from '../config.js';
 import { createEmptyResult, type GeneratorResult } from '../results.js';
 import { safeWriteFile } from '../fs-utils.js';
 
-// Typed shape for layers from .architecture.yaml
+// Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
   folder: string;
   subfolders?: string[];

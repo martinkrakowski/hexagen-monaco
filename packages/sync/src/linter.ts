@@ -26,7 +26,7 @@ export async function runArchLinter(config: SyncConfig): Promise<void> {
     if (stdout) logger.info(stdout.trim());
     if (stderr) logger.error(stderr.trim());
 
-    logger.info('✅ Architecture is compliant with architecture.yaml.');
+    logger.info('✅ Architecture is compliant with manifest.yaml.');
   } catch (error: any) {
     const message = error.stderr || error.message || 'Unknown linter error';
     logger.error(`Architectural Integrity Check Failed:\n${message}`);

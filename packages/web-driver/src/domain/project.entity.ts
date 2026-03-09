@@ -11,7 +11,6 @@ export interface Project {
    * Unique identifier (e.g. UUID or slug from wizard session)
    */
   id: string;
-
   /**
    * Project specification snapshot (minimal subset)
    */
@@ -21,13 +20,11 @@ export interface Project {
     version?: string;
     // Future: templateId, boundedContexts list, etc.
   };
-
   /**
-   * Root-level files (e.g. package.json, tsconfig.json, .architecture.yaml)
+   * Root-level files (e.g. package.json, tsconfig.json, .architecture/manifest.yaml)
    * Content as string for preview/download serialization
    */
   rootFiles?: Record<string, string>;
-
   /**
    * High-level bounded contexts metadata
    * (Not full code — just names/roles for tree projection and preview)
@@ -37,13 +34,11 @@ export interface Project {
     type: 'core' | 'supporting' | 'driver' | 'shared-kernel';
     description?: string;
   }>;
-
   /**
    * Timestamp of last generation/sync
    */
   lastGeneratedAt: Date;
-
   // Future optional fields (when we extend):
   // manifestHash?: string;
-  // generatedFileTree?: FileTreeProjection;  // but avoid legacy FileTreeNode
+  // generatedFileTree?: FileTreeProjection; // but avoid legacy FileTreeNode
 }
