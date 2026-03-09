@@ -11,8 +11,8 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
     projectId: string
   ): Promise<Result<MonacoSession | null, PersistenceError>> {
     try {
-      const key = `monaco-session-${projectId}`;
-      const raw = localStorage.getItem(key);
+      const _id = `monaco-session-${projectId}`;
+      const raw = localStorage.getItem(_id);
       if (!raw) return { success: true, value: null };
 
       const session = JSON.parse(raw) as MonacoSession;
@@ -49,8 +49,8 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
   }
 
   async listSessions(
-    projectId: string,
-    limit?: number
+    _projectId: string,
+    _limit?: number
   ): Promise<Result<SessionMetadata[], PersistenceError>> {
     // MVP stub — localStorage does not support listing
     return { success: true, value: [] };

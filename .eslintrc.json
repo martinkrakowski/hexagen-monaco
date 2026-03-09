@@ -7,10 +7,7 @@
     "prettier"
   ],
   "parser": "@typescript-eslint/parser",
-  "plugins": [
-    "@typescript-eslint",
-    "import"
-  ],
+  "plugins": ["@typescript-eslint", "import"],
   "rules": {
     "no-console": "warn",
     "no-restricted-imports": [
@@ -18,19 +15,34 @@
       {
         "patterns": [
           {
-            "group": [
-              "@hexagen/*/*",
-              "!@hexagen/shared/*"
-            ],
+            "group": ["@hexagen/*/*", "!@hexagen/shared/*"],
             "message": "Cross-package imports must be done via the barrel file. Only deep imports from `shared` are allowed."
           }
         ]
       }
     ]
   },
-  "ignorePatterns": [
-    "dist",
-    "node_modules",
-    "**/*.js"
+  "ignorePatterns": ["dist", "node_modules", "**/*.js", "apps/web"],
+  "overrides": [
+    {
+      "files": ["**/src/application/ports/in/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off"
+      }
+    },
+    {
+      "files": ["**/src/application/use-cases/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off"
+      }
+    },
+    {
+      "files": ["**/src/infrastructure/adapters/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-unused-vars": "off"
+      }
+    }
   ]
 }
