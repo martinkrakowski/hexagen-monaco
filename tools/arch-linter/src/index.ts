@@ -1,10 +1,12 @@
 /// <reference types="node" />
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises'; // async fs
+import * as fs from 'fs'; // sync fs for existsSync (temporary bridge)
 import { Project } from 'ts-morph';
 import * as yaml from 'js-yaml';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createConsoleLogger } from './logger.js';
+import type { Manifest } from '@hexagen/sync';
 
 // ESM polyfill for __dirname / __filename
 const __filename = fileURLToPath(import.meta.url);
@@ -15,24 +17,17 @@ const logger = createConsoleLogger();
 
 // --- CONFIGURATION ---
 const ROOT_DIR = path.resolve(__dirname, '..', '..', '..');
-const MANIFEST_PATH = path.join(ROOT_DIR, '.architecture.yaml');
+const MANIFEST_PATH = path.join(ROOT_DIR, '.architecture/manifest.yaml'); // ← UPDATED
 const TSCONFIG_PATH = path.join(ROOT_DIR, 'tsconfig.base.json');
 const PKG_ROOT_PATH = path.join(ROOT_DIR, 'packages');
 const SCOPE = '@hexagen';
-// ---
-
-function getKebabCase(s: string) {
-  return s
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
-    .replace(/[\s_]+/g, '-')
-    .toLowerCase();
-}
 
 // Load the architecture manifest
-let manifest: any;
+let manifest: Manifest;
 try {
-  manifest = yaml.load(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+  const content = await fsPromises.readFile(MANIFEST_PATH, 'utf8');
+  const loaded = yaml.load(content);
+  manifest = (loaded as Manifest) ?? { bounded_contexts: [] }; // safe fallback
 } catch (e) {
   logger.error(`Could not load architecture manifest from ${MANIFEST_PATH}`);
   process.exit(1);
@@ -45,12 +40,13 @@ const project = new Project({
 
 function checkArchitecturalIntegrity() {
   const errors: string[] = [];
-  const modules: any[] = manifest.modules || [];
+  const modules = manifest.bounded_contexts || []; // ← use correct key from manifest.yaml
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
     const modulePath = path.join(PKG_ROOT_PATH, moduleName);
 
+    // Use sync existsSync for simplicity (linter is CLI tool)
     if (!fs.existsSync(modulePath)) {
       // This is a placeholder module, skip it
       return;
@@ -68,15 +64,13 @@ function checkArchitecturalIntegrity() {
         // Rule: No imports from other modules, except 'shared'
         if (moduleSpecifier.startsWith(SCOPE) && moduleName !== 'shared') {
           const importedPkg = moduleSpecifier.split('/')[1];
-
           if (
             importedPkg &&
             importedPkg !== moduleName &&
             importedPkg !== 'shared'
           ) {
             errors.push(
-              `
-Boundary Violation in [${moduleName}]:
+              `Boundary Violation in [${moduleName}]:
   File: ${path.relative(ROOT_DIR, file.getFilePath())}
   Illegal import from another module: "${moduleSpecifier}"
               `.trim()
@@ -131,10 +125,10 @@ Application Violation in [${moduleName}]:
   // --- REPORTING ---
   if (errors.length > 0) {
     logger.error('Architectural Integrity Check Failed. Found violations:');
-    errors.forEach((e) => logger.error(`  - ${e}`));
+    errors.forEach((e) => logger.error(` - ${e}`));
     process.exit(1);
   } else {
-    logger.info('Architecture is compliant with architecture.yaml.');
+    logger.info('Architecture is compliant with manifest.yaml.');
   }
 }
 

@@ -41,23 +41,19 @@ export class SyncEngine {
 
   private async findWorkspaceRoot(): Promise<string> {
     let currentDir = __dirname;
-
     while (currentDir !== path.parse(currentDir).root) {
       try {
         const pkgPath = path.join(currentDir, 'package.json');
         const pkgContent = await fs.readFile(pkgPath, 'utf-8');
         const pkg = JSON.parse(pkgContent) as { workspaces?: unknown[] };
-
         if (pkg.workspaces && Array.isArray(pkg.workspaces)) {
           return currentDir;
         }
       } catch {
         // silent — not this directory
       }
-
       currentDir = path.dirname(currentDir);
     }
-
     throw new Error(
       'Could not locate monorepo root. No package.json with "workspaces" field found.'
     );
@@ -65,9 +61,10 @@ export class SyncEngine {
 
   private async loadManifest(): Promise<void> {
     const { logger, dryRun } = this.partialConfig;
-
-    const manifestPath = path.join(this.workspaceRoot, '.architecture.yaml');
-
+    const manifestPath = path.join(
+      this.workspaceRoot,
+      '.architecture/manifest.yaml'
+    );
     logger.info(`[debug] __dirname (ESM): ${__dirname}`);
     logger.info(`[debug] resolved workspaceRoot: ${this.workspaceRoot}`);
     logger.info(`[debug] resolved manifestPath: ${manifestPath}`);
@@ -111,7 +108,6 @@ export class SyncEngine {
   private async ensureRootFiles(): Promise<void> {
     const config = this.getConfig();
     const { logger } = config;
-
     const rootFiles = [
       {
         path: path.join(this.workspaceRoot, '.gitignore'),
@@ -176,6 +172,7 @@ export class SyncEngine {
       result.updated.push(...layerResult.updated);
       result.totalOps += layerResult.totalOps;
     }
+
     return result;
   }
 
@@ -187,7 +184,6 @@ export class SyncEngine {
     await this.ensureRootFiles();
 
     let totalOps = 0;
-
     const barrels = createEmptyResult();
     const stubs = createEmptyResult();
     const pkgs = createEmptyResult();
@@ -252,7 +248,6 @@ export class SyncEngine {
 
   async run(): Promise<void> {
     const { logger, dryRun } = this.partialConfig;
-
     const start = Date.now();
 
     logger.info(
@@ -283,21 +278,21 @@ export class SyncEngine {
       );
       logger.info(`\n=== Generator Summary ===`);
       logger.info(
-        `• Layers        : ${layerResult.created.length} created, ${layerResult.updated.length} updated, ${layerResult.skipped.length} skipped`
+        `• Layers : ${layerResult.created.length} created, ${layerResult.updated.length} updated, ${layerResult.skipped.length} skipped`
       );
       logger.info(
-        `• Barrels       : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`
+        `• Barrels : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`
       );
       logger.info(
-        `• Stubs         : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`
+        `• Stubs : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`
       );
       logger.info(
-        `• package.json  : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`
+        `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`
       );
       logger.info(
         `• tsconfig.json : ${tsconfigs.created.length} created, ${tsconfigs.updated.length} updated, ${tsconfigs.skipped.length} skipped`
       );
-      logger.info(`• Total ops     : ${totalOps}`);
+      logger.info(`• Total ops : ${totalOps}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown sync error';
       logger.error(`Sync failed: ${message}`);

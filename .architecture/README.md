@@ -28,7 +28,7 @@ The following failures were identified and manually fixed. Each represents a gap
 
 Two configuration files govern the reformed system. Their separation is the foundational architectural decision.
 
-### 3.1 .architecture.yaml
+### 3.1 manifest.yaml
 
 Reserved strictly for the domain architecture of the generated monorepo: bounded contexts, aggregates, entities, value objects, ports, and use cases of the target system. This file describes **what** to build, not **how** the generator behaves.
 

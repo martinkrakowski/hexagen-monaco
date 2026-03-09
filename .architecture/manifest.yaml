@@ -95,7 +95,9 @@ generator:
       - .gitignore
       - turbo.json
       - yarn.lock
-      - .architecture.yaml
+      - .architecture/
+      - .architecture/manifest.yaml
+      - .architecture/generator.config.yaml
       - README.md
       - .env
       - .env.local

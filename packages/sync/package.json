@@ -3,8 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "lint": "eslint . --ext .ts",
@@ -12,5 +10,13 @@
   },
   "devDependencies": {
     "typescript": "^5.0.0"
+  },
+  "main": "dist/cli.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/cli.js"
+    }
   }
 }

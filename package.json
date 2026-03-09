@@ -22,7 +22,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
+    "@types/node": "^25.3.5",
     "@typescript-eslint/eslint-plugin": "^7.8.0",
     "@typescript-eslint/parser": "^7.8.0",
     "eslint": "^8.57.0",

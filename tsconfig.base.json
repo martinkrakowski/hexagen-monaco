@@ -13,6 +13,7 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "isolatedModules": true,
+    "types": ["node"],
     "paths": {
       "@hexagen/project-configuration": [
         "./packages/project-configuration/src/index.ts"

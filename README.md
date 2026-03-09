@@ -78,7 +78,7 @@ The system treats architecture as a time-evolving asset. Unlike static generator
 ## Example Manifest
 
 ```yaml
-# .architecture.yaml (excerpt)
+# .architecture/manifest.yaml (excerpt)
 
 system: hexagen-monaco
 architecture: modular-monolith
