@@ -1,5 +1,3 @@
-// packages/monaco-orchestration/src/application/ports/out/monaco-persistence.port.ts
-
 import type { MonacoSession } from '../../../domain/model/monaco-session/monaco-session';
 import type { Result } from '@hexagen/shared/errors';
 

@@ -32,7 +32,7 @@ HexaGen Monaco is designed to reduce structural decay in large frontend codebase
 
 ## High-Level Architecture
 
-HexaGen Monaco is a modular monolith composed of strictly isolated modules defined in `.architecture.yaml`.
+HexaGen Monaco is a modular monolith composed of strictly isolated modules defined in `.architecture./manifest.yaml`.
 
 **Enforcement Mechanisms:**
 

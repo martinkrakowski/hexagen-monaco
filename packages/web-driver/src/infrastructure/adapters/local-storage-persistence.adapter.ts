@@ -1,5 +1,3 @@
-// packages/web-driver/src/infrastructure/adapters/local-storage-persistence.adapter.ts
-
 import type {
   MonacoPersistencePort,
   MonacoSession,

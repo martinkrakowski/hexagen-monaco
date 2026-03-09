@@ -23,14 +23,12 @@ export class PersistSessionIntentHandler {
       : { success: false, message: result.error.message };
   }
 
-  async handleLoad(
-    projectId: string
-  ): Promise<{
+  async handleLoad(projectId: string): Promise<{
     session: MonacoSession | null;
     success: boolean;
     message: string;
   }> {
-    const result = await this.persistencePort.loadLatestSession(projectId); // ← loadLatestSession not loadSession
+    const result = await this.persistencePort.loadLatestSession(projectId);
     if (!result.success)
       return { session: null, success: false, message: result.error.message };
     return {

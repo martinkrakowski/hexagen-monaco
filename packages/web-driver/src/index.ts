@@ -1,4 +1,3 @@
-// packages/web-driver/src/index.ts
 // Main barrel + factory for web-driver bounded context
 // Public API surface — only export local things
 

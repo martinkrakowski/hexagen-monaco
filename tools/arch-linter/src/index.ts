@@ -17,7 +17,7 @@ const logger = createConsoleLogger();
 
 // --- CONFIGURATION ---
 const ROOT_DIR = path.resolve(__dirname, '..', '..', '..');
-const MANIFEST_PATH = path.join(ROOT_DIR, '.architecture/manifest.yaml'); // ← UPDATED
+const MANIFEST_PATH = path.join(ROOT_DIR, '.architecture/manifest.yaml');
 const TSCONFIG_PATH = path.join(ROOT_DIR, 'tsconfig.base.json');
 const PKG_ROOT_PATH = path.join(ROOT_DIR, 'packages');
 const SCOPE = '@hexagen';
@@ -40,7 +40,7 @@ const project = new Project({
 
 function checkArchitecturalIntegrity() {
   const errors: string[] = [];
-  const modules = manifest.bounded_contexts || []; // ← use correct key from manifest.yaml
+  const modules = manifest.bounded_contexts || [];
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;

@@ -1,5 +1,3 @@
-// packages/project-configuration/src/domain/model/project-specification.ts
-
 export interface ProjectSpecification {
   readonly rootName: string;
   readonly workspaceScope: string;

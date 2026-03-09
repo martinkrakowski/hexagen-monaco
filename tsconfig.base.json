@@ -22,7 +22,7 @@
         "./packages/project-configuration/src/*"
       ],
       "@hexagen/shared": ["./packages/shared/src/index.ts"],
-      "@hexagen/shared/*": ["./packages/shared/src/*"], // ← ADDED THIS LINE
+      "@hexagen/shared/*": ["./packages/shared/src/*"],
       "@hexagen/messaging": ["./packages/messaging/src/index.ts"],
       "@hexagen/messaging/*": ["./packages/messaging/src/*"],
       "@hexagen/wizard-orchestration": [
