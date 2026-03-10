@@ -1,0 +1,24 @@
+# HexaGen Monaco — Architectural Invariants
+# Governs the dependency flow between layers and packages.
+
+shared_kernel:
+  package: "@hexagen/shared"
+  allowed_in_all_layers: true
+
+layers:
+  domain:
+    access_rule: "internal-only"
+    allowed_imports: ["@hexagen/shared"]
+
+  application:
+    access_rule: "ports-only"
+    allowed_imports: ["domain", "@hexagen/shared"]
+
+  infrastructure:
+    access_rule: "adapters"
+    allowed_imports: ["domain", "application", "@hexagen/shared"]
+
+# Cross-Package Boundaries
+cross_package_rules:
+  - package: "web-driver"
+    cannot_import: ["monaco-orchestration"] # Use @hexagen/shared for DTOs instead

@@ -42,3 +42,32 @@ export async function generateTsconfig(
 
   return result;
 }
+
+export async function generateTsconfigTest(
+  moduleDir: string,
+  config: SyncConfig
+): Promise<GeneratorResult> {
+  const result = createEmptyResult();
+  const filePath = path.join(moduleDir, 'tsconfig.test.json');
+  const content = `{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+      "noEmit": true,
+      "composite": false,
+      "rootDir": "..",
+      "skipLibCheck": true
+    },
+    "include": [
+      "src/**/*.ts",
+      "__tests__/**/*.ts",
+      "tests/**/*.ts"
+    ]
+  }`;
+  const status = await safeWriteFile(filePath, content, config);
+  if (status === 'created') result.created.push(filePath);
+  if (status === 'updated') result.updated.push(filePath);
+  if (status === 'skipped' || status === 'protected')
+    result.skipped.push(filePath);
+  result.totalOps += status === 'created' || status === 'updated' ? 1 : 0;
+  return result;
+}
