@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { FakeGeneratorConfigPort } from '../../doubles/ports/generator-config.fake';
+import { FakeGeneratorConfigPort } from "../../doubles/ports/generator-config.fake.js";
 import {
   type BootstrapStep,
   type InvariantConfig,
@@ -15,39 +15,39 @@ import {
   assert.deepStrictEqual(
     defaultBootstrap,
     { success: true, value: [] },
-    "Default bootstrap sequence should be empty"
+    "Default bootstrap sequence should be empty",
   );
 
   const defaultInvariants = await defaultFake.getAllInvariants();
   assert.deepStrictEqual(
     defaultInvariants,
     { success: true, value: [] },
-    "Default invariants list should be empty"
+    "Default invariants list should be empty",
   );
 
   const defaultFailureCritical = await defaultFake.getFailureBehavior(
-    "critical" as InvariantPriority
+    "critical" as InvariantPriority,
   );
   const defaultFailureHigh = await defaultFake.getFailureBehavior(
-    "high" as InvariantPriority
+    "high" as InvariantPriority,
   );
   const defaultFailureMedium = await defaultFake.getFailureBehavior(
-    "medium" as InvariantPriority
+    "medium" as InvariantPriority,
   );
   assert.strictEqual(
     defaultFailureCritical,
     "abort-and-cleanup",
-    "Critical failure behavior should be abort-and-cleanup"
+    "Critical failure behavior should be abort-and-cleanup",
   );
   assert.strictEqual(
     defaultFailureHigh,
     "abort",
-    "High failure behavior should be abort"
+    "High failure behavior should be abort",
   );
   assert.strictEqual(
     defaultFailureMedium,
     "warn-and-continue",
-    "Medium failure behavior should be warn-and-continue"
+    "Medium failure behavior should be warn-and-continue",
   );
 
   // Custom behavior – set bootstrap, invariants, and failure map.
@@ -76,23 +76,23 @@ import {
   assert.deepStrictEqual(
     fetchedBootstrap,
     { success: true, value: customBootstrap },
-    "Custom bootstrap sequence should be returned"
+    "Custom bootstrap sequence should be returned",
   );
 
   const fetchedInvariants = await customFake.getAllInvariants();
   assert.deepStrictEqual(
     fetchedInvariants,
     { success: true, value: customInvariants },
-    "Custom invariants list should be returned"
+    "Custom invariants list should be returned",
   );
 
   const fetchedCritical = await customFake.getFailureBehavior(
-    "critical" as InvariantPriority
+    "critical" as InvariantPriority,
   );
   assert.strictEqual(
     fetchedCritical,
     customFailure,
-    "Custom critical failure behavior should be applied"
+    "Custom critical failure behavior should be applied",
   );
 
   console.log("All FakeGeneratorConfigPort tests passed.");

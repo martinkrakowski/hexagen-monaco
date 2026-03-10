@@ -1,4 +1,4 @@
-import type { Result } from "./result";
+import type { Result } from "./result.js";
 
 export function ok<T>(value: T): Result<T, unknown> {
   return { success: true, value };

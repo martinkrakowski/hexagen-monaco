@@ -1,1 +1,1 @@
-export * from './branded.types';
+export * from "./branded.types.js";

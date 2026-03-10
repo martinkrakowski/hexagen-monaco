@@ -1,3 +1,3 @@
-export * from './base.error';
-export type { Result } from './result';
-export * from './result-helpers';
+export * from './base.error.js';
+export type { Result } from './result.js';
+export * from './result-helpers.js';

@@ -1,5 +1,5 @@
 // Fake implementation of the IGenerateProjectPort for unit tests in the project-generation package.
-import type { IGenerateProjectPort } from '../../../src/application/ports/in/generate-project.port';
+import type { IGenerateProjectPort } from "../../../src/application/ports/in/generate-project.port";
 
 /**
  * In-memory fake for `IGenerateProjectPort`.
@@ -20,7 +20,7 @@ export class FakeGenerateProjectPort implements IGenerateProjectPort {
   }
 
   /** Execute the port – either the custom behavior or a default echo. */
-  async execute(input: any): Promise<any> {
+  async generate(input: any): Promise<any> {
     if (this.behavior) {
       return this.behavior(input);
     }

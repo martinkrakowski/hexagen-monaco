@@ -1,7 +1,16 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "rootDir": "../..",
+    "composite": false,
+    "skipLibCheck": true,
+    "moduleResolution": "NodeNext"
   },
-  "include": ["__tests__/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "__tests__/**/*.ts",
+    "tests/**/*.ts",
+    "../shared/src/**/*.ts"
+  ]
 }

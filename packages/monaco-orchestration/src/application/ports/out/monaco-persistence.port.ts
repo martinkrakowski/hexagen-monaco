@@ -1,6 +1,5 @@
 import type { MonacoSession } from '../../../domain/model/monaco-session/monaco-session';
-import type { Result } from '@hexagen/shared/errors';
-
+import type { Result } from '@hexagen/shared';
 /**
  * Port defining persistence operations for Monaco editor sessions.
  * Implemented by infrastructure adapters (e.g. LocalStoragePersistenceAdapter).

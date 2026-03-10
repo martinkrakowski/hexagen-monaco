@@ -2,13 +2,13 @@ import assert from "node:assert";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { YamlConfigAdapter } from "../../../src/infrastructure/adapters/yaml-config.adapter";
+import { YamlConfigAdapter } from "../../../src/infrastructure/adapters/yaml-config.adapter.js";
 import type {
   BootstrapStep,
   InvariantConfig,
   InvariantPriority,
   PortOwnershipRecord,
-} from "../../../src/application/ports/out";
+} from "../../../src/application/ports/out/index.js";
 
 /**
  * Helper to create a temporary directory with a YAML config file.
