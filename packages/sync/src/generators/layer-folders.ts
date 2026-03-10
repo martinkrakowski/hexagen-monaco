@@ -1,4 +1,5 @@
 import path from 'node:path';
+import yaml from 'js-yaml';
 import fs from 'node:fs/promises';
 import { SyncConfig } from '../config.js';
 import { createEmptyResult, type GeneratorResult } from '../results.js';

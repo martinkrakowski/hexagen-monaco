@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { SyncConfig } from '../config.js';
 import { createEmptyResult, type GeneratorResult } from '../results.js';
 import { safeWriteFile } from '../fs-utils.js';
