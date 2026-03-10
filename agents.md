@@ -241,7 +241,7 @@ A separate `tsconfig.test.json` extends the base config with `"noEmit": true` an
 Scripts in every package `package.json`:
 
 ```json
-"test":           "tsx --test src/**/__tests__/**/*.test.ts",
+"test": "tsx --test __tests__/**/*.test.ts"
 "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
 ```
 
