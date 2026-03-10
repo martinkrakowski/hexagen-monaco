@@ -1,4 +1,2 @@
-// Outbound port for infrastructure: persistence
-export interface IPersistencePort {
-  // TODO: Define methods (e.g. query, execute)
-}
+// TODO: define outbound operations
+export type IPersistencePort = Record<string, never>;

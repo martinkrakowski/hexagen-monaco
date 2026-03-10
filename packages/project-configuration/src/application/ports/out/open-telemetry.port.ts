@@ -1,3 +1,2 @@
-export interface IOpenTelemetryPort {
-  // TODO: Define methods for open-telemetry infrastructure
-}
+// TODO: define outbound operations
+export type IOpenTelemetryPort = Record<string, never>;

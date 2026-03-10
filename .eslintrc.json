@@ -43,6 +43,19 @@
       "rules": {
         "@typescript-eslint/no-unused-vars": "off"
       }
+    },
+    {
+      "files": [
+        "**/__tests__/**/*.ts",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "**/doubles/**/*.ts",
+        "**/fakes/**/*.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "no-console": "off"
+      }
     }
   ]
 }

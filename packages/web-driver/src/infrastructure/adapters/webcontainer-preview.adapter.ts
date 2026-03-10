@@ -39,7 +39,6 @@ export class WebContainerPreviewAdapter implements DownloadProjectPort {
         message: `Project "${project.spec.name}" prepared for preview/download (${projectFiles.fileCount} files)`,
       };
     } catch (err) {
-      console.warn('WebContainer preview/download failed', err);
       throw new Error(
         `Failed to prepare project download: ${err instanceof Error ? err.message : 'Unknown error'}`
       );

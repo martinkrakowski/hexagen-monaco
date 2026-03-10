@@ -1,3 +1,2 @@
-export interface IPortsPort {
-  // TODO: Define methods for ports infrastructure
-}
+// TODO: define outbound operations
+export type IPortsPort = Record<string, never>;

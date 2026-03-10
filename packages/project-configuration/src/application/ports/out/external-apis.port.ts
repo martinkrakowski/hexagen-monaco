@@ -1,4 +1,2 @@
-// Outbound port for infrastructure: external_apis
-export interface IExternal_apisPort {
-  // TODO: Define methods (e.g. query, execute)
-}
+// TODO: define outbound operations
+export type IExternalApisPort = Record<string, never>;

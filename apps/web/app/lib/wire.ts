@@ -26,6 +26,7 @@ export const wireDependencies = () => {
   // Download project port → placeholder (to be replaced with jszip / zip adapter later)
   registry.set('DownloadProjectPort', {
     downloadProject: async (_project: Project) => {
+      // eslint-disable-next-line no-console
       console.warn('[DownloadProjectPort] Not implemented yet', _project);
       return { success: false as const, message: 'Not implemented' };
     },

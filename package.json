@@ -27,8 +27,8 @@
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
-    "@typescript-eslint/eslint-plugin": "^7.8.0",
-    "@typescript-eslint/parser": "^7.8.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-config-turbo": "^1.13.3",

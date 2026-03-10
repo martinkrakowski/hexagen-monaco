@@ -1,3 +1,1 @@
-export interface IIntentBusPort {
-  // TODO: Define methods for intent-bus infrastructure
-}
+export type IIntentBusPort = Record<string, never>;

@@ -1,3 +1,2 @@
-export interface IBullMqPort {
-  // TODO: Define methods for bull-mq infrastructure
-}
+// TODO: define outbound operations
+export type IBullMqPort = Record<string, never>;

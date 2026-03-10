@@ -1,3 +1,2 @@
-export interface IDrizzlePort {
-  // TODO: Define methods for drizzle infrastructure
-}
+// TODO: define outbound operations
+export type IDrizzlePort = Record<string, never>;

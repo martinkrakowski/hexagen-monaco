@@ -1,3 +1,1 @@
-export interface ILocalStoragePort {
-  // TODO: Define methods for local-storage infrastructure
-}
+export type ILocalStoragePort = Record<string, never>;
