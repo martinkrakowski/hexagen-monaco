@@ -38,19 +38,21 @@ export class FakeGeneratorConfigPort implements GeneratorConfigPort {
   }
 
   async getBootstrapSequence(): Promise<Result<BootstrapStep[], Error>> {
-    return ok(this.bootstrapSequence);
+    return ok(this.bootstrapSequence) as Result<BootstrapStep[], Error>;
   }
 
   async getFailureBehavior(priority: InvariantPriority): Promise<FailureMode> {
     return this.failureMap[priority];
   }
 
-  async getInvariantPriority(invariantName: string): Promise<InvariantPriority | null> {
+  async getInvariantPriority(
+    invariantName: string,
+  ): Promise<InvariantPriority | null> {
     const found = this.invariants.find((i) => i.name === invariantName);
     return found ? found.priority : null;
   }
 
   async getAllInvariants(): Promise<Result<InvariantConfig[], Error>> {
-    return ok(this.invariants);
+    return ok(this.invariants) as Result<InvariantConfig[], Error>;
   }
 }
