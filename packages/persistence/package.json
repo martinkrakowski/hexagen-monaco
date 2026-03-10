@@ -8,9 +8,13 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint . --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts tests/**/*.test.ts tests/**/*.spec.ts",
+    "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts tests/**/*.test.ts tests/**/*.spec.ts",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "typescript": "^5.0.0"
   }
 }

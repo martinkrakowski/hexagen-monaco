@@ -8,13 +8,17 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts tests/**/*.test.ts tests/**/*.spec.ts",
+    "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts tests/**/*.test.ts tests/**/*.spec.ts",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@hexagen/project-configuration": "workspace:*",
     "zod": "^3.x.x"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "typescript": "^5.4.5"
   }
 }
