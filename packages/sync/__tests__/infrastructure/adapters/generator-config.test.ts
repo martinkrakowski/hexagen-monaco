@@ -1,0 +1,99 @@
+import assert from "node:assert";
+import { FakeGeneratorConfigPort } from '../../doubles/ports/generator-config.fake';
+import {
+  type BootstrapStep,
+  type InvariantConfig,
+  type InvariantPriority,
+  type FailureMode,
+} from "@hexagen/sync";
+
+(async () => {
+  // Test default behavior – empty bootstrap sequence, empty invariants,
+  // and default failure map.
+  const defaultFake = new FakeGeneratorConfigPort();
+  const defaultBootstrap = await defaultFake.getBootstrapSequence();
+  assert.deepStrictEqual(
+    defaultBootstrap,
+    { success: true, value: [] },
+    "Default bootstrap sequence should be empty"
+  );
+
+  const defaultInvariants = await defaultFake.getAllInvariants();
+  assert.deepStrictEqual(
+    defaultInvariants,
+    { success: true, value: [] },
+    "Default invariants list should be empty"
+  );
+
+  const defaultFailureCritical = await defaultFake.getFailureBehavior(
+    "critical" as InvariantPriority
+  );
+  const defaultFailureHigh = await defaultFake.getFailureBehavior(
+    "high" as InvariantPriority
+  );
+  const defaultFailureMedium = await defaultFake.getFailureBehavior(
+    "medium" as InvariantPriority
+  );
+  assert.strictEqual(
+    defaultFailureCritical,
+    "abort-and-cleanup",
+    "Critical failure behavior should be abort-and-cleanup"
+  );
+  assert.strictEqual(
+    defaultFailureHigh,
+    "abort",
+    "High failure behavior should be abort"
+  );
+  assert.strictEqual(
+    defaultFailureMedium,
+    "warn-and-continue",
+    "Medium failure behavior should be warn-and-continue"
+  );
+
+  // Custom behavior – set bootstrap, invariants, and failure map.
+  const customFake = new FakeGeneratorConfigPort();
+
+  const customBootstrap: BootstrapStep[] = [
+    { name: "load-ownership-map", priority: "high", failure: "abort" },
+  ];
+  customFake.setBootstrapSequence(customBootstrap);
+
+  const customInvariants: InvariantConfig[] = [
+    {
+      name: "test-double-parity",
+      description: "All fakes must match port signatures",
+      priority: "medium",
+      enforcement: "bootstrap",
+      failure: "warn-and-continue",
+    },
+  ];
+  customFake.setInvariants(customInvariants);
+
+  const customFailure: FailureMode = "abort-and-cleanup";
+  customFake.setFailureMode("critical" as InvariantPriority, customFailure);
+
+  const fetchedBootstrap = await customFake.getBootstrapSequence();
+  assert.deepStrictEqual(
+    fetchedBootstrap,
+    { success: true, value: customBootstrap },
+    "Custom bootstrap sequence should be returned"
+  );
+
+  const fetchedInvariants = await customFake.getAllInvariants();
+  assert.deepStrictEqual(
+    fetchedInvariants,
+    { success: true, value: customInvariants },
+    "Custom invariants list should be returned"
+  );
+
+  const fetchedCritical = await customFake.getFailureBehavior(
+    "critical" as InvariantPriority
+  );
+  assert.strictEqual(
+    fetchedCritical,
+    customFailure,
+    "Custom critical failure behavior should be applied"
+  );
+
+  console.log("All FakeGeneratorConfigPort tests passed.");
+})();
