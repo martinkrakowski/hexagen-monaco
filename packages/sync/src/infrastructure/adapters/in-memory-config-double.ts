@@ -14,6 +14,12 @@ export class InMemoryConfigDouble
 {
   private invariants: InvariantConfig[] = [];
   private bootstrapSequence: BootstrapStep[] = [];
+  // Default failure behaviours – used for reset/clear operations.
+  private static readonly DEFAULT_FAILURE_BEHAVIORS: Record<InvariantPriority, FailureMode> = {
+    critical: 'abort-and-cleanup',
+    high: 'abort',
+    medium: 'warn-and-continue',
+  };
   private failureBehaviors: Record<InvariantPriority, FailureMode> = {
     critical: 'abort-and-cleanup',
     high: 'abort',
@@ -111,6 +117,15 @@ export class InMemoryConfigDouble
   }
 
   setFailureBehavior(priority: InvariantPriority, mode: FailureMode): void {
+    // Runtime validation – ensure the provided priority and mode are valid enum values.
+    const validPriorities: InvariantPriority[] = ['critical', 'high', 'medium'];
+    const validModes: FailureMode[] = ['abort', 'abort-and-cleanup', 'warn-and-continue'];
+    if (!validPriorities.includes(priority)) {
+      throw new Error(`Invalid InvariantPriority '${priority}'.`);
+    }
+    if (!validModes.includes(mode)) {
+      throw new Error(`Invalid FailureMode '${mode}'.`);
+    }
     this.failureBehaviors[priority] = mode;
   }
 
@@ -121,11 +136,8 @@ export class InMemoryConfigDouble
   clear(): void {
     this.invariants = [];
     this.bootstrapSequence = [];
-    this.failureBehaviors = {
-      critical: 'abort-and-cleanup',
-      high: 'abort',
-      medium: 'warn-and-continue',
-    };
+    // Reset failure behaviours to a fresh copy of the defaults.
+    this.failureBehaviors = { ...InMemoryConfigDouble.DEFAULT_FAILURE_BEHAVIORS };
     this.ownershipMap = [];
   }
 }
