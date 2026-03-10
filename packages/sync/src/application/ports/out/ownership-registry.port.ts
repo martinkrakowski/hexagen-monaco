@@ -1,10 +1,17 @@
 import type { Result } from '@hexagen/shared';
 
+/**
+ * Represents ownership of a port by a package.
+ * The fields are readonly to enforce immutability.
+ */
 export interface PortOwnershipRecord {
-  portName: string;
-  owningPackage: string;
+  readonly portName: string;
+  readonly owningPackage: string;
 }
 
+/**
+ * Port for persisting and querying port ownership information.
+ */
 export interface OwnershipRegistryPort {
   /**
    * Loads the current ownership map from persistent storage.
