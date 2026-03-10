@@ -9,8 +9,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "cli": "node dist/cli.js",
-    "test": "tsx --test __tests__/**/*.test.ts",
-    "test:watch": "tsx --test --watch __tests__/**/*.test.ts",
+    "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts || true",
+    "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {

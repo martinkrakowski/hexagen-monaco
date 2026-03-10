@@ -1,25 +1,20 @@
 // In‑memory fake implementation of the IGenerateProjectPort used for unit tests.
-// Allows optional custom behavior for the `execute` method.
-// By default, `execute` simply echoes the input unchanged.
+// Allows optional custom behavior for the `generate` method.
+// By default, `generate` simply echoes the input unchanged.
 
 import type { IGenerateProjectPort } from "../../../src/application/ports/in/generate-project.port";
 
 /**
  * Fake implementation of `IGenerateProjectPort`.
- *
  * Provides a `setBehavior` method so tests can inject a custom
- * async implementation for `execute`. If no custom behavior is set,
+ * async implementation for `generate`. If no custom behavior is set,
  * the fake simply returns the input unchanged (echo).
  */
 export class FakeGenerateProjectPort implements IGenerateProjectPort {
-  private behavior: ((input: any) => Promise<any>) | null = null;
+  private behavior: ((spec: any) => Promise<any>) | null = null;
 
-  /**
-   * Register a custom implementation for the `execute` method.
-   *
-   * @param fn - Async function that receives the input and returns a result.
-   */
-  setBehavior(fn: (input: any) => Promise<any>) {
+  /** Register a custom implementation for the `generate` method. */
+  setBehavior(fn: (spec: any) => Promise<any>) {
     this.behavior = fn;
   }
 
@@ -30,5 +25,10 @@ export class FakeGenerateProjectPort implements IGenerateProjectPort {
     }
     // Default happy‑path – echo the input.
     return Promise.resolve(spec);
+  }
+
+  // Alias for compatibility with tests expecting `execute`
+  async execute(spec: any): Promise<any> {
+    return this.generate(spec);
   }
 }
