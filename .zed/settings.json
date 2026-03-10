@@ -1,0 +1,48 @@
+{
+  "tab_size": 2,
+  "hard_tabs": false,
+  "detect_indentation": false,
+  "format_on_save": "on",
+  "formatter": "prettier",
+  "trim_trailing_whitespace_on_save": true,
+  "insert_final_newline_on_save": true,
+  "ui_font_size": 16,
+  "buffer_font_size": 14,
+  "project_panel": {
+    "compact_folders": false
+  },
+  "lsp": {
+    "tailwindcss": {
+      "settings": {
+        "tailwindCSS": {
+          "experimental": {
+            "classRegex": [["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*)\"']"]]
+          }
+        }
+      }
+    }
+  },
+  "languages": {
+    "CSS": {
+      "language_servers": ["tailwindcss-language-server", "..."]
+    },
+    "SCSS": {
+      "language_servers": ["tailwindcss-language-server", "..."]
+    },
+    "Markdown": {
+      "tab_size": 2
+    }
+  },
+  "prettier": {
+    "allowed": true,
+    "tabWidth": 2,
+    "useTabs": false,
+    "printWidth": 80,
+    "singleQuote": true,
+    "trailingComma": "es5",
+    "semi": true,
+    "bracketSpacing": true,
+    "arrowParens": "always"
+  },
+  "edges": [100]
+}
