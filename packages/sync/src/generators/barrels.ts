@@ -10,7 +10,6 @@ export async function generateBarrels(
   moduleDir: string,
   config: SyncConfig,
   report?: { record: (type: string, target: string, message?: string) => void },
-  allowShared: boolean = true, // Passed from the invariant check in SyncEngine
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
   const layers = ["domain", "application", "infrastructure"];
@@ -25,7 +24,6 @@ export async function generateBarrels(
       for (const entry of entries) {
         if (entry.name === "index.ts" || entry.name.startsWith(".")) continue;
 
-        // Upward reachability: export files as .js and folders as directories
         const name = entry.isDirectory()
           ? entry.name
           : entry.name.replace(/\.ts$/, "");
@@ -35,17 +33,14 @@ export async function generateBarrels(
       /* Directory might not exist yet */
     }
 
-    // Enforce Architectural Invariant: Shared Kernel Re-exports
-    if (allowShared) {
-      exportLines.unshift(
-        `export * from '../shared/result.js';`,
-        `export * from '../shared/ok.js';`,
-      );
-    }
+    // NOTE: Shared kernel re-exports removed.
+    // Each package imports from @hexagen/shared directly where needed.
+    // Re-exporting from another package violates barrel-ownership-boundary.
 
-    const content = `${GENERATED_MARKER}\n\n${
-      exportLines.length > 0 ? exportLines.join("\n") : "export {};"
-    }\n`;
+    const content =
+      exportLines.length > 0
+        ? `${GENERATED_MARKER}\n\n${exportLines.join("\n")}\n`
+        : `${GENERATED_MARKER}\n\n// No exports yet\n`;
 
     const status = await safeWriteFileAtomic(filePath, content, config, report);
     if (status === "created" || status === "updated") {
