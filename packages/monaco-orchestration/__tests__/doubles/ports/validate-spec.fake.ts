@@ -1,4 +1,4 @@
-import type { IValidateSpecPort } from '../../../src/application/ports/in/validate-spec.port';
+import type { IValidateSpecPort } from '@hexagen/project-configuration';
 
 /**
  * In‑memory fake implementation of `IValidateSpecPort` for unit tests.

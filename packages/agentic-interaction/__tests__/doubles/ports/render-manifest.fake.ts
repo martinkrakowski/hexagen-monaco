@@ -1,7 +1,7 @@
 // Fake implementation for IRenderManifestPort used in unit tests.
 // Implements the same contract as the real port but allows optional custom behavior.
 
-import type { IRenderManifestPort } from '../../../src/application/ports/in/render-manifest.port';
+import type { IRenderManifestPort } from '@hexagen/project-configuration';
 
 export class FakeRenderManifestPort implements IRenderManifestPort {
   private behavior: ((input: any) => Promise<any>) | null = null;

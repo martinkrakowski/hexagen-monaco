@@ -3,7 +3,7 @@
 // Allows optional custom behavior for the `execute` method.
 // By default, `execute` simply echoes the input unchanged.
 
-import type { IRenderManifestPort } from '../../../src/application/ports/in/render-manifest.port';
+import type { IRenderManifestPort } from '@hexagen/project-configuration';
 
 /**
  * Fake implementation of `IRenderManifestPort`.

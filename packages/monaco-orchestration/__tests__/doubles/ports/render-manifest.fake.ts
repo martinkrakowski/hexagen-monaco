@@ -1,4 +1,4 @@
-import type { IRenderManifestPort } from '../../../src/application/ports/in/render-manifest.port';
+import type { IRenderManifestPort } from '@hexagen/project-configuration';
 
 /**
  * In‑memory fake implementation of `IRenderManifestPort`.
