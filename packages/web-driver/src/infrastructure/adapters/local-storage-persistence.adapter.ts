@@ -4,7 +4,7 @@ import type {
   PersistenceError,
   SessionMetadata,
 } from "@hexagen/monaco-orchestration";
-import type { Result } from "@hexagen/sync/domain";
+import type { Result } from "../../../../sync/src/domain/result.js";
 
 export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
   async loadLatestSession(
