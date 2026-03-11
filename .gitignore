@@ -118,3 +118,4 @@ packages/*/infrastructure/adapters/index.ts
 
 # Future-proof catch-all for any nested index.ts barrels
 # packages/**/index.ts
+SYNC-MIGRATION-REPORT.md
