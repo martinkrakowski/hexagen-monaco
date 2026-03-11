@@ -1,21 +1,28 @@
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
-import { SyncFlags, SyncConfig } from './config.js';
-import { safeWriteFile } from './fs-utils.js';
-import { runArchLinter } from './linter.js';
-import { ensureLayerFolders } from './generators/layer-folders.js';
-import { generateBarrels } from './generators/barrels.js';
-import { generateStubs } from './generators/stubs.js';
-import { generatePackageJson } from './generators/package-json.js';
-import { generateTsconfig } from './generators/tsconfig.js';
-import { createEmptyResult, type GeneratorResult } from './results.js';
-import type { Manifest } from './types/manifest.js';
+import path from "node:path";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import yaml from "js-yaml";
+import { SyncFlags, SyncConfig } from "./config.js";
+import { MigrationReport } from "./migration-report.js";
+
+import { runArchLinter } from "./linter.js";
+import { ensureLayerFolders } from "./generators/layer-folders.js";
+import { generateBarrels } from "./generators/barrels.js";
+import { generateStubs } from "./generators/stubs.js";
+import { generatePackageJson } from "./generators/package-json.js";
+import { generateTsconfig } from "./generators/tsconfig.js";
+import { reapLegacyFolders } from "./generators/reap.js";
+import { createEmptyResult, type GeneratorResult } from "./results.js";
+import { safeWriteFileAtomic } from "./fs-utils.js";
+import type { Manifest } from "./types/manifest.js";
+import { ensureDependenciesBuilt } from "./preflight.js";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 
 // ESM-safe __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const execAsync = promisify(exec);
 
 // Structured return type from generateCoreArtifacts
 interface GeneratorResults {
@@ -30,10 +37,11 @@ interface GeneratorResults {
  * Central orchestrator — ALL generators return structured GeneratorResult.
  */
 export class SyncEngine {
+  private report = new MigrationReport();
   private partialConfig: SyncFlags;
   private fullConfig: SyncConfig | null = null;
   private manifest: Manifest = {};
-  private workspaceRoot: string = '';
+  private workspaceRoot: string = "";
 
   constructor(flags: SyncFlags) {
     this.partialConfig = flags;
@@ -43,8 +51,8 @@ export class SyncEngine {
     let currentDir = __dirname;
     while (currentDir !== path.parse(currentDir).root) {
       try {
-        const pkgPath = path.join(currentDir, 'package.json');
-        const pkgContent = await fs.readFile(pkgPath, 'utf-8');
+        const pkgPath = path.join(currentDir, "package.json");
+        const pkgContent = await fs.readFile(pkgPath, "utf-8");
         const pkg = JSON.parse(pkgContent) as { workspaces?: unknown[] };
         if (pkg.workspaces && Array.isArray(pkg.workspaces)) {
           return currentDir;
@@ -55,7 +63,7 @@ export class SyncEngine {
       currentDir = path.dirname(currentDir);
     }
     throw new Error(
-      'Could not locate monorepo root. No package.json with "workspaces" field found.'
+      'Could not locate monorepo root. No package.json with "workspaces" field found.',
     );
   }
 
@@ -63,7 +71,7 @@ export class SyncEngine {
     const { logger, dryRun } = this.partialConfig;
     const manifestPath = path.join(
       this.workspaceRoot,
-      '.architecture/manifest.yaml'
+      ".architecture/manifest.yaml",
     );
     logger.info(`[debug] __dirname (ESM): ${__dirname}`);
     logger.info(`[debug] resolved workspaceRoot: ${this.workspaceRoot}`);
@@ -71,12 +79,12 @@ export class SyncEngine {
 
     try {
       await fs.access(manifestPath);
-      logger.info('[debug] fs.access succeeded');
+      logger.info("[debug] fs.access succeeded");
     } catch (err) {
       if (
         err instanceof Error &&
-        'code' in err &&
-        err.code === 'ENOENT' &&
+        "code" in err &&
+        err.code === "ENOENT" &&
         dryRun
       ) {
         logger.warn(`Manifest not found — using empty for dry-run`);
@@ -87,20 +95,20 @@ export class SyncEngine {
     }
 
     try {
-      const content = await fs.readFile(manifestPath, 'utf8');
+      const content = await fs.readFile(manifestPath, "utf8");
       const loaded = yaml.load(content);
       this.manifest = (loaded as Manifest) ?? {};
       logger.info(`Loaded manifest from ${manifestPath}`);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Unknown parse error';
+        err instanceof Error ? err.message : "Unknown parse error";
       throw new Error(`Failed to parse manifest: ${message}`);
     }
   }
 
   private getConfig(): SyncConfig {
     if (!this.fullConfig) {
-      throw new Error('SyncEngine config not initialized. Call run() first.');
+      throw new Error("SyncEngine config not initialized. Call run() first.");
     }
     return this.fullConfig;
   }
@@ -110,30 +118,35 @@ export class SyncEngine {
     const { logger } = config;
     const rootFiles = [
       {
-        path: path.join(this.workspaceRoot, '.gitignore'),
+        path: path.join(this.workspaceRoot, ".gitignore"),
         content:
-          '# HexaGen defaults\nnode_modules\ndist\n.next\n.turbo\n*.log\n.DS_Store\n',
+          "# HexaGen defaults\nnode_modules\ndist\n.next\n.turbo\n*.log\n.DS_Store\n",
       },
       {
-        path: path.join(this.workspaceRoot, 'turbo.json'),
+        path: path.join(this.workspaceRoot, "turbo.json"),
         content:
           JSON.stringify(
             {
-              $schema: 'https://turbo.build/schema.json',
+              $schema: "https://turbo.build/schema.json",
               pipeline: {
-                build: { dependsOn: ['^build'] },
+                build: { dependsOn: ["^build"] },
                 dev: { cache: false, persistent: true },
               },
             },
             null,
-            2
-          ) + '\n',
+            2,
+          ) + "\n",
       },
     ];
 
     for (const file of rootFiles) {
-      const status = await safeWriteFile(file.path, file.content, config);
-      if (status !== 'unchanged' && status !== 'skipped') {
+      const status = await safeWriteFileAtomic(
+        file.path,
+        file.content,
+        config,
+        this.report as any,
+      );
+      if (status !== "unchanged" && status !== "skipped") {
         logger.info(`Root file ${status}: ${file.path}`);
       }
     }
@@ -151,22 +164,27 @@ export class SyncEngine {
 
       // Validate moduleName (prevent path traversal)
       if (
-        mod.name.includes('..') ||
-        mod.name.includes('/') ||
-        mod.name.startsWith('.')
+        mod.name.includes("..") ||
+        mod.name.includes("/") ||
+        mod.name.startsWith(".")
       ) {
         logger.warn(
-          `Skipping invalid module name (potential path traversal): ${mod.name}`
+          `Skipping invalid module name (potential path traversal): ${mod.name}`,
         );
         continue;
       }
 
-      const moduleDir = path.join(this.workspaceRoot, 'packages', mod.name);
+      const moduleDir = path.join(this.workspaceRoot, "packages", mod.name);
       logger.info(
-        `Ensuring directories for module: ${mod.name} at ${moduleDir}`
+        `Ensuring directories for module: ${mod.name} at ${moduleDir}`,
       );
 
-      const layerResult = await ensureLayerFolders(moduleDir, layers, config);
+      const layerResult = await ensureLayerFolders(
+        moduleDir,
+        layers,
+        config,
+        this.report,
+      );
       result.created.push(...layerResult.created);
       result.skipped.push(...layerResult.skipped);
       result.updated.push(...layerResult.updated);
@@ -191,30 +209,42 @@ export class SyncEngine {
 
     for (const module of modules) {
       const moduleName = module.name;
-      const moduleDir = path.join(this.workspaceRoot, 'packages', moduleName);
+      const moduleDir = path.join(this.workspaceRoot, "packages", moduleName);
 
       // Validate moduleName (prevent path traversal)
       if (
-        moduleName.includes('..') ||
-        moduleName.includes('/') ||
-        moduleName.startsWith('.')
+        moduleName.includes("..") ||
+        moduleName.includes("/") ||
+        moduleName.startsWith(".")
       ) {
         logger.warn(
-          `Skipping invalid module name (potential path traversal): ${moduleName}`
+          `Skipping invalid module name (potential path traversal): ${moduleName}`,
         );
         continue;
       }
 
       logger.info(`Processing module: ${moduleName}`);
 
-      const barrelResult = await generateBarrels(moduleDir, config);
-      const stubResult = await generateStubs(moduleDir, config);
+      const barrelResult = await generateBarrels(
+        moduleDir,
+        config,
+        this.report,
+      );
+      const stubResult = await generateStubs(moduleDir, config, this.report);
       const pkgResult = await generatePackageJson(
         moduleDir,
         moduleName,
-        config
+        config,
+        this.report,
       );
-      const tsResult = await generateTsconfig(moduleDir, moduleName, config);
+      const tsResult = await generateTsconfig(
+        moduleDir,
+        moduleName,
+        config,
+        this.report,
+      );
+      // Reap legacy layer folders after successful generation for this module
+      await reapLegacyFolders(moduleDir, config, this.report);
 
       barrels.created.push(...barrelResult.created);
       barrels.skipped.push(...barrelResult.skipped);
@@ -251,8 +281,17 @@ export class SyncEngine {
     const start = Date.now();
 
     logger.info(
-      dryRun ? '[DRY-RUN MODE] Starting sync...' : 'Starting sync...'
+      dryRun ? "[DRY-RUN MODE] Starting sync..." : "Starting sync...",
     );
+
+    // Ensure a clean git tree before mutating anything
+    const { stdout: gitStatus } = await execAsync("git status --porcelain");
+    if (gitStatus && gitStatus.trim().length > 0) {
+      logger.error(
+        "Git working tree is dirty. Commit or stash changes before running sync.",
+      );
+      throw new Error("Dirty git tree");
+    }
 
     try {
       this.workspaceRoot = await this.findWorkspaceRoot();
@@ -264,39 +303,54 @@ export class SyncEngine {
         manifest: this.manifest,
       } as const;
 
+      // Pre‑flight: build any stale packages
+      await ensureDependenciesBuilt(this.fullConfig!);
+
       const layerResult = await this.ensureDirectories();
       const { barrels, stubs, pkgs, tsconfigs, totalOps } =
         await this.generateCoreArtifacts();
 
       await runArchLinter(this.fullConfig);
+      await this.report.writeReport(this.fullConfig!);
 
       const duration = Date.now() - start;
 
-      logger.info('\nSync completed successfully.');
+      logger.info("\nSync completed successfully.");
       logger.info(
-        `Processed ${this.manifest.bounded_contexts?.length ?? 0} modules in ${duration}ms`
+        `Processed ${this.manifest.bounded_contexts?.length ?? 0} modules in ${duration}ms`,
       );
       logger.info(`\n=== Generator Summary ===`);
       logger.info(
-        `• Layers : ${layerResult.created.length} created, ${layerResult.updated.length} updated, ${layerResult.skipped.length} skipped`
+        `• Layers : ${layerResult.created.length} created, ${layerResult.updated.length} updated, ${layerResult.skipped.length} skipped`,
       );
       logger.info(
-        `• Barrels : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`
+        `• Barrels : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`,
       );
       logger.info(
-        `• Stubs : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`
+        `• Stubs : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`,
       );
       logger.info(
-        `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`
+        `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`,
       );
       logger.info(
-        `• tsconfig.json : ${tsconfigs.created.length} created, ${tsconfigs.updated.length} updated, ${tsconfigs.skipped.length} skipped`
+        `• tsconfig.json : ${tsconfigs.created.length} created, ${tsconfigs.updated.length} updated, ${tsconfigs.skipped.length} skipped`,
       );
       logger.info(`• Total ops : ${totalOps}`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown sync error';
+      const message = err instanceof Error ? err.message : "Unknown sync error";
       logger.error(`Sync failed: ${message}`);
-      if (!dryRun) process.exit(1);
+      // Attempt total rollback on error (unless dry‑run)
+      if (!dryRun) {
+        try {
+          await execAsync("git reset --hard HEAD && git clean -fd");
+          logger.info("Rollback completed after failure.");
+        } catch (rollbackErr) {
+          logger.warn(
+            `Rollback failed: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`,
+          );
+        }
+        process.exit(1);
+      }
     }
   }
 }
