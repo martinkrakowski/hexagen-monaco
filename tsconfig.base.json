@@ -59,6 +59,8 @@
       "@hexagen/deployment/*": ["./packages/deployment/src/*"],
       "@hexagen/*": ["./packages/*/src/index.ts"],
       "@hexagen/web-driver": ["./packages/web-driver/src/index.ts"],
+      "@hexagen/sync": ["./packages/sync/src/index.ts"],
+      "@hexagen/sync/*": ["./packages/sync/src/*"],
       "@hexagen/web-driver/*": ["./packages/web-driver/src/*"],
       "@/*": ["./apps/web/src/*", "./apps/web/app/*"]
     }
