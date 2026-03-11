@@ -25,7 +25,7 @@ export async function generateTsconfig(
   ];
   const references = allModules
     .filter((name) => name && name !== moduleName)
-    .map((name) => ({ path: `../packages/${name}/tsconfig.json` }));
+    .map((name) => ({ path: `../${name}/tsconfig.json` }));
   const content = `{\n  "extends": "../../tsconfig.base.json",\n  "compilerOptions": {\n    "rootDir": "src",\n    "outDir": "dist",\n    "declaration": true,\n    "emitDeclarationOnly": true,\n    "composite": true,\n    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"\n  },\n  "include": ["src/**/*"],\n  "exclude": ["node_modules", "dist"],\n  "references": ${JSON.stringify(references, null, 2)}\n}\n`;
 
   const status = await safeWriteFileAtomic(
