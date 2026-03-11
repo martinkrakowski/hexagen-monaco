@@ -10,19 +10,19 @@ monorepo:
   packageManager: yarn@4.12.0
   linker: node-modules
   buildTool: turbo
-  workspaces: ["apps/*", "packages/*"]
+  workspaces: ['apps/*', 'packages/*']
   root:
     hoistDevDependencies: true
     noInternalDeps: true
   eslint:
-    extends: ["turbo", "prettier"]
+    extends: ['turbo', 'prettier']
     rules:
       no-console: warn
-      "@typescript-eslint/no-explicit-any": error
+      '@typescript-eslint/no-explicit-any': error
       no-restricted-imports:
         patterns:
-          - group: ["@hexagen/*"]
-            message: "Cross-package imports must go through barrel files."
+          - group: ['@hexagen/*']
+            message: 'Cross-package imports must go through barrel files.'
 
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
@@ -43,16 +43,16 @@ monorepo:
       declaration: true
       emitDeclarationOnly: true
       paths:
-        "@hexagen/*": ["packages/*/src/index.ts"]
-        "@hexagen/shared": ["packages/shared/src/index.ts"]
-        "@hexagen/shared/*": ["packages/shared/src/*"]
-        "@/*": ["apps/web/src/*", "apps/web/app/*"]
+        '@hexagen/*': ['packages/*/src/index.ts']
+        '@hexagen/shared': ['packages/shared/src/index.ts']
+        '@hexagen/shared/*': ['packages/shared/src/*']
+        '@/*': ['apps/web/src/*', 'apps/web/app/*']
     include: []
     exclude: [node_modules, dist, .next, .turbo]
 
   workspaceDefaults:
     tsConfig:
-      extends: "../../tsconfig.base.json"
+      extends: '../../tsconfig.base.json'
       compilerOptions:
         rootDir: src
         outDir: dist
@@ -60,24 +60,24 @@ monorepo:
         emitDeclarationOnly: true
         declarationMap: true
         composite: true
-        tsBuildInfoFile: "./dist/.tsbuildinfo"
-      include: ["src/**/*"]
-      exclude: [node_modules, dist, ".turbo"]
+        tsBuildInfoFile: './dist/.tsbuildinfo'
+      include: ['src/**/*']
+      exclude: [node_modules, dist, '.turbo']
       references: []
 
   turboConfig:
     globalDependencies:
-      - "**/.env.*"
+      - '**/.env.*'
     pipeline:
       clean:
         cache: false
       build:
-        dependsOn: ["^build"]
-        outputs: ["dist/**", ".next/**", "!.next/cache/**"]
+        dependsOn: ['^build']
+        outputs: ['dist/**', '.next/**', '!.next/cache/**']
       lint:
-        dependsOn: ["^build"]
+        dependsOn: ['^build']
       test:
-        dependsOn: ["^build"]
+        dependsOn: ['^build']
       dev:
         cache: false
         persistent: true
@@ -86,7 +86,7 @@ monorepo:
         cache: true
 
 generator:
-  version: "0.2.0"
+  version: '0.2.0'
   sync:
     idempotent: true
     createOnlyIfMissing: true
@@ -128,8 +128,8 @@ generator:
         devDependencies:
           typescript: ^5.5.4
           eslint: ^9.0.0
-          "@typescript-eslint/parser": ^8.0.0
-          "@typescript-eslint/eslint-plugin": ^8.0.0
+          '@typescript-eslint/parser': ^8.0.0
+          '@typescript-eslint/eslint-plugin': ^8.0.0
           eslint-config-prettier: ^9.1.0
 
 bounded_contexts:
@@ -193,13 +193,15 @@ bounded_contexts:
         use_cases:
           [ProcessIntentUseCase, ProjectWizardStateUseCase, ValidateStepUseCase]
         ports:
-          out:
-            [
+          out: [
               WizardPersistencePort,
               WizardTelemetryPort,
-              IntentBusPort,
+              # IntentBusPort removed — canonical owner is messaging context.
+              # Import from @hexagen/messaging instead.
               MonacoSyncPort,
             ]
+    depends_on:
+      - messaging # required for IntentBusPort
 
   - name: monaco-orchestration
     type: core
@@ -218,9 +220,9 @@ bounded_contexts:
           ]
         ports:
           out:
-            - MonacoPersistencePort
+            - MonacoPersistencePort # canonical owner — do not redeclare in other contexts
             - SemanticModelAdapterPort
-            - TsMorphPort # already present in ports/out
+            - TsMorphPort
     generator:
       dependencies:
         monaco-editor: ^0.51.0
@@ -244,7 +246,7 @@ bounded_contexts:
     generator:
       dependencies:
         reactflow: ^11.11.4
-        "@dagrejs/dagre": ^1.1.4
+        '@dagrejs/dagre': ^1.1.4
 
   - name: messaging
     type: supporting
@@ -254,7 +256,9 @@ bounded_contexts:
         value_objects: [DomainEvent, Intent]
       application:
         ports:
-          out: [EventBusPort, IntentBusPort]
+          out:
+            - EventBusPort
+            - IntentBusPort # canonical owner — wizard-orchestration and others import from here
 
   - name: persistence
     type: supporting
@@ -283,7 +287,8 @@ bounded_contexts:
         entities: [Project, MonacoSessionState]
         ports:
           out:
-            - MonacoPersistencePort
+            # MonacoPersistencePort removed — canonical owner is monaco-orchestration.
+            # LocalStoragePersistenceAdapter implements it; port is imported from @hexagen/monaco-orchestration.
             - DownloadProjectPort
       application:
         use_cases:
@@ -295,12 +300,14 @@ bounded_contexts:
         factories: [createWebUseCaseFactories]
       infrastructure:
         adapters:
-          - LocalStoragePersistenceAdapter
+          - LocalStoragePersistenceAdapter # implements MonacoPersistencePort from @hexagen/monaco-orchestration
           - WebContainerPreviewAdapter
     driver_for: apps/web
+    depends_on:
+      - monaco-orchestration # required for MonacoPersistencePort
     wiring:
       - Intent Bus dispatches to projections/use-case factories only
-      - MonacoPersistencePort is implemented by LocalStoragePersistenceAdapter for browser session persistence
+      - MonacoPersistencePort is owned by monaco-orchestration and implemented here by LocalStoragePersistenceAdapter
 
 apps:
   - name: web
