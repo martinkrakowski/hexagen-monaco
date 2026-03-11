@@ -1,45 +1,32 @@
-import type { DownloadProjectPort } from '../ports/out/download-project.port';
+import type { Result } from '@hexagen/shared';
+import type { DownloadError, DownloadProjectPort } from '../ports/out/download-project.port';
 import type { Project } from '../../domain/project.entity';
 
-/**
- * Use case for project download / preview flow.
- * Application layer — only orchestrates the port (no direct Blob/URL/WebContainer logic).
- * Returns structured result for Intent Bus (success, downloadUrl, message).
- */
+export interface DownloadResult {
+  downloadUrl?: string;
+  requiresConfirmation?: boolean;
+}
+
 export class DownloadProjectUseCase {
   constructor(private readonly downloadPort: DownloadProjectPort) {}
 
-  /**
-   * Execute download/preview for a Project entity.
-   * @param project Full Project aggregate (from projection or wizard)
-   * @returns Intent-friendly result with optional downloadUrl (blob/object URL)
-   */
-  async execute(project: Project): Promise<{
-    success: boolean;
-    downloadUrl?: string;
-    message: string;
-    requiresConfirmation?: boolean;
-  }> {
-    try {
-      const result = await this.downloadPort.downloadProject(project);
-
-      // Optional cleanup (e.g. revoke old blob URLs)
-      if (this.downloadPort.cleanup) {
-        await this.downloadPort.cleanup();
-      }
-
-      return {
-        success: result.success,
-        downloadUrl: result.downloadUrl,
-        message: result.message,
-        requiresConfirmation: false, // download is low-risk
-      };
-    } catch (err) {
-      return {
-        success: false,
-        message: `Download failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        requiresConfirmation: true, // destructive fallback — ask user
-      };
+  async execute(project: Project): Promise<Result<DownloadResult, DownloadError>> {
+    const result = await this.downloadPort.downloadProject(project);
+    if (!result.success) {
+      return result;
     }
+    if (this.downloadPort.cleanup) {
+      const cleanup = await this.downloadPort.cleanup();
+      if (!cleanup.success) {
+        return cleanup;
+      }
+    }
+    return {
+      success: true,
+      value: {
+        downloadUrl: result.value.downloadUrl,
+        requiresConfirmation: false,
+      },
+    };
   }
 }
