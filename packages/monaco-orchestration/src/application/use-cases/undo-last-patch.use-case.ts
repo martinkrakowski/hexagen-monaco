@@ -1,7 +1,7 @@
-import type { IUndoLastPatchPort } from '../ports/in/undo-last-patch.port';
+import type { UndoLastPatchPort } from '../ports/in/undo-last-patch.port';
 
 export class UndoLastPatchUseCase {
-  constructor(private readonly port: IUndoLastPatchPort) {}
+  constructor(private readonly port: UndoLastPatchPort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility

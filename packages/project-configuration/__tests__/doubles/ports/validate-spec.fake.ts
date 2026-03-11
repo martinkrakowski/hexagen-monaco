@@ -1,11 +1,11 @@
-import type { IValidateSpecPort } from '../../../src/application/ports/in/validate-spec.port';
+import type { ValidateSpecPort } from '../../../src/application/ports/in/validate-spec.port';
 
 /**
- * In‑memory fake for `IValidateSpecPort`.
+ * In‑memory fake for `ValidateSpecPort`.
  * Allows tests to optionally provide a custom implementation for `execute`.
  * Default behavior simply echoes the input unchanged.
  */
-export class FakeValidateSpecPort implements IValidateSpecPort {
+export class FakeValidateSpecPort implements ValidateSpecPort {
   private behavior: ((input: any) => Promise<any>) | null = null;
 
   /**

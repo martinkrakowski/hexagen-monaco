@@ -1,6 +1,6 @@
-import type { IExportgraphimagePort } from "../../../src/application/ports/in/export-graph-image.port";
+import type { ExportGraphImagePort } from "../../../src/application/ports/in/export-graph-image.port";
 
-export class FakeExportGraphImagePort implements IExportgraphimagePort {
+export class FakeExportGraphImagePort implements ExportGraphImagePort {
   private behavior: ((data: unknown) => Promise<unknown>) | null = null;
 
   setBehavior(fn: (data: unknown) => Promise<unknown>) {

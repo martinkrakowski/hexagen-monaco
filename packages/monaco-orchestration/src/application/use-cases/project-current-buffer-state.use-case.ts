@@ -1,7 +1,7 @@
-import type { IProjectCurrentBufferStatePort } from '../ports/in/project-current-buffer-state.port';
+import type { ProjectCurrentBufferStatePort } from '../ports/in/project-current-buffer-state.port';
 
 export class ProjectCurrentBufferStateUseCase {
-  constructor(private readonly port: IProjectCurrentBufferStatePort) {}
+  constructor(private readonly port: ProjectCurrentBufferStatePort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility

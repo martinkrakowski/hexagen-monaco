@@ -1,11 +1,11 @@
-import type { IRenderManifestPort } from '../../../src/application/ports/in/render-manifest.port';
+import type { RenderManifestPort } from '../../../src/application/ports/in/render-manifest.port';
 
 /**
- * In‑memory fake for `IRenderManifestPort`.
+ * In‑memory fake for `RenderManifestPort`.
  * Allows tests to optionally provide a custom implementation for `execute`.
  * Default behavior simply echoes the input unchanged.
  */
-export class FakeRenderManifestPort implements IRenderManifestPort {
+export class FakeRenderManifestPort implements RenderManifestPort {
   private behavior: ((input: any) => Promise<any>) | null = null;
 
   /** Register a custom async implementation for the `execute` method. */

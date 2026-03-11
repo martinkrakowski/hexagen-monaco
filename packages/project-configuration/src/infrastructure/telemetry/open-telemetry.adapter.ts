@@ -1,6 +1,6 @@
-import type { ITelemetryPort } from "@hexagen/project-configuration";
+import type { TelemetryPort } from "@hexagen/project-configuration";
 
-export class OpenTelemetryAdapter implements ITelemetryPort {
+export class OpenTelemetryAdapter implements TelemetryPort {
   recordMetric(name: string, value: number): void {
     // TODO: implement real OpenTelemetry metric recording
     // eslint-disable-next-line no-console

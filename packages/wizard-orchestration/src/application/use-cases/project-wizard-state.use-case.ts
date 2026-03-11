@@ -1,7 +1,7 @@
-import type { IProjectWizardStatePort } from '../ports/in/project-wizard-state.port';
+import type { ProjectWizardStatePort } from '../ports/in/project-wizard-state.port';
 
 export class ProjectWizardStateUseCase {
-  constructor(private readonly port: IProjectWizardStatePort) {}
+  constructor(private readonly port: ProjectWizardStatePort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility

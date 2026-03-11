@@ -1,10 +1,10 @@
-import type { IGenerateArchitectureGraphPort } from '../../../src/application/ports/in/generate-architecture-graph.port';
+import type { ArchitectureGraphProviderPort } from '../../../src/application/ports/in/generate-architecture-graph.port';
 
 /**
- * In‑memory fake for `IGenerateArchitectureGraphPort`.
+ * In‑memory fake for `ArchitectureGraphProviderPort`.
  * Allows optional custom behavior; defaults to echo input.
  */
-export class FakeGenerateArchitectureGraphPort implements IGenerateArchitectureGraphPort {
+export class FakeGenerateArchitectureGraphPort implements ArchitectureGraphProviderPort {
   private behavior: ((input: any) => Promise<any>) | null = null;
 
   /**

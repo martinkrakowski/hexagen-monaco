@@ -1,7 +1,7 @@
-import type { IProcessIntentPort } from '../ports/in/process-intent.port';
+import type { ProcessIntentPort } from '../ports/in/process-intent.port';
 
 export class ProcessIntentUseCase {
-  constructor(private readonly port: IProcessIntentPort) {}
+  constructor(private readonly port: ProcessIntentPort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation (application layer responsibility)

@@ -1,4 +1,4 @@
-export interface IProjectCurrentBufferStatePort {
+export interface ProjectCurrentBufferStatePort {
   /**
    * Retrieves the current state of the Monaco buffer (content, cursor, selections, etc.).
    * Infrastructure adapters (Monaco Editor instance, text-model wrapper, snapshot service)

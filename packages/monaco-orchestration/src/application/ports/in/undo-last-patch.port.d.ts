@@ -1,4 +1,4 @@
-export interface IUndoLastPatchPort {
+export interface UndoLastPatchPort {
     /**
      * Undoes the last applied semantic patch (rollback buffer state, restore previous version).
      * Infrastructure adapters (Monaco undo manager, patch history store, text-model snapshot)

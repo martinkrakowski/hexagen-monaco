@@ -1,11 +1,11 @@
-import type { IProcessIntentPort } from '../ports/in/process-intent.port';
+import type { ProcessIntentPort } from '../ports/in/process-intent.port';
 
 // If domain types already exist, import them here
 // import { Intent } from '../../domain/entities/intent';
 // import { IntentResult } from '../../domain/value-objects/intent-result';
 
 export class ProcessIntentUseCase {
-  constructor(private readonly port: IProcessIntentPort) {}
+  constructor(private readonly port: ProcessIntentPort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Step 1: Validate / convert incoming data to domain concept

@@ -1,7 +1,7 @@
-import type { IValidatePatchIntentPort } from '../ports/in/validate-patch-intent.port';
+import type { ValidatePatchIntentPort } from '../ports/in/validate-patch-intent.port';
 
 export class ValidatePatchIntentUseCase {
-  constructor(private readonly port: IValidatePatchIntentPort) {}
+  constructor(private readonly port: ValidatePatchIntentPort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility

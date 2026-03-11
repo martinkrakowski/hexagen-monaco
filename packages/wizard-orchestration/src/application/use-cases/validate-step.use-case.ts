@@ -1,7 +1,7 @@
-import type { IValidateStepPort } from '../ports/in/validate-step.port';
+import type { ValidateStepPort } from '../ports/in/validate-step.port';
 
 export class ValidateStepUseCase {
-  constructor(private readonly port: IValidateStepPort) {}
+  constructor(private readonly port: ValidateStepPort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility

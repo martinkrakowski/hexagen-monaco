@@ -1,4 +1,4 @@
-export interface IValidateStepPort {
+export interface ValidateStepPort {
   /**
    * Validates the current wizard step against domain rules and invariants.
    * Infrastructure adapters (schema validator, business rules engine, etc.)

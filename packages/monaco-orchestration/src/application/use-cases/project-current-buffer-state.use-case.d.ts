@@ -1,7 +1,7 @@
-import type { IProjectCurrentBufferStatePort } from '../ports/in/project-current-buffer-state.port';
+import type { ProjectCurrentBufferStatePort } from '../ports/in/project-current-buffer-state.port';
 export declare class ProjectCurrentBufferStateUseCase {
     private readonly port;
-    constructor(port: IProjectCurrentBufferStatePort);
+    constructor(port: ProjectCurrentBufferStatePort);
     execute(data: unknown): Promise<unknown>;
 }
 //# sourceMappingURL=project-current-buffer-state.use-case.d.ts.map

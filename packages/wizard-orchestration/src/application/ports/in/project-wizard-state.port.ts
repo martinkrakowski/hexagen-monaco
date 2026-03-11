@@ -1,4 +1,4 @@
-export interface IProjectWizardStatePort {
+export interface ProjectWizardStatePort {
   /**
    * Retrieves the current state of the project wizard based on input data.
    * Infrastructure adapters (state machine, persistence, session store, etc.)
