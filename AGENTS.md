@@ -1,61 +1,95 @@
-# HexaGen Monaco — Agent Collaboration Guide
+# AGENTS.md — HexaGen Monaco
 
 > **Maintained jointly by human architects and the AI architectural co-pilot.**  
-> Update this file whenever a new mode is introduced, a major `.architecture/` convention changes, or a new invariant family is enforced.  
-> Last significant sync: March 2026
+> Update this file whenever a new mode is introduced, a major `.architecture/` convention changes, or a new invariant family is enforced.
 
 ---
 
-## Architecture Inspection Protocol
+## Quick Reference
 
-Before performing any architectural reasoning, code generation, or design proposal, the agent MUST inspect the `.architecture/` directory and account for the current manifest state.
+**Before starting ANY work:**
 
-Primary source of truth:
+```bash
+yarn build && yarn typecheck && yarn lint
+```
 
-.architecture/manifest.yaml
+If any command fails, **STOP**. Fix the existing errors first. Never begin development on a broken build.
 
-The manifest defines:
+**After editing `.ts` / `.tsx` files:**
 
-• bounded contexts
-• entities and value objects
-• use cases
-• ports (in/out)
-• adapters
-• driver applications
-• generator configuration
-• monorepo structure
-• workspace tooling
+```bash
+yarn lint && yarn typecheck
+```
 
-Agent responsibilities:
+**After editing `.architecture/` files:**
 
-1. Load and interpret `.architecture/manifest.yaml`.
-2. Treat the manifest as the canonical architecture model.
-3. Do not invent contexts, ports, or entities that do not appear in the manifest unless explicitly instructed.
-4. When proposing architecture changes, reference the exact section of the manifest that would be modified.
-5. In Architect Mode, produce only the changed manifest section rather than rewriting the entire file.
-6. Ensure all generated files correspond to elements declared in the manifest.
-7. If `.architecture/manifest.yaml` cannot be located or parsed, the agent must stop and request clarification before proceeding. The agent must never invent architecture state.
+```bash
+yarn hooks:validate
+```
+
+**After running `yarn sync`:**
+
+```bash
+yarn build && yarn typecheck
+```
 
 ---
 
-## 1. Purpose
+## Table of Contents
 
-This file is the single source of truth for how an AI agent should reason about, critique, and evolve the HexaGen Monaco codebase. It is intentionally model-agnostic — the protocol described here applies to any capable language model acting in the architectural co-pilot role, not to any specific provider or product.
+- [Quick Reference](#quick-reference)
+- [1. Commands After Edits](#1-commands-after-edits)
+- [2. Files Never Edit](#2-files-never-edit)
+- [3. Operating Modes](#3-operating-modes)
+- [4. Architectural Constraints](#4-architectural-constraints)
+- [5. Architecture Directory](#5-architecture-directory)
+- [6. Generator vs Target System](#6-generator-vs-target-system)
+- [7. SyncEngine & Bootstrap](#7-syncengine--bootstrap)
+- [8. Testing Protocol](#8-testing-protocol)
+- [9. Subsystem-Specific Rules](#9-subsystem-specific-rules)
+- [10. Interaction Protocol](#10-interaction-protocol)
+- [Appendix: Open Items](#appendix-open-items)
 
 ---
 
-## 2. Agent Role & Specialisations
+## 1. Commands After Edits
 
-**Role:** Senior architectural co-pilot and code-review enforcer for HexaGen Monaco.
+| Trigger                   | Command                                     | On Failure                                       |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------ |
+| **Before starting work**  | `yarn build && yarn typecheck && yarn lint` | **STOP** — fix existing errors before proceeding |
+| Any `.ts` / `.tsx` edit   | `yarn lint`                                 | Fix lint errors before continuing                |
+| Any `.ts` / `.tsx` edit   | `yarn typecheck`                            | Fix type errors before continuing                |
+| Any `.architecture/` edit | `yarn hooks:validate`                       | **STOP** — do not proceed until valid            |
+| After `yarn sync`         | `yarn build && yarn typecheck`              | Fix generator output before committing           |
+| Before committing         | `yarn test`                                 | Fix failing tests                                |
 
-**Core specialisations:**
-- Hexagonal Architecture (Ports & Adapters)
-- Domain-Driven Design — bounded contexts, aggregates, entities, value objects
-- TypeScript strict monorepo discipline — Yarn Workspaces, Turborepo
-- Generator / target-system separation (see §5)
-- Agentic UI patterns — A2UI, intent-based projection systems
-- Generative UI and Monaco semantic editing
-- Self-regeneration: the generator must be capable of regenerating itself
+**Failure protocol:**
+
+- `build` / `typecheck` / `lint` failures: Fix immediately, do not accumulate errors
+- `hooks:validate` failure: Architecture is invalid — stop and request clarification
+- `test` failure: Diagnose root cause, do not delete tests to make them pass
+
+---
+
+## 2. Files Never Edit
+
+The following files are **off-limits** to direct agent edits:
+
+| Path                    | Reason                                                  |
+| ----------------------- | ------------------------------------------------------- |
+| `generator.config.yaml` | Runtime state — event-driven only                       |
+| `**/dist/**`            | Compiled output — regenerated by build                  |
+| `**/*.tsbuildinfo`      | TypeScript incremental cache                            |
+| `**/node_modules/**`    | Package manager controlled                              |
+| `yarn.lock`             | Package manager controlled                              |
+| `turbo.json`            | Protected root file — use `--force-root` if intentional |
+| `.gitignore`            | Protected root file — use `--force-root` if intentional |
+
+**If you need to modify a protected file:**
+
+1. State the reason explicitly
+2. Get human confirmation
+3. Use `yarn sync --force-root` if it's a root file
 
 ---
 
@@ -75,6 +109,7 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 
 **Triggers:** "architect", "design", "plan", "update .architecture/manifest.yaml", structural decisions.  
 **Required deliverables:**
+
 - Updated `.architecture/manifest.yaml` snippet (only the changed section)
 - Bounded context definition: entities, value objects, ports (in/out), use cases
 - Mermaid diagram when the structure has more than two moving parts
@@ -83,9 +118,11 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 - Wiring strategy (how ports are satisfied at the composition root)
 
 **Ends every response with:**
+
 > Ready to move to Develop mode when you say `develop [feature]`.
 
 **Validation pass:** Before declaring architecture locked, the agent must explicitly verify:
+
 1. Bootstrap sequence precondition order (memory-only steps before disk steps)
 2. Failure behaviour per priority level is explicitly stated
 3. All diagram nodes match the YAML sequence
@@ -97,6 +134,8 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 
 **Triggers:** "develop [feature]", "implement", "code", "next step".  
 **Strict rules:**
+
+0. **Verify clean build first.** Run `yarn build && yarn typecheck && yarn lint`. If any fail, stop and fix before writing new code.
 1. Print a numbered Table of Contents of all files to be created/modified before writing any code.
 2. Produce **one file per response** — full content, no ellipsis, no placeholders.
 3. **Pause after every file.** Wait for explicit "next step" before continuing.
@@ -106,20 +145,54 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 
 ---
 
-## 4. Understanding `.architecture/manifest.yaml`
+## 4. Architectural Constraints
 
-The `.architecture/` directory is the **single source of truth for the shape of generated monorepos** — not for the generator itself. The generator has its own configuration (see §5).
+The agent **rejects** any proposal or code that violates the following:
+
+| Constraint                                           | Reason                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------- |
+| Domain imports infrastructure                        | Violates hexagonal dependency rule                            |
+| Business logic in UI components                      | Violates separation of concerns                               |
+| Framework imports in domain layer                    | Domain must be framework-free                                 |
+| Manual edits to `generator.config.yaml`              | Must be event-driven only                                     |
+| Port declared in more than one package               | Violates port-single-ownership invariant                      |
+| Self-import by package name                          | TypeScript resolution failure                                 |
+| Barrel containing only `export {}`                   | Generation-time stub hygiene violation                        |
+| Cross-package reference to `src/` instead of `dist/` | Composite project safety violation                            |
+| Consumer signature derived from memory               | Must be read from canonical port at generation time           |
+| Catch block returning null/false/default             | Violates explicit error handling — must return `Result<T, E>` |
+
+---
+
+## 5. Architecture Directory
+
+The `.architecture/` directory is the **single source of truth for the shape of generated monorepos** — not for the generator itself. The generator has its own configuration (see §6).
 
 ```
 .architecture/
-├── manifest.yaml          # Main manifest — bounded contexts, aggregates, ports, use cases
-├── ports/                      # Canonical port definitions (YAML or .ts snippets)
-├── contexts/                   # Per-bounded-context sub-manifests (optional)
-├── events/                     # Domain events catalogue
-└── invariants/                 # Business rules and generation invariants
+├── manifest.yaml              # Main manifest — bounded contexts, ports, use cases
+├── generator.config.yaml      # Runtime state — DO NOT EDIT DIRECTLY
+├── decisions/                 # ADRs (Architecture Decision Records)
+├── invariants/                # Business rules and generation invariants
+│   ├── layer-rules.yaml
+│   └── linter-config.yaml
+└── README.md
 ```
 
+**Before performing any architectural reasoning, code generation, or design proposal**, the agent MUST inspect `.architecture/manifest.yaml` and account for the current manifest state.
+
+**Agent responsibilities:**
+
+1. Load and interpret `.architecture/manifest.yaml`
+2. Treat the manifest as the canonical architecture model
+3. Do not invent contexts, ports, or entities that do not appear in the manifest unless explicitly instructed
+4. When proposing architecture changes, reference the exact section of the manifest that would be modified
+5. In Architect Mode, produce only the changed manifest section rather than rewriting the entire file
+6. Ensure all generated files correspond to elements declared in the manifest
+7. If `.architecture/manifest.yaml` cannot be located or parsed, the agent must stop and request clarification before proceeding
+
 **Semantic rules the agent always enforces:**
+
 - Domain never imports infrastructure, framework, or I/O
 - Each port interface is declared **once** in exactly one bounded context
 - Adapters implement ports; they live in the infrastructure layer
@@ -128,7 +201,7 @@ The `.architecture/` directory is the **single source of truth for the shape of 
 
 ---
 
-## 5. Generator vs Target System
+## 6. Generator vs Target System
 
 This distinction is critical and must never be blurred.
 
@@ -145,43 +218,25 @@ Contains agent-interaction logic                      No generator awareness
 
 ---
 
-## 6. Architectural Constraints (Non-Negotiable)
+## 7. SyncEngine & Bootstrap
 
-The agent **rejects** any proposal or code that violates the following:
+### Invariants (Enforced by Bootstrap)
 
-| Constraint | Reason |
-|---|---|
-| Domain imports infrastructure | Violates hexagonal dependency rule |
-| Business logic in UI components | Violates separation of concerns |
-| Framework imports in domain layer | Domain must be framework-free |
-| Manual edits to `generator.config.yaml` | Must be event-driven only |
-| Port declared in more than one package | Violates port-single-ownership invariant |
-| Self-import by package name | TypeScript resolution failure |
-| Barrel containing only `export {}` | Generation-time stub hygiene violation |
-| Cross-package reference to `src/` instead of `dist/` | Composite project safety violation |
-| Consumer signature derived from memory | Must be read from canonical port at generation time |
-| Catch block returning null/false/default | Violates explicit error handling — must return `Result<T, E>` |
+These invariants run as the mandatory final phase of every generation run. All nine must pass before the generator exits.
 
----
+| #   | Invariant                                                                            | Priority | Failure         |
+| --- | ------------------------------------------------------------------------------------ | -------- | --------------- |
+| 1   | `composite-safety` — every tsconfig.json contains `"paths": {}`                      | critical | abort + cleanup |
+| 2   | `barrel-ownership-boundary` — upward reachability + no cross-package re-exports      | critical | abort + cleanup |
+| 3   | `port-single-ownership` — no duplicate port declarations across packages             | critical | abort + cleanup |
+| 4   | `dependency-consistency` — every `@hexagen/*` import has a package.json entry        | high     | abort           |
+| 5   | `self-import-prevention` — no package imports itself by name                         | high     | abort           |
+| 6   | `signature-synchronization` — consumers derive exact signatures from canonical port  | high     | abort           |
+| 7   | `no-empty-stubs` — no `export {}` barrels in compiled source                         | medium   | warn + continue |
+| 8   | `exports-field-mandatory` — every package.json has a complete exports map            | medium   | warn + continue |
+| 9   | `test-double-parity` — test doubles implement exact same interface as canonical port | medium   | warn + continue |
 
-## 7. SyncEngine Invariants (Enforced by Bootstrap)
-
-These invariants run as the mandatory final phase of every generation run. All eight must pass before the generator exits.
-
-| # | Invariant | Priority | Failure |
-|---|---|---|---|
-| 1 | `composite-safety` — every tsconfig.json contains `"paths": {}` | critical | abort + cleanup |
-| 2 | `barrel-ownership-boundary` — upward reachability + no cross-package re-exports | critical | abort + cleanup |
-| 3 | `port-single-ownership` — no duplicate port declarations across packages | critical | abort + cleanup |
-| 4 | `dependency-consistency` — every `@hexagen/*` import has a package.json entry | high | abort |
-| 5 | `self-import-prevention` — no package imports itself by name | high | abort |
-| 6 | `signature-synchronization` — consumers derive exact signatures from canonical port | high | abort |
-| 7 | `no-empty-stubs` — no `export {}` barrels in compiled source | medium | warn + continue |
-| 8 | `exports-field-mandatory` — every package.json has a complete exports map | medium | warn + continue |
-
----
-
-## 8. Bootstrap Sequence
+### Bootstrap Sequence
 
 Steps run in this exact order. Preconditions must be respected — memory-only steps must complete before any disk writes begin.
 
@@ -198,15 +253,26 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 ```
 
 **Failure behaviour:**
+
 - `critical` → abort + cleanup (snapshot restore, then rm -rf fallback)
 - `high` → abort, leave partial state for inspection
 - `medium` → warn and continue
 
+### CLI Reference
+
+| Flag            | Description                                             |
+| --------------- | ------------------------------------------------------- |
+| `--dry-run`     | Preview changes without writing files                   |
+| `--force`       | Overwrite non-generated files in packages               |
+| `--force-root`  | Overwrite protected root files (turbo.json, .gitignore) |
+| `--allow-dirty` | Skip git clean check (for development)                  |
+| `--strict`      | Fail on arch-linter warnings                            |
+
 ---
 
-## 9. Testing Protocol
+## 8. Testing Protocol
 
-### File locations
+### File Locations
 
 Test files live outside `src/`. The `src/` directory contains production code only — no `.test.ts` files, no test doubles, no test utilities.
 
@@ -222,9 +288,9 @@ packages/<name>/
             └── yaml-config.adapter.test.ts
 ```
 
-Test doubles (in-memory fakes, stubs) belong in `__tests__/doubles/` unless they need to be shared across packages, in which case they live in a dedicated `@hexagen/test-doubles` package. They must never appear in `src/` where they could be inadvertently exported from a package barrel.
+Test doubles (in-memory fakes, stubs) belong in `__tests__/doubles/` unless they need to be shared across packages, in which case they live in a dedicated `@hexagen/test-doubles` package.
 
-### tsconfig discipline
+### tsconfig Discipline
 
 The package `tsconfig.json` must exclude all test files from the production build:
 
@@ -234,72 +300,122 @@ The package `tsconfig.json` must exclude all test files from the production buil
 
 A separate `tsconfig.test.json` extends the base config with `"noEmit": true` and re-includes test files for type-checking without emitting output.
 
-### Test runner
+### Test Runner
 
 `tsx` is the preferred runner for this project — it executes TypeScript directly with no compilation step and no framework overhead. Tests that do not need a framework use `node:assert`. Tests that require fixtures, mocking, or parallel execution use Vitest.
 
 Scripts in every package `package.json`:
 
 ```json
-"test": "tsx --test __tests__/**/*.test.ts"
+"test": "tsx --test __tests__/**/*.test.ts",
 "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
 ```
 
-### What every develop slice must produce
+### What Every Develop Slice Must Produce
 
 Every slice that introduces a port adapter must include all three of the following before the slice is considered complete:
 
-1. **The adapter** — implements the port contract exactly; no silent error swallowing; all failures surface via `Result<T, E>`.
-2. **A test double** — in-memory fake implementing the same port interface; lives in `__tests__/doubles/`; exposes test-control methods (`set*`, `reset`, `clear`) not present on the real adapter.
-3. **Unit tests** — cover at minimum: happy path, missing-file/empty bootstrap case, conflict or validation failure, and round-trip write-then-read.
+1. **The adapter** — implements the port contract exactly; no silent error swallowing; all failures surface via `Result<T, E>`
+2. **A test double** — in-memory fake implementing the same port interface; lives in `__tests__/doubles/`; exposes test-control methods (`set*`, `reset`, `clear`) not present on the real adapter
+3. **Unit tests** — cover at minimum: happy path, missing-file/empty bootstrap case, conflict or validation failure, and round-trip write-then-read
 
 The agent will not mark a slice complete if any of the three is missing.
 
-### Test double parity rule
+### Test Double Parity Rule
 
-A test double must implement **exactly the same interface** as the real adapter — same method names, same parameter types, same return types. Any drift between them means tests are not testing the real contract. The agent checks for parity whenever code is pasted for review.
+A test double must implement **exactly the same interface** as the real adapter — same method names, same parameter types, same return types. Any drift between them means tests are not testing the real contract.
 
 Specific violations the agent rejects:
 
-| Violation | Reason |
-|---|---|
-| Test double method returns `T` where adapter returns `Result<T, E>` | Tests cannot exercise error paths |
-| Test double silently ignores writes | Round-trip tests give false positives |
-| Test double uses different field names than the port contract | Tests pass against a shadow type, not the real contract |
-| `fsMock.readCount` shared across tests without reset | Count accumulates across runs; second test asserts wrong value |
+| Violation                                                           | Reason                                                         |
+| ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Test double method returns `T` where adapter returns `Result<T, E>` | Tests cannot exercise error paths                              |
+| Test double silently ignores writes                                 | Round-trip tests give false positives                          |
+| Test double uses different field names than the port contract       | Tests pass against a shadow type, not the real contract        |
+| `fsMock.readCount` shared across tests without reset                | Count accumulates across runs; second test asserts wrong value |
 
-### Silent error swallowing (hard rejection)
+### Silent Error Swallowing (Hard Rejection)
 
-Any adapter method that catches an error and returns `null`, `false`, or a default value instead of a typed `Result` will be rejected. Without using `Result<T, E>`, the caller cannot distinguish a genuine empty result from a disk failure. Every catch block must either re-throw or return `{ success: false, error: err as Error }`.
-
----
-
-## 10. Open Items (as of March 2026)
-
-These are known gaps that must be resolved before the corresponding implementation slice begins:
-
-1. **Ownership registry drift** — no structural enforcement that every new port raises `PortDeclaredEvent`. Needs a lint rule or pre-commit hook scanning port declarations against `generator.config.yaml`.
-
-2. **Concurrent sync sessions** — `YamlConfigAdapter` has no file locking. Two parallel CI builds against the same workspace root will produce conflicting writes. Document as a single-session limitation until file locking is implemented.
-
-3. **Step-to-use-case mapping** — `ExecuteBootstrapSequenceUseCase` must map step name strings to concrete use case classes. The mapping strategy (registry map, strategy pattern, or convention-based lookup) must be decided as the first design decision of that slice, not inside the implementation.
+Any adapter method that catches an error and returns `null`, `false`, or a default value instead of a typed `Result` will be rejected. Every catch block must either re-throw or return `{ success: false, error: err as Error }`.
 
 ---
 
-## 11. Interaction Protocol
+## 9. Subsystem-Specific Rules
 
-| Intent | Command |
-|---|---|
-| Switch mode | `🧠 Brainstorm Mode`, `🏗️ Architect Mode`, `🔨 develop [feature]` |
-| Advance development | `next step` |
-| Reject a proposal | `reject this approach` |
-| Open a design question | `brainstorm [topic]` |
-| Paste code for review | Paste directly — agent will critique against hexagonal/DDD rules |
-| Ask for regeneration impact | "What would regenerating this affect?" |
+### Sync Engine (`packages/sync/`)
+
+- All generators must return `Result<GeneratorResult, Error>`
+- New generators are added to `generateCoreArtifacts()` in `sync-engine.ts`
+- Bootstrap sequence in `generator.config.yaml` is documentation; code order in `sync-engine.ts` is authoritative
+- Test with `yarn sync --dry-run` before actual sync
+- The reaper only deletes truly empty folders — folders with `index.ts` are preserved
+
+### Web Driver (`packages/web-driver/`)
+
+- Components must not contain business logic — delegate to use cases
+- All ports are imported from other packages, never declared here (except `DownloadProjectPort`)
+- `LocalStoragePersistenceAdapter` implements `MonacoPersistencePort` from `@hexagen/monaco-orchestration`
+- Wire dependencies through `apps/web/app/lib/wire.ts`
+
+### Monaco Orchestration (`packages/monaco-orchestration/`)
+
+- Owns `MonacoPersistencePort` — other packages import, never redeclare
+- Semantic patches must include confidence scores
+- All buffer mutations go through `ApplySemanticPatchUseCase`
+
+### Project Configuration (`packages/project-configuration/`)
+
+- Owns governance ports: `ValidateSpecPort`, `RenderManifestPort`, `TelemetryPort`, `GenerateProjectPort`
+- Manifest parsing uses `zod` for runtime validation
+- `ProjectGeneratorPort` and `DownloadProviderPort` are out-ports
+
+### Architecture Files (`.architecture/`)
+
+- `manifest.yaml` is the source of truth for bounded contexts
+- `generator.config.yaml` is auto-maintained — **never edit directly**
+- Run `yarn hooks:validate` after any edit to `.architecture/`
+- ADRs go in `.architecture/decisions/` with format `NNNN-title.md`
+
+---
+
+## 10. Interaction Protocol
+
+| Intent                      | Command                                                           |
+| --------------------------- | ----------------------------------------------------------------- |
+| Switch mode                 | `🧠 Brainstorm Mode`, `🏗️ Architect Mode`, `🔨 develop [feature]` |
+| Advance development         | `next step`                                                       |
+| Reject a proposal           | `reject this approach`                                            |
+| Open a design question      | `brainstorm [topic]`                                              |
+| Paste code for review       | Paste directly — agent will critique against hexagonal/DDD rules  |
+| Ask for regeneration impact | "What would regenerating this affect?"                            |
 
 **When pasting code for review**, the agent will check against:
+
 - Port contract alignment (method signatures, return types)
 - Barrel reachability from package root
 - No silent error swallowing (all errors must propagate via `Result<T, E>`)
 - Cache invalidation correctness
 - Test double parity with real adapter signatures
+
+---
+
+## Appendix: Open Items
+
+These are known gaps that should be resolved:
+
+1. **Ownership registry drift** — No structural enforcement that every new port raises `PortDeclaredEvent`. Needs a lint rule or pre-commit hook scanning port declarations against `generator.config.yaml`.
+
+2. **Concurrent sync sessions** — `YamlConfigAdapter` has no file locking. Two parallel CI builds against the same workspace root will produce conflicting writes. Document as a single-session limitation until file locking is implemented.
+
+3. **Step-to-use-case mapping** — `ExecuteBootstrapSequenceUseCase` must map step name strings to concrete use case classes. The mapping strategy (registry map, strategy pattern, or convention-based lookup) must be decided as the first design decision of that slice.
+
+---
+
+## Document History
+
+| Date       | Change                                                       |
+| ---------- | ------------------------------------------------------------ |
+| March 2026 | Initial version — modes, constraints, testing protocol       |
+| March 2026 | Added Quick Reference, Commands, Files Never Edit sections   |
+| March 2026 | Added Subsystem-Specific Rules, CLI Reference                |
+| March 2026 | Restructured with Table of Contents and consistent numbering |
