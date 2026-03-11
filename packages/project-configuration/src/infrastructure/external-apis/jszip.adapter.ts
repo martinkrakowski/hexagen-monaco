@@ -1,8 +1,8 @@
 import JSZip from 'jszip';
 import type { FileTreeNode } from '../../domain/model/file-tree-node/file-tree-node';
-import type { IDownloadProviderPort } from '../../application/ports/out/download-provider.port';
+import type { DownloadProviderPort } from '../../application/ports/out/download-provider.port';
 
-export class JSZipDownloadAdapter implements IDownloadProviderPort {
+export class JSZipDownloadAdapter implements DownloadProviderPort {
   async download(tree: FileTreeNode): Promise<Blob> {
     const zip = new JSZip();
 

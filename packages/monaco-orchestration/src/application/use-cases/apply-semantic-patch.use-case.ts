@@ -1,7 +1,7 @@
-import type { IApplySemanticPatchPort } from '../ports/in/apply-semantic-patch.port';
+import type { ApplySemanticPatchPort } from '../ports/in/apply-semantic-patch.port';
 
 export class ApplySemanticPatchUseCase {
-  constructor(private readonly port: IApplySemanticPatchPort) {}
+  constructor(private readonly port: ApplySemanticPatchPort) {}
 
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility

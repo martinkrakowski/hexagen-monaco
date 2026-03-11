@@ -1,4 +1,4 @@
-export interface IApplySemanticPatchPort {
+export interface ApplySemanticPatchPort {
   /**
    * Applies a semantic patch to the current buffer/state.
    * Infrastructure adapters (Monaco Editor model, AST transformer,
