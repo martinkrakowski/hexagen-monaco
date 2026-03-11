@@ -1,9 +1,9 @@
-import path from "node:path";
-import yaml from "js-yaml";
-import fs from "node:fs/promises";
-import { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
-import { safeWriteFile } from "../fs-utils.js";
+import path from 'node:path';
+import yaml from 'js-yaml';
+import fs from 'node:fs/promises';
+import { SyncConfig } from '../config.js';
+import { createEmptyResult, type GeneratorResult } from '../results.js';
+import { safeWriteFile } from '../fs-utils.js';
 
 // Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
@@ -17,7 +17,7 @@ interface LayerConfig {
  * Uses safeWriteFile for dry-run safety, protection, and idempotency.
  */
 async function loadYaml<T>(filePath: string): Promise<T> {
-  const content = await fs.readFile(filePath, "utf8");
+  const content = await fs.readFile(filePath, 'utf8');
   return yaml.load(content) as T;
 }
 
@@ -61,10 +61,19 @@ export async function ensureLayerFolders(
     // Determine if this layer is allowed to re-export shared kernel utilities
     const rule = layerRules?.layers?.[layerName];
     // Determine shared re‑export eligibility based on layer rules and linter config
-    let allowShared = rule?.allowed_imports?.some((imp: string) => imp.includes('@hexagen/shared')) ?? false;
+    let allowShared =
+      rule?.allowed_imports?.some((imp: string) =>
+        imp.includes('@hexagen/shared')
+      ) ?? false;
     // Override if linter config explicitly restricts this package from importing shared
-    const pkgRule = linterConfig?.package_rules?.find((r: any) => r.name === layerName);
-    if (pkgRule?.restricted_to?.some((imp: string) => imp.includes('@hexagen/shared'))) {
+    const pkgRule = linterConfig?.package_rules?.find(
+      (r: any) => r.name === layerName
+    );
+    if (
+      pkgRule?.restricted_to?.some((imp: string) =>
+        imp.includes('@hexagen/shared')
+      )
+    ) {
       allowShared = false;
     }
 
@@ -138,3 +147,4 @@ export async function ensureLayerFolders(
   }
 
   return result;
+}
