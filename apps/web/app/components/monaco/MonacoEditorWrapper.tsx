@@ -11,8 +11,8 @@ import {
 } from "@hexagen/monaco-orchestration";
 
 import type {
-  IUndoLastPatchPort,
-  IProjectCurrentBufferStatePort,
+  UndoLastPatchPort,
+  ProjectCurrentBufferStatePort,
 } from "@hexagen/monaco-orchestration";
 
 import { getMonacoPersistence } from "@/lib/wire";
@@ -36,7 +36,7 @@ export function MonacoEditorWrapper({
   const persistence = getMonacoPersistence();
 
   // Stub ports for undo & buffer state (keep until real ports are wired)
-  class StubUndoPort implements IUndoLastPatchPort {
+  class StubUndoPort implements UndoLastPatchPort {
     async undo(_data: unknown): Promise<unknown> {
       // eslint-disable-next-line no-console
       console.info('[STUB] undo called with:', _data);
@@ -44,7 +44,7 @@ export function MonacoEditorWrapper({
     }
   }
 
-  class StubBufferStatePort implements IProjectCurrentBufferStatePort {
+  class StubBufferStatePort implements ProjectCurrentBufferStatePort {
     async getCurrentState(_data: unknown): Promise<unknown> {
       // eslint-disable-next-line no-console
       console.info('[STUB] getCurrentState called with:', _data);
