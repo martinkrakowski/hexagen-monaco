@@ -1,6 +1,6 @@
 import type { ProjectSpecification } from '../../../domain/value-objects/project-specification';
 
-export interface IGenerateProjectPort {
+export interface RunProjectGenerationPort {
   /**
    * Generates the full project structure from specification.
    * Infrastructure adapter (file-system, template engine, etc.) implements this.

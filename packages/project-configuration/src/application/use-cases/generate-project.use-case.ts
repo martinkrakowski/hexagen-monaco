@@ -1,10 +1,10 @@
-import type { IGenerateProjectPort } from '../ports/in/generate-project.port';
+import type { GenerateProjectPort } from '../ports/in/generate-project.port';
 
 import { Project } from '../../domain/entities/project';
 import { ProjectSpecification } from '../../domain/value-objects/project-specification';
 
 export class GenerateProjectUseCase {
-  constructor(private readonly port: IGenerateProjectPort) {}
+  constructor(private readonly port: GenerateProjectPort) {}
 
   async execute(rawSpec: {
     rootName?: string;

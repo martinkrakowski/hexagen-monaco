@@ -1,16 +1,16 @@
-// In‑memory fake implementation of the IGenerateProjectPort used for unit tests.
+// In‑memory fake implementation of the GenerateProjectPort used for unit tests.
 // Allows optional custom behavior for the `generate` method.
 // By default, `generate` simply echoes the input unchanged.
 
-import type { IGenerateProjectPort } from "../../../src/application/ports/in/generate-project.port";
+import type { GenerateProjectPort } from "../../../src/application/ports/in/generate-project.port";
 
 /**
- * Fake implementation of `IGenerateProjectPort`.
+ * Fake implementation of `GenerateProjectPort`.
  * Provides a `setBehavior` method so tests can inject a custom
  * async implementation for `generate`. If no custom behavior is set,
  * the fake simply returns the input unchanged (echo).
  */
-export class FakeGenerateProjectPort implements IGenerateProjectPort {
+export class FakeGenerateProjectPort implements GenerateProjectPort {
   private behavior: ((spec: any) => Promise<any>) | null = null;
 
   /** Register a custom implementation for the `generate` method. */

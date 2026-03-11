@@ -5,9 +5,9 @@ export * from './application/ports/in/generate-project.port';
 
 // Factories (exactly what wire.ts in the web driver expects)
 import { GenerateProjectUseCase } from './application/generate-project-use-case';
-import type { IGenerateProjectPort } from './application/ports/in/generate-project.port';
+import type { RunProjectGenerationPort } from './application/ports/in/generate-project.port';
 
-export const generateProjectUseCase = (port: IGenerateProjectPort) =>
+export const generateProjectUseCase = (port: RunProjectGenerationPort) =>
   new GenerateProjectUseCase(port);
 
 // Placeholder for legacy downloadProjectUseCase (will be refactored later)

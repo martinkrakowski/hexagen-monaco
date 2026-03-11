@@ -1,4 +1,4 @@
-import type { IGenerateProjectPort } from "./ports/in/generate-project.port";
+import type { RunProjectGenerationPort } from "./ports/in/generate-project.port";
 import path from "node:path";
 import { WorkflowGenerator } from "../infrastructure/adapters/WorkflowGenerator";
 import { getWorkflowTemplatePath } from "../utils/resolveAssetPath";
@@ -11,7 +11,7 @@ import { Logger, defaultLogger } from "../utils/logger";
 
 export class GenerateProjectUseCase {
   constructor(
-    private readonly port: IGenerateProjectPort,
+    private readonly port: RunProjectGenerationPort,
     private readonly logger: Logger = defaultLogger,
   ) {}
 
