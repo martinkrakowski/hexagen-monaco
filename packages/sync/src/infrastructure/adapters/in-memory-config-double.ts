@@ -7,7 +7,7 @@ import type {
   InvariantPriority,
   FailureMode,
 } from '@hexagen/sync';
-import type { Result } from '@hexagen/shared';
+import type { Result } from '@hexagen/sync/domain';
 
 export class InMemoryConfigDouble
   implements OwnershipRegistryPort, GeneratorConfigPort

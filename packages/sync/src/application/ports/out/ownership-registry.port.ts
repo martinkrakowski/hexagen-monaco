@@ -1,4 +1,4 @@
-import type { Result } from '@hexagen/shared';
+import type { Result } from '@hexagen/sync/domain';
 
 /**
  * Represents ownership of a port by a package.

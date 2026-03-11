@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import type { Result } from '@hexagen/shared';
+import type { Result } from '@hexagen/sync/domain';
 import type {
   OwnershipRegistryPort,
   PortOwnershipRecord,

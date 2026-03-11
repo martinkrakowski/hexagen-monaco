@@ -6,4 +6,4 @@
 // Example usage:
 //   import { Result } from '@hexagen/sync/application/ports/out/result';
 //
-export type { Result } from '@hexagen/shared';
+export type { Result } from '@hexagen/sync/domain';

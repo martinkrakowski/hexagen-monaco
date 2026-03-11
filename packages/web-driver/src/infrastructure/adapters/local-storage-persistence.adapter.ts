@@ -3,12 +3,12 @@ import type {
   MonacoSession,
   PersistenceError,
   SessionMetadata,
-} from '@hexagen/monaco-orchestration';
-import type { Result } from '@hexagen/shared';
+} from "@hexagen/monaco-orchestration";
+import type { Result } from "@hexagen/sync/domain";
 
 export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
   async loadLatestSession(
-    projectId: string
+    projectId: string,
   ): Promise<Result<MonacoSession | null, PersistenceError>> {
     try {
       const _id = `monaco-session-${projectId}`;
@@ -21,8 +21,8 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
       return {
         success: false,
         error: {
-          kind: 'DeserializationFailed',
-          message: 'Failed to load session',
+          kind: "DeserializationFailed",
+          message: "Failed to load session",
           cause: e,
         },
       };
@@ -30,7 +30,7 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
   }
 
   async saveSession(
-    session: MonacoSession
+    session: MonacoSession,
   ): Promise<Result<MonacoSession, PersistenceError>> {
     try {
       const key = `monaco-session-${session.id}`;
@@ -40,8 +40,8 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
       return {
         success: false,
         error: {
-          kind: 'SerializationFailed',
-          message: 'Failed to save session',
+          kind: "SerializationFailed",
+          message: "Failed to save session",
           cause: e,
         },
       };
@@ -50,14 +50,14 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
 
   async listSessions(
     _projectId: string,
-    _limit?: number
+    _limit?: number,
   ): Promise<Result<SessionMetadata[], PersistenceError>> {
     // MVP stub — localStorage does not support listing
     return { success: true, value: [] };
   }
 
   async deleteSession(
-    sessionId: string
+    sessionId: string,
   ): Promise<Result<void, PersistenceError>> {
     try {
       localStorage.removeItem(`monaco-session-${sessionId}`);
@@ -66,8 +66,8 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
       return {
         success: false,
         error: {
-          kind: 'Unknown',
-          message: 'Failed to delete session',
+          kind: "Unknown",
+          message: "Failed to delete session",
           cause: e,
         },
       };
@@ -75,7 +75,7 @@ export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
   }
 
   async clearProjectSessions(
-    projectId: string
+    projectId: string,
   ): Promise<Result<void, PersistenceError>> {
     // MVP stub — localStorage does not support prefix delete
     return { success: true, value: undefined };
