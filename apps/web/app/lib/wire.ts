@@ -2,10 +2,10 @@
 // Centralized dependency composition root for web driver
 // All cross-package imports go through root barrels only (lint-enforced)
 
-import type { MonacoPersistencePort } from '@hexagen/monaco-orchestration';
-import type { DownloadProjectPort } from '@hexagen/web-driver';
-import { LocalStoragePersistenceAdapter } from '@hexagen/web-driver'; // same context → allowed
-import type { Project } from '@hexagen/web-driver';
+import type { MonacoPersistencePort } from "@hexagen/monaco-orchestration";
+import type { DownloadProjectPort } from "@hexagen/web-driver";
+import { LocalStoragePersistenceAdapter } from "@hexagen/web-driver"; // same context → allowed
+import type { Project } from "@hexagen/web-driver";
 
 // Note: LocalStoragePersistenceAdapter is allowed direct import because it is in the same bounded context (web-driver).
 // All external ports must come from root barrels.
@@ -19,16 +19,22 @@ export const wireDependencies = () => {
 
   // Monaco persistence port → concrete localStorage adapter
   registry.set(
-    'MonacoPersistencePort',
-    new LocalStoragePersistenceAdapter() satisfies MonacoPersistencePort
+    "MonacoPersistencePort",
+    new LocalStoragePersistenceAdapter() satisfies MonacoPersistencePort,
   );
 
   // Download project port → placeholder (to be replaced with jszip / zip adapter later)
-  registry.set('DownloadProjectPort', {
+  registry.set("DownloadProjectPort", {
     downloadProject: async (_project: Project) => {
       // eslint-disable-next-line no-console
-      console.warn('[DownloadProjectPort] Not implemented yet', _project);
-      return { success: false as const, message: 'Not implemented' };
+      console.warn("[DownloadProjectPort] Not implemented yet", _project);
+      return {
+        success: false as const,
+        error: {
+          code: "DOWNLOAD_FAILED" as const,
+          message: "Not implemented",
+        },
+      };
     },
   } satisfies DownloadProjectPort);
 
@@ -54,7 +60,7 @@ export const dependencies = wireDependencies();
 
 // Typed convenience getters
 export const getMonacoPersistence = () =>
-  dependencies.get<MonacoPersistencePort>('MonacoPersistencePort');
+  dependencies.get<MonacoPersistencePort>("MonacoPersistencePort");
 
 export const getDownloadProject = () =>
-  dependencies.get<DownloadProjectPort>('DownloadProjectPort');
+  dependencies.get<DownloadProjectPort>("DownloadProjectPort");
