@@ -1,0 +1,48 @@
+name: "Architectural Integrity Check"
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  verify-sync:
+    name: "Verify Sync Engine & Hexagonal Structure"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for the engine's Git checks
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+
+      - name: "Install Dependencies"
+        run: yarn install --frozen-lockfile
+
+      - name: "Build Sync Engine"
+        run: yarn turbo run build --filter=@hexagen/sync
+
+      - name: "Execute Hardened Sync"
+        # We use --force here to ensure the engine can verify
+        # that even forced writes don't violate architectural rules.
+        run: yarn sync --force
+
+      - name: "Run Verification Script"
+        run: |
+          chmod +x ./verify-sync.sh
+          ./verify-sync.sh
+
+      - name: "Archive Migration Report"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-migration-report
+          path: SYNC-MIGRATION-REPORT.md
+          retention-days: 7
