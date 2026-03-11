@@ -16,6 +16,9 @@ The HexaGen Monaco sync engine (`@hexagen/sync`) had several structural bugs tha
 3. **Dry-run mutations** — The reaper deleted files even in `--dry-run` mode
 4. **Root file overwrites** — `yarn sync --force` could overwrite protected root files (`turbo.json`, `.gitignore`)
 5. **Delete-recreate cycles** — The reaper deleted folders containing only `index.ts`, which the sync engine then recreated
+6. **Incorrect tsconfig references** — Generated `tsconfig.json` files had wrong relative paths for project references
+7. **Blocked development workflow** — Git clean check prevented sync during active development
+8. **Incomplete type coverage** — The `Manifest` type didn't model the full manifest.yaml structure
 
 These issues were discovered during a comprehensive structural integrity audit of the codebase.
 
@@ -23,13 +26,16 @@ These issues were discovered during a comprehensive structural integrity audit o
 
 ## Decision
 
-We implemented the following fixes across the sync engine:
+We implemented fixes in two phases:
+
+## Phase A — Stop Barrel Corruption
 
 ### 1. Remove Broken Shared Kernel Re-exports
 
 **Files:** `barrels.ts`, `stubs.ts`, `layer-folders.ts`
 
 **Before:**
+
 ```typescript
 exportLines.unshift(
   `export * from '../shared/result.js';`,
@@ -40,6 +46,7 @@ exportLines.unshift(
 **After:** Removed entirely.
 
 **Rationale:**
+
 - The shared kernel is a package (`@hexagen/shared`), not a relative folder
 - Re-exporting from another package violates the `barrel-ownership-boundary` invariant
 - Each package should import from `@hexagen/shared` directly where needed
@@ -49,18 +56,22 @@ exportLines.unshift(
 **Files:** `barrels.ts`, `stubs.ts`, `layer-folders.ts`
 
 **Before:**
+
 ```typescript
 const content = exportLines.length > 0 ? exportLines.join("\n") : "export {};";
 ```
 
 **After:**
+
 ```typescript
-const content = exportLines.length > 0
-  ? `${GENERATED_MARKER}\n\n${exportLines.join("\n")}\n`
-  : `${GENERATED_MARKER}\n\n// No exports yet\n`;
+const content =
+  exportLines.length > 0
+    ? `${GENERATED_MARKER}\n\n${exportLines.join("\n")}\n`
+    : `${GENERATED_MARKER}\n\n// No exports yet\n`;
 ```
 
 **Rationale:**
+
 - `export {};` violates the `no-empty-stubs` invariant
 - A comment is clearer and signals intent without creating a stub export
 
@@ -69,6 +80,7 @@ const content = exportLines.length > 0
 **File:** `layer-folders.ts`
 
 **Before:**
+
 ```typescript
 async function loadYaml<T>(filePath: string): Promise<T> {
   const content = await fs.readFile(filePath, "utf8");
@@ -77,6 +89,7 @@ async function loadYaml<T>(filePath: string): Promise<T> {
 ```
 
 **After:**
+
 ```typescript
 async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
   try {
@@ -92,6 +105,7 @@ async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
 ```
 
 **Rationale:**
+
 - Graceful degradation when optional config files are missing
 - Prevents sync from crashing in new or partially configured workspaces
 
@@ -100,11 +114,13 @@ async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
 **File:** `preflight.ts`
 
 **Before:**
+
 ```typescript
 const { stdout, stderr } = await execAsync("yarn turbo run build");
 ```
 
 **After:**
+
 ```typescript
 const MAX_BUFFER = 1024 * 1024 * 10; // 10MB
 
@@ -119,6 +135,7 @@ const { stdout, stderr } = await execAsync("yarn turbo run build", {
 ```
 
 **Rationale:**
+
 - Turbo's verbose output exceeds Node's default 1MB buffer
 - Dry-run mode should not require building (no files are written)
 
@@ -127,6 +144,7 @@ const { stdout, stderr } = await execAsync("yarn turbo run build", {
 **File:** `reap.ts`
 
 **Before:**
+
 ```typescript
 const nonEmpty = entries.filter((e) => e !== "index.ts");
 if (nonEmpty.length === 0) {
@@ -135,6 +153,7 @@ if (nonEmpty.length === 0) {
 ```
 
 **After:**
+
 ```typescript
 if (entries.length === 0) {
   if (dryRun) {
@@ -146,11 +165,12 @@ if (entries.length === 0) {
 ```
 
 **Rationale:**
+
 - Dry-run must never mutate the filesystem
 - Folders with `index.ts` are valid barrels maintained by the sync engine
 - Deleting them creates a delete-recreate cycle
 
-### 6. Root File Protection (Previously Applied)
+### 6. Root File Protection
 
 **File:** `fs-utils.ts`
 
@@ -167,6 +187,112 @@ The `ensureRootFiles()` method was removed from `sync-engine.ts` entirely — `t
 
 ---
 
+## Phase B — Fix Incorrect Generation
+
+### 7. Fix tsconfig.json References Path
+
+**File:** `tsconfig.ts`
+
+**Before:**
+
+```typescript
+.map((name) => ({ path: `../packages/${name}/tsconfig.json` }));
+```
+
+**After:**
+
+```typescript
+.map((name) => ({ path: `../${name}/tsconfig.json` }));
+```
+
+**Rationale:**
+
+- Packages are siblings in `packages/`, not nested under `packages/packages/`
+- The path from `packages/foo` to `packages/bar` is `../bar`, not `../packages/bar`
+
+### 8. Add `--allow-dirty` Flag
+
+**Files:** `config.ts`, `sync-engine.ts`
+
+**Before:**
+
+```typescript
+const { stdout: gitStatus } = await execAsync("git status --porcelain");
+if (gitStatus && gitStatus.trim().length > 0) {
+  throw new Error("Dirty git tree");
+}
+```
+
+**After:**
+
+```typescript
+if (!allowDirty) {
+  const { stdout: gitStatus } = await execAsync("git status --porcelain");
+  if (gitStatus && gitStatus.trim().length > 0) {
+    logger.error(
+      "Git working tree is dirty. Commit or stash changes, or use --allow-dirty to proceed.",
+    );
+    throw new Error("Dirty git tree");
+  }
+} else {
+  logger.warn("Skipping git clean check (--allow-dirty)");
+}
+```
+
+**Rationale:**
+
+- Developers iterating on sync changes need to test without committing every change
+- The `--allow-dirty` flag is opt-in, preserving safety by default
+- Error message now mentions the flag for discoverability
+
+### 9. Expand Manifest Type Definitions
+
+**File:** `types/manifest.ts`
+
+**Before:** Minimal type with only `bounded_contexts[].name` and `packageJson`
+
+**After:** Complete type definitions including:
+
+```typescript
+export interface BoundedContext {
+  name: string;
+  type?: BoundedContextType;
+  description?: string;
+  layers?: BoundedContextLayers;
+  depends_on?: string[];
+  driver_for?: string;
+  wiring?: string[];
+  generator?: BoundedContextGenerator;
+  packageJson?: Record<string, unknown>;
+}
+
+export interface BoundedContextLayers {
+  domain?: DomainLayer;
+  application?: ApplicationLayer;
+  infrastructure?: InfrastructureLayer;
+}
+
+export interface ApplicationLayer {
+  use_cases?: string[];
+  ports?: ApplicationPorts;
+  factories?: string[];
+}
+```
+
+Plus helper functions:
+
+- `extractPorts()` — get in/out ports from a context
+- `extractDependencies()` — get depends_on list
+- `isSharedKernel()` / `isDriver()` — type guards
+
+**Rationale:**
+
+- Enables type-safe access to manifest data throughout the sync engine
+- Supports future code generation from manifest (ports, entities, use cases)
+- Documents the manifest schema in code
+
+---
+
 ## Consequences
 
 ### Positive
@@ -176,6 +302,9 @@ The `ensureRootFiles()` method was removed from `sync-engine.ts` entirely — `t
 - Protected root files cannot be accidentally overwritten
 - Sync engine degrades gracefully when optional config is missing
 - No more delete-recreate cycles for layer folders
+- Developers can iterate on sync changes with `--allow-dirty`
+- Full type coverage for manifest enables future code generation
+- tsconfig references now resolve correctly
 
 ### Negative
 
@@ -186,6 +315,7 @@ The `ensureRootFiles()` method was removed from `sync-engine.ts` entirely — `t
 
 - The `--force-root` flag is required for intentional root file overwrites
 - Empty folders are only deleted if truly empty (no `index.ts`)
+- The `--allow-dirty` flag is available but not default
 
 ---
 
@@ -210,10 +340,14 @@ yarn sync --dry-run  # Completes without mutations
 
 ---
 
-## Open Items
+## CLI Reference
 
-The following issues remain for Phase B:
+After these changes, the sync engine supports:
 
-1. `tsconfig.ts` — References path uses wrong relative path (`../packages/${name}` vs `../${name}`)
-2. `sync-engine.ts` — Git clean check blocks sync during development (needs `--allow-dirty` flag)
-3. `types/manifest.ts` — Missing type definitions for `ports`, `entities`, `use_cases`, `adapters`
+| Flag            | Description                                             |
+| --------------- | ------------------------------------------------------- |
+| `--dry-run`     | Preview changes without writing files                   |
+| `--force`       | Overwrite non-generated files in packages               |
+| `--force-root`  | Overwrite protected root files (turbo.json, .gitignore) |
+| `--allow-dirty` | Skip git clean check (for development)                  |
+| `--strict`      | Fail on arch-linter warnings                            |
