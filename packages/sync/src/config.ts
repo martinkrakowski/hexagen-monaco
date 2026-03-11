@@ -1,4 +1,4 @@
-import type { Manifest } from '@hexagen/sync';
+import type { Manifest } from "@hexagen/sync";
 
 // Temporary internal logger
 interface Logger {
@@ -29,6 +29,7 @@ export interface SyncFlags {
   dryRun: boolean;
   force: boolean;
   forceRoot: boolean;
+  allowDirty: boolean;
   strict: boolean;
   logger: Logger;
 }
@@ -45,6 +46,7 @@ export function parseArgs(rawArgs: string[]): SyncFlags {
   const flags: SyncFlags = {
     force: false,
     forceRoot: false,
+    allowDirty: false,
     dryRun: false,
     strict: false,
     logger: internalLogger,
@@ -54,26 +56,30 @@ export function parseArgs(rawArgs: string[]): SyncFlags {
     const arg = args[i];
 
     switch (arg) {
-      case '--force':
-      case '-f':
+      case "--force":
+      case "-f":
         flags.force = true;
         break;
 
-      case '--force-root':
+      case "--force-root":
         flags.forceRoot = true;
         break;
 
-      case '--dry-run':
-      case '--dry':
+      case "--dry-run":
+      case "--dry":
         flags.dryRun = true;
         break;
 
-      case '--strict':
+      case "--strict":
         flags.strict = true;
         break;
 
+      case "--allow-dirty":
+        flags.allowDirty = true;
+        break;
+
       default:
-        if (arg.startsWith('-')) {
+        if (arg.startsWith("-")) {
           flags.logger.warn(`Unknown flag ignored: ${arg}`);
         }
         break;
