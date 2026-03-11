@@ -1,4 +1,4 @@
-import type { Result } from '@hexagen/sync/domain';
+import type { Result } from "../../../domain/result.js";
 
 /**
  * Represents ownership of a port by a package.
@@ -25,7 +25,7 @@ export interface OwnershipRegistryPort {
    */
   registerPortOwnership(
     portName: string,
-    owningPackage: string
+    owningPackage: string,
   ): Promise<Result<void, Error>>;
 
   /**

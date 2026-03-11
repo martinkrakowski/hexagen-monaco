@@ -6,8 +6,8 @@ import type {
   BootstrapStep,
   InvariantPriority,
   FailureMode,
-} from '@hexagen/sync';
-import type { Result } from '@hexagen/sync/domain';
+} from "@hexagen/sync";
+import type { Result } from "../../domain/result.js";
 
 export class InMemoryConfigDouble
   implements OwnershipRegistryPort, GeneratorConfigPort
@@ -15,15 +15,18 @@ export class InMemoryConfigDouble
   private invariants: InvariantConfig[] = [];
   private bootstrapSequence: BootstrapStep[] = [];
   // Default failure behaviours – used for reset/clear operations.
-  private static readonly DEFAULT_FAILURE_BEHAVIORS: Record<InvariantPriority, FailureMode> = {
-    critical: 'abort-and-cleanup',
-    high: 'abort',
-    medium: 'warn-and-continue',
+  private static readonly DEFAULT_FAILURE_BEHAVIORS: Record<
+    InvariantPriority,
+    FailureMode
+  > = {
+    critical: "abort-and-cleanup",
+    high: "abort",
+    medium: "warn-and-continue",
   };
   private failureBehaviors: Record<InvariantPriority, FailureMode> = {
-    critical: 'abort-and-cleanup',
-    high: 'abort',
-    medium: 'warn-and-continue',
+    critical: "abort-and-cleanup",
+    high: "abort",
+    medium: "warn-and-continue",
   };
   private ownershipMap: PortOwnershipRecord[] = [];
 
@@ -51,7 +54,7 @@ export class InMemoryConfigDouble
 
   async registerPortOwnership(
     portName: string,
-    owningPackage: string
+    owningPackage: string,
   ): Promise<Result<void, Error>> {
     const existing = this.ownershipMap.find((r) => r.portName === portName);
 
@@ -60,7 +63,7 @@ export class InMemoryConfigDouble
         return {
           success: false,
           error: new Error(
-            `Port ${portName} already owned by ${existing.owningPackage}`
+            `Port ${portName} already owned by ${existing.owningPackage}`,
           ),
         };
       }
@@ -73,7 +76,7 @@ export class InMemoryConfigDouble
 
   async canDeclarePort(
     portName: string,
-    contextName: string
+    contextName: string,
   ): Promise<boolean> {
     const existing = this.ownershipMap.find((r) => r.portName === portName);
     return !existing || existing.owningPackage === contextName;
@@ -92,11 +95,11 @@ export class InMemoryConfigDouble
   }
 
   async getFailureBehavior(priority: InvariantPriority): Promise<FailureMode> {
-    return this.failureBehaviors[priority] ?? 'warn-and-continue';
+    return this.failureBehaviors[priority] ?? "warn-and-continue";
   }
 
   async getInvariantPriority(
-    invariantName: string
+    invariantName: string,
   ): Promise<InvariantPriority | null> {
     return (
       this.invariants.find((i) => i.name === invariantName)?.priority ?? null
@@ -118,8 +121,12 @@ export class InMemoryConfigDouble
 
   setFailureBehavior(priority: InvariantPriority, mode: FailureMode): void {
     // Runtime validation – ensure the provided priority and mode are valid enum values.
-    const validPriorities: InvariantPriority[] = ['critical', 'high', 'medium'];
-    const validModes: FailureMode[] = ['abort', 'abort-and-cleanup', 'warn-and-continue'];
+    const validPriorities: InvariantPriority[] = ["critical", "high", "medium"];
+    const validModes: FailureMode[] = [
+      "abort",
+      "abort-and-cleanup",
+      "warn-and-continue",
+    ];
     if (!validPriorities.includes(priority)) {
       throw new Error(`Invalid InvariantPriority '${priority}'.`);
     }
@@ -137,7 +144,9 @@ export class InMemoryConfigDouble
     this.invariants = [];
     this.bootstrapSequence = [];
     // Reset failure behaviours to a fresh copy of the defaults.
-    this.failureBehaviors = { ...InMemoryConfigDouble.DEFAULT_FAILURE_BEHAVIORS };
+    this.failureBehaviors = {
+      ...InMemoryConfigDouble.DEFAULT_FAILURE_BEHAVIORS,
+    };
     this.ownershipMap = [];
   }
 }

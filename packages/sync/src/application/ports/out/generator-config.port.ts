@@ -1,14 +1,14 @@
-import type { Result } from '@hexagen/sync/domain';
+import type { Result } from "../../../domain/result.js";
 
 /**
  * The priority level for an invariant.
  */
-export type InvariantPriority = 'critical' | 'high' | 'medium';
+export type InvariantPriority = "critical" | "high" | "medium";
 
 /**
  * How the system should behave when an invariant fails.
  */
-export type FailureMode = 'abort' | 'abort-and-cleanup' | 'warn-and-continue';
+export type FailureMode = "abort" | "abort-and-cleanup" | "warn-and-continue";
 
 /**
  * Configuration for a single invariant.
@@ -21,7 +21,7 @@ export interface InvariantConfig {
   /** Importance of the invariant. */
   priority: InvariantPriority;
   /** When the invariant is enforced. */
-  enforcement?: 'bootstrap' | 'generation-time';
+  enforcement?: "bootstrap" | "generation-time";
   /** Failure handling strategy. */
   failure: FailureMode;
 }
@@ -51,7 +51,9 @@ export interface GeneratorConfigPort {
   getFailureBehavior(priority: InvariantPriority): Promise<FailureMode>;
 
   /** Get the configured priority for a named invariant. */
-  getInvariantPriority(invariantName: string): Promise<InvariantPriority | null>;
+  getInvariantPriority(
+    invariantName: string,
+  ): Promise<InvariantPriority | null>;
 
   /** Get all invariants with their configurations. */
   getAllInvariants(): Promise<Result<InvariantConfig[], Error>>;
