@@ -284,8 +284,12 @@ export class SyncEngine {
         manifest: this.manifest,
       } as const;
 
-      // Pre‑flight: build any stale packages
-      await ensureDependenciesBuilt(this.fullConfig!);
+      // Pre-flight: build any stale packages (skip in external mode)
+      if (mode === "self-regen") {
+        await ensureDependenciesBuilt(this.fullConfig!);
+      } else {
+        logger.info("Skipping preflight build (external mode)");
+      }
 
       const layerResult = await this.ensureDirectories();
       const { barrels, stubs, pkgs, tsconfigs, totalOps } =
