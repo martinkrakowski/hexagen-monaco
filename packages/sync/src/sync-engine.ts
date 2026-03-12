@@ -218,8 +218,10 @@ export class SyncEngine {
         config,
         this.report,
       );
-      // Reap legacy layer folders after successful generation for this module
-      await reapLegacyFolders(moduleDir, config, this.report);
+      // Reap legacy layer folders after successful generation for this module (skip in external mode)
+      if (this.partialConfig.mode === "self-regen") {
+        await reapLegacyFolders(moduleDir, config, this.report);
+      }
 
       barrels.created.push(...barrelResult.created);
       barrels.skipped.push(...barrelResult.skipped);
