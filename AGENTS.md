@@ -399,18 +399,6 @@ Any adapter method that catches an error and returns `null`, `false`, or a defau
 
 ---
 
-## Appendix: Open Items
-
-These are known gaps that should be resolved:
-
-1. **Ownership registry drift** — No structural enforcement that every new port raises `PortDeclaredEvent`. Needs a lint rule or pre-commit hook scanning port declarations against `generator.config.yaml`.
-
-2. **Concurrent sync sessions** — `YamlConfigAdapter` has no file locking. Two parallel CI builds against the same workspace root will produce conflicting writes. Document as a single-session limitation until file locking is implemented.
-
-3. **Step-to-use-case mapping** — `ExecuteBootstrapSequenceUseCase` must map step name strings to concrete use case classes. The mapping strategy (registry map, strategy pattern, or convention-based lookup) must be decided as the first design decision of that slice.
-
----
-
 ## Document History
 
 | Date       | Change                                                       |
