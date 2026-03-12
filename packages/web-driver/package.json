@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hexagen/monaco-orchestration": "workspace:*",
+    "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*"
   },
   "devDependencies": {
