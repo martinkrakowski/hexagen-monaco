@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   verify-sync:
     name: "Verify Sync Engine & Hexagonal Structure"
@@ -33,7 +36,7 @@ jobs:
 
       - name: "Build All Packages"
         # Build everything first so turbo CLI and all dependencies are available
-        run: yarn build
+        run: yarn build --verbose 2>&1 || (echo "::error::Build failed. See logs above for details." && exit 1)
 
       - name: "Execute Hardened Sync"
         # We use --force and --allow-dirty here for CI environment
