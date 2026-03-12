@@ -31,6 +31,7 @@ export interface SyncFlags {
   forceRoot: boolean;
   allowDirty: boolean;
   strict: boolean;
+  /** Mode is set programmatically (not via CLI). Use 'self-regen' for CLI, 'external' for API-driven generation */
   mode: "self-regen" | "external";
   logger: Logger;
 }

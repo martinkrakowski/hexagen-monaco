@@ -33,7 +33,8 @@ export async function POST(request: Request) {
       message: "Project generation stub completed",
       projectId,
     });
-  } catch {
+  } catch (err) {
+    console.error("[api/generate] Error:", err);
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 },

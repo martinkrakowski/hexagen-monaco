@@ -33,9 +33,3 @@ export const generateProjectUseCase = (
   generator: ExternalProjectGeneratorPort,
   zipCreator: ZipCreatorPort,
 ) => new GenerateProjectUseCase(generator, zipCreator);
-
-export const downloadProjectUseCase = () => {
-  throw new Error(
-    "downloadProjectUseCase not yet ported to hexagonal style — coming in next iteration",
-  );
-};

@@ -46,13 +46,12 @@ export class SyncEngine {
   private fullConfig: SyncConfig | null = null;
   private manifest: Manifest = {};
   private workspaceRoot: string = "";
+  private readonly options?: SyncEngineOptions;
 
   constructor(flags: SyncFlags, options?: SyncEngineOptions) {
     this.partialConfig = flags;
     this.options = options;
   }
-
-  private readonly options?: SyncEngineOptions;
 
   private async findWorkspaceRoot(): Promise<string> {
     if (this.options?.targetRoot) {
@@ -89,13 +88,13 @@ export class SyncEngine {
       this.workspaceRoot,
       ".architecture/manifest.yaml",
     );
-    logger.info(`[debug] __dirname (ESM): ${__dirname}`);
-    logger.info(`[debug] resolved workspaceRoot: ${this.workspaceRoot}`);
-    logger.info(`[debug] resolved manifestPath: ${manifestPath}`);
+    logger.debug(`[debug] __dirname (ESM): ${__dirname}`);
+    logger.debug(`[debug] resolved workspaceRoot: ${this.workspaceRoot}`);
+    logger.debug(`[debug] resolved manifestPath: ${manifestPath}`);
 
     try {
       await fs.access(manifestPath);
-      logger.info("[debug] fs.access succeeded");
+      logger.debug("[debug] fs.access succeeded");
     } catch (err) {
       if (
         err instanceof Error &&

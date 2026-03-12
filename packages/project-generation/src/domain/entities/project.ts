@@ -1,12 +1,20 @@
 export class Project {
+  private _files: Map<string, string>;
+
   private constructor(
     public readonly id: string,
     public readonly name: string,
     public readonly rootName: string,
-    public readonly files: Map<string, string> = new Map(),
+    files: Map<string, string> = new Map(),
     public readonly createdAt: Date = new Date(),
     public readonly updatedAt: Date = new Date(),
-  ) {}
+  ) {
+    this._files = new Map(files);
+  }
+
+  get files(): ReadonlyMap<string, string> {
+    return this._files;
+  }
 
   static create(props: {
     id: string;
@@ -23,7 +31,7 @@ export class Project {
       props.id,
       props.name.trim(),
       props.rootName.trim().toLowerCase().replace(/\s+/g, "-"),
-      props.files ?? new Map(),
+      props.files,
     );
   }
 
@@ -33,7 +41,7 @@ export class Project {
       props.name?.trim() ?? this.name,
       props.rootName?.trim().toLowerCase().replace(/\s+/g, "-") ??
         this.rootName,
-      this.files,
+      this._files,
       this.createdAt,
       new Date(),
     );
