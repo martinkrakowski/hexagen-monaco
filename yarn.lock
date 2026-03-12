@@ -723,7 +723,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/web-driver@workspace:packages/web-driver":
+"@hexagen/web-driver@workspace:*, @hexagen/web-driver@workspace:packages/web-driver":
   version: 0.0.0-use.local
   resolution: "@hexagen/web-driver@workspace:packages/web-driver"
   dependencies:
@@ -6929,9 +6929,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "web@workspace:apps/web"
   dependencies:
+    "@hexagen/monaco-orchestration": "workspace:*"
     "@hexagen/project-configuration": "workspace:*"
     "@hexagen/project-generation": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/web-driver": "workspace:*"
     "@hookform/resolvers": "npm:^3.9.0"
     "@monaco-editor/react": "npm:^4.6.0"
     "@types/file-saver": "npm:^2.0.7"

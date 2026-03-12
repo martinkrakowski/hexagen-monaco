@@ -10,9 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hexagen/monaco-orchestration": "workspace:*",
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/project-generation": "workspace:*",
     "@hexagen/shared": "workspace:*",
+    "@hexagen/web-driver": "workspace:*",
     "@hookform/resolvers": "^3.9.0",
     "@monaco-editor/react": "^4.6.0",
     "@types/react-dom": "^19.2.3",

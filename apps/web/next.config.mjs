@@ -9,16 +9,19 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: [
-    "@hexagen/project-generation",
+    "@hexagen/monaco-orchestration",
     "@hexagen/project-configuration",
+    "@hexagen/project-generation",
+    "@hexagen/shared",
+    "@hexagen/web-driver",
   ],
 
   // Turbopack configuration (Next.js 16+ default bundler)
   turbopack: {
-    // Set root to monorepo root for proper workspace resolution in CI
-    root: path.resolve(__dirname, "../.."),
+    // Set root to monorepo root (two levels up from apps/web)
+    root: path.join(__dirname, "..", ".."),
     resolveAlias: {
-      "@": path.resolve(__dirname, "app"),
+      "@": path.join(__dirname, "app"),
     },
   },
 };
