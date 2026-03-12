@@ -6,16 +6,17 @@ import { getMonacoPersistence } from "@/lib/wire";
 import { MonacoSession } from "@hexagen/monaco-orchestration";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-// TODO: wire real GenerateProjectUseCase here (use-case from project-generation)
-// The project-generation package is built but Turbopack has issues resolving workspace modules
+// TODO: Wire real GenerateProjectUseCase after resolving Turbopack workspace resolution
+// The @hexagen/project-generation package builds but Turbopack can't resolve its exports
+// Possible fixes:
+// 1. Configure package to emit .js files (currently emitDeclarationOnly)
+// 2. Use Next.js transpilePackages
+// 3. Switch to webpack (next.config.js)
 export async function POST(request: Request) {
   try {
     const rawSpec = (await request.json()) as ProjectConfig;
 
     // Placeholder - replace with real use-case call
-    // console.info('Generating project from spec:', rawSpec);
-
-    // Generate project ID (or use real generator later)
     const projectId = "generated-" + Date.now();
 
     // Save the spec as session content (for persistence round-trip demo)
@@ -33,7 +34,6 @@ export async function POST(request: Request) {
       projectId,
     });
   } catch {
-    // console.error('Generate route error:', err);
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 },
