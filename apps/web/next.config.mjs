@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Monorepo root is two levels up from apps/web
+const monorepoRoot = path.resolve(__dirname, "../..");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -16,17 +19,13 @@ const nextConfig = {
     "@hexagen/web-driver",
   ],
 
-  // Turbopack configuration (Next.js 16+ default bundler)
-  turbopack: {
-    // Set root to monorepo root (two levels up from apps/web)
-    root: path.join(__dirname, "..", ".."),
-    resolveAlias: {
-      "@": path.join(__dirname, "app"),
-    },
-  },
-
   // Ensure proper build output handling for monorepo environments
   distDir: ".next",
+
+  // Set Turbopack root for monorepo workspace resolution (Next.js 16+)
+  turbopack: {
+    root: monorepoRoot,
+  },
 };
 
 export default nextConfig;
