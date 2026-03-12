@@ -24,30 +24,32 @@ export class GenerateProjectUseCase {
   async execute(
     input: GenerateProjectInput,
   ): Promise<Result<GenerateProjectOutput, Error>> {
-    try {
-      const project = await this.generator.generateAt(
-        input.targetRoot,
-        input.manifest,
-      );
+    const genResult = await this.generator.generateAt(
+      input.targetRoot,
+      input.manifest,
+    );
 
-      let zipBuffer: Buffer | undefined;
-      if (input.outputFormat === "zip") {
-        const zipResult = await this.zipCreator.createZip(project);
-        if (!zipResult.success) {
-          return { success: false, error: new Error(zipResult.error.message) };
-        }
-        zipBuffer = zipResult.value;
-      }
-
-      return {
-        success: true,
-        value: { project, zipBuffer },
-      };
-    } catch (err) {
+    if (!genResult.success) {
       return {
         success: false,
-        error: err instanceof Error ? err : new Error(String(err)),
+        error: new Error(genResult.error.message),
       };
     }
+
+    const project = genResult.value;
+
+    let zipBuffer: Buffer | undefined;
+    if (input.outputFormat === "zip") {
+      const zipResult = await this.zipCreator.createZip(project);
+      if (!zipResult.success) {
+        return { success: false, error: new Error(zipResult.error.message) };
+      }
+      zipBuffer = zipResult.value;
+    }
+
+    return {
+      success: true,
+      value: { project, zipBuffer },
+    };
   }
 }

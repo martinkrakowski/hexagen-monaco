@@ -1,6 +1,10 @@
 import { SyncEngine, type Manifest, type SyncFlags } from "@hexagen/sync";
-import type { ExternalProjectGeneratorPort } from "../../application/ports/out/external-project-generator.port.js";
+import type {
+  ExternalProjectGeneratorPort,
+  GeneratorError,
+} from "../../application/ports/out/external-project-generator.port.js";
 import { Project } from "../../domain/entities/project.js";
+import type { Result } from "@hexagen/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
@@ -12,44 +16,68 @@ const noopLogger = {
   debug: () => {},
 };
 
+function generateId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `fallback-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
-  async generateAt(targetRoot: string, manifest: Manifest): Promise<Project> {
-    await fs.mkdir(targetRoot, { recursive: true });
+  async generateAt(
+    targetRoot: string,
+    manifest: Manifest,
+  ): Promise<Result<Project, GeneratorError>> {
+    try {
+      await fs.mkdir(targetRoot, { recursive: true });
 
-    const archDir = path.join(targetRoot, ".architecture");
-    await fs.mkdir(archDir, { recursive: true });
-    await fs.writeFile(
-      path.join(archDir, "manifest.yaml"),
-      yaml.dump(manifest),
-      "utf8",
-    );
+      const archDir = path.join(targetRoot, ".architecture");
+      await fs.mkdir(archDir, { recursive: true });
+      await fs.writeFile(
+        path.join(archDir, "manifest.yaml"),
+        yaml.dump(manifest),
+        "utf8",
+      );
 
-    const flags: SyncFlags = {
-      dryRun: false,
-      force: true,
-      forceRoot: false,
-      allowDirty: true,
-      strict: false,
-      mode: "external",
-      logger: noopLogger,
-    };
+      const flags: SyncFlags = {
+        dryRun: false,
+        force: true,
+        forceRoot: false,
+        allowDirty: true,
+        strict: false,
+        mode: "external",
+        logger: noopLogger,
+      };
 
-    const engine = new SyncEngine(flags, {
-      targetRoot,
-      manifest,
-    });
+      const engine = new SyncEngine(flags, {
+        targetRoot,
+        manifest,
+      });
 
-    await engine.run();
+      await engine.run();
 
-    const files = await this.collectFileTree(targetRoot);
+      const files = await this.collectFileTree(targetRoot);
 
-    const projectName = manifest.system ?? "generated-project";
-    return Project.create({
-      id: crypto.randomUUID(),
-      name: projectName,
-      rootName: projectName.toLowerCase().replace(/\s+/g, "-"),
-      files,
-    });
+      const projectName = manifest.system ?? "generated-project";
+      const project = Project.create({
+        id: generateId(),
+        name: projectName,
+        rootName: projectName.toLowerCase().replace(/\s+/g, "-"),
+        files,
+      });
+
+      return { success: true, value: project };
+    } catch (err) {
+      return {
+        success: false,
+        error: {
+          code: "GENERATION_FAILED",
+          message:
+            err instanceof Error ? err.message : "Unknown generation error",
+          cause: err,
+        },
+      };
+    }
   }
 
   private async collectFileTree(

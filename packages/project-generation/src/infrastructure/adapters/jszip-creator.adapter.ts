@@ -22,7 +22,8 @@ export class JsZipCreatorAdapter implements ZipCreatorPort {
         success: false,
         error: {
           code: "ZIP_CREATION_FAILED",
-          message: "Failed to create zip file",
+          message:
+            err instanceof Error ? err.message : "Failed to create zip file",
           cause: err,
         },
       };
