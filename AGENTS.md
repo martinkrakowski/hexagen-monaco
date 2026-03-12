@@ -24,7 +24,7 @@ yarn lint && yarn typecheck
 **After editing `.architecture/` files:**
 
 ```bash
-yarn hooks:validate
+yarn lint:arch
 ```
 
 **After running `yarn sync`:**
@@ -59,14 +59,14 @@ yarn build && yarn typecheck
 | **Before starting work**  | `yarn build && yarn typecheck && yarn lint` | **STOP** — fix existing errors before proceeding |
 | Any `.ts` / `.tsx` edit   | `yarn lint`                                 | Fix lint errors before continuing                |
 | Any `.ts` / `.tsx` edit   | `yarn typecheck`                            | Fix type errors before continuing                |
-| Any `.architecture/` edit | `yarn hooks:validate`                       | **STOP** — do not proceed until valid            |
+| Any `.architecture/` edit | `yarn lint:arch`                            | **STOP** — do not proceed until valid            |
 | After `yarn sync`         | `yarn build && yarn typecheck`              | Fix generator output before committing           |
 | Before committing         | `yarn test`                                 | Fix failing tests                                |
 
 **Failure protocol:**
 
 - `build` / `typecheck` / `lint` failures: Fix immediately, do not accumulate errors
-- `hooks:validate` failure: Architecture is invalid — stop and request clarification
+- `lint:arch` failure: Architecture is invalid — stop and request clarification
 - `test` failure: Diagnose root cause, do not delete tests to make them pass
 
 ---
@@ -373,7 +373,7 @@ Any adapter method that catches an error and returns `null`, `false`, or a defau
 
 - `manifest.yaml` is the source of truth for bounded contexts
 - `generator.config.yaml` is auto-maintained — **never edit directly**
-- Run `yarn hooks:validate` after any edit to `.architecture/`
+- Run `yarn lint:arch` after any edit to `.architecture/`
 - ADRs go in `.architecture/decisions/` with format `NNNN-title.md`
 
 ---
