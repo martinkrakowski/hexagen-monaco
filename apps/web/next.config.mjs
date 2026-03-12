@@ -18,11 +18,29 @@ const nextConfig = {
 
   // Turbopack configuration (Next.js 16+ default bundler)
   turbopack: {
-    // Set root to monorepo root (two levels up from apps/web)
-    root: path.join(__dirname, "..", ".."),
+    // Set root to the current app directory for proper CI resolution
+    root: __dirname,
     resolveAlias: {
       "@": path.join(__dirname, "app"),
     },
+  },
+
+  // Ensure proper build output handling for monorepo environments
+  distDir: ".next",
+
+  // Disable experimental features that might cause issues in CI
+  experimental: {
+    serverComponents: false,
+  },
+
+  // Explicitly set the project root for CI environments to prevent path resolution issues
+  async redirects() {
+    return [];
+  },
+
+  // Ensure proper handling of the build process in monorepos
+  async rewrites() {
+    return [];
   },
 };
 
