@@ -31,6 +31,7 @@ export interface SyncFlags {
   forceRoot: boolean;
   allowDirty: boolean;
   strict: boolean;
+  mode: "self-regen" | "external";
   logger: Logger;
 }
 
@@ -49,6 +50,7 @@ export function parseArgs(rawArgs: string[]): SyncFlags {
     allowDirty: false,
     dryRun: false,
     strict: false,
+    mode: "self-regen",
     logger: internalLogger,
   };
 
