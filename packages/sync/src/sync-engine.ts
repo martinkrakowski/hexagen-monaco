@@ -297,8 +297,12 @@ export class SyncEngine {
       const { barrels, stubs, pkgs, tsconfigs, totalOps } =
         await this.generateCoreArtifacts();
 
-      await runArchLinter(this.fullConfig);
-      await this.report.writeReport(this.fullConfig!);
+      if (mode === "self-regen") {
+        await runArchLinter(this.fullConfig);
+        await this.report.writeReport(this.fullConfig!);
+      } else {
+        logger.info("Skipping arch-linter and report (external mode)");
+      }
 
       const duration = Date.now() - start;
 
