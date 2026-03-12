@@ -555,6 +555,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/agentic-interaction@workspace:packages/agentic-interaction"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -593,6 +594,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/architectural-enforcement@workspace:packages/architectural-enforcement"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -603,6 +605,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/code-generation@workspace:packages/code-generation"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -613,6 +616,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/deployment@workspace:packages/deployment"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -623,6 +627,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/messaging@workspace:packages/messaging"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -633,6 +638,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/monaco-orchestration@workspace:packages/monaco-orchestration"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -643,6 +649,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/persistence@workspace:packages/persistence"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -653,6 +660,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/project-configuration@workspace:packages/project-configuration"
   dependencies:
+    "@hexagen/shared": "workspace:*"
+    "@hexagen/sync": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -685,10 +694,11 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/sync@workspace:^, @hexagen/sync@workspace:packages/sync":
+"@hexagen/sync@workspace:*, @hexagen/sync@workspace:^, @hexagen/sync@workspace:packages/sync":
   version: 0.0.0-use.local
   resolution: "@hexagen/sync@workspace:packages/sync"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^25.3.5"
     js-yaml: "npm:^4.1.0"
@@ -701,6 +711,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/visualization@workspace:packages/visualization"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
@@ -711,6 +722,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/web-driver@workspace:packages/web-driver"
   dependencies:
+    "@hexagen/sync": "workspace:*"
     "@types/node": "npm:^20.0.0"
     typescript: "npm:^5.0.0"
   languageName: unknown
