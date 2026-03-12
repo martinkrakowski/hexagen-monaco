@@ -10,6 +10,10 @@
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@hexagen/shared": "workspace:*",
+    "zod": "^3.23.8"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"

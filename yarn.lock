@@ -665,6 +665,7 @@ __metadata:
     "@types/node": "npm:^20.0.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
+    zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
 
@@ -732,8 +733,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/wizard-orchestration@workspace:packages/wizard-orchestration"
   dependencies:
+    "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
     typescript: "npm:^5.0.0"
+    zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
 
