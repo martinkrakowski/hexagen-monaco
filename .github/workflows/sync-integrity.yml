@@ -1,19 +1,15 @@
 name: "Architectural Integrity Check"
-
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   verify-sync:
     name: "Verify Sync Engine & Hexagonal Structure"
     runs-on: ubuntu-latest
-
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@v4
@@ -35,19 +31,16 @@ jobs:
         run: yarn install --immutable
 
       - name: "Build All Packages"
-        # Build everything first so turbo CLI and all dependencies are available
-        run: yarn build --verbose --output-logs=full 2>&1 || (echo "::error::Build failed. See logs above for details." && exit 1)
+        run: yarn turbo run build --output-logs=full --log-order=stream
 
       - name: "Execute Hardened Sync"
-        # We use --force and --allow-dirty here for CI environment
-        # The sync engine verifies architectural rules are not violated.
         run: yarn sync --force --allow-dirty
 
       - name: "Verify Build After Sync"
-        run: yarn build
+        run: yarn turbo run build --output-logs=full --log-order=stream --force
 
       - name: "Verify TypeCheck After Sync"
-        run: yarn typecheck
+        run: yarn turbo run typecheck --output-logs=full --log-order=stream
 
       - name: "Verify Architectural Rules After Sync"
         run: yarn sync:dry
