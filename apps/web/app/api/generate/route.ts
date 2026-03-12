@@ -7,6 +7,7 @@ import { MonacoSession } from "@hexagen/monaco-orchestration";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 // TODO: wire real GenerateProjectUseCase here (use-case from project-generation)
+// The project-generation package is built but Turbopack has issues resolving workspace modules
 export async function POST(request: Request) {
   try {
     const rawSpec = (await request.json()) as ProjectConfig;
