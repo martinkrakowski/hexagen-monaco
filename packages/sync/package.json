@@ -24,7 +24,7 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/cli.js"
+      "default": "./dist/index.js"
     }
   }
 }

@@ -656,7 +656,10 @@ __metadata:
   resolution: "@hexagen/project-generation@workspace:packages/project-generation"
   dependencies:
     "@hexagen/project-configuration": "workspace:*"
+    "@hexagen/sync": "workspace:^"
+    "@types/js-yaml": "npm:^4"
     "@types/jszip": "npm:^3.4.1"
+    js-yaml: "npm:^4.1.1"
     jszip: "npm:^3.10.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.4.5"
@@ -672,7 +675,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/sync@workspace:packages/sync":
+"@hexagen/sync@workspace:^, @hexagen/sync@workspace:packages/sync":
   version: 0.0.0-use.local
   resolution: "@hexagen/sync@workspace:packages/sync"
   dependencies:
@@ -1233,7 +1236,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/js-yaml@npm:^4.0.9":
+"@types/js-yaml@npm:^4, @types/js-yaml@npm:^4.0.9":
   version: 4.0.9
   resolution: "@types/js-yaml@npm:4.0.9"
   checksum: 10c0/24de857aa8d61526bbfbbaa383aa538283ad17363fcd5bb5148e2c7f604547db36646440e739d78241ed008702a8920665d1add5618687b6743858fae00da211
