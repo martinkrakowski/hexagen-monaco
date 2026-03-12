@@ -579,6 +579,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/arch-linter@workspace:tools/arch-linter"
   dependencies:
+    "@hexagen/sync": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/lodash": "npm:^4.17.7"
     "@types/node": "npm:^20.12.7"
@@ -587,6 +588,7 @@ __metadata:
     lodash: "npm:^4.17.21"
     ts-morph: "npm:^27.0.2"
     typescript: "npm:^5.5.3"
+    zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
 
