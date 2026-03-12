@@ -1,12 +1,14 @@
 import type {
   OwnershipRegistryPort,
   PortOwnershipRecord,
+} from "../../application/ports/out/ownership-registry.port.js";
+import type {
   GeneratorConfigPort,
   InvariantConfig,
   BootstrapStep,
   InvariantPriority,
   FailureMode,
-} from "@hexagen/sync";
+} from "../../application/ports/out/generator-config.port.js";
 import type { Result } from "../../domain/result.js";
 
 export class InMemoryConfigDouble
