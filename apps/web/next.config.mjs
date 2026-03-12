@@ -15,6 +15,8 @@ const nextConfig = {
 
   // Turbopack configuration (Next.js 16+ default bundler)
   turbopack: {
+    // Set root to monorepo root for proper workspace resolution in CI
+    root: path.resolve(__dirname, "../.."),
     resolveAlias: {
       "@": path.resolve(__dirname, "app"),
     },
