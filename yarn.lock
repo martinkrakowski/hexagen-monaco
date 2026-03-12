@@ -678,6 +678,7 @@ __metadata:
   resolution: "@hexagen/project-generation@workspace:packages/project-generation"
   dependencies:
     "@hexagen/project-configuration": "workspace:*"
+    "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:^"
     "@types/js-yaml": "npm:^4"
     "@types/jszip": "npm:^3.4.1"
