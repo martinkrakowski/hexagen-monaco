@@ -1,4 +1,4 @@
-import type { TelemetryPort } from "@hexagen/project-configuration";
+import type { TelemetryPort } from "../../application/ports/out/telemetry.port.js";
 
 export class OpenTelemetryAdapter implements TelemetryPort {
   recordMetric(name: string, value: number): void {

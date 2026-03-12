@@ -1,4 +1,4 @@
-import type { Manifest } from "@hexagen/sync";
+import type { Manifest } from "./types/manifest.js";
 
 // Temporary internal logger
 interface Logger {

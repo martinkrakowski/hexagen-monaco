@@ -21,6 +21,11 @@ export async function generateTsconfig(
   // Don't generate tsconfig references automatically.
   // References create build-order dependencies and can cause circular issues.
   // The monorepo build tool (turbo) handles dependency ordering via package.json dependencies.
+  //
+  // IMPORTANT: We override "paths" to empty object to prevent inheriting paths from
+  // tsconfig.base.json. Without this, TypeScript will try to resolve @hexagen/* imports
+  // to source files in other packages, causing TS6059/TS6307 errors about files not
+  // being under rootDir.
   const content = `{
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
@@ -29,7 +34,8 @@ export async function generateTsconfig(
     "declaration": true,
     "emitDeclarationOnly": true,
     "composite": true,
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+    "paths": {}
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
