@@ -16,9 +16,11 @@
   "dependencies": {
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
+    "jszip": "^3.10.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/jszip": "^3.4.1",
     "@types/node": "^20.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.0.0"
