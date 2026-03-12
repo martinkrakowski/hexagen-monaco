@@ -48,6 +48,7 @@ yarn build && yarn typecheck
 - [8. Testing Protocol](#8-testing-protocol)
 - [9. Subsystem-Specific Rules](#9-subsystem-specific-rules)
 - [10. Interaction Protocol](#10-interaction-protocol)
+- [11. Agent Editing Discipline](#11-agent-editing-discipline)
 - [Appendix: Open Items](#appendix-open-items)
 
 ---
@@ -103,8 +104,6 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 **Output:** Concepts, trade-offs, risks — always anchored to hexagonal/DDD principles.  
 **Constraints:** No code. No file paths. No implementation decisions. Surface options; do not converge.
 
----
-
 ### 🏗️ Architect Mode
 
 **Triggers:** "architect", "design", "plan", "update .architecture/manifest.yaml", structural decisions.  
@@ -128,8 +127,6 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 3. All diagram nodes match the YAML sequence
 4. No port declared in more than one bounded context
 
----
-
 ### 🔨 Develop Mode
 
 **Triggers:** "develop [feature]", "implement", "code", "next step".  
@@ -143,24 +140,31 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 5. After completing a meaningful slice (port + adapter + test double): remind to run `yarn build` and `yarn sync`.
 6. Never leave a barrel file with only `export {}`. Omit the barrel until it has at least one real export.
 
+**Additional strict rules (enforced on every Develop response):**
+
+- **Minimal scoped changes only**: Never perform cosmetic reformatting (e.g. single quotes ↔ double quotes, whitespace, semicolons, etc.). Only edit lines required for the feature. Always respect `.vscode/settings.json` (Prettier singleQuote: true, tabSize: 2, formatOnSave). If a file already matches editor formatting, leave it untouched.
+- **Multi-phase pause + review**: For any feature spanning >1 logical phase (e.g. invariant checker → bootstrap integration → tests), stop after each phase, provide a concise summary table of changes made, and await explicit human confirmation (“code review complete” or “next step”). Do not proceed until received.
+- **Version control discipline**: After human code review approval, run `git commit` locally with a descriptive message referencing the phase/feature. **Never** run `git push` (or any remote command) unless the human explicitly says “push now”.
+
 ---
 
 ## 4. Architectural Constraints
 
 The agent **rejects** any proposal or code that violates the following:
 
-| Constraint                                           | Reason                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------- |
-| Domain imports infrastructure                        | Violates hexagonal dependency rule                            |
-| Business logic in UI components                      | Violates separation of concerns                               |
-| Framework imports in domain layer                    | Domain must be framework-free                                 |
-| Manual edits to `generator.config.yaml`              | Must be event-driven only                                     |
-| Port declared in more than one package               | Violates port-single-ownership invariant                      |
-| Self-import by package name                          | TypeScript resolution failure                                 |
-| Barrel containing only `export {}`                   | Generation-time stub hygiene violation                        |
-| Cross-package reference to `src/` instead of `dist/` | Composite project safety violation                            |
-| Consumer signature derived from memory               | Must be read from canonical port at generation time           |
-| Catch block returning null/false/default             | Violates explicit error handling — must return `Result<T, E>` |
+| Constraint                                                 | Reason                                                                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Domain imports infrastructure                              | Violates hexagonal dependency rule                                                                                     |
+| Business logic in UI components                            | Violates separation of concerns                                                                                        |
+| Framework imports in domain layer                          | Domain must be framework-free                                                                                          |
+| Manual edits to `generator.config.yaml`                    | Must be event-driven only                                                                                              |
+| Port declared in more than one package                     | Violates port-single-ownership invariant                                                                               |
+| Self-import by package name                                | TypeScript resolution failure                                                                                          |
+| Barrel containing only `export {}`                         | Generation-time stub hygiene violation                                                                                 |
+| Cross-package reference to `src/` instead of `dist/`       | Composite project safety violation                                                                                     |
+| Consumer signature derived from memory                     | Must be read from canonical port at generation time                                                                    |
+| Catch block returning null/false/default                   | Violates explicit error handling — must return `Result<T, E>`                                                          |
+| Unnecessary reformatting (quotes, whitespace, indentation) | Violates minimal scoped change principle and pollutes git history. Agents must follow `.vscode/settings.json` exactly. |
 
 ---
 
@@ -168,7 +172,7 @@ The agent **rejects** any proposal or code that violates the following:
 
 The `.architecture/` directory is the **single source of truth for the shape of generated monorepos** — not for the generator itself. The generator has its own configuration (see §6).
 
-```
+```yaml
 .architecture/
 ├── manifest.yaml              # Main manifest — bounded contexts, ports, use cases
 ├── generator.config.yaml      # Runtime state — DO NOT EDIT DIRECTLY
@@ -399,11 +403,27 @@ Any adapter method that catches an error and returns `null`, `false`, or a defau
 
 ---
 
+## 11. Agent Editing Discipline
+
+- **Quote & formatting rule**: Single quotes only (`prettier.singleQuote: true`). Never convert existing single quotes to double quotes. Use VS Code/Prettier formatting on save as the single source of truth.
+- **Change scoping**: Diffs must be minimal. If a line is unrelated to the feature, do not touch it.
+- **Phase gating**: See Develop Mode rules above.
+- **Commit & push**: Local commit only after review. No auto-push.
+
+---
+
+## Appendix: Open Items
+
+1. Enforce `PortDeclaredEvent` on new ports (lint/hook)
+2. `YamlConfigAdapter` – no file locking (single-session only for now)
+3. `ExecuteBootstrapSequenceUseCase` – decide step→use-case mapping strategy
+
 ## Document History
 
-| Date       | Change                                                       |
-| ---------- | ------------------------------------------------------------ |
-| March 2026 | Initial version — modes, constraints, testing protocol       |
-| March 2026 | Added Quick Reference, Commands, Files Never Edit sections   |
-| March 2026 | Added Subsystem-Specific Rules, CLI Reference                |
-| March 2026 | Restructured with Table of Contents and consistent numbering |
+| Date       | Change                                                                                        |
+| ---------- | --------------------------------------------------------------------------------------------- |
+| March 2026 | Initial version — modes, constraints, testing protocol                                        |
+| March 2026 | Added Quick Reference, Commands, Files Never Edit sections                                    |
+| March 2026 | Added Subsystem-Specific Rules, CLI Reference                                                 |
+| March 2026 | Restructured with Table of Contents and consistent numbering                                  |
+| March 2026 | Added minimal-change discipline, phase gating, commit rules, Agent Editing Discipline section |
