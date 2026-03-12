@@ -25,7 +25,7 @@ export async function ensureDependenciesBuilt(
   logger.info("Pre‑flight: ensuring package dependencies are up‑to‑date...");
   try {
     // Turbo will only rebuild packages that need it based on timestamps.
-    const { stdout, stderr } = await execAsync("yarn turbo run build", {
+    const { stdout, stderr } = await execAsync("npx turbo run build", {
       maxBuffer: MAX_BUFFER,
     });
     if (stdout) logger.debug(stdout);
