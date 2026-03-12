@@ -18,15 +18,23 @@ export async function generateTsconfig(
   const result = createEmptyResult();
   const filePath = path.join(moduleDir, "tsconfig.json");
 
-  const manifestAny = config.manifest as any;
-  const allModules = [
-    ...(manifestAny.bounded_contexts?.map((m: any) => m.name) ?? []),
-    ...(manifestAny.apps?.map((a: any) => a.name) ?? []),
-  ];
-  const references = allModules
-    .filter((name) => name && name !== moduleName)
-    .map((name) => ({ path: `../${name}/tsconfig.json` }));
-  const content = `{\n  "extends": "../../tsconfig.base.json",\n  "compilerOptions": {\n    "rootDir": "src",\n    "outDir": "dist",\n    "declaration": true,\n    "emitDeclarationOnly": true,\n    "composite": true,\n    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"\n  },\n  "include": ["src/**/*"],\n  "exclude": ["node_modules", "dist"],\n  "references": ${JSON.stringify(references, null, 2)}\n}\n`;
+  // Don't generate tsconfig references automatically.
+  // References create build-order dependencies and can cause circular issues.
+  // The monorepo build tool (turbo) handles dependency ordering via package.json dependencies.
+  const content = `{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "composite": true,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+`;
 
   const status = await safeWriteFileAtomic(
     filePath,
