@@ -11,6 +11,8 @@ const monorepoRoot = path.resolve(__dirname, "../..");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  // Workspace packages to transpile
   transpilePackages: [
     "@hexagen/monaco-orchestration",
     "@hexagen/project-configuration",
@@ -30,9 +32,41 @@ const nextConfig = {
     externalDir: true,
   },
 
-  // Set Turbopack root for monorepo workspace resolution (Next.js 16+)
-  // This must be an absolute path to the monorepo root so Turbopack can
-  // resolve the 'next' package from node_modules at the workspace level
+  // Webpack configuration for monorepo package resolution
+  webpack: (config, { isServer }) => {
+    // Resolve workspace packages from the monorepo root node_modules
+    config.resolve.modules = [
+      path.resolve(monorepoRoot, "node_modules"),
+      "node_modules",
+      ...(config.resolve.modules || []),
+    ];
+
+    // Ensure proper resolution of @hexagen/* packages
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@hexagen/monaco-orchestration": path.resolve(
+        monorepoRoot,
+        "packages/monaco-orchestration/src",
+      ),
+      "@hexagen/project-configuration": path.resolve(
+        monorepoRoot,
+        "packages/project-configuration/src",
+      ),
+      "@hexagen/project-generation": path.resolve(
+        monorepoRoot,
+        "packages/project-generation/src",
+      ),
+      "@hexagen/shared": path.resolve(monorepoRoot, "packages/shared/src"),
+      "@hexagen/web-driver": path.resolve(
+        monorepoRoot,
+        "packages/web-driver/src",
+      ),
+    };
+
+    return config;
+  },
+
+  // Turbopack config (for dev mode, but we use webpack for builds due to CI issues)
   turbopack: {
     root: monorepoRoot,
   },
