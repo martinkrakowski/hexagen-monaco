@@ -252,15 +252,15 @@ export class SyncEngine {
   }
 
   async run(): Promise<void> {
-    const { logger, dryRun, allowDirty } = this.partialConfig;
+    const { logger, dryRun, allowDirty, mode } = this.partialConfig;
     const start = Date.now();
 
     logger.info(
       dryRun ? "[DRY-RUN MODE] Starting sync..." : "Starting sync...",
     );
 
-    // Ensure a clean git tree before mutating anything (unless --allow-dirty)
-    if (!allowDirty) {
+    // Ensure a clean git tree before mutating anything (unless --allow-dirty or external mode)
+    if (mode === "self-regen" && !allowDirty) {
       const { stdout: gitStatus } = await execAsync("git status --porcelain");
       if (gitStatus && gitStatus.trim().length > 0) {
         logger.error(
@@ -268,6 +268,8 @@ export class SyncEngine {
         );
         throw new Error("Dirty git tree");
       }
+    } else if (mode === "external") {
+      logger.info("Skipping git check (external mode)");
     } else {
       logger.warn("Skipping git clean check (--allow-dirty)");
     }
