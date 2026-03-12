@@ -1,46 +1,53 @@
-import type { RunProjectGenerationPort } from "./ports/in/generate-project.port";
-import path from "node:path";
-import { WorkflowGenerator } from "../infrastructure/adapters/WorkflowGenerator";
-import { getWorkflowTemplatePath } from "../utils/resolveAssetPath";
+import type { ExternalProjectGeneratorPort } from "./ports/out/external-project-generator.port.js";
+import type { ZipCreatorPort } from "./ports/out/zip-creator.port.js";
+import type { Project } from "../domain/entities/project.js";
+import type { Manifest } from "@hexagen/sync";
+import type { Result } from "@hexagen/shared";
 
-import { Project } from "../domain/entities/project";
-import { ProjectSpecification } from "../domain/value-objects/project-specification";
-import type { ProjectConfig } from "@hexagen/project-configuration";
+export interface GenerateProjectInput {
+  targetRoot: string;
+  manifest: Manifest;
+  outputFormat: "files" | "zip";
+}
 
-import { Logger, defaultLogger } from "../utils/logger";
+export interface GenerateProjectOutput {
+  project: Project;
+  zipBuffer?: Buffer;
+}
 
 export class GenerateProjectUseCase {
   constructor(
-    private readonly port: RunProjectGenerationPort,
-    private readonly logger: Logger = defaultLogger,
+    private readonly generator: ExternalProjectGeneratorPort,
+    private readonly zipCreator: ZipCreatorPort,
   ) {}
 
-  async execute(fullSpec: ProjectConfig): Promise<Project> {
-    const rootName = fullSpec.rootName;
+  async execute(
+    input: GenerateProjectInput,
+  ): Promise<Result<GenerateProjectOutput, Error>> {
+    try {
+      const project = await this.generator.generateAt(
+        input.targetRoot,
+        input.manifest,
+      );
 
-    // Create domain value object (invariants enforced)
-    ProjectSpecification.create({
-      name: rootName,
-      rootName,
-    });
+      let zipBuffer: Buffer | undefined;
+      if (input.outputFormat === "zip") {
+        const zipResult = await this.zipCreator.createZip(project);
+        if (!zipResult.success) {
+          return { success: false, error: new Error(zipResult.error.message) };
+        }
+        zipBuffer = zipResult.value;
+      }
 
-    // Delegate generation to infrastructure port (port only needs spec)
-    await this.port.generate(
-      ProjectSpecification.create({
-        name: rootName,
-        rootName,
-      }),
-    );
-    // Inject CI workflow into the generated project
-    const projectRoot = path.resolve(rootName);
-    const workflowGenerator = new WorkflowGenerator(getWorkflowTemplatePath());
-    await workflowGenerator.generate(projectRoot, { logger: this.logger });
-
-    // Return minimal valid Project entity (port doesn't create it)
-    return Project.create({
-      id: crypto.randomUUID(),
-      name: rootName,
-      rootName,
-    });
+      return {
+        success: true,
+        value: { project, zipBuffer },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err : new Error(String(err)),
+      };
+    }
   }
 }

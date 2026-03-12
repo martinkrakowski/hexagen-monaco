@@ -8,10 +8,13 @@ export * from "./infrastructure/index.js";
 
 // Factories (exactly what wire.ts in the web driver expects)
 import { GenerateProjectUseCase } from "./application/generate-project-use-case";
-import type { RunProjectGenerationPort } from "./application/ports/in/generate-project.port";
+import type { ExternalProjectGeneratorPort } from "./application/ports/out/external-project-generator.port";
+import type { ZipCreatorPort } from "./application/ports/out/zip-creator.port";
 
-export const generateProjectUseCase = (port: RunProjectGenerationPort) =>
-  new GenerateProjectUseCase(port);
+export const generateProjectUseCase = (
+  generator: ExternalProjectGeneratorPort,
+  zipCreator: ZipCreatorPort,
+) => new GenerateProjectUseCase(generator, zipCreator);
 
 // Placeholder for legacy downloadProjectUseCase (will be refactored later)
 export const downloadProjectUseCase = () => {
