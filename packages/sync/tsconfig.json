@@ -4,11 +4,20 @@
     "rootDir": "src",
     "outDir": "dist",
     "declaration": true,
-    "emitDeclarationOnly": true,
+    "emitDeclarationOnly": false,
     "composite": true,
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
-    "paths": {}
+    "moduleResolution": "NodeNext",
+    "module": "NodeNext",
+    "target": "es2022",
+    "allowJs": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {},
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../shared" }],
 }

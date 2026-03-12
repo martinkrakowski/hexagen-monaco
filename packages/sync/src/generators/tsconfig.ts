@@ -18,6 +18,14 @@ export async function generateTsconfig(
   const result = createEmptyResult();
   const filePath = path.join(moduleDir, "tsconfig.json");
 
+  // Skip tsconfig generation for the sync package itself.
+  // The sync package needs special config (emitDeclarationOnly: false) to emit JS files
+  // for the CLI, which differs from the standard declaration-only config.
+  if (moduleName === "sync") {
+    result.skipped.push(filePath);
+    return result;
+  }
+
   // Don't generate tsconfig references automatically.
   // References create build-order dependencies and can cause circular issues.
   // The monorepo build tool (turbo) handles dependency ordering via package.json dependencies.
