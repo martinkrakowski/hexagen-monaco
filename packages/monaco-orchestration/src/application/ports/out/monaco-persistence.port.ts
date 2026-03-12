@@ -1,5 +1,5 @@
-import type { MonacoSession } from '../../../domain/model/monaco-session/monaco-session';
-import type { Result } from '@hexagen/sync';
+import type { MonacoSession } from "../../../domain/model/monaco-session/monaco-session";
+import type { Result } from "@hexagen/shared";
 /**
  * Port defining persistence operations for Monaco editor sessions.
  * Implemented by infrastructure adapters (e.g. LocalStoragePersistenceAdapter).
@@ -8,22 +8,22 @@ import type { Result } from '@hexagen/sync';
  */
 export interface MonacoPersistencePort {
   loadLatestSession(
-    projectId: string
+    projectId: string,
   ): Promise<Result<MonacoSession | null, PersistenceError>>;
 
   saveSession(
-    session: MonacoSession
+    session: MonacoSession,
   ): Promise<Result<MonacoSession, PersistenceError>>;
 
   listSessions(
     projectId: string,
-    limit?: number
+    limit?: number,
   ): Promise<Result<SessionMetadata[], PersistenceError>>;
 
   deleteSession(sessionId: string): Promise<Result<void, PersistenceError>>;
 
   clearProjectSessions(
-    projectId: string
+    projectId: string,
   ): Promise<Result<void, PersistenceError>>;
 }
 
@@ -44,8 +44,8 @@ export interface SessionMetadata {
  * Discriminated union of persistence-specific errors.
  */
 export type PersistenceError =
-  | { kind: 'NotFound'; message: string }
-  | { kind: 'StorageQuotaExceeded'; message: string }
-  | { kind: 'SerializationFailed'; message: string; cause?: unknown }
-  | { kind: 'DeserializationFailed'; message: string; cause?: unknown }
-  | { kind: 'Unknown'; message: string; cause?: unknown };
+  | { kind: "NotFound"; message: string }
+  | { kind: "StorageQuotaExceeded"; message: string }
+  | { kind: "SerializationFailed"; message: string; cause?: unknown }
+  | { kind: "DeserializationFailed"; message: string; cause?: unknown }
+  | { kind: "Unknown"; message: string; cause?: unknown };
