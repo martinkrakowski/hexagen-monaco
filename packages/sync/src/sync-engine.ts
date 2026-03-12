@@ -32,6 +32,11 @@ interface GeneratorResults {
   totalOps: number;
 }
 
+export interface SyncEngineOptions {
+  targetRoot?: string;
+  manifest?: Manifest;
+}
+
 /**
  * Central orchestrator — ALL generators return structured GeneratorResult.
  */
@@ -42,9 +47,12 @@ export class SyncEngine {
   private manifest: Manifest = {};
   private workspaceRoot: string = "";
 
-  constructor(flags: SyncFlags) {
+  constructor(flags: SyncFlags, options?: SyncEngineOptions) {
     this.partialConfig = flags;
+    this.options = options;
   }
+
+  private readonly options?: SyncEngineOptions;
 
   private async findWorkspaceRoot(): Promise<string> {
     let currentDir = __dirname;
