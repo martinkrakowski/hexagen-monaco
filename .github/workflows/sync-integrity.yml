@@ -30,19 +30,15 @@ jobs:
         run: yarn turbo run build --filter=@hexagen/sync
 
       - name: "Execute Hardened Sync"
-        # We use --force here to ensure the engine can verify
-        # that even forced writes don't violate architectural rules.
-        run: yarn sync --force
+        # We use --force and --allow-dirty here for CI environment
+        # The sync engine verifies architectural rules are not violated.
+        run: yarn sync --force --allow-dirty
 
-      - name: "Run Verification Script"
-        run: |
-          chmod +x ./verify-sync.sh
-          ./verify-sync.sh
+      - name: "Verify Build After Sync"
+        run: yarn build
 
-      - name: "Archive Migration Report"
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sync-migration-report
-          path: SYNC-MIGRATION-REPORT.md
-          retention-days: 7
+      - name: "Verify TypeCheck After Sync"
+        run: yarn typecheck
+
+      - name: "Verify Architectural Rules After Sync"
+        run: yarn sync:dry
