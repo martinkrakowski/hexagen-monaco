@@ -13,11 +13,18 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "@hexagen/*": ["../*/src"]
-    }
+    "paths": {}
   },
-  "include": ["src/**/*"],
-  "references": [{ "path": "../shared" }],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "../shared"
+    }
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

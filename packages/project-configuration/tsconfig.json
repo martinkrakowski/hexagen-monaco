@@ -5,12 +5,10 @@
     "outDir": "dist",
     "declaration": true,
     "emitDeclarationOnly": true,
-    "declarationMap": true,
     "composite": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "paths": {}
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../shared" }, { "path": "../sync" }]
+  "exclude": ["node_modules", "dist"]
 }
