@@ -55,6 +55,10 @@ export class SyncEngine {
   private readonly options?: SyncEngineOptions;
 
   private async findWorkspaceRoot(): Promise<string> {
+    if (this.options?.targetRoot) {
+      return this.options.targetRoot;
+    }
+
     let currentDir = __dirname;
     while (currentDir !== path.parse(currentDir).root) {
       try {
@@ -75,6 +79,11 @@ export class SyncEngine {
   }
 
   private async loadManifest(): Promise<void> {
+    if (this.options?.manifest) {
+      this.manifest = this.options.manifest;
+      return;
+    }
+
     const { logger, dryRun } = this.partialConfig;
     const manifestPath = path.join(
       this.workspaceRoot,
