@@ -23,7 +23,7 @@ jobs:
       - name: "Setup Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: "25"
+          node-version: "22"
 
       - name: "Enable Corepack"
         run: corepack enable
@@ -36,7 +36,7 @@ jobs:
 
       - name: "Build All Packages"
         # Build everything first so turbo CLI and all dependencies are available
-        run: yarn build --verbose 2>&1 || (echo "::error::Build failed. See logs above for details." && exit 1)
+        run: yarn build
 
       - name: "Execute Hardened Sync"
         # We use --force and --allow-dirty here for CI environment
