@@ -5,10 +5,22 @@ global_whitelist:
   - "@hexagen/shared"
   - "@hexagen/shared/**"
 
+# Test doubles may import port interfaces from any package.
+# Required for type safety and test-double-parity (AGENTS.md §8)
+test_double_rules:
+  allowed_cross_package_imports: true
+
 # Enforce strict boundaries for drivers
 package_rules:
   - name: "web-driver"
-    restricted_to:
+    allowed_imports:
       - "@hexagen/shared"
-      # web-driver should NOT import from monaco-orchestration directly.
-      # It should only implement the ports defined in its own domain.
+      - "@hexagen/monaco-orchestration"
+    # web-driver needs monaco-orchestration for MonacoPersistencePort.
+    # TODO: Move types to @hexagen/shared to eliminate this dependency.
+  - name: "project-generation"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/sync"
+    # project-generation intentionally imports sync for External Project Generation MVP.
+    # See ADR-0003 for details.
