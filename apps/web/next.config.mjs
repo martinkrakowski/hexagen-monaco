@@ -73,9 +73,29 @@ const nextConfig = {
     return config;
   },
 
-  // Turbopack config (for dev mode, but we use webpack for builds due to CI issues)
+  // Turbopack config (for dev mode)
   turbopack: {
     root: monorepoRoot,
+    resolveAlias: {
+      "@hexagen/monaco-orchestration": path.resolve(
+        monorepoRoot,
+        "packages/monaco-orchestration/src",
+      ),
+      "@hexagen/project-configuration": path.resolve(
+        monorepoRoot,
+        "packages/project-configuration/src",
+      ),
+      "@hexagen/project-generation": path.resolve(
+        monorepoRoot,
+        "packages/project-generation/src",
+      ),
+      "@hexagen/shared": path.resolve(monorepoRoot, "packages/shared/src"),
+      "@hexagen/web-driver": path.resolve(
+        monorepoRoot,
+        "packages/web-driver/src",
+      ),
+    },
+    resolveExtensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
   },
 };
 
