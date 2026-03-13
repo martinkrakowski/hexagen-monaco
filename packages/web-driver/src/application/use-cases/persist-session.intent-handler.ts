@@ -1,7 +1,4 @@
-import type {
-  MonacoPersistencePort,
-  MonacoSession,
-} from '@hexagen/monaco-orchestration';
+import type { MonacoPersistencePort, MonacoSession } from "@hexagen/shared";
 
 /**
  * Intent handler for persisting Monaco editor session state.
@@ -12,7 +9,7 @@ export class PersistSessionIntentHandler {
   constructor(private readonly persistencePort: MonacoPersistencePort) {}
 
   async handleSave(
-    session: MonacoSession
+    session: MonacoSession,
   ): Promise<{ success: boolean; message: string }> {
     const result = await this.persistencePort.saveSession(session);
     return result.success

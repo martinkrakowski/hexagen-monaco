@@ -2,9 +2,9 @@ import type {
   MonacoPersistencePort,
   MonacoSession,
   PersistenceError,
+  Result,
   SessionMetadata,
-} from "@hexagen/monaco-orchestration";
-import type { Result } from "@hexagen/shared";
+} from "@hexagen/shared";
 
 export class LocalStoragePersistenceAdapter implements MonacoPersistencePort {
   async loadLatestSession(
