@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/cli.js",
+  "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
+  "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "hexagen": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
@@ -13,8 +17,15 @@
     "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
+  "keywords": [
+    "hexagonal-architecture",
+    "monorepo",
+    "code-generation"
+  ],
+  "license": "MIT",
   "dependencies": {
     "@hexagen/shared": "workspace:*",
+    "commander": "^14.0.3",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

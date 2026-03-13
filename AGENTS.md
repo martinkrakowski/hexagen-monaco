@@ -314,6 +314,25 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 
 ### CLI Reference
 
+**Invokable via:**
+
+- `yarn workspace @hexagen/sync cli` — from monorepo root
+- `node packages/sync/dist/cli.js` — direct invocation
+- `npx hexagen` — via bin field (after build)
+
+#### Commands
+
+| Command                  | Description                                       |
+| ------------------------ | ------------------------------------------------- |
+| `hexagen sync`           | Run the HexaGen sync engine to generate artifacts |
+| `hexagen sync --dry-run` | Preview changes without writing files             |
+| `hexagen sync --force`   | Overwrite non-generated files in packages         |
+| `hexagen sync --strict`  | Fail on architecture linter warnings              |
+| `hexagen arch list`      | Display manifest.yaml in tabular format           |
+| `hexagen arch validate`  | Validate manifest.yaml against linter rules       |
+
+#### Sync Flags
+
 | Flag            | Description                                             |
 | --------------- | ------------------------------------------------------- |
 | `--dry-run`     | Preview changes without writing files                   |

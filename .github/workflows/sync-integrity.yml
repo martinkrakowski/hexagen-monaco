@@ -1,4 +1,4 @@
-name: "Architectural Integrity Check"
+name: "Build & Sync Integrity Check"
 on:
   push:
     branches: [main, develop]
@@ -34,7 +34,7 @@ jobs:
         run: yarn turbo run build --output-logs=full --log-order=stream
 
       - name: "Execute Hardened Sync"
-        run: yarn sync --force --allow-dirty
+        run: node packages/sync/dist/cli.js sync --force --allow-dirty
 
       - name: "Verify Build After Sync"
         run: yarn turbo run build --output-logs=full --log-order=stream --force
@@ -43,4 +43,4 @@ jobs:
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
 
       - name: "Verify Architectural Rules After Sync"
-        run: yarn sync:dry
+        run: node packages/sync/dist/cli.js sync --dry-run

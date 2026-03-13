@@ -7,3 +7,4 @@ export * from "./domain/index.js";
 export * from "./application/ports/out/index.js";
 export * from "./infrastructure/adapters/yaml-config.adapter.js";
 export * from "./infrastructure/adapters/in-memory-config-double.js";
+export * from "./manifest-service.js";
