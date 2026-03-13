@@ -1,9 +1,0 @@
-export interface ProjectCurrentBufferStatePort {
-    /**
-     * Retrieves the current state of the Monaco buffer (content, cursor, selections, etc.).
-     * Infrastructure adapters (Monaco Editor instance, text-model wrapper, snapshot service)
-     * implement this contract.
-     */
-    getCurrentState(data: unknown): Promise<unknown>;
-}
-//# sourceMappingURL=project-current-buffer-state.port.d.ts.map

@@ -1,1 +1,0 @@
-{"version":3,"file":"undo-last-patch.use-case.d.ts","sourceRoot":"","sources":["undo-last-patch.use-case.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,kBAAkB,EAAE,MAAM,kCAAkC,CAAC;AAE3E,qBAAa,oBAAoB;IACnB,OAAO,CAAC,QAAQ,CAAC,IAAI;gBAAJ,IAAI,EAAE,kBAAkB;IAE/C,OAAO,CAAC,IAAI,EAAE,OAAO,GAAG,OAAO,CAAC,OAAO,CAAC;CAa/C"}

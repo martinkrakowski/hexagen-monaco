@@ -22,7 +22,13 @@ export async function generateBarrels(
     try {
       const entries = await fs.readdir(layerDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name === "index.ts" || entry.name.startsWith(".")) continue;
+        if (
+          entry.name === "index.ts" ||
+          entry.name.startsWith(".") ||
+          entry.name.endsWith(".d.ts") ||
+          entry.name.endsWith(".d.ts.map")
+        )
+          continue;
 
         const name = entry.isDirectory()
           ? entry.name
