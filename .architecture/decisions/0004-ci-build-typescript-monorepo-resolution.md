@@ -131,7 +131,7 @@ To verify the fix works, simulate CI locally:
 rm -rf packages/*/dist .turbo node_modules/.cache
 find . -name "*.tsbuildinfo" -delete
 yarn turbo run build --force
-yarn sync --force --allow-dirty
+hexagen sync --force --allow-dirty
 yarn turbo run build --force
 ```
 

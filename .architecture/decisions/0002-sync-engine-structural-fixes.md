@@ -14,7 +14,7 @@ The HexaGen Monaco sync engine (`@hexagen/sync`) had several structural bugs tha
 1. **Barrel corruption** — Generated barrels contained invalid relative imports (`../shared/result.js`, `../shared/ok.js`) that pointed to non-existent paths
 2. **Silent failures** — The preflight build step failed silently due to stdout buffer overflow
 3. **Dry-run mutations** — The reaper deleted files even in `--dry-run` mode
-4. **Root file overwrites** — `yarn sync --force` could overwrite protected root files (`turbo.json`, `.gitignore`)
+4. **Root file overwrites** — `hexagen sync --force` could overwrite protected root files (`turbo.json`, `.gitignore`)
 5. **Delete-recreate cycles** — The reaper deleted folders containing only `index.ts`, which the sync engine then recreated
 6. **Incorrect tsconfig references** — Generated `tsconfig.json` files had wrong relative paths for project references
 7. **Blocked development workflow** — Git clean check prevented sync during active development
@@ -297,7 +297,7 @@ Plus helper functions:
 
 ### Positive
 
-- `yarn sync --dry-run` is now safe and idempotent
+- `hexagen sync --dry-run` is now safe and idempotent
 - Barrels no longer contain invalid imports
 - Protected root files cannot be accidentally overwritten
 - Sync engine degrades gracefully when optional config is missing
@@ -327,7 +327,7 @@ All fixes were verified with:
 yarn build        # 17 successful
 yarn typecheck    # 21 successful
 yarn lint         # 17 successful
-yarn sync --dry-run  # Completes without mutations
+hexagen sync --dry-run  # Completes without mutations
 ```
 
 ---

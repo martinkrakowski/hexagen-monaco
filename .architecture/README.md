@@ -28,7 +28,7 @@ This directory is the **single source of truth** for the architectural shape of 
 HexaGen Monaco treats architecture as **executable data**. Instead of relying on convention and code review to enforce boundaries, the system:
 
 1. **Declares** architecture in `manifest.yaml` (bounded contexts, ports, use cases)
-2. **Generates** package skeletons, barrels, and configuration via `yarn sync`
+2. **Generates** package skeletons, barrels, and configuration via `hexagen sync`
 3. **Validates** boundaries at build time via the arch-linter
 4. **Enforces** invariants through the bootstrap sequence
 
@@ -113,7 +113,7 @@ apps:
 Always run after modifying `manifest.yaml`:
 
 ```bash
-yarn sync --allow-dirty    # Regenerate packages
+hexagen sync --allow-dirty    # Regenerate packages
 yarn build                 # Verify compilation
 yarn typecheck             # Verify types
 ```
@@ -144,7 +144,7 @@ Nine structural rules enforced during generation:
 
 ### Bootstrap Sequence
 
-Steps executed during `yarn sync`:
+Steps executed during `hexagen sync`:
 
 ```
 1. load-ownership-map              # memory-only
@@ -262,22 +262,22 @@ What are the positive, negative, and neutral outcomes?
 
 ```bash
 # Regenerate all packages from manifest
-yarn sync
+hexagen sync
 
 # Preview changes without writing
-yarn sync --dry-run
+hexagen sync --dry-run
 
 # Force overwrite non-generated files
-yarn sync --force
+hexagen sync --force
 
 # Allow sync with uncommitted changes
-yarn sync --allow-dirty
+hexagen sync --allow-dirty
 
 # Overwrite protected root files (turbo.json, .gitignore)
-yarn sync --force-root
+hexagen sync --force-root
 
 # Fail on arch-linter warnings
-yarn sync --strict
+hexagen sync --strict
 ```
 
 ### Validation
@@ -294,7 +294,7 @@ yarn build && yarn typecheck && yarn lint
 
 ```bash
 # Recommended workflow
-yarn sync --allow-dirty
+hexagen sync --allow-dirty
 yarn build
 yarn typecheck
 ```
@@ -403,7 +403,7 @@ export * from "./subdirectory/index.js";
 
 ### When Barrels Are Regenerated
 
-- Running `yarn sync` regenerates all barrels marked with `@generated`
+- Running `hexagen sync` regenerates all barrels marked with `@generated`
 - New files are automatically added to the appropriate barrel
 - Deleted files are automatically removed from barrels
 
@@ -422,7 +422,7 @@ export * from "./public-api.js";
 
 | Issue                       | Cause                             | Fix                               |
 | --------------------------- | --------------------------------- | --------------------------------- |
-| New file not exported       | Barrel not regenerated            | Run `yarn sync`                   |
+| New file not exported       | Barrel not regenerated            | Run `hexagen sync`                |
 | Export of `.d.js` (invalid) | `.d.ts` files in `src/`           | Delete stale `.d.ts` artifacts    |
 | Circular export error       | A re-exports B which re-exports A | Restructure to break cycle        |
 | "Not a module" error        | Empty barrel with `export {}`     | Add real exports or delete barrel |
@@ -460,7 +460,7 @@ Keep types in their owning package when:
    - Ports → `packages/shared/src/application/ports/`
    - Errors → `packages/shared/src/errors/`
 
-2. Run `yarn sync` to regenerate barrels
+2. Run `hexagen sync` to regenerate barrels
 
 3. Export from root barrel (`packages/shared/src/index.ts`) if needed
 

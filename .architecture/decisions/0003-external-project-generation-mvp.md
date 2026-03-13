@@ -9,7 +9,7 @@
 
 ## Context
 
-The HexaGen Monaco system had strong self-regeneration capabilities (`yarn sync`), but no way to generate **new** projects from scratch. The goal was to enable:
+The HexaGen Monaco system had strong self-regeneration capabilities (`hexagen sync`), but no way to generate **new** projects from scratch. The goal was to enable:
 
 1. **UI-driven generation** — A wizard in the web UI collects project specifications
 2. **External target directory** — Generate projects to arbitrary locations (not just self)
@@ -234,7 +234,7 @@ yarn build        # 17 successful
 yarn typecheck   # 22 successful
 yarn lint        # 17 successful (pre-existing violations in other packages)
 yarn test        # 5 tests passing
-yarn sync --dry-run  # Self-regen still works
+hexagen sync --dry-run  # Self-regen still works
 ```
 
 ---
