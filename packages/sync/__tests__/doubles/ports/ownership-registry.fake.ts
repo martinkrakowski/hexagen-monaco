@@ -1,8 +1,5 @@
-import type { Result } from '@hexagen/sync/domain';
-import type {
-  OwnershipRegistryPort,
-  PortOwnershipRecord,
-} from '@hexagen/sync';
+import type { Result } from "@hexagen/sync";
+import type { OwnershipRegistryPort, PortOwnershipRecord } from "@hexagen/sync";
 
 /**
  * In‑memory fake for `OwnershipRegistryPort`.

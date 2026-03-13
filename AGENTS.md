@@ -173,7 +173,7 @@ The agent **rejects** any proposal or code that violates the following:
 | Framework imports in domain layer                          | Domain must be framework-free                                                                                          |
 | Manual edits to `generator.config.yaml`                    | Must be event-driven only                                                                                              |
 | Port declared in more than one package                     | Violates port-single-ownership invariant                                                                               |
-| Self-import by package name                                | TypeScript resolution failure                                                                                          |
+| Self-import by package name (in `src/` only)               | TypeScript resolution failure in production code (test code may use package imports)                                   |
 | Barrel containing only `export {}`                         | Generation-time stub hygiene violation                                                                                 |
 | Cross-package reference to `src/` instead of `dist/`       | Composite project safety violation                                                                                     |
 | Consumer signature derived from memory                     | Must be read from canonical port at generation time                                                                    |
@@ -250,7 +250,7 @@ These invariants run as the mandatory final phase of every generation run. All n
 | 2   | `barrel-ownership-boundary` — upward reachability + no cross-package re-exports      | critical | abort + cleanup |
 | 3   | `port-single-ownership` — no duplicate port declarations across packages             | critical | abort + cleanup |
 | 4   | `dependency-consistency` — every `@hexagen/*` import has a package.json entry        | high     | abort           |
-| 5   | `self-import-prevention` — no package imports itself by name                         | high     | abort           |
+| 5   | `self-import-prevention` — no package imports itself by name in `src/` (production)  | high     | abort           |
 | 6   | `signature-synchronization` — consumers derive exact signatures from canonical port  | high     | abort           |
 | 7   | `no-empty-stubs` — no `export {}` barrels in compiled source                         | medium   | warn + continue |
 | 8   | `exports-field-mandatory` — every package.json has a complete exports map            | medium   | warn + continue |
@@ -330,6 +330,15 @@ Scripts in every package `package.json`:
 "test": "tsx --test __tests__/**/*.test.ts",
 "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
 ```
+
+**Test Import Convention:**
+Test code (`__tests__/`) should import from the package by name (`@hexagen/package-name`), not via deep relative paths. This approach:
+
+- Tests the public API as external consumers would use it
+- Remains resilient to internal refactoring
+- Uses `tsconfig.test.json` with `rootDir: "../.."` for proper resolution
+
+The `self-import-prevention` invariant applies only to production code (`src/`), not test code.
 
 ### What Every Develop Slice Must Produce
 
