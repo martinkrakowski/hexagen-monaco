@@ -113,8 +113,22 @@ modules:
 git clone git@github.com:martinkrakowski/hexagen-monaco.git
 cd hexagen-monaco
 yarn install
-yarn sync # Synchronize system bindings
-yarn dev
+yarn build
+hexagen --help
+```
+
+## CLI Commands
+
+```bash
+# Run the sync engine
+hexagen sync                    # Generate artifacts
+hexagen sync --dry-run         # Preview changes
+hexagen sync --force           # Overwrite non-generated files
+hexagen sync --strict          # Fail on linter warnings
+
+# Manage architecture manifest
+hexagen arch list              # List bounded contexts
+hexagen arch validate          # Validate manifest against rules
 ```
 
 ---
