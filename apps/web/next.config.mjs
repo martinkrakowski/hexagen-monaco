@@ -41,6 +41,13 @@ const nextConfig = {
       ...(config.resolve.modules || []),
     ];
 
+    // Resolve .js imports to .ts files (needed for ESM-style imports in TypeScript source)
+    // This allows barrels to use .js extensions (correct for ESM) while webpack resolves to .ts
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js"],
+      ".mjs": [".mts", ".mjs"],
+    };
+
     // Ensure proper resolution of @hexagen/* packages
     config.resolve.alias = {
       ...config.resolve.alias,
