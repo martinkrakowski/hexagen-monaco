@@ -711,6 +711,8 @@ __metadata:
     js-yaml: "npm:^4.1.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.9.3"
+  bin:
+    hexagen: ./dist/cli.js
   languageName: unknown
   linkType: soft
 

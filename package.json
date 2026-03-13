@@ -2,7 +2,11 @@
   "name": "hexagen-monaco",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "packageManager": "yarn@4.12.0",
+  "bin": {
+    "hexagen": "./cli.js"
+  },
   "workspaces": [
     "apps/*",
     "packages/*",

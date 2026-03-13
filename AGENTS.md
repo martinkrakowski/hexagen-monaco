@@ -316,9 +316,11 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 
 **Invokable via:**
 
-- `yarn workspace @hexagen/sync cli` — from monorepo root
-- `node packages/sync/dist/cli.js` — direct invocation
-- `npx hexagen` — via bin field (after build)
+- `hexagen` — directly from monorepo root (requires build)
+- `npx hexagen` — via npx (requires build)
+- `node cli.js` — direct invocation
+- `yarn sync` — via yarn script
+- `yarn workspace @hexagen/sync cli` — via workspace
 
 #### Commands
 
