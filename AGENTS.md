@@ -413,6 +413,24 @@ Any adapter method that catches an error and returns `null`, `false`, or a defau
 - Run `yarn lint:arch` after any edit to `.architecture/`
 - ADRs go in `.architecture/decisions/` with format `NNNN-title.md`
 
+### Package.json Standards
+
+All packages must include:
+
+- `"main": "dist/index.js"` — CommonJS entry point
+- `"types": "dist/index.d.ts"` — TypeScript declarations
+- `"exports"` — Modern Node.js module resolution:
+  ```json
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+  ```
+
+**Rationale:** Ensures consistent module resolution across Node.js versions and bundlers. All packages standardized as of Phase 2 (March 2026).
+
 ---
 
 ## 10. Interaction Protocol
