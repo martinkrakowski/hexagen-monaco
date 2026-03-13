@@ -218,6 +218,7 @@ ADRs document significant architectural decisions. Located in `decisions/`.
 
 | ADR  | Title                                     | Status   |
 | ---- | ----------------------------------------- | -------- |
+| 0000 | Next.js with Webpack over Vite            | Accepted |
 | 0001 | Persistence Wiring                        | Accepted |
 | 0002 | Sync Engine Structural Fixes              | Accepted |
 | 0003 | External Project Generation MVP           | Accepted |
