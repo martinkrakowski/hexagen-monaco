@@ -51,7 +51,9 @@ yarn build && yarn typecheck
 - [9. Subsystem-Specific Rules](#9-subsystem-specific-rules)
 - [10. Interaction Protocol](#10-interaction-protocol)
 - [11. Agent Editing Discipline](#11-agent-editing-discipline)
+- [12. Git Archeology Toolkit](#12-git-archeology-toolkit)
 - [Appendix: Open Items](#appendix-open-items)
+- [Appendix: Barrel Generation](#appendix-barrel-generation-fixed-march-2026)
 - [Appendix: Module Resolution](#appendix-module-resolution)
 
 ---
@@ -162,6 +164,36 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 
 ---
 
+### 🔍 Review & Archeology Mode
+
+**Triggers:** "review", "analyze", "critique", "check this code", "why was this added", "history of", "archeology".
+
+**Constraint:** Read-only — no edits, no file writes, no code generation.
+
+**Output:** A structured critique categorized by "Critical Violations" and "Architectural Smells."
+
+**Archeology Protocol:**
+
+1. **Trace Origin**: Use the [Git Archeology Toolkit](#12-git-archeology-toolkit) to find the origin commit.
+2. **Verify Intent**: Cross-reference with `.architecture/decisions/` (ADRs).
+3. **Classify**: Identify if code is a "Bug-fix Invariant" (Do Not Touch) or "Legacy Debt" (Safe to Refactor).
+
+**Rigid Checks:**
+
+- **Port-Adapter Alignment**: Verify the Adapter implements the current Port signature in `manifest.yaml`.
+- **Error Chain Integrity**: Ensure `Result<T, E>` is maintained from Adapter → Use Case → Controller. Flag any `try/catch` that doesn't map to a typed Domain Error.
+- **Import Hygiene**:
+  - Reject relative imports that cross package boundaries (e.g., `../package-b/src`).
+  - Reject production code (`src/`) that imports the current package by name.
+- **Dependency Direction**: Ensure `infrastructure/` imports `domain/`, but `domain/` never references `infrastructure/` or `adapters/`.
+- **Test Double Parity**: Verify `__tests__/doubles/` matches the Port interface exactly.
+
+**Ends every response with:**
+
+> Ready to move to Develop mode when you say `develop [feature]`.
+
+---
+
 ## 4. Architectural Constraints
 
 The agent **rejects** any proposal or code that violates the following:
@@ -181,6 +213,7 @@ The agent **rejects** any proposal or code that violates the following:
 | Unnecessary reformatting (quotes, whitespace, indentation) | Violates minimal scoped change principle and pollutes git history. Agents must follow `.vscode/settings.json` exactly. |
 | Cross-context type dependency                              | Move shared types to `@hexagen/shared` instead of importing from another bounded context                               |
 | `.d.ts` files in `src/` directories                        | Build artifacts must only exist in `dist/` — delete if found in `src/`                                                 |
+| Logic-heavy Zod schemas in Infrastructure                  | Persistence schemas in Infra; Domain/Shared for business rules                                                         |
 
 ---
 
@@ -199,7 +232,7 @@ The `.architecture/` directory is the **single source of truth for the shape of 
 └── README.md
 ```
 
-**Before performing any architectural reasoning, code generation, or design proposal**, the agent MUST inspect `.architecture/manifest.yaml` and account for the current manifest state.
+**Before performing any architectural reasoning, code generation, or design proposal**, the agent MUST inspect `.architecture/manifest.yaml` and account for the current manifest state. You must inspect `.architecture/decisions/*` to understand the architectural context.
 
 **Agent responsibilities:**
 
@@ -319,6 +352,16 @@ The package `tsconfig.json` must exclude all test files from the production buil
 ```
 
 A separate `tsconfig.test.json` extends the base config with `"noEmit": true` and re-includes test files for type-checking without emitting output.
+
+### Result Type Convention
+
+All fallible operations must return a Result type:
+
+```typescript
+type Result<T, E = Error> =
+  | { success: true; data: T }
+  | { success: false; error: E };
+```
 
 ### Test Runner
 
@@ -452,6 +495,12 @@ All packages must include:
 - Cache invalidation correctness
 - Test double parity with real adapter signatures
 
+**When requesting code archeology**, specify:
+
+- File path and line number (if known)
+- Behavior or logic you're investigating
+- Example: "Archeology: why was the empty barrel deletion logic introduced in recursive.ts?"
+
 ---
 
 ## 11. Agent Editing Discipline
@@ -460,6 +509,80 @@ All packages must include:
 - **Change scoping**: Diffs must be minimal. If a line is unrelated to the feature, do not touch it.
 - **Phase gating**: See Develop Mode rules above.
 - **Commit & push**: Local commit only after review. No auto-push.
+
+---
+
+## 12. Git Archeology Toolkit
+
+Use these commands to trace the origin and evolution of code when investigating "why" questions.
+
+### A. Trace Logic Evolution
+
+**Find file history (including deleted files):**
+
+```bash
+git log --all --full-history --oneline -- "path/to/file"
+```
+
+**Pickaxe Search (find when a string was added/removed):**
+
+```bash
+git log -p --all -S 'string' -- "path/to/file"
+```
+
+**Chronological evolution:**
+
+```bash
+git log -p --all -S 'string' --reverse -- "path/to/file"
+```
+
+### B. Inspect Point-in-Time State
+
+**View file at specific commit:**
+
+```bash
+git show <commit-hash>:path/to/file
+```
+
+**View file content before change:**
+
+```bash
+git show <commit-hash>^:path/to/file
+```
+
+**Find when file was created:**
+
+```bash
+git log --all --diff-filter=A --oneline -- "path/to/file"
+```
+
+### C. Context Retrieval
+
+**Show changed files in commit:**
+
+```bash
+git show <commit-hash> --name-status
+```
+
+**Search commit messages:**
+
+```bash
+git log --all --oneline --grep="pattern"
+```
+
+**Show commit with statistics:**
+
+```bash
+git show <commit-hash> --stat
+```
+
+### Archeology Workflow
+
+1. **Start with symptom**: Identify the file and logic in question
+2. **Find introduction**: Use `git log -S 'string'` to find when it was added
+3. **Read commit context**: Use `git show <commit> --stat` to see what else changed
+4. **Cross-reference ADRs**: Check `.architecture/decisions/` for rationale
+5. **Classify**: Bug-fix Invariant (protected) or Legacy Debt (refactorable)
 
 ---
 
@@ -516,3 +639,4 @@ This monorepo has **two module resolution strategies**:
 | March 2026 | Added minimal-change discipline, phase gating, commit rules, Agent Editing Discipline section |
 | March 2026 | Added CI simulation, .d.ts constraint, module resolution appendix, shared kernel updates      |
 | March 2026 | Added barrel generation consolidation details (PR #56), updated Sync Engine rules             |
+| March 2026 | Added Git Archeology Toolkit section, enhanced Review mode with archeology protocol           |
