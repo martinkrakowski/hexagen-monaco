@@ -60,9 +60,13 @@ export async function validateManifest(
 
     return ok({ valid: true, errors: [] });
   } catch (errObj) {
-    const error = errObj as Error & { stderr?: string };
-    const message = error.stderr || error.message || "Unknown linter error";
-    const errors = message.split("\n").filter((line) => line.trim().length > 0);
+    const error = errObj as Error & { stderr?: string | Buffer };
+    const message = error.stderr
+      ? String(error.stderr)
+      : error.message || "Unknown linter error";
+    const errors = message
+      .split("\n")
+      .filter((line: string) => line.trim().length > 0);
 
     return ok({ valid: false, errors });
   }
