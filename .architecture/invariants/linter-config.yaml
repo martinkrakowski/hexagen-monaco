@@ -15,9 +15,6 @@ package_rules:
   - name: "web-driver"
     allowed_imports:
       - "@hexagen/shared"
-      - "@hexagen/monaco-orchestration"
-    # web-driver needs monaco-orchestration for MonacoPersistencePort.
-    # TODO: Move types to @hexagen/shared to eliminate this dependency.
   - name: "project-generation"
     allowed_imports:
       - "@hexagen/shared"
