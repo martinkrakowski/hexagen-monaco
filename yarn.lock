@@ -6934,6 +6934,7 @@ __metadata:
     "@hexagen/project-configuration": "workspace:*"
     "@hexagen/project-generation": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/sync": "workspace:*"
     "@hexagen/web-driver": "workspace:*"
     "@hookform/resolvers": "npm:^3.9.0"
     "@monaco-editor/react": "npm:^4.6.0"
