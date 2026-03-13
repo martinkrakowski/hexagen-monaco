@@ -8,7 +8,6 @@ import { MigrationReport } from "./migration-report.js";
 import { runArchLinter } from "./linter.js";
 import { ensureLayerFolders } from "./generators/layer-folders.js";
 import { generateBarrels } from "./generators/barrels.js";
-import { generateStubs } from "./generators/stubs.js";
 import { generatePackageJson } from "./generators/package-json.js";
 import { generateTsconfig } from "./generators/tsconfig.js";
 import { reapLegacyFolders } from "./generators/reap.js";
@@ -26,7 +25,6 @@ const execAsync = promisify(exec);
 // Structured return type from generateCoreArtifacts
 interface GeneratorResults {
   barrels: GeneratorResult;
-  stubs: GeneratorResult;
   pkgs: GeneratorResult;
   tsconfigs: GeneratorResult;
   totalOps: number;
@@ -177,7 +175,6 @@ export class SyncEngine {
 
     let totalOps = 0;
     const barrels = createEmptyResult();
-    const stubs = createEmptyResult();
     const pkgs = createEmptyResult();
     const tsconfigs = createEmptyResult();
 
@@ -204,7 +201,6 @@ export class SyncEngine {
         config,
         this.report,
       );
-      const stubResult = await generateStubs(moduleDir, config, this.report);
       const pkgResult = await generatePackageJson(
         moduleDir,
         moduleName,
@@ -227,11 +223,6 @@ export class SyncEngine {
       barrels.updated.push(...barrelResult.updated);
       totalOps += barrelResult.totalOps;
 
-      stubs.created.push(...stubResult.created);
-      stubs.skipped.push(...stubResult.skipped);
-      stubs.updated.push(...stubResult.updated);
-      totalOps += stubResult.totalOps;
-
       pkgs.created.push(...pkgResult.created);
       pkgs.skipped.push(...pkgResult.skipped);
       pkgs.updated.push(...pkgResult.updated);
@@ -245,7 +236,6 @@ export class SyncEngine {
 
     return {
       barrels,
-      stubs,
       pkgs,
       tsconfigs,
       totalOps,
@@ -293,7 +283,7 @@ export class SyncEngine {
       }
 
       const layerResult = await this.ensureDirectories();
-      const { barrels, stubs, pkgs, tsconfigs, totalOps } =
+      const { barrels, pkgs, tsconfigs, totalOps } =
         await this.generateCoreArtifacts();
 
       if (mode === "self-regen") {
@@ -315,9 +305,6 @@ export class SyncEngine {
       );
       logger.info(
         `• Barrels : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`,
-      );
-      logger.info(
-        `• Stubs : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`,
       );
       logger.info(
         `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`,

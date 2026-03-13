@@ -238,8 +238,8 @@ async function walkDirectory(
           isNew: false,
         });
       } else if (isEmptyStub && isLayerDir) {
-        // Replace export {} with comment-only for layer directories
-        const newContent = `${GENERATED_MARKER}\n\n// No exports yet\n`;
+        // Clean up comment-only barrels - replace with just export {}
+        const newContent = `${GENERATED_MARKER}\n\nexport {};\n`;
         if (contentHash(existingBarrel) !== contentHash(newContent)) {
           pendingWrites.push({
             filePath: barrelPath,
@@ -249,7 +249,7 @@ async function walkDirectory(
         }
       } else if (!existingBarrel.includes("export {}") && isLayerDir) {
         // Layer directory needs export {} to be a valid TypeScript module
-        const newContent = `${GENERATED_MARKER}\n\n// No exports yet\nexport {};\n`;
+        const newContent = `${GENERATED_MARKER}\n\nexport {};\n`;
         pendingWrites.push({
           filePath: barrelPath,
           content: newContent,
@@ -257,8 +257,8 @@ async function walkDirectory(
         });
       }
     } else if (isLayerDir) {
-      // Create barrel with export {} for layer directories
-      const newContent = `${GENERATED_MARKER}\n\n// No exports yet\nexport {};\n`;
+      // Create barrel with export {} for layer directories (valid TypeScript module)
+      const newContent = `${GENERATED_MARKER}\n\nexport {};\n`;
       pendingWrites.push({
         filePath: barrelPath,
         content: newContent,
