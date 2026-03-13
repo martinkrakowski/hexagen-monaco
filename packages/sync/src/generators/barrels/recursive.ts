@@ -7,6 +7,7 @@ import { createEmptyResult, type GeneratorResult } from "../../results.js";
 import { safeWriteFileAtomic } from "../../fs-utils.js";
 import { isExcludedDirectory } from "../../config/barrel-exclusions.js";
 import {
+  GENERATED_MARKER,
   isGeneratedFile,
   isSourceFile,
   generateBarrelContent,
@@ -110,6 +111,27 @@ export async function generateRecursiveBarrels(
 
   // Write all pending barrels
   for (const pending of pendingWrites) {
+    // Empty content signals deletion of empty barrel
+    if (pending.content === "") {
+      try {
+        await fs.unlink(pending.filePath);
+        result.created.push(pending.filePath);
+        result.totalOps++;
+        continue;
+      } catch (err: unknown) {
+        if (
+          err &&
+          typeof err === "object" &&
+          "code" in err &&
+          err.code === "ENOENT"
+        ) {
+          // File already deleted, skip
+          continue;
+        }
+        throw err;
+      }
+    }
+
     const status = await safeWriteFileAtomic(
       pending.filePath,
       pending.content,
@@ -194,7 +216,55 @@ async function walkDirectory(
 
   // Determine if we should create/update a barrel for this directory
   if (exportEntries.length === 0) {
-    // No exportable content, skip this directory
+    // No exportable content - check if there's an existing barrel to clean up
+    const barrelPath = path.join(dirPath, "index.ts");
+    const existingBarrel = await readFileIfExists(barrelPath);
+    const dirName = path.basename(dirPath);
+    const isLayerDir = ["domain", "application", "infrastructure"].includes(
+      dirName,
+    );
+
+    if (existingBarrel) {
+      // For layer directories: keep barrel with export {} (needed for TypeScript modules)
+      // For other directories: can delete empty barrels
+      const isGenerated = isGeneratedFile(existingBarrel);
+      const isEmptyStub = existingBarrel.includes("export {}");
+
+      if ((isGenerated || isEmptyStub) && !isLayerDir) {
+        // Delete the empty barrel (not a layer directory)
+        pendingWrites.push({
+          filePath: barrelPath,
+          content: "", // Empty content signals deletion
+          isNew: false,
+        });
+      } else if (isEmptyStub && isLayerDir) {
+        // Replace export {} with comment-only for layer directories
+        const newContent = `${GENERATED_MARKER}\n\n// No exports yet\n`;
+        if (contentHash(existingBarrel) !== contentHash(newContent)) {
+          pendingWrites.push({
+            filePath: barrelPath,
+            content: newContent,
+            isNew: false,
+          });
+        }
+      } else if (!existingBarrel.includes("export {}") && isLayerDir) {
+        // Layer directory needs export {} to be a valid TypeScript module
+        const newContent = `${GENERATED_MARKER}\n\n// No exports yet\nexport {};\n`;
+        pendingWrites.push({
+          filePath: barrelPath,
+          content: newContent,
+          isNew: false,
+        });
+      }
+    } else if (isLayerDir) {
+      // Create barrel with export {} for layer directories
+      const newContent = `${GENERATED_MARKER}\n\n// No exports yet\nexport {};\n`;
+      pendingWrites.push({
+        filePath: barrelPath,
+        content: newContent,
+        isNew: true,
+      });
+    }
     return [];
   }
 
@@ -207,6 +277,11 @@ async function walkDirectory(
 
   if (shouldCreateBarrel) {
     const content = generateBarrelContent(exportEntries);
+
+    // Skip if content is null (empty directory)
+    if (content === null) {
+      return [];
+    }
 
     // Check if content actually changed
     const existingContent = await readFileIfExists(barrelPath);

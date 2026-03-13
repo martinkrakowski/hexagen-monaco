@@ -100,9 +100,9 @@ export interface ExportEntry {
  * @param entries - List of export entries with name and type info
  * @returns Generated barrel file content with marker
  */
-export function generateBarrelContent(entries: ExportEntry[]): string {
+export function generateBarrelContent(entries: ExportEntry[]): string | null {
   if (entries.length === 0) {
-    return `${GENERATED_MARKER}\n\n// No exports yet\nexport {};\n`;
+    return null; // Skip creating barrel for empty directories
   }
 
   const exportLines = entries
