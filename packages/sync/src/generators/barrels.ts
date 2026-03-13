@@ -10,10 +10,7 @@
 
 import type { SyncConfig } from "../config.js";
 import type { GeneratorResult } from "../results.js";
-import {
-  generateRecursiveBarrels,
-  CircularExportError,
-} from "./barrels/index.js";
+import { generateRecursiveBarrels } from "./barrels/index.js";
 
 export { CircularExportError } from "./barrels/index.js";
 

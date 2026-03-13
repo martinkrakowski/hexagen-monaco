@@ -13,7 +13,6 @@ import {
   generateBarrelContent,
   detectCircularExports,
   contentHash,
-  type CircularCheckResult,
   type ExportEntry,
 } from "./utils.js";
 
