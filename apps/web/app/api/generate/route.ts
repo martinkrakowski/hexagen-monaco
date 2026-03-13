@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       projectId,
     });
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("[api/generate] Error:", err);
     return NextResponse.json(
       { success: false, message: "Internal server error" },

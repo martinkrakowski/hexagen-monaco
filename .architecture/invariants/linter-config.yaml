@@ -21,3 +21,9 @@ package_rules:
       - "@hexagen/sync"
     # project-generation intentionally imports sync for External Project Generation MVP.
     # See ADR-0003 for details.
+
+  - name: "project-configuration"
+    allowed_imports:
+      - "@hexagen/shared"
+    # project-configuration should only import from shared kernel.
+    # Sync types should come from shared kernel after consolidation.
