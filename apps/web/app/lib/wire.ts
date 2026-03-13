@@ -3,12 +3,13 @@
 // All cross-package imports go through root barrels only (lint-enforced)
 
 import type { MonacoPersistencePort } from "@hexagen/monaco-orchestration";
-import type { DownloadProjectPort } from "@hexagen/web-driver";
-import { LocalStoragePersistenceAdapter } from "@hexagen/web-driver"; // same context → allowed
-import type { Project } from "@hexagen/web-driver";
+import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
+import { LocalStoragePersistenceAdapter } from "@hexagen/web-driver";
 
 // Note: LocalStoragePersistenceAdapter is allowed direct import because it is in the same bounded context (web-driver).
 // All external ports must come from root barrels.
+// Note: Project generation imports are in separate file (wire.project-generation.ts)
+// to avoid Node.js dependencies being bundled into client components.
 
 /**
  * Simple registry-based composition for ports used by web-driver use-cases.
