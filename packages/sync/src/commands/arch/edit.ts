@@ -145,8 +145,8 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
   const tempPath = join(tmpdir(), `manifest-${Date.now()}.yaml`);
 
   try {
-    const yamlContent = yaml.dump(manifest, { indent: 2 });
-    writeFileSync(tempPath, yamlContent, "utf-8");
+    const originalContent = yaml.dump(manifest, { indent: 2 });
+    writeFileSync(tempPath, originalContent, "utf-8");
 
     console.log(`✅ Opening ${editorName}...`);
 
@@ -162,9 +162,10 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
     if (options.dryRun) {
       console.log("\n⚠️  DRY-RUN MODE: No changes will be written\n");
 
+      let editedContent: string;
       let editedManifest: Manifest;
       try {
-        const editedContent = readFileSync(tempPath, "utf-8");
+        editedContent = readFileSync(tempPath, "utf-8");
         editedManifest = yaml.load(editedContent) as Manifest;
       } catch (err) {
         console.error(
@@ -185,6 +186,12 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
 
       console.log("✅ YAML syntax valid");
       console.log("✅ Manifest structure valid");
+
+      if (editedContent.trim() === originalContent.trim()) {
+        console.log("✅ No changes detected.");
+      } else {
+        console.log("✅ Changes would be written.");
+      }
       unlinkSync(tempPath);
       return;
     }
@@ -192,8 +199,9 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
     console.log("✅ YAML syntax valid");
 
     let editedManifest: Manifest;
+    let editedContent: string;
     try {
-      const editedContent = readFileSync(tempPath, "utf-8");
+      editedContent = readFileSync(tempPath, "utf-8");
       editedManifest = yaml.load(editedContent) as Manifest;
     } catch (err) {
       console.error("❌ Failed to parse edited file:", (err as Error).message);
@@ -212,10 +220,17 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
     }
 
     console.log("✅ Manifest structure valid");
+
+    // Check if content changed
+    if (editedContent.trim() === originalContent.trim()) {
+      console.log("✅ No changes detected.");
+      unlinkSync(tempPath);
+      return;
+    }
+
     console.log("✅ Writing manifest...");
 
-    const finalContent = yaml.dump(editedManifest, { indent: 2 });
-    writeFileSync(manifestPath, finalContent, "utf-8");
+    writeFileSync(manifestPath, editedContent, "utf-8");
 
     console.log("✅ Success! Manifest updated.");
 
