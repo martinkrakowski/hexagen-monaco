@@ -1,17 +1,11 @@
 import { Command } from "commander";
-import {
-  readFileSync,
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-  existsSync,
-} from "fs";
 import { spawn } from "child_process";
 import { tmpdir } from "os";
-import { join, dirname } from "path";
-import yaml from "js-yaml";
+import { join } from "path";
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { getProjectRoot, findProjectRoot } from "../shared/project-root.js";
+import { yamlService } from "../shared/yaml-service.js";
 
 export interface EditOptions {
   editor?: string;
@@ -24,8 +18,11 @@ function getManifestPath(cwd: string): string {
 }
 
 function loadManifest(path: string): Manifest {
-  const content = readFileSync(path, "utf-8");
-  return yaml.load(content) as Manifest;
+  const result = yamlService.loadManifest(path);
+  if (!result.success) {
+    throw result.error;
+  }
+  return result.value;
 }
 
 function detectEditor(): { editor: string; args: string[] } {
@@ -145,7 +142,7 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
   const tempPath = join(tmpdir(), `manifest-${Date.now()}.yaml`);
 
   try {
-    const originalContent = yaml.dump(manifest, { indent: 2 });
+    const originalContent = yamlService.serialize(manifest);
     writeFileSync(tempPath, originalContent, "utf-8");
 
     console.log(`✅ Opening ${editorName}...`);
@@ -166,7 +163,11 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
       let editedManifest: Manifest;
       try {
         editedContent = readFileSync(tempPath, "utf-8");
-        editedManifest = yaml.load(editedContent) as Manifest;
+        const parseResult = yamlService.parse(editedContent);
+        if (!parseResult.success) {
+          throw parseResult.error;
+        }
+        editedManifest = parseResult.value;
       } catch (err) {
         console.error(
           "❌ Failed to parse edited file:",
@@ -202,7 +203,11 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
     let editedContent: string;
     try {
       editedContent = readFileSync(tempPath, "utf-8");
-      editedManifest = yaml.load(editedContent) as Manifest;
+      const parseResult = yamlService.parse(editedContent);
+      if (!parseResult.success) {
+        throw parseResult.error;
+      }
+      editedManifest = parseResult.value;
     } catch (err) {
       console.error("❌ Failed to parse edited file:", (err as Error).message);
       process.exit(1);
