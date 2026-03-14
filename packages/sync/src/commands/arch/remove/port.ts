@@ -2,9 +2,9 @@ import { Command } from "commander";
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
-import { getProjectRoot } from "../../shared/project-root.js";
-import { yamlService } from "../../shared/yaml-service.js";
 import {
+  getProjectRoot,
+  yamlService,
   confirm,
   promptService,
   formatWarning,

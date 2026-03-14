@@ -6,7 +6,7 @@
  */
 
 export { yamlService } from "./yaml-service.js";
-export { getProjectRoot } from "./project-root.js";
+export { getProjectRoot, findProjectRoot } from "./project-root.js";
 export { promptService, PromptService } from "./prompt-service.js";
 export { spinner, Spinner } from "./spinner.js";
 export { confirm } from "./confirm.js";

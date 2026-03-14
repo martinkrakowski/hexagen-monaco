@@ -4,10 +4,13 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
-import { getProjectRoot, findProjectRoot } from "../shared/project-root.js";
-import { yamlService } from "../shared/yaml-service.js";
-import { spinner } from "../shared/spinner.js";
-import { promptService } from "../shared/prompt-service.js";
+import {
+  getProjectRoot,
+  findProjectRoot,
+  yamlService,
+  spinner,
+  promptService,
+} from "../shared/index.js";
 
 export interface EditOptions {
   editor?: string;
