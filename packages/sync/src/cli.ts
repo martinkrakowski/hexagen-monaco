@@ -4,6 +4,8 @@ import { Command } from "commander";
 import type { SyncFlags } from "./config.js";
 import { SyncEngine } from "./sync-engine.js";
 import { listCommand, validateCommand } from "./commands/arch/index.js";
+import { portCommander } from "./commands/arch/port.js";
+import { contextCommander } from "./commands/arch/context/command.js";
 
 const internalLogger: SyncFlags["logger"] = {
   info: (msg) => console.log(`[sync] ${msg}`),
@@ -83,6 +85,9 @@ function buildProgram(): Command {
     .action(async () => {
       await validateCommand();
     });
+
+  archCommand.addCommand(portCommander);
+  archCommand.addCommand(contextCommander);
 
   return program;
 }
