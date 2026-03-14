@@ -6,6 +6,8 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { getProjectRoot, findProjectRoot } from "../shared/project-root.js";
 import { yamlService } from "../shared/yaml-service.js";
+import { spinner } from "../shared/spinner.js";
+import { promptService } from "../shared/prompt-service.js";
 
 export interface EditOptions {
   editor?: string;
@@ -61,10 +63,6 @@ function validateManifestStructure(manifest: Manifest): string[] {
   return errors;
 }
 
-function isTTY(): boolean {
-  return process.stdin.isTTY && process.stdout.isTTY;
-}
-
 async function runEditor(editor: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(editor, args, {
@@ -98,12 +96,15 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  console.log("✅ Loading manifest...");
+  console.log("Loading manifest...");
+  spinner.start("Loading manifest");
 
   let manifest: Manifest;
   try {
     manifest = loadManifest(manifestPath);
+    spinner.succeed("Manifest loaded");
   } catch (err) {
+    spinner.fail("Failed to load manifest");
     console.error("❌ Failed to load manifest:", (err as Error).message);
     process.exit(1);
   }
@@ -130,7 +131,7 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
     return;
   }
 
-  if (!isTTY()) {
+  if (!promptService.canPrompt()) {
     console.error("❌ No terminal detected.");
     console.error("   This command requires an interactive terminal.");
     console.error(

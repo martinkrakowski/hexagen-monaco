@@ -1,16 +1,10 @@
 import { Command } from "commander";
-import * as readline from "node:readline";
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  renameSync,
-  unlinkSync,
-} from "fs";
+import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
 import { getProjectRoot } from "../../shared/project-root.js";
 import { yamlService } from "../../shared/yaml-service.js";
+import { confirm, promptService } from "../../shared/index.js";
 
 export interface RemoveContextOptions {
   force?: boolean;
@@ -22,16 +16,7 @@ export const removeContextCommander = new Command("context")
     await removeContextCommand(options);
   });
 
-function ask(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(prompt, resolve);
-  });
-}
-
-async function getContextSelection(
-  manifest: Manifest,
-  rl: readline.Interface,
-): Promise<string | null> {
+async function getContextSelection(manifest: Manifest): Promise<string | null> {
   const contexts = manifest.bounded_contexts ?? [];
 
   if (contexts.length === 0) {
@@ -47,7 +32,7 @@ async function getContextSelection(
     }
   });
 
-  const answer = await ask(rl, "\nSelect context number to remove: ");
+  const answer = await promptService.ask("\nSelect context number to remove: ");
   const numIndex = parseInt(answer, 10) - 1;
 
   if (isNaN(numIndex) || numIndex < 0 || numIndex >= contexts.length) {
@@ -61,16 +46,10 @@ async function getContextSelection(
   return selected.name;
 }
 
-async function confirmRemoval(
-  contextName: string,
-  rl: readline.Interface,
-): Promise<boolean> {
-  const answer = await ask(
-    rl,
-    `\n⚠️  Are you sure you want to remove context '${contextName}'? This will also remove all its ports. (y/n): `,
+async function confirmRemoval(contextName: string): Promise<boolean> {
+  return confirm(
+    `Are you sure you want to remove context '${contextName}'? This will also remove all its ports.`,
   );
-
-  return answer.toLowerCase() === "y";
 }
 
 function removeContextFromManifest(
@@ -103,21 +82,15 @@ export async function removeContextCommand(
   }
   manifest = loadResult.value;
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-  });
-
   try {
-    const selection = await getContextSelection(manifest, rl);
+    const selection = await getContextSelection(manifest);
 
     if (!selection) {
       console.info("👋 Removal cancelled.");
       return;
     }
 
-    const confirmed = force || (await confirmRemoval(selection, rl));
+    const confirmed = force || (await confirmRemoval(selection));
 
     if (!confirmed) {
       console.info("👋 Removal cancelled.");
@@ -147,6 +120,6 @@ export async function removeContextCommand(
       process.exit(1);
     }
   } finally {
-    rl.close();
+    promptService.close();
   }
 }

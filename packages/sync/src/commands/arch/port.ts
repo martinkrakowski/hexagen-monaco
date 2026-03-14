@@ -1,16 +1,14 @@
 import { Command } from "commander";
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  renameSync,
-  unlinkSync,
-} from "fs";
-import * as readline from "node:readline";
+import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "./port/persistence.js";
 import { getProjectRoot } from "../shared/project-root.js";
 import { yamlService } from "../shared/yaml-service.js";
+import {
+  promptService,
+  isValidPortName,
+  validatePortName,
+} from "../shared/index.js";
 
 // Local interface definition (temporary until validation.ts is created)
 interface PortDefinition {
@@ -104,24 +102,17 @@ function createWizardSession(): WizardSessionState {
   };
 }
 
-// Helper: wrap synchronous question() in a Promise for async/await support
-function ask(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(prompt, resolve);
-  });
-}
-
 async function collectPortDefinition(
   session: WizardSessionState,
   manifest: Manifest,
-  rl: readline.Interface,
 ): Promise<WizardSessionState> {
   // Step 1: Collect port name (with format validation)
   while (!session.portName) {
-    const prompt = "Enter port name (PascalCase, e.g., FooPort): ";
-    const answer = await ask(rl, prompt);
+    const answer = await promptService.askRequired(
+      "Enter port name (PascalCase, e.g., FooPort): ",
+    );
 
-    if (/^[A-Z][a-zA-Z0-9]*$/.test(answer)) {
+    if (isValidPortName(answer)) {
       session.portName = answer;
     } else {
       console.warn("⚠️ Port name must be PascalCase (e.g., FooPort)");
@@ -138,7 +129,7 @@ async function collectPortDefinition(
       console.info(`  ${index + 1}. ${name}`);
     });
 
-    const answer = await ask(rl, "Select context number (or name): ");
+    const answer = await promptService.ask("Select context number (or name): ");
 
     // Try numeric selection first
     const numIndex = parseInt(answer, 10) - 1;
@@ -154,7 +145,7 @@ async function collectPortDefinition(
 
   // Step 3: Collect port type (inbound vs outbound)
   while (!session.portType) {
-    const answer = await ask(rl, "\nPort type (in/out): ");
+    const answer = await promptService.ask("\nPort type (in/out): ");
 
     if (answer.toLowerCase() === "in") {
       session.portType = "in";
@@ -171,12 +162,6 @@ async function collectPortDefinition(
 async function runWizardSession(
   manifest: Manifest,
 ): Promise<PortDefinition | null> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-  });
-
   try {
     console.info("\n🔧 Starting port scaffolding wizard...\n");
 
@@ -184,7 +169,6 @@ async function runWizardSession(
     const session = await collectPortDefinition(
       createWizardSession(),
       manifest,
-      rl,
     );
 
     // Construct port definition
@@ -218,8 +202,8 @@ async function runWizardSession(
       validation.errors.forEach((error) => console.info(`   ${error}`));
 
       // Ask user if they want to retry or cancel
-      const retryAnswer = await ask(rl, "\nRetry? (y/n): ");
-      if (retryAnswer?.toLowerCase() === "y") {
+      const shouldRetry = await promptService.ask("Retry? (y/n): ");
+      if (shouldRetry?.toLowerCase() === "y") {
         return runWizardSession(manifest); // Recursive retry
       } else {
         console.info("👋 Wizard cancelled by user.");
@@ -228,19 +212,19 @@ async function runWizardSession(
     }
 
     return portDef;
-  } finally {
-    rl.close();
+  } catch (error) {
+    console.error("Wizard error:", error);
+    return null;
   }
 }
 
 export async function portCommand(): Promise<void> {
   const cwd = getProjectRoot();
 
-  // Load current manifest state (using inline function for now)
+  // Load current manifest state
   try {
     const manifestPath = `${cwd}/.architecture/manifest.yaml`;
-    const manifestContent = readFileSync(manifestPath, "utf-8");
-    const manifestResult = yamlService.loadManifest(manifestContent);
+    const manifestResult = yamlService.loadManifest(manifestPath);
     if (!manifestResult.success) {
       console.error(
         "⚠️ Failed to parse manifest:",

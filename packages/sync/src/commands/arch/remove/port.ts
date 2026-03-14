@@ -1,16 +1,15 @@
 import { Command } from "commander";
-import * as readline from "node:readline";
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  renameSync,
-  unlinkSync,
-} from "fs";
+import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
 import { getProjectRoot } from "../../shared/project-root.js";
 import { yamlService } from "../../shared/yaml-service.js";
+import {
+  confirm,
+  promptService,
+  formatWarning,
+  formatInfo,
+} from "../../shared/index.js";
 
 export interface RemovePortOptions {
   force?: boolean;
@@ -22,16 +21,7 @@ export const removePortCommander = new Command("port")
     await removePortCommand(options);
   });
 
-function ask(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(prompt, resolve);
-  });
-}
-
-async function getPortSelection(
-  manifest: Manifest,
-  rl: readline.Interface,
-): Promise<{
+async function getPortSelection(manifest: Manifest): Promise<{
   contextName: string;
   portName: string;
   direction: string;
@@ -84,7 +74,7 @@ async function getPortSelection(
     );
   });
 
-  const answer = await ask(rl, "\nSelect port number to remove: ");
+  const answer = await promptService.ask("\nSelect port number to remove: ");
   const numIndex = parseInt(answer, 10) - 1;
 
   if (isNaN(numIndex) || numIndex < 0 || numIndex >= allPorts.length) {
@@ -100,16 +90,14 @@ async function getPortSelection(
   return selected;
 }
 
-async function confirmRemoval(
-  port: { contextName: string; portName: string; direction: string },
-  rl: readline.Interface,
-): Promise<boolean> {
-  const answer = await ask(
-    rl,
-    `\nAre you sure you want to remove port '${port.portName}' from context '${port.contextName}'? (y/n): `,
+async function confirmRemoval(port: {
+  contextName: string;
+  portName: string;
+  direction: string;
+}): Promise<boolean> {
+  return confirm(
+    `Are you sure you want to remove port '${port.portName}' from context '${port.contextName}'?`,
   );
-
-  return answer.toLowerCase() === "y";
 }
 
 function removePortFromManifest(
@@ -163,21 +151,15 @@ export async function removePortCommand(
   }
   manifest = loadResult.value;
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-  });
-
   try {
-    const selection = await getPortSelection(manifest, rl);
+    const selection = await getPortSelection(manifest);
 
     if (!selection) {
       console.info("👋 Removal cancelled.");
       return;
     }
 
-    const confirmed = force || (await confirmRemoval(selection, rl));
+    const confirmed = force || (await confirmRemoval(selection));
 
     if (!confirmed) {
       console.info("👋 Removal cancelled.");
@@ -216,6 +198,6 @@ export async function removePortCommand(
       process.exit(1);
     }
   } finally {
-    rl.close();
+    promptService.close();
   }
 }

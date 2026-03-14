@@ -1,7 +1,6 @@
-import readline from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
 import type { Manifest } from "@hexagen/sync";
 import { validateContextName, checkContextUniqueness } from "./persistence.js";
+import { promptService, isValidContextName } from "../../shared/index.js";
 
 interface WizardState {
   name: string | null;
@@ -30,8 +29,6 @@ const CONTEXT_TYPE_OPTIONS = [
 export async function runContextWizard(
   manifest: Manifest,
 ): Promise<{ name: string; type: string; description?: string } | null> {
-  const rl = readline.createInterface({ input, output });
-
   try {
     console.info("\n🆕 Starting bounded context scaffolding wizard...\n");
 
@@ -39,15 +36,14 @@ export async function runContextWizard(
 
     // Step 1: Collect context name
     while (!state.name) {
-      const answer = await rl.question(
+      const answer = await promptService.askRequired(
         "Enter context name (snake_case, e.g., user-management): ",
       );
 
-      const validation = validateContextName(answer);
-
-      if (!validation.valid) {
-        console.warn("⚠️  Validation errors:");
-        validation.errors.forEach((err) => console.warn(`   - ${err}`));
+      if (!isValidContextName(answer)) {
+        console.warn(
+          "⚠️  Context name must be snake_case (e.g., user_management)",
+        );
         console.log("");
         continue;
       }
@@ -70,7 +66,7 @@ export async function runContextWizard(
     });
 
     while (!state.type) {
-      const answer = await rl.question("Enter number (1-4): ");
+      const answer = await promptService.ask("Enter number (1-4): ");
 
       const num = parseInt(answer, 10);
       if (num >= 1 && num <= CONTEXT_TYPE_OPTIONS.length) {
@@ -81,7 +77,7 @@ export async function runContextWizard(
     }
 
     // Step 3: Optional description
-    const descAnswer = await rl.question(
+    const descAnswer = await promptService.ask(
       "\nEnter description (optional, press Enter to skip): ",
     );
 
@@ -102,7 +98,8 @@ export async function runContextWizard(
       type: state.type!,
       description: state.description || undefined,
     };
-  } finally {
-    rl.close();
+  } catch (error) {
+    console.error("Wizard error:", error);
+    return null;
   }
 }
