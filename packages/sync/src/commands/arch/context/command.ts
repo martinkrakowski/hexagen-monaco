@@ -5,13 +5,14 @@ import {
   saveManifest,
 } from "./persistence.js";
 import { runContextWizard } from "./wizard.js";
+import { getProjectRoot } from "../../shared/project-root.js";
 
 export const contextCommander = new Command("context").description(
   "Add a new bounded context interactively",
 );
 
 export async function contextCommand(): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
 
   // Load current manifest state
   const manifestResult = loadManifest(cwd);

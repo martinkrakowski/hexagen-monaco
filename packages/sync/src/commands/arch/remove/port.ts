@@ -10,6 +10,7 @@ import {
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
 import { load } from "js-yaml";
+import { getProjectRoot } from "../../shared/project-root.js";
 
 export interface RemovePortOptions {
   force?: boolean;
@@ -147,7 +148,7 @@ function removePortFromManifest(
 export async function removePortCommand(
   options: RemovePortOptions = {},
 ): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
   // Get force from parent command hook or direct option
   const force =

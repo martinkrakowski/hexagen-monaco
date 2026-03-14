@@ -10,6 +10,7 @@ import * as readline from "node:readline";
 import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "./port/persistence.js";
+import { getProjectRoot } from "../shared/project-root.js";
 
 // Local interface definition (temporary until validation.ts is created)
 interface PortDefinition {
@@ -233,7 +234,7 @@ async function runWizardSession(
 }
 
 export async function portCommand(): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
 
   // Load current manifest state (using inline function for now)
   try {

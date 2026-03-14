@@ -1,8 +1,9 @@
 import { loadManifest } from "../../manifest-service.js";
 import type { Manifest, BoundedContext, App } from "../../types/manifest.js";
+import { getProjectRoot } from "../shared/project-root.js";
 
 export async function listCommand(): Promise<void> {
-  const workspaceRoot = process.cwd();
+  const workspaceRoot = getProjectRoot();
 
   const result = await loadManifest(workspaceRoot);
 

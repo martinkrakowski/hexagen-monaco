@@ -1,7 +1,8 @@
 import { validateManifest } from "../../manifest-service.js";
+import { getProjectRoot } from "../shared/project-root.js";
 
 export async function validateCommand(): Promise<void> {
-  const workspaceRoot = process.cwd();
+  const workspaceRoot = getProjectRoot();
 
   console.log("Running architecture validation...\n");
 

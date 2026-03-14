@@ -11,6 +11,7 @@ import { tmpdir } from "os";
 import { join, dirname } from "path";
 import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
+import { getProjectRoot, findProjectRoot } from "../shared/project-root.js";
 
 export interface EditOptions {
   editor?: string;
@@ -89,7 +90,7 @@ async function runEditor(editor: string, args: string[]): Promise<void> {
 }
 
 export async function editCommand(options: EditOptions = {}): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
   const { editor: editorName, args: editorArgs } = options.editor
     ? { editor: options.editor, args: [] }

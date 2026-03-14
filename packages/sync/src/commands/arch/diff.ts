@@ -5,6 +5,7 @@ import { join, dirname } from "path";
 import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
 import { Result, ok, err } from "../../domain/result.js";
+import { getProjectRoot } from "../shared/project-root.js";
 
 interface DiffEntry {
   type: "port" | "context";
@@ -239,7 +240,7 @@ function formatDiff(diff: ManifestDiff): string {
 }
 
 async function runDiffGit(): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
 
   const currentResult = loadManifestFromPath(manifestPath);
@@ -263,7 +264,7 @@ async function runDiffGit(): Promise<void> {
 }
 
 async function runDiffFile(filePath: string): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
 
   const currentResult = loadManifestFromPath(manifestPath);
@@ -287,7 +288,7 @@ async function runDiffFile(filePath: string): Promise<void> {
 }
 
 async function runDiffStdin(): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
 
   const currentResult = loadManifestFromPath(manifestPath);

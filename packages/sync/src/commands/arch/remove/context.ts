@@ -10,6 +10,7 @@ import {
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
 import { load } from "js-yaml";
+import { getProjectRoot } from "../../shared/project-root.js";
 
 export interface RemoveContextOptions {
   force?: boolean;
@@ -87,7 +88,7 @@ function removeContextFromManifest(
 export async function removeContextCommand(
   options: RemoveContextOptions = {},
 ): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = getProjectRoot();
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
   // Get force from parent command hook or direct option
   const force =
