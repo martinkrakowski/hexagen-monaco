@@ -28,7 +28,7 @@ This directory is the **single source of truth** for the architectural shape of 
 HexaGen Monaco treats architecture as **executable data**. Instead of relying on convention and code review to enforce boundaries, the system:
 
 1. **Declares** architecture in `manifest.yaml` (bounded contexts, ports, use cases)
-2. **Generates** package skeletons, barrels, and configuration via `hexagen sync`
+2. **Generates** package skeletons, barrels, and configuration via `npx hexagen sync`
 3. **Validates** boundaries at build time via the arch-linter
 4. **Enforces** invariants through the bootstrap sequence
 
@@ -144,7 +144,7 @@ Nine structural rules enforced during generation:
 
 ### Bootstrap Sequence
 
-Steps executed during `hexagen sync`:
+Steps executed during `npx hexagen sync`:
 
 ```
 1. load-ownership-map              # memory-only
@@ -299,6 +299,28 @@ yarn build
 yarn typecheck
 ```
 
+### Manage Architecture Manifest
+
+```bash
+# List bounded contexts
+hexagen arch list
+
+# Validate manifest against rules
+hexagen arch validate
+
+# Scaffold a new port interactively
+hexagen arch port
+
+# Add a new bounded context interactively
+hexagen arch context
+
+# Remove a port from a context
+hexagen arch remove port
+
+# Remove a bounded context
+hexagen arch remove context
+```
+
 ---
 
 ## Troubleshooting
@@ -403,7 +425,7 @@ export * from "./subdirectory/index.js";
 
 ### When Barrels Are Regenerated
 
-- Running `hexagen sync` regenerates all barrels marked with `@generated`
+- Running `npx hexagen sync` regenerates all barrels marked with `@generated`
 - New files are automatically added to the appropriate barrel
 - Deleted files are automatically removed from barrels
 
@@ -422,7 +444,7 @@ export * from "./public-api.js";
 
 | Issue                       | Cause                             | Fix                               |
 | --------------------------- | --------------------------------- | --------------------------------- |
-| New file not exported       | Barrel not regenerated            | Run `hexagen sync`                |
+| New file not exported       | Barrel not regenerated            | Run `npx hexagen sync`            |
 | Export of `.d.js` (invalid) | `.d.ts` files in `src/`           | Delete stale `.d.ts` artifacts    |
 | Circular export error       | A re-exports B which re-exports A | Restructure to break cycle        |
 | "Not a module" error        | Empty barrel with `export {}`     | Add real exports or delete barrel |
@@ -460,7 +482,7 @@ Keep types in their owning package when:
    - Ports → `packages/shared/src/application/ports/`
    - Errors → `packages/shared/src/errors/`
 
-2. Run `hexagen sync` to regenerate barrels
+2. Run `npx hexagen sync` to regenerate barrels
 
 3. Export from root barrel (`packages/shared/src/index.ts`) if needed
 

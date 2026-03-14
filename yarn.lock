@@ -3903,6 +3903,8 @@ __metadata:
     prettier: "npm:^3.2.5"
     turbo: "npm:^1.13.3"
     typescript: "npm:^5.4.5"
+  bin:
+    hexagen: ./cli.js
   languageName: unknown
   linkType: soft
 

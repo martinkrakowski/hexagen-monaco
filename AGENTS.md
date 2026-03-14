@@ -316,7 +316,7 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 
 **Invokable via:**
 
-- `hexagen` — directly from monorepo root (requires build)
+- `npx hexagen` — directly from monorepo root (requires build)
 - `npx hexagen` — via npx (requires build)
 - `node cli.js` — direct invocation
 - `yarn sync` — via yarn script
@@ -324,14 +324,18 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 
 #### Commands
 
-| Command                  | Description                                       |
-| ------------------------ | ------------------------------------------------- |
-| `hexagen sync`           | Run the HexaGen sync engine to generate artifacts |
-| `hexagen sync --dry-run` | Preview changes without writing files             |
-| `hexagen sync --force`   | Overwrite non-generated files in packages         |
-| `hexagen sync --strict`  | Fail on architecture linter warnings              |
-| `hexagen arch list`      | Display manifest.yaml in tabular format           |
-| `hexagen arch validate`  | Validate manifest.yaml against linter rules       |
+| Command                           | Description                                       |
+| --------------------------------- | ------------------------------------------------- |
+| `npx hexagen sync`                | Run the HexaGen sync engine to generate artifacts |
+| `npx hexagen sync --dry-run`      | Preview changes without writing files             |
+| `npx hexagen sync --force`        | Overwrite non-generated files in packages         |
+| `npx hexagen sync --strict`       | Fail on architecture linter warnings              |
+| `npx hexagen arch list`           | Display manifest.yaml in tabular format           |
+| `npx hexagen arch validate`       | Validate manifest.yaml against linter rules       |
+| `npx hexagen arch port`           | Scaffold a new port interactively                 |
+| `npx hexagen arch context`        | Add a new bounded context interactively           |
+| `npx hexagen arch remove port`    | Remove a port from a bounded context              |
+| `npx hexagen arch remove context` | Remove a bounded context from manifest            |
 
 #### Sync Flags
 

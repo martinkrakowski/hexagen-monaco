@@ -114,21 +114,25 @@ git clone git@github.com:martinkrakowski/hexagen-monaco.git
 cd hexagen-monaco
 yarn install
 yarn build
-hexagen --help
+npx hexagen --help
 ```
 
 ## CLI Commands
 
 ```bash
 # Run the sync engine
-hexagen sync                    # Generate artifacts
-hexagen sync --dry-run         # Preview changes
-hexagen sync --force           # Overwrite non-generated files
-hexagen sync --strict          # Fail on linter warnings
+npx hexagen sync                    # Generate artifacts
+npx hexagen sync --dry-run         # Preview changes
+npx hexagen sync --force           # Overwrite non-generated files
+npx hexagen sync --strict          # Fail on linter warnings
 
 # Manage architecture manifest
-hexagen arch list              # List bounded contexts
-hexagen arch validate          # Validate manifest against rules
+npx hexagen arch list              # List bounded contexts
+npx hexagen arch validate          # Validate manifest against rules
+npx hexagen arch port              # Scaffold a new port interactively
+npx hexagen arch context           # Add a new bounded context interactively
+npx hexagen arch remove port       # Remove a port from a context
+npx hexagen arch remove context    # Remove a bounded context
 ```
 
 ---
