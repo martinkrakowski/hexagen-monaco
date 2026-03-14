@@ -34,7 +34,7 @@ jobs:
         run: yarn turbo run build --output-logs=full --log-order=stream
 
       - name: "Execute Hardened Sync"
-        run: node packages/sync/dist/cli.js sync --force --allow-dirty
+        run: yarn workspace @hexagen/sync run cli sync --force --allow-dirty
 
       - name: "Verify Build After Sync"
         run: yarn turbo run build --output-logs=full --log-order=stream --force
@@ -43,4 +43,4 @@ jobs:
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
 
       - name: "Verify Architectural Rules After Sync"
-        run: node packages/sync/dist/cli.js sync --dry-run
+        run: yarn workspace @hexagen/sync run cli sync --dry-run
