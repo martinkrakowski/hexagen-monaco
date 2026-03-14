@@ -2,10 +2,10 @@ import { Command } from "commander";
 import { readFileSync } from "fs";
 import { execSync } from "child_process";
 import { join, dirname } from "path";
-import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
 import { Result, ok, err } from "../../domain/result.js";
 import { getProjectRoot } from "../shared/project-root.js";
+import { yamlService } from "../shared/yaml-service.js";
 
 interface DiffEntry {
   type: "port" | "context";
@@ -29,13 +29,11 @@ function getManifestPath(cwd: string): string {
 }
 
 function loadManifestFromPath(path: string): Result<Manifest> {
-  try {
-    const content = readFileSync(path, "utf-8");
-    const manifest = yaml.load(content) as Manifest;
-    return ok(manifest);
-  } catch (e) {
-    return err(e as Error);
+  const result = yamlService.loadManifest(path);
+  if (!result.success) {
+    return err(result.error);
   }
+  return ok(result.value);
 }
 
 function loadManifestFromGit(cwd: string): Result<Manifest> {
@@ -44,8 +42,11 @@ function loadManifestFromGit(cwd: string): Result<Manifest> {
       cwd,
       encoding: "utf-8",
     });
-    const manifest = yaml.load(content) as Manifest;
-    return ok(manifest);
+    const parseResult = yamlService.parse(content);
+    if (!parseResult.success) {
+      return err(parseResult.error);
+    }
+    return ok(parseResult.value);
   } catch (e) {
     return err(new Error("No previous manifest found in git history"));
   }
@@ -302,14 +303,13 @@ async function runDiffStdin(): Promise<void> {
   let stdinContent = "";
   process.stdin.on("data", (chunk) => (stdinContent += chunk));
   process.stdin.on("end", () => {
-    try {
-      const previousManifest = yaml.load(stdinContent) as Manifest;
-      const diff = computeDiff(currentResult.value, previousManifest);
-      console.log(formatDiff(diff));
-    } catch (e) {
-      console.error(`Failed to parse stdin: ${(e as Error).message}`);
+    const parseResult = yamlService.parse(stdinContent);
+    if (!parseResult.success) {
+      console.error(`Failed to parse stdin: ${parseResult.error.message}`);
       process.exit(1);
     }
+    const diff = computeDiff(currentResult.value, parseResult.value);
+    console.log(formatDiff(diff));
   });
 }
 

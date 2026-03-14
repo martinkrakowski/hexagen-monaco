@@ -9,8 +9,8 @@ import {
 } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
-import { load } from "js-yaml";
 import { getProjectRoot } from "../../shared/project-root.js";
+import { yamlService } from "../../shared/yaml-service.js";
 
 export interface RemoveContextOptions {
   force?: boolean;
@@ -96,15 +96,12 @@ export async function removeContextCommand(
 
   let manifest: Manifest;
 
-  try {
-    const content = readFileSync(manifestPath, "utf-8");
-    const loaded = load(content) as Manifest;
-    manifest = loaded;
-  } catch (err) {
-    const error = err as Error;
-    console.error("⚠️  Failed to read manifest:", error.message);
+  const loadResult = yamlService.loadManifest(manifestPath);
+  if (!loadResult.success) {
+    console.error("⚠️  Failed to read manifest:", loadResult.error.message);
     process.exit(1);
   }
+  manifest = loadResult.value;
 
   const rl = readline.createInterface({
     input: process.stdin,

@@ -6,9 +6,9 @@ import {
   unlinkSync,
 } from "fs";
 import { join, dirname } from "path";
-import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
 import type { BoundedContext } from "../../../types/manifest.js";
+import { yamlService } from "../../shared/yaml-service.js";
 
 export interface SaveResult {
   success: boolean;
@@ -38,20 +38,19 @@ function getManifestPath(cwd: string): string {
 export function loadManifest(
   cwd: string,
 ): { success: true; data: Manifest } | { success: false; error: Error } {
-  try {
-    const manifestPath = getManifestPath(cwd);
-    const content = readFileSync(manifestPath, "utf-8");
-    const manifest = yaml.load(content) as Manifest;
+  const manifestPath = getManifestPath(cwd);
+  const result = yamlService.loadManifest(manifestPath);
 
-    if (!manifest || typeof manifest !== "object") {
-      return { success: false, error: new Error("Invalid manifest structure") };
-    }
-
-    return { success: true, data: manifest };
-  } catch (err) {
-    const error = err as Error;
-    return { success: false, error };
+  if (!result.success) {
+    return { success: false, error: result.error };
   }
+
+  const manifest = result.value;
+  if (!manifest || typeof manifest !== "object") {
+    return { success: false, error: new Error("Invalid manifest structure") };
+  }
+
+  return { success: true, data: manifest };
 }
 
 export function addContextToManifest(
@@ -82,11 +81,7 @@ export function generateManifestYaml(manifest: Manifest): string {
     apps: manifest.apps,
   };
 
-  return yaml.dump(cleanManifest, {
-    indent: 2,
-    lineWidth: -1,
-    noRefs: true,
-  });
+  return yamlService.serialize(cleanManifest);
 }
 
 export function saveManifest(cwd: string, manifest: Manifest): SaveResult {

@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
-import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
+import { yamlService } from "../../shared/yaml-service.js";
 
 /**
  * SaveResult — typed result wrapper for manifest persistence operations.
@@ -94,11 +94,7 @@ export function generateManifestYaml(manifest: Manifest): string {
     apps: manifest.apps,
   };
 
-  return yaml.dump(cleanManifest, {
-    indent: 2,
-    lineWidth: -1,
-    noRefs: true,
-  });
+  return yamlService.serialize(cleanManifest);
 }
 
 /**
