@@ -282,7 +282,7 @@ async function runDiffFile(filePath: string): Promise<void> {
     process.exit(1);
   }
 
-  const diff = computeDiff(currentResult.value, previousResult.value);
+  const diff = computeDiff(previousResult.value, currentResult.value);
   console.log(formatDiff(diff));
 }
 
