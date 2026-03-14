@@ -132,7 +132,9 @@ npx hexagen arch validate          # Validate manifest against rules
 npx hexagen arch port              # Scaffold a new port interactively
 npx hexagen arch context           # Add a new bounded context interactively
 npx hexagen arch remove port       # Remove a port from a context
+npx hexagen arch remove port --force   # Remove without confirmation
 npx hexagen arch remove context    # Remove a bounded context
+npx hexagen arch remove context --force  # Remove without confirmation
 npx hexagen arch diff              # Show manifest changes (current vs git HEAD)
 npx hexagen arch diff --file <path>  # Compare against specific file
 ```

@@ -11,9 +11,15 @@ import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
 import { load } from "js-yaml";
 
+export interface RemovePortOptions {
+  force?: boolean;
+}
+
 export const removePortCommander = new Command("port")
   .description("Remove a port from a bounded context")
-  .action(removePortCommand);
+  .action(async (options: RemovePortOptions) => {
+    await removePortCommand(options);
+  });
 
 function ask(rl: readline.Interface, prompt: string): Promise<string> {
   return new Promise((resolve) => {
@@ -138,9 +144,14 @@ function removePortFromManifest(
   };
 }
 
-export async function removePortCommand(): Promise<void> {
+export async function removePortCommand(
+  options: RemovePortOptions = {},
+): Promise<void> {
   const cwd = process.cwd();
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
+  // Get force from parent command hook or direct option
+  const force =
+    options.force ?? (removePortCommander as any).forceOption ?? false;
 
   let manifest: Manifest;
 
@@ -168,12 +179,16 @@ export async function removePortCommand(): Promise<void> {
       return;
     }
 
-    const confirmed = await confirmRemoval(selection, rl);
+    const confirmed = force || (await confirmRemoval(selection, rl));
 
     if (!confirmed) {
       console.info("👋 Removal cancelled.");
       return;
     }
+
+    console.info(
+      `\n➡️  Removing port '${selection.portName}' from context '${selection.contextName}'`,
+    );
 
     const updatedManifest = removePortFromManifest(
       manifest,

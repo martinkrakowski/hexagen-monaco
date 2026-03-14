@@ -324,20 +324,22 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 
 #### Commands
 
-| Command                           | Description                                       |
-| --------------------------------- | ------------------------------------------------- |
-| `npx hexagen sync`                | Run the HexaGen sync engine to generate artifacts |
-| `npx hexagen sync --dry-run`      | Preview changes without writing files             |
-| `npx hexagen sync --force`        | Overwrite non-generated files in packages         |
-| `npx hexagen sync --strict`       | Fail on architecture linter warnings              |
-| `npx hexagen arch list`           | Display manifest.yaml in tabular format           |
-| `npx hexagen arch validate`       | Validate manifest.yaml against linter rules       |
-| `npx hexagen arch port`           | Scaffold a new port interactively                 |
-| `npx hexagen arch context`        | Add a new bounded context interactively           |
-| `npx hexagen arch remove port`    | Remove a port from a bounded context              |
-| `npx hexagen arch remove context` | Remove a bounded context from manifest            |
-| `npx hexagen arch diff`           | Show manifest changes (current vs git HEAD)       |
-| `npx hexagen arch diff --file`    | Compare manifest against specific file            |
+| Command                                   | Description                                       |
+| ----------------------------------------- | ------------------------------------------------- |
+| `npx hexagen sync`                        | Run the HexaGen sync engine to generate artifacts |
+| `npx hexagen sync --dry-run`              | Preview changes without writing files             |
+| `npx hexagen sync --force`                | Overwrite non-generated files in packages         |
+| `npx hexagen sync --strict`               | Fail on architecture linter warnings              |
+| `npx hexagen arch list`                   | Display manifest.yaml in tabular format           |
+| `npx hexagen arch validate`               | Validate manifest.yaml against linter rules       |
+| `npx hexagen arch port`                   | Scaffold a new port interactively                 |
+| `npx hexagen arch context`                | Add a new bounded context interactively           |
+| `npx hexagen arch remove port`            | Remove a port from a bounded context              |
+| `npx hexagen arch remove port --force`    | Remove without confirmation (scripting)           |
+| `npx hexagen arch remove context`         | Remove a bounded context from manifest            |
+| `npx hexagen arch remove context --force` | Remove without confirmation (scripting)           |
+| `npx hexagen arch diff`                   | Show manifest changes (current vs git HEAD)       |
+| `npx hexagen arch diff --file`            | Compare manifest against specific file            |
 
 #### Sync Flags
 

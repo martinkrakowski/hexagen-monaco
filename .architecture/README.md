@@ -316,9 +316,11 @@ hexagen arch context
 
 # Remove a port from a context
 hexagen arch remove port
+hexagen arch remove port --force   # Skip confirmation
 
 # Remove a bounded context
 hexagen arch remove context
+hexagen arch remove context --force  # Skip confirmation
 
 # Show manifest changes (current vs git HEAD)
 hexagen arch diff

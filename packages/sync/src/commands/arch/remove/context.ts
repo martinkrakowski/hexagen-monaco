@@ -11,9 +11,15 @@ import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "../port/persistence.js";
 import { load } from "js-yaml";
 
+export interface RemoveContextOptions {
+  force?: boolean;
+}
+
 export const removeContextCommander = new Command("context")
   .description("Remove a bounded context from the manifest")
-  .action(removeContextCommand);
+  .action(async (options: RemoveContextOptions) => {
+    await removeContextCommand(options);
+  });
 
 function ask(rl: readline.Interface, prompt: string): Promise<string> {
   return new Promise((resolve) => {
@@ -78,9 +84,14 @@ function removeContextFromManifest(
   };
 }
 
-export async function removeContextCommand(): Promise<void> {
+export async function removeContextCommand(
+  options: RemoveContextOptions = {},
+): Promise<void> {
   const cwd = process.cwd();
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
+  // Get force from parent command hook or direct option
+  const force =
+    options.force ?? (removeContextCommander as any).forceOption ?? false;
 
   let manifest: Manifest;
 
@@ -108,12 +119,14 @@ export async function removeContextCommand(): Promise<void> {
       return;
     }
 
-    const confirmed = await confirmRemoval(selection, rl);
+    const confirmed = force || (await confirmRemoval(selection, rl));
 
     if (!confirmed) {
       console.info("👋 Removal cancelled.");
       return;
     }
+
+    console.info(`\n➡️  Removing context '${selection}'`);
 
     const updatedManifest = removeContextFromManifest(manifest, selection);
 
