@@ -137,6 +137,9 @@ npx hexagen arch remove context    # Remove a bounded context
 npx hexagen arch remove context --force  # Remove without confirmation
 npx hexagen arch diff              # Show manifest changes (current vs git HEAD)
 npx hexagen arch diff --file <path>  # Compare against specific file
+npx hexagen arch edit              # Edit manifest in editor (default: nano)
+npx hexagen arch edit --editor vim # Use vim instead of nano
+npx hexagen arch edit --validate-only  # Validate without editing
 ```
 
 ---

@@ -340,6 +340,9 @@ Steps run in this exact order. Preconditions must be respected — memory-only s
 | `npx hexagen arch remove context --force` | Remove without confirmation (scripting)           |
 | `npx hexagen arch diff`                   | Show manifest changes (current vs git HEAD)       |
 | `npx hexagen arch diff --file`            | Compare manifest against specific file            |
+| `npx hexagen arch edit`                   | Edit manifest in editor (default: nano)           |
+| `npx hexagen arch edit --editor vim`      | Use specified editor                              |
+| `npx hexagen arch edit --validate-only`   | Validate without editing                          |
 
 #### Sync Flags
 

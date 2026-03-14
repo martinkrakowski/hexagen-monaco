@@ -327,6 +327,11 @@ hexagen arch diff
 
 # Compare against specific file
 hexagen arch diff --file proposed.yaml
+
+# Edit manifest in editor (default: nano)
+hexagen arch edit
+hexagen arch edit --editor vim    # Use vim instead
+hexagen arch edit --validate-only  # Validate without editing
 ```
 
 ---

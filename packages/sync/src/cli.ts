@@ -8,6 +8,7 @@ import { portCommander } from "./commands/arch/port.js";
 import { contextCommander } from "./commands/arch/context/command.js";
 import { removeCommander } from "./commands/arch/remove.js";
 import { diffCommander } from "./commands/arch/diff.js";
+import { editCommander } from "./commands/arch/edit.js";
 
 const internalLogger: SyncFlags["logger"] = {
   info: (msg) => console.log(`[sync] ${msg}`),
@@ -92,6 +93,7 @@ function buildProgram(): Command {
   archCommand.addCommand(contextCommander);
   archCommand.addCommand(removeCommander);
   archCommand.addCommand(diffCommander);
+  archCommand.addCommand(editCommander);
 
   return program;
 }
