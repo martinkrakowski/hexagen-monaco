@@ -7,6 +7,7 @@ import {
   unlinkSync,
 } from "fs";
 import * as readline from "node:readline";
+import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "./port/persistence.js";
 
@@ -238,7 +239,7 @@ export async function portCommand(): Promise<void> {
   try {
     const manifestPath = `${cwd}/.architecture/manifest.yaml`;
     const manifestContent = readFileSync(manifestPath, "utf-8");
-    const manifest: Manifest = JSON.parse(manifestContent);
+    const manifest: Manifest = yaml.load(manifestContent) as Manifest;
 
     // Run interactive wizard session
     const portDef = await runWizardSession(manifest);
