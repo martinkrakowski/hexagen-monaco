@@ -319,6 +319,12 @@ hexagen arch remove port
 
 # Remove a bounded context
 hexagen arch remove context
+
+# Show manifest changes (current vs git HEAD)
+hexagen arch diff
+
+# Compare against specific file
+hexagen arch diff --file proposed.yaml
 ```
 
 ---
