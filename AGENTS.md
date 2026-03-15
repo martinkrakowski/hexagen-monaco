@@ -218,6 +218,7 @@ The agent **rejects** any proposal or code that violates the following:
 | Logic-heavy Zod schemas in Infrastructure                  | Persistence schemas in Infra; Domain/Shared for business rules                                                         |
 | Implicit parameter types (TS7006)                          | Violates strict typing — all parameters must have explicit type annotations                                            |
 | Editing a port/use-case file before its manifest entry exists or is updated | Manifest is the source of truth — code must follow the manifest, never lead it |
+| Adding an `@hexagen/*` import in any package's source without updating `package.json` | Local builds pass via webpack aliasing in `next.config.mjs`; CI uses `tsc` composite build which requires an explicit `"@hexagen/pkg": "workspace:*"` entry in the importing package's `dependencies` — missing entries cause CI-only TS2307 errors |
 
 ---
 
