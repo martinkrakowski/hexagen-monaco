@@ -7,6 +7,9 @@
 
 ## Quick Reference
 
+**Before answering any questions**
+Switch to the correct mode that is appropriate for the prompt, then proceed.
+
 **Before starting ANY work:**
 
 ```bash
@@ -51,8 +54,6 @@ yarn build && yarn typecheck
 - [9. Subsystem-Specific Rules](#9-subsystem-specific-rules)
 - [10. Interaction Protocol](#10-interaction-protocol)
 - [11. Git Archeology Toolkit](#11-git-archeology-toolkit)
-- [Appendix: Open Items](#appendix-open-items)
-- [Appendix: Barrel Generation](#appendix-barrel-generation-fixed-march-2026)
 - [Appendix: Module Resolution](#appendix-module-resolution)
 
 ---
@@ -215,6 +216,7 @@ The agent **rejects** any proposal or code that violates the following:
 | Cross-context type dependency                              | Move shared types to `@hexagen/shared` instead of importing from another bounded context                               |
 | `.d.ts` files in `src/` directories                        | Build artifacts must only exist in `dist/` — delete if found in `src/`                                                 |
 | Logic-heavy Zod schemas in Infrastructure                  | Persistence schemas in Infra; Domain/Shared for business rules                                                         |
+| Implicit parameter types (TS7006)                          | Violates strict typing — all parameters must have explicit type annotations                                            |
 
 ---
 
@@ -486,7 +488,7 @@ Every package must include:
 | Paste code for review       | Paste directly — agent will critique against hexagonal/DDD rules  |
 | Ask for regeneration impact | "What would regenerating this affect?"                            |
 
-**When pasting code for review**, the agent will check against:
+**When pasting code for review**, the agent will switch to Review & Archeology Mode and check against:
 
 - Port contract alignment (method signatures, return types)
 - Barrel reachability from package root
@@ -573,21 +575,6 @@ git show <commit-hash> --stat
 3. **Read commit context**: Use `git show <commit> --stat` to see what else changed
 4. **Cross-reference ADRs**: Check `.architecture/decisions/` for rationale
 5. **Classify**: Bug-fix Invariant (protected) or Legacy Debt (refactorable)
-
----
-
-## Appendix: Open Items
-
-1. Enforce `PortDeclaredEvent` on new ports (lint/hook)
-2. `YamlConfigAdapter` – no file locking (single-session only for now)
-3. `ExecuteBootstrapSequenceUseCase` – decide step→use-case mapping strategy
-4. Turbopack support for ESM `.js` extension resolution (blocked upstream)
-
----
-
-## Appendix: Barrel Generation
-
-Barrel generation was consolidated in PR #56 — **See** [ADR-0007](.architecture/decisions/0004-ci-build-typescript-monorepo-resolution.md) for full technical details.
 
 ---
 
