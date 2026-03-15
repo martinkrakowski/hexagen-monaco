@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { ReactFlowProvider } from "@xyflow/react";
 import { useCanvasState } from "../../hooks/use-canvas-state";
 import { HexagonCanvas, CanvasToolbar, NodeEditorDialog } from "./index";
 import type { Result } from "@hexagen/shared";
@@ -58,23 +59,25 @@ export function GraphCanvasWrapper({ projectId }: GraphCanvasWrapperProps) {
     : undefined;
 
   return (
-    <div className="w-full h-full min-h-[400px] relative">
-      <HexagonCanvas
-        nodes={state.nodes}
-        edges={state.edges}
-        onNodeDragStop={state.onNodeDragStop}
-        onNodeDoubleClick={state.onNodeDoubleClick}
-        onExportClick={handleExportClick}
-      />
-      <div className="absolute top-4 right-4">
-        <CanvasToolbar onAddNode={state.onAddNode} onExport={handleExport} />
+    <ReactFlowProvider>
+      <div className="w-full h-full min-h-[400px] relative">
+        <HexagonCanvas
+          nodes={state.nodes}
+          edges={state.edges}
+          onNodeDragStop={state.onNodeDragStop}
+          onNodeDoubleClick={state.onNodeDoubleClick}
+          onExportClick={handleExportClick}
+        />
+        <div className="absolute top-4 right-4">
+          <CanvasToolbar onAddNode={state.onAddNode} onExport={handleExport} />
+        </div>
+        <NodeEditorDialog
+          isOpen={!!selectedNode}
+          node={selectedNode}
+          onClose={state.onCloseEditor}
+          onUpdateNode={state.onUpdateNode}
+        />
       </div>
-      <NodeEditorDialog
-        isOpen={!!selectedNode}
-        node={selectedNode}
-        onClose={state.onCloseEditor}
-        onUpdateNode={state.onUpdateNode}
-      />
-    </div>
+    </ReactFlowProvider>
   );
 }
