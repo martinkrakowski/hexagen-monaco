@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hexagen/shared": "workspace:*"
+    "@hexagen/shared": "workspace:*",
+    "@hexagen/visualization": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
