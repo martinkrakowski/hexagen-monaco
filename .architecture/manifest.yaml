@@ -296,8 +296,7 @@ bounded_contexts:
             - ArchitectureGraphProviderPort
     generator:
       dependencies:
-        reactflow: ^11.11.4
-        "@dagrejs/dagre": ^1.1.4
+        "@dagrejs/dagre": ^2.0.4
   - name: messaging
     type: supporting
     description: Domain events, intent bus, pluggable transports
@@ -359,6 +358,9 @@ bounded_contexts:
           - LocalStoragePersistenceAdapter
           - WebContainerPreviewAdapter
     driver_for: apps/web
+    generator:
+      dependencies:
+        "@xyflow/react": ^12.10.1
     depends_on:
       - monaco-orchestration
     wiring:
