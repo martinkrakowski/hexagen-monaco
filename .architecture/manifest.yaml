@@ -17,11 +17,11 @@ monorepo:
       - prettier
     rules:
       no-console: warn
-      '@typescript-eslint/no-explicit-any': error
+      "@typescript-eslint/no-explicit-any": error
       no-restricted-imports:
         patterns:
           - group:
-              - '@hexagen/*'
+              - "@hexagen/*"
             message: Cross-package imports must go through barrel files.
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
@@ -45,13 +45,13 @@ monorepo:
       declaration: true
       emitDeclarationOnly: true
       paths:
-        '@hexagen/*':
+        "@hexagen/*":
           - packages/*/src/index.ts
-        '@hexagen/shared':
+        "@hexagen/shared":
           - packages/shared/src/index.ts
-        '@hexagen/shared/*':
+        "@hexagen/shared/*":
           - packages/shared/src/*
-        '@/*':
+        "@/*":
           - apps/web/src/*
           - apps/web/app/*
     include: []
@@ -80,7 +80,7 @@ monorepo:
       references: []
   turboConfig:
     globalDependencies:
-      - '**/.env.*'
+      - "**/.env.*"
     pipeline:
       clean:
         cache: false
@@ -90,7 +90,7 @@ monorepo:
         outputs:
           - dist/**
           - .next/**
-          - '!.next/cache/**'
+          - "!.next/cache/**"
       lint:
         dependsOn:
           - ^build
@@ -146,8 +146,8 @@ generator:
         devDependencies:
           typescript: ^5.5.4
           eslint: ^9.0.0
-          '@typescript-eslint/parser': ^8.0.0
-          '@typescript-eslint/eslint-plugin': ^8.0.0
+          "@typescript-eslint/parser": ^8.0.0
+          "@typescript-eslint/eslint-plugin": ^8.0.0
           eslint-config-prettier: ^9.1.0
 bounded_contexts:
   - name: shared
@@ -184,6 +184,7 @@ bounded_contexts:
             - RenderManifestPort
             - TelemetryPort
             - GenerateProjectPort
+            - LoggerPort
           out:
             - ProjectGeneratorPort
             - DownloadProviderPort
@@ -294,7 +295,7 @@ bounded_contexts:
     generator:
       dependencies:
         reactflow: ^11.11.4
-        '@dagrejs/dagre': ^1.1.4
+        "@dagrejs/dagre": ^1.1.4
   - name: messaging
     type: supporting
     description: Domain events, intent bus, pluggable transports

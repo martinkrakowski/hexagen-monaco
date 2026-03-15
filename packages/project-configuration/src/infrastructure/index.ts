@@ -2,6 +2,7 @@
 
 export * from './external-apis/index.js';
 export * from './llm/index.js';
+export * from './logging/index.js';
 export * from './messaging/index.js';
 export * from './persistence/index.js';
 export * from './telemetry/index.js';
