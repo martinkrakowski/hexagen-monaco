@@ -733,7 +733,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/visualization@workspace:packages/visualization":
+"@hexagen/visualization@workspace:*, @hexagen/visualization@workspace:packages/visualization":
   version: 0.0.0-use.local
   resolution: "@hexagen/visualization@workspace:packages/visualization"
   dependencies:
@@ -7143,6 +7143,7 @@ __metadata:
     "@hexagen/project-generation": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
+    "@hexagen/visualization": "workspace:*"
     "@hexagen/web-driver": "workspace:*"
     "@hookform/resolvers": "npm:^3.9.0"
     "@monaco-editor/react": "npm:^4.6.0"
