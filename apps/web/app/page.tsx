@@ -9,6 +9,7 @@ import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { cn } from '@/lib/utils';
 import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
+import { GraphCanvasWrapper } from '@/components/canvas/graph-canvas-wrapper';
 
 import {
   emptyFormValues,
@@ -426,16 +427,14 @@ export default function Home() {
             </Card>
           }
           middle={
-            <Card className="h-full border-0 rounded-none bg-muted/20">
+            <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col">
               <CardHeader>
                 <CardTitle className="text-sm text-muted-foreground">
-                  Live Manifest Preview
+                  Architecture Preview
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
-                <pre className="text-[11px] font-mono bg-background p-4 rounded-md border shadow-sm">
-                  {JSON.stringify(watchedValues, null, 2)}
-                </pre>
+              <CardContent className="flex-1 p-0 overflow-hidden">
+                <GraphCanvasWrapper projectId="demo" />
               </CardContent>
             </Card>
           }

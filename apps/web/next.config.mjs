@@ -12,6 +12,10 @@ const monorepoRoot = path.resolve(__dirname, "../..");
 const nextConfig = {
   reactStrictMode: true,
 
+  // Allow LAN IP access in dev (Next.js 15+ host validation)
+  // Must include port — Next.js matches against the full Host header value
+  allowedDevOrigins: ["10.10.0.219:3000"],
+
   // Workspace packages to transpile
   transpilePackages: [
     "@hexagen/monaco-orchestration",
