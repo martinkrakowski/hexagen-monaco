@@ -16,6 +16,7 @@
     "@hexagen/project-generation": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
+    "@hexagen/visualization": "workspace:*",
     "@hexagen/web-driver": "workspace:*",
     "@hookform/resolvers": "^3.9.0",
     "@monaco-editor/react": "^4.6.0",

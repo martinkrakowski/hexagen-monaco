@@ -18,6 +18,7 @@ const nextConfig = {
     "@hexagen/project-configuration",
     "@hexagen/project-generation",
     "@hexagen/shared",
+    "@hexagen/visualization",
     "@hexagen/web-driver",
   ],
 
@@ -64,6 +65,10 @@ const nextConfig = {
         "packages/project-generation/src",
       ),
       "@hexagen/shared": path.resolve(monorepoRoot, "packages/shared/src"),
+      "@hexagen/visualization": path.resolve(
+        monorepoRoot,
+        "packages/visualization/src",
+      ),
       "@hexagen/web-driver": path.resolve(
         monorepoRoot,
         "packages/web-driver/src",
@@ -90,6 +95,10 @@ const nextConfig = {
         "packages/project-generation/src",
       ),
       "@hexagen/shared": path.resolve(monorepoRoot, "packages/shared/src"),
+      "@hexagen/visualization": path.resolve(
+        monorepoRoot,
+        "packages/visualization/src",
+      ),
       "@hexagen/web-driver": path.resolve(
         monorepoRoot,
         "packages/web-driver/src",
