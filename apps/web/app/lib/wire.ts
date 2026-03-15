@@ -5,7 +5,11 @@
 import type { MonacoPersistencePort } from "@hexagen/monaco-orchestration";
 import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
 import type { LoggerPort } from "@hexagen/shared";
-import { LocalStoragePersistenceAdapter } from "@hexagen/web-driver";
+import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
+import {
+  LocalStoragePersistenceAdapter,
+  ArchitectureGraphProviderAdapter,
+} from "@hexagen/web-driver";
 
 const createWebLogger = (): LoggerPort => ({
   // eslint-disable-next-line no-console
@@ -67,6 +71,12 @@ export const wireDependencies = () => {
     },
   } satisfies DownloadProjectPort);
 
+  // Architecture graph provider port → stub (returns empty graph for now)
+  registry.set(
+    "ArchitectureGraphProviderPort",
+    new ArchitectureGraphProviderAdapter() satisfies IArchitectureGraphProviderPort,
+  );
+
   // Future ports/adapters go here
 
   return {
@@ -93,5 +103,10 @@ export const getMonacoPersistence = () =>
 
 export const getDownloadProject = () =>
   dependencies.get<DownloadProjectPort>("DownloadProjectPort");
+
+export const getArchitectureGraphProvider = () =>
+  dependencies.get<IArchitectureGraphProviderPort>(
+    "ArchitectureGraphProviderPort",
+  );
 
 export const getLogger = () => dependencies.get<LoggerPort>("LoggerPort");

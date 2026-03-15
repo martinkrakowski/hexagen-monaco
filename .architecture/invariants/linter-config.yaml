@@ -15,6 +15,9 @@ package_rules:
   - name: "web-driver"
     allowed_imports:
       - "@hexagen/shared"
+      - "@hexagen/visualization"
+    # visualization is allowed because ArchitectureGraphProviderAdapter
+    # implements IArchitectureGraphProviderPort owned by visualization
   - name: "project-generation"
     allowed_imports:
       - "@hexagen/shared"

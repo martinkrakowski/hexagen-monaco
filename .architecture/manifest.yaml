@@ -357,17 +357,22 @@ bounded_contexts:
         adapters:
           - LocalStoragePersistenceAdapter
           - WebContainerPreviewAdapter
+          - ArchitectureGraphProviderAdapter
     driver_for: apps/web
     generator:
       dependencies:
         "@xyflow/react": ^12.10.1
     depends_on:
       - monaco-orchestration
+      - visualization
     wiring:
       - Intent Bus dispatches to projections/use-case factories only
       - >-
         MonacoPersistencePort is owned by monaco-orchestration and implemented
         here by LocalStoragePersistenceAdapter
+      - >-
+        ArchitectureGraphProviderPort is owned by visualization and implemented
+        here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
   - name: project-generation
     type: core
     description: >-
