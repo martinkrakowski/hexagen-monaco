@@ -1,13 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { HexagonNode } from "@hexagen/visualization";
+import type { HexagonNode, HexagonNodeType } from "@hexagen/visualization";
+
+const NODE_TYPES: HexagonNodeType[] = [
+  "bounded-context",
+  "entity",
+  "port",
+  "use-case",
+];
 
 interface NodeEditorDialogProps {
   isOpen: boolean;
   node?: HexagonNode;
   onClose: () => void;
-  onUpdateNode: (nodeId: string, updates: Pick<HexagonNode, "label">) => void;
+  onUpdateNode: (
+    nodeId: string,
+    updates: Pick<HexagonNode, "label" | "type">,
+  ) => void;
 }
 
 export function NodeEditorDialog({
@@ -17,10 +27,12 @@ export function NodeEditorDialog({
   onUpdateNode,
 }: NodeEditorDialogProps) {
   const [label, setLabel] = useState("");
+  const [type, setType] = useState<HexagonNodeType>("entity");
 
   useEffect(() => {
     if (node) {
       setLabel(node.label);
+      setType(node.type);
     }
   }, [node]);
 
@@ -29,7 +41,7 @@ export function NodeEditorDialog({
   }
 
   const handleSave = () => {
-    onUpdateNode(node.id, { label });
+    onUpdateNode(node.id, { label, type });
     onClose();
   };
 
@@ -55,10 +67,24 @@ export function NodeEditorDialog({
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Type</label>
-            <div className="text-sm text-muted-foreground capitalize">
-              {node.type.replace("-", " ")}
-            </div>
+            <label
+              className="block text-sm font-medium mb-1"
+              htmlFor="node-type"
+            >
+              Type
+            </label>
+            <select
+              id="node-type"
+              value={type}
+              onChange={(e) => setType(e.target.value as HexagonNodeType)}
+              className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {NODE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.replace("-", " ")}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

@@ -25,7 +25,10 @@ interface UseCanvasStateResult extends Omit<GraphState, "selectedNodeId"> {
   onNodeDoubleClick: (node: HexagonNode) => void;
   onAddNode: () => void;
   onExportImage: () => void;
-  onUpdateNode: (nodeId: string, updates: Pick<HexagonNode, "label">) => void;
+  onUpdateNode: (
+    nodeId: string,
+    updates: Pick<HexagonNode, "label" | "type">,
+  ) => void;
   onCloseEditor: () => void;
 }
 
@@ -144,7 +147,7 @@ export function useCanvasState(
   }, []);
 
   const onUpdateNode = useCallback(
-    (nodeId: string, updates: Pick<HexagonNode, "label">) => {
+    (nodeId: string, updates: Pick<HexagonNode, "label" | "type">) => {
       setState((prev) => ({
         ...prev,
         nodes: prev.nodes.map((n) =>
