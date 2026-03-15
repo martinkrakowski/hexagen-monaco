@@ -1,50 +1,56 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   BackgroundVariant,
-  type Node,
-  type Edge,
+  type Node as FlowNode,
+  type Edge as FlowEdge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { HexagonNode } from "./hexagon-node";
 import type {
-  HexagonNode as HexagonNodeType,
+  HexagonNode as HexagonNodeData,
   HexagonEdge,
 } from "@hexagen/visualization";
+
+type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
+
+type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
 
 const nodeTypes = {
   hexagon: HexagonNode,
 };
 
 export interface HexagonCanvasProps {
-  nodes: HexagonNodeType[];
+  nodes: HexagonNodeData[];
   edges: HexagonEdge[];
-  onNodeDragStop?: (node: HexagonNodeType) => void;
-  onNodeDoubleClick?: (node: HexagonNodeType) => void;
+  onNodeDragStop?: (node: HexagonNodeData) => void;
+  onNodeDoubleClick?: (node: HexagonNodeData) => void;
 }
 
-function mapToFlowNodes(nodes: HexagonNodeType[]): Node[] {
-  return nodes.map((node) => ({
-    id: node.id,
-    type: "hexagon",
-    position: node.position,
-    data: node,
-  })) as unknown as Node[];
+function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
+  return nodes.map(
+    (node): HexagonFlowNode => ({
+      id: node.id,
+      type: "hexagon",
+      position: node.position,
+      data: node as HexagonNodeDataRecord,
+    }),
+  );
 }
 
-function mapToFlowEdges(edges: HexagonEdge[]): Edge[] {
+function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
   return edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    type: edge.type === "animated" ? "default" : undefined,
+    animated: edge.type === "animated",
     label: edge.label,
-  })) as unknown as Edge[];
+  }));
 }
 
 export function HexagonCanvas({
@@ -53,22 +59,22 @@ export function HexagonCanvas({
   onNodeDragStop,
   onNodeDoubleClick,
 }: HexagonCanvasProps) {
-  const flowNodes = mapToFlowNodes(nodes);
-  const flowEdges = mapToFlowEdges(edges);
+  const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
+  const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
 
   const handleNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      if (onNodeDragStop && node.data) {
-        onNodeDragStop(node.data as unknown as HexagonNodeType);
+    (_event: React.MouseEvent, node: HexagonFlowNode) => {
+      if (onNodeDragStop) {
+        onNodeDragStop(node.data);
       }
     },
     [onNodeDragStop],
   );
 
   const handleNodeDoubleClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      if (onNodeDoubleClick && node.data) {
-        onNodeDoubleClick(node.data as unknown as HexagonNodeType);
+    (_event: React.MouseEvent, node: HexagonFlowNode) => {
+      if (onNodeDoubleClick) {
+        onNodeDoubleClick(node.data);
       }
     },
     [onNodeDoubleClick],
