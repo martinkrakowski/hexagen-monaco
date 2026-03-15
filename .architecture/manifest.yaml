@@ -281,14 +281,16 @@ bounded_contexts:
         value_objects:
           - GraphLayoutOptions
           - NodeVisualStyle
+          - HexagonNode
+          - HexagonEdge
+          - CanvasViewport
       application:
         use_cases:
-          - GenerateArchitectureGraphUseCase
-          - RenderGraphProjectionUseCase
+          - RenderHexagonCanvasUseCase
           - ExportGraphImageUseCase
         ports:
           in:
-            - RenderGraphProjectionPort
+            - RenderHexagonCanvasPort
             - ExportGraphImagePort
           out:
             - ArchitectureGraphProviderPort

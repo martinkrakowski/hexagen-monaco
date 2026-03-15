@@ -3,6 +3,7 @@
 export * from './log-context.js';
 export * from './log-level.js';
 export * from './logger-config.js';
+export * from './logger-port.js';
 export * from './monaco-session.js';
 export * from './persistence-error.js';
 export * from './project-specification.js';
