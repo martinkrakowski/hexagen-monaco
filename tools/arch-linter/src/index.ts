@@ -312,5 +312,5 @@ function checkArchitecturalIntegrity() {
 logger.info("Running Architectural Integrity Linter...");
 checkArchitecturalIntegrity();
 
-export type { Logger } from "./logger.js";
+export type { LoggerPort } from "./logger.js";
 export { createConsoleLogger } from "./logger.js";

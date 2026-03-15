@@ -1,26 +1,22 @@
 import type { Manifest } from "./types/manifest.js";
+import { type LoggerPort, type LoggerConfig } from "@hexagen/shared";
 
-// Temporary internal logger
-interface Logger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string | Error): void;
-  debug(message: string): void;
-}
+export type { LoggerPort, LoggerConfig };
 
-const internalLogger: Logger = {
-  info: (msg) => console.log(`[sync] ${msg}`),
+const internalLogger: LoggerPort = {
+  error: (msg) => console.error(`[sync] ${msg}`),
   warn: (msg) => console.warn(`[sync] ${msg}`),
-  error: (msg) => {
-    if (msg instanceof Error) {
-      console.error(`[sync] ${msg.message}`);
-      if (msg.stack) console.error(msg.stack);
-    } else {
-      console.error(`[sync] ${msg}`);
-    }
-  },
+  info: (msg) => console.log(`[sync] ${msg}`),
   debug: (msg) => {
     if (process.env.DEBUG) console.log(`[debug] ${msg}`);
+  },
+  errorWithException: (err, msg) => {
+    const errorMessage =
+      msg ?? (err instanceof Error ? err.message : String(err));
+    console.error(`[sync] ${errorMessage}`);
+    if (err instanceof Error && err.stack) {
+      console.error(err.stack);
+    }
   },
 };
 
@@ -33,7 +29,7 @@ export interface SyncFlags {
   strict: boolean;
   /** Mode is set programmatically (not via CLI). Use 'self-regen' for CLI, 'external' for API-driven generation */
   mode: "self-regen" | "external";
-  logger: Logger;
+  logger: LoggerPort;
 }
 
 // Full runtime config (after augmentation)

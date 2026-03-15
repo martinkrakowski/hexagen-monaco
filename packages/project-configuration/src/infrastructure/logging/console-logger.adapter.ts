@@ -1,8 +1,9 @@
-import { LogLevel, type LogContext } from "@hexagen/shared";
-import type {
-  LoggerPort,
-  LoggerConfig,
-} from "../../application/ports/in/logger.port.js";
+import {
+  LogLevel,
+  type LogContext,
+  type LoggerPort,
+  type LoggerConfig,
+} from "@hexagen/shared";
 
 export class ConsoleLoggerAdapter implements LoggerPort {
   private readonly config: LoggerConfig;

@@ -14,6 +14,7 @@ const noopLogger = {
   warn: () => {},
   error: () => {},
   debug: () => {},
+  errorWithException: () => {},
 };
 
 function generateId(): string {

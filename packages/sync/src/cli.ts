@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import type { SyncFlags } from "./config.js";
+import { type LoggerPort } from "@hexagen/shared";
 import { SyncEngine } from "./sync-engine.js";
 import { listCommand, validateCommand } from "./commands/arch/index.js";
 import { portCommander } from "./commands/arch/port.js";
@@ -10,18 +11,20 @@ import { removeCommander } from "./commands/arch/remove.js";
 import { diffCommander } from "./commands/arch/diff.js";
 import { editCommander } from "./commands/arch/edit.js";
 
-const internalLogger: SyncFlags["logger"] = {
+const internalLogger: LoggerPort = {
   info: (msg) => console.log(`[sync] ${msg}`),
   warn: (msg) => console.warn(`[sync] ${msg}`),
-  error: (msg) => {
-    if (msg instanceof Error) {
-      console.error(`[sync] ${msg.message}`);
-    } else {
-      console.error(`[sync] ${msg}`);
-    }
-  },
+  error: (msg) => console.error(`[sync] ${msg}`),
   debug: (msg) => {
     if (process.env.DEBUG) console.log(`[debug] ${msg}`);
+  },
+  errorWithException: (err, msg) => {
+    const errorMessage =
+      msg ?? (err instanceof Error ? err.message : String(err));
+    console.error(`[sync] ${errorMessage}`);
+    if (err instanceof Error && err.stack) {
+      console.error(err.stack);
+    }
   },
 };
 

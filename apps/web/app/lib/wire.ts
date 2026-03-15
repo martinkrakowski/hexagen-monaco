@@ -4,7 +4,32 @@
 
 import type { MonacoPersistencePort } from "@hexagen/monaco-orchestration";
 import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
+import type { LoggerPort } from "@hexagen/shared";
 import { LocalStoragePersistenceAdapter } from "@hexagen/web-driver";
+
+const createWebLogger = (): LoggerPort => ({
+  // eslint-disable-next-line no-console
+  info: (msg) => console.log(`[web] ${msg}`),
+  // eslint-disable-next-line no-console
+  warn: (msg) => console.warn(`[web] ${msg}`),
+  // eslint-disable-next-line no-console
+  error: (msg) => console.error(`[web] ${msg}`),
+  debug: (msg) => {
+    // turbo lint rule for env var - DEBUG is a common dev flag
+    // eslint-disable-next-line turbo/no-undeclared-env-vars, no-console
+    if (process.env.DEBUG) console.log(`[debug] ${msg}`);
+  },
+  errorWithException: (err, msg) => {
+    const errorMessage =
+      msg ?? (err instanceof Error ? err.message : String(err));
+    // eslint-disable-next-line no-console
+    console.error(`[web] ${errorMessage}`);
+    if (err instanceof Error && err.stack) {
+      // eslint-disable-next-line no-console
+      console.error(err.stack);
+    }
+  },
+});
 
 // Note: LocalStoragePersistenceAdapter is allowed direct import because it is in the same bounded context (web-driver).
 // All external ports must come from root barrels.
@@ -23,6 +48,9 @@ export const wireDependencies = () => {
     "MonacoPersistencePort",
     new LocalStoragePersistenceAdapter() satisfies MonacoPersistencePort,
   );
+
+  // Logger port → console logger for web app
+  registry.set("LoggerPort", createWebLogger() satisfies LoggerPort);
 
   // Download project port → placeholder (to be replaced with jszip / zip adapter later)
   registry.set("DownloadProjectPort", {
@@ -65,3 +93,5 @@ export const getMonacoPersistence = () =>
 
 export const getDownloadProject = () =>
   dependencies.get<DownloadProjectPort>("DownloadProjectPort");
+
+export const getLogger = () => dependencies.get<LoggerPort>("LoggerPort");

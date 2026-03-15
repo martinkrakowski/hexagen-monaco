@@ -2,7 +2,7 @@
 // Endpoint to generate a new project from spec
 
 import { NextResponse } from "next/server";
-import { getMonacoPersistence } from "@/lib/wire";
+import { getMonacoPersistence, getLogger } from "@/lib/wire";
 import { MonacoSession } from "@hexagen/monaco-orchestration";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import { getGenerateProject } from "@/lib/wire.project-generation";
@@ -77,10 +77,10 @@ export async function POST(request: Request) {
       hasZip: !!zipBuffer,
     });
   } catch (err) {
+    const logger = getLogger();
+    logger.errorWithException(err, "[api/generate] Failed to generate project");
     const message =
       err instanceof Error ? err.message : "Internal server error";
-    // eslint-disable-next-line no-console
-    console.error("[api/generate] Error:", err);
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

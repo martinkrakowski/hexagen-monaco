@@ -4,6 +4,7 @@
 export { LogLevel } from "./domain/log-level";
 export type { LogContext } from "./domain/log-context";
 export type { LoggerConfig } from "./domain/logger-config";
+export type { LoggerPort } from "./domain/logger-port";
 export { MonacoSession } from "./domain/monaco-session";
 export type { SessionMetadata } from "./domain/session-metadata";
 export type { PersistenceError } from "./domain/persistence-error";
