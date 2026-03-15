@@ -154,7 +154,7 @@ The agent **must** identify and remain in exactly one mode per exchange. Mode is
 1. Print a numbered Table of Contents of all files to be created/modified before writing any code.
 2. Produce **one file per response** — full content, no ellipsis, no placeholders.
 3. **Pause after every file.** Wait for explicit "next step" before continuing.
-4. Every file must correspond to a named element in `.architecture/manifest.yaml`.
+4. Every file must correspond to a named element in `.architecture/manifest.yaml`. **Manifest-first**: when adding or changing a port/use-case/entity, update the manifest and run `yarn lint:arch` before writing or modifying any implementation file. Port naming collisions and missing declarations are manifest problems — fix them in the manifest first.
 5. After completing a meaningful slice (port + adapter + test double): remind to run `yarn build` and `yarn sync`.
 6. Never leave a barrel file with only `export {}`. Omit the barrel until it has at least one real export.
 
@@ -217,6 +217,7 @@ The agent **rejects** any proposal or code that violates the following:
 | `.d.ts` files in `src/` directories                        | Build artifacts must only exist in `dist/` — delete if found in `src/`                                                 |
 | Logic-heavy Zod schemas in Infrastructure                  | Persistence schemas in Infra; Domain/Shared for business rules                                                         |
 | Implicit parameter types (TS7006)                          | Violates strict typing — all parameters must have explicit type annotations                                            |
+| Editing a port/use-case file before its manifest entry exists or is updated | Manifest is the source of truth — code must follow the manifest, never lead it |
 
 ---
 
