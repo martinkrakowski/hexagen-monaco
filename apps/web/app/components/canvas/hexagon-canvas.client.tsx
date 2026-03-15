@@ -6,6 +6,7 @@ import {
   Background,
   Controls,
   BackgroundVariant,
+  useReactFlow,
   type Node as FlowNode,
   type Edge as FlowEdge,
 } from "@xyflow/react";
@@ -16,6 +17,7 @@ import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
 } from "@hexagen/visualization";
+import type { Result } from "@hexagen/shared";
 
 type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 
@@ -30,6 +32,7 @@ export interface HexagonCanvasProps {
   edges: HexagonEdge[];
   onNodeDragStop?: (node: HexagonNodeData) => void;
   onNodeDoubleClick?: (node: HexagonNodeData) => void;
+  onExportClick?: (handler: () => Promise<Result<Blob, Error>>) => void;
 }
 
 function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
@@ -58,9 +61,46 @@ export function HexagonCanvas({
   edges,
   onNodeDragStop,
   onNodeDoubleClick,
+  onExportClick,
 }: HexagonCanvasProps) {
   const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
   const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
+
+  const reactFlow = useReactFlow();
+
+  const handleExportClick = useCallback(async (): Promise<
+    Result<Blob, Error>
+  > => {
+    const container = document.querySelector(
+      ".react-flow__renderer",
+    ) as HTMLDivElement | null;
+    if (!container) {
+      return { success: false, error: new Error("Canvas container not found") };
+    }
+
+    try {
+      const canvas = container.querySelector("canvas");
+      if (!canvas) {
+        return { success: false, error: new Error("Canvas element not found") };
+      }
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (b: Blob | null) =>
+            b ? resolve(b) : reject(new Error("Failed to create blob")),
+          "image/png",
+          1.0,
+        );
+      });
+      return { success: true, value: blob };
+    } catch (err) {
+      return { success: false, error: err as Error };
+    }
+  }, [reactFlow]);
+
+  if (onExportClick) {
+    onExportClick(handleExportClick);
+  }
 
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: HexagonFlowNode) => {
