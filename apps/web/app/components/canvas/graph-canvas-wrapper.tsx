@@ -1,7 +1,7 @@
 "use client";
 
 import { useCanvasState } from "../../hooks/use-canvas-state";
-import { HexagonCanvas, CanvasToolbar } from "./index";
+import { HexagonCanvas, CanvasToolbar, NodeEditorDialog } from "./index";
 
 interface GraphCanvasWrapperProps {
   projectId: string;
@@ -20,6 +20,10 @@ export function GraphCanvasWrapper({ projectId }: GraphCanvasWrapperProps) {
     );
   }
 
+  const selectedNode = state.selectedNodeId
+    ? state.nodes.find((n) => n.id === state.selectedNodeId)
+    : undefined;
+
   return (
     <div className="w-full h-full min-h-[400px] relative">
       <HexagonCanvas
@@ -29,8 +33,17 @@ export function GraphCanvasWrapper({ projectId }: GraphCanvasWrapperProps) {
         onNodeDoubleClick={state.onNodeDoubleClick}
       />
       <div className="absolute top-4 right-4">
-        <CanvasToolbar />
+        <CanvasToolbar
+          onAddNode={state.onAddNode}
+          onExport={state.onExportImage}
+        />
       </div>
+      <NodeEditorDialog
+        isOpen={!!selectedNode}
+        node={selectedNode}
+        onClose={state.onCloseEditor}
+        onUpdateNode={state.onUpdateNode}
+      />
     </div>
   );
 }

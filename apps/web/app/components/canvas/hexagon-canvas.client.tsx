@@ -65,7 +65,7 @@ export function HexagonCanvas({
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: HexagonFlowNode) => {
       if (onNodeDragStop) {
-        onNodeDragStop(node.data);
+        onNodeDragStop({ ...node.data, position: node.position });
       }
     },
     [onNodeDragStop],

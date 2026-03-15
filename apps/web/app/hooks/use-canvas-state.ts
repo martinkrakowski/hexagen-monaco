@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import dagre from "@dagrejs/dagre";
 import type {
   HexagonNode,
+  HexagonNodeType,
   HexagonEdge,
   CanvasViewport,
 } from "@hexagen/visualization";
@@ -15,11 +16,17 @@ interface GraphState {
   nodes: HexagonNode[];
   edges: HexagonEdge[];
   viewport: CanvasViewport;
+  selectedNodeId?: string;
 }
 
-interface UseCanvasStateResult extends GraphState {
+interface UseCanvasStateResult extends Omit<GraphState, "selectedNodeId"> {
+  selectedNodeId?: string;
   onNodeDragStop: (node: HexagonNode) => void;
   onNodeDoubleClick: (node: HexagonNode) => void;
+  onAddNode: () => void;
+  onExportImage: () => void;
+  onUpdateNode: (nodeId: string, updates: Pick<HexagonNode, "label">) => void;
+  onCloseEditor: () => void;
 }
 
 interface UseCanvasStateError {
@@ -57,6 +64,17 @@ function applyDagreLayout(
       },
     };
   });
+}
+
+function createDefaultHexagonNode(
+  type: HexagonNodeType = "entity",
+): HexagonNode {
+  return {
+    id: crypto.randomUUID(),
+    label: "New Node",
+    type,
+    position: { x: 0, y: 0 },
+  };
 }
 
 export function useCanvasState(
@@ -99,12 +117,46 @@ export function useCanvasState(
     loadGraph();
   }, [loadGraph]);
 
-  const onNodeDragStop = useCallback((_node: HexagonNode) => {
-    void _node;
+  const onNodeDragStop = useCallback((node: HexagonNode) => {
+    setState((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === node.id ? { ...n, position: node.position } : n,
+      ),
+    }));
   }, []);
 
-  const onNodeDoubleClick = useCallback((_node: HexagonNode) => {
-    void _node;
+  const onNodeDoubleClick = useCallback((node: HexagonNode) => {
+    setState((prev) => ({ ...prev, selectedNodeId: node.id }));
+  }, []);
+
+  const onAddNode = useCallback(() => {
+    const newNode = createDefaultHexagonNode();
+    setState((prev) => ({
+      ...prev,
+      nodes: [...prev.nodes, newNode],
+      selectedNodeId: newNode.id,
+    }));
+  }, []);
+
+  const onExportImage = useCallback(() => {
+    console.warn("[onExportImage] Not implemented yet");
+  }, []);
+
+  const onUpdateNode = useCallback(
+    (nodeId: string, updates: Pick<HexagonNode, "label">) => {
+      setState((prev) => ({
+        ...prev,
+        nodes: prev.nodes.map((n) =>
+          n.id === nodeId ? { ...n, ...updates } : n,
+        ),
+      }));
+    },
+    [],
+  );
+
+  const onCloseEditor = useCallback(() => {
+    setState((prev) => ({ ...prev, selectedNodeId: undefined }));
   }, []);
 
   if (error) {
@@ -112,8 +164,15 @@ export function useCanvasState(
   }
 
   return {
-    ...state,
+    nodes: state.nodes,
+    edges: state.edges,
+    viewport: state.viewport,
+    selectedNodeId: state.selectedNodeId,
     onNodeDragStop,
     onNodeDoubleClick,
+    onAddNode,
+    onExportImage,
+    onUpdateNode,
+    onCloseEditor,
   };
 }
