@@ -150,7 +150,7 @@ export function useCanvasState(
       edges,
       viewport: renderResult.viewport,
     });
-  }, [projectId]);
+  }, [projectId, wizardData]);
 
   useEffect(() => {
     loadGraph();

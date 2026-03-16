@@ -4646,6 +4646,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"html-to-image@npm:^1.11.13":
+  version: 1.11.13
+  resolution: "html-to-image@npm:1.11.13"
+  checksum: 10c0/03bd7192d87b99499e37ff12a8e2b41ddce4cf8e33a93dfadff18df0f213434c7f1ba8328db2158f4805da07b7aec3c90aec3152908281153217e86784218b10
+  languageName: node
+  linkType: hard
+
 "http-cache-semantics@npm:^4.1.1":
   version: 4.2.0
   resolution: "http-cache-semantics@npm:4.2.0"
@@ -8225,8 +8232,6 @@ __metadata:
     "@hexagen/web-driver": "workspace:*"
     "@hookform/resolvers": "npm:^3.9.0"
     "@monaco-editor/react": "npm:^4.6.0"
-    "@testing-library/jest-dom": "npm:^6.9.1"
-    "@testing-library/react": "npm:^16.3.2"
     "@types/file-saver": "npm:^2.0.7"
     "@types/node": "npm:^20.14.10"
     "@types/react": "npm:^19.2.14"
@@ -8238,7 +8243,7 @@ __metadata:
     clsx: "npm:^2.1.1"
     eslint-config-next: "npm:^16.1.6"
     file-saver: "npm:^2.0.5"
-    jsdom: "npm:^29.0.0"
+    html-to-image: "npm:^1.11.13"
     jszip: "npm:^3.10.1"
     lucide-react: "npm:^0.453.0"
     monaco-editor: "npm:^0.52.0"
@@ -8252,7 +8257,6 @@ __metadata:
     tailwindcss: "npm:^3.4.6"
     tailwindcss-animate: "npm:^1.0.7"
     typescript: "npm:^5.5.3"
-    vitest: "npm:^4.1.0"
     zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft

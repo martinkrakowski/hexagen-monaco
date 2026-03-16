@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   BackgroundVariant,
-  useReactFlow,
   type Node as FlowNode,
   type Edge as FlowEdge,
 } from "@xyflow/react";
+import { toPng } from "html-to-image";
 import "@xyflow/react/dist/style.css";
 
 import { HexagonNode } from "./hexagon-node";
@@ -66,41 +66,38 @@ export function HexagonCanvas({
   const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
   const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
 
-  const reactFlow = useReactFlow();
+  const initialExportDone = useRef(false);
 
   const handleExportClick = useCallback(async (): Promise<
     Result<Blob, Error>
   > => {
-    const container = document.querySelector(
-      ".react-flow__renderer",
-    ) as HTMLDivElement | null;
-    if (!container) {
-      return { success: false, error: new Error("Canvas container not found") };
-    }
-
     try {
-      const canvas = container.querySelector("canvas");
-      if (!canvas) {
-        return { success: false, error: new Error("Canvas element not found") };
+      const viewport = document.querySelector(
+        ".react-flow__viewport",
+      ) as HTMLElement | null;
+      if (!viewport) {
+        return { success: false, error: new Error("Viewport not found") };
       }
 
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (b: Blob | null) =>
-            b ? resolve(b) : reject(new Error("Failed to create blob")),
-          "image/png",
-          1.0,
-        );
+      const dataUrl = await toPng(viewport, {
+        backgroundColor: "#ffffff",
+        pixelRatio: 2,
       });
+
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
       return { success: true, value: blob };
     } catch (err) {
       return { success: false, error: err as Error };
     }
-  }, [reactFlow]);
+  }, []);
 
-  if (onExportClick) {
-    onExportClick(handleExportClick);
-  }
+  useEffect(() => {
+    if (onExportClick && !initialExportDone.current) {
+      initialExportDone.current = true;
+      onExportClick(handleExportClick);
+    }
+  }, [onExportClick, handleExportClick]);
 
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: HexagonFlowNode) => {
