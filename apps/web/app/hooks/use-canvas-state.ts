@@ -71,17 +71,24 @@ function applyDagreLayout(
 
 function createDefaultHexagonNode(
   type: HexagonNodeType = "entity",
+  label: string = "New Node",
 ): HexagonNode {
   return {
     id: crypto.randomUUID(),
-    label: "New Node",
+    label,
     type,
     position: { x: 0, y: 0 },
   };
 }
 
+interface WizardData {
+  entities?: string[];
+  useCases?: string[];
+}
+
 export function useCanvasState(
   projectId: string,
+  wizardData?: WizardData,
 ): UseCanvasStateResult | UseCanvasStateError {
   const [state, setState] = useState<GraphState>({
     nodes: [],
@@ -91,6 +98,35 @@ export function useCanvasState(
   const [error, setError] = useState<Error | null>(null);
 
   const loadGraph = useCallback(async () => {
+    // If wizard data exists, use it to create nodes
+    if (
+      wizardData &&
+      (wizardData.entities?.length || wizardData.useCases?.length)
+    ) {
+      const nodes: HexagonNode[] = [];
+
+      wizardData.entities?.forEach((entity) => {
+        nodes.push(createDefaultHexagonNode("entity", `${entity} (Entity)`));
+      });
+
+      wizardData.useCases?.forEach((useCase) => {
+        nodes.push(
+          createDefaultHexagonNode("use-case", `${useCase} (Use Case)`),
+        );
+      });
+
+      if (nodes.length > 0) {
+        const laidOutNodes = applyDagreLayout(nodes, []);
+        setState({
+          nodes: laidOutNodes,
+          edges: [],
+          viewport: createCanvasViewport(),
+        });
+        return;
+      }
+    }
+
+    // Fall back to demo data from provider
     const provider = getArchitectureGraphProvider();
     const result = await provider.getArchitectureGraph(projectId);
 
@@ -118,7 +154,7 @@ export function useCanvasState(
 
   useEffect(() => {
     loadGraph();
-  }, [loadGraph]);
+  }, [loadGraph, wizardData]);
 
   const onNodeDragStop = useCallback((node: HexagonNode) => {
     setState((prev) => ({

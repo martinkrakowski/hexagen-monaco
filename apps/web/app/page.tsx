@@ -1,69 +1,69 @@
-'use client';
+"use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
 // import type { FileTreeNode } from '@hexagen/project-generation';
-import { ResizableLayout } from '@/components/layout/ResizableLayout';
-import { PrimaryButton } from '@/components/ui/PrimaryButton';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Header } from './components/layout/Header';
-import { Footer } from './components/layout/Footer';
-import { cn } from '@/lib/utils';
-import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
-import { GraphCanvasWrapper } from '@/components/canvas/graph-canvas-wrapper';
+import { ResizableLayout } from "@/components/layout/ResizableLayout";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { Header } from "./components/layout/Header";
+import { Footer } from "./components/layout/Footer";
+import { cn } from "@/lib/utils";
+import { MonacoEditorWrapper } from "@/components/monaco/MonacoEditorWrapper";
+import { GraphCanvasWrapper } from "@/components/canvas/graph-canvas-wrapper";
 
 import {
   emptyFormValues,
   wizardSteps,
   projectAddons,
-} from '@/components/project-wizard/config';
-import { useForm, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+} from "@/components/project-wizard/config";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   projectConfigSchema,
   type ProjectConfig,
-} from '@hexagen/project-configuration';
+} from "@hexagen/project-configuration";
 
 // Intent Bus type
 type Intent =
   | {
-      type: 'WIZARD_NEXT';
-      source: 'user' | 'agent';
+      type: "WIZARD_NEXT";
+      source: "user" | "agent";
       payload: Partial<ProjectConfig>;
       metadata: { confidence: number };
     }
   | {
-      type: 'WIZARD_BACK';
-      source: 'user' | 'agent';
+      type: "WIZARD_BACK";
+      source: "user" | "agent";
       payload: null;
       metadata: { confidence: number };
     }
   | {
-      type: 'GENERATE_PROJECT';
-      source: 'user' | 'agent';
+      type: "GENERATE_PROJECT";
+      source: "user" | "agent";
       payload: ProjectConfig;
       metadata: { confidence: number };
     }
   | {
-      type: 'REGENERATE_PROJECT';
-      source: 'user' | 'agent';
+      type: "REGENERATE_PROJECT";
+      source: "user" | "agent";
       payload: null;
       metadata: { confidence: number };
     }
   | {
-      type: 'CANCEL';
-      source: 'user' | 'agent';
+      type: "CANCEL";
+      source: "user" | "agent";
       payload: null;
       metadata: { confidence: number };
     }
   | {
-      type: 'RESET';
-      source: 'user' | 'agent';
+      type: "RESET";
+      source: "user" | "agent";
       payload: null;
       metadata: { confidence: number };
     }
   | {
-      type: 'DOWNLOAD';
-      source: 'user' | 'agent';
+      type: "DOWNLOAD";
+      source: "user" | "agent";
       // payload: FileTreeNode;
       metadata: { confidence: number };
     };
@@ -84,12 +84,12 @@ export default function Home() {
 
   const defaultProjectValues: Partial<ProjectConfig> = {
     ...emptyFormValues,
-    workspaceScope: '@hexagen',
-    contextName: 'core',
-    messagingAdapter: 'BullMQ',
-    telemetryProvider: 'OpenTelemetry',
-    uiFramework: 'Next.js',
-    apiFramework: 'Fastify',
+    workspaceScope: "@hexagen",
+    contextName: "core",
+    messagingAdapter: "BullMQ",
+    telemetryProvider: "OpenTelemetry",
+    uiFramework: "Next.js",
+    apiFramework: "Fastify",
     persistenceAdapter: undefined,
     entities: [],
     useCases: [],
@@ -101,7 +101,7 @@ export default function Home() {
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
     defaultValues: defaultProjectValues,
-    mode: 'all',
+    mode: "all",
   });
 
   const watchedValues = useWatch({
@@ -118,26 +118,26 @@ export default function Home() {
   const dispatchIntent = useCallback(
     async (intent: Intent) => {
       switch (intent.type) {
-        case 'WIZARD_NEXT': {
+        case "WIZARD_NEXT": {
           const fieldsToValidate: (keyof ProjectConfig)[] =
-            currentStepIndex === 0 ? ['rootName', 'contextName'] : [];
+            currentStepIndex === 0 ? ["rootName", "contextName"] : [];
           const isValid = await form.trigger(fieldsToValidate);
           if (isValid) {
             setCurrentStepIndex((i) => Math.min(i + 1, wizardSteps.length - 1));
           }
           break;
         }
-        case 'WIZARD_BACK':
+        case "WIZARD_BACK":
           setCurrentStepIndex((i) => Math.max(i - 1, 0));
           break;
-        case 'GENERATE_PROJECT':
+        case "GENERATE_PROJECT":
           setLoading(true);
           setTimeout(() => {
             setLoading(false);
             // TODO: real generation via ProjectGeneratorPort
           }, 1000);
           break;
-        case 'RESET':
+        case "RESET":
           form.reset(defaultProjectValues);
           setCurrentStepIndex(0);
           break;
@@ -146,11 +146,11 @@ export default function Home() {
           break;
       }
     },
-    [form, currentStepIndex]
+    [form, currentStepIndex],
   );
 
   const initialManifest = JSON.stringify(watchedValues, null, 2);
-  const sessionId = 'wizard-session-1'; // Dummy – persist later
+  const sessionId = "wizard-session-1"; // Dummy – persist later
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
@@ -174,12 +174,12 @@ export default function Home() {
                     <div
                       key={i}
                       className={cn(
-                        'w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-medium transition-all',
+                        "w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-medium transition-all",
                         i === currentStepIndex
-                          ? 'bg-primary text-primary-foreground border-primary scale-110'
+                          ? "bg-primary text-primary-foreground border-primary scale-110"
                           : i < currentStepIndex
-                            ? 'bg-primary/20 text-primary border-primary'
-                            : 'bg-muted text-muted-foreground border-muted'
+                            ? "bg-primary/20 text-primary border-primary"
+                            : "bg-muted text-muted-foreground border-muted",
                       )}
                     >
                       {i + 1}
@@ -202,7 +202,7 @@ export default function Home() {
                           Root Project Name *
                         </label>
                         <input
-                          {...form.register('rootName')}
+                          {...form.register("rootName")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="my-hexagen-app"
                         />
@@ -212,7 +212,7 @@ export default function Home() {
                           Context Name *
                         </label>
                         <input
-                          {...form.register('contextName')}
+                          {...form.register("contextName")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="billing-context"
                         />
@@ -253,7 +253,7 @@ export default function Home() {
                           LLM Providers (comma-separated)
                         </label>
                         <input
-                          {...form.register('llmProviders')}
+                          {...form.register("llmProviders")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="OpenAI,Anthropic,Grok"
                         />
@@ -268,7 +268,7 @@ export default function Home() {
                           Blockchain Networks (comma-separated)
                         </label>
                         <input
-                          {...form.register('blockchainNetworks')}
+                          {...form.register("blockchainNetworks")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="Ethereum,Polygon,Solana"
                         />
@@ -283,7 +283,7 @@ export default function Home() {
                           Workspace Scope
                         </label>
                         <input
-                          {...form.register('workspaceScope')}
+                          {...form.register("workspaceScope")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="@hexagen"
                         />
@@ -293,7 +293,7 @@ export default function Home() {
                           Context Name
                         </label>
                         <input
-                          {...form.register('contextName')}
+                          {...form.register("contextName")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="billing-context"
                         />
@@ -308,7 +308,7 @@ export default function Home() {
                           API Framework
                         </label>
                         <select
-                          {...form.register('apiFramework')}
+                          {...form.register("apiFramework")}
                           className="w-full px-4 py-2 border rounded-md"
                         >
                           <option value="Fastify">Fastify</option>
@@ -320,7 +320,7 @@ export default function Home() {
                           UI Framework
                         </label>
                         <select
-                          {...form.register('uiFramework')}
+                          {...form.register("uiFramework")}
                           className="w-full px-4 py-2 border rounded-md"
                         >
                           <option value="Next.js">Next.js</option>
@@ -340,7 +340,7 @@ export default function Home() {
                           Persistence Adapter
                         </label>
                         <select
-                          {...form.register('persistenceAdapter')}
+                          {...form.register("persistenceAdapter")}
                           className="w-full px-4 py-2 border rounded-md"
                         >
                           <option value="Prisma">Prisma</option>
@@ -354,7 +354,7 @@ export default function Home() {
                           Messaging Adapter
                         </label>
                         <select
-                          {...form.register('messagingAdapter')}
+                          {...form.register("messagingAdapter")}
                           className="w-full px-4 py-2 border rounded-md"
                         >
                           <option value="BullMQ">BullMQ</option>
@@ -372,7 +372,7 @@ export default function Home() {
                           Entities (comma-separated)
                         </label>
                         <input
-                          {...form.register('entities')}
+                          {...form.register("entities")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="User,Order,Product"
                         />
@@ -382,7 +382,7 @@ export default function Home() {
                           Use Cases (comma-separated)
                         </label>
                         <input
-                          {...form.register('useCases')}
+                          {...form.register("useCases")}
                           className="w-full px-4 py-2 border rounded-md"
                           placeholder="RegisterUser,PlaceOrder"
                         />
@@ -398,8 +398,8 @@ export default function Home() {
                       className="flex-1"
                       onClick={() =>
                         dispatchIntent({
-                          type: 'WIZARD_BACK',
-                          source: 'user',
+                          type: "WIZARD_BACK",
+                          source: "user",
                           payload: null,
                           metadata: { confidence: 1 },
                         })
@@ -413,14 +413,14 @@ export default function Home() {
                     disabled={!canProceed || loading}
                     onClick={() =>
                       dispatchIntent({
-                        type: isLastStep ? 'GENERATE_PROJECT' : 'WIZARD_NEXT',
-                        source: 'user',
+                        type: isLastStep ? "GENERATE_PROJECT" : "WIZARD_NEXT",
+                        source: "user",
                         payload: form.getValues(),
                         metadata: { confidence: 1 },
                       })
                     }
                   >
-                    {isLastStep ? 'Generate' : 'Next'}
+                    {isLastStep ? "Generate" : "Next"}
                   </PrimaryButton>
                 </div>
               </CardContent>
@@ -434,7 +434,23 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 p-0 overflow-hidden">
-                <GraphCanvasWrapper projectId="demo" />
+                <GraphCanvasWrapper
+                  projectId="demo"
+                  wizardData={{
+                    entities: watchedValues.entities
+                      ? String(watchedValues.entities)
+                          .split(",")
+                          .map((e) => e.trim())
+                          .filter(Boolean)
+                      : undefined,
+                    useCases: watchedValues.useCases
+                      ? String(watchedValues.useCases)
+                          .split(",")
+                          .map((u) => u.trim())
+                          .filter(Boolean)
+                      : undefined,
+                  }}
+                />
               </CardContent>
             </Card>
           }

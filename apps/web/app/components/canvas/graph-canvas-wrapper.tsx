@@ -6,12 +6,21 @@ import { useCanvasState } from "../../hooks/use-canvas-state";
 import { HexagonCanvas, CanvasToolbar, NodeEditorDialog } from "./index";
 import type { Result } from "@hexagen/shared";
 
-interface GraphCanvasWrapperProps {
-  projectId: string;
+interface WizardData {
+  entities?: string[];
+  useCases?: string[];
 }
 
-export function GraphCanvasWrapper({ projectId }: GraphCanvasWrapperProps) {
-  const state = useCanvasState(projectId);
+interface GraphCanvasWrapperProps {
+  projectId: string;
+  wizardData?: WizardData;
+}
+
+export function GraphCanvasWrapper({
+  projectId,
+  wizardData,
+}: GraphCanvasWrapperProps) {
+  const state = useCanvasState(projectId, wizardData);
   const [exportHandler, setExportHandler] = useState<
     (() => Promise<Result<Blob, Error>>) | null
   >(null);
@@ -49,6 +58,19 @@ export function GraphCanvasWrapper({ projectId }: GraphCanvasWrapperProps) {
       <div className="flex items-center justify-center w-full h-full min-h-[400px]">
         <div className="text-destructive">
           Failed to load graph: {state.error.message}
+        </div>
+      </div>
+    );
+  }
+
+  if (state.nodes.length === 0) {
+    return (
+      <div className="flex items-center justify-center w-full h-full min-h-[400px] bg-muted/20">
+        <div className="text-center text-muted-foreground">
+          <p className="text-lg font-medium mb-2">No Architecture Data</p>
+          <p className="text-sm">
+            Complete the wizard to visualize your project structure
+          </p>
         </div>
       </div>
     );
