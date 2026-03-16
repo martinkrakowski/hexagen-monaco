@@ -13,8 +13,8 @@ const nextConfig = {
   reactStrictMode: true,
 
   // Allow LAN IP access in dev (Next.js 15+ host validation)
-  // Must include port — Next.js matches against the full Host header value
-  allowedDevOrigins: ["10.10.0.219:3000"],
+  // Use wildcard for flexibility during development
+  allowedDevOrigins: ["10.10.0.219", "localhost", "127.0.0.1"],
 
   // Workspace packages to transpile
   transpilePackages: [
