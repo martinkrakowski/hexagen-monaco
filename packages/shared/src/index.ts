@@ -13,6 +13,9 @@ export type { ProjectSpecification } from "./domain/project-specification";
 // Application exports
 export type { MonacoPersistencePort } from "./application/ports/monaco-persistence.port";
 
+// Canvas / wizard exports
+export type { WizardData } from "./domain/wizard-data";
+
 // Error/Result exports
 export type { Result } from "./errors/result";
 export { ok } from "./errors/result-helpers";

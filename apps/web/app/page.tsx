@@ -437,18 +437,21 @@ export default function Home() {
                 <GraphCanvasWrapper
                   projectId="demo"
                   wizardData={{
+                    rootName: watchedValues.rootName?.trim() || undefined,
                     entities: watchedValues.entities
-                      ? String(watchedValues.entities)
-                          .split(",")
-                          .map((e) => e.trim())
-                          .filter(Boolean)
+                      ? String(watchedValues.entities).split(",").map((e) => e.trim()).filter(Boolean)
                       : undefined,
                     useCases: watchedValues.useCases
-                      ? String(watchedValues.useCases)
-                          .split(",")
-                          .map((u) => u.trim())
-                          .filter(Boolean)
+                      ? String(watchedValues.useCases).split(",").map((u) => u.trim()).filter(Boolean)
                       : undefined,
+                    apiFramework: watchedValues.apiFramework || undefined,
+                    uiFramework: watchedValues.uiFramework || undefined,
+                    persistenceAdapter: watchedValues.persistenceAdapter || undefined,
+                    messagingAdapter: watchedValues.messagingAdapter || undefined,
+                    telemetryProvider: watchedValues.telemetryProvider || undefined,
+                    externalApiPorts: watchedValues.externalApiPorts?.length ? watchedValues.externalApiPorts : undefined,
+                    llmProviders: watchedValues.withLlm && watchedValues.llmProviders?.length ? watchedValues.llmProviders : undefined,
+                    blockchainNetworks: watchedValues.withBlockchain && watchedValues.blockchainNetworks?.length ? watchedValues.blockchainNetworks : undefined,
                   }}
                 />
               </CardContent>
