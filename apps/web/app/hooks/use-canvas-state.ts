@@ -74,7 +74,9 @@ function createDefaultHexagonNode(
   label: string = "New Node",
 ): HexagonNode {
   return {
-    id: crypto.randomUUID(),
+    id:
+      crypto.randomUUID?.() ??
+      `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
     label,
     type,
     position: { x: 0, y: 0 },
