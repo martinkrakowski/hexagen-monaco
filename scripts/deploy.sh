@@ -9,6 +9,7 @@ set -euo pipefail
 #   ./scripts/deploy.sh -t myregistry.io -e dev # Dev environment
 #   ./scripts/deploy.sh -t myregistry.io -e prod # Prod environment
 #   ./scripts/deploy.sh -i myimage -g v1.0.0    # Override image name and tag
+#   ./scripts/deploy.sh -n mynamespace          # Override target namespace
 # =============================================================================
 
 # Colors
@@ -24,18 +25,20 @@ IMAGE_NAME="${DOCKER_IMAGE_NAME:-hexagen-monaco}"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
 ENVIRONMENT="${ENVIRONMENT:-dev}"
 KUBECONFIG="${KUBECONFIG:-}"
+K8S_NAMESPACE="${K8S_NAMESPACE:-default}"   # default namespace if not set
 
 # Parse arguments
-while getopts "t:e:k:i:g:vh" opt; do
+while getopts "t:e:k:i:g:n:vh" opt; do
   case $opt in
     t) REGISTRY="$OPTARG" ;;
     e) ENVIRONMENT="$OPTARG" ;;
     k) KUBECONFIG="$OPTARG" ;;
     i) IMAGE_NAME="$OPTARG" ;;
     g) TAG="$OPTARG" ;;
+    n) K8S_NAMESPACE="$OPTARG" ;;
     v) VERBOSE=1 ;;
     h)
-      echo "Usage: $0 [-t registry] [-e environment] [-k kubeconfig] [-i image] [-g tag] [-v]"
+      echo "Usage: $0 [-t registry] [-e environment] [-k kubeconfig] [-i image] [-g tag] [-n namespace] [-v]"
       echo ""
       echo "Options:"
       echo "  -t  Docker registry (default: docker.io)"
@@ -43,12 +46,14 @@ while getopts "t:e:k:i:g:vh" opt; do
       echo "  -k  Kubeconfig path (default: ~/.kube/config)"
       echo "  -i  Image name (default: hexagen-monaco)"
       echo "  -g  Image tag (default: git short hash)"
+      echo "  -n  Target Kubernetes namespace (default: default)"
       echo "  -v  Verbose output"
       echo ""
       echo "Environment variables:"
       echo "  DOCKER_REGISTRY      Docker registry (default: docker.io)"
       echo "  DOCKER_IMAGE_NAME    Image name (default: hexagen-monaco)"
       echo "  TAG                  Image tag (default: git short hash)"
+      echo "  K8S_NAMESPACE        Target namespace (default: default)"
       exit 0
       ;;
     \?) exit 1 ;;
@@ -162,7 +167,7 @@ if [[ -f "$K8S_MANIFEST" ]]; then
   sed "s|$IMAGE_PLACEHOLDER|$FULL_IMAGE|g" "$K8S_MANIFEST" > "$TMP_MANIFEST"
   
   # Apply
-  kubectl apply -f "$TMP_MANIFEST"
+  kubectl apply -f "$TMP_MANIFEST" -n "$K8S_NAMESPACE"
   
   # Rollout status
   log_info "Waiting for rollout..."

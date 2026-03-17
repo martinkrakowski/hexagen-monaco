@@ -1,18 +1,20 @@
 # ---------- 1️⃣  Build stage ----------
-FROM node:20-alpine AS builder
+FROM node:20-alpine AS base
 
+# Enable corepack and set Yarn version
+RUN corepack enable && corepack prepare yarn@4.12.0 --activate
+
+FROM base AS builder
 WORKDIR /app
 
-# Copy workspace lockfile and package manifests (yarn uses yarn.lock)
-COPY package.json yarn.lock ./
-COPY packages ./packages
-COPY apps ./apps
+# Copy the entire repository (respecting .dockerignore)
+COPY . .
 
 # Install all dependencies (including dev) – Yarn 2+ uses `yarn install`
-RUN yarn install --frozen-lockfile
+RUN yarn install
 
-# Build the web app (adjust if your build script is different)
-RUN yarn workspace web build
+# Build all packages using turbo
+RUN yarn turbo build
 
 # ---------- 2️⃣  Runtime stage ----------
 FROM node:20-alpine AS runner
@@ -24,7 +26,7 @@ RUN adduser -S nextjs -u 1001
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/yarn.lock ./
-RUN yarn install --production --frozen-lockfile
+RUN yarn install --production
 
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./.next/static
