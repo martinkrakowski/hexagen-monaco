@@ -8,6 +8,7 @@ const NODE_TYPES: HexagonNodeType[] = [
   "entity",
   "port",
   "use-case",
+  "adapter",
 ];
 
 interface NodeEditorDialogProps {

@@ -1,4 +1,4 @@
-export type EdgeType = "default" | "animated";
+export type EdgeType = "default" | "animated" | "smoothstep";
 
 export interface HexagonEdge {
   id: string;
@@ -6,6 +6,8 @@ export interface HexagonEdge {
   target: string;
   type: EdgeType;
   label?: string;
+  sourceHandle?: string;
+  targetHandle?: string;
 }
 
 export function createHexagonEdge(

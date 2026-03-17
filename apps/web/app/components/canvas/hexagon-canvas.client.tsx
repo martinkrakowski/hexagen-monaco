@@ -8,6 +8,7 @@ import {
   BackgroundVariant,
   type Node as FlowNode,
   type Edge as FlowEdge,
+  type Connection,
 } from "@xyflow/react";
 import { toPng } from "html-to-image";
 import "@xyflow/react/dist/style.css";
@@ -51,8 +52,11 @@ function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    type: edge.type === "animated" ? "default" : (edge.type ?? "default"),
     animated: edge.type === "animated",
     label: edge.label,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
   }));
 }
 
@@ -117,6 +121,27 @@ export function HexagonCanvas({
     [onNodeDoubleClick],
   );
 
+  const isValidConnection = useCallback(
+    (connection: FlowEdge | Connection): boolean => {
+      const targetNode = nodes.find((n) => n.id === connection.target);
+
+      // Only enforce rules when connecting to the root core
+      if (targetNode?.id !== "root-core") return true;
+
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      // `side` is layout metadata from HexagonNodeWithLayout that rides directly
+      // on the node object — not nested under `.data`. The `any` cast is intentional:
+      // HexagonCanvas receives HexagonNodeData[], which doesn't include layout fields
+      // in its type, even though wizard-generated nodes carry them at runtime.
+      const sourceSide = (sourceNode as any)?.side;
+
+      // Manually added nodes (no side) can connect to any handle
+      // Wizard-generated nodes must connect to their designated handle
+      return !sourceSide || sourceSide === connection.targetHandle;
+    },
+    [nodes],
+  );
+
   return (
     <div className="w-full h-full min-h-[400px]">
       <ReactFlow
@@ -125,6 +150,7 @@ export function HexagonCanvas({
         nodeTypes={nodeTypes}
         onNodeDragStop={handleNodeDragStop}
         onNodeDoubleClick={handleNodeDoubleClick}
+        isValidConnection={isValidConnection}
         fitView
         className="bg-background"
       >
