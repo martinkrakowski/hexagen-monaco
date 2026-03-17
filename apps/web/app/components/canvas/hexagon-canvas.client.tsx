@@ -37,14 +37,18 @@ export interface HexagonCanvasProps {
 }
 
 function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
-  return nodes.map(
-    (node): HexagonFlowNode => ({
+  return nodes.map((node): HexagonFlowNode => {
+    const n = node as any;
+    return {
       id: node.id,
       type: "hexagon",
       position: node.position,
       data: node as HexagonNodeDataRecord,
-    }),
-  );
+      ...(n.parentId
+        ? { parentId: n.parentId, extent: n.extent ?? "parent", draggable: false }
+        : {}),
+    };
+  });
 }
 
 function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {

@@ -10,6 +10,8 @@ export type HexagonNodeWithLayout = HexagonNode & {
   isRoot?: boolean;
   side?: "north" | "south" | "east" | "west";
   category?: string;
+  parentId?: string;
+  extent?: "parent";
 };
 
 type Side = "north" | "south" | "east" | "west";
@@ -31,9 +33,8 @@ const SIDE_MAP: Record<string, Side> = {
   searchService: "west",
 };
 
-// Fields intentionally excluded from the strategic context map.
-// rootName drives the central node label; entities/useCases are tactical
-// detail that belongs inside a bounded context, not on the map itself.
+// Fields handled by dedicated rendering passes — excluded from the generic
+// SIDE_MAP grouping to avoid duplicate processing or spurious warnings.
 const STRATEGIC_MAP_EXCLUDED = new Set(["rootName", "entities", "useCases"]);
 
 export function generateHexagonalContextMap(wizardData: WizardData): {
@@ -117,6 +118,61 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     },
   );
+
+  // Category nodes rendered inside root-core as locked child nodes.
+  // Positions are relative to root-core's top-left corner (0,0 = top-left of 400×400 box).
+  // Placed in the lower half of the hexagon — clear of the center label.
+  const entityItems = (wizardData.entities ?? []).filter(Boolean);
+  const useCaseItems = (wizardData.useCases ?? []).filter(Boolean);
+
+  const categoryDefs = [
+    { id: "inner-entities", label: "Entities", type: "entity" as const, items: entityItems },
+    { id: "inner-usecases", label: "Use Cases", type: "use-case" as const, items: useCaseItems },
+  ].filter((def) => def.items.length > 0);
+
+  // Center category nodes horizontally within the 400px hexagon body.
+  // spacing=160 keeps two nodes comfortably inside the widest part of the hex.
+  const categoryY = 258;
+  const categorySpacing = 160;
+  categoryDefs.forEach((cat, i) => {
+    const offsetX = (i - (categoryDefs.length - 1) / 2) * categorySpacing;
+    nodes.push({
+      id: cat.id,
+      label: cat.label,
+      type: cat.type,
+      position: { x: 130 + offsetX, y: categoryY },
+      parentId: "root-core",
+      extent: "parent" as const,
+    });
+  });
+
+  // Individual domain nodes orbit root-core at innerRadius.
+  // Each connects to its category node inside the hexagon.
+  const innerRadius = 310;
+  const allDomainItems = [
+    ...entityItems.map((label, i) => ({ id: `entity-${i}`, label, type: "entity" as const, categoryId: "inner-entities" })),
+    ...useCaseItems.map((label, i) => ({ id: `usecase-${i}`, label, type: "use-case" as const, categoryId: "inner-usecases" })),
+  ];
+
+  allDomainItems.forEach((dn, i) => {
+    const angle = (2 * Math.PI * i) / allDomainItems.length - Math.PI / 2;
+    nodes.push({
+      id: dn.id,
+      label: dn.label,
+      type: dn.type,
+      position: {
+        x: centerX + Math.cos(angle) * innerRadius - 70,
+        y: centerY + Math.sin(angle) * innerRadius - 36,
+      },
+    });
+
+    edges.push({
+      id: `edge-${dn.id}`,
+      source: dn.categoryId,
+      target: dn.id,
+      type: "default",
+    });
+  });
 
   return { nodes, edges };
 }
