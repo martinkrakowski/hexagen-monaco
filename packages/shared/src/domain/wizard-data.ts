@@ -27,4 +27,16 @@ export interface WizardData {
   llmProviders?: string[];
   /** Step 1 addon (withBlockchain): blockchain network ports → outer ring */
   blockchainNetworks?: string[];
+  /** West/External side: outbound auth provider (Auth0, Cognito, etc.) */
+  authenticationProvider?: string;
+  /** West/External side: outbound transactional email service */
+  emailService?: string;
+  /** West/External side: outbound payment gateway */
+  paymentGateway?: string;
+  /** West/External side: outbound object storage provider */
+  storageProvider?: string;
+  /** West/External side: outbound search service */
+  searchService?: string;
+  /** North/Presentation side: inbound webhook/callback endpoint names */
+  webhookEndpoints?: string[];
 }

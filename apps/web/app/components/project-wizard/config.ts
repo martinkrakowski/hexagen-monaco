@@ -56,6 +56,12 @@ export const projectConfigSchema = z.object({
     message: 'Please define at least one use case.',
   }),
   externalApiPorts: z.array(z.string()).optional().default([]),
+  authenticationProvider: z.string().optional(),
+  emailService: z.string().optional(),
+  paymentGateway: z.string().optional(),
+  storageProvider: z.string().optional(),
+  searchService: z.string().optional(),
+  webhookEndpoints: z.array(z.string()).default([]),
   persistenceAdapter: z.enum(persistenceAdapterOptions),
   messagingAdapter: z.enum(messagingAdapterOptions),
   telemetryProvider: z.enum(telemetryProviderOptions),
@@ -81,6 +87,7 @@ export const emptyFormValues: ProjectConfig = {
   telemetryProvider: 'OpenTelemetry',
   apiFramework: 'NestJS',
   uiFramework: 'Next.js',
+  webhookEndpoints: [],
 };
 
 export const projectAddons = [
@@ -97,6 +104,47 @@ export const projectAddons = [
       'Add-on for multi-chain apps. Adds chain-agnostic ports for reading/writing, events, contract calls, wallets, and RPCs. Presets for Ethereum, Solana, Cosmos, Aptos, and more.',
   },
 ];
+
+export const authProviderOptions = [
+  'Auth0',
+  'Cognito',
+  'Firebase Auth',
+  'Supabase Auth',
+  'Clerk',
+  'Keycloak',
+] as const;
+
+export const emailServiceOptions = [
+  'SendGrid',
+  'Postmark',
+  'Resend',
+  'Mailgun',
+  'AWS SES',
+] as const;
+
+export const paymentGatewayOptions = [
+  'Stripe',
+  'Square',
+  'PayPal',
+  'Braintree',
+  'Adyen',
+] as const;
+
+export const storageProviderOptions = [
+  'AWS S3',
+  'Google Cloud Storage',
+  'Azure Blob',
+  'Cloudflare R2',
+  'MinIO',
+] as const;
+
+export const searchServiceOptions = [
+  'Elasticsearch',
+  'Algolia',
+  'Typesense',
+  'Meilisearch',
+  'OpenSearch',
+] as const;
 
 export const llmProviderOptions = [
   'OpenAI',
@@ -181,6 +229,20 @@ export const wizardSteps = [
     description:
       'Choose implementations for data persistence, messaging, and observability.',
     fields: ['persistenceAdapter', 'messagingAdapter', 'telemetryProvider'],
+  },
+  {
+    id: 'external_integrations',
+    title: 'External Integrations',
+    description:
+      'Configure outbound integrations (West side) and inbound webhook endpoints (North side).',
+    fields: [
+      'authenticationProvider',
+      'emailService',
+      'paymentGateway',
+      'storageProvider',
+      'searchService',
+      'webhookEndpoints',
+    ],
   },
   {
     id: 'core',

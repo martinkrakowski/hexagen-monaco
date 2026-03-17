@@ -17,12 +17,23 @@ const SIDE_MAP: Record<string, Side> = {
   apiFramework: "east",
   uiFramework: "north",
   messagingAdapter: "north",
+  webhookEndpoints: "north",
   persistenceAdapter: "south",
   telemetryProvider: "south",
   externalApiPorts: "west",
   llmProviders: "west",
   blockchainNetworks: "west",
+  authenticationProvider: "west",
+  emailService: "west",
+  paymentGateway: "west",
+  storageProvider: "west",
+  searchService: "west",
 };
+
+// Fields intentionally excluded from the strategic context map.
+// rootName drives the central node label; entities/useCases are tactical
+// detail that belongs inside a bounded context, not on the map itself.
+const STRATEGIC_MAP_EXCLUDED = new Set(["rootName", "entities", "useCases"]);
 
 export function generateHexagonalContextMap(wizardData: WizardData): {
   nodes: HexagonNodeWithLayout[];
@@ -57,7 +68,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const side = SIDE_MAP[key];
     if (value && side) {
       groups[side].push({ key, val: value as string | string[] });
-    } else if (value && key !== "rootName" && process.env.NODE_ENV === "development") {
+    } else if (value && !STRATEGIC_MAP_EXCLUDED.has(key) && process.env.NODE_ENV === "development") {
       console.warn(
         `[layout-engine] WizardData key "${key}" has a value but no SIDE_MAP entry — it will not appear on the context map. Add it to SIDE_MAP to include it.`,
       );

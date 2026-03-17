@@ -15,6 +15,11 @@ import {
   emptyFormValues,
   wizardSteps,
   projectAddons,
+  authProviderOptions,
+  emailServiceOptions,
+  paymentGatewayOptions,
+  storageProviderOptions,
+  searchServiceOptions,
 } from "@/components/project-wizard/config";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -369,6 +374,91 @@ export default function Home() {
                     <div className="space-y-6">
                       <div>
                         <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                          Authentication Provider
+                        </label>
+                        <select
+                          {...form.register("authenticationProvider")}
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="">None</option>
+                          {authProviderOptions.map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                          Email Service
+                        </label>
+                        <select
+                          {...form.register("emailService")}
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="">None</option>
+                          {emailServiceOptions.map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                          Payment Gateway
+                        </label>
+                        <select
+                          {...form.register("paymentGateway")}
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="">None</option>
+                          {paymentGatewayOptions.map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                          Storage Provider
+                        </label>
+                        <select
+                          {...form.register("storageProvider")}
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="">None</option>
+                          {storageProviderOptions.map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                          Search Service
+                        </label>
+                        <select
+                          {...form.register("searchService")}
+                          className="w-full px-4 py-2 border rounded-md"
+                        >
+                          <option value="">None</option>
+                          {searchServiceOptions.map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                          Webhook Endpoints (comma-separated)
+                        </label>
+                        <input
+                          {...form.register("webhookEndpoints")}
+                          className="w-full px-4 py-2 border rounded-md"
+                          placeholder="Stripe Webhooks,SendGrid Events"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {currentStepIndex === 7 && (
+                    <div className="space-y-6">
+                      <div>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
                           Entities (comma-separated)
                         </label>
                         <input
@@ -452,6 +542,14 @@ export default function Home() {
                     externalApiPorts: watchedValues.externalApiPorts?.length ? watchedValues.externalApiPorts : undefined,
                     llmProviders: watchedValues.withLlm && watchedValues.llmProviders?.length ? watchedValues.llmProviders : undefined,
                     blockchainNetworks: watchedValues.withBlockchain && watchedValues.blockchainNetworks?.length ? watchedValues.blockchainNetworks : undefined,
+                    authenticationProvider: watchedValues.authenticationProvider || undefined,
+                    emailService: watchedValues.emailService || undefined,
+                    paymentGateway: watchedValues.paymentGateway || undefined,
+                    storageProvider: watchedValues.storageProvider || undefined,
+                    searchService: watchedValues.searchService || undefined,
+                    webhookEndpoints: watchedValues.webhookEndpoints?.length
+                      ? String(watchedValues.webhookEndpoints).split(",").map((e) => e.trim()).filter(Boolean)
+                      : undefined,
                   }}
                 />
               </CardContent>

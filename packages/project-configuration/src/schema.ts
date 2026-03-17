@@ -30,6 +30,12 @@ export const projectConfigSchema = z
     withBlockchain: z.boolean().default(false),
     llmProviders: z.array(z.string()).default([]),
     blockchainNetworks: z.array(z.string()).default([]),
+    authenticationProvider: z.string().optional(),
+    emailService: z.string().optional(),
+    paymentGateway: z.string().optional(),
+    storageProvider: z.string().optional(),
+    searchService: z.string().optional(),
+    webhookEndpoints: z.array(z.string()).default([]),
   })
   .refine((data) => !data.withLlm || data.llmProviders.length > 0, {
     message: 'Select LLM providers',
