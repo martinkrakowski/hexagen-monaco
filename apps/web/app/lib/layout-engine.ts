@@ -46,7 +46,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
 
   const centerX = 2000;
   const centerY = 2000;
-  const orbitRadius = 450;
+  const orbitRadius = 600;
   const stackGap = 180;
 
   // Central root node — 400px component, centered at (centerX, centerY)
@@ -130,17 +130,18 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     { id: "inner-usecases", label: "Use Cases", type: "use-case" as const, items: useCaseItems },
   ].filter((def) => def.items.length > 0);
 
-  // Center category nodes horizontally within the 400px hexagon body.
-  // spacing=160 keeps two nodes comfortably inside the widest part of the hex.
-  const categoryY = 258;
-  const categorySpacing = 160;
+  // Category nodes rendered as compact 120×36 labels inside the hexagon.
+  // Base x=140 centers a 120px node at hexagon center (200px). spacing=130
+  // places two nodes side by side within the safe zone (SVG y ≤ 72.5).
+  const categoryY = 252;
+  const categorySpacing = 130;
   categoryDefs.forEach((cat, i) => {
     const offsetX = (i - (categoryDefs.length - 1) / 2) * categorySpacing;
     nodes.push({
       id: cat.id,
       label: cat.label,
       type: cat.type,
-      position: { x: 130 + offsetX, y: categoryY },
+      position: { x: 140 + offsetX, y: categoryY },
       parentId: "root-core",
       extent: "parent" as const,
     });
@@ -148,7 +149,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
 
   // Individual domain nodes orbit root-core at innerRadius.
   // Each connects to its category node inside the hexagon.
-  const innerRadius = 310;
+  const innerRadius = 340;
   const allDomainItems = [
     ...entityItems.map((label, i) => ({ id: `entity-${i}`, label, type: "entity" as const, categoryId: "inner-entities" })),
     ...useCaseItems.map((label, i) => ({ id: `usecase-${i}`, label, type: "use-case" as const, categoryId: "inner-usecases" })),

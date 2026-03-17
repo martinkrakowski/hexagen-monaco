@@ -76,9 +76,14 @@ function HexagonNodeComponent({
   // Rectangular node (entity, port, use-case, adapter)
   if (!isHexagon) {
     const styles = RECT_STYLES[nodeType as Exclude<NodeType, "bounded-context">];
+    // Inner category nodes (parentId set) render as compact labels — smaller so
+    // they stay within the hexagon polygon boundary without clipping.
+    const isInner = !!data.parentId;
+    const nodeWidth = isInner ? 120 : 140;
+    const nodeHeight = isInner ? 36 : 72;
     return (
       <div
-        style={{ width: 140, height: 72 }}
+        style={{ width: nodeWidth, height: nodeHeight }}
         className={`relative flex items-center justify-center rounded-md border-2 text-xs font-medium transition-colors select-none ${styles.fill} ${styles.stroke} ${styles.text} ${selected ? "ring-2 ring-ring ring-offset-2" : ""}`}
       >
         {data.category && (
@@ -93,7 +98,7 @@ function HexagonNodeComponent({
             className={`${styles.handleColor} !w-2.5 !h-2.5`}
           />
         )}
-        <span className="px-3 truncate max-w-[120px] text-center leading-tight">
+        <span className={`px-2 truncate text-center leading-tight ${isInner ? "max-w-[100px]" : "max-w-[120px]"}`}>
           {String(data.label || "")}
         </span>
         <Handle
