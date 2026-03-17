@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./scripts/deploy.sh                           # Interactive mode
 #   ./scripts/deploy.sh -t myregistry.io -e dev # Dev environment
 #   ./scripts/deploy.sh -t myregistry.io -e prod # Prod environment
+#   ./scripts/deploy.sh -i myimage -g v1.0.0    # Override image name and tag
 # =============================================================================
 
 # Colors
@@ -25,19 +26,23 @@ ENVIRONMENT="${ENVIRONMENT:-dev}"
 KUBECONFIG="${KUBECONFIG:-}"
 
 # Parse arguments
-while getopts "t:e:k:vh" opt; do
+while getopts "t:e:k:i:g:vh" opt; do
   case $opt in
     t) REGISTRY="$OPTARG" ;;
     e) ENVIRONMENT="$OPTARG" ;;
     k) KUBECONFIG="$OPTARG" ;;
+    i) IMAGE_NAME="$OPTARG" ;;
+    g) TAG="$OPTARG" ;;
     v) VERBOSE=1 ;;
     h)
-      echo "Usage: $0 [-t registry] [-e environment] [-k kubeconfig] [-v]"
+      echo "Usage: $0 [-t registry] [-e environment] [-k kubeconfig] [-i image] [-g tag] [-v]"
       echo ""
       echo "Options:"
       echo "  -t  Docker registry (default: docker.io)"
       echo "  -e  Environment: dev|staging|prod (default: dev)"
       echo "  -k  Kubeconfig path (default: ~/.kube/config)"
+      echo "  -i  Image name (default: hexagen-monaco)"
+      echo "  -g  Image tag (default: git short hash)"
       echo "  -v  Verbose output"
       echo ""
       echo "Environment variables:"
@@ -161,7 +166,7 @@ if [[ -f "$K8S_MANIFEST" ]]; then
   
   # Rollout status
   log_info "Waiting for rollout..."
-  kubectl rollout status deployment/hexagen-web --timeout=120s
+  kubectl rollout status deployment/hexagen-web -n "$K8S_NAMESPACE" --timeout=120s
   
   # Cleanup
   rm -f "$TMP_MANIFEST"
@@ -169,7 +174,7 @@ if [[ -f "$K8S_MANIFEST" ]]; then
   log_success "Deployed to cluster!"
   
   # Show status
-  kubectl get pods -l app=hexagen-web
+  kubectl get pods -l app=hexagen-web -n "$K8S_NAMESPACE"
 else
   log_warn "K8s manifest not found at $K8S_MANIFEST"
   log_info "To deploy manually:"

@@ -5,6 +5,7 @@ metadata:
   labels:
     app: hexagen-web
     tier: frontend
+  namespace: webapps
 spec:
   replicas: 2
   selector:
@@ -16,6 +17,8 @@ spec:
         app: hexagen-web
         tier: frontend
     spec:
+      imagePullSecrets:
+        - name: harbor-regcred
       containers:
         - name: web
           image: IMAGE_NAME
@@ -50,6 +53,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: hexagen-web
+  namespace: webapps
 spec:
   selector:
     app: hexagen-web

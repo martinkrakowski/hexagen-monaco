@@ -1,49 +1,37 @@
-FROM node:20-alpine AS base
+# ---------- 1️⃣  Build stage ----------
+FROM node:20-alpine AS builder
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Install dependencies only when needed
-FROM base AS deps
-WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
-
-# Rebuild the source code only when needed
-FROM base AS builder
 WORKDIR /app
 
-# Copy workspace package data
-COPY package.json pnpm-workspace.yaml ./
-COPY packages packages/
-COPY apps apps/
+# Copy workspace lockfile and package manifests (yarn uses yarn.lock)
+COPY package.json yarn.lock ./
+COPY packages ./packages
+COPY apps ./apps
 
-# Install all dependencies (including dev)
-RUN pnpm install
+# Install all dependencies (including dev) – Yarn 2+ uses `yarn install`
+RUN yarn install --frozen-lockfile
 
-# Generate prisma if needed (not used in this project)
-# RUN pnpm prisma generate
+# Build the web app (adjust if your build script is different)
+RUN yarn workspace web build
 
-# Build the application
-RUN pnpm --filter web build
-
-# Production image
-FROM base AS runner
+# ---------- 2️⃣  Runtime stage ----------
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV=production
+# Only need production deps + the built output
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/yarn.lock ./
+RUN yarn install --production --frozen-lockfile
 
-COPY --from=builder /app/apps/web/public ./public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./.next/static
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/public ./public
 
 USER nextjs
-
 EXPOSE 3000
 ENV PORT=3000
-
+ENV NODE_ENV=production
 CMD ["node", "server.js"]
