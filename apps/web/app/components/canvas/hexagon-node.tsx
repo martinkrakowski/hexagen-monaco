@@ -1,8 +1,9 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { Package, Gem, Zap, Settings2 } from "lucide-react";
+import { Package, Gem, Zap, Settings2, X } from "lucide-react";
 
 type NodeType =
   | "bounded-context"
@@ -19,17 +20,21 @@ interface HexagonData extends Record<string, unknown> {
   category?: string;
   stats?: {
     aggregates?: number;
+    aggregateItems?: string[];
     valueObjects?: number;
+    valueObjectItems?: string[];
     events?: number;
+    eventItems?: string[];
     services?: number;
+    serviceItems?: string[];
   };
 }
 
 const DOMAIN_COMPASS = [
-  { key: "aggregates",   label: "Aggregates",    Icon: Package,  color: "text-amber-400"   },
-  { key: "valueObjects", label: "Value Objects",  Icon: Gem,      color: "text-emerald-400" },
-  { key: "events",       label: "Events",         Icon: Zap,      color: "text-purple-400"  },
-  { key: "services",     label: "Services",       Icon: Settings2, color: "text-sky-400"    },
+  { key: "aggregates",   itemsKey: "aggregateItems",   label: "Aggregates",   Icon: Package,   color: "text-amber-400"   },
+  { key: "valueObjects", itemsKey: "valueObjectItems", label: "Value Objects", Icon: Gem,       color: "text-emerald-400" },
+  { key: "events",       itemsKey: "eventItems",       label: "Events",        Icon: Zap,       color: "text-purple-400"  },
+  { key: "services",     itemsKey: "serviceItems",     label: "Services",      Icon: Settings2, color: "text-sky-400"     },
 ] as const;
 
 // Visual tokens per type for rectangular nodes (all non-root nodes)
@@ -79,6 +84,65 @@ function getSatelliteHandlePosition(side: string | undefined): Position {
   }
 }
 
+type CompassKey = (typeof DOMAIN_COMPASS)[number]["label"];
+type CompassCountKey = (typeof DOMAIN_COMPASS)[number]["key"];
+type CompassItemsKey = (typeof DOMAIN_COMPASS)[number]["itemsKey"];
+type NodeStats = NonNullable<HexagonData["stats"]>;
+
+function getStatCount(stats: NodeStats | undefined, key: CompassCountKey): number {
+  return stats?.[key] ?? 0;
+}
+function getStatItems(stats: NodeStats | undefined, key: CompassItemsKey): string[] {
+  return stats?.[key] ?? [];
+}
+
+interface CompassModalProps {
+  label: CompassKey | string;
+  items: string[];
+  onClose: () => void;
+}
+
+function CompassModal({ label, items, onClose }: CompassModalProps) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-80 rounded-xl border border-border bg-background shadow-2xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X size={16} />
+        </button>
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">
+          {label}
+        </h3>
+        {items.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">No items defined.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {items.map((item, i) => (
+              <li
+                key={`${item}-${i}`}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm bg-muted/50 text-foreground border border-border/50"
+              >
+                <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function HexagonNodeComponent({
   data,
   selected,
@@ -86,6 +150,7 @@ function HexagonNodeComponent({
   const nodeType = (data.type as NodeType) ?? "bounded-context";
   const isRoot = !!data.isRoot;
   const isHexagon = isRoot; // Only the root bounded-context renders as hexagon
+  const [activeCompass, setActiveCompass] = useState<{ label: string; items: string[] } | null>(null);
 
   // Rectangular node (entity, port, use-case, adapter)
   if (!isHexagon) {
@@ -179,16 +244,32 @@ function HexagonNodeComponent({
         {/* Domain Compass — only on root node */}
         {isRoot && (
           <div className="grid grid-cols-2 gap-x-10 gap-y-5">
-            {DOMAIN_COMPASS.map(({ key, label, Icon, color }) => (
-              <div key={key} className="flex flex-col items-center opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
+            {DOMAIN_COMPASS.map(({ key, itemsKey, label, Icon, color }) => (
+              <div
+                key={key}
+                className="flex flex-col items-center opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+                onClick={() =>
+                  setActiveCompass({
+                    label,
+                    items: getStatItems(data.stats, itemsKey),
+                  })
+                }
+              >
                 <Icon size={16} className={color} />
                 <span className="text-[7px] uppercase tracking-tighter font-bold text-slate-500 mt-1">{label}</span>
                 <span className="text-xs font-mono text-slate-900 dark:text-slate-100">
-                  {(data.stats as any)?.[key] ?? 0}
+                  {getStatCount(data.stats, key)}
                 </span>
               </div>
             ))}
           </div>
+        )}
+        {activeCompass && (
+          <CompassModal
+            label={activeCompass.label}
+            items={activeCompass.items}
+            onClose={() => setActiveCompass(null)}
+          />
         )}
       </div>
 

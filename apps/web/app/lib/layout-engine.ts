@@ -14,9 +14,13 @@ export type HexagonNodeWithLayout = HexagonNode & {
   extent?: "parent";
   stats?: {
     aggregates: number;
+    aggregateItems: string[];
     valueObjects: number;
+    valueObjectItems: string[];
     events: number;
+    eventItems: string[];
     services: number;
+    serviceItems: string[];
   };
 };
 
@@ -55,6 +59,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const orbitRadius = 600;
   const stackGap = 180;
 
+  // Derived domain item arrays — declared early so stats can reference them.
+  const entityItems = (wizardData.entities ?? []).filter(Boolean);
+  const useCaseItems = (wizardData.useCases ?? []).filter(Boolean);
+
   // Central root node — 500px component, centered at (centerX, centerY)
   nodes.push({
     id: "root-core",
@@ -63,10 +71,14 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     position: { x: centerX - 250, y: centerY - 250 },
     isRoot: true,
     stats: {
-      aggregates: wizardData.entities?.length ?? 0,
-      services: wizardData.useCases?.length ?? 0,
-      valueObjects: 0, // placeholder — future schema extension
-      events: 0,       // placeholder — future schema extension
+      aggregates: entityItems.length,
+      aggregateItems: entityItems,
+      services: useCaseItems.length,
+      serviceItems: useCaseItems,
+      valueObjects: 0,
+      valueObjectItems: [],
+      events: 0,
+      eventItems: [],
     },
   });
 
@@ -132,10 +144,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   );
 
   // Category nodes rendered inside root-core as locked child nodes.
-  // Positions are relative to root-core's top-left corner (0,0 = top-left of 400×400 box).
+  // Positions are relative to root-core's top-left corner (0,0 = top-left of 500×500 box).
   // Placed in the lower half of the hexagon — clear of the center label.
-  const entityItems = (wizardData.entities ?? []).filter(Boolean);
-  const useCaseItems = (wizardData.useCases ?? []).filter(Boolean);
 
   const categoryDefs = [
     { id: "inner-entities", label: "Entities", type: "entity" as const, items: entityItems },
@@ -164,14 +174,17 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const rootBottom = centerY + 250;
   const ITEM_SPACER = 85;
 
+  // Wider spread for item columns — items are 140px wide so categorySpacing (140)
+  // would make adjacent columns touch. 240 gives ~100px of breathing room.
+  const itemColumnSpacing = 240;
+
   const domainGroups = [
     { items: entityItems, categoryId: "inner-entities", type: "entity" as const, idPrefix: "entity" },
     { items: useCaseItems, categoryId: "inner-usecases", type: "use-case" as const, idPrefix: "usecase" },
   ];
 
   domainGroups.forEach((group, gi) => {
-    // Mirror the offsetX calculation used for categoryDefs above so columns align.
-    const offsetX = (gi - (categoryDefs.length - 1) / 2) * categorySpacing;
+    const offsetX = (gi - (categoryDefs.length - 1) / 2) * itemColumnSpacing;
     // Absolute center-x of the 120px category node: root left edge + node left + half width
     const catCenterX = (centerX - 250) + (190 + offsetX) + 60;
 
