@@ -20,17 +20,18 @@ RUN yarn turbo build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
+# Enable corepack for Yarn 4
+RUN corepack enable && corepack prepare yarn@4.12.0 --activate
+
 # Only need production deps + the built output
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/yarn.lock ./
-RUN yarn install --production
-
-COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/standalone/apps/web/server.js ./
+COPY --from=builder /app/apps/web/.next/standalone/apps/web/package.json ./
+COPY --from=builder /app/apps/web/.next/standalone/apps/web/.next/ ./.next/
 COPY --from=builder /app/apps/web/.next/static ./.next/static
-COPY --from=builder /app/apps/web/public ./public
+COPY --from=builder /app/apps/web/.next/standalone/node_modules ./node_modules
 
 USER nextjs
 EXPOSE 3000
