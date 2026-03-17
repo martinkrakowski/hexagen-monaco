@@ -86,11 +86,13 @@ function HexagonNodeComponent({
             {String(data.category)}
           </span>
         )}
-        <Handle
-          type="target"
-          position={Position.Top}
-          className={`${styles.handleColor} !w-2.5 !h-2.5`}
-        />
+        {!data.category && (
+          <Handle
+            type="target"
+            position={Position.Top}
+            className={`${styles.handleColor} !w-2.5 !h-2.5`}
+          />
+        )}
         <span className="px-3 truncate max-w-[120px] text-center leading-tight">
           {String(data.label || "")}
         </span>
@@ -117,9 +119,9 @@ function HexagonNodeComponent({
       >
         <polygon
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
-          fill={isRoot ? "#0f172a" : "#1e293b"}
-          stroke={selected ? "#38bdf8" : "#334155"}
-          strokeWidth={isRoot ? "1.2" : "2.2"}
+          fill="transparent"
+          stroke={selected ? "#38bdf8" : "#000000"}
+          strokeWidth={isRoot ? "1.5" : "2.2"}
           className="transition-all duration-500 group-hover:stroke-sky-400"
         />
         {isRoot && (
@@ -133,7 +135,7 @@ function HexagonNodeComponent({
       </svg>
 
       <div
-        className={`z-10 text-center flex flex-col items-center justify-center text-slate-100 uppercase tracking-widest leading-tight ${
+        className={`z-10 text-center flex flex-col items-center justify-center text-slate-900 dark:text-slate-100 uppercase tracking-widest leading-tight ${
           isRoot ? "text-2xl font-black italic" : "text-[10px] font-bold"
         }`}
       >
