@@ -1,3 +1,19 @@
+/** DDD relationship types used to classify cross-context dependencies. */
+export type ContextRelationshipType = "U" | "D" | "ACL" | "SK" | "P" | "OHS";
+
+/**
+ * Represents a peer Bounded Context in the strategic landscape.
+ * Rendered in the outer orbit ring, distinct from infrastructure adapters.
+ */
+export interface ExternalContext {
+  id: string;
+  name: string;
+  relationshipType: ContextRelationshipType;
+  isEventDriven?: boolean;
+  entityNames?: string[];
+  useCaseNames?: string[];
+}
+
 /**
  * WizardData is the input port between the project wizard (controller layer)
  * and the canvas visualization use case. It represents the in-progress state
@@ -39,4 +55,6 @@ export interface WizardData {
   searchService?: string;
   /** North/Presentation side: inbound webhook/callback endpoint names */
   webhookEndpoints?: string[];
+  /** Strategic landscape: peer Bounded Contexts in the outer orbit ring */
+  externalContexts?: ExternalContext[];
 }

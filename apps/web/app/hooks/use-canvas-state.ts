@@ -166,23 +166,13 @@ export function useCanvasState(
         : { x: 100, y: 100 };
       const newNode = createDefaultHexagonNode("entity", "New Node", position);
 
-      // Auto-link to root-core if it exists
-      const newEdges = root
-        ? [
-            ...prev.edges,
-            {
-              id: `edge-${newNode.id}`,
-              source: newNode.id,
-              target: "root-core",
-              type: "smoothstep" as const,
-            },
-          ]
-        : prev.edges;
-
+      // No auto-edge: manually added nodes have no cardinal side, so connecting
+      // them programmatically always defaults to the nearest handle ("north").
+      // The user draws the connection manually to choose the correct handle.
       return {
         ...prev,
         nodes: [...prev.nodes, newNode],
-        edges: newEdges,
+        edges: prev.edges,
         selectedNodeId: newNode.id,
       };
     });

@@ -1,4 +1,4 @@
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData, ExternalContext } from "@hexagen/shared";
 import type { HexagonNode, HexagonEdge } from "@hexagen/visualization";
 
 /**
@@ -8,6 +8,7 @@ import type { HexagonNode, HexagonEdge } from "@hexagen/visualization";
  */
 export type HexagonNodeWithLayout = HexagonNode & {
   isRoot?: boolean;
+  isPeer?: boolean;
   side?: "north" | "south" | "east" | "west";
   category?: string;
   parentId?: string;
@@ -45,7 +46,7 @@ const SIDE_MAP: Record<string, Side> = {
 
 // Fields handled by dedicated rendering passes — excluded from the generic
 // SIDE_MAP grouping to avoid duplicate processing or spurious warnings.
-const STRATEGIC_MAP_EXCLUDED = new Set(["rootName", "entities", "useCases"]);
+const STRATEGIC_MAP_EXCLUDED = new Set(["rootName", "entities", "useCases", "externalContexts"]);
 
 export function generateHexagonalContextMap(wizardData: WizardData): {
   nodes: HexagonNodeWithLayout[];
@@ -206,6 +207,50 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         target: id,
         type: "default",
       });
+    });
+  });
+
+  // Peer Bounded Contexts — outer orbit, beyond the infrastructure adapter ring.
+  // Placed in a true circle so no side is privileged over another.
+  const outerOrbitRadius = 1100;
+  const peerHalf = 150; // half of 300px peer dimension
+
+  (wizardData.externalContexts ?? []).forEach((bc: ExternalContext, index, arr) => {
+    const angle = (index / arr.length) * 2 * Math.PI;
+    const tx = centerX + outerOrbitRadius * Math.cos(angle);
+    const ty = centerY + outerOrbitRadius * Math.sin(angle);
+
+    const peerEntityNames = bc.entityNames ?? [];
+    const peerUseCaseNames = bc.useCaseNames ?? [];
+
+    nodes.push({
+      id: bc.id,
+      label: bc.name,
+      type: "bounded-context",
+      position: { x: tx - peerHalf, y: ty - peerHalf },
+      isPeer: true,
+      stats: {
+        aggregates: peerEntityNames.length,
+        aggregateItems: peerEntityNames,
+        services: peerUseCaseNames.length,
+        serviceItems: peerUseCaseNames,
+        valueObjects: 0,
+        valueObjectItems: [],
+        events: 0,
+        eventItems: [],
+      },
+    });
+
+    // DDD flow rule: Downstream (D) → peer is source, root is target.
+    // All other relationship types → root is source, peer is target.
+    const isDownstream = bc.relationshipType === "D";
+    edges.push({
+      id: `edge-peer-${bc.id}`,
+      source: isDownstream ? bc.id : "root-core",
+      target: isDownstream ? "root-core" : bc.id,
+      label: bc.relationshipType,
+      type: "smoothstep",
+      animated: !!bc.isEventDriven,
     });
   });
 

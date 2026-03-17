@@ -16,6 +16,7 @@ interface HexagonData extends Record<string, unknown> {
   label: string;
   type?: NodeType;
   isRoot?: boolean;
+  isPeer?: boolean;
   side?: "north" | "south" | "east" | "west";
   category?: string;
   stats?: {
@@ -149,7 +150,8 @@ function HexagonNodeComponent({
 }: NodeProps<Node<HexagonData>>) {
   const nodeType = (data.type as NodeType) ?? "bounded-context";
   const isRoot = !!data.isRoot;
-  const isHexagon = isRoot; // Only the root bounded-context renders as hexagon
+  const isPeer = !!data.isPeer;
+  const isHexagon = isRoot || isPeer; // Root and peer bounded-contexts render as hexagons
   const [activeCompass, setActiveCompass] = useState<{ label: string; items: string[] } | null>(null);
 
   // Rectangular node (entity, port, use-case, adapter)
@@ -189,8 +191,8 @@ function HexagonNodeComponent({
     );
   }
 
-  // Hexagonal node (bounded-context) — root is 500px, satellite is 160px
-  const dimension = isRoot ? 500 : 160;
+  // Hexagonal node: root = 500px, peer BC = 300px, infrastructure satellite = 160px
+  const dimension = isRoot ? 500 : isPeer ? 300 : 160;
 
   return (
     <div
@@ -205,7 +207,7 @@ function HexagonNodeComponent({
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
           fill="transparent"
           stroke={selected ? "#38bdf8" : "#000000"}
-          strokeWidth={isRoot ? "0.8" : "2.2"}
+          strokeWidth={isRoot ? "0.8" : isPeer ? "1.2" : "2.2"}
           className="transition-all duration-500 group-hover:stroke-sky-400"
         />
         {isRoot && (
@@ -222,7 +224,7 @@ function HexagonNodeComponent({
         {/* Project name */}
         <div
           className={`text-center text-slate-900 dark:text-slate-100 uppercase tracking-widest leading-tight ${
-            isRoot ? "text-base font-black italic" : "text-[10px] font-bold"
+            isRoot ? "text-base font-black italic" : isPeer ? "text-sm font-bold italic" : "text-[10px] font-bold"
           }`}
         >
           {String(data.label || "")
@@ -241,9 +243,9 @@ function HexagonNodeComponent({
             ))}
         </div>
 
-        {/* Domain Compass — only on root node */}
-        {isRoot && (
-          <div className="grid grid-cols-2 gap-x-10 gap-y-5">
+        {/* Domain Compass — root and peer nodes */}
+        {(isRoot || isPeer) && (
+          <div className={`grid grid-cols-2 ${isPeer ? "gap-x-6 gap-y-3" : "gap-x-10 gap-y-5"}`}>
             {DOMAIN_COMPASS.map(({ key, itemsKey, label, Icon, color }) => (
               <div
                 key={key}
@@ -298,6 +300,21 @@ function HexagonNodeComponent({
             position={Position.Right}
             id="east"
             className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          />
+        </>
+      ) : isPeer ? (
+        <>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="peer-in"
+            className="!bg-violet-500 !w-2.5 !h-2.5 border border-slate-900"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="peer-out"
+            className="!bg-violet-500 !w-2.5 !h-2.5 border border-slate-900"
           />
         </>
       ) : (

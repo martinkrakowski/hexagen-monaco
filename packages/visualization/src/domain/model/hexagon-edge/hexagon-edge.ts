@@ -6,6 +6,7 @@ export interface HexagonEdge {
   target: string;
   type: EdgeType;
   label?: string;
+  animated?: boolean;
   sourceHandle?: string;
   targetHandle?: string;
 }

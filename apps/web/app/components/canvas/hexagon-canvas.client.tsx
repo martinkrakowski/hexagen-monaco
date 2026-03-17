@@ -57,10 +57,14 @@ function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
     source: edge.source,
     target: edge.target,
     type: edge.type === "animated" ? "default" : (edge.type ?? "default"),
-    animated: edge.type === "animated",
+    animated: edge.type === "animated" || !!edge.animated,
     label: edge.label,
     sourceHandle: edge.sourceHandle,
     targetHandle: edge.targetHandle,
+    // SK (Shared Kernel) gets a visually heavier edge to convey tight coupling
+    style: edge.label === "SK"
+      ? { strokeWidth: 4, stroke: "#a78bfa" }
+      : undefined,
   }));
 }
 

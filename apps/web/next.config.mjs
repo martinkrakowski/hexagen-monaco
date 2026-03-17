@@ -10,6 +10,7 @@ const monorepoRoot = path.resolve(__dirname, "../..");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
   reactStrictMode: true,
 
   // Allow LAN IP access in dev (Next.js 15+ host validation)
