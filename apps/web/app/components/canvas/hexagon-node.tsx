@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+import { Package, Gem, Zap, Settings2 } from "lucide-react";
 
 type NodeType =
   | "bounded-context"
@@ -16,7 +17,20 @@ interface HexagonData extends Record<string, unknown> {
   isRoot?: boolean;
   side?: "north" | "south" | "east" | "west";
   category?: string;
+  stats?: {
+    aggregates?: number;
+    valueObjects?: number;
+    events?: number;
+    services?: number;
+  };
 }
+
+const DOMAIN_COMPASS = [
+  { key: "aggregates",   label: "Aggregates",    Icon: Package,  color: "text-amber-400"   },
+  { key: "valueObjects", label: "Value Objects",  Icon: Gem,      color: "text-emerald-400" },
+  { key: "events",       label: "Events",         Icon: Zap,      color: "text-purple-400"  },
+  { key: "services",     label: "Services",       Icon: Settings2, color: "text-sky-400"    },
+] as const;
 
 // Visual tokens per type for rectangular nodes (all non-root nodes)
 const RECT_STYLES: Record<
@@ -110,8 +124,8 @@ function HexagonNodeComponent({
     );
   }
 
-  // Hexagonal node (bounded-context) — root is 400px, satellite is 160px
-  const dimension = isRoot ? 400 : 160;
+  // Hexagonal node (bounded-context) — root is 500px, satellite is 160px
+  const dimension = isRoot ? 500 : 160;
 
   return (
     <div
@@ -126,7 +140,7 @@ function HexagonNodeComponent({
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
           fill="transparent"
           stroke={selected ? "#38bdf8" : "#000000"}
-          strokeWidth={isRoot ? "1.5" : "2.2"}
+          strokeWidth={isRoot ? "0.8" : "2.2"}
           className="transition-all duration-500 group-hover:stroke-sky-400"
         />
         {isRoot && (
@@ -139,25 +153,43 @@ function HexagonNodeComponent({
         )}
       </svg>
 
-      <div
-        className={`z-10 text-center flex flex-col items-center justify-center text-slate-900 dark:text-slate-100 uppercase tracking-widest leading-tight ${
-          isRoot ? "text-2xl font-black italic" : "text-[10px] font-bold"
-        }`}
-      >
-        {String(data.label || "")
-          .split("\n")
-          .map((line, i) => (
-            <span
-              key={i}
-              className={
-                i > 0
-                  ? "opacity-50 text-[9px] lowercase mt-1 font-normal tracking-normal normal-case"
-                  : ""
-              }
-            >
-              {line}
-            </span>
-          ))}
+      <div className="z-10 flex flex-col items-center justify-center gap-3">
+        {/* Project name */}
+        <div
+          className={`text-center text-slate-900 dark:text-slate-100 uppercase tracking-widest leading-tight ${
+            isRoot ? "text-base font-black italic" : "text-[10px] font-bold"
+          }`}
+        >
+          {String(data.label || "")
+            .split("\n")
+            .map((line, i) => (
+              <span
+                key={i}
+                className={
+                  i > 0
+                    ? "opacity-50 text-[9px] lowercase mt-1 font-normal tracking-normal normal-case"
+                    : ""
+                }
+              >
+                {line}
+              </span>
+            ))}
+        </div>
+
+        {/* Domain Compass — only on root node */}
+        {isRoot && (
+          <div className="grid grid-cols-2 gap-x-10 gap-y-5">
+            {DOMAIN_COMPASS.map(({ key, label, Icon, color }) => (
+              <div key={key} className="flex flex-col items-center opacity-70 hover:opacity-100 transition-opacity cursor-pointer">
+                <Icon size={16} className={color} />
+                <span className="text-[7px] uppercase tracking-tighter font-bold text-slate-500 mt-1">{label}</span>
+                <span className="text-xs font-mono text-slate-900 dark:text-slate-100">
+                  {(data.stats as any)?.[key] ?? 0}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {isRoot ? (

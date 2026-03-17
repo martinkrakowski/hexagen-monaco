@@ -12,6 +12,12 @@ export type HexagonNodeWithLayout = HexagonNode & {
   category?: string;
   parentId?: string;
   extent?: "parent";
+  stats?: {
+    aggregates: number;
+    valueObjects: number;
+    events: number;
+    services: number;
+  };
 };
 
 type Side = "north" | "south" | "east" | "west";
@@ -49,13 +55,19 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const orbitRadius = 600;
   const stackGap = 180;
 
-  // Central root node — 400px component, centered at (centerX, centerY)
+  // Central root node — 500px component, centered at (centerX, centerY)
   nodes.push({
     id: "root-core",
     label: wizardData.rootName?.trim() || "Project Root",
     type: "bounded-context",
-    position: { x: centerX - 200, y: centerY - 200 },
+    position: { x: centerX - 250, y: centerY - 250 },
     isRoot: true,
+    stats: {
+      aggregates: wizardData.entities?.length ?? 0,
+      services: wizardData.useCases?.length ?? 0,
+      valueObjects: 0, // placeholder — future schema extension
+      events: 0,       // placeholder — future schema extension
+    },
   });
 
   // Grouping pass — only SIDE_MAP keys are included
@@ -131,47 +143,56 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   ].filter((def) => def.items.length > 0);
 
   // Category nodes rendered as compact 120×36 labels inside the hexagon.
-  // Base x=140 centers a 120px node at hexagon center (200px). spacing=130
-  // places two nodes side by side within the safe zone (SVG y ≤ 72.5).
-  const categoryY = 252;
-  const categorySpacing = 130;
+  // Base x=190 centers a 120px node at hexagon center (250px). spacing=140
+  // places two nodes side by side within the safe zone of the 500px hex body.
+  const categoryY = 390;
+  const categorySpacing = 140;
   categoryDefs.forEach((cat, i) => {
     const offsetX = (i - (categoryDefs.length - 1) / 2) * categorySpacing;
     nodes.push({
       id: cat.id,
       label: cat.label,
       type: cat.type,
-      position: { x: 140 + offsetX, y: categoryY },
+      position: { x: 190 + offsetX, y: categoryY },
       parentId: "root-core",
       extent: "parent" as const,
     });
   });
 
-  // Individual domain nodes orbit root-core at innerRadius.
-  // Each connects to its category node inside the hexagon.
-  const innerRadius = 340;
-  const allDomainItems = [
-    ...entityItems.map((label, i) => ({ id: `entity-${i}`, label, type: "entity" as const, categoryId: "inner-entities" })),
-    ...useCaseItems.map((label, i) => ({ id: `usecase-${i}`, label, type: "use-case" as const, categoryId: "inner-usecases" })),
+  // Individual domain nodes are placed in vertical columns directly below their
+  // category node. rootBottom is the absolute bottom edge of the 500px root-core.
+  const rootBottom = centerY + 250;
+  const ITEM_SPACER = 85;
+
+  const domainGroups = [
+    { items: entityItems, categoryId: "inner-entities", type: "entity" as const, idPrefix: "entity" },
+    { items: useCaseItems, categoryId: "inner-usecases", type: "use-case" as const, idPrefix: "usecase" },
   ];
 
-  allDomainItems.forEach((dn, i) => {
-    const angle = (2 * Math.PI * i) / allDomainItems.length - Math.PI / 2;
-    nodes.push({
-      id: dn.id,
-      label: dn.label,
-      type: dn.type,
-      position: {
-        x: centerX + Math.cos(angle) * innerRadius - 70,
-        y: centerY + Math.sin(angle) * innerRadius - 36,
-      },
-    });
+  domainGroups.forEach((group, gi) => {
+    // Mirror the offsetX calculation used for categoryDefs above so columns align.
+    const offsetX = (gi - (categoryDefs.length - 1) / 2) * categorySpacing;
+    // Absolute center-x of the 120px category node: root left edge + node left + half width
+    const catCenterX = (centerX - 250) + (190 + offsetX) + 60;
 
-    edges.push({
-      id: `edge-${dn.id}`,
-      source: dn.categoryId,
-      target: dn.id,
-      type: "default",
+    group.items.forEach((label, j) => {
+      const id = `${group.idPrefix}-${j}`;
+      nodes.push({
+        id,
+        label,
+        type: group.type,
+        position: {
+          x: catCenterX - 70,
+          y: rootBottom + 30 + j * ITEM_SPACER,
+        },
+      });
+
+      edges.push({
+        id: `edge-${id}`,
+        source: group.categoryId,
+        target: id,
+        type: "default",
+      });
     });
   });
 
