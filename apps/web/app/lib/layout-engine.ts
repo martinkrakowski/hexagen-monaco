@@ -9,6 +9,7 @@ import type { HexagonNode, HexagonEdge } from "@hexagen/visualization";
 export type HexagonNodeWithLayout = HexagonNode & {
   isRoot?: boolean;
   side?: "north" | "south" | "east" | "west";
+  category?: string;
 };
 
 type Side = "north" | "south" | "east" | "west";
@@ -93,12 +94,13 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         const displayVal = Array.isArray(item.val)
           ? item.val.join(", ")
           : String(item.val);
-        const label = `${item.key.replace(/([A-Z])/g, " $1")}\n(${displayVal})`;
+        const category = item.key.replace(/([A-Z])/g, " $1").trim();
 
         // Satellite node — 160px component, centered at (tx, ty)
         nodes.push({
           id: item.key,
-          label,
+          label: displayVal,
+          category,
           type: "bounded-context",
           position: { x: tx - 80, y: ty - 80 },
           side,

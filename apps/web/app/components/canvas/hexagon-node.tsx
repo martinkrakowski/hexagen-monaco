@@ -15,6 +15,7 @@ interface HexagonData extends Record<string, unknown> {
   type?: NodeType;
   isRoot?: boolean;
   side?: "north" | "south" | "east" | "west";
+  category?: string;
 }
 
 // Visual tokens per type for rectangular nodes (all non-root nodes)
@@ -80,6 +81,11 @@ function HexagonNodeComponent({
         style={{ width: 140, height: 72 }}
         className={`relative flex items-center justify-center rounded-md border-2 text-xs font-medium transition-colors select-none ${styles.fill} ${styles.stroke} ${styles.text} ${selected ? "ring-2 ring-ring ring-offset-2" : ""}`}
       >
+        {data.category && (
+          <span className="absolute -top-2.5 right-2 px-1.5 py-px text-[8px] font-mono bg-background border border-border text-muted-foreground rounded-sm truncate max-w-[100px]">
+            {String(data.category)}
+          </span>
+        )}
         <Handle
           type="target"
           position={Position.Top}
