@@ -73,22 +73,79 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       },
     });
 
-    // Create edges to infrastructure adapters based on context settings
+    // Add satellite nodes for root context entities and use cases
+    const rootCenterX = tx;
+    const rootCenterY = ty;
+    const rootDimension = 500;
+
+    // Entity satellites (compact rectangles in upper-left portion)
+    entityItems.forEach((name: string, i: number) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      nodes.push({
+        id: `${ctx.id}-entity-${i}`,
+        label: name,
+        type: "entity",
+        position: {
+          x: rootCenterX - 180 + col * 160,
+          y: rootCenterY - rootDimension / 3 + row * 25,
+        },
+        parentId: ctx.id,
+        category: "entities",
+        extent: "parent",
+      });
+    });
+
+    // Use case satellites (compact rectangles in upper-right portion)
+    useCaseItems.forEach((name: string, i: number) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      nodes.push({
+        id: `${ctx.id}-usecase-${i}`,
+        label: name,
+        type: "use-case",
+        position: {
+          x: rootCenterX - 180 + col * 160,
+          y: rootCenterY + rootDimension / 8 + row * 25,
+        },
+        parentId: ctx.id,
+        category: "useCases",
+        extent: "parent",
+      });
+    });
+
+    // Create adapter nodes for infrastructure frameworks/adapters
     if (ctx.apiFramework) {
+      const apiAdapterId = `adapter-${ctx.apiFramework}`;
+      nodes.push({
+        id: apiAdapterId,
+        label: `${ctx.apiFramework} API`,
+        type: "port",
+        parentId: ctx.id || `context-${index}`,
+        category: "infrastructure",
+        position: { x: rootCenterX + 120, y: rootCenterY - 50 },
+      });
       edges.push({
         id: `edge-${ctx.id}-api`,
         source: ctx.id || `context-${index}`,
-        target: `adapter-${ctx.apiFramework}`,
-        targetHandle: "west",
+        target: apiAdapterId,
         type: "smoothstep",
       });
     }
     if (ctx.persistenceAdapter) {
+      const dbAdapterId = `adapter-${ctx.persistenceAdapter}`;
+      nodes.push({
+        id: dbAdapterId,
+        label: `${ctx.persistenceAdapter} DB`,
+        type: "port",
+        parentId: ctx.id || `context-${index}`,
+        category: "infrastructure",
+        position: { x: rootCenterX + 120, y: rootCenterY + 80 },
+      });
       edges.push({
         id: `edge-${ctx.id}-db`,
-        source: `adapter-${ctx.persistenceAdapter}`,
+        source: dbAdapterId,
         target: ctx.id || `context-${index}`,
-        targetHandle: "south",
         type: "smoothstep",
       });
     }
