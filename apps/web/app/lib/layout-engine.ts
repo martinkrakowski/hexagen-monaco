@@ -15,6 +15,7 @@ export interface HexagonNodeWithLayout extends HexagonNode {
   isRoot?: boolean;
   isPeer?: boolean;
   side?: "north" | "south" | "east" | "west";
+  draggable?: boolean;
   style?: { width?: number; height?: number; zIndex?: number };
   stats?: {
     aggregates: number;
@@ -68,12 +69,14 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const hexX = groupCenterX - 300; // half of 600px width
     const hexY = groupCenterY - 260; // half of 520px height
 
+    // Hexagon at the CENTER of the group (absolute position, not draggable)
     nodes.push({
       id: ctx.id || `context-${index}`,
       type: "bounded-context" as HexagonNodeType,
       label: ctx.name || `Context ${index + 1}`,
       position: { x: hexX, y: hexY },
       isRoot: index === 0,
+      draggable: false, // Fixed position, not draggable
       stats: {
         aggregates: entityItems.length,
         aggregateItems: entityItems,
@@ -82,15 +85,16 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       },
     });
 
-    // API / Presentation (North) - above hexagon
+    // API / Presentation (North) - above hexagon (draggable)
     if (ctx.apiFramework) {
       const apiId = `adapter-${ctx.apiFramework}`;
       nodes.push({
         id: apiId,
         type: "port" as HexagonNodeType,
         label: ctx.apiFramework,
-        position: { x: groupCenterX - 70, y: hexY - 220 }, // 220px above hexagon top
+        position: { x: groupCenterX - 70, y: hexY - 220 },
         side: "north",
+        // No parentId - this node is draggable
       });
       edges.push({
         id: `e-${apiId}`,
@@ -101,15 +105,16 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     }
 
-    // DB / Infrastructure (South) - below hexagon
+    // DB / Infrastructure (South) - below hexagon (draggable)
     if (ctx.persistenceAdapter) {
       const dbId = `adapter-${ctx.persistenceAdapter}`;
       nodes.push({
         id: dbId,
         type: "port" as HexagonNodeType,
         label: ctx.persistenceAdapter,
-        position: { x: groupCenterX - 70, y: hexY + 520 + 60 }, // 60px below hexagon bottom
+        position: { x: groupCenterX - 70, y: hexY + 520 + 60 },
         side: "south",
+        // No parentId - this node is draggable
       });
       edges.push({
         id: `e-${dbId}`,

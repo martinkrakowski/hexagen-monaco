@@ -52,14 +52,19 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
       nodeType = "peer";
     }
 
-    // Don't use parentId - use absolute positioning instead
-    return {
+    const flowNode: HexagonFlowNode = {
       id: node.id,
       type: nodeType,
       position: node.position,
       data: node as HexagonNodeDataRecord,
-      draggable: false,
     };
+
+    // Use draggable property from data if present, otherwise default to true
+    if (n.draggable === false) {
+      flowNode.draggable = false;
+    }
+
+    return flowNode;
   });
 }
 
