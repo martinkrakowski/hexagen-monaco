@@ -50,13 +50,12 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const groupX = canvasCenterX - groupWidth / 2;
   const groupY = canvasCenterY - groupHeight / 2;
 
-  // 1. Add Group Node
+  // 1. Add Group Node (root node - no parentId or extent)
   nodes.push({
     id: "monorepo-boundary",
     type: "group" as HexagonNodeType,
     label: "MONOREPO BOUNDARY",
     position: { x: groupX, y: groupY },
-    extent: "parent",
     style: { width: groupWidth, height: groupHeight },
   });
 
