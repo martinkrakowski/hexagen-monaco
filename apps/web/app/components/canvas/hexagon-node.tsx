@@ -410,6 +410,31 @@ function HexagonNodeComponent({
             id="east"
             className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
           />
+          {/* Source handles for outgoing connections (e.g., to peer contexts) */}
+          <Handle
+            type="source"
+            position={Position.Top}
+            id="north"
+            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="south"
+            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
+          />
+          <Handle
+            type="source"
+            position={Position.Left}
+            id="west"
+            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="east"
+            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
+          />
           {/* Dynamic event handles — published (right face, amber) */}
           {(data.publishedEvents ?? []).slice(0, 5).map((evt, i) => (
             <Handle
@@ -469,6 +494,19 @@ function HexagonNodeComponent({
               title={`Subscribes to: ${evt.label}`}
             />
           ))}
+          {/* South handle for programmatic connections (e.g., peer-to-root edges) */}
+          <Handle
+            type="target"
+            position={Position.Bottom}
+            id="south"
+            className="!bg-sky-500 !w-3 !h-3 !border-2 !border-slate-900"
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="south"
+            className="!bg-sky-500 !w-3 !h-3 !border-2 !border-slate-900"
+          />
         </>
       ) : (
         <Handle

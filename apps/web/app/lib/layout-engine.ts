@@ -123,6 +123,47 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       },
     });
 
+    // Add satellite nodes for peer context entities and use cases
+    const peerCenterX = tx;
+    const peerCenterY = ty;
+    const peerDimension = 300;
+
+    // Entity satellites (compact rectangles in upper portion)
+    peerEntityNames.forEach((name: string, i: number) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      nodes.push({
+        id: `${bc.id}-entity-${i}`,
+        label: name,
+        type: "entity",
+        position: {
+          x: peerCenterX - 60 + col * 120,
+          y: peerCenterY - peerDimension / 3 + row * 25,
+        },
+        parentId: bc.id,
+        category: "entities",
+        extent: "parent",
+      });
+    });
+
+    // Use case satellites (compact rectangles in lower portion)
+    peerUseCaseNames.forEach((name: string, i: number) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      nodes.push({
+        id: `${bc.id}-usecase-${i}`,
+        label: name,
+        type: "use-case",
+        position: {
+          x: peerCenterX - 60 + col * 120,
+          y: peerCenterY + peerDimension / 6 + row * 25,
+        },
+        parentId: bc.id,
+        category: "useCases",
+        extent: "parent",
+      });
+    });
+
     // Connect to first bounded context
     const rootId = boundedContexts[0]?.id || "context-0";
     const isDownstream = bc.relationshipType === "D";
