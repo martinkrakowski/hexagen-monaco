@@ -79,7 +79,14 @@ export function HexagonCanvas({
   onNodeDoubleClick,
   onExportClick,
 }: HexagonCanvasProps) {
-  const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
+  // Add timestamp to key to force React Flow to re-render nodes when data changes
+  const flowNodes = useMemo(() => {
+    const ts = Date.now();
+    return mapToFlowNodes(nodes).map((n) => ({
+      ...n,
+      key: `${n.id}-${ts}`,
+    }));
+  }, [nodes]);
   const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
 
   const initialExportDone = useRef(false);

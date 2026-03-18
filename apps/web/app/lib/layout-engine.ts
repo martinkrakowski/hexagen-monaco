@@ -35,8 +35,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const nodes: HexagonNodeWithLayout[] = [];
   const edges: HexagonEdge[] = [];
 
-  const centerX = 2000;
-  const centerY = 2000;
+  const centerX = 400;
+  const centerY = 300;
 
   const boundedContexts = wizardData.boundedContexts ?? [];
   const externalContexts = wizardData.externalContexts ?? [];
@@ -130,6 +130,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       id: `edge-peer-${bc.id}`,
       source: isDownstream ? bc.id : rootId,
       target: isDownstream ? rootId : bc.id,
+      sourceHandle: "south",
+      targetHandle: "south",
       label: bc.relationshipType,
       type: "smoothstep",
       animated: !!bc.isEventDriven,

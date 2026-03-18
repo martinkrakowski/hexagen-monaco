@@ -80,6 +80,7 @@ export default function Home() {
     []) as BoundedContext[];
   const externalContexts = (watchedValues.externalContexts ||
     []) as ExternalContextInput[];
+
   const activeContext = deriveActiveContext(boundedContexts, activeContextId);
 
   useEffect(() => {
@@ -103,6 +104,15 @@ export default function Home() {
     form.setValue("boundedContexts", updated as BoundedContextInput[], {
       shouldDirty: true,
     });
+  };
+
+  // Compute fresh each render to ensure latest data reaches canvas
+  const wizardData: WizardData = {
+    boundedContexts: boundedContexts as WizardData["boundedContexts"],
+    externalContexts: externalContexts as WizardData["externalContexts"],
+    workspaceScope: watchedValues.workspaceScope,
+    withLlm: watchedValues.withLlm,
+    withBlockchain: watchedValues.withBlockchain,
   };
 
   const currentStep = wizardSteps[currentStepIndex];
@@ -592,20 +602,7 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 p-0 overflow-hidden">
-                <GraphCanvasWrapper
-                  projectId="demo"
-                  wizardData={
-                    {
-                      boundedContexts:
-                        watchedValues.boundedContexts as WizardData["boundedContexts"],
-                      externalContexts:
-                        watchedValues.externalContexts as WizardData["externalContexts"],
-                      workspaceScope: watchedValues.workspaceScope,
-                      withLlm: watchedValues.withLlm,
-                      withBlockchain: watchedValues.withBlockchain,
-                    } as WizardData
-                  }
-                />
+                <GraphCanvasWrapper projectId="demo" wizardData={wizardData} />
               </CardContent>
             </Card>
           }

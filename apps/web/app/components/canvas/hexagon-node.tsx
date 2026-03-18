@@ -6,12 +6,7 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Package, Gem, Zap, Settings2, X } from "lucide-react";
 import type { DomainEventRef } from "@hexagen/shared";
 
-type NodeType =
-  | "bounded-context"
-  | "entity"
-  | "port"
-  | "use-case"
-  | "adapter";
+type NodeType = "bounded-context" | "entity" | "port" | "use-case" | "adapter";
 
 interface HexagonData extends Record<string, unknown> {
   label: string;
@@ -35,10 +30,34 @@ interface HexagonData extends Record<string, unknown> {
 }
 
 const DOMAIN_COMPASS = [
-  { key: "aggregates",   itemsKey: "aggregateItems",   label: "Aggregates",   Icon: Package,   color: "text-amber-400"   },
-  { key: "valueObjects", itemsKey: "valueObjectItems", label: "Value Objects", Icon: Gem,       color: "text-emerald-400" },
-  { key: "events",       itemsKey: "eventItems",       label: "Events",        Icon: Zap,       color: "text-purple-400"  },
-  { key: "services",     itemsKey: "serviceItems",     label: "Services",      Icon: Settings2, color: "text-sky-400"     },
+  {
+    key: "aggregates",
+    itemsKey: "aggregateItems",
+    label: "Aggregates",
+    Icon: Package,
+    color: "text-amber-400",
+  },
+  {
+    key: "valueObjects",
+    itemsKey: "valueObjectItems",
+    label: "Value Objects",
+    Icon: Gem,
+    color: "text-emerald-400",
+  },
+  {
+    key: "events",
+    itemsKey: "eventItems",
+    label: "Events",
+    Icon: Zap,
+    color: "text-purple-400",
+  },
+  {
+    key: "services",
+    itemsKey: "serviceItems",
+    label: "Services",
+    Icon: Settings2,
+    color: "text-sky-400",
+  },
 ] as const;
 
 // Visual tokens per type for rectangular nodes (all non-root nodes)
@@ -80,11 +99,16 @@ const RECT_STYLES: Record<
 
 function getSatelliteHandlePosition(side: string | undefined): Position {
   switch (side) {
-    case "east":  return Position.Left;
-    case "west":  return Position.Right;
-    case "north": return Position.Bottom;
-    case "south": return Position.Top;
-    default:      return Position.Left;
+    case "east":
+      return Position.Left;
+    case "west":
+      return Position.Right;
+    case "north":
+      return Position.Bottom;
+    case "south":
+      return Position.Top;
+    default:
+      return Position.Left;
   }
 }
 
@@ -93,10 +117,16 @@ type CompassCountKey = (typeof DOMAIN_COMPASS)[number]["key"];
 type CompassItemsKey = (typeof DOMAIN_COMPASS)[number]["itemsKey"];
 type NodeStats = NonNullable<HexagonData["stats"]>;
 
-function getStatCount(stats: NodeStats | undefined, key: CompassCountKey): number {
+function getStatCount(
+  stats: NodeStats | undefined,
+  key: CompassCountKey,
+): number {
   return stats?.[key] ?? 0;
 }
-function getStatItems(stats: NodeStats | undefined, key: CompassItemsKey): string[] {
+function getStatItems(
+  stats: NodeStats | undefined,
+  key: CompassItemsKey,
+): string[] {
   return stats?.[key] ?? [];
 }
 
@@ -140,7 +170,9 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
           {label}
         </h3>
         {items.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No items defined.</p>
+          <p className="text-xs text-muted-foreground italic">
+            No items defined.
+          </p>
         ) : (
           <ul className="space-y-1.5">
             {items.map((item, i) => (
@@ -148,7 +180,9 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
                 key={`${item}-${i}`}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-sm bg-muted/50 text-foreground border border-border/50"
               >
-                <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">
+                  {i + 1}
+                </span>
                 {item}
               </li>
             ))}
@@ -168,11 +202,15 @@ function HexagonNodeComponent({
   const isRoot = !!data.isRoot;
   const isPeer = !!data.isPeer;
   const isHexagon = isRoot || isPeer; // Root and peer bounded-contexts render as hexagons
-  const [activeCompass, setActiveCompass] = useState<{ label: string; items: string[] } | null>(null);
+  const [activeCompass, setActiveCompass] = useState<{
+    label: string;
+    items: string[];
+  } | null>(null);
 
   // Rectangular node (entity, port, use-case, adapter)
   if (!isHexagon) {
-    const styles = RECT_STYLES[nodeType as Exclude<NodeType, "bounded-context">];
+    const styles =
+      RECT_STYLES[nodeType as Exclude<NodeType, "bounded-context">];
     // Inner category nodes (parentId set) render as compact labels — smaller so
     // they stay within the hexagon polygon boundary without clipping.
     const isInner = !!data.parentId;
@@ -195,7 +233,9 @@ function HexagonNodeComponent({
             className={`${styles.handleColor} !w-2.5 !h-2.5`}
           />
         )}
-        <span className={`px-2 truncate text-center leading-tight ${isInner ? "max-w-[100px]" : "max-w-[120px]"}`}>
+        <span
+          className={`px-2 truncate text-center leading-tight ${isInner ? "max-w-[100px]" : "max-w-[120px]"}`}
+        >
           {String(data.label || "")}
         </span>
         <Handle
@@ -228,10 +268,54 @@ function HexagonNodeComponent({
         />
         {isRoot && (
           <>
-            <text x="50" y="-3" textAnchor="middle" fill="#475569" fontSize="4" fontFamily="monospace" letterSpacing="0.8" fontWeight="700">PRESENTATION</text>
-            <text x="50" y="104" textAnchor="middle" fill="#475569" fontSize="4" fontFamily="monospace" letterSpacing="0.8" fontWeight="700">INFRASTRUCTURE</text>
-            <text x="102" y="52" textAnchor="start" fill="#475569" fontSize="4" fontFamily="monospace" letterSpacing="0.8" fontWeight="700">DRIVING</text>
-            <text x="-2" y="52" textAnchor="end" fill="#475569" fontSize="4" fontFamily="monospace" letterSpacing="0.8" fontWeight="700">EXTERNAL</text>
+            <text
+              x="50"
+              y="-3"
+              textAnchor="middle"
+              fill="#475569"
+              fontSize="4"
+              fontFamily="monospace"
+              letterSpacing="0.8"
+              fontWeight="700"
+            >
+              PRESENTATION
+            </text>
+            <text
+              x="50"
+              y="104"
+              textAnchor="middle"
+              fill="#475569"
+              fontSize="4"
+              fontFamily="monospace"
+              letterSpacing="0.8"
+              fontWeight="700"
+            >
+              INFRASTRUCTURE
+            </text>
+            <text
+              x="102"
+              y="52"
+              textAnchor="start"
+              fill="#475569"
+              fontSize="4"
+              fontFamily="monospace"
+              letterSpacing="0.8"
+              fontWeight="700"
+            >
+              DRIVING
+            </text>
+            <text
+              x="-2"
+              y="52"
+              textAnchor="end"
+              fill="#475569"
+              fontSize="4"
+              fontFamily="monospace"
+              letterSpacing="0.8"
+              fontWeight="700"
+            >
+              EXTERNAL
+            </text>
           </>
         )}
       </svg>
@@ -240,7 +324,11 @@ function HexagonNodeComponent({
         {/* Project name */}
         <div
           className={`text-center text-slate-900 dark:text-slate-100 uppercase tracking-widest leading-tight ${
-            isRoot ? "text-base font-black italic" : isPeer ? "text-sm font-bold italic" : "text-[10px] font-bold"
+            isRoot
+              ? "text-base font-black italic"
+              : isPeer
+                ? "text-sm font-bold italic"
+                : "text-[10px] font-bold"
           }`}
         >
           {String(data.label || "")
@@ -261,7 +349,9 @@ function HexagonNodeComponent({
 
         {/* Domain Compass — root and peer nodes */}
         {(isRoot || isPeer) && (
-          <div className={`grid grid-cols-2 ${isPeer ? "gap-x-6 gap-y-3" : "gap-x-10 gap-y-5"}`}>
+          <div
+            className={`grid grid-cols-2 ${isPeer ? "gap-x-6 gap-y-3" : "gap-x-10 gap-y-5"}`}
+          >
             {DOMAIN_COMPASS.map(({ key, itemsKey, label, Icon, color }) => (
               <div
                 key={key}
@@ -274,7 +364,9 @@ function HexagonNodeComponent({
                 }
               >
                 <Icon size={16} className={color} />
-                <span className="text-[7px] uppercase tracking-tighter font-bold text-slate-500 mt-1">{label}</span>
+                <span className="text-[7px] uppercase tracking-tighter font-bold text-slate-500 mt-1">
+                  {label}
+                </span>
                 <span className="text-xs font-mono text-slate-900 dark:text-slate-100">
                   {getStatCount(data.stats, key)}
                 </span>
@@ -325,7 +417,9 @@ function HexagonNodeComponent({
               type="source"
               position={Position.Right}
               id={evt.id}
-              style={{ top: getSlottedOffsets((data.publishedEvents ?? []).length)[i] }}
+              style={{
+                top: getSlottedOffsets((data.publishedEvents ?? []).length)[i],
+              }}
               className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
               title={`Publishes: ${evt.label}`}
             />
@@ -337,7 +431,9 @@ function HexagonNodeComponent({
               type="target"
               position={Position.Left}
               id={evt.id}
-              style={{ top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i] }}
+              style={{
+                top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i],
+              }}
               className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
               title={`Subscribes to: ${evt.label}`}
             />
@@ -352,7 +448,9 @@ function HexagonNodeComponent({
               type="source"
               position={Position.Right}
               id={evt.id}
-              style={{ top: getSlottedOffsets((data.publishedEvents ?? []).length)[i] }}
+              style={{
+                top: getSlottedOffsets((data.publishedEvents ?? []).length)[i],
+              }}
               className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
               title={`Publishes: ${evt.label}`}
             />
@@ -364,7 +462,9 @@ function HexagonNodeComponent({
               type="target"
               position={Position.Left}
               id={evt.id}
-              style={{ top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i] }}
+              style={{
+                top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i],
+              }}
               className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
               title={`Subscribes to: ${evt.label}`}
             />
@@ -381,7 +481,19 @@ function HexagonNodeComponent({
   );
 }
 
-const HexagonNode = memo(HexagonNodeComponent);
+const HexagonNode = memo(HexagonNodeComponent, (prev, next) => {
+  // Force re-render when stats change
+  const prevStats = prev.data.stats;
+  const nextStats = next.data.stats;
+  if (!prevStats && !nextStats) return false; // both null/undefined - equal
+  if (!prevStats || !nextStats) return true; // one is null - not equal
+  // Compare stats values
+  if (prevStats.aggregates !== nextStats.aggregates) return true;
+  if (prevStats.services !== nextStats.services) return true;
+  if (prevStats.events !== nextStats.events) return true;
+  if (prevStats.valueObjects !== nextStats.valueObjects) return true;
+  return false;
+});
 HexagonNode.displayName = "HexagonNode";
 
 export { HexagonNode };
