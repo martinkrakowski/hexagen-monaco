@@ -1,4 +1,4 @@
-import { BoundedContext } from "./wizard-data";
+import { BoundedContext } from "./wizard-data.js";
 
 /**
  * Derive the active bounded context from the collection.

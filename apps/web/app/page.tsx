@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ResizableLayout } from "@/components/layout/ResizableLayout";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -28,7 +28,14 @@ import {
   type BoundedContextInput,
   type ExternalContextInput,
 } from "@hexagen/project-configuration";
-import type { WizardData } from "@hexagen/shared";
+import type {
+  WizardData,
+  BoundedContext,
+  ContextUpdateCallback,
+} from "@hexagen/shared";
+import { deriveActiveContext } from "@hexagen/shared";
+import { IProjectWizardController } from "@hexagen/wizard-orchestration";
+import { ContextSelector } from "@/components/project-wizard/context-selector";
 
 type Intent =
   | {
@@ -59,10 +66,7 @@ type Intent =
 export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [editingContextIndex, setEditingContextIndex] = useState<number>(0);
-
-  const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === wizardSteps.length - 1;
+  const [activeContextId, setActiveContextId] = useState<string>("");
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
@@ -71,12 +75,44 @@ export default function Home() {
   });
 
   const watchedValues = useWatch({ control: form.control });
+
+  const boundedContexts = (watchedValues.boundedContexts ||
+    []) as BoundedContext[];
+  const externalContexts = (watchedValues.externalContexts ||
+    []) as ExternalContextInput[];
+  const activeContext = deriveActiveContext(boundedContexts, activeContextId);
+
+  useEffect(() => {
+    if (!activeContextId && boundedContexts.length > 0) {
+      setActiveContextId(boundedContexts[0].id);
+    }
+  }, [boundedContexts, activeContextId]);
+
+  const wizardController: IProjectWizardController = {
+    navigateToStep: (stepIndex: number) => setCurrentStepIndex(stepIndex),
+    setActiveContextId: (id: string) => setActiveContextId(id),
+  };
+
+  const handleUpdateContext: ContextUpdateCallback = (
+    contextId: string,
+    updates: Partial<BoundedContext>,
+  ) => {
+    const updated = boundedContexts.map((ctx) =>
+      ctx.id === contextId ? { ...ctx, ...updates } : ctx,
+    );
+    form.setValue("boundedContexts", updated as BoundedContextInput[], {
+      shouldDirty: true,
+    });
+  };
+
   const currentStep = wizardSteps[currentStepIndex];
+  const isFirstStep = currentStepIndex === 0;
+  const isLastStep = currentStepIndex === wizardSteps.length - 1;
 
   const canProceed =
     currentStepIndex === 1
-      ? (watchedValues.boundedContexts?.length ?? 0) > 0 &&
-        (watchedValues.boundedContexts?.every((c) => c.name?.trim()) ?? false)
+      ? boundedContexts.length > 0 &&
+        boundedContexts.every((c) => c.name?.trim())
       : true;
 
   const dispatchIntent = useCallback(
@@ -100,7 +136,7 @@ export default function Home() {
         case "RESET":
           form.reset(emptyFormValues);
           setCurrentStepIndex(0);
-          setEditingContextIndex(0);
+          setActiveContextId("");
           break;
       }
     },
@@ -109,10 +145,6 @@ export default function Home() {
 
   const initialManifest = JSON.stringify(watchedValues, null, 2);
   const sessionId = "wizard-session-1";
-
-  const boundedContexts = watchedValues.boundedContexts || [];
-  const externalContexts = watchedValues.externalContexts || [];
-  const activeContext = boundedContexts[editingContextIndex];
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
@@ -209,64 +241,57 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => {
-                              const current =
-                                watchedValues.boundedContexts || [];
+                              const newId = crypto.randomUUID();
+                              const newContexts = [
+                                ...boundedContexts,
+                                { id: newId, name: "" } as BoundedContext,
+                              ];
                               form.setValue(
                                 "boundedContexts",
-                                [
-                                  ...current,
-                                  { id: crypto.randomUUID(), name: "" },
-                                ],
+                                newContexts as BoundedContextInput[],
                                 { shouldDirty: true },
                               );
-                              setEditingContextIndex(current.length);
+                              setActiveContextId(newId);
                             }}
                             className="text-xs px-2 py-1 bg-secondary rounded"
                           >
                             + Add Context
                           </button>
                         </div>
-                        {boundedContexts.map(
-                          (ctx: BoundedContextInput, idx: number) => (
-                            <div key={ctx.id} className="flex gap-2 mb-2">
-                              <input
-                                value={ctx.name || ""}
-                                onChange={(e) => {
-                                  const updated = [...boundedContexts];
-                                  updated[idx] = {
-                                    ...updated[idx],
-                                    name: e.target.value,
-                                  };
-                                  form.setValue("boundedContexts", updated, {
-                                    shouldDirty: true,
-                                  });
-                                }}
-                                className="flex-1 px-2 py-1 text-sm border rounded"
-                                placeholder="context name"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = boundedContexts.filter(
-                                    (_: BoundedContextInput, i: number) =>
-                                      i !== idx,
-                                  );
-                                  form.setValue("boundedContexts", updated, {
-                                    shouldDirty: true,
-                                  });
-                                  if (editingContextIndex >= updated.length) {
-                                    setEditingContextIndex(
-                                      Math.max(0, updated.length - 1),
-                                    );
-                                  }
-                                }}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ),
-                        )}
+                        {boundedContexts.map((ctx) => (
+                          <div key={ctx.id} className="flex gap-2 mb-2">
+                            <input
+                              value={ctx.name || ""}
+                              onChange={(e) => {
+                                handleUpdateContext(ctx.id, {
+                                  name: e.target.value,
+                                });
+                              }}
+                              className="flex-1 px-2 py-1 text-sm border rounded"
+                              placeholder="context name"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (boundedContexts.length <= 1) return;
+                                const updated = boundedContexts.filter(
+                                  (c) => c.id !== ctx.id,
+                                );
+                                form.setValue(
+                                  "boundedContexts",
+                                  updated as BoundedContextInput[],
+                                  { shouldDirty: true },
+                                );
+                                if (activeContextId === ctx.id) {
+                                  setActiveContextId(updated[0]?.id || "");
+                                }
+                              }}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                         {boundedContexts.length === 0 && (
                           <p className="text-xs text-muted-foreground">
                             Add at least one bounded context.
@@ -301,63 +326,60 @@ export default function Home() {
                             + Add Peer
                           </button>
                         </div>
-                        {externalContexts.map(
-                          (ctx: ExternalContextInput, idx: number) => (
-                            <div key={ctx.id} className="flex gap-2 mb-2">
-                              <input
-                                value={ctx.name || ""}
-                                onChange={(e) => {
-                                  const updated = [...externalContexts];
-                                  updated[idx] = {
-                                    ...updated[idx],
-                                    name: e.target.value,
-                                  };
-                                  form.setValue("externalContexts", updated, {
-                                    shouldDirty: true,
-                                  });
-                                }}
-                                className="flex-1 px-2 py-1 text-sm border rounded"
-                                placeholder="peer context name"
-                              />
-                              <select
-                                value={ctx.relationshipType || "U"}
-                                onChange={(e) => {
-                                  const updated = [...externalContexts];
-                                  updated[idx] = {
-                                    ...updated[idx],
-                                    relationshipType: e.target
-                                      .value as ExternalContextInput["relationshipType"],
-                                  };
-                                  form.setValue("externalContexts", updated, {
-                                    shouldDirty: true,
-                                  });
-                                }}
-                                className="text-xs border rounded"
-                              >
-                                {relationshipTypeOptions.map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = externalContexts.filter(
-                                    (_: ExternalContextInput, i: number) =>
-                                      i !== idx,
-                                  );
-                                  form.setValue("externalContexts", updated, {
-                                    shouldDirty: true,
-                                  });
-                                }}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ),
-                        )}
+                        {externalContexts.map((ctx, idx) => (
+                          <div key={ctx.id} className="flex gap-2 mb-2">
+                            <input
+                              value={ctx.name || ""}
+                              onChange={(e) => {
+                                const updated = [...externalContexts];
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  name: e.target.value,
+                                };
+                                form.setValue("externalContexts", updated, {
+                                  shouldDirty: true,
+                                });
+                              }}
+                              className="flex-1 px-2 py-1 text-sm border rounded"
+                              placeholder="peer context name"
+                            />
+                            <select
+                              value={ctx.relationshipType || "U"}
+                              onChange={(e) => {
+                                const updated = [...externalContexts];
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  relationshipType: e.target
+                                    .value as ExternalContextInput["relationshipType"],
+                                };
+                                form.setValue("externalContexts", updated, {
+                                  shouldDirty: true,
+                                });
+                              }}
+                              className="text-xs border rounded"
+                            >
+                              {relationshipTypeOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = externalContexts.filter(
+                                  (_, i) => i !== idx,
+                                );
+                                form.setValue("externalContexts", updated, {
+                                  shouldDirty: true,
+                                });
+                              }}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                         {externalContexts.length === 0 && (
                           <p className="text-xs text-muted-foreground">
                             No peer contexts defined.
@@ -370,29 +392,13 @@ export default function Home() {
                   {/* Step 3: Configure Context */}
                   {currentStepIndex === 2 && boundedContexts.length > 0 && (
                     <div className="space-y-6">
-                      <div className="mb-4 p-3 border rounded-lg bg-muted/30">
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
-                          Editing Context
-                        </label>
-                        <div className="flex gap-2 flex-wrap">
-                          {boundedContexts.map(
-                            (ctx: BoundedContextInput, idx: number) => (
-                              <button
-                                key={ctx.id}
-                                type="button"
-                                onClick={() => setEditingContextIndex(idx)}
-                                className={`px-3 py-1.5 text-sm rounded-md border ${
-                                  editingContextIndex === idx
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-background border-border hover:bg-muted"
-                                }`}
-                              >
-                                {ctx.name || `Context ${idx + 1}`}
-                              </button>
-                            ),
-                          )}
-                        </div>
-                      </div>
+                      {boundedContexts.length > 1 && (
+                        <ContextSelector
+                          contexts={boundedContexts}
+                          activeId={activeContextId}
+                          controller={wizardController}
+                        />
+                      )}
 
                       {activeContext && (
                         <>
@@ -408,14 +414,9 @@ export default function Home() {
                                 <select
                                   value={activeContext.apiFramework || ""}
                                   onChange={(e) => {
-                                    const updated = [...boundedContexts];
-                                    updated[editingContextIndex] = {
-                                      ...updated[editingContextIndex],
+                                    handleUpdateContext(activeContextId, {
                                       apiFramework: e.target
                                         .value as BoundedContextInput["apiFramework"],
-                                    };
-                                    form.setValue("boundedContexts", updated, {
-                                      shouldDirty: true,
                                     });
                                   }}
                                   className="w-full px-3 py-2 border rounded-md text-sm"
@@ -435,14 +436,9 @@ export default function Home() {
                                 <select
                                   value={activeContext.uiFramework || ""}
                                   onChange={(e) => {
-                                    const updated = [...boundedContexts];
-                                    updated[editingContextIndex] = {
-                                      ...updated[editingContextIndex],
+                                    handleUpdateContext(activeContextId, {
                                       uiFramework: e.target
                                         .value as BoundedContextInput["uiFramework"],
-                                    };
-                                    form.setValue("boundedContexts", updated, {
-                                      shouldDirty: true,
                                     });
                                   }}
                                   className="w-full px-3 py-2 border rounded-md text-sm"
@@ -462,14 +458,9 @@ export default function Home() {
                                 <select
                                   value={activeContext.persistenceAdapter || ""}
                                   onChange={(e) => {
-                                    const updated = [...boundedContexts];
-                                    updated[editingContextIndex] = {
-                                      ...updated[editingContextIndex],
+                                    handleUpdateContext(activeContextId, {
                                       persistenceAdapter: e.target
                                         .value as BoundedContextInput["persistenceAdapter"],
-                                    };
-                                    form.setValue("boundedContexts", updated, {
-                                      shouldDirty: true,
                                     });
                                   }}
                                   className="w-full px-3 py-2 border rounded-md text-sm"
@@ -489,14 +480,9 @@ export default function Home() {
                                 <select
                                   value={activeContext.messagingAdapter || ""}
                                   onChange={(e) => {
-                                    const updated = [...boundedContexts];
-                                    updated[editingContextIndex] = {
-                                      ...updated[editingContextIndex],
+                                    handleUpdateContext(activeContextId, {
                                       messagingAdapter: e.target
                                         .value as BoundedContextInput["messagingAdapter"],
-                                    };
-                                    form.setValue("boundedContexts", updated, {
-                                      shouldDirty: true,
                                     });
                                   }}
                                   className="w-full px-3 py-2 border rounded-md text-sm"
@@ -524,16 +510,11 @@ export default function Home() {
                                     activeContext.entities?.join(",") || ""
                                   }
                                   onChange={(e) => {
-                                    const updated = [...boundedContexts];
-                                    updated[editingContextIndex] = {
-                                      ...updated[editingContextIndex],
+                                    handleUpdateContext(activeContextId, {
                                       entities: e.target.value
                                         .split(",")
                                         .map((s) => s.trim())
                                         .filter(Boolean),
-                                    };
-                                    form.setValue("boundedContexts", updated, {
-                                      shouldDirty: true,
                                     });
                                   }}
                                   className="w-full px-3 py-2 border rounded-md text-sm"
@@ -549,16 +530,11 @@ export default function Home() {
                                     activeContext.useCases?.join(",") || ""
                                   }
                                   onChange={(e) => {
-                                    const updated = [...boundedContexts];
-                                    updated[editingContextIndex] = {
-                                      ...updated[editingContextIndex],
+                                    handleUpdateContext(activeContextId, {
                                       useCases: e.target.value
                                         .split(",")
                                         .map((s) => s.trim())
                                         .filter(Boolean),
-                                    };
-                                    form.setValue("boundedContexts", updated, {
-                                      shouldDirty: true,
                                     });
                                   }}
                                   className="w-full px-3 py-2 border rounded-md text-sm"

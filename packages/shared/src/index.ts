@@ -21,6 +21,8 @@ export type {
   ContextRelationshipType,
   DomainEventRef,
 } from "./domain/wizard-data";
+export { deriveActiveContext } from "./domain/wizard-multi-context";
+export type { ContextUpdateCallback } from "./domain/wizard-multi-context";
 
 // Error/Result exports
 export type { Result } from "./errors/result";
