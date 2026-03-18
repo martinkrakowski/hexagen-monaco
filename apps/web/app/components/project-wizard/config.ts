@@ -77,8 +77,8 @@ export const wizardSteps = [
   {
     id: "workspace",
     title: "Workspace",
-    description: "Define workspace scope and add bounded contexts.",
-    fields: ["workspaceScope", "boundedContexts"],
+    description: "Define workspace scope, bounded contexts, and peer contexts.",
+    fields: ["workspaceScope", "boundedContexts", "externalContexts"],
   },
   {
     id: "configure_context",
@@ -86,11 +86,5 @@ export const wizardSteps = [
     description:
       "Select a context and configure its infrastructure and domain.",
     fields: ["boundedContexts"],
-  },
-  {
-    id: "external_contexts",
-    title: "External Contexts",
-    description: "Define peer bounded contexts in the strategic landscape.",
-    fields: ["externalContexts"],
   },
 ];

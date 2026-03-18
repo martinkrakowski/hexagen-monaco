@@ -236,6 +236,7 @@ bounded_contexts:
             - ProcessIntentPort
             - ProjectWizardStatePort
             - ValidateStepPort
+            - IProjectWizardController
           out:
             - WizardPersistencePort
             - WizardTelemetryPort
