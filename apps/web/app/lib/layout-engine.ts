@@ -35,19 +35,21 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const boundedContexts = wizardData.boundedContexts ?? [];
   const externalContexts = wizardData.externalContexts ?? [];
 
-  // Center of the viewport (we'll use these as absolute coordinates)
+  // Center of the viewport
   const canvasCenterX = 400;
   const canvasCenterY = 300;
 
-  // Group dimensions
-  const groupWidth = 1200;
+  // Calculate group size based on number of bounded contexts
+  const contextCount = boundedContexts.length;
+  const contextSpacing = 700;
+  const groupWidth = Math.max(1200, contextCount * contextSpacing + 400);
   const groupHeight = 1000;
 
   // Place group centered in viewport
   const groupX = canvasCenterX - groupWidth / 2;
   const groupY = canvasCenterY - groupHeight / 2;
 
-  // 1. Add Group Node (NOT as parent - just visual boundary)
+  // 1. Add Group Node
   nodes.push({
     id: "monorepo-boundary",
     type: "group" as HexagonNodeType,
@@ -56,8 +58,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     style: { width: groupWidth, height: groupHeight },
   });
 
-  // 2. Add Hexagon centered WITHIN the group box (absolute coordinates)
-  // Group center is groupX + groupWidth/2, groupY + groupHeight/2
+  // 2. Add Hexagons with adapters - spaced horizontally
   const groupCenterX = groupX + groupWidth / 2;
   const groupCenterY = groupY + groupHeight / 2;
 
@@ -65,18 +66,19 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const entityItems = ctx.entities ?? [];
     const useCaseItems = ctx.useCases ?? [];
 
-    // Hexagon at the CENTER of the group (absolute position)
-    const hexX = groupCenterX - 300; // half of 600px width
-    const hexY = groupCenterY - 260; // half of 520px height
+    // Calculate position for each context (horizontal spacing)
+    const contextOffsetX = (index - (contextCount - 1) / 2) * contextSpacing;
+    const hexX = groupCenterX + contextOffsetX - 300;
+    const hexY = groupCenterY - 260;
 
-    // Hexagon at the CENTER of the group (absolute position, not draggable)
+    // Hexagon
     nodes.push({
       id: ctx.id || `context-${index}`,
       type: "bounded-context" as HexagonNodeType,
       label: ctx.name || `Context ${index + 1}`,
       position: { x: hexX, y: hexY },
       isRoot: index === 0,
-      draggable: false, // Fixed position, not draggable
+      draggable: false,
       stats: {
         aggregates: entityItems.length,
         aggregateItems: entityItems,
@@ -85,45 +87,120 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       },
     });
 
-    // API / Presentation (North) - above hexagon (draggable)
+    // Collect all adapters for this context with unique handle IDs
+    const adapters: Array<{
+      id: string;
+      label: string;
+      side: "north" | "south";
+      handleIndex: number;
+    }> = [];
+
+    // North adapters - stacked (API first, then UI)
+    let northCount = 0;
+    const contextId = ctx.id || `context-${index}`;
     if (ctx.apiFramework) {
-      const apiId = `adapter-${ctx.apiFramework}`;
-      nodes.push({
-        id: apiId,
-        type: "port" as HexagonNodeType,
+      adapters.push({
+        id: `adapter-${contextId}-${ctx.apiFramework}`,
         label: ctx.apiFramework,
-        position: { x: groupCenterX - 70, y: hexY - 220 },
         side: "north",
-        // No parentId - this node is draggable
+        handleIndex: northCount++,
       });
-      edges.push({
-        id: `e-${apiId}`,
-        source: apiId,
-        target: ctx.id || `context-${index}`,
-        targetHandle: "north",
-        type: "smoothstep",
+    }
+    if (ctx.uiFramework) {
+      adapters.push({
+        id: `adapter-${contextId}-${ctx.uiFramework}`,
+        label: ctx.uiFramework,
+        side: "north",
+        handleIndex: northCount++,
       });
     }
 
-    // DB / Infrastructure (South) - below hexagon (draggable)
-    if (ctx.persistenceAdapter) {
-      const dbId = `adapter-${ctx.persistenceAdapter}`;
-      nodes.push({
-        id: dbId,
-        type: "port" as HexagonNodeType,
-        label: ctx.persistenceAdapter,
-        position: { x: groupCenterX - 70, y: hexY + 520 + 60 },
+    // South adapters - stacked (Messaging first, then Persistence)
+    let southCount = 0;
+    if (ctx.messagingAdapter) {
+      adapters.push({
+        id: `adapter-${contextId}-${ctx.messagingAdapter}`,
+        label: ctx.messagingAdapter,
         side: "south",
-        // No parentId - this node is draggable
-      });
-      edges.push({
-        id: `e-${dbId}`,
-        source: ctx.id || `context-${index}`,
-        target: dbId,
-        sourceHandle: "south",
-        type: "smoothstep",
+        handleIndex: southCount++,
       });
     }
+    if (ctx.persistenceAdapter) {
+      adapters.push({
+        id: `adapter-${contextId}-${ctx.persistenceAdapter}`,
+        label: ctx.persistenceAdapter,
+        side: "south",
+        handleIndex: southCount++,
+      });
+    }
+
+    // Create adapter nodes and edges
+    adapters.forEach((adapter) => {
+      let yOffset: number;
+      let edgeConfig: {
+        source: string;
+        target: string;
+        sourceHandle?: string;
+        targetHandle: string;
+      };
+
+      if (adapter.side === "north") {
+        yOffset = hexY - 220 - adapter.handleIndex * 100;
+        // Adapter connects TO hexagon - adapter is source, hexagon has target handle
+        edgeConfig = {
+          source: adapter.id,
+          target: ctx.id || `context-${index}`,
+          targetHandle: `north-${adapter.handleIndex}`,
+        };
+      } else {
+        yOffset = hexY + 520 + 60 + adapter.handleIndex * 100;
+        // Hexagon connects TO adapter - hexagon is source (with south handle), adapter is target
+        edgeConfig = {
+          source: ctx.id || `context-${index}`,
+          target: adapter.id,
+          sourceHandle: `south-${adapter.handleIndex}`,
+          targetHandle: `south`,
+        };
+      }
+
+      // Determine the type label
+      let typeLabel = adapter.side === "north" ? "API" : "Infrastructure";
+      if (
+        adapter.label.toLowerCase().includes("react") ||
+        adapter.label.toLowerCase().includes("ui")
+      ) {
+        typeLabel = "UI";
+      } else if (
+        adapter.label.toLowerCase().includes("messaging") ||
+        adapter.label.toLowerCase().includes("kafka") ||
+        adapter.label.toLowerCase().includes("rabbit")
+      ) {
+        typeLabel = "Messaging";
+      } else if (
+        adapter.label.toLowerCase().includes("prisma") ||
+        adapter.label.toLowerCase().includes("typeorm") ||
+        adapter.label.toLowerCase().includes("sql")
+      ) {
+        typeLabel = "Persistence";
+      }
+
+      nodes.push({
+        id: adapter.id,
+        type: "port" as HexagonNodeType,
+        label: `${adapter.label}\n(${typeLabel})`,
+        position: { x: hexX + 230, y: yOffset },
+        side: adapter.side,
+      });
+
+      edges.push({
+        id: `e-${adapter.id}`,
+        source: edgeConfig.source,
+        target: edgeConfig.target,
+        sourceHandle: edgeConfig.sourceHandle,
+        targetHandle: edgeConfig.targetHandle,
+        type: "smoothstep",
+      });
+    });
   });
 
   // 3. External Peers - positioned outside the group

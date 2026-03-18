@@ -232,8 +232,7 @@ function HexagonNodeComponent({
               {String(data.category)}
             </span>
           )}
-          {/* North handle for upward connections (API/Presentation adapter) */}
-          {/* Edge goes from adapter (source) to hexagon (target), so adapter needs SOURCE handle */}
+          {/* North handle: adapter connects TO hexagon, so adapter needs SOURCE handle */}
           {showNorth && (
             <Handle
               type="source"
@@ -242,10 +241,10 @@ function HexagonNodeComponent({
               className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
             />
           )}
-          {/* South handle for downward connections (DB/Infrastructure adapter) */}
+          {/* South handle: hexagon connects TO adapter, so adapter needs TARGET handle */}
           {showSouth && (
             <Handle
-              type="source"
+              type="target"
               position={Position.Bottom}
               id="south"
               className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
@@ -292,6 +291,7 @@ function HexagonNodeComponent({
           <Handle
             type="target"
             position={Position.Top}
+            id="north"
             className={`${styles.handleColor} !w-2.5 !h-2.5`}
           />
         )}
@@ -303,6 +303,7 @@ function HexagonNodeComponent({
         <Handle
           type="source"
           position={Position.Bottom}
+          id="south"
           className={`${styles.handleColor} !w-2.5 !h-2.5`}
         />
       </div>
@@ -445,52 +446,45 @@ function HexagonNodeComponent({
         )}
       </div>
 
-      {isRoot ? (
+      {/* All bounded contexts (not peers) get the cardinal handles */}
+      {isRoot || nodeType === "bounded-context" ? (
         <>
-          {/* Infrastructure cardinal handles */}
+          {/* North: target handles for multiple API/UI adapters */}
           <Handle
             type="target"
             position={Position.Top}
-            id="north"
+            id="north-0"
             className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
           />
           <Handle
             type="target"
+            position={Position.Top}
+            id="north-1"
+            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+            style={{ left: "60%" }}
+          />
+          {/* South: source handles for multiple Messaging/Persistence adapters */}
+          <Handle
+            type="source"
             position={Position.Bottom}
-            id="south"
+            id="south-0"
             className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
           />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="south-1"
+            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+            style={{ left: "60%" }}
+          />
+          {/* West: target handle for upstream peer connections */}
           <Handle
             type="target"
             position={Position.Left}
             id="west"
             className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
           />
-          <Handle
-            type="target"
-            position={Position.Right}
-            id="east"
-            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
-          />
-          {/* Source handles for outgoing connections (e.g., to peer contexts) */}
-          <Handle
-            type="source"
-            position={Position.Top}
-            id="north"
-            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
-          />
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id="south"
-            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
-          />
-          <Handle
-            type="source"
-            position={Position.Left}
-            id="west"
-            className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
-          />
+          {/* East: source handle for downstream peer connections */}
           <Handle
             type="source"
             position={Position.Right}
