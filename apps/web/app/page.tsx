@@ -36,6 +36,7 @@ import type {
 import { deriveActiveContext } from "@hexagen/shared";
 import { IProjectWizardController } from "@hexagen/wizard-orchestration";
 import { ContextSelector } from "@/components/project-wizard/context-selector";
+import { StepDomain } from "@/components/project-wizard/step-domain";
 
 type Intent =
   | {
@@ -399,7 +400,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Step 3: Configure Context */}
+                  {/* Step 3: Infrastructure Configuration */}
                   {currentStepIndex === 2 && boundedContexts.length > 0 && (
                     <div className="space-y-6">
                       {boundedContexts.length > 1 && (
@@ -507,57 +508,32 @@ export default function Home() {
                               </div>
                             </div>
                           </div>
-
-                          <div className="border-t pt-4">
-                            <h3 className="text-sm font-medium mb-3">Domain</h3>
-                            <div className="space-y-4">
-                              <div>
-                                <label className="text-xs text-muted-foreground block mb-1">
-                                  Entities (comma-separated)
-                                </label>
-                                <input
-                                  value={
-                                    activeContext.entities?.join(",") || ""
-                                  }
-                                  onChange={(e) => {
-                                    handleUpdateContext(activeContextId, {
-                                      entities: e.target.value
-                                        .split(",")
-                                        .map((s) => s.trim())
-                                        .filter(Boolean),
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                  placeholder="User,Order,Product"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground block mb-1">
-                                  Use Cases (comma-separated)
-                                </label>
-                                <input
-                                  value={
-                                    activeContext.useCases?.join(",") || ""
-                                  }
-                                  onChange={(e) => {
-                                    handleUpdateContext(activeContextId, {
-                                      useCases: e.target.value
-                                        .split(",")
-                                        .map((s) => s.trim())
-                                        .filter(Boolean),
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                  placeholder="RegisterUser,PlaceOrder"
-                                />
-                              </div>
-                            </div>
-                          </div>
                         </>
                       )}
                     </div>
                   )}
                 </div>
+
+                {currentStepIndex === 3 && boundedContexts.length > 0 && (
+                  <div className="space-y-6">
+                    {boundedContexts.length > 1 && (
+                      <ContextSelector
+                        contexts={boundedContexts}
+                        activeId={activeContextId}
+                        controller={wizardController}
+                      />
+                    )}
+                    {activeContext && (
+                      <StepDomain
+                        activeContext={activeContext}
+                        contextId={activeContextId}
+                        onUpdateContext={(updates) =>
+                          handleUpdateContext(activeContextId, updates)
+                        }
+                      />
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-auto flex gap-3 pt-6 border-t">
                   {!isFirstStep && (

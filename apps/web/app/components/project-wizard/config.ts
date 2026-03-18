@@ -81,10 +81,16 @@ export const wizardSteps = [
     fields: ["workspaceScope", "boundedContexts", "externalContexts"],
   },
   {
-    id: "configure_context",
-    title: "Configure Context",
+    id: "infrastructure_config",
+    title: "Infrastructure Configuration",
     description:
-      "Select a context and configure its infrastructure and domain.",
+      "Configure infrastructure for the active context (API, persistence, messaging).",
+    fields: ["boundedContexts"],
+  },
+  {
+    id: "domain_config",
+    title: "Domain Configuration",
+    description: "Define entities and use cases for the active context.",
     fields: ["boundedContexts"],
   },
 ];
