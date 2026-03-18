@@ -201,7 +201,8 @@ function HexagonNodeComponent({
   const nodeType = (data.type as NodeType) ?? "bounded-context";
   const isRoot = !!data.isRoot;
   const isPeer = !!data.isPeer;
-  const isHexagon = isRoot || isPeer; // Root and peer bounded-contexts render as hexagons
+  // All bounded contexts (not peers) render as hexagons
+  const isHexagon = nodeType === "bounded-context" && !isPeer;
   const [activeCompass, setActiveCompass] = useState<{
     label: string;
     items: string[];
