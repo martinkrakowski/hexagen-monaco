@@ -214,7 +214,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         };
       }
 
-      // Determine the type label
+      // Determine the type label (for category badge)
       let typeLabel = adapter.side === "north" ? "API" : "Infrastructure";
       if (
         adapter.label.toLowerCase().includes("react") ||
@@ -238,7 +238,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       nodes.push({
         id: adapter.id,
         type: "port" as HexagonNodeType,
-        label: `${adapter.label}\n(${typeLabel})`,
+        label: adapter.label,
+        category: typeLabel,
         position: { x: hexX + 230, y: yOffset },
         side: adapter.side,
       });
