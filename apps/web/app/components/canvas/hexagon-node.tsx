@@ -6,7 +6,13 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Package, Gem, Zap, Settings2, X } from "lucide-react";
 import type { DomainEventRef } from "@hexagen/shared";
 
-type NodeType = "bounded-context" | "entity" | "port" | "use-case" | "adapter";
+type NodeType =
+  | "bounded-context"
+  | "entity"
+  | "port"
+  | "use-case"
+  | "adapter"
+  | "inner";
 
 interface HexagonData extends Record<string, unknown> {
   label: string;
@@ -70,6 +76,12 @@ const RECT_STYLES: Record<
     stroke: "border-sky-500",
     text: "text-sky-700 dark:text-sky-400",
     handleColor: "!bg-sky-500",
+  },
+  inner: {
+    fill: "bg-slate-500/10",
+    stroke: "border-slate-500",
+    text: "text-slate-700 dark:text-slate-400",
+    handleColor: "!bg-slate-500",
   },
   entity: {
     fill: "bg-emerald-500/10",
@@ -276,31 +288,56 @@ function HexagonNodeComponent({
     }
 
     // Entity/use-case satellites (with or without category) get top/bottom handles
+    // Inner nodes (Domain/Use Cases static nodes) also get handles regardless of category
     const nodeWidth = isInner ? 120 : 140;
     const nodeHeight = isInner ? 36 : 72;
+    const isDomainOrUseCases = nodeType === "inner";
     return (
       <div
         style={{ width: nodeWidth, height: nodeHeight }}
         className={`relative flex items-center justify-center rounded-md border-2 text-xs font-medium transition-colors select-none ${styles.fill} ${styles.stroke} ${styles.text} ${selected ? "ring-2 ring-ring ring-offset-2" : ""}`}
       >
-        {data.category && (
+        {data.category && !isDomainOrUseCases && (
           <span className="absolute -top-2.5 right-2 px-1.5 py-px text-[8px] font-mono bg-background border border-border text-muted-foreground rounded-sm truncate max-w-[100px]">
             {String(data.category)}
           </span>
         )}
-        {!data.category && (
-          <Handle
-            type="target"
-            position={Position.Top}
-            id="north"
-            className={`${styles.handleColor} !w-2.5 !h-2.5`}
-          />
+        {/* Inner nodes (Domain/Use Cases) always render handles for parent/child connections */}
+        {(isDomainOrUseCases || !data.category) && (
+          <>
+            {/* Top handle for parent connection */}
+            <Handle
+              type="target"
+              position={Position.Top}
+              id="north"
+              className={`${styles.handleColor} !w-2.5 !h-2.5`}
+            />
+            {/* Left handle for domain nodes (west connection to parent hexagon) */}
+            {isDomainOrUseCases && (
+              <Handle
+                type="target"
+                position={Position.Left}
+                id="west"
+                className={`${styles.handleColor} !w-2.5 !h-2.5`}
+              />
+            )}
+            {/* Right handle for use cases nodes (east connection to children) */}
+            {isDomainOrUseCases && (
+              <Handle
+                type="source"
+                position={Position.Right}
+                id="east"
+                className={`${styles.handleColor} !w-2.5 !h-2.5`}
+              />
+            )}
+          </>
         )}
         <span
           className={`px-2 truncate text-center leading-tight ${isInner ? "max-w-[100px]" : "max-w-[120px]"}`}
         >
           {String(data.label || "")}
         </span>
+        {/* Bottom handle for child connections */}
         <Handle
           type="source"
           position={Position.Bottom}

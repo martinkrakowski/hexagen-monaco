@@ -59,6 +59,21 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
       data: node as HexagonNodeDataRecord,
     };
 
+    // Pass parentId for grouping - establishes parent-child relationship
+    if (n.parentId) {
+      flowNode.parentId = n.parentId;
+    }
+
+    // Pass extent to make child position relative to parent
+    if (n.extent) {
+      flowNode.extent = n.extent;
+    }
+
+    // Pass style (width/height) for parent container bounds
+    if (n.style) {
+      flowNode.style = n.style;
+    }
+
     // Use draggable property from data if present, otherwise default to true
     if (n.draggable === false) {
       flowNode.draggable = false;

@@ -56,6 +56,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     type: "group" as HexagonNodeType,
     label: "MONOREPO BOUNDARY",
     position: { x: groupX, y: groupY },
+    extent: "parent",
     style: { width: groupWidth, height: groupHeight },
   });
 
@@ -72,14 +73,21 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const hexX = groupCenterX + contextOffsetX - 300;
     const hexY = groupCenterY - 260;
 
-    // Hexagon
+    // Hexagon - root is 500x500, non-root (satellite) would be smaller
+    const hexDimension = index === 0 ? 500 : 160;
+    // Calculate position relative to monorepo boundary group
+    const hexRelativeX = hexX - groupX;
+    const hexRelativeY = hexY - groupY;
     nodes.push({
       id: ctx.id || `context-${index}`,
       type: "bounded-context" as HexagonNodeType,
       label: ctx.name || `Context ${index + 1}`,
-      position: { x: hexX, y: hexY },
+      position: { x: hexRelativeX, y: hexRelativeY },
+      parentId: "monorepo-boundary",
+      extent: "parent",
       isRoot: index === 0,
-      draggable: false,
+      draggable: index === 0, // Only root hexagon is draggable
+      style: { width: hexDimension, height: hexDimension },
       stats: {
         aggregates: entityItems.length,
         aggregateItems: entityItems,
@@ -88,52 +96,89 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       },
     });
 
-    // Entity satellites (west/side of hexagon)
+    const contextId = ctx.id || `context-${index}`;
+
+    // Add static Domain node inside hexagon (left-center, lower area)
+    // Using parentId + extent to group with hexagon for drag
+    const domainNodeId = `domain-${contextId}`;
+    nodes.push({
+      id: domainNodeId,
+      label: "Domain",
+      type: "inner" as HexagonNodeType,
+      category: "Domain",
+      parentId: contextId,
+      extent: "parent",
+      draggable: false,
+      position: { x: 110, y: 360 },
+    });
+
+    // Add static Use Cases node inside hexagon (right-center, lower area)
+    const useCasesNodeId = `usecases-${contextId}`;
+    nodes.push({
+      id: useCasesNodeId,
+      label: "Use Cases",
+      type: "inner" as HexagonNodeType,
+      category: "Use Cases",
+      parentId: contextId,
+      extent: "parent",
+      draggable: false,
+      position: { x: 275, y: 360 },
+    });
+
+    // Entity satellites (connect to Domain node)
+    // Positioned below Domain node inside hexagon
     entityItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
-      const contextId = ctx.id || `context-${index}`;
       nodes.push({
         id: `entity-${contextId}-${i}`,
         label: name,
         type: "entity" as HexagonNodeType,
         category: "Entity",
+        parentId: contextId,
+        extent: "parent",
+        draggable: false,
         position: {
-          x: hexX - 250 + col * 120,
-          y: hexY - 50 + row * 30,
+          x: 30 + col * 50,
+          y: 410 + row * 40,
         },
       });
-      // Edge from hexagon to entity
+      // Edge from domain (south handle) to entity (north handle)
       edges.push({
         id: `edge-${contextId}-entity-${i}`,
-        source: contextId,
+        source: domainNodeId,
+        sourceHandle: "south",
         target: `entity-${contextId}-${i}`,
-        targetHandle: "west",
+        targetHandle: "north",
         type: "smoothstep",
       });
     });
 
-    // Use case satellites (east/side of hexagon)
+    // Use case satellites (connect to Use Cases node)
+    // Positioned below Use Cases node inside hexagon
     useCaseItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
-      const contextId = ctx.id || `context-${index}`;
       nodes.push({
         id: `usecase-${contextId}-${i}`,
         label: name,
         type: "use-case" as HexagonNodeType,
         category: "Use Case",
+        parentId: contextId,
+        extent: "parent",
+        draggable: false,
         position: {
-          x: hexX + 500 + col * 120,
-          y: hexY - 50 + row * 30,
+          x: 420 + col * 50,
+          y: 410 + row * 40,
         },
       });
-      // Edge from hexagon to use case
+      // Edge from use cases (south handle) to use case (north handle)
       edges.push({
         id: `edge-${contextId}-usecase-${i}`,
-        source: contextId,
+        source: useCasesNodeId,
+        sourceHandle: "south",
         target: `usecase-${contextId}-${i}`,
-        sourceHandle: "east",
+        targetHandle: "north",
         type: "smoothstep",
       });
     });
@@ -148,7 +193,6 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
 
     // North adapters - stacked (API first, then UI)
     let northCount = 0;
-    const contextId = ctx.id || `context-${index}`;
     if (ctx.apiFramework) {
       adapters.push({
         id: `adapter-${contextId}-${ctx.apiFramework}`,
