@@ -87,6 +87,54 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       },
     });
 
+    // Entity satellites (west/side of hexagon)
+    entityItems.forEach((name: string, i: number) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const contextId = ctx.id || `context-${index}`;
+      nodes.push({
+        id: `entity-${contextId}-${i}`,
+        label: name,
+        type: "entity" as HexagonNodeType,
+        position: {
+          x: hexX - 250 + col * 120,
+          y: hexY - 50 + row * 30,
+        },
+      });
+      // Edge from hexagon to entity
+      edges.push({
+        id: `edge-${contextId}-entity-${i}`,
+        source: contextId,
+        target: `entity-${contextId}-${i}`,
+        targetHandle: "west",
+        type: "smoothstep",
+      });
+    });
+
+    // Use case satellites (east/side of hexagon)
+    useCaseItems.forEach((name: string, i: number) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const contextId = ctx.id || `context-${index}`;
+      nodes.push({
+        id: `usecase-${contextId}-${i}`,
+        label: name,
+        type: "use-case" as HexagonNodeType,
+        position: {
+          x: hexX + 500 + col * 120,
+          y: hexY - 50 + row * 30,
+        },
+      });
+      // Edge from hexagon to use case
+      edges.push({
+        id: `edge-${contextId}-usecase-${i}`,
+        source: contextId,
+        target: `usecase-${contextId}-${i}`,
+        sourceHandle: "east",
+        type: "smoothstep",
+      });
+    });
+
     // Collect all adapters for this context with unique handle IDs
     const adapters: Array<{
       id: string;
