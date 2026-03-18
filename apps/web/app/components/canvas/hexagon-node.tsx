@@ -302,34 +302,32 @@ function HexagonNodeComponent({
             {String(data.category)}
           </span>
         )}
-        {/* Inner nodes (Domain/Use Cases) always render handles for parent/child connections */}
-        {(isDomainOrUseCases || !data.category) && (
+        {/* Top handle for parent connection - render for all non-entity/use-case nodes */}
+        {!isDomainOrUseCases && (
+          <Handle
+            type="target"
+            position={Position.Top}
+            id="north"
+            className={`${styles.handleColor} !w-2.5 !h-2.5`}
+          />
+        )}
+        {/* Inner nodes (Domain/Use Cases) always render west/east handles */}
+        {isDomainOrUseCases && (
           <>
-            {/* Top handle for parent connection */}
+            {/* Left handle for domain nodes (west connection to parent hexagon) */}
             <Handle
               type="target"
-              position={Position.Top}
-              id="north"
+              position={Position.Left}
+              id="west"
               className={`${styles.handleColor} !w-2.5 !h-2.5`}
             />
-            {/* Left handle for domain nodes (west connection to parent hexagon) */}
-            {isDomainOrUseCases && (
-              <Handle
-                type="target"
-                position={Position.Left}
-                id="west"
-                className={`${styles.handleColor} !w-2.5 !h-2.5`}
-              />
-            )}
             {/* Right handle for use cases nodes (east connection to children) */}
-            {isDomainOrUseCases && (
-              <Handle
-                type="source"
-                position={Position.Right}
-                id="east"
-                className={`${styles.handleColor} !w-2.5 !h-2.5`}
-              />
-            )}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="east"
+              className={`${styles.handleColor} !w-2.5 !h-2.5`}
+            />
           </>
         )}
         <span
