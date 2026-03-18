@@ -137,7 +137,6 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         category: "Entity",
         parentId: contextId,
         extent: "parent",
-        draggable: false,
         position: {
           x: 30 + col * 50,
           y: 410 + row * 40,
@@ -166,7 +165,6 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         category: "Use Case",
         parentId: contextId,
         extent: "parent",
-        draggable: false,
         position: {
           x: 420 + col * 50,
           y: 410 + row * 40,
