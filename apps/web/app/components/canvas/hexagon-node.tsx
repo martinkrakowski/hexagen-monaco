@@ -357,18 +357,6 @@ function HexagonNodeComponent({
               INFRASTRUCTURE
             </text>
             <text
-              x="102"
-              y="52"
-              textAnchor="start"
-              fill="#475569"
-              fontSize="4"
-              fontFamily="monospace"
-              letterSpacing="0.8"
-              fontWeight="700"
-            >
-              DRIVING
-            </text>
-            <text
               x="-2"
               y="52"
               textAnchor="end"
@@ -378,7 +366,19 @@ function HexagonNodeComponent({
               letterSpacing="0.8"
               fontWeight="700"
             >
-              EXTERNAL
+              DRIVING
+            </text>
+            <text
+              x="108"
+              y="52"
+              textAnchor="start"
+              fill="#475569"
+              fontSize="4"
+              fontFamily="monospace"
+              letterSpacing="0.8"
+              fontWeight="700"
+            >
+              DRIVEN
             </text>
           </>
         )}
