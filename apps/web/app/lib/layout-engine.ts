@@ -16,6 +16,7 @@ export interface HexagonNodeWithLayout extends HexagonNode {
   isPeer?: boolean;
   side?: "north" | "south" | "east" | "west";
   draggable?: boolean;
+  category?: string;
   style?: { width?: number; height?: number; zIndex?: number };
   stats?: {
     aggregates: number;
@@ -96,6 +97,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         id: `entity-${contextId}-${i}`,
         label: name,
         type: "entity" as HexagonNodeType,
+        category: "Entity",
         position: {
           x: hexX - 250 + col * 120,
           y: hexY - 50 + row * 30,
@@ -120,6 +122,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         id: `usecase-${contextId}-${i}`,
         label: name,
         type: "use-case" as HexagonNodeType,
+        category: "Use Case",
         position: {
           x: hexX + 500 + col * 120,
           y: hexY - 50 + row * 30,
