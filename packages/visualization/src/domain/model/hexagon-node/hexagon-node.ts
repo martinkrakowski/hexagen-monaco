@@ -3,7 +3,9 @@ export type HexagonNodeType =
   | "entity"
   | "port"
   | "use-case"
-  | "adapter";
+  | "adapter"
+  | "peer"
+  | "group";
 
 /**
  * Defines which handle type (if any) a node of a given type may connect to.
@@ -23,6 +25,8 @@ export const CONNECTION_TARGETS: Record<
   "use-case": null,
   port: "port",
   adapter: "adapter",
+  peer: null,
+  group: null,
 };
 
 export function getConnectionTargetType(

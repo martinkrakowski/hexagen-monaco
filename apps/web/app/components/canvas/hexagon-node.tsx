@@ -214,6 +214,68 @@ function HexagonNodeComponent({
     // Inner category nodes (parentId set) render as compact labels — smaller so
     // they stay within the hexagon polygon boundary without clipping.
     const isInner = !!data.parentId;
+
+    // Standalone port/adapters get cardinal handles for edge connections
+    // Use side prop to determine which handles to show (north for API, south for DB)
+    if (nodeType === "port" && !isInner) {
+      const side = data.side as "north" | "south" | undefined;
+      const showNorth = side === "north";
+      const showSouth = side === "south";
+
+      return (
+        <div
+          style={{ width: 140, height: 72 }}
+          className={`relative flex items-center justify-center rounded-md border-2 text-xs font-medium transition-colors select-none ${styles.fill} ${styles.stroke} ${styles.text} ${selected ? "ring-2 ring-ring ring-offset-2" : ""}`}
+        >
+          {data.category && (
+            <span className="absolute -top-2.5 right-2 px-1.5 py-px text-[8px] font-mono bg-background border border-border text-muted-foreground rounded-sm truncate max-w-[100px]">
+              {String(data.category)}
+            </span>
+          )}
+          {/* North handle for upward connections (API/Presentation adapter) */}
+          {/* Edge goes from adapter (source) to hexagon (target), so adapter needs SOURCE handle */}
+          {showNorth && (
+            <Handle
+              type="source"
+              position={Position.Top}
+              id="north"
+              className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+            />
+          )}
+          {/* South handle for downward connections (DB/Infrastructure adapter) */}
+          {showSouth && (
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="south"
+              className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+            />
+          )}
+          {/* Default left/right handles for horizontal connections */}
+          {!showNorth && !showSouth && (
+            <>
+              <Handle
+                type="target"
+                position={Position.Left}
+                id="west"
+                className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+              />
+              <Handle
+                type="source"
+                position={Position.Right}
+                id="east"
+                className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+              />
+            </>
+          )}
+          <span className={`px-2 truncate text-center leading-tight`}>
+            {String(data.label || "")}
+          </span>
+        </div>
+      );
+    }
+
+    // Entity/use-case satellites (with or without category) get top/bottom handles
     const nodeWidth = isInner ? 120 : 140;
     const nodeHeight = isInner ? 36 : 72;
     return (

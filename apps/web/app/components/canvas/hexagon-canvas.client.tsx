@@ -14,6 +14,8 @@ import { toPng } from "html-to-image";
 import "@xyflow/react/dist/style.css";
 
 import { HexagonNode } from "./hexagon-node";
+import { PeerContextNode } from "./peer-context-node";
+import { GroupBoundaryNode } from "./group-boundary-node";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
@@ -27,6 +29,8 @@ type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
 
 const nodeTypes = {
   hexagon: HexagonNode,
+  peer: PeerContextNode,
+  group: GroupBoundaryNode,
 };
 
 export interface HexagonCanvasProps {
@@ -40,18 +44,21 @@ export interface HexagonCanvasProps {
 function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   return nodes.map((node): HexagonFlowNode => {
     const n = node as HexagonNodeWithLayout;
+
+    let nodeType = "hexagon";
+    if (n.id === "monorepo-boundary" || n.type === "group") {
+      nodeType = "group";
+    } else if (n.isPeer || n.type === "peer") {
+      nodeType = "peer";
+    }
+
+    // Don't use parentId - use absolute positioning instead
     return {
       id: node.id,
-      type: "hexagon",
+      type: nodeType,
       position: node.position,
       data: node as HexagonNodeDataRecord,
-      ...(n.parentId
-        ? {
-            parentId: n.parentId,
-            extent: n.extent ?? "parent",
-            draggable: false,
-          }
-        : {}),
+      draggable: false,
     };
   });
 }
@@ -80,13 +87,7 @@ export function HexagonCanvas({
   onExportClick,
 }: HexagonCanvasProps) {
   // Add timestamp to key to force React Flow to re-render nodes when data changes
-  const flowNodes = useMemo(() => {
-    const ts = Date.now();
-    return mapToFlowNodes(nodes).map((n) => ({
-      ...n,
-      key: `${n.id}-${ts}`,
-    }));
-  }, [nodes]);
+  const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
   const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
 
   const initialExportDone = useRef(false);
