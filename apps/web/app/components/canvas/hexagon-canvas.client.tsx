@@ -19,6 +19,7 @@ import type {
   HexagonEdge,
 } from "@hexagen/visualization";
 import type { Result } from "@hexagen/shared";
+import type { HexagonNodeWithLayout } from "../../lib/layout-engine";
 
 type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 
@@ -38,14 +39,18 @@ export interface HexagonCanvasProps {
 
 function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   return nodes.map((node): HexagonFlowNode => {
-    const n = node as any;
+    const n = node as HexagonNodeWithLayout;
     return {
       id: node.id,
       type: "hexagon",
       position: node.position,
       data: node as HexagonNodeDataRecord,
       ...(n.parentId
-        ? { parentId: n.parentId, extent: n.extent ?? "parent", draggable: false }
+        ? {
+            parentId: n.parentId,
+            extent: n.extent ?? "parent",
+            draggable: false,
+          }
         : {}),
     };
   });
@@ -62,9 +67,8 @@ function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
     sourceHandle: edge.sourceHandle,
     targetHandle: edge.targetHandle,
     // SK (Shared Kernel) gets a visually heavier edge to convey tight coupling
-    style: edge.label === "SK"
-      ? { strokeWidth: 4, stroke: "#a78bfa" }
-      : undefined,
+    style:
+      edge.label === "SK" ? { strokeWidth: 4, stroke: "#a78bfa" } : undefined,
   }));
 }
 
@@ -131,21 +135,31 @@ export function HexagonCanvas({
 
   const isValidConnection = useCallback(
     (connection: FlowEdge | Connection): boolean => {
+      const sourceHandle = connection.sourceHandle ?? "";
+      const targetHandle = connection.targetHandle ?? "";
+
+      // Rule 1: Event handles must pair pub_ ↔ sub_ exclusively.
+      // Prevents domain event ports from accidentally plugging into cardinal handles.
+      const isSourceEvent = sourceHandle.startsWith("pub_");
+      const isTargetEvent = targetHandle.startsWith("sub_");
+      if (isSourceEvent || isTargetEvent) {
+        return isSourceEvent && isTargetEvent;
+      }
+
+      // Rule 2: Wizard-generated satellite nodes must connect to their designated
+      // cardinal handle on root-core. Manually added nodes (no side) connect freely.
+      // `side` is layout metadata on HexagonNodeWithLayout — the any cast is
+      // intentional since HexagonCanvas receives the base HexagonNodeData[] type.
       const targetNode = nodes.find((n) => n.id === connection.target);
+      if (targetNode?.id === "root-core") {
+        const sourceNode = nodes.find((n) => n.id === connection.source) as
+          | HexagonNodeWithLayout
+          | undefined;
+        const sourceSide = sourceNode?.side;
+        return !sourceSide || sourceSide === targetHandle;
+      }
 
-      // Only enforce rules when connecting to the root core
-      if (targetNode?.id !== "root-core") return true;
-
-      const sourceNode = nodes.find((n) => n.id === connection.source);
-      // `side` is layout metadata from HexagonNodeWithLayout that rides directly
-      // on the node object — not nested under `.data`. The `any` cast is intentional:
-      // HexagonCanvas receives HexagonNodeData[], which doesn't include layout fields
-      // in its type, even though wizard-generated nodes carry them at runtime.
-      const sourceSide = (sourceNode as any)?.side;
-
-      // Manually added nodes (no side) can connect to any handle
-      // Wizard-generated nodes must connect to their designated handle
-      return !sourceSide || sourceSide === connection.targetHandle;
+      return true;
     },
     [nodes],
   );

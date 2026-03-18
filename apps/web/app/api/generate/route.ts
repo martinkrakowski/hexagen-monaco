@@ -34,7 +34,10 @@ export async function POST(request: Request) {
     const useCase = getGenerateProject();
     const result = await useCase.execute({
       targetRoot: tempDir,
-      manifest: manifest ?? { system: config.rootName, boundedContexts: [] },
+      manifest: manifest ?? {
+        system: config.boundedContexts?.[0]?.name ?? "project",
+        boundedContexts: config.boundedContexts ?? [],
+      },
       outputFormat,
     });
 

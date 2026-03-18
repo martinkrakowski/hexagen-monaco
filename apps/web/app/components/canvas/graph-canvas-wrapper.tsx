@@ -29,13 +29,13 @@ export function GraphCanvasWrapper({
 
   const handleExport = useCallback(async () => {
     if (!exportHandler) {
-      console.warn("Export handler not available");
+      // Export not available in this context
       return;
     }
 
     const result = await exportHandler();
     if (!result.success) {
-      console.error("Export failed:", result.error);
+      // Export failed - result.error contains the reason
       return;
     }
 

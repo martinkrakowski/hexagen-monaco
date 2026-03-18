@@ -1,52 +1,49 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-export const projectConfigSchema = z
-  .object({
-    rootName: z.string().min(1, 'Required'),
-    workspaceScope: z.string().min(1).default('@hexagen'),
-    contextName: z.string().min(1).default('core'),
-    entities: z.array(z.string()).default([]),
-    useCases: z.array(z.string()).default([]),
-    persistenceAdapter: z
-      .enum(['Prisma', 'TypeORM', 'Mongoose', 'Drizzle'])
-      .default('Prisma'),
-    messagingAdapter: z
-      .enum(['BullMQ', 'Temporal', 'RabbitMQ'])
-      .default('BullMQ'),
-    telemetryProvider: z
-      .enum(['OpenTelemetry', 'None'])
-      .optional()
-      .default('OpenTelemetry'),
-    apiFramework: z
-      .enum(['Fastify', 'Express', 'NestJS'])
-      .optional()
-      .default('Fastify'),
-    uiFramework: z
-      .enum(['Next.js', 'React Router', 'Remix', 'Angular'])
-      .optional()
-      .default('Next.js'),
-    externalApiPorts: z.array(z.string()).default([]),
-    withLlm: z.boolean().default(false),
-    withBlockchain: z.boolean().default(false),
-    llmProviders: z.array(z.string()).default([]),
-    blockchainNetworks: z.array(z.string()).default([]),
-    authenticationProvider: z.string().optional(),
-    emailService: z.string().optional(),
-    paymentGateway: z.string().optional(),
-    storageProvider: z.string().optional(),
-    searchService: z.string().optional(),
-    webhookEndpoints: z.array(z.string()).default([]),
-  })
-  .refine((data) => !data.withLlm || data.llmProviders.length > 0, {
-    message: 'Select LLM providers',
-    path: ['llmProviders'],
-  })
-  .refine(
-    (data) => !data.withBlockchain || data.blockchainNetworks.length > 0,
-    {
-      message: 'Select blockchain networks',
-      path: ['blockchainNetworks'],
-    }
-  );
+const externalContextSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  relationshipType: z.enum(["U", "D", "ACL", "SK", "P", "OHS"]).optional(),
+  isEventDriven: z.boolean().optional(),
+  entityNames: z.array(z.string()).optional(),
+  useCaseNames: z.array(z.string()).optional(),
+});
+
+const boundedContextSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  apiFramework: z.enum(["Fastify", "Express", "NestJS"]).optional(),
+  uiFramework: z
+    .enum(["Next.js", "React Router", "Remix", "Angular", "Vue.js"])
+    .optional(),
+  persistenceAdapter: z
+    .enum(["Prisma", "TypeORM", "Mongoose", "Drizzle"])
+    .optional(),
+  messagingAdapter: z.enum(["BullMQ", "Temporal", "RabbitMQ"]).optional(),
+  telemetryProvider: z
+    .enum(["OpenTelemetry", "None", "Prometheus", "Winston"])
+    .optional(),
+  externalApiPorts: z.array(z.string()).optional(),
+  llmProviders: z.array(z.string()).optional(),
+  blockchainNetworks: z.array(z.string()).optional(),
+  authenticationProvider: z.string().optional(),
+  emailService: z.string().optional(),
+  paymentGateway: z.string().optional(),
+  storageProvider: z.string().optional(),
+  searchService: z.string().optional(),
+  webhookEndpoints: z.array(z.string()).optional(),
+  entities: z.array(z.string()).optional(),
+  useCases: z.array(z.string()).optional(),
+});
+
+export const projectConfigSchema = z.object({
+  withLlm: z.boolean().default(false),
+  withBlockchain: z.boolean().default(false),
+  workspaceScope: z.string().min(1).default("@hexagen"),
+  boundedContexts: z.array(boundedContextSchema).min(1),
+  externalContexts: z.array(externalContextSchema).default([]),
+});
 
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
+export type ExternalContextInput = z.infer<typeof externalContextSchema>;
+export type BoundedContextInput = z.infer<typeof boundedContextSchema>;

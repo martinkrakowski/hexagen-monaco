@@ -102,7 +102,7 @@ export function useCanvasState(
 
   const loadGraph = useCallback(async () => {
     // Wizard path: generate strategic context map
-    if (wizardData?.rootName?.trim()) {
+    if (wizardData?.boundedContexts?.length) {
       const { nodes, edges } = generateHexagonalContextMap(wizardData);
       setState({
         nodes,
@@ -179,7 +179,7 @@ export function useCanvasState(
   }, []);
 
   const onExportImage = useCallback(() => {
-    console.warn("[onExportImage] Not implemented yet");
+    // TODO: implement export to PNG/SVG via html-to-image
   }, []);
 
   const onUpdateNode = useCallback(

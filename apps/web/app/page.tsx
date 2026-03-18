@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-// import type { FileTreeNode } from '@hexagen/project-generation';
 import { ResizableLayout } from "@/components/layout/ResizableLayout";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -15,20 +14,22 @@ import {
   emptyFormValues,
   wizardSteps,
   projectAddons,
-  authProviderOptions,
-  emailServiceOptions,
-  paymentGatewayOptions,
-  storageProviderOptions,
-  searchServiceOptions,
+  relationshipTypeOptions,
+  apiFrameworkOptions,
+  uiFrameworkOptions,
+  persistenceAdapterOptions,
+  messagingAdapterOptions,
 } from "@/components/project-wizard/config";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   projectConfigSchema,
   type ProjectConfig,
+  type BoundedContextInput,
+  type ExternalContextInput,
 } from "@hexagen/project-configuration";
+import type { WizardData } from "@hexagen/shared";
 
-// Intent Bus type
 type Intent =
   | {
       type: "WIZARD_NEXT";
@@ -49,84 +50,41 @@ type Intent =
       metadata: { confidence: number };
     }
   | {
-      type: "REGENERATE_PROJECT";
-      source: "user" | "agent";
-      payload: null;
-      metadata: { confidence: number };
-    }
-  | {
-      type: "CANCEL";
-      source: "user" | "agent";
-      payload: null;
-      metadata: { confidence: number };
-    }
-  | {
       type: "RESET";
       source: "user" | "agent";
       payload: null;
       metadata: { confidence: number };
-    }
-  | {
-      type: "DOWNLOAD";
-      source: "user" | "agent";
-      // payload: FileTreeNode;
-      metadata: { confidence: number };
     };
-
-// Type for addon items (from project-wizard/config)
-type ProjectAddon = {
-  id: keyof ProjectConfig;
-  title: string;
-  description?: string;
-};
 
 export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [editingContextIndex, setEditingContextIndex] = useState<number>(0);
 
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === wizardSteps.length - 1;
 
-  const defaultProjectValues: Partial<ProjectConfig> = {
-    ...emptyFormValues,
-    workspaceScope: "@hexagen",
-    contextName: "core",
-    messagingAdapter: "BullMQ",
-    telemetryProvider: "OpenTelemetry",
-    uiFramework: "Next.js",
-    apiFramework: "Fastify",
-    persistenceAdapter: undefined,
-    entities: [],
-    useCases: [],
-    externalApiPorts: [],
-    llmProviders: [],
-    blockchainNetworks: [],
-  };
-
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
-    defaultValues: defaultProjectValues,
+    defaultValues: emptyFormValues,
     mode: "all",
   });
 
-  const watchedValues = useWatch({
-    control: form.control,
-  });
-
+  const watchedValues = useWatch({ control: form.control });
   const currentStep = wizardSteps[currentStepIndex];
 
   const canProceed =
-    currentStepIndex === 0
-      ? !!watchedValues.rootName?.trim() && !!watchedValues.contextName?.trim()
+    currentStepIndex === 1
+      ? (watchedValues.boundedContexts?.length ?? 0) > 0 &&
+        (watchedValues.boundedContexts?.every((c) => c.name?.trim()) ?? false)
       : true;
 
   const dispatchIntent = useCallback(
     async (intent: Intent) => {
       switch (intent.type) {
         case "WIZARD_NEXT": {
-          const fieldsToValidate: (keyof ProjectConfig)[] =
-            currentStepIndex === 0 ? ["rootName", "contextName"] : [];
-          const isValid = await form.trigger(fieldsToValidate);
+          const isValid =
+            currentStepIndex !== 1 || (await form.trigger("boundedContexts"));
           if (isValid) {
             setCurrentStepIndex((i) => Math.min(i + 1, wizardSteps.length - 1));
           }
@@ -137,17 +95,12 @@ export default function Home() {
           break;
         case "GENERATE_PROJECT":
           setLoading(true);
-          setTimeout(() => {
-            setLoading(false);
-            // TODO: real generation via ProjectGeneratorPort
-          }, 1000);
+          setTimeout(() => setLoading(false), 1000);
           break;
         case "RESET":
-          form.reset(defaultProjectValues);
+          form.reset(emptyFormValues);
           setCurrentStepIndex(0);
-          break;
-        default:
-          // Placeholder for future intents
+          setEditingContextIndex(0);
           break;
       }
     },
@@ -155,7 +108,11 @@ export default function Home() {
   );
 
   const initialManifest = JSON.stringify(watchedValues, null, 2);
-  const sessionId = "wizard-session-1"; // Dummy – persist later
+  const sessionId = "wizard-session-1";
+
+  const boundedContexts = watchedValues.boundedContexts || [];
+  const externalContexts = watchedValues.externalContexts || [];
+  const activeContext = boundedContexts[editingContextIndex];
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
@@ -168,10 +125,8 @@ export default function Home() {
                 <CardTitle>HexaGen Project Wizard</CardTitle>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col p-8 overflow-y-auto">
-                {/* Debug */}
-                <div className="mb-4 text-[10px] font-mono bg-black text-green-400 p-2 rounded border border-green-900/30">
-                  STEP: {currentStepIndex + 1} (ID: {currentStep.id}) |
-                  CAN_PROCEED: {String(canProceed)}
+                <div className="mb-4 text-[10px] font-mono bg-black text-green-400 p-2 rounded">
+                  STEP: {currentStepIndex + 1} ({currentStep.id})
                 </div>
 
                 <div className="flex gap-2 mb-8">
@@ -179,9 +134,9 @@ export default function Home() {
                     <div
                       key={i}
                       className={cn(
-                        "w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-medium transition-all",
+                        "w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm",
                         i === currentStepIndex
-                          ? "bg-primary text-primary-foreground border-primary scale-110"
+                          ? "bg-primary text-primary-foreground border-primary"
                           : i < currentStepIndex
                             ? "bg-primary/20 text-primary border-primary"
                             : "bg-muted text-muted-foreground border-muted",
@@ -200,33 +155,14 @@ export default function Home() {
                 </p>
 
                 <div className="space-y-8 flex-1">
+                  {/* Step 1: Project Type */}
                   {currentStepIndex === 0 && (
                     <div className="space-y-6">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Root Project Name *
-                        </label>
-                        <input
-                          {...form.register("rootName")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="my-hexagen-app"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Context Name *
-                        </label>
-                        <input
-                          {...form.register("contextName")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="billing-context"
-                        />
-                      </div>
                       <div>
                         <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-3">
                           Project Type Selection
                         </label>
-                        {projectAddons.map((addon: ProjectAddon) => (
+                        {projectAddons.map((addon) => (
                           <div
                             key={addon.id}
                             className="flex items-start gap-3 mb-4"
@@ -251,40 +187,11 @@ export default function Home() {
                     </div>
                   )}
 
+                  {/* Step 2: Workspace + Bounded Contexts Registry */}
                   {currentStepIndex === 1 && (
                     <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          LLM Providers (comma-separated)
-                        </label>
-                        <input
-                          {...form.register("llmProviders")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="OpenAI,Anthropic,Grok"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {currentStepIndex === 2 && (
-                    <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Blockchain Networks (comma-separated)
-                        </label>
-                        <input
-                          {...form.register("blockchainNetworks")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="Ethereum,Polygon,Solana"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {currentStepIndex === 3 && (
-                    <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                           Workspace Scope
                         </label>
                         <input
@@ -293,190 +200,378 @@ export default function Home() {
                           placeholder="@hexagen"
                         />
                       </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Context Name
-                        </label>
-                        <input
-                          {...form.register("contextName")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="billing-context"
-                        />
+
+                      <div className="border-t pt-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Bounded Contexts
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const current =
+                                watchedValues.boundedContexts || [];
+                              form.setValue(
+                                "boundedContexts",
+                                [
+                                  ...current,
+                                  { id: crypto.randomUUID(), name: "" },
+                                ],
+                                { shouldDirty: true },
+                              );
+                              setEditingContextIndex(current.length);
+                            }}
+                            className="text-xs px-2 py-1 bg-secondary rounded"
+                          >
+                            + Add Context
+                          </button>
+                        </div>
+                        {boundedContexts.map(
+                          (ctx: BoundedContextInput, idx: number) => (
+                            <div key={ctx.id} className="flex gap-2 mb-2">
+                              <input
+                                value={ctx.name || ""}
+                                onChange={(e) => {
+                                  const updated = [...boundedContexts];
+                                  updated[idx] = {
+                                    ...updated[idx],
+                                    name: e.target.value,
+                                  };
+                                  form.setValue("boundedContexts", updated, {
+                                    shouldDirty: true,
+                                  });
+                                }}
+                                className="flex-1 px-2 py-1 text-sm border rounded"
+                                placeholder="context name"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = boundedContexts.filter(
+                                    (_: BoundedContextInput, i: number) =>
+                                      i !== idx,
+                                  );
+                                  form.setValue("boundedContexts", updated, {
+                                    shouldDirty: true,
+                                  });
+                                  if (editingContextIndex >= updated.length) {
+                                    setEditingContextIndex(
+                                      Math.max(0, updated.length - 1),
+                                    );
+                                  }
+                                }}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ),
+                        )}
+                        {boundedContexts.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Add at least one bounded context.
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {currentStepIndex === 4 && (
+                  {/* Step 3: Configure Context */}
+                  {currentStepIndex === 2 && boundedContexts.length > 0 && (
                     <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          API Framework
+                      <div className="mb-4 p-3 border rounded-lg bg-muted/30">
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                          Editing Context
                         </label>
-                        <select
-                          {...form.register("apiFramework")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="Fastify">Fastify</option>
-                          <option value="Express">Express</option>
-                        </select>
+                        <div className="flex gap-2 flex-wrap">
+                          {boundedContexts.map(
+                            (ctx: BoundedContextInput, idx: number) => (
+                              <button
+                                key={ctx.id}
+                                type="button"
+                                onClick={() => setEditingContextIndex(idx)}
+                                className={`px-3 py-1.5 text-sm rounded-md border ${
+                                  editingContextIndex === idx
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background border-border hover:bg-muted"
+                                }`}
+                              >
+                                {ctx.name || `Context ${idx + 1}`}
+                              </button>
+                            ),
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          UI Framework
-                        </label>
-                        <select
-                          {...form.register("uiFramework")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="Next.js">Next.js</option>
-                          <option value="React">React</option>
-                          <option value="Vue.js">Vue.js</option>
-                          <option value="Angular">Angular</option>
-                          <option value="React Router 7">React Router 7</option>
-                        </select>
-                      </div>
+
+                      {activeContext && (
+                        <>
+                          <div className="border-t pt-4">
+                            <h3 className="text-sm font-medium mb-3">
+                              Infrastructure
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">
+                                  API Framework
+                                </label>
+                                <select
+                                  value={activeContext.apiFramework || ""}
+                                  onChange={(e) => {
+                                    const updated = [...boundedContexts];
+                                    updated[editingContextIndex] = {
+                                      ...updated[editingContextIndex],
+                                      apiFramework: e.target
+                                        .value as BoundedContextInput["apiFramework"],
+                                    };
+                                    form.setValue("boundedContexts", updated, {
+                                      shouldDirty: true,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                >
+                                  <option value="">Select...</option>
+                                  {apiFrameworkOptions.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">
+                                  UI Framework
+                                </label>
+                                <select
+                                  value={activeContext.uiFramework || ""}
+                                  onChange={(e) => {
+                                    const updated = [...boundedContexts];
+                                    updated[editingContextIndex] = {
+                                      ...updated[editingContextIndex],
+                                      uiFramework: e.target
+                                        .value as BoundedContextInput["uiFramework"],
+                                    };
+                                    form.setValue("boundedContexts", updated, {
+                                      shouldDirty: true,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                >
+                                  <option value="">Select...</option>
+                                  {uiFrameworkOptions.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">
+                                  Persistence
+                                </label>
+                                <select
+                                  value={activeContext.persistenceAdapter || ""}
+                                  onChange={(e) => {
+                                    const updated = [...boundedContexts];
+                                    updated[editingContextIndex] = {
+                                      ...updated[editingContextIndex],
+                                      persistenceAdapter: e.target
+                                        .value as BoundedContextInput["persistenceAdapter"],
+                                    };
+                                    form.setValue("boundedContexts", updated, {
+                                      shouldDirty: true,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                >
+                                  <option value="">Select...</option>
+                                  {persistenceAdapterOptions.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">
+                                  Messaging
+                                </label>
+                                <select
+                                  value={activeContext.messagingAdapter || ""}
+                                  onChange={(e) => {
+                                    const updated = [...boundedContexts];
+                                    updated[editingContextIndex] = {
+                                      ...updated[editingContextIndex],
+                                      messagingAdapter: e.target
+                                        .value as BoundedContextInput["messagingAdapter"],
+                                    };
+                                    form.setValue("boundedContexts", updated, {
+                                      shouldDirty: true,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                >
+                                  <option value="">Select...</option>
+                                  {messagingAdapterOptions.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="border-t pt-4">
+                            <h3 className="text-sm font-medium mb-3">Domain</h3>
+                            <div className="space-y-4">
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">
+                                  Entities (comma-separated)
+                                </label>
+                                <input
+                                  value={
+                                    activeContext.entities?.join(",") || ""
+                                  }
+                                  onChange={(e) => {
+                                    const updated = [...boundedContexts];
+                                    updated[editingContextIndex] = {
+                                      ...updated[editingContextIndex],
+                                      entities: e.target.value
+                                        .split(",")
+                                        .map((s) => s.trim())
+                                        .filter(Boolean),
+                                    };
+                                    form.setValue("boundedContexts", updated, {
+                                      shouldDirty: true,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                  placeholder="User,Order,Product"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">
+                                  Use Cases (comma-separated)
+                                </label>
+                                <input
+                                  value={
+                                    activeContext.useCases?.join(",") || ""
+                                  }
+                                  onChange={(e) => {
+                                    const updated = [...boundedContexts];
+                                    updated[editingContextIndex] = {
+                                      ...updated[editingContextIndex],
+                                      useCases: e.target.value
+                                        .split(",")
+                                        .map((s) => s.trim())
+                                        .filter(Boolean),
+                                    };
+                                    form.setValue("boundedContexts", updated, {
+                                      shouldDirty: true,
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-md text-sm"
+                                  placeholder="RegisterUser,PlaceOrder"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
-                  {currentStepIndex === 5 && (
+                  {/* Step 4: External Contexts */}
+                  {currentStepIndex === 3 && (
                     <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Persistence Adapter
-                        </label>
-                        <select
-                          {...form.register("persistenceAdapter")}
-                          className="w-full px-4 py-2 border rounded-md"
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          External/Peer Contexts
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = externalContexts;
+                            form.setValue(
+                              "externalContexts",
+                              [
+                                ...current,
+                                {
+                                  id: crypto.randomUUID(),
+                                  name: "",
+                                  relationshipType: "U",
+                                },
+                              ],
+                              { shouldDirty: true },
+                            );
+                          }}
+                          className="text-xs px-2 py-1 bg-secondary rounded"
                         >
-                          <option value="Prisma">Prisma</option>
-                          <option value="TypeORM">TypeORM</option>
-                          <option value="Mongoose">Mongoose</option>
-                          <option value="Drizzle">Drizzle</option>
-                        </select>
+                          + Add
+                        </button>
                       </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Messaging Adapter
-                        </label>
-                        <select
-                          {...form.register("messagingAdapter")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="BullMQ">BullMQ</option>
-                          <option value="Kafka">Kafka</option>
-                          <option value="RabbitMQ">RabbitMQ</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  {currentStepIndex === 6 && (
-                    <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Authentication Provider
-                        </label>
-                        <select
-                          {...form.register("authenticationProvider")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="">None</option>
-                          {authProviderOptions.map((o) => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Email Service
-                        </label>
-                        <select
-                          {...form.register("emailService")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="">None</option>
-                          {emailServiceOptions.map((o) => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Payment Gateway
-                        </label>
-                        <select
-                          {...form.register("paymentGateway")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="">None</option>
-                          {paymentGatewayOptions.map((o) => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Storage Provider
-                        </label>
-                        <select
-                          {...form.register("storageProvider")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="">None</option>
-                          {storageProviderOptions.map((o) => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Search Service
-                        </label>
-                        <select
-                          {...form.register("searchService")}
-                          className="w-full px-4 py-2 border rounded-md"
-                        >
-                          <option value="">None</option>
-                          {searchServiceOptions.map((o) => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Webhook Endpoints (comma-separated)
-                        </label>
-                        <input
-                          {...form.register("webhookEndpoints")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="Stripe Webhooks,SendGrid Events"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {currentStepIndex === 7 && (
-                    <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Entities (comma-separated)
-                        </label>
-                        <input
-                          {...form.register("entities")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="User,Order,Product"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">
-                          Use Cases (comma-separated)
-                        </label>
-                        <input
-                          {...form.register("useCases")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="RegisterUser,PlaceOrder"
-                        />
-                      </div>
+                      {externalContexts.map(
+                        (ctx: ExternalContextInput, idx: number) => (
+                          <div key={ctx.id} className="flex gap-2 mb-2">
+                            <input
+                              value={ctx.name || ""}
+                              onChange={(e) => {
+                                const updated = [...externalContexts];
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  name: e.target.value,
+                                };
+                                form.setValue("externalContexts", updated, {
+                                  shouldDirty: true,
+                                });
+                              }}
+                              className="flex-1 px-2 py-1 text-sm border rounded"
+                              placeholder="peer context name"
+                            />
+                            <select
+                              value={ctx.relationshipType || "U"}
+                              onChange={(e) => {
+                                const updated = [...externalContexts];
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  relationshipType: e.target
+                                    .value as ExternalContextInput["relationshipType"],
+                                };
+                                form.setValue("externalContexts", updated, {
+                                  shouldDirty: true,
+                                });
+                              }}
+                              className="text-xs border rounded"
+                            >
+                              {relationshipTypeOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = externalContexts.filter(
+                                  (_: ExternalContextInput, i: number) =>
+                                    i !== idx,
+                                );
+                                form.setValue("externalContexts", updated, {
+                                  shouldDirty: true,
+                                });
+                              }}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ),
+                      )}
+                      {externalContexts.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No external contexts defined.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -526,31 +621,17 @@ export default function Home() {
               <CardContent className="flex-1 p-0 overflow-hidden">
                 <GraphCanvasWrapper
                   projectId="demo"
-                  wizardData={{
-                    rootName: watchedValues.rootName?.trim() || undefined,
-                    entities: watchedValues.entities
-                      ? String(watchedValues.entities).split(",").map((e) => e.trim()).filter(Boolean)
-                      : undefined,
-                    useCases: watchedValues.useCases
-                      ? String(watchedValues.useCases).split(",").map((u) => u.trim()).filter(Boolean)
-                      : undefined,
-                    apiFramework: watchedValues.apiFramework || undefined,
-                    uiFramework: watchedValues.uiFramework || undefined,
-                    persistenceAdapter: watchedValues.persistenceAdapter || undefined,
-                    messagingAdapter: watchedValues.messagingAdapter || undefined,
-                    telemetryProvider: watchedValues.telemetryProvider || undefined,
-                    externalApiPorts: watchedValues.externalApiPorts?.length ? watchedValues.externalApiPorts : undefined,
-                    llmProviders: watchedValues.withLlm && watchedValues.llmProviders?.length ? watchedValues.llmProviders : undefined,
-                    blockchainNetworks: watchedValues.withBlockchain && watchedValues.blockchainNetworks?.length ? watchedValues.blockchainNetworks : undefined,
-                    authenticationProvider: watchedValues.authenticationProvider || undefined,
-                    emailService: watchedValues.emailService || undefined,
-                    paymentGateway: watchedValues.paymentGateway || undefined,
-                    storageProvider: watchedValues.storageProvider || undefined,
-                    searchService: watchedValues.searchService || undefined,
-                    webhookEndpoints: watchedValues.webhookEndpoints?.length
-                      ? String(watchedValues.webhookEndpoints).split(",").map((e) => e.trim()).filter(Boolean)
-                      : undefined,
-                  }}
+                  wizardData={
+                    {
+                      boundedContexts:
+                        watchedValues.boundedContexts as WizardData["boundedContexts"],
+                      externalContexts:
+                        watchedValues.externalContexts as WizardData["externalContexts"],
+                      workspaceScope: watchedValues.workspaceScope,
+                      withLlm: watchedValues.withLlm,
+                      withBlockchain: watchedValues.withBlockchain,
+                    } as WizardData
+                  }
                 />
               </CardContent>
             </Card>

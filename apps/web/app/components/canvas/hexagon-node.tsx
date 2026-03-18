@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Package, Gem, Zap, Settings2, X } from "lucide-react";
+import type { DomainEventRef } from "@hexagen/shared";
 
 type NodeType =
   | "bounded-context"
@@ -29,6 +30,8 @@ interface HexagonData extends Record<string, unknown> {
     services?: number;
     serviceItems?: string[];
   };
+  publishedEvents?: DomainEventRef[];
+  subscribedEvents?: DomainEventRef[];
 }
 
 const DOMAIN_COMPASS = [
@@ -95,6 +98,19 @@ function getStatCount(stats: NodeStats | undefined, key: CompassCountKey): numbe
 }
 function getStatItems(stats: NodeStats | undefined, key: CompassItemsKey): string[] {
   return stats?.[key] ?? [];
+}
+
+/**
+ * Distributes up to 5 event handles evenly across the flat left/right face of
+ * the hexagon. The safe vertical zone runs from y=27.5% to y=72.5% (a 45-unit
+ * span in the 100-unit viewBox). Slots are centred within that zone using:
+ *   startY = 50 - ((count - 1) * 7.5) / 2
+ * ensuring handles never bleed into the slanted corners.
+ */
+function getSlottedOffsets(count: number): string[] {
+  const safeCount = Math.min(count, 5);
+  const startY = 50 - ((safeCount - 1) * 7.5) / 2;
+  return Array.from({ length: safeCount }, (_, i) => `${startY + i * 7.5}%`);
 }
 
 interface CompassModalProps {
@@ -277,6 +293,7 @@ function HexagonNodeComponent({
 
       {isRoot ? (
         <>
+          {/* Infrastructure cardinal handles */}
           <Handle
             type="target"
             position={Position.Top}
@@ -301,21 +318,57 @@ function HexagonNodeComponent({
             id="east"
             className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
           />
+          {/* Dynamic event handles — published (right face, amber) */}
+          {(data.publishedEvents ?? []).slice(0, 5).map((evt, i) => (
+            <Handle
+              key={evt.id}
+              type="source"
+              position={Position.Right}
+              id={evt.id}
+              style={{ top: getSlottedOffsets((data.publishedEvents ?? []).length)[i] }}
+              className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
+              title={`Publishes: ${evt.label}`}
+            />
+          ))}
+          {/* Dynamic event handles — subscribed (left face, violet) */}
+          {(data.subscribedEvents ?? []).slice(0, 5).map((evt, i) => (
+            <Handle
+              key={evt.id}
+              type="target"
+              position={Position.Left}
+              id={evt.id}
+              style={{ top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i] }}
+              className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
+              title={`Subscribes to: ${evt.label}`}
+            />
+          ))}
         </>
       ) : isPeer ? (
         <>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="peer-in"
-            className="!bg-violet-500 !w-2.5 !h-2.5 border border-slate-900"
-          />
-          <Handle
-            type="source"
-            position={Position.Right}
-            id="peer-out"
-            className="!bg-violet-500 !w-2.5 !h-2.5 border border-slate-900"
-          />
+          {/* Dynamic event handles — published (right face, amber) */}
+          {(data.publishedEvents ?? []).slice(0, 5).map((evt, i) => (
+            <Handle
+              key={evt.id}
+              type="source"
+              position={Position.Right}
+              id={evt.id}
+              style={{ top: getSlottedOffsets((data.publishedEvents ?? []).length)[i] }}
+              className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
+              title={`Publishes: ${evt.label}`}
+            />
+          ))}
+          {/* Dynamic event handles — subscribed (left face, violet) */}
+          {(data.subscribedEvents ?? []).slice(0, 5).map((evt, i) => (
+            <Handle
+              key={evt.id}
+              type="target"
+              position={Position.Left}
+              id={evt.id}
+              style={{ top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i] }}
+              className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
+              title={`Subscribes to: ${evt.label}`}
+            />
+          ))}
         </>
       ) : (
         <Handle
