@@ -101,6 +101,9 @@ export function useCanvasState(
   const [error, setError] = useState<Error | null>(null);
 
   const loadGraph = useCallback(async () => {
+    // Clear any previous errors before loading new data
+    setError(null);
+
     // Wizard path: generate strategic context map
     if (wizardData?.boundedContexts?.length) {
       const { nodes, edges } = generateHexagonalContextMap(wizardData);
@@ -137,6 +140,11 @@ export function useCanvasState(
       viewport: renderResult.viewport,
     });
   }, [projectId, wizardData]);
+
+  // Reset error when component mounts or wizard data changes significantly
+  useEffect(() => {
+    setError(null);
+  }, [wizardData?.boundedContexts?.length]);
 
   useEffect(() => {
     loadGraph();

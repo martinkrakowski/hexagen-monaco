@@ -23,6 +23,29 @@ interface MonacoEditorWrapperProps {
   language?: string;
 }
 
+// Stub ports defined outside component to prevent re-declaration on every render
+class StubUndoPort implements UndoLastPatchPort {
+  async undo(_data: unknown): Promise<unknown> {
+    // eslint-disable-next-line no-console
+    console.info("[STUB] undo called with:", _data);
+    return { success: true, message: "Undo stub executed" };
+  }
+}
+
+class StubBufferStatePort implements ProjectCurrentBufferStatePort {
+  private editorRef: monaco.editor.IStandaloneCodeEditor | null = null;
+
+  setEditorRef(editor: monaco.editor.IStandaloneCodeEditor | null) {
+    this.editorRef = editor;
+  }
+
+  async getCurrentState(_data: unknown): Promise<unknown> {
+    // eslint-disable-next-line no-console
+    console.info("[STUB] getCurrentState called with:", _data);
+    return { content: this.editorRef?.getValue() || "" };
+  }
+}
+
 export function MonacoEditorWrapper({
   initialBuffer,
   sessionId,
@@ -35,25 +58,18 @@ export function MonacoEditorWrapper({
 
   const persistence = getMonacoPersistence();
 
-  // Stub ports for undo & buffer state (keep until real ports are wired)
-  class StubUndoPort implements UndoLastPatchPort {
-    async undo(_data: unknown): Promise<unknown> {
-      // eslint-disable-next-line no-console
-      console.info('[STUB] undo called with:', _data);
-      return { success: true, message: "Undo stub executed" };
-    }
-  }
+  // Lazy-initialized stub ports (singleton pattern per component instance)
+  const undoPortRef = useRef<StubUndoPort>(new StubUndoPort());
+  const bufferStatePortRef = useRef<StubBufferStatePort>(
+    new StubBufferStatePort(),
+  );
 
-  class StubBufferStatePort implements ProjectCurrentBufferStatePort {
-    async getCurrentState(_data: unknown): Promise<unknown> {
-      // eslint-disable-next-line no-console
-      console.info('[STUB] getCurrentState called with:', _data);
-      return { content: editorRef.current?.getValue() || "" };
-    }
-  }
+  useEffect(() => {
+    bufferStatePortRef.current.setEditorRef(editorRef.current);
+  }, [editorRef]);
 
-  const undoPort = new StubUndoPort();
-  const bufferStatePort = new StubBufferStatePort();
+  const undoPort = undoPortRef.current;
+  const bufferStatePort = bufferStatePortRef.current;
 
   const undoLastPatchUseCase = new UndoLastPatchUseCase(undoPort);
   const projectCurrentBufferStateUseCase = new ProjectCurrentBufferStateUseCase(
@@ -119,6 +135,7 @@ export function MonacoEditorWrapper({
     editorInstance: monaco.editor.IStandaloneCodeEditor,
   ) => {
     editorRef.current = editorInstance;
+    bufferStatePortRef.current.setEditorRef(editorInstance);
   };
 
   const handleEditorChange = (value: string | undefined) => {
@@ -127,6 +144,10 @@ export function MonacoEditorWrapper({
       saveSession(value);
     }
   };
+
+  useEffect(() => {
+    bufferStatePortRef.current.setEditorRef(editorRef.current);
+  }, [editorRef]);
 
   const handleUndo = async () => {
     try {

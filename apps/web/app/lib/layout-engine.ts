@@ -26,6 +26,61 @@ export interface HexagonNodeWithLayout extends HexagonNode {
   };
 }
 
+/**
+ * Layout configuration constants for hexagonal context map generation.
+ * Extracted from hardcoded calculations to improve maintainability and reduce magic numbers.
+ */
+const LAYOUT_CONFIG = {
+  // Viewport center (canvas coordinates)
+  CENTER_X: 400,
+  CENTER_Y: 300,
+
+  // Group (monorepo boundary) dimensions
+  GROUP_SPACING: 700,
+  GROUP_MIN_WIDTH: 1200,
+
+  // Hexagon dimensions
+  ROOT_HEX_DIMENSION: 500,
+  SATELLITE_HEX_DIMENSION: 160,
+
+  // Position offsets (relative to hex center)
+  HEX_POSITION_OFFSET_X: -300,
+  HEX_POSITION_OFFSET_Y: -260,
+
+  // Inner node positions (inside root hexagon)
+  DOMAIN_NODE_X: 110,
+  DOMAIN_NODE_Y: 360,
+  USECASES_NODE_X: 275,
+  USECASES_NODE_Y: 360,
+
+  // Entity satellites positioning
+  ENTITY_COL_WIDTH: 50,
+  ENTITY_ROW_HEIGHT: 40,
+  ENTITY_START_X: 30,
+  ENTITY_START_Y: 410,
+
+  // Use case satellites positioning
+  USECASE_COL_WIDTH: 50,
+  USECASE_ROW_HEIGHT: 40,
+  USECASE_START_X: 420,
+  USECASE_START_Y: 410,
+
+  // Adapter positions (north/south of hex)
+  NORTH_OFFSET_BASE: 220,
+  NORTH_OFFSET_STEP: 100,
+  SOUTH_OFFSET_BASE: 520,
+  SOUTH_OFFSET_ADDITIONAL: 60,
+  SOUTH_OFFSET_STEP: 100,
+
+  // Adapter label X position
+  ADAPTER_LABEL_X: 230,
+
+  // External peer positioning
+  PEER_OFFSET_LEFT: -400,
+  PEER_OFFSET_RIGHT: 100,
+  PEER_Y_STEP: 300,
+} as const;
+
 export function generateHexagonalContextMap(wizardData: WizardData): {
   nodes: HexagonNodeWithLayout[];
   edges: HexagonEdge[];
@@ -36,14 +91,17 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const boundedContexts = wizardData.boundedContexts ?? [];
   const externalContexts = wizardData.externalContexts ?? [];
 
-  // Center of the viewport
-  const canvasCenterX = 400;
-  const canvasCenterY = 300;
+  // Center of the viewport (using config constants)
+  const canvasCenterX = LAYOUT_CONFIG.CENTER_X;
+  const canvasCenterY = LAYOUT_CONFIG.CENTER_Y;
 
   // Calculate group size based on number of bounded contexts
   const contextCount = boundedContexts.length;
-  const contextSpacing = 700;
-  const groupWidth = Math.max(1200, contextCount * contextSpacing + 400);
+  const contextSpacing = LAYOUT_CONFIG.GROUP_SPACING;
+  const groupWidth = Math.max(
+    LAYOUT_CONFIG.GROUP_MIN_WIDTH,
+    contextCount * contextSpacing + 400,
+  );
   const groupHeight = 1000;
 
   // Place group centered in viewport
@@ -59,7 +117,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     style: { width: groupWidth, height: groupHeight },
   });
 
-  // 2. Add Hexagons with adapters - spaced horizontally
+  // 2. Add Hexagons with adapters - spaced horizontally (using config constants)
   const groupCenterX = groupX + groupWidth / 2;
   const groupCenterY = groupY + groupHeight / 2;
 
@@ -67,13 +125,17 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const entityItems = ctx.entities ?? [];
     const useCaseItems = ctx.useCases ?? [];
 
-    // Calculate position for each context (horizontal spacing)
+    // Calculate position for each context (horizontal spacing using config constants)
     const contextOffsetX = (index - (contextCount - 1) / 2) * contextSpacing;
-    const hexX = groupCenterX + contextOffsetX - 300;
-    const hexY = groupCenterY - 260;
+    const hexX =
+      groupCenterX + contextOffsetX + LAYOUT_CONFIG.HEX_POSITION_OFFSET_X;
+    const hexY = groupCenterY + LAYOUT_CONFIG.HEX_POSITION_OFFSET_Y;
 
-    // Hexagon - root is 500x500, non-root (satellite) would be smaller
-    const hexDimension = index === 0 ? 500 : 160;
+    // Hexagon - root is ROOT_HEX_DIMENSION, non-root (satellite) uses SATELLITE_HEX_DIMENSION
+    const hexDimension =
+      index === 0
+        ? LAYOUT_CONFIG.ROOT_HEX_DIMENSION
+        : LAYOUT_CONFIG.SATELLITE_HEX_DIMENSION;
     // Calculate position relative to monorepo boundary group
     const hexRelativeX = hexX - groupX;
     const hexRelativeY = hexY - groupY;
@@ -108,7 +170,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       parentId: contextId,
       extent: "parent",
       draggable: false,
-      position: { x: 110, y: 360 },
+      position: {
+        x: LAYOUT_CONFIG.DOMAIN_NODE_X,
+        y: LAYOUT_CONFIG.DOMAIN_NODE_Y,
+      },
     });
 
     // Add static Use Cases node inside hexagon (right-center, lower area)
@@ -121,11 +186,14 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       parentId: contextId,
       extent: "parent",
       draggable: false,
-      position: { x: 275, y: 360 },
+      position: {
+        x: LAYOUT_CONFIG.USECASES_NODE_X,
+        y: LAYOUT_CONFIG.USECASES_NODE_Y,
+      },
     });
 
     // Entity satellites (connect to Domain node)
-    // Positioned below Domain node inside hexagon
+    // Positioned below Domain node inside hexagon using config constants
     entityItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
@@ -137,8 +205,11 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         parentId: contextId,
         extent: "parent",
         position: {
-          x: 30 + col * 50,
-          y: 410 + row * 40,
+          x:
+            LAYOUT_CONFIG.ENTITY_START_X + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH,
+          y:
+            LAYOUT_CONFIG.ENTITY_START_Y +
+            row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT,
         },
       });
       // Edge from domain (south handle) to entity (north handle)
@@ -153,7 +224,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     });
 
     // Use case satellites (connect to Use Cases node)
-    // Positioned below Use Cases node inside hexagon
+    // Positioned below Use Cases node inside hexagon using config constants
     useCaseItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
@@ -165,8 +236,12 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         parentId: contextId,
         extent: "parent",
         position: {
-          x: 420 + col * 50,
-          y: 410 + row * 40,
+          x:
+            LAYOUT_CONFIG.USECASE_START_X +
+            col * LAYOUT_CONFIG.USECASE_COL_WIDTH,
+          y:
+            LAYOUT_CONFIG.USECASE_START_Y +
+            row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT,
         },
       });
       // Edge from use cases (south handle) to use case (north handle)
@@ -188,7 +263,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       handleIndex: number;
     }> = [];
 
-    // North adapters - stacked (API first, then UI)
+    // North adapters - stacked (API first, then UI) using config constants
     let northCount = 0;
     if (ctx.apiFramework) {
       adapters.push({
@@ -207,7 +282,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     }
 
-    // South adapters - stacked (Messaging first, then Persistence)
+    // South adapters - stacked (Messaging first, then Persistence) using config constants
     let southCount = 0;
     if (ctx.messagingAdapter) {
       adapters.push({
@@ -226,7 +301,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     }
 
-    // Create adapter nodes and edges
+    // Create adapter nodes and edges using config constants
     adapters.forEach((adapter) => {
       let yOffset: number;
       let edgeConfig: {
@@ -237,7 +312,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       };
 
       if (adapter.side === "north") {
-        yOffset = hexY - 220 - adapter.handleIndex * 100;
+        yOffset =
+          hexY -
+          LAYOUT_CONFIG.NORTH_OFFSET_BASE -
+          adapter.handleIndex * LAYOUT_CONFIG.NORTH_OFFSET_STEP;
         // Adapter connects TO hexagon - adapter is source, hexagon has target handle
         edgeConfig = {
           source: adapter.id,
@@ -245,7 +323,11 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
           targetHandle: `north-${adapter.handleIndex}`,
         };
       } else {
-        yOffset = hexY + 520 + 60 + adapter.handleIndex * 100;
+        yOffset =
+          hexY +
+          LAYOUT_CONFIG.SOUTH_OFFSET_BASE +
+          LAYOUT_CONFIG.SOUTH_OFFSET_ADDITIONAL +
+          adapter.handleIndex * LAYOUT_CONFIG.SOUTH_OFFSET_STEP;
         // Hexagon connects TO adapter - hexagon is source (with south handle), adapter is target
         edgeConfig = {
           source: ctx.id || `context-${index}`,
@@ -281,7 +363,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         type: "port" as HexagonNodeType,
         label: adapter.label,
         category: typeLabel,
-        position: { x: hexX + 230, y: yOffset },
+        position: { x: hexX + LAYOUT_CONFIG.ADAPTER_LABEL_X, y: yOffset },
         side: adapter.side,
       });
 
@@ -296,12 +378,15 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     });
   });
 
-  // 3. External Peers - positioned outside the group
+  // 3. External Peers - positioned outside the group using config constants
   externalContexts.forEach((bc: ExternalContext, index: number) => {
     const isUpstream =
       bc.relationshipType === "U" || bc.relationshipType === "OHS";
-    const tx = isUpstream ? groupX - 400 : groupX + groupWidth + 100;
-    const ty = canvasCenterY + index * 300 - 150;
+    const peerOffsetX = isUpstream
+      ? LAYOUT_CONFIG.PEER_OFFSET_LEFT
+      : groupWidth + LAYOUT_CONFIG.PEER_OFFSET_RIGHT;
+    const tx = groupX + peerOffsetX;
+    const ty = canvasCenterY + index * LAYOUT_CONFIG.PEER_Y_STEP - 150;
 
     nodes.push({
       id: bc.id,

@@ -143,6 +143,35 @@ export function HexagonCanvas({
     }
   }, [onExportClick, handleExportClick]);
 
+  const isValidConnection = useCallback(
+    (connection: FlowEdge | Connection): boolean => {
+      const sourceHandle = connection.sourceHandle ?? "";
+      const targetHandle = connection.targetHandle ?? "";
+
+      // Rule 1: Event handles must pair pub_ ↔ sub_ exclusively.
+      // Prevents domain event ports from accidentally plugging into cardinal handles.
+      const isSourceEvent = sourceHandle.startsWith("pub_");
+      const isTargetEvent = targetHandle.startsWith("sub_");
+      if (isSourceEvent || isTargetEvent) {
+        return isSourceEvent && isTargetEvent;
+      }
+
+      // Rule 2: Wizard-generated satellite nodes must connect to their designated
+      // cardinal handle on root-core. Manually added nodes (no side) connect freely.
+      const targetNode = nodes.find((n) => n.id === connection.target);
+      if (targetNode?.id === "root-core") {
+        const sourceNode = nodes.find((n) => n.id === connection.source) as
+          | HexagonNodeWithLayout
+          | undefined;
+        const sourceSide = sourceNode?.side;
+        return !sourceSide || sourceSide === targetHandle;
+      }
+
+      return true;
+    },
+    [nodes],
+  );
+
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: HexagonFlowNode) => {
       if (onNodeDragStop) {
@@ -159,37 +188,6 @@ export function HexagonCanvas({
       }
     },
     [onNodeDoubleClick],
-  );
-
-  const isValidConnection = useCallback(
-    (connection: FlowEdge | Connection): boolean => {
-      const sourceHandle = connection.sourceHandle ?? "";
-      const targetHandle = connection.targetHandle ?? "";
-
-      // Rule 1: Event handles must pair pub_ ↔ sub_ exclusively.
-      // Prevents domain event ports from accidentally plugging into cardinal handles.
-      const isSourceEvent = sourceHandle.startsWith("pub_");
-      const isTargetEvent = targetHandle.startsWith("sub_");
-      if (isSourceEvent || isTargetEvent) {
-        return isSourceEvent && isTargetEvent;
-      }
-
-      // Rule 2: Wizard-generated satellite nodes must connect to their designated
-      // cardinal handle on root-core. Manually added nodes (no side) connect freely.
-      // `side` is layout metadata on HexagonNodeWithLayout — the any cast is
-      // intentional since HexagonCanvas receives the base HexagonNodeData[] type.
-      const targetNode = nodes.find((n) => n.id === connection.target);
-      if (targetNode?.id === "root-core") {
-        const sourceNode = nodes.find((n) => n.id === connection.source) as
-          | HexagonNodeWithLayout
-          | undefined;
-        const sourceSide = sourceNode?.side;
-        return !sourceSide || sourceSide === targetHandle;
-      }
-
-      return true;
-    },
-    [nodes],
   );
 
   return (

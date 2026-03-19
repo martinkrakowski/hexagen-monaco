@@ -11,6 +11,9 @@ import {
   ArchitectureGraphProviderAdapter,
 } from "@hexagen/web-driver";
 
+// Note: LocalStoragePersistenceAdapter and ArchitectureGraphProviderAdapter are imported through barrel exports.
+// Direct adapter imports bypass package boundary integrity; all adapters must be re-exported at @hexagen/web-driver root.
+
 const createWebLogger = (): LoggerPort => ({
   // eslint-disable-next-line no-console
   info: (msg) => console.log(`[web] ${msg}`),
@@ -71,7 +74,7 @@ export const wireDependencies = () => {
     },
   } satisfies DownloadProjectPort);
 
-  // Architecture graph provider port → stub (returns empty graph for now)
+  // Architecture graph provider port → concrete adapter instance
   registry.set(
     "ArchitectureGraphProviderPort",
     new ArchitectureGraphProviderAdapter() satisfies IArchitectureGraphProviderPort,
