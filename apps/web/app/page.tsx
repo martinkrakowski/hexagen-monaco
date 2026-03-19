@@ -14,7 +14,6 @@ import {
   emptyFormValues,
   wizardSteps,
   projectAddons,
-  relationshipTypeOptions,
   apiFrameworkOptions,
   uiFrameworkOptions,
   persistenceAdapterOptions,
@@ -37,6 +36,8 @@ import { deriveActiveContext } from "@hexagen/shared";
 import { IProjectWizardController } from "@hexagen/wizard-orchestration";
 import { ContextSelector } from "@/components/project-wizard/context-selector";
 import { StepDomain } from "@/components/project-wizard/step-domain";
+import { BoundedContextList } from "@/components/project-wizard/BoundedContextList";
+import { PeerContextList } from "@/components/project-wizard/PeerContextList";
 
 type Intent =
   | {
@@ -103,6 +104,18 @@ export default function Home() {
       ctx.id === contextId ? { ...ctx, ...updates } : ctx,
     );
     form.setValue("boundedContexts", updated as BoundedContextInput[], {
+      shouldDirty: true,
+    });
+  };
+
+  const handleUpdatePeerContext: ContextUpdateCallback = (
+    contextId: string,
+    updates: Partial<ExternalContextInput>,
+  ) => {
+    const updated = externalContexts.map((ctx) =>
+      ctx.id === contextId ? { ...ctx, ...updates } : ctx,
+    );
+    form.setValue("externalContexts", updated, {
       shouldDirty: true,
     });
   };
@@ -244,159 +257,45 @@ export default function Home() {
                         />
                       </div>
 
-                      <div className="border-t pt-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            Bounded Contexts
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newId = crypto.randomUUID();
-                              const newContexts = [
-                                ...boundedContexts,
-                                { id: newId, name: "" } as BoundedContext,
-                              ];
-                              form.setValue(
-                                "boundedContexts",
-                                newContexts as BoundedContextInput[],
-                                { shouldDirty: true },
-                              );
-                              setActiveContextId(newId);
-                            }}
-                            className="text-xs px-2 py-1 bg-secondary rounded"
-                          >
-                            + Add Context
-                          </button>
-                        </div>
-                        {boundedContexts.map((ctx) => (
-                          <div key={ctx.id} className="flex gap-2 mb-2">
-                            <input
-                              value={ctx.name || ""}
-                              onChange={(e) => {
-                                handleUpdateContext(ctx.id, {
-                                  name: e.target.value,
-                                });
-                              }}
-                              className="flex-1 px-2 py-1 text-sm border rounded"
-                              placeholder="context name"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (boundedContexts.length <= 1) return;
-                                const updated = boundedContexts.filter(
-                                  (c) => c.id !== ctx.id,
-                                );
-                                form.setValue(
-                                  "boundedContexts",
-                                  updated as BoundedContextInput[],
-                                  { shouldDirty: true },
-                                );
-                                if (activeContextId === ctx.id) {
-                                  setActiveContextId(updated[0]?.id || "");
-                                }
-                              }}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                        {boundedContexts.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Add at least one bounded context.
-                          </p>
-                        )}
-                      </div>
+                      {/* Bounded Contexts */}
+                      <BoundedContextList
+                        contexts={boundedContexts as BoundedContextInput[]}
+                        onAddContext={() => {
+                          const newId = crypto.randomUUID();
+                          const newContexts = [
+                            ...boundedContexts,
+                            { id: newId, name: "" } as BoundedContext,
+                          ];
+                          form.setValue(
+                            "boundedContexts",
+                            newContexts as BoundedContextInput[],
+                            { shouldDirty: true },
+                          );
+                          setActiveContextId(newId);
+                        }}
+                        onUpdateContext={handleUpdateContext}
+                      />
 
-                      <div className="border-t pt-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            Peer Bounded Contexts
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const current = externalContexts;
-                              form.setValue(
-                                "externalContexts",
-                                [
-                                  ...current,
-                                  {
-                                    id: crypto.randomUUID(),
-                                    name: "",
-                                    relationshipType: "U",
-                                  },
-                                ],
-                                { shouldDirty: true },
-                              );
-                            }}
-                            className="text-xs px-2 py-1 bg-secondary rounded"
-                          >
-                            + Add Peer
-                          </button>
-                        </div>
-                        {externalContexts.map((ctx, idx) => (
-                          <div key={ctx.id} className="flex gap-2 mb-2">
-                            <input
-                              value={ctx.name || ""}
-                              onChange={(e) => {
-                                const updated = [...externalContexts];
-                                updated[idx] = {
-                                  ...updated[idx],
-                                  name: e.target.value,
-                                };
-                                form.setValue("externalContexts", updated, {
-                                  shouldDirty: true,
-                                });
-                              }}
-                              className="flex-1 px-2 py-1 text-sm border rounded"
-                              placeholder="peer context name"
-                            />
-                            <select
-                              value={ctx.relationshipType || "U"}
-                              onChange={(e) => {
-                                const updated = [...externalContexts];
-                                updated[idx] = {
-                                  ...updated[idx],
-                                  relationshipType: e.target
-                                    .value as ExternalContextInput["relationshipType"],
-                                };
-                                form.setValue("externalContexts", updated, {
-                                  shouldDirty: true,
-                                });
-                              }}
-                              className="text-xs border rounded"
-                            >
-                              {relationshipTypeOptions.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = externalContexts.filter(
-                                  (_, i) => i !== idx,
-                                );
-                                form.setValue("externalContexts", updated, {
-                                  shouldDirty: true,
-                                });
-                              }}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                        {externalContexts.length === 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            No peer contexts defined.
-                          </p>
-                        )}
-                      </div>
+                      {/* Peer Contexts */}
+                      <PeerContextList
+                        contexts={externalContexts as ExternalContextInput[]}
+                        onAddContext={() => {
+                          const current = externalContexts;
+                          form.setValue(
+                            "externalContexts",
+                            [
+                              ...current,
+                              {
+                                id: crypto.randomUUID(),
+                                name: "",
+                                relationshipType: "U",
+                              },
+                            ],
+                            { shouldDirty: true },
+                          );
+                        }}
+                        onUpdateContext={handleUpdatePeerContext}
+                      />
                     </div>
                   )}
 
