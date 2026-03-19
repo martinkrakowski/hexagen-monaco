@@ -81,6 +81,16 @@ Thumbs.db
 *.sw?
 
 # ───────────────────────────────────────────────
+# AI agent skills & tooling
+# ───────────────────────────────────────────────
+.agents/
+.claude/
+.continue/
+.cursor/
+skills-lock.json
+skills/
+
+# ───────────────────────────────────────────────
 # Temporary / generated / project-specific files
 # ───────────────────────────────────────────────
 *.zip
