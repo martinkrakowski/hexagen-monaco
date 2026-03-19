@@ -590,13 +590,13 @@ function HexagonNodeComponent({
           <Handle
             type="target"
             position={Position.Bottom}
-            id="south"
+            id="south-target"
             className="!bg-sky-500 !w-3 !h-3 !border-2 !border-slate-900"
           />
           <Handle
             type="source"
             position={Position.Bottom}
-            id="south"
+            id="south-source"
             className="!bg-sky-500 !w-3 !h-3 !border-2 !border-slate-900"
           />
         </>
@@ -609,6 +609,11 @@ function HexagonNodeComponent({
       )}
     </div>
   );
+}
+
+interface HexagonNodeProps {
+  data: HexagonData;
+  selected?: boolean;
 }
 
 const HexagonNode = memo(HexagonNodeComponent, (prev, next) => {
@@ -628,8 +633,3 @@ HexagonNode.displayName = "HexagonNode";
 
 export { HexagonNode };
 export type { HexagonNodeProps };
-
-interface HexagonNodeProps {
-  data: HexagonData;
-  selected?: boolean;
-}

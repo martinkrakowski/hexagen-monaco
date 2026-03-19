@@ -21,10 +21,10 @@ export function CanvasToolbar({
         Add Node
       </PrimaryButton>
       <div className="flex-1" />
-      <PrimaryButton size="sm" variant="outline" onClick={onZoomIn}>
+      <PrimaryButton size="sm" variant="outline" onClick={onZoomIn} aria-label="Zoom in">
         <ZoomIn className="h-4 w-4" />
       </PrimaryButton>
-      <PrimaryButton size="sm" variant="outline" onClick={onZoomOut}>
+      <PrimaryButton size="sm" variant="outline" onClick={onZoomOut} aria-label="Zoom out">
         <ZoomOut className="h-4 w-4" />
       </PrimaryButton>
       <PrimaryButton size="sm" variant="outline" onClick={onExport}>
