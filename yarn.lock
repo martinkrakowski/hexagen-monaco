@@ -911,7 +911,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/wizard-orchestration@workspace:packages/wizard-orchestration":
+"@hexagen/wizard-orchestration@workspace:*, @hexagen/wizard-orchestration@workspace:packages/wizard-orchestration":
   version: 0.0.0-use.local
   resolution: "@hexagen/wizard-orchestration@workspace:packages/wizard-orchestration"
   dependencies:
@@ -8265,6 +8265,7 @@ __metadata:
     "@hexagen/sync": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@hexagen/web-driver": "workspace:*"
+    "@hexagen/wizard-orchestration": "workspace:*"
     "@hookform/resolvers": "npm:^3.9.0"
     "@monaco-editor/react": "npm:^4.6.0"
     "@types/file-saver": "npm:^2.0.7"
