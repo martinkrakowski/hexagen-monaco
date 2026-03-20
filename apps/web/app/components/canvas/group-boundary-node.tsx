@@ -14,8 +14,8 @@ function GroupBoundaryNodeComponent({
 
   return (
     <div
-      className="w-full h-full border-2 border-dashed border-border rounded-3xl pointer-events-none"
-      style={{ width, height }}
+      className="w-full h-full bg-transparent border-2 border-dashed border-border rounded-3xl pointer-events-none"
+      style={{ width, height, backgroundColor: "transparent" }}
     >
       <div className="absolute top-6 right-8 text-right">
         <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
