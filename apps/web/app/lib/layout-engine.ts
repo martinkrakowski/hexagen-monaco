@@ -36,7 +36,7 @@ const LAYOUT_CONFIG = {
   CENTER_Y: 300,
 
   // Group (monorepo boundary) dimensions
-  GROUP_SPACING: 700,
+  GROUP_SPACING: 900,
   GROUP_MIN_WIDTH: 1200,
 
   // Hexagon dimensions
