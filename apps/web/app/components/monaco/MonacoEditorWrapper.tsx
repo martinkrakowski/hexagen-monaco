@@ -23,7 +23,7 @@ const HEXAGEN_DARK_THEME: monaco.editor.IStandaloneThemeData = {
   inherit: true,
   rules: [],
   colors: {
-    "editor.background": "#0d1117",
+    "editor.background": "#0e1219",
     "editor.foreground": "#e6edf3",
     "editorLineNumber.foreground": "#6e7681",
     "editorLineNumber.activeForeground": "#e6edf3",
@@ -139,9 +139,7 @@ export function MonacoEditorWrapper({
     return () => clearTimeout(timeout);
   };
 
-  const handleEditorDidMount: OnMount = (editor, monacoInstance) => {
-    monacoInstance.editor.defineTheme("hexagen-dark", HEXAGEN_DARK_THEME);
-    monacoInstance.editor.defineTheme("hexagen-light", HEXAGEN_LIGHT_THEME);
+  const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
     bufferStatePortRef.current.setEditorRef(editor);
   };
@@ -192,6 +190,16 @@ export function MonacoEditorWrapper({
           height="100%"
           language={language}
           value={content}
+          beforeMount={(monacoInstance) => {
+            monacoInstance.editor.defineTheme(
+              "hexagen-dark",
+              HEXAGEN_DARK_THEME,
+            );
+            monacoInstance.editor.defineTheme(
+              "hexagen-light",
+              HEXAGEN_LIGHT_THEME,
+            );
+          }}
           onMount={handleEditorDidMount}
           onChange={handleEditorChange}
           theme={monacoTheme}
