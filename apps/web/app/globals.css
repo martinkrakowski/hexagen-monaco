@@ -125,3 +125,13 @@
     }
   }
 }
+
+/* React Flow dark mode overrides */
+.react-flow__node-group {
+  background: transparent !important;
+  border: none !important;
+}
+
+.react-flow.dark .react-flow__node-group {
+  background: transparent !important;
+}
