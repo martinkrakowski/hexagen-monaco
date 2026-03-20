@@ -16,6 +16,7 @@ import type {
 } from "@hexagen/monaco-orchestration";
 
 import { getMonacoPersistence } from "@/lib/wire";
+import { useTheme } from "@/hooks/use-theme";
 
 interface MonacoEditorWrapperProps {
   initialBuffer: string;
@@ -52,6 +53,9 @@ export function MonacoEditorWrapper({
   const [content, setContent] = useState(initialBuffer);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { theme } = useTheme();
+  const monacoTheme = theme === "dark" ? "vs-dark" : "vs";
 
   const persistence = getMonacoPersistence();
 
@@ -160,7 +164,7 @@ export function MonacoEditorWrapper({
           value={content}
           onMount={handleEditorDidMount}
           onChange={handleEditorChange}
-          theme="vs-dark"
+          theme={monacoTheme}
           options={{
             minimap: { enabled: false },
             fontSize: 14,
