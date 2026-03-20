@@ -271,8 +271,8 @@ export default function Home() {
             </Card>
           }
           right={
-            <Card className="h-full border-0 rounded-none">
-              <CardHeader>
+            <Card className="h-full border-0 rounded-none flex flex-col">
+              <CardHeader className="shrink-0">
                 <CardTitle className="text-sm text-muted-foreground">
                   Monaco AI Architect
                 </CardTitle>
