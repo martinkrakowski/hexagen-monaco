@@ -36,8 +36,8 @@ const LAYOUT_CONFIG = {
   CENTER_Y: 300,
 
   // Group (monorepo boundary) dimensions
-  GROUP_SPACING: 900,
-  GROUP_MIN_WIDTH: 1200,
+  GROUP_SPACING: 1200,
+  GROUP_MIN_WIDTH: 1400,
 
   // Hexagon dimensions
   ROOT_HEX_DIMENSION: 500,
@@ -47,23 +47,37 @@ const LAYOUT_CONFIG = {
   HEX_POSITION_OFFSET_X: -300,
   HEX_POSITION_OFFSET_Y: -260,
 
-  // Inner node positions (inside root hexagon)
+  // Inner node positions (inside root hexagon - 500px)
   DOMAIN_NODE_X: 110,
-  DOMAIN_NODE_Y: 360,
+  DOMAIN_NODE_Y: 400,
   USECASES_NODE_X: 275,
-  USECASES_NODE_Y: 360,
+  USECASES_NODE_Y: 400,
 
-  // Entity satellites positioning
+  // Satellite hexagon inner node positions (160px - smaller, needs more spacing)
+  SATELLITE_DOMAIN_X: 50,
+  SATELLITE_DOMAIN_Y: 280,
+  SATELLITE_USECASES_X: 50,
+  SATELLITE_USECASES_Y: 320,
+
+  // Entity satellites positioning (root hex)
   ENTITY_COL_WIDTH: 50,
   ENTITY_ROW_HEIGHT: 40,
   ENTITY_START_X: 30,
-  ENTITY_START_Y: 410,
+  ENTITY_START_Y: 460,
 
-  // Use case satellites positioning
+  // Entity satellites positioning (satellite hex)
+  SATELLITE_ENTITY_START_X: 20,
+  SATELLITE_ENTITY_START_Y: 360,
+
+  // Use case satellites positioning (root hex)
   USECASE_COL_WIDTH: 50,
   USECASE_ROW_HEIGHT: 40,
   USECASE_START_X: 420,
-  USECASE_START_Y: 410,
+  USECASE_START_Y: 460,
+
+  // Use case satellites positioning (satellite hex)
+  SATELLITE_USECASE_START_X: 20,
+  SATELLITE_USECASE_START_Y: 400,
 
   // Adapter positions (north/south of hex)
   NORTH_OFFSET_BASE: 220,
@@ -164,9 +178,35 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     });
 
     const contextId = ctx.id || `context-${index}`;
+    const isRootContext = index === 0;
 
-    // Add static Domain node inside hexagon (left-center, lower area)
-    // Using parentId + extent to group with hexagon for drag
+    // Select appropriate config based on context type
+    const domainX = isRootContext
+      ? LAYOUT_CONFIG.DOMAIN_NODE_X
+      : LAYOUT_CONFIG.SATELLITE_DOMAIN_X;
+    const domainY = isRootContext
+      ? LAYOUT_CONFIG.DOMAIN_NODE_Y
+      : LAYOUT_CONFIG.SATELLITE_DOMAIN_Y;
+    const useCasesX = isRootContext
+      ? LAYOUT_CONFIG.USECASES_NODE_X
+      : LAYOUT_CONFIG.SATELLITE_USECASES_X;
+    const useCasesY = isRootContext
+      ? LAYOUT_CONFIG.USECASES_NODE_Y
+      : LAYOUT_CONFIG.SATELLITE_USECASES_Y;
+    const entityStartX = isRootContext
+      ? LAYOUT_CONFIG.ENTITY_START_X
+      : LAYOUT_CONFIG.SATELLITE_ENTITY_START_X;
+    const entityStartY = isRootContext
+      ? LAYOUT_CONFIG.ENTITY_START_Y
+      : LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y;
+    const useCaseStartX = isRootContext
+      ? LAYOUT_CONFIG.USECASE_START_X
+      : LAYOUT_CONFIG.SATELLITE_USECASE_START_X;
+    const useCaseStartY = isRootContext
+      ? LAYOUT_CONFIG.USECASE_START_Y
+      : LAYOUT_CONFIG.SATELLITE_USECASE_START_Y;
+
+    // Add static Domain node inside hexagon
     const domainNodeId = `domain-${contextId}`;
     nodes.push({
       id: domainNodeId,
@@ -176,13 +216,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       parentId: contextId,
       extent: "parent",
       draggable: false,
-      position: {
-        x: LAYOUT_CONFIG.DOMAIN_NODE_X,
-        y: LAYOUT_CONFIG.DOMAIN_NODE_Y,
-      },
+      position: { x: domainX, y: domainY },
     });
 
-    // Add static Use Cases node inside hexagon (right-center, lower area)
+    // Add static Use Cases node inside hexagon
     const useCasesNodeId = `usecases-${contextId}`;
     nodes.push({
       id: useCasesNodeId,
@@ -192,14 +229,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       parentId: contextId,
       extent: "parent",
       draggable: false,
-      position: {
-        x: LAYOUT_CONFIG.USECASES_NODE_X,
-        y: LAYOUT_CONFIG.USECASES_NODE_Y,
-      },
+      position: { x: useCasesX, y: useCasesY },
     });
 
     // Entity satellites (connect to Domain node)
-    // Positioned below Domain node inside hexagon using config constants
     entityItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
@@ -211,11 +244,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         parentId: contextId,
         extent: "parent",
         position: {
-          x:
-            LAYOUT_CONFIG.ENTITY_START_X + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH,
-          y:
-            LAYOUT_CONFIG.ENTITY_START_Y +
-            row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT,
+          x: entityStartX + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH,
+          y: entityStartY + row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT,
         },
       });
       // Edge from domain (south handle) to entity (north handle)
@@ -230,7 +260,6 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     });
 
     // Use case satellites (connect to Use Cases node)
-    // Positioned below Use Cases node inside hexagon using config constants
     useCaseItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
@@ -242,12 +271,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         parentId: contextId,
         extent: "parent",
         position: {
-          x:
-            LAYOUT_CONFIG.USECASE_START_X +
-            col * LAYOUT_CONFIG.USECASE_COL_WIDTH,
-          y:
-            LAYOUT_CONFIG.USECASE_START_Y +
-            row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT,
+          x: useCaseStartX + col * LAYOUT_CONFIG.USECASE_COL_WIDTH,
+          y: useCaseStartY + row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT,
         },
       });
       // Edge from use cases (south handle) to use case (north handle)
