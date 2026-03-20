@@ -72,37 +72,37 @@ const RECT_STYLES: Record<
   { fill: string; stroke: string; text: string; handleColor: string }
 > = {
   "bounded-context": {
-    fill: "bg-sky-500/10",
+    fill: "bg-sky-500/10 dark:bg-sky-500/20",
     stroke: "border-sky-500",
     text: "text-sky-700 dark:text-sky-400",
     handleColor: "!bg-sky-500",
   },
   inner: {
-    fill: "bg-slate-500/10",
+    fill: "bg-slate-500/10 dark:bg-slate-500/20",
     stroke: "border-slate-500",
     text: "text-slate-700 dark:text-slate-400",
     handleColor: "!bg-slate-500",
   },
   entity: {
-    fill: "bg-emerald-500/10",
+    fill: "bg-emerald-500/10 dark:bg-emerald-500/20",
     stroke: "border-emerald-500",
     text: "text-emerald-700 dark:text-emerald-400",
     handleColor: "!bg-emerald-500",
   },
   port: {
-    fill: "bg-violet-500/10",
+    fill: "bg-violet-500/10 dark:bg-violet-500/20",
     stroke: "border-violet-500",
     text: "text-violet-700 dark:text-violet-400",
     handleColor: "!bg-violet-500",
   },
   "use-case": {
-    fill: "bg-amber-500/10",
+    fill: "bg-amber-500/10 dark:bg-amber-500/20",
     stroke: "border-amber-500",
     text: "text-amber-700 dark:text-amber-400",
     handleColor: "!bg-amber-500",
   },
   adapter: {
-    fill: "bg-blue-500/10",
+    fill: "bg-blue-500/10 dark:bg-blue-500/20",
     stroke: "border-blue-500",
     text: "text-blue-700 dark:text-blue-400",
     handleColor: "!bg-blue-500",
@@ -361,9 +361,9 @@ function HexagonNodeComponent({
         <polygon
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
           fill="transparent"
-          stroke={selected ? "#38bdf8" : "#000000"}
+          stroke={selected ? "#38bdf8" : "currentColor"}
           strokeWidth={isRoot ? "0.8" : isPeer ? "1.2" : "2.2"}
-          className="transition-all duration-500 group-hover:stroke-sky-400"
+          className="text-muted-foreground/30 dark:text-white/20 transition-all duration-500 group-hover:stroke-sky-400"
         />
         {isRoot && (
           <>
@@ -463,10 +463,10 @@ function HexagonNodeComponent({
                 }
               >
                 <Icon size={16} className={color} />
-                <span className="text-[7px] uppercase tracking-tighter font-bold text-slate-500 mt-1">
+                <span className="text-[7px] uppercase tracking-tighter font-bold text-muted-foreground mt-1">
                   {label}
                 </span>
-                <span className="text-xs font-mono text-slate-900 dark:text-slate-100">
+                <span className="text-xs font-mono text-foreground">
                   {getStatCount(data.stats, key)}
                 </span>
               </div>

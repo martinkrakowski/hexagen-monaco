@@ -9,8 +9,10 @@ import {
   type Node as FlowNode,
   type Edge as FlowEdge,
   type Connection,
+  type ColorMode,
 } from "@xyflow/react";
 import { toPng } from "html-to-image";
+import { useTheme } from "@/hooks/use-theme";
 import "@xyflow/react/dist/style.css";
 
 import { HexagonNode } from "./hexagon-node";
@@ -106,6 +108,9 @@ export function HexagonCanvas({
   onNodeDoubleClick,
   onExportClick,
 }: HexagonCanvasProps) {
+  const { theme } = useTheme();
+  const colorMode: ColorMode = theme === "dark" ? "dark" : "light";
+
   // Add timestamp to key to force React Flow to re-render nodes when data changes
   const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
   const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
@@ -200,6 +205,7 @@ export function HexagonCanvas({
         onNodeDoubleClick={handleNodeDoubleClick}
         isValidConnection={isValidConnection}
         fitView
+        colorMode={colorMode}
         className="bg-background"
       >
         <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
