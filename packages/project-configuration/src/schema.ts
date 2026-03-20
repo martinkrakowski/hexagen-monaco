@@ -99,8 +99,9 @@ export const BoundedContextSchema = z.object({
   // Backward compatibility: support legacy fields
   apiFramework: z.enum(["Fastify", "Express", "NestJS"]).optional(),
   uiFramework: z
-    .enum(["Next.js", "React Router", "Remix", "Angular", "Vue.js"])
-    .optional(),
+    .enum(["", "Next.js", "React Router", "Remix", "Angular", "Vue.js"])
+    .optional()
+    .default(""),
   persistenceAdapter: z
     .enum(["Prisma", "TypeORM", "Mongoose", "Drizzle"])
     .optional(),

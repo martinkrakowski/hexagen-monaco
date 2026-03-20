@@ -21,13 +21,20 @@ export const telemetryProviderOptions = [
   "Prometheus",
   "Winston",
 ] as const;
-export const apiFrameworkOptions = ["NestJS", "Fastify", "Express"] as const;
+export const apiFrameworkOptions = [
+  { value: "nestjs", label: "NestJS" },
+  { value: "express", label: "Express" },
+  { value: "serverless", label: "Serverless" },
+  { value: "plain-ts", label: "Plain TypeScript" },
+] as const;
+
 export const uiFrameworkOptions = [
-  "Next.js",
-  "Remix",
-  "React Router",
-  "Vue.js",
-  "Angular",
+  { value: "", label: "None (Headless / API Only)" },
+  { value: "Next.js", label: "Next.js" },
+  { value: "Remix", label: "Remix" },
+  { value: "React Router", label: "React Router" },
+  { value: "Vue.js", label: "Vue.js" },
+  { value: "Angular", label: "Angular" },
 ] as const;
 
 export const relationshipTypeOptions = [
@@ -73,6 +80,7 @@ export const emptyFormValues: ProjectConfig = {
         inboundPorts: [],
         outboundPorts: [],
       },
+      uiFramework: "",
     },
   ],
   externalContexts: [],

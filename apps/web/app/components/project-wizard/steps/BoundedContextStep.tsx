@@ -7,6 +7,7 @@ import type {
   BoundedContext,
 } from "@hexagen/project-configuration";
 import { v4 as uuidv4 } from "uuid";
+import { apiFrameworkOptions, uiFrameworkOptions } from "../config";
 
 interface BoundedContextStepProps {
   onNext: () => void;
@@ -129,7 +130,7 @@ export function BoundedContextStep({
         outboundPorts: [],
       },
       apiFramework: "NestJS",
-      uiFramework: "Next.js",
+      uiFramework: "",
       persistenceAdapter: "Prisma",
       messagingAdapter: "BullMQ",
       telemetryProvider: "None",
@@ -234,6 +235,61 @@ export function BoundedContextStep({
                     }))
                   }
                 />
+              </div>
+
+              <div className="border-t border-border pt-4 space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Infrastructure
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      API / Backend
+                    </label>
+                    <select
+                      value={context.infrastructureTarget || ""}
+                      onChange={(e) =>
+                        updateContext(index, (ctx) => ({
+                          ...ctx,
+                          infrastructureTarget: e.target
+                            .value as BoundedContext["infrastructureTarget"],
+                        }))
+                      }
+                      className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+                    >
+                      <option value="" disabled>
+                        Select Backend Engine
+                      </option>
+                      {apiFrameworkOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      UI / Frontend
+                    </label>
+                    <select
+                      value={context.uiFramework || ""}
+                      onChange={(e) =>
+                        updateContext(index, (ctx) => ({
+                          ...ctx,
+                          uiFramework: e.target
+                            .value as BoundedContext["uiFramework"],
+                        }))
+                      }
+                      className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+                    >
+                      {uiFrameworkOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
