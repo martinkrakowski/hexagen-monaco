@@ -53,11 +53,11 @@ const LAYOUT_CONFIG = {
   USECASES_NODE_X: 275,
   USECASES_NODE_Y: 400,
 
-  // Satellite hexagon inner node positions (160px - smaller, needs more spacing)
-  SATELLITE_DOMAIN_X: 50,
-  SATELLITE_DOMAIN_Y: 280,
-  SATELLITE_USECASES_X: 50,
-  SATELLITE_USECASES_Y: 320,
+  // Satellite hexagon inner node positions (placed BELOW the small hex since it's too small)
+  SATELLITE_DOMAIN_X: 40,
+  SATELLITE_DOMAIN_Y: 200,
+  SATELLITE_USECASES_X: 40,
+  SATELLITE_USECASES_Y: 300,
 
   // Entity satellites positioning (root hex)
   ENTITY_COL_WIDTH: 50,
@@ -65,9 +65,9 @@ const LAYOUT_CONFIG = {
   ENTITY_START_X: 30,
   ENTITY_START_Y: 460,
 
-  // Entity satellites positioning (satellite hex)
+  // Entity satellites positioning (satellite hex - below Use Cases node)
   SATELLITE_ENTITY_START_X: 20,
-  SATELLITE_ENTITY_START_Y: 360,
+  SATELLITE_ENTITY_START_Y: 380,
 
   // Use case satellites positioning (root hex)
   USECASE_COL_WIDTH: 50,
@@ -75,9 +75,9 @@ const LAYOUT_CONFIG = {
   USECASE_START_X: 420,
   USECASE_START_Y: 460,
 
-  // Use case satellites positioning (satellite hex)
+  // Use case satellites positioning (satellite hex - below Use Cases node)
   SATELLITE_USECASE_START_X: 20,
-  SATELLITE_USECASE_START_Y: 400,
+  SATELLITE_USECASE_START_Y: 430,
 
   // Adapter positions (north/south of hex)
   NORTH_OFFSET_BASE: 220,
