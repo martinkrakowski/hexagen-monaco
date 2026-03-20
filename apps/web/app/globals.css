@@ -136,24 +136,12 @@
   background: transparent !important;
 }
 
-/* ReactFlow main pane background - use semantic token */
+/* ReactFlow main pane - transparent so background shows through */
 .react-flow__pane {
+  background: transparent !important;
+}
+
+/* Background layer */
+.react-flow__background {
   background: hsl(var(--background)) !important;
-}
-
-.react-flow.dark .react-flow__pane {
-  background: hsl(var(--background)) !important;
-}
-
-/* ReactFlow background dots color */
-.react-flow__background pattern circle {
-  fill: var(--xy-background-pattern-dots-color-default, #6e7681);
-}
-
-.react-flow.dark .react-flow__background pattern circle {
-  fill: #6e7681 !important;
-}
-
-.react-flow:not(.dark) .react-flow__background pattern circle {
-  fill: #9ca3af !important;
 }

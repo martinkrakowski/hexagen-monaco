@@ -210,9 +210,10 @@ export function HexagonCanvas({
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={12}
+          gap={16}
           size={1}
-          style={{ opacity: theme === "dark" ? 0.4 : 0.5 }}
+          color={theme === "dark" ? "#6e7681" : "#9ca3af"}
+          style={{ opacity: 1 }}
         />
         <Controls className="bg-background border-border" />
       </ReactFlow>
