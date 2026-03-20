@@ -97,6 +97,7 @@ export function BoundedContextStep({
                     {index + 1}.
                   </span>
                   <input
+                    name={`boundedContexts.${index}.name`}
                     value={context.name}
                     onChange={(e) => {
                       const newContexts = [...boundedContexts];
@@ -111,6 +112,7 @@ export function BoundedContextStep({
                   type="button"
                   onClick={() => handleRemoveContext(index)}
                   disabled={boundedContexts.length === 1}
+                  aria-label={`Remove context ${context.name || index + 1}`}
                   className="px-2 py-1 text-xs text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50"
                 >
                   Remove

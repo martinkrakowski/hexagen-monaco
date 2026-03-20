@@ -18,8 +18,7 @@ interface SummaryStepProps {
 export function SummaryStep({
   onBack,
   onGenerate,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  canProceed: _canProceed,
+  canProceed,
   isGenerating,
 }: SummaryStepProps) {
   const { watch } = useFormContext<ProjectConfig>();
@@ -145,11 +144,8 @@ export function SummaryStep({
               <div key={addon.id} className="flex items-center gap-3">
                 <input
                   type="checkbox"
+                  name={addon.id}
                   checked={watch(addon.id as keyof ProjectConfig) as boolean}
-                  onChange={(e) =>
-                    watch(addon.id as keyof ProjectConfig) !== undefined &&
-                    e.target.checked !== undefined
-                  }
                   readOnly
                   className="h-4 w-4 accent-primary"
                 />
@@ -174,7 +170,9 @@ export function SummaryStep({
           <button
             type="button"
             onClick={onGenerate}
-            disabled={isGenerating || boundedContexts.length === 0}
+            disabled={
+              isGenerating || boundedContexts.length === 0 || !canProceed
+            }
             className="px-6 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 font-medium"
           >
             {isGenerating ? "Generating..." : "Generate Project"}

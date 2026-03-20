@@ -42,7 +42,7 @@ const _legacyExternalContextSchema = z.object({
 
 // --- 1. Workspace Governance (New) ---
 export const WorkspaceGovernanceSchema = z.object({
-  workspaceName: z.string().min(1, "Workspace name is required").optional(),
+  workspaceName: z.string().min(1, "Workspace name is required"),
   packageManager: z.enum(["yarn", "pnpm", "bun"]).optional(),
   topologyStrictness: z.enum(["strict", "flexible"]).optional(),
   namespacePrefix: z.string().optional(),

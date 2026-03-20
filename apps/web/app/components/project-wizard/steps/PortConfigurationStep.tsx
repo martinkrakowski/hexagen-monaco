@@ -41,29 +41,38 @@ export function PortConfigurationStep({
     direction: "inbound" | "outbound",
     port: string,
   ) => {
-    const newContexts = [...boundedContexts];
-    const context = newContexts[contextIndex];
-    const currentConfig = context.portConfiguration || {
-      inboundPorts: [],
-      outboundPorts: [],
+    const currentContext = boundedContexts[contextIndex];
+    if (!currentContext) return;
+
+    const nextPortConfig: PortConfiguration = {
+      inboundPorts: [...(currentContext.portConfiguration?.inboundPorts ?? [])],
+      outboundPorts: [
+        ...(currentContext.portConfiguration?.outboundPorts ?? []),
+      ],
+    };
+
+    const nextContext: BoundedContext = {
+      ...currentContext,
+      portConfiguration: nextPortConfig,
     };
 
     if (direction === "inbound") {
-      const currentPorts = currentConfig.inboundPorts || [];
+      const currentPorts = nextPortConfig.inboundPorts;
       const newPorts = currentPorts.includes(port as never)
         ? currentPorts.filter((p) => p !== port)
         : [...currentPorts, port as PortConfiguration["inboundPorts"][number]];
-      currentConfig.inboundPorts = newPorts;
+      nextPortConfig.inboundPorts = newPorts;
     } else {
-      const currentPorts = currentConfig.outboundPorts || [];
+      const currentPorts = nextPortConfig.outboundPorts;
       const newPorts = currentPorts.includes(port as never)
         ? currentPorts.filter((p) => p !== port)
         : [...currentPorts, port as PortConfiguration["outboundPorts"][number]];
-      currentConfig.outboundPorts = newPorts;
+      nextPortConfig.outboundPorts = newPorts;
     }
 
-    context.portConfiguration = currentConfig;
-    setValue("boundedContexts", newContexts);
+    const nextContexts = [...boundedContexts];
+    nextContexts[contextIndex] = nextContext;
+    setValue("boundedContexts", nextContexts);
   };
 
   if (boundedContexts.length === 0) {
@@ -86,7 +95,8 @@ export function PortConfigurationStep({
           <button
             type="button"
             onClick={onNext}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors"
+            disabled={!canProceed}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             Next
           </button>
@@ -142,6 +152,7 @@ export function PortConfigurationStep({
                       >
                         <input
                           type="checkbox"
+                          name={`boundedContexts.${index}.portConfiguration.inbound.${port.value}`}
                           checked={portConfig.inboundPorts?.includes(
                             port.value as never,
                           )}
@@ -174,6 +185,7 @@ export function PortConfigurationStep({
                       >
                         <input
                           type="checkbox"
+                          name={`boundedContexts.${index}.portConfiguration.outbound.${port.value}`}
                           checked={portConfig.outboundPorts?.includes(
                             port.value as never,
                           )}
@@ -205,7 +217,8 @@ export function PortConfigurationStep({
         <button
           type="button"
           onClick={onNext}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors"
+          disabled={!canProceed}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           Next
         </button>

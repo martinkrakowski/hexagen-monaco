@@ -72,6 +72,12 @@ const LAYOUT_CONFIG = {
   SOUTH_OFFSET_ADDITIONAL: 60,
   SOUTH_OFFSET_STEP: 100,
 
+  // Port satellites (west/east driving/driven)
+  WEST_PORT_OFFSET_X: -220,
+  EAST_PORT_OFFSET_X: 520,
+  PORT_OFFSET_BASE_Y: -40,
+  PORT_OFFSET_STEP_Y: 80,
+
   // Adapter label X position
   ADAPTER_LABEL_X: 230,
 
@@ -373,6 +379,68 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         target: edgeConfig.target,
         sourceHandle: edgeConfig.sourceHandle,
         targetHandle: edgeConfig.targetHandle,
+        type: "smoothstep",
+      });
+    });
+
+    // --- Port Configuration (Driving/Driven) ---
+    const inboundPorts = ctx.portConfiguration?.inboundPorts ?? [];
+    const outboundPorts = ctx.portConfiguration?.outboundPorts ?? [];
+
+    // West (Driving) ports: edge from port -> hex west handle
+    inboundPorts.forEach((port, i) => {
+      const portId = `port-in-${contextId}-${port}-${i}`;
+      const yOffset =
+        hexY +
+        LAYOUT_CONFIG.PORT_OFFSET_BASE_Y +
+        i * LAYOUT_CONFIG.PORT_OFFSET_STEP_Y;
+
+      nodes.push({
+        id: portId,
+        type: "port" as HexagonNodeType,
+        label: port,
+        side: "west",
+        position: {
+          x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X,
+          y: yOffset,
+        },
+      });
+
+      edges.push({
+        id: `edge-${portId}`,
+        source: portId,
+        sourceHandle: "east",
+        target: contextId,
+        targetHandle: "west",
+        type: "smoothstep",
+      });
+    });
+
+    // East (Driven) ports: edge from hex east handle -> port
+    outboundPorts.forEach((port, i) => {
+      const portId = `port-out-${contextId}-${port}-${i}`;
+      const yOffset =
+        hexY +
+        LAYOUT_CONFIG.PORT_OFFSET_BASE_Y +
+        i * LAYOUT_CONFIG.PORT_OFFSET_STEP_Y;
+
+      nodes.push({
+        id: portId,
+        type: "port" as HexagonNodeType,
+        label: port,
+        side: "east",
+        position: {
+          x: hexX + LAYOUT_CONFIG.EAST_PORT_OFFSET_X,
+          y: yOffset,
+        },
+      });
+
+      edges.push({
+        id: `edge-${portId}`,
+        source: contextId,
+        sourceHandle: "east",
+        target: portId,
+        targetHandle: "west",
         type: "smoothstep",
       });
     });
