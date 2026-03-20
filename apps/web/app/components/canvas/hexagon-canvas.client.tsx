@@ -31,6 +31,7 @@ type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
 
 const nodeTypes = {
   hexagon: HexagonNode,
+  inner: HexagonNode,
   peer: PeerContextNode,
   group: GroupBoundaryNode,
 };
@@ -47,7 +48,17 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   return nodes.map((node): HexagonFlowNode => {
     const n = node as HexagonNodeWithLayout;
 
-    let nodeType = "hexagon";
+    // DEBUG: log inner node positions
+    if (n.type === "inner") {
+      console.log(
+        `ReactFlow ${n.type} node "${n.id}": position=`,
+        node.position,
+        "parentId=",
+        n.parentId,
+      );
+    }
+
+    let nodeType = n.type === "inner" ? "inner" : "hexagon";
     if (n.id === "monorepo-boundary" || n.type === "group") {
       nodeType = "group";
     } else if (n.isPeer || n.type === "peer") {

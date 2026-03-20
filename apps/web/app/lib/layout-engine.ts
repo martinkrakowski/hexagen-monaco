@@ -41,7 +41,7 @@ const LAYOUT_CONFIG = {
 
   // Hexagon dimensions
   ROOT_HEX_DIMENSION: 500,
-  SATELLITE_HEX_DIMENSION: 160,
+  SATELLITE_HEX_DIMENSION: 360,
 
   // Position offsets (relative to hex center)
   HEX_POSITION_OFFSET_X: -300,
@@ -53,11 +53,11 @@ const LAYOUT_CONFIG = {
   USECASES_NODE_X: 275,
   USECASES_NODE_Y: 400,
 
-  // Satellite/peer hexagon inner node positions (375px - align near bottom like root)
-  SATELLITE_DOMAIN_X: 90,
-  SATELLITE_DOMAIN_Y: 330,
-  SATELLITE_USECASES_X: 230,
-  SATELLITE_USECASES_Y: 330,
+  // Satellite/peer hexagon inner node positions (360px hex - at bottom, spread apart)
+  SATELLITE_DOMAIN_X: 50,
+  SATELLITE_DOMAIN_Y: 320,
+  SATELLITE_USECASES_X: 240,
+  SATELLITE_USECASES_Y: 320,
 
   // Entity satellites positioning (root hex)
   ENTITY_COL_WIDTH: 50,
@@ -65,9 +65,9 @@ const LAYOUT_CONFIG = {
   ENTITY_START_X: 30,
   ENTITY_START_Y: 460,
 
-  // Entity satellites positioning (satellite hex - below Domain node)
-  SATELLITE_ENTITY_START_X: 90,
-  SATELLITE_ENTITY_START_Y: 380,
+  // Entity satellites positioning (satellite hex - below Domain)
+  SATELLITE_ENTITY_START_X: -20,
+  SATELLITE_ENTITY_START_Y: 600,
 
   // Use case satellites positioning (root hex)
   USECASE_COL_WIDTH: 50,
@@ -75,9 +75,9 @@ const LAYOUT_CONFIG = {
   USECASE_START_X: 420,
   USECASE_START_Y: 460,
 
-  // Use case satellites positioning (satellite hex - below Use Cases node)
-  SATELLITE_USECASE_START_X: 230,
-  SATELLITE_USECASE_START_Y: 430,
+  // Use case satellites positioning (satellite hex - below Use Cases)
+  SATELLITE_USECASE_START_X: 320,
+  SATELLITE_USECASE_START_Y: 600,
 
   // Adapter positions (north/south of hex)
   NORTH_OFFSET_BASE: 220,
@@ -181,6 +181,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const isRootContext = index === 0;
 
     // Select appropriate config based on context type
+    // Note: Domain/Use Cases inner nodes use parentId, so they render relative to parent automatically
+    // Only satellites need offset calculation (done inline where they're created)
     const domainX = isRootContext
       ? LAYOUT_CONFIG.DOMAIN_NODE_X
       : LAYOUT_CONFIG.SATELLITE_DOMAIN_X;
@@ -232,21 +234,29 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       position: { x: useCasesX, y: useCasesY },
     });
 
-    // Entity satellites (connect to Domain node)
+    // Entity satellites - use absolute positioning (no parentId) to render below parent hex
+    // For satellites, position is absolute: hex position + offset within hex's coordinate space
     entityItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
+      // Root uses parent-relative, satellites use hex-relative absolute position
+      const posX = isRootContext
+        ? entityStartX + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH
+        : hexRelativeX +
+          LAYOUT_CONFIG.SATELLITE_ENTITY_START_X +
+          col * LAYOUT_CONFIG.ENTITY_COL_WIDTH;
+      const posY = isRootContext
+        ? entityStartY + row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
+        : LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y +
+          row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT;
       nodes.push({
         id: `entity-${contextId}-${i}`,
         label: name,
         type: "entity" as HexagonNodeType,
         category: "Entity",
-        parentId: contextId,
-        extent: "parent",
-        position: {
-          x: entityStartX + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH,
-          y: entityStartY + row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT,
-        },
+        parentId: isRootContext ? contextId : undefined,
+        extent: isRootContext ? "parent" : undefined,
+        position: { x: posX, y: posY },
       });
       // Edge from domain (south handle) to entity (north handle)
       edges.push({
@@ -259,21 +269,27 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     });
 
-    // Use case satellites (connect to Use Cases node)
+    // Use case satellites - use absolute positioning for satellites
     useCaseItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
+      const posX = isRootContext
+        ? useCaseStartX + col * LAYOUT_CONFIG.USECASE_COL_WIDTH
+        : hexRelativeX +
+          LAYOUT_CONFIG.SATELLITE_USECASE_START_X +
+          col * LAYOUT_CONFIG.USECASE_COL_WIDTH;
+      const posY = isRootContext
+        ? useCaseStartY + row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
+        : LAYOUT_CONFIG.SATELLITE_USECASE_START_Y +
+          row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT;
       nodes.push({
         id: `usecase-${contextId}-${i}`,
         label: name,
         type: "use-case" as HexagonNodeType,
         category: "Use Case",
-        parentId: contextId,
-        extent: "parent",
-        position: {
-          x: useCaseStartX + col * LAYOUT_CONFIG.USECASE_COL_WIDTH,
-          y: useCaseStartY + row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT,
-        },
+        parentId: isRootContext ? contextId : undefined,
+        extent: isRootContext ? "parent" : undefined,
+        position: { x: posX, y: posY },
       });
       // Edge from use cases (south handle) to use case (north handle)
       edges.push({
