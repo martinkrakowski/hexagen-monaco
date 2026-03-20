@@ -18,6 +18,34 @@ import type {
 import { getMonacoPersistence } from "@/lib/wire";
 import { useTheme } from "@/hooks/use-theme";
 
+const HEXAGEN_DARK_THEME: monaco.editor.IStandaloneThemeData = {
+  base: "vs-dark",
+  inherit: true,
+  rules: [],
+  colors: {
+    "editor.background": "#0d1117",
+    "editor.foreground": "#e6edf3",
+    "editorLineNumber.foreground": "#6e7681",
+    "editorLineNumber.activeForeground": "#e6edf3",
+    "editor.selectionBackground": "#264f78",
+    "editor.lineHighlightBackground": "#161b22",
+    "editorCursor.foreground": "#58a6ff",
+    "editor.inactiveSelectionBackground": "#264f7855",
+  },
+};
+
+const HEXAGEN_LIGHT_THEME: monaco.editor.IStandaloneThemeData = {
+  base: "vs",
+  inherit: true,
+  rules: [],
+  colors: {
+    "editor.background": "#ffffff",
+    "editor.foreground": "#24292f",
+    "editorLineNumber.foreground": "#8c959f",
+    "editorLineNumber.activeForeground": "#24292f",
+  },
+};
+
 interface MonacoEditorWrapperProps {
   initialBuffer: string;
   sessionId: string;
@@ -55,7 +83,7 @@ export function MonacoEditorWrapper({
   const [error, setError] = useState<string | null>(null);
 
   const { theme } = useTheme();
-  const monacoTheme = theme === "dark" ? "vs-dark" : "vs";
+  const monacoTheme = theme === "dark" ? "hexagen-dark" : "hexagen-light";
 
   const persistence = getMonacoPersistence();
 
@@ -111,7 +139,9 @@ export function MonacoEditorWrapper({
     return () => clearTimeout(timeout);
   };
 
-  const handleEditorDidMount: OnMount = (editor) => {
+  const handleEditorDidMount: OnMount = (editor, monacoInstance) => {
+    monacoInstance.editor.defineTheme("hexagen-dark", HEXAGEN_DARK_THEME);
+    monacoInstance.editor.defineTheme("hexagen-light", HEXAGEN_LIGHT_THEME);
     editorRef.current = editor;
     bufferStatePortRef.current.setEditorRef(editor);
   };
@@ -171,6 +201,7 @@ export function MonacoEditorWrapper({
             lineNumbers: "on",
             scrollBeyondLastLine: false,
             automaticLayout: true,
+            bracketPairColorization: { enabled: false },
           }}
         />
       )}
