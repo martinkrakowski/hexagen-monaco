@@ -136,19 +136,11 @@
   background: transparent !important;
 }
 
-/* ReactFlow container background - use semantic token */
-.react-flow__pane,
-.react-flow {
+/* ReactFlow main pane background - use semantic token */
+.react-flow__pane {
   background: hsl(var(--background)) !important;
 }
 
-.react-flow.dark .react-flow__pane,
-.react-flow.dark .react-flow {
+.react-flow.dark .react-flow__pane {
   background: hsl(var(--background)) !important;
-}
-
-/* Override ReactFlow's built-in dark mode background color */
-.react-flow,
-.react-flow__background {
-  background-color: hsl(var(--background)) !important;
 }
