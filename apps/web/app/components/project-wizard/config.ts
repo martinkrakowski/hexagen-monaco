@@ -1,8 +1,8 @@
 import {
   projectConfigSchema,
   type ProjectConfig,
-  type ExternalContextInput,
-  type BoundedContextInput,
+  type ExternalContext,
+  type BoundedContext,
 } from "@hexagen/project-configuration";
 
 export const persistenceAdapterOptions = [
@@ -42,16 +42,41 @@ export const relationshipTypeOptions = [
 export {
   projectConfigSchema,
   type ProjectConfig,
-  type ExternalContextInput,
-  type BoundedContextInput,
+  type ExternalContext,
+  type BoundedContext,
 };
 
 export const emptyFormValues: ProjectConfig = {
   withLlm: false,
   withBlockchain: false,
   workspaceScope: "@hexagen",
-  boundedContexts: [{ id: crypto.randomUUID(), name: "core" }],
+  governance: {
+    workspaceName: "@hexagen",
+    packageManager: "yarn",
+    topologyStrictness: "flexible",
+    namespacePrefix: "@hexagen",
+    namingConventions: {
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".adapter.ts",
+    },
+  },
+  boundedContexts: [
+    {
+      id: crypto.randomUUID(),
+      name: "core",
+      description: "",
+      infrastructureTarget: "nestjs",
+      coreDomainEntities: [],
+      entities: [],
+      useCases: [],
+      portConfiguration: {
+        inboundPorts: [],
+        outboundPorts: [],
+      },
+    },
+  ],
   externalContexts: [],
+  peerMappings: [],
 };
 
 export const projectAddons = [
@@ -69,28 +94,33 @@ export const projectAddons = [
 
 export const wizardSteps = [
   {
-    id: "project_type",
-    title: "Project Type",
-    description: "Start with a general-purpose project.",
+    id: "workspace_governance",
+    title: "Workspace Governance",
+    description: "Define workspace name, package manager, and topology.",
+    fields: ["governance"],
+  },
+  {
+    id: "bounded_contexts",
+    title: "Bounded Contexts",
+    description: "Add and configure bounded contexts for your project.",
+    fields: ["boundedContexts"],
+  },
+  {
+    id: "peer_mappings",
+    title: "Peer Context Mappings",
+    description: "Define how contexts interact with each other.",
+    fields: ["peerMappings"],
+  },
+  {
+    id: "ports_configuration",
+    title: "Ports Configuration",
+    description: "Configure inbound and outbound ports for each context.",
+    fields: ["boundedContexts"],
+  },
+  {
+    id: "project_addons",
+    title: "Project Add-ons",
+    description: "Enable optional features like LLM or blockchain support.",
     fields: ["withLlm", "withBlockchain"],
-  },
-  {
-    id: "workspace",
-    title: "Workspace",
-    description: "Define workspace scope, bounded contexts, and peer contexts.",
-    fields: ["workspaceScope", "boundedContexts", "externalContexts"],
-  },
-  {
-    id: "infrastructure_config",
-    title: "Infrastructure Configuration",
-    description:
-      "Configure infrastructure for the active context (API, persistence, messaging).",
-    fields: ["boundedContexts"],
-  },
-  {
-    id: "domain_config",
-    title: "Domain Configuration",
-    description: "Define entities and use cases for the active context.",
-    fields: ["boundedContexts"],
   },
 ];

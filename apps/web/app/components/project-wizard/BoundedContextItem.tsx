@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { BoundedContextInput } from "@hexagen/project-configuration";
+import type { BoundedContext } from "@hexagen/shared";
 import type { ContextUpdateCallback } from "@hexagen/shared";
 
 interface BoundedContextItemProps {
-  context: BoundedContextInput;
+  context: BoundedContext;
   index: number;
   onUpdateContext: ContextUpdateCallback;
   onRemoveContext: () => void;
@@ -59,7 +59,9 @@ export function BoundedContextItem({
         </span>
         <input
           value={context.name || ""}
-          onChange={(e) => context.id && onUpdateContext(context.id, { name: e.target.value })}
+          onChange={(e) =>
+            context.id && onUpdateContext(context.id, { name: e.target.value })
+          }
           className="flex-1 px-3 py-2 border rounded-md text-sm font-medium"
           placeholder="Context name (required)"
         />
@@ -227,7 +229,9 @@ export function BoundedContextItem({
         <button
           type="button"
           onClick={onRemoveContext}
-          disabled={context.entities?.length === 0 && context.useCases?.length === 0}
+          disabled={
+            context.entities?.length === 0 && context.useCases?.length === 0
+          }
           className="w-full py-2 text-sm text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t"
         >
           Remove Context

@@ -1,2 +1,5 @@
 // Re-exports the canonical schema — single source of truth
-export { projectConfigSchema, type ProjectConfig } from '../../../schema';
+export {
+  ProjectSpecSchema as projectConfigSchema,
+  type ProjectSpec as ProjectConfig,
+} from "../../../schema";

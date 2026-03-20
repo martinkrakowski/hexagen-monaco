@@ -1,0 +1,179 @@
+"use client";
+
+import { useFormContext } from "react-hook-form";
+import type { ProjectConfig } from "@hexagen/project-configuration";
+
+interface WorkspaceGovernanceStepProps {
+  onNext: () => void;
+  onBack: () => void;
+  canProceed: boolean;
+}
+
+export function WorkspaceGovernanceStep({
+  onNext,
+  onBack,
+  canProceed,
+}: WorkspaceGovernanceStepProps) {
+  const { watch, setValue } = useFormContext<ProjectConfig>();
+
+  const workspaceName = watch("governance.workspaceName") || "";
+  const packageManager = watch("governance.packageManager") || "yarn";
+  const topologyStrictness =
+    watch("governance.topologyStrictness") || "flexible";
+  const namespacePrefix = watch("governance.namespacePrefix") || "@hexagen";
+  const contextDirectoryPattern =
+    watch("governance.namingConventions.contextDirectoryPattern") ||
+    "packages/";
+  const adapterSuffix =
+    watch("governance.namingConventions.adapterSuffix") || ".adapter.ts";
+
+  const handleNext = () => {
+    setValue("governance.workspaceName", workspaceName.trim());
+    setValue("governance.packageManager", packageManager);
+    setValue("governance.topologyStrictness", topologyStrictness);
+    setValue("governance.namespacePrefix", namespacePrefix.trim());
+    setValue(
+      "governance.namingConventions.contextDirectoryPattern",
+      contextDirectoryPattern,
+    );
+    setValue("governance.namingConventions.adapterSuffix", adapterSuffix);
+    onNext();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Workspace Name */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          Workspace Name
+        </label>
+        <input
+          value={workspaceName}
+          onChange={(e) => setValue("governance.workspaceName", e.target.value)}
+          className="w-full px-4 py-2 border rounded-md"
+          placeholder="@mycompany"
+        />
+      </div>
+
+      {/* Package Manager */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          Package Manager
+        </label>
+        <select
+          value={packageManager}
+          onChange={(e) =>
+            setValue(
+              "governance.packageManager",
+              e.target.value as "yarn" | "pnpm" | "bun",
+            )
+          }
+          className="w-full px-4 py-2 border rounded-md"
+        >
+          <option value="yarn">Yarn</option>
+          <option value="pnpm">PNPM</option>
+          <option value="bun">Bun</option>
+        </select>
+      </div>
+
+      {/* Topology Strictness */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          Topology Strictness
+        </label>
+        <select
+          value={topologyStrictness}
+          onChange={(e) =>
+            setValue(
+              "governance.topologyStrictness",
+              e.target.value as "strict" | "flexible",
+            )
+          }
+          className="w-full px-4 py-2 border rounded-md"
+        >
+          <option value="strict">Strict (Zero sharing between adapters)</option>
+          <option value="flexible">Flexible (Allows shared-kernel)</option>
+        </select>
+      </div>
+
+      {/* Namespace Prefix */}
+      <div className="space-y-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          Namespace Prefix
+        </label>
+        <input
+          value={namespacePrefix}
+          onChange={(e) =>
+            setValue("governance.namespacePrefix", e.target.value)
+          }
+          className="w-full px-4 py-2 border rounded-md"
+          placeholder="@hexagen"
+        />
+      </div>
+
+      {/* Naming Conventions */}
+      <div className="border-t pt-4">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+          Naming Conventions
+        </h3>
+
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-slate-600">
+              Context Directory Pattern
+            </label>
+            <input
+              value={contextDirectoryPattern}
+              onChange={(e) =>
+                setValue(
+                  "governance.namingConventions.contextDirectoryPattern",
+                  e.target.value,
+                )
+              }
+              className="w-full px-3 py-2 border rounded-md"
+              placeholder="packages/"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-slate-600">
+              Adapter Suffix
+            </label>
+            <input
+              value={adapterSuffix}
+              onChange={(e) =>
+                setValue(
+                  "governance.namingConventions.adapterSuffix",
+                  e.target.value,
+                )
+              }
+              className="w-full px-3 py-2 border rounded-md"
+              placeholder=".adapter.ts"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between pt-6">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={!canProceed}
+          className="px-4 py-2 text-sm text-muted-foreground hover:text-muted-foreground/75 transition-colors disabled:opacity-50"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={handleNext}
+          disabled={
+            !canProceed || !workspaceName.trim() || !namespacePrefix.trim()
+          }
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}

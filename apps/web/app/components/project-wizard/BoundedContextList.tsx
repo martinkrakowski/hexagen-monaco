@@ -1,11 +1,11 @@
 "use client";
 
-import type { BoundedContextInput } from "@hexagen/project-configuration";
+import type { BoundedContext } from "@hexagen/shared";
 import { BoundedContextItem } from "./BoundedContextItem";
 import type { ContextUpdateCallback } from "@hexagen/shared";
 
 interface BoundedContextListProps {
-  contexts: BoundedContextInput[];
+  contexts: BoundedContext[];
   onAddContext: () => void;
   onUpdateContext: ContextUpdateCallback;
 }

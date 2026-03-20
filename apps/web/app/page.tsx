@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { ResizableLayout } from "@/components/layout/ResizableLayout";
-import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
@@ -13,31 +12,27 @@ import { GraphCanvasWrapper } from "@/components/canvas/graph-canvas-wrapper";
 import {
   emptyFormValues,
   wizardSteps,
-  projectAddons,
-  apiFrameworkOptions,
-  uiFrameworkOptions,
-  persistenceAdapterOptions,
-  messagingAdapterOptions,
 } from "@/components/project-wizard/config";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   projectConfigSchema,
   type ProjectConfig,
-  type BoundedContextInput,
 } from "@hexagen/project-configuration";
 import type {
   WizardData,
   BoundedContext,
   ExternalContext,
-  ContextUpdateCallback,
 } from "@hexagen/shared";
 import { deriveActiveContext } from "@hexagen/shared";
 import { IProjectWizardController } from "@hexagen/wizard-orchestration";
-import { ContextSelector } from "@/components/project-wizard/context-selector";
-import { StepDomain } from "@/components/project-wizard/step-domain";
-import { BoundedContextList } from "@/components/project-wizard/BoundedContextList";
-import { PeerContextList } from "@/components/project-wizard/PeerContextList";
+import {
+  WorkspaceGovernanceStep,
+  BoundedContextStep,
+  PeerContextMappingStep,
+  PortConfigurationStep,
+  SummaryStep,
+} from "@/components/project-wizard/steps";
 
 type Intent =
   | {
@@ -83,43 +78,26 @@ export default function Home() {
   const externalContexts = (watchedValues.externalContexts ||
     []) as ExternalContext[];
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const activeContext = deriveActiveContext(boundedContexts, activeContextId);
 
-  useEffect(() => {
-    if (!activeContextId && boundedContexts.length > 0) {
-      setActiveContextId(boundedContexts[0].id);
-    }
-  }, [boundedContexts, activeContextId]);
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const wizardController: IProjectWizardController = {
     navigateToStep: (stepIndex: number) => setCurrentStepIndex(stepIndex),
     setActiveContextId: (id: string) => setActiveContextId(id),
-  };
-
-  const handleUpdateContext: ContextUpdateCallback = (
-    contextId: string,
-    updates: Partial<BoundedContext>,
-  ) => {
-    const updated = boundedContexts.map((ctx) =>
-      ctx.id === contextId ? { ...ctx, ...updates } : ctx,
-    );
-    form.setValue("boundedContexts", updated as BoundedContextInput[], {
-      shouldDirty: true,
-    });
   };
 
   // Compute fresh each render to ensure latest data reaches canvas
   const wizardData: WizardData = {
     boundedContexts: boundedContexts,
     externalContexts: externalContexts,
-    workspaceScope: watchedValues.workspaceScope,
+    workspaceScope: watchedValues.governance?.workspaceName || "",
     withLlm: watchedValues.withLlm,
     withBlockchain: watchedValues.withBlockchain,
   };
 
   const currentStep = wizardSteps[currentStepIndex];
   const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === wizardSteps.length - 1;
 
   const canProceed =
     currentStepIndex === 1
@@ -157,6 +135,82 @@ export default function Home() {
 
   const initialManifest = JSON.stringify(watchedValues, null, 2);
   const sessionId = "wizard-session-1";
+
+  const handleNext = () => {
+    dispatchIntent({
+      type: "WIZARD_NEXT",
+      source: "user",
+      payload: form.getValues(),
+      metadata: { confidence: 1 },
+    });
+  };
+
+  const handleBack = () => {
+    dispatchIntent({
+      type: "WIZARD_BACK",
+      source: "user",
+      payload: null,
+      metadata: { confidence: 1 },
+    });
+  };
+
+  const handleGenerate = () => {
+    dispatchIntent({
+      type: "GENERATE_PROJECT",
+      source: "user",
+      payload: form.getValues(),
+      metadata: { confidence: 1 },
+    });
+  };
+
+  // Render the appropriate step component
+  const renderStep = () => {
+    switch (currentStepIndex) {
+      case 0:
+        return (
+          <WorkspaceGovernanceStep
+            onNext={handleNext}
+            onBack={handleBack}
+            canProceed={isFirstStep}
+          />
+        );
+      case 1:
+        return (
+          <BoundedContextStep
+            onNext={handleNext}
+            onBack={handleBack}
+            canProceed={canProceed}
+          />
+        );
+      case 2:
+        return (
+          <PeerContextMappingStep
+            onNext={handleNext}
+            onBack={handleBack}
+            canProceed={canProceed}
+          />
+        );
+      case 3:
+        return (
+          <PortConfigurationStep
+            onNext={handleNext}
+            onBack={handleBack}
+            canProceed={canProceed}
+          />
+        );
+      case 4:
+        return (
+          <SummaryStep
+            onBack={handleBack}
+            onGenerate={handleGenerate}
+            canProceed={canProceed}
+            isGenerating={loading}
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden">
@@ -198,266 +252,8 @@ export default function Home() {
                   {currentStep.description}
                 </p>
 
-                <div className="space-y-8 flex-1">
-                  {/* Step 1: Project Type */}
-                  {currentStepIndex === 0 && (
-                    <div className="space-y-6">
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-3">
-                          Project Type Selection
-                        </label>
-                        {projectAddons.map((addon) => (
-                          <div
-                            key={addon.id}
-                            className="flex items-start gap-3 mb-4"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={!!watchedValues[addon.id]}
-                              onChange={(e) =>
-                                form.setValue(addon.id, e.target.checked, {
-                                  shouldValidate: true,
-                                  shouldDirty: true,
-                                })
-                              }
-                              className="mt-1.5 h-4 w-4 accent-primary"
-                            />
-                            <label className="font-medium cursor-pointer text-sm">
-                              {addon.title}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Step 2: Workspace + Bounded Contexts Registry */}
-                  {currentStepIndex === 1 && (
-                    <div className="space-y-6">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Workspace Scope
-                        </label>
-                        <input
-                          {...form.register("workspaceScope")}
-                          className="w-full px-4 py-2 border rounded-md"
-                          placeholder="@hexagen"
-                        />
-                      </div>
-
-                      {/* Bounded Contexts */}
-                      <BoundedContextList
-                        contexts={boundedContexts as BoundedContextInput[]}
-                        onAddContext={() => {
-                          const newId = crypto.randomUUID();
-                          const newContexts = [
-                            ...boundedContexts,
-                            { id: newId, name: "" } as BoundedContext,
-                          ];
-                          form.setValue(
-                            "boundedContexts",
-                            newContexts as BoundedContextInput[],
-                            { shouldDirty: true },
-                          );
-                          setActiveContextId(newId);
-                        }}
-                        onUpdateContext={handleUpdateContext}
-                      />
-
-                      {/* Peer Contexts */}
-                      <PeerContextList
-                        contexts={externalContexts}
-                        onAddContext={() => {
-                          const current = externalContexts;
-                          form.setValue(
-                            "externalContexts",
-                            [
-                              ...current,
-                              {
-                                id: crypto.randomUUID(),
-                                name: "",
-                                relationshipType: "U",
-                              },
-                            ],
-                            { shouldDirty: true },
-                          );
-                          setActiveContextId(
-                            externalContexts.length > 0
-                              ? externalContexts[externalContexts.length - 1].id
-                              : "",
-                          );
-                        }}
-                        onUpdateContext={handleUpdateContext}
-                      />
-                    </div>
-                  )}
-
-                  {/* Step 3: Infrastructure Configuration */}
-                  {currentStepIndex === 2 && boundedContexts.length > 0 && (
-                    <div className="space-y-6">
-                      {boundedContexts.length > 1 && (
-                        <ContextSelector
-                          contexts={boundedContexts}
-                          activeId={activeContextId}
-                          controller={wizardController}
-                        />
-                      )}
-
-                      {activeContext && (
-                        <>
-                          <div className="border-t pt-4">
-                            <h3 className="text-sm font-medium mb-3">
-                              Infrastructure
-                            </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <label className="text-xs text-muted-foreground block mb-1">
-                                  API Framework
-                                </label>
-                                <select
-                                  value={activeContext.apiFramework || ""}
-                                  onChange={(e) => {
-                                    handleUpdateContext(activeContextId, {
-                                      apiFramework: e.target
-                                        .value as BoundedContextInput["apiFramework"],
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                >
-                                  <option value="">Select...</option>
-                                  {apiFrameworkOptions.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground block mb-1">
-                                  UI Framework
-                                </label>
-                                <select
-                                  value={activeContext.uiFramework || ""}
-                                  onChange={(e) => {
-                                    handleUpdateContext(activeContextId, {
-                                      uiFramework: e.target
-                                        .value as BoundedContextInput["uiFramework"],
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                >
-                                  <option value="">Select...</option>
-                                  {uiFrameworkOptions.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground block mb-1">
-                                  Persistence
-                                </label>
-                                <select
-                                  value={activeContext.persistenceAdapter || ""}
-                                  onChange={(e) => {
-                                    handleUpdateContext(activeContextId, {
-                                      persistenceAdapter: e.target
-                                        .value as BoundedContextInput["persistenceAdapter"],
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                >
-                                  <option value="">Select...</option>
-                                  {persistenceAdapterOptions.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground block mb-1">
-                                  Messaging
-                                </label>
-                                <select
-                                  value={activeContext.messagingAdapter || ""}
-                                  onChange={(e) => {
-                                    handleUpdateContext(activeContextId, {
-                                      messagingAdapter: e.target
-                                        .value as BoundedContextInput["messagingAdapter"],
-                                    });
-                                  }}
-                                  className="w-full px-3 py-2 border rounded-md text-sm"
-                                >
-                                  <option value="">Select...</option>
-                                  {messagingAdapterOptions.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {currentStepIndex === 3 && boundedContexts.length > 0 && (
-                  <div className="space-y-6">
-                    {boundedContexts.length > 1 && (
-                      <ContextSelector
-                        contexts={boundedContexts}
-                        activeId={activeContextId}
-                        controller={wizardController}
-                      />
-                    )}
-                    {activeContext && (
-                      <StepDomain
-                        activeContext={activeContext}
-                        contextId={activeContextId}
-                        onUpdateContext={(updates) =>
-                          handleUpdateContext(activeContextId, updates)
-                        }
-                      />
-                    )}
-                  </div>
-                )}
-
-                <div className="mt-auto flex gap-3 pt-6 border-t">
-                  {!isFirstStep && (
-                    <PrimaryButton
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() =>
-                        dispatchIntent({
-                          type: "WIZARD_BACK",
-                          source: "user",
-                          payload: null,
-                          metadata: { confidence: 1 },
-                        })
-                      }
-                    >
-                      Back
-                    </PrimaryButton>
-                  )}
-                  <PrimaryButton
-                    className="flex-1"
-                    disabled={!canProceed || loading}
-                    onClick={() =>
-                      dispatchIntent({
-                        type: isLastStep ? "GENERATE_PROJECT" : "WIZARD_NEXT",
-                        source: "user",
-                        payload: form.getValues(),
-                        metadata: { confidence: 1 },
-                      })
-                    }
-                  >
-                    {isLastStep ? "Generate" : "Next"}
-                  </PrimaryButton>
+                <div className="flex-1">
+                  <FormProvider {...form}>{renderStep()}</FormProvider>
                 </div>
               </CardContent>
             </Card>

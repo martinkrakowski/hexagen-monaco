@@ -22,8 +22,8 @@ export interface ExternalContext {
   isEventDriven?: boolean;
   entityNames?: string[];
   useCaseNames?: string[];
-  publishedEvents?: DomainEventRef[];
-  subscribedEvents?: DomainEventRef[];
+  publishedEvents?: Array<{ id: string; label: string }>;
+  subscribedEvents?: Array<{ id: string; label: string }>;
 }
 
 /**
@@ -33,42 +33,63 @@ export interface ExternalContext {
 export interface BoundedContext {
   id: string;
   name: string;
-  /** Inbound API driver */
-  apiFramework?: string;
-  /** Inbound UI driver */
-  uiFramework?: string;
-  /** Outbound persistence adapter */
-  persistenceAdapter?: string;
-  /** Outbound messaging adapter */
-  messagingAdapter?: string;
-  /** Telemetry provider */
-  telemetryProvider?: string;
-  /** External API ports */
-  externalApiPorts?: string[];
-  /** LLM providers (if withLlm addon) */
-  llmProviders?: string[];
-  /** Blockchain networks (if withBlockchain addon) */
-  blockchainNetworks?: string[];
-  /** Authentication provider */
-  authenticationProvider?: string;
-  /** Email service */
-  emailService?: string;
-  /** Payment gateway */
-  paymentGateway?: string;
-  /** Storage provider */
-  storageProvider?: string;
-  /** Search service */
-  searchService?: string;
-  /** Webhook endpoints */
-  webhookEndpoints?: string[];
-  /** Domain entities */
+  description?: string;
+  // Infrastructure Target (required)
+  infrastructureTarget: "nestjs" | "express" | "serverless" | "plain-ts";
+  // Core Domain Entities (required - comprehensive data collection)
+  coreDomainEntities: string[];
+  // Domain Entities (legacy - backward compatibility)
   entities?: string[];
-  /** Domain use cases */
+  // Domain Use Cases
   useCases?: string[];
-  /** Domain events published */
-  publishedEvents?: DomainEventRef[];
-  /** Domain events subscribed */
-  subscribedEvents?: DomainEventRef[];
+  // Port Configuration (maps to React Flow N/S/E/W handles) (required)
+  portConfiguration: {
+    // Feeds West (Driving Ports) & North (Presentation Adapters)
+    inboundPorts: (
+      | "rest-controller"
+      | "graphql-resolver"
+      | "event-listener"
+      | "cli-command"
+    )[];
+    // Feeds East (Driven Ports) & South (Infrastructure Adapters)
+    outboundPorts: (
+      | "relational-db"
+      | "document-db"
+      | "external-service-client"
+      | "message-publisher"
+    )[];
+  };
+  // Inbound API Driver (West handle) (required)
+  apiFramework: "Fastify" | "Express" | "NestJS";
+  // Inbound UI Driver (North handle) (required)
+  uiFramework: "Next.js" | "React Router" | "Remix" | "Angular" | "Vue.js";
+  // Outbound Persistence Adapter (South handle) (required)
+  persistenceAdapter: "Prisma" | "TypeORM" | "Mongoose" | "Drizzle";
+  // Outbound Messaging Adapter (South handle) (required)
+  messagingAdapter: "BullMQ" | "Temporal" | "RabbitMQ";
+  // Telemetry Provider (South handle) (required)
+  telemetryProvider: "OpenTelemetry" | "None" | "Prometheus" | "Winston";
+  // External API Ports (outbound port) (required)
+  externalApiPorts: string[];
+  // LLM Providers (outbound port) (required)
+  llmProviders: string[];
+  // Blockchain Networks (outbound port) (required)
+  blockchainNetworks: string[];
+  // Authentication Provider (outbound port) (required)
+  authenticationProvider: string;
+  // Email Service (outbound port) (required)
+  emailService: string;
+  // Payment Gateway (outbound port) (required)
+  paymentGateway: string;
+  // Storage Provider (outbound port) (required)
+  storageProvider: string;
+  // Search Service (outbound port) (required)
+  searchService: string;
+  // Webhook Endpoints (outbound port) (required)
+  webhookEndpoints: string[];
+  // Events (required)
+  publishedEvents: Array<{ id: string; label: string }>;
+  subscribedEvents: Array<{ id: string; label: string }>;
 }
 
 /**
