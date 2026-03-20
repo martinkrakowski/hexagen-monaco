@@ -128,7 +128,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   const groupCenterY = groupY + groupHeight / 2;
 
   boundedContexts.forEach((ctx: BoundedContext, index: number) => {
-    const entityItems = ctx.entities ?? [];
+    const entityItems = ctx.coreDomainEntities ?? ctx.entities ?? [];
     const useCaseItems = ctx.useCases ?? [];
 
     // Calculate position for each context (horizontal spacing using config constants)

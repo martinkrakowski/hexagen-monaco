@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type KeyboardEvent } from "react";
 import { useFormContext } from "react-hook-form";
 import type {
   ProjectConfig,
@@ -13,6 +14,81 @@ interface BoundedContextStepProps {
   canProceed: boolean;
 }
 
+interface ChipInputProps {
+  label: string;
+  placeholder: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  name: string;
+}
+
+function ChipInput({
+  label,
+  placeholder,
+  values,
+  onChange,
+  name,
+}: ChipInputProps) {
+  const [inputValue, setInputValue] = useState("");
+
+  const commitValue = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && !values.includes(trimmed)) {
+      onChange([...values, trimmed]);
+    }
+    setInputValue("");
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      commitValue();
+    }
+  };
+
+  const removeValue = (value: string) => {
+    onChange(values.filter((v) => v !== value));
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {values.map((val) => (
+          <span
+            key={val}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+          >
+            {val}
+            <button
+              type="button"
+              aria-label={`Remove ${val}`}
+              onClick={() => removeValue(val)}
+              className="h-4 w-4 inline-flex items-center justify-center rounded-full text-blue-500 hover:bg-blue-100"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        name={name}
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={commitValue}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 border rounded-md text-sm"
+      />
+      <p className="text-[10px] text-muted-foreground">
+        Press Enter or comma to add.
+      </p>
+    </div>
+  );
+}
+
 export function BoundedContextStep({
   onNext,
   onBack,
@@ -21,6 +97,19 @@ export function BoundedContextStep({
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
   const boundedContexts = watch("boundedContexts") || [];
+
+  const updateContext = (
+    index: number,
+    updater: (ctx: BoundedContext) => BoundedContext,
+  ) => {
+    const nextContexts = boundedContexts.map(
+      (ctx: BoundedContext, i: number) => (i === index ? updater(ctx) : ctx),
+    );
+    setValue("boundedContexts", nextContexts, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
 
   const handleNext = () => {
     onNext();
@@ -99,11 +188,12 @@ export function BoundedContextStep({
                   <input
                     name={`boundedContexts.${index}.name`}
                     value={context.name}
-                    onChange={(e) => {
-                      const newContexts = [...boundedContexts];
-                      newContexts[index].name = e.target.value;
-                      setValue("boundedContexts", newContexts);
-                    }}
+                    onChange={(e) =>
+                      updateContext(index, (ctx) => ({
+                        ...ctx,
+                        name: e.target.value,
+                      }))
+                    }
                     className="flex-1 px-3 py-2 border rounded-md text-sm font-medium"
                     placeholder="Context name (required)"
                   />
@@ -117,6 +207,33 @@ export function BoundedContextStep({
                 >
                   Remove
                 </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <ChipInput
+                  label="Core Domain Entities"
+                  placeholder="e.g. Invoice, User, Catalog"
+                  name={`boundedContexts.${index}.coreDomainEntities`}
+                  values={context.coreDomainEntities || []}
+                  onChange={(values) =>
+                    updateContext(index, (ctx) => ({
+                      ...ctx,
+                      coreDomainEntities: values,
+                    }))
+                  }
+                />
+                <ChipInput
+                  label="Primary Use Cases"
+                  placeholder="e.g. CreateInvoice, ProcessPayment"
+                  name={`boundedContexts.${index}.useCases`}
+                  values={context.useCases || []}
+                  onChange={(values) =>
+                    updateContext(index, (ctx) => ({
+                      ...ctx,
+                      useCases: values,
+                    }))
+                  }
+                />
               </div>
             </div>
           ))}
