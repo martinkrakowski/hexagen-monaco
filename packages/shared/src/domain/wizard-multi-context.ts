@@ -1,4 +1,4 @@
-import { BoundedContext } from "./wizard-data.js";
+import { BoundedContext, ExternalContext } from "./wizard-data.js";
 
 /**
  * Derive the active bounded context from the collection.
@@ -14,8 +14,10 @@ export function deriveActiveContext(
 /**
  * Callback signature for updating a context.
  * The implementation merges the partial updates into the target context.
+ * Can be used for both BoundedContext and ExternalContext.
  */
+type ContextUpdate = Partial<BoundedContext> | Partial<ExternalContext>;
 export type ContextUpdateCallback = (
   contextId: string,
-  updates: Partial<BoundedContext>,
+  updates: ContextUpdate,
 ) => void;

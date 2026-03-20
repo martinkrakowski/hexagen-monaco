@@ -25,11 +25,11 @@ import {
   projectConfigSchema,
   type ProjectConfig,
   type BoundedContextInput,
-  type ExternalContextInput,
 } from "@hexagen/project-configuration";
 import type {
   WizardData,
   BoundedContext,
+  ExternalContext,
   ContextUpdateCallback,
 } from "@hexagen/shared";
 import { deriveActiveContext } from "@hexagen/shared";
@@ -81,7 +81,7 @@ export default function Home() {
   const boundedContexts = (watchedValues.boundedContexts ||
     []) as BoundedContext[];
   const externalContexts = (watchedValues.externalContexts ||
-    []) as ExternalContextInput[];
+    []) as ExternalContext[];
 
   const activeContext = deriveActiveContext(boundedContexts, activeContextId);
 
@@ -108,22 +108,10 @@ export default function Home() {
     });
   };
 
-  const handleUpdatePeerContext: ContextUpdateCallback = (
-    contextId: string,
-    updates: Partial<ExternalContextInput>,
-  ) => {
-    const updated = externalContexts.map((ctx) =>
-      ctx.id === contextId ? { ...ctx, ...updates } : ctx,
-    );
-    form.setValue("externalContexts", updated, {
-      shouldDirty: true,
-    });
-  };
-
   // Compute fresh each render to ensure latest data reaches canvas
   const wizardData: WizardData = {
-    boundedContexts: boundedContexts as WizardData["boundedContexts"],
-    externalContexts: externalContexts as WizardData["externalContexts"],
+    boundedContexts: boundedContexts,
+    externalContexts: externalContexts,
     workspaceScope: watchedValues.workspaceScope,
     withLlm: watchedValues.withLlm,
     withBlockchain: watchedValues.withBlockchain,
@@ -278,7 +266,7 @@ export default function Home() {
 
                       {/* Peer Contexts */}
                       <PeerContextList
-                        contexts={externalContexts as ExternalContextInput[]}
+                        contexts={externalContexts}
                         onAddContext={() => {
                           const current = externalContexts;
                           form.setValue(
@@ -293,8 +281,13 @@ export default function Home() {
                             ],
                             { shouldDirty: true },
                           );
+                          setActiveContextId(
+                            externalContexts.length > 0
+                              ? externalContexts[externalContexts.length - 1].id
+                              : "",
+                          );
                         }}
-                        onUpdateContext={handleUpdatePeerContext}
+                        onUpdateContext={handleUpdateContext}
                       />
                     </div>
                   )}

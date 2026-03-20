@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { ExternalContextInput, ContextUpdateCallback } from "@hexagen/shared";
+import type { ExternalContext, ContextUpdateCallback } from "@hexagen/shared";
 import { relationshipTypeOptions } from "./config";
 
 interface PeerContextItemProps {
-  context: ExternalContextInput;
+  context: ExternalContext;
   index: number;
   onUpdateContext: ContextUpdateCallback;
   onRemoveContext: () => void;
@@ -55,7 +55,9 @@ export function PeerContextItem({
         </span>
         <input
           value={context.name || ""}
-          onChange={(e) => onUpdateContext(context.id, { name: e.target.value })}
+          onChange={(e) =>
+            onUpdateContext(context.id, { name: e.target.value })
+          }
           className="flex-1 px-3 py-2 border rounded-md text-sm font-medium"
           placeholder="Peer context name (required)"
         />
@@ -70,7 +72,8 @@ export function PeerContextItem({
           value={context.relationshipType || "U"}
           onChange={(e) => {
             onUpdateContext(context.id, {
-              relationshipType: e.target.value as ExternalContextInput["relationshipType"],
+              relationshipType: e.target
+                .value as ExternalContext["relationshipType"],
             });
           }}
           className="w-full px-3 py-2 border rounded-md text-sm bg-background"
@@ -242,7 +245,10 @@ export function PeerContextItem({
       <button
         type="button"
         onClick={onRemoveContext}
-        disabled={context.entityNames?.length === 0 && context.useCaseNames?.length === 0}
+        disabled={
+          context.entityNames?.length === 0 &&
+          context.useCaseNames?.length === 0
+        }
         className="w-full py-2 text-sm text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t"
       >
         Remove Peer Context

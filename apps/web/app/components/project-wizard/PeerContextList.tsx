@@ -1,11 +1,11 @@
 "use client";
 
-import type { ExternalContextInput } from "@hexagen/project-configuration";
+import type { ExternalContext } from "@hexagen/shared";
 import { PeerContextItem } from "./PeerContextItem";
 import type { ContextUpdateCallback } from "@hexagen/shared";
 
 interface PeerContextListProps {
-  contexts: ExternalContextInput[];
+  contexts: ExternalContext[];
   onAddContext: () => void;
   onUpdateContext: ContextUpdateCallback;
 }
