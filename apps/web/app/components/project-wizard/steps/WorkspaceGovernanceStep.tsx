@@ -112,7 +112,7 @@ export function WorkspaceGovernanceStep({
       </div>
 
       {/* Naming Conventions */}
-      <div className="border-t border-sidebar-border pt-4">
+      <div className="border-t border-border pt-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
           Naming Conventions
         </h3>
