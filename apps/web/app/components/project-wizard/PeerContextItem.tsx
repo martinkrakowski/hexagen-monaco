@@ -64,7 +64,7 @@ export function PeerContextItem({
       </div>
 
       {/* Relationship Type Selector */}
-      <div className="border-t pt-4 space-y-2">
+      <div className="border-t border-sidebar-border pt-4 space-y-2">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Relationship Type
         </h4>
@@ -87,7 +87,7 @@ export function PeerContextItem({
       </div>
 
       {/* External Entities Section */}
-      <div className="border-t pt-4 space-y-3">
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           External Entities
         </h4>
@@ -145,7 +145,7 @@ export function PeerContextItem({
       </div>
 
       {/* External Use Cases Section */}
-      <div className="border-t pt-4 space-y-3">
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           External Use Cases
         </h4>
@@ -203,7 +203,7 @@ export function PeerContextItem({
       </div>
 
       {/* Quick Edit Section */}
-      <div className="border-t pt-4 space-y-3">
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Quick Edit
         </h4>
@@ -249,7 +249,7 @@ export function PeerContextItem({
           context.entityNames?.length === 0 &&
           context.useCaseNames?.length === 0
         }
-        className="w-full py-2 text-sm text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t"
+        className="w-full py-2 text-sm text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t border-sidebar-border"
       >
         Remove Peer Context
       </button>

@@ -68,7 +68,7 @@ export function BoundedContextItem({
       </div>
 
       {/* Entities Section */}
-      <div className="border-t pt-4 space-y-3">
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Entities
         </h4>
@@ -126,7 +126,7 @@ export function BoundedContextItem({
       </div>
 
       {/* Use Cases Section */}
-      <div className="border-t pt-4 space-y-3">
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Use Cases
         </h4>
@@ -184,7 +184,7 @@ export function BoundedContextItem({
       </div>
 
       {/* Quick Edit Section */}
-      <div className="border-t pt-4 space-y-3">
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Quick Edit
         </h4>
@@ -232,7 +232,7 @@ export function BoundedContextItem({
           disabled={
             context.entities?.length === 0 && context.useCases?.length === 0
           }
-          className="w-full py-2 text-sm text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t"
+          className="w-full py-2 text-sm text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-t border-sidebar-border"
         >
           Remove Context
         </button>

@@ -25,7 +25,7 @@ interface PanelHeaderProps {
 function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
   const Icon = side === "left" ? ChevronLeft : ChevronRight;
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+    <div className="flex items-center justify-between px-3 py-2 border-b border-sidebar-border bg-muted/30">
       <span className="font-semibold text-sm truncate">{title}</span>
       <button
         onClick={onCollapse}
@@ -46,7 +46,7 @@ interface CollapsedStripProps {
 function CollapsedStrip({ side, onExpand }: CollapsedStripProps) {
   const Icon = side === "left" ? ChevronRight : ChevronLeft;
   return (
-    <div className="flex items-start justify-center w-8 shrink-0 border rounded-lg bg-card pt-2">
+    <div className="flex items-start justify-center w-8 shrink-0 border border-sidebar-border rounded-lg bg-card pt-2">
       <button
         onClick={onExpand}
         aria-label={`Expand ${side} panel`}
@@ -87,7 +87,7 @@ export function ResizableLayout({ left, middle, right }: ResizableLayoutProps) {
             onCollapse={() => setLeftCollapsed(true)}
             onExpand={() => setLeftCollapsed(false)}
           >
-            <Card className="h-full overflow-hidden border rounded-lg">
+            <Card className="h-full overflow-hidden border border-sidebar-border rounded-lg">
               <PanelHeader
                 title="HexaGen Project Wizard"
                 side="left"
@@ -104,7 +104,7 @@ export function ResizableLayout({ left, middle, right }: ResizableLayoutProps) {
 
           {/* Middle Pane - Main Content / Preview */}
           <Panel defaultSize={50} minSize={30}>
-            <Card className="h-full overflow-hidden border rounded-lg">
+            <Card className="h-full overflow-hidden border border-sidebar-border rounded-lg">
               {middle}
             </Card>
           </Panel>
@@ -124,7 +124,7 @@ export function ResizableLayout({ left, middle, right }: ResizableLayoutProps) {
             onCollapse={() => setRightCollapsed(true)}
             onExpand={() => setRightCollapsed(false)}
           >
-            <Card className="h-full overflow-hidden border rounded-lg">
+            <Card className="h-full overflow-hidden border border-sidebar-border rounded-lg">
               <PanelHeader
                 title="Monaco AI Architect"
                 side="right"

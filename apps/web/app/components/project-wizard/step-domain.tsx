@@ -47,10 +47,8 @@ export function StepDomain({
 
   return (
     <div className="space-y-6">
-      <div className="border-t pt-4 space-y-3">
-        <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">
-          Entities
-        </h3>
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
+        <h3 className="text-sm font-medium text-foreground">Entities</h3>
 
         <ul className="space-y-2">
           {activeContext.entities?.map((entity, i) => (
@@ -101,10 +99,8 @@ export function StepDomain({
         </div>
       </div>
 
-      <div className="border-t pt-4 space-y-3">
-        <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">
-          Use Cases
-        </h3>
+      <div className="border-t border-sidebar-border pt-4 space-y-3">
+        <h3 className="text-sm font-medium text-foreground">Use Cases</h3>
 
         <ul className="space-y-2">
           {activeContext.useCases?.map((useCase, i) => (
@@ -155,7 +151,7 @@ export function StepDomain({
         </div>
       </div>
 
-      <div className="border-t pt-4">
+      <div className="border-t border-sidebar-border pt-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
           Quick Edit
         </h3>

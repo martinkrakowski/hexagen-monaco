@@ -126,7 +126,7 @@ export function PortConfigurationStep({
               key={context.id}
               className="border rounded-lg p-4 space-y-4 bg-card"
             >
-              <div className="flex items-center gap-2 border-b pb-3">
+              <div className="flex items-center gap-2 border-b border-sidebar-border pb-3">
                 <span className="text-xs font-mono text-muted-foreground">
                   {index + 1}.
                 </span>
@@ -205,7 +205,7 @@ export function PortConfigurationStep({
         })}
       </div>
 
-      <div className="flex justify-between pt-6 border-t">
+      <div className="flex justify-between pt-6 border-t border-sidebar-border">
         <button
           type="button"
           onClick={onBack}

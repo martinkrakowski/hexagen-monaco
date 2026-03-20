@@ -157,7 +157,7 @@ export function SummaryStep({
       </div>
 
       {/* Generate Button */}
-      <div className="border-t pt-6 space-y-4">
+      <div className="border-t border-sidebar-border pt-6 space-y-4">
         <div className="flex justify-between">
           <button
             type="button"

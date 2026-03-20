@@ -50,7 +50,7 @@ export function WorkspaceGovernanceStep({
         <input
           value={workspaceName}
           onChange={(e) => setValue("governance.workspaceName", e.target.value)}
-          className="w-full px-4 py-2 border rounded-md"
+          className="w-full px-4 py-2 bg-background border border-input rounded-md"
           placeholder="@mycompany"
         />
       </div>
@@ -68,7 +68,7 @@ export function WorkspaceGovernanceStep({
               e.target.value as "yarn" | "pnpm" | "bun",
             )
           }
-          className="w-full px-4 py-2 border rounded-md"
+          className="w-full px-4 py-2 bg-background border border-input rounded-md"
         >
           <option value="yarn">Yarn</option>
           <option value="pnpm">PNPM</option>
@@ -89,7 +89,7 @@ export function WorkspaceGovernanceStep({
               e.target.value as "strict" | "flexible",
             )
           }
-          className="w-full px-4 py-2 border rounded-md"
+          className="w-full px-4 py-2 bg-background border border-input rounded-md"
         >
           <option value="strict">Strict (Zero sharing between adapters)</option>
           <option value="flexible">Flexible (Allows shared-kernel)</option>
@@ -106,20 +106,20 @@ export function WorkspaceGovernanceStep({
           onChange={(e) =>
             setValue("governance.namespacePrefix", e.target.value)
           }
-          className="w-full px-4 py-2 border rounded-md"
+          className="w-full px-4 py-2 bg-background border border-input rounded-md"
           placeholder="@hexagen"
         />
       </div>
 
       {/* Naming Conventions */}
-      <div className="border-t pt-4">
+      <div className="border-t border-sidebar-border pt-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
           Naming Conventions
         </h3>
 
         <div className="space-y-3">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-600">
+            <label className="text-xs font-medium text-muted-foreground">
               Context Directory Pattern
             </label>
             <input
@@ -130,13 +130,13 @@ export function WorkspaceGovernanceStep({
                   e.target.value,
                 )
               }
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 bg-background border border-input rounded-md"
               placeholder="packages/"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-600">
+            <label className="text-xs font-medium text-muted-foreground">
               Adapter Suffix
             </label>
             <input
@@ -147,7 +147,7 @@ export function WorkspaceGovernanceStep({
                   e.target.value,
                 )
               }
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 bg-background border border-input rounded-md"
               placeholder=".adapter.ts"
             />
           </div>
