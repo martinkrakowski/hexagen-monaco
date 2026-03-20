@@ -347,7 +347,7 @@ function HexagonNodeComponent({
   }
 
   // Hexagonal node: root = 500px, peer BC = 300px, infrastructure satellite = 160px
-  const dimension = isRoot ? 500 : isPeer ? 300 : 160;
+  const dimension = isRoot ? 500 : isPeer ? 375 : 360;
 
   return (
     <div
@@ -362,7 +362,7 @@ function HexagonNodeComponent({
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
           fill="transparent"
           stroke={selected ? "#38bdf8" : "currentColor"}
-          strokeWidth={isRoot ? "0.8" : isPeer ? "1.2" : "2.2"}
+          strokeWidth={isRoot ? "0.8" : isPeer ? "0.6" : "2.2"}
           className="text-muted-foreground/30 dark:text-white/20 transition-all duration-500 group-hover:stroke-sky-400"
         />
         {isRoot && (
