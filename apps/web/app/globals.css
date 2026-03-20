@@ -3,47 +3,125 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Hexagen Design System - Dark-first, developer-tool aesthetic
+ * See AGENTS.md design documentation for full token specification
+ */
+
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  /* Font families */
+  --app-font-sans: "Inter", sans-serif;
+  --app-font-mono: "Menlo", monospace;
+
+  /* Light Mode Colors */
+  --background: 220 16% 96%;
+  --foreground: 222 47% 11%;
+
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 210 20% 98%; /* Gray base (Vega/Theme Gray) */
-  --primary-foreground: 210 20% 10%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 220 13% 91%;
+
+  /* Sidebar - stays dark in light mode */
+  --sidebar: 222 47% 11%;
+  --sidebar-foreground: 215 20% 85%;
+  --sidebar-border: 217 33% 20%;
+  --sidebar-primary: 226 70% 55%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent-foreground: 215 20% 85%;
+  --sidebar-ring: 226 70% 55%;
+
+  --primary: 226 70% 55%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 14% 93%;
+  --secondary-foreground: 222 47% 11%;
+
+  --muted: 220 14% 93%;
+  --muted-foreground: 220 9% 46%;
+
+  --accent: 220 14% 93%;
+  --accent-foreground: 222 47% 11%;
+
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 226 70% 55%;
+
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 210 20% 60%;
-  --radius: 0.25rem; /* Radius Small */
+
+  /* Radius */
+  --radius: 0.5rem;
 }
 
+/* Dark Mode */
 .dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 210 20% 12%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
+  --background: 222 47% 7%;
+  --foreground: 213 31% 91%;
+
+  --card: 222 47% 10%;
+  --card-foreground: 213 31% 91%;
+  --card-border: 217 33% 17%;
+
+  /* Sidebar - deepest surface */
+  --sidebar: 222 47% 6%;
+  --sidebar-foreground: 215 20% 75%;
+  --sidebar-border: 217 33% 14%;
+  --sidebar-primary: 226 70% 58%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 217 33% 13%;
+  --sidebar-accent-foreground: 215 20% 75%;
+  --sidebar-ring: 226 70% 58%;
+
+  --primary: 226 70% 58%;
+  --primary-foreground: 0 0% 100%;
+
+  --muted: 217 33% 13%;
+  --muted-foreground: 215 20% 55%;
+
+  --secondary: 217 33% 13%;
+  --secondary-foreground: 215 20% 75%;
+
+  --accent: 217 33% 13%;
+  --accent-foreground: 215 20% 75%;
+
+  --border: 217 33% 17%;
+  --input: 217 33% 17%;
+  --ring: 226 70% 58%;
+
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 210 20% 60%;
+}
+
+/* Base styles */
+@layer base {
+  body {
+    font-family: var(--app-font-sans);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--app-font-mono);
+  }
+}
+
+/* Animation utilities */
+@layer utilities {
+  .animate-in {
+    animation: animate-in 0.3s ease-out;
+  }
+
+  @keyframes animate-in {
+    from {
+      opacity: 0;
+      transform: translateY(1rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }

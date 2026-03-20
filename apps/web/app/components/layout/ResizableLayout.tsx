@@ -72,9 +72,7 @@ export function ResizableLayout({ left, middle, right }: ResizableLayoutProps) {
   return (
     <div className="h-screen w-full overflow-hidden p-5 bg-background">
       <div className="flex h-full gap-2">
-        {leftCollapsed && (
-          <CollapsedStrip side="left" onExpand={expandLeft} />
-        )}
+        {leftCollapsed && <CollapsedStrip side="left" onExpand={expandLeft} />}
 
         <PanelGroup direction="horizontal" className="flex-1 h-full">
           {/* Left Sidebar - Wizard */}

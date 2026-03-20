@@ -19,14 +19,14 @@ export function ContextSelector({
   };
 
   return (
-    <div className="flex items-center justify-between p-3 mb-6 bg-slate-900 border border-slate-700 rounded-md">
-      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider px-2">
+    <div className="flex items-center justify-between p-3 mb-6 bg-card border border-border rounded-md">
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2">
         Editing Context:
       </span>
       <select
         value={activeId}
         onChange={(e) => handleContextChange(e.target.value)}
-        className="w-[240px] h-8 px-3 bg-slate-800 border border-slate-600 rounded text-sm text-slate-200"
+        className="w-[240px] h-8 px-3 bg-background border border-input rounded-md text-sm"
       >
         {contexts.map((ctx) => (
           <option key={ctx.id} value={ctx.id}>

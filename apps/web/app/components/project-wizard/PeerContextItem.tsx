@@ -58,7 +58,7 @@ export function PeerContextItem({
           onChange={(e) =>
             onUpdateContext(context.id, { name: e.target.value })
           }
-          className="flex-1 px-3 py-2 border rounded-md text-sm font-medium"
+          className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm font-medium"
           placeholder="Peer context name (required)"
         />
       </div>
@@ -76,7 +76,7 @@ export function PeerContextItem({
                 .value as ExternalContext["relationshipType"],
             });
           }}
-          className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+          className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
         >
           {relationshipTypeOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -131,7 +131,7 @@ export function PeerContextItem({
               }
             }}
             placeholder="New external entity name"
-            className="flex-1 px-3 py-2 border rounded-md text-sm"
+            className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
           <button
             type="button"
@@ -189,7 +189,7 @@ export function PeerContextItem({
               }
             }}
             placeholder="New external use case name"
-            className="flex-1 px-3 py-2 border rounded-md text-sm"
+            className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
           <button
             type="button"
@@ -223,7 +223,7 @@ export function PeerContextItem({
               onUpdateContext(context.id, { entityNames });
             }}
             placeholder="User, Order (comma-separated)"
-            className="w-full px-3 py-2 border rounded-md text-sm"
+            className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
           <input
             type="text"
@@ -236,7 +236,7 @@ export function PeerContextItem({
               onUpdateContext(context.id, { useCaseNames });
             }}
             placeholder="RegisterUser, PlaceOrder (comma-separated)"
-            className="w-full px-3 py-2 border rounded-md text-sm"
+            className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
         </div>
       </div>

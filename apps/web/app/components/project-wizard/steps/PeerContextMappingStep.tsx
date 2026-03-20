@@ -143,7 +143,7 @@ export function PeerContextMappingStep({
                         consumerContext: e.target.value,
                       })
                     }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                   >
                     {contextNames.map((ctx) => (
                       <option key={ctx.id} value={ctx.id}>
@@ -164,7 +164,7 @@ export function PeerContextMappingStep({
                         providerContext: e.target.value,
                       })
                     }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                   >
                     {contextNames.map((ctx) => (
                       <option key={ctx.id} value={ctx.id}>
@@ -187,7 +187,7 @@ export function PeerContextMappingStep({
                           | "acl",
                       })
                     }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                   >
                     <option value="open-host">Open Host Service</option>
                     <option value="acl">Anticorruption Layer (ACL)</option>
@@ -207,7 +207,7 @@ export function PeerContextMappingStep({
                           | "networked",
                       })
                     }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                   >
                     <option value="in-process">In-Process</option>
                     <option value="networked">Networked (API/Events)</option>

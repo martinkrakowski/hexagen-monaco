@@ -86,12 +86,12 @@ export function SummaryStep({
                   ({ctx.infrastructureTarget || "nestjs"})
                 </span>
                 {ctx.portConfiguration?.inboundPorts && (
-                  <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                     {ctx.portConfiguration.inboundPorts.length} in
                   </span>
                 )}
                 {ctx.portConfiguration?.outboundPorts && (
-                  <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                     {ctx.portConfiguration.outboundPorts.length} out
                   </span>
                 )}

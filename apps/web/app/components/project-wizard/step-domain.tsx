@@ -89,7 +89,7 @@ export function StepDomain({
               }
             }}
             placeholder="New entity name"
-            className="flex-1 px-3 py-2 border rounded-md text-sm"
+            className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
           <button
             type="button"
@@ -143,7 +143,7 @@ export function StepDomain({
               }
             }}
             placeholder="New use case name"
-            className="flex-1 px-3 py-2 border rounded-md text-sm"
+            className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
           <button
             type="button"
@@ -175,7 +175,7 @@ export function StepDomain({
               onUpdateContext({ entities });
             }}
             placeholder="User, Order, Product (comma-separated)"
-            className="w-full px-3 py-2 border rounded-md text-sm"
+            className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
           <input
             type="text"
@@ -188,7 +188,7 @@ export function StepDomain({
               onUpdateContext({ useCases });
             }}
             placeholder="RegisterUser, PlaceOrder (comma-separated)"
-            className="w-full px-3 py-2 border rounded-md text-sm"
+            className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
           />
         </div>
       </div>

@@ -59,14 +59,14 @@ function ChipInput({
         {values.map((val) => (
           <span
             key={val}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-primary/10 text-primary border border-primary/20"
           >
             {val}
             <button
               type="button"
               aria-label={`Remove ${val}`}
               onClick={() => removeValue(val)}
-              className="h-4 w-4 inline-flex items-center justify-center rounded-full text-blue-500 hover:bg-blue-100"
+              className="h-4 w-4 inline-flex items-center justify-center rounded-full text-primary hover:bg-primary/20"
             >
               ×
             </button>
@@ -80,7 +80,7 @@ function ChipInput({
         onKeyDown={handleKeyDown}
         onBlur={commitValue}
         placeholder={placeholder}
-        className="w-full px-3 py-2 border rounded-md text-sm"
+        className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
       />
       <p className="text-[10px] text-muted-foreground">
         Press Enter or comma to add.
@@ -194,7 +194,7 @@ export function BoundedContextStep({
                         name: e.target.value,
                       }))
                     }
-                    className="flex-1 px-3 py-2 border rounded-md text-sm font-medium"
+                    className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm font-medium"
                     placeholder="Context name (required)"
                   />
                 </div>
