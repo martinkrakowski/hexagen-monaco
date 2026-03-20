@@ -271,10 +271,15 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
 
     // North adapters - stacked (API first, then UI) using config constants
     let northCount = 0;
-    if (ctx.apiFramework) {
+    // Support both legacy apiFramework and new infrastructureTarget
+    const apiLabel = ctx.infrastructureTarget
+      ? ctx.infrastructureTarget.charAt(0).toUpperCase() +
+        ctx.infrastructureTarget.slice(1)
+      : ctx.apiFramework;
+    if (apiLabel) {
       adapters.push({
-        id: `adapter-${contextId}-${ctx.apiFramework}`,
-        label: ctx.apiFramework,
+        id: `adapter-${contextId}-${apiLabel}`,
+        label: apiLabel,
         side: "north",
         handleIndex: northCount++,
       });
