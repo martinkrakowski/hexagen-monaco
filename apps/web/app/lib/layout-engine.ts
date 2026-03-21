@@ -195,6 +195,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const useCasesY = isRootContext
       ? LAYOUT_CONFIG.USECASES_NODE_Y
       : LAYOUT_CONFIG.SATELLITE_USECASES_Y;
+    // For satellites we will position children in absolute canvas coords using hexX/hexY
     const entityStartX = isRootContext
       ? LAYOUT_CONFIG.ENTITY_START_X
       : LAYOUT_CONFIG.SATELLITE_ENTITY_START_X;
@@ -234,20 +235,19 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       position: { x: useCasesX, y: useCasesY },
     });
 
-    // Entity satellites - use absolute positioning (no parentId) to render below parent hex
-    // For satellites, position is absolute: hex position + offset within hex's coordinate space
+    // Entity satellites - absolute positioning for satellites
     entityItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
-      // Root uses parent-relative, satellites use hex-relative absolute position
       const posX = isRootContext
         ? entityStartX + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH
-        : hexRelativeX +
+        : hexX +
           LAYOUT_CONFIG.SATELLITE_ENTITY_START_X +
           col * LAYOUT_CONFIG.ENTITY_COL_WIDTH;
       const posY = isRootContext
         ? entityStartY + row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
-        : LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y +
+        : hexY +
+          LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y +
           row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT;
       nodes.push({
         id: `entity-${contextId}-${i}`,
@@ -269,18 +269,19 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     });
 
-    // Use case satellites - use absolute positioning for satellites
+    // Use case satellites - absolute positioning for satellites
     useCaseItems.forEach((name: string, i: number) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
       const posX = isRootContext
         ? useCaseStartX + col * LAYOUT_CONFIG.USECASE_COL_WIDTH
-        : hexRelativeX +
+        : hexX +
           LAYOUT_CONFIG.SATELLITE_USECASE_START_X +
           col * LAYOUT_CONFIG.USECASE_COL_WIDTH;
       const posY = isRootContext
         ? useCaseStartY + row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
-        : LAYOUT_CONFIG.SATELLITE_USECASE_START_Y +
+        : hexY +
+          LAYOUT_CONFIG.SATELLITE_USECASE_START_Y +
           row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT;
       nodes.push({
         id: `usecase-${contextId}-${i}`,
