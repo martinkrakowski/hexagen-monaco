@@ -82,7 +82,33 @@ export function PortConfigurationStep({
   if (boundedContexts.length === 0) {
     return (
       <div className="flex flex-col h-full bg-white overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-shrink-0 p-6 pb-4">
+          <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
+            STEP: 4 (port_configuration)
+          </div>
+          <div className="flex gap-2 mb-4">
+            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+              1
+            </div>
+            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+              2
+            </div>
+            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+              3
+            </div>
+            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-primary text-primary-foreground border-primary">
+              4
+            </div>
+            <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+              5
+            </div>
+          </div>
+          <h2 className="text-2xl font-semibold mb-2">Port Configuration</h2>
+          <p className="text-muted-foreground mb-6 text-sm">
+            Configure inbound and outbound ports for each context.
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
           <div className="space-y-6 max-w-2xl">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
               <p className="text-sm text-muted-foreground">
@@ -120,16 +146,34 @@ export function PortConfigurationStep({
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="space-y-6 max-w-2xl">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold">Port Configuration</h2>
-            <p className="text-sm text-muted-foreground">
-              Configure inbound (West) and outbound (East) ports for each
-              context
-            </p>
+      <div className="flex-shrink-0 p-6 pb-4">
+        <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
+          STEP: 4 (port_configuration)
+        </div>
+        <div className="flex gap-2 mb-4">
+          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+            1
           </div>
-
+          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+            2
+          </div>
+          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+            3
+          </div>
+          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-primary text-primary-foreground border-primary">
+            4
+          </div>
+          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
+            5
+          </div>
+        </div>
+        <h2 className="text-2xl font-semibold mb-2">Port Configuration</h2>
+        <p className="text-muted-foreground mb-6 text-sm">
+          Configure inbound and outbound ports for each context.
+        </p>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 pb-6">
+        <div className="space-y-6 max-w-2xl">
           <div className="space-y-6">
             {boundedContexts.map((context: BoundedContext, index: number) => {
               const portConfig = context.portConfiguration || {

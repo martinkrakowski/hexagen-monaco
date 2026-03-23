@@ -255,39 +255,8 @@ export default function Home() {
                     </div>
                   </FormProvider>
                 ) : (
-                  <div className="flex-1 flex flex-col p-8 overflow-y-auto">
-                    <div className="mb-4 text-[10px] font-mono bg-black text-green-400 p-2 rounded">
-                      STEP: {currentStepIndex + 1} ({currentStep.id})
-                    </div>
-
-                    <div className="flex gap-2 mb-8">
-                      {wizardSteps.map((_, i) => (
-                        <div
-                          key={i}
-                          className={cn(
-                            "w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm",
-                            i === currentStepIndex
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : i < currentStepIndex
-                                ? "bg-primary/20 text-primary border-primary"
-                                : "bg-muted text-muted-foreground border-muted",
-                          )}
-                        >
-                          {i + 1}
-                        </div>
-                      ))}
-                    </div>
-
-                    <h2 className="text-2xl font-semibold mb-2">
-                      {currentStep.title}
-                    </h2>
-                    <p className="text-muted-foreground mb-8 text-sm">
-                      {currentStep.description}
-                    </p>
-
-                    <div className="flex-1">
-                      <FormProvider {...form}>{renderStep()}</FormProvider>
-                    </div>
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <FormProvider {...form}>{renderStep()}</FormProvider>
                   </div>
                 )}
               </CardContent>
