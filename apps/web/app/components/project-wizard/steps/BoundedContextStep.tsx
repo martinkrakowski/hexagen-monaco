@@ -83,7 +83,7 @@ export function BoundedContextStep({
               }
               className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Next Step
+              Next
             </button>
           </div>
         </footer>
@@ -121,7 +121,7 @@ export function BoundedContextStep({
               }
               className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Next Step
+              Next
             </button>
           </div>
         </footer>
@@ -315,7 +315,7 @@ export function BoundedContextStep({
             }
             className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Next Step
+            Next
           </button>
         </div>
       </footer>
