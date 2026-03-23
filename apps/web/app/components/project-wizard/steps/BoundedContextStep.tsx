@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useFormContext } from "react-hook-form";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, X, Layers } from "lucide-react";
 import type {
   ProjectConfig,
   BoundedContext,
@@ -70,7 +70,7 @@ function ChipInput({
               onClick={() => removeValue(val)}
               className="h-4 w-4 inline-flex items-center justify-center rounded-full text-primary hover:bg-primary/20"
             >
-              ×
+              <X />
             </button>
           </span>
         ))}
@@ -177,7 +177,7 @@ export function BoundedContextStep({
       ) : (
         <>
           {/* --- THE TILES (Master) --- */}
-          <div className="flex flex-wrap gap-4 mb-6">
+          <div className="flex flex-wrap gap-1 mb-6">
             {boundedContexts.map((context: BoundedContext) => (
               <div
                 key={context.id}
@@ -195,8 +195,8 @@ export function BoundedContextStep({
                  `}
               >
                 <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-200 text-gray-500">
-                    📦
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500">
+                    <Layers />
                   </div>
                   <div className="space-y-1">
                     <h3 className="font-medium text-sm">
@@ -219,7 +219,7 @@ export function BoundedContextStep({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <AlertTriangle className="h-3 w-3 text-destructive" />
-                      <span className="text-[10px] font-medium text-destructive">
+                      <span className="mt-1 text-[10px] font-medium text-destructive">
                         Delete?
                       </span>
                       <button
@@ -245,10 +245,10 @@ export function BoundedContextStep({
                           }
                           setConfirmDeleteId(null);
                         }}
-                        className="p-0.5 rounded text-destructive hover:bg-destructive/20"
+                        className="p-1.5 rounded text-destructive hover:bg-destructive/20"
                         aria-label="Confirm delete"
                       >
-                        <X className="h-3 w-3" />
+                        <span className="text-[10px] font-medium">Yes</span>
                       </button>
                       <button
                         type="button"
@@ -256,10 +256,10 @@ export function BoundedContextStep({
                           e.stopPropagation();
                           setConfirmDeleteId(null);
                         }}
-                        className="p-0.5 rounded text-muted-foreground hover:bg-muted"
+                        className="p-1.5 rounded text-muted-foreground hover:bg-muted"
                         aria-label="Cancel delete"
                       >
-                        <span className="text-[10px] font-medium">No</span>
+                        <span className="mt-2 text-[10px] font-medium">No</span>
                       </button>
                     </div>
                   ) : (
