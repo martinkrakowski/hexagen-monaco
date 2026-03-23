@@ -192,26 +192,96 @@ export function BoundedContextStep({
                 }
                  `}
               >
-                <div className="flex items-center gap-2">
-                  {/* Visual Identifier (icon placeholder) */}
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-200 text-gray-500">
-                    {/* TODO: Replace with actual icon based on context type */}
-                    📦
-                  </div>
-                  <div className="space-y-1">
-                    {/* Context Title */}
-                    <h3 className="font-medium text-sm">
-                      {context.name || "Unnamed Context"}
-                    </h3>
-                    {/* Complexity Metric */}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <div className="flex h-6 items-center gap-1 px-2 rounded-full bg-gray-100 text-[10px]">
-                        {(context.coreDomainEntities?.length ?? 0) +
-                          (context.useCases?.length ?? 0)}{" "}
-                        items
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {/* Visual Identifier (icon placeholder) */}
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-200 text-gray-500">
+                        {/* TODO: Replace with actual icon based on context type */}
+                        📦
+                      </div>
+                      <div className="space-y-1">
+                        {/* Context Title */}
+                        <h3 className="font-medium text-sm">
+                          {context.name || "Unnamed Context"}
+                        </h3>
+                        {/* Complexity Metric */}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <div className="flex h-6 items-center gap-1 px-2 rounded-full bg-gray-100 text-[10px]">
+                            {(context.coreDomainEntities?.length ?? 0) +
+                              (context.useCases?.length ?? 0)}{" "}
+                            items
+                          </div>
+                        </div>
                       </div>
                     </div>
+                    {/* Delete Button - only show if more than 1 context and not the first context */}
+                    {boundedContexts.length > 1 &&
+                      boundedContexts[0].id !== context.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Find the index of the context to delete
+                            const indexToDelete = boundedContexts.findIndex(
+                              (c) => c.id === context.id,
+                            );
+                            if (indexToDelete >= 0) {
+                              const newContexts = [...boundedContexts];
+                              newContexts.splice(indexToDelete, 1);
+                              setValue("boundedContexts", newContexts);
+
+                              // If we deleted the active context, select another one
+                              if (activeContextId === context.id) {
+                                const newActiveIndex = Math.min(
+                                  indexToDelete,
+                                  newContexts.length - 1,
+                                );
+                                setActiveContextId(
+                                  newContexts[newActiveIndex]?.id ?? null,
+                                );
+                              }
+                            }
+                          }}
+                          className="p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
+                          aria-label="Delete context"
+                        >
+                          ×
+                        </button>
+                      )}
                   </div>
+                  {/* Delete Button - only show if more than 1 context and not the first context */}
+                  {boundedContexts.length > 1 &&
+                    boundedContexts[0].id !== context.id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Find the index of the context to delete
+                          const indexToDelete = boundedContexts.findIndex(
+                            (c) => c.id === context.id,
+                          );
+                          if (indexToDelete >= 0) {
+                            const newContexts = [...boundedContexts];
+                            newContexts.splice(indexToDelete, 1);
+                            setValue("boundedContexts", newContexts);
+
+                            // If we deleted the active context, select another one
+                            if (activeContextId === context.id) {
+                              const newActiveIndex = Math.min(
+                                indexToDelete,
+                                newContexts.length - 1,
+                              );
+                              setActiveContextId(
+                                newContexts[newActiveIndex]?.id ?? null,
+                              );
+                            }
+                          }
+                        }}
+                        className="p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
+                        aria-label="Delete context"
+                      >
+                        ×
+                      </button>
+                    )}
                 </div>
               </div>
             ))}
