@@ -153,20 +153,6 @@ export function BoundedContextStep({
     setActiveContextId(newContext.id);
   };
 
-  const handleRemoveContext = (index: number) => {
-    if (boundedContexts.length <= 1) return;
-    const contextToRemove = boundedContexts[index];
-    const newContexts = [...boundedContexts];
-    newContexts.splice(index, 1);
-    setValue("boundedContexts", newContexts);
-
-    // If we removed the active context, select another one
-    if (activeContextId === contextToRemove.id) {
-      const newActiveIndex = Math.min(index, newContexts.length - 1);
-      setActiveContextId(newContexts[newActiveIndex]?.id ?? null);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-4">
@@ -189,7 +175,7 @@ export function BoundedContextStep({
       ) : (
         <>
           {/* --- THE TILES (Master) --- */}
-          <div className="flex gap-4 overflow-x-auto mb-6">
+          <div className="flex flex-wrap gap-4 mb-6">
             {boundedContexts.map((context: BoundedContext) => (
               <div
                 key={context.id}
@@ -215,8 +201,8 @@ export function BoundedContextStep({
                     {/* Complexity Metric */}
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex h-6 items-center gap-1 px-2 rounded-full bg-gray-100 text-[10px]">
-                        {context.coreDomainEntities.length +
-                          context.useCases.length}{" "}
+                        {(context.coreDomainEntities?.length ?? 0) +
+                          (context.useCases?.length ?? 0)}{" "}
                         items
                       </div>
                     </div>
