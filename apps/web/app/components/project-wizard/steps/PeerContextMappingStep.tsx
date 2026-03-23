@@ -61,7 +61,7 @@ export function PeerContextMappingStep({
 
   if (boundedContexts.length < 2) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full bg-white overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-6 max-w-2xl">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
@@ -101,7 +101,7 @@ export function PeerContextMappingStep({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       <div className="flex-1 overflow-y-auto p-6">
         <div className="space-y-6 max-w-2xl">
           <div className="flex items-center justify-between mb-4">

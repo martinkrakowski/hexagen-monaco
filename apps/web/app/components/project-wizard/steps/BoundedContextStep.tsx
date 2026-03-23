@@ -50,25 +50,81 @@ export function BoundedContextStep({
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="flex flex-col h-full items-center justify-center bg-slate-50">
-        <div className="text-center p-8">
-          <h2 className="text-lg font-semibold text-slate-700 mb-2">
-            No Bounded Contexts
-          </h2>
-          <p className="text-sm text-slate-500">
-            Add a bounded context from the sidebar to get started.
-          </p>
+      <div className="flex flex-col h-full bg-white overflow-hidden">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-lg font-semibold text-slate-700 mb-2">
+              No Bounded Contexts
+            </h2>
+            <p className="text-sm text-slate-500">
+              Add a bounded context from the sidebar to get started.
+            </p>
+          </div>
         </div>
+        <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={!canProceed}
+            className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
+          >
+            Back
+          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-400">
+              Step {currentStep} of {totalSteps}
+            </span>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={
+                !canProceed ||
+                boundedContexts.some((c: BoundedContext) => !c.name?.trim())
+              }
+              className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next Step
+            </button>
+          </div>
+        </footer>
       </div>
     );
   }
 
   if (!activeContext) {
     return (
-      <div className="flex flex-col h-full items-center justify-center bg-slate-50">
-        <div className="text-center p-8">
-          <p className="text-sm text-slate-500">Select a context to edit</p>
+      <div className="flex flex-col h-full bg-white overflow-hidden">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-slate-500">Select a context to edit</p>
+          </div>
         </div>
+        <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={!canProceed}
+            className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
+          >
+            Back
+          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-400">
+              Step {currentStep} of {totalSteps}
+            </span>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={
+                !canProceed ||
+                boundedContexts.some((c: BoundedContext) => !c.name?.trim())
+              }
+              className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next Step
+            </button>
+          </div>
+        </footer>
       </div>
     );
   }
@@ -79,7 +135,7 @@ export function BoundedContextStep({
   const fieldPrefix = `boundedContexts.${contextIndex}`;
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       {/* Zone A: Identity (Fixed Top) */}
       <header className="flex-shrink-0 border-b border-slate-100 p-6 bg-slate-50/50">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

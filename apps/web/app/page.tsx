@@ -243,12 +243,14 @@ export default function Home() {
                         />
                       </div>
                       <div className="flex-1 overflow-hidden">
-                        <BoundedContextStep
-                          onNext={handleNext}
-                          onBack={handleBack}
-                          canProceed={canProceed}
-                          activeContextId={activeContextId}
-                        />
+                        <div className="h-full flex flex-col">
+                          <BoundedContextStep
+                            onNext={handleNext}
+                            onBack={handleBack}
+                            canProceed={canProceed}
+                            activeContextId={activeContextId}
+                          />
+                        </div>
                       </div>
                     </div>
                   </FormProvider>

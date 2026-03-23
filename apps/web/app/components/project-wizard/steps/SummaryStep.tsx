@@ -32,7 +32,7 @@ export function SummaryStep({
   const peerMappings = watch("peerMappings") || [];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       <div className="flex-1 overflow-y-auto p-6">
         <div className="space-y-6 max-w-2xl">
           <div className="mb-4">

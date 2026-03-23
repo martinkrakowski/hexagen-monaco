@@ -81,7 +81,7 @@ export function PortConfigurationStep({
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full bg-white overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-6 max-w-2xl">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
@@ -100,21 +100,26 @@ export function PortConfigurationStep({
           >
             Back
           </button>
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={!canProceed}
-            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
-          >
-            Next
-          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-400">
+              Step {currentStep} of {totalSteps}
+            </span>
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!canProceed}
+              className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </footer>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       <div className="flex-1 overflow-y-auto p-6">
         <div className="space-y-6 max-w-2xl">
           <div className="mb-4">
@@ -227,14 +232,19 @@ export function PortConfigurationStep({
         >
           Back
         </button>
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!canProceed}
-          className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
-        >
-          Next
-        </button>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-slate-400">
+            Step {currentStep} of {totalSteps}
+          </span>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!canProceed}
+            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </footer>
     </div>
   );
