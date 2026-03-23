@@ -11,6 +11,8 @@ interface PortConfigurationStepProps {
   onNext: () => void;
   onBack: () => void;
   canProceed: boolean;
+  currentStep?: number;
+  totalSteps?: number;
 }
 
 const INBOUND_PORTS = [
@@ -31,6 +33,8 @@ export function PortConfigurationStep({
   onNext,
   onBack,
   canProceed,
+  currentStep = 4,
+  totalSteps = 4,
 }: PortConfigurationStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 

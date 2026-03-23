@@ -13,6 +13,8 @@ interface SummaryStepProps {
   onGenerate: () => void;
   canProceed: boolean;
   isGenerating: boolean;
+  currentStep?: number;
+  totalSteps?: number;
 }
 
 export function SummaryStep({
@@ -20,6 +22,8 @@ export function SummaryStep({
   onGenerate,
   canProceed,
   isGenerating,
+  currentStep = 5,
+  totalSteps = 5,
 }: SummaryStepProps) {
   const { watch } = useFormContext<ProjectConfig>();
 
@@ -167,14 +171,19 @@ export function SummaryStep({
       </div>
 
       <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={isGenerating}
-          className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
-        >
-          Back
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={isGenerating}
+            className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
+          >
+            Back
+          </button>
+          <span className="text-xs text-muted-foreground">
+            Step {currentStep} of {totalSteps}
+          </span>
+        </div>
         <button
           type="button"
           onClick={onGenerate}

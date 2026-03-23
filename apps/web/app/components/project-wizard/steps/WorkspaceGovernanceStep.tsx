@@ -7,12 +7,16 @@ interface WorkspaceGovernanceStepProps {
   onNext: () => void;
   onBack: () => void;
   canProceed: boolean;
+  currentStep?: number;
+  totalSteps?: number;
 }
 
 export function WorkspaceGovernanceStep({
   onNext,
   onBack,
   canProceed,
+  currentStep = 1,
+  totalSteps = 4,
 }: WorkspaceGovernanceStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
@@ -171,16 +175,21 @@ export function WorkspaceGovernanceStep({
         >
           Back
         </button>
-        <button
-          type="button"
-          onClick={handleNext}
-          disabled={
-            !canProceed || !workspaceName.trim() || !namespacePrefix.trim()
-          }
-          className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Next
-        </button>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-slate-400">
+            Step {currentStep} of {totalSteps}
+          </span>
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={
+              !canProceed || !workspaceName.trim() || !namespacePrefix.trim()
+            }
+            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </footer>
     </div>
   );

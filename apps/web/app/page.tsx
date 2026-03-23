@@ -99,6 +99,7 @@ export default function Home() {
 
   const currentStep = wizardSteps[currentStepIndex];
   const isFirstStep = currentStepIndex === 0;
+  const totalSteps = wizardSteps.length;
 
   const canProceed =
     currentStepIndex === 1
@@ -173,6 +174,8 @@ export default function Home() {
             onNext={handleNext}
             onBack={handleBack}
             canProceed={isFirstStep}
+            currentStep={1}
+            totalSteps={totalSteps}
           />
         );
       case 1:
@@ -189,6 +192,8 @@ export default function Home() {
             onNext={handleNext}
             onBack={handleBack}
             canProceed={canProceed}
+            currentStep={3}
+            totalSteps={totalSteps}
           />
         );
       case 3:
@@ -197,6 +202,8 @@ export default function Home() {
             onNext={handleNext}
             onBack={handleBack}
             canProceed={canProceed}
+            currentStep={4}
+            totalSteps={totalSteps}
           />
         );
       case 4:
@@ -206,6 +213,8 @@ export default function Home() {
             onGenerate={handleGenerate}
             canProceed={canProceed}
             isGenerating={loading}
+            currentStep={5}
+            totalSteps={totalSteps}
           />
         );
       default:

@@ -10,12 +10,16 @@ interface PeerContextMappingStepProps {
   onNext: () => void;
   onBack: () => void;
   canProceed: boolean;
+  currentStep?: number;
+  totalSteps?: number;
 }
 
 export function PeerContextMappingStep({
   onNext,
   onBack,
   canProceed,
+  currentStep = 3,
+  totalSteps = 4,
 }: PeerContextMappingStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
@@ -79,13 +83,18 @@ export function PeerContextMappingStep({
           >
             Back
           </button>
-          <button
-            type="button"
-            onClick={onNext}
-            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
-          >
-            Next
-          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-400">
+              Step {currentStep} of {totalSteps}
+            </span>
+            <button
+              type="button"
+              onClick={onNext}
+              className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+            >
+              Next
+            </button>
+          </div>
         </footer>
       </div>
     );
@@ -242,13 +251,18 @@ export function PeerContextMappingStep({
         >
           Back
         </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
-        >
-          Next
-        </button>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-slate-400">
+            Step {currentStep} of {totalSteps}
+          </span>
+          <button
+            type="button"
+            onClick={onNext}
+            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+          >
+            Next
+          </button>
+        </div>
       </footer>
     </div>
   );
