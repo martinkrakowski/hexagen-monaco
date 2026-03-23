@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useFormContext } from "react-hook-form";
-import { Trash2 } from "lucide-react";
+import { X } from "lucide-react";
 import type {
   ProjectConfig,
   BoundedContext,
@@ -234,10 +234,10 @@ export function BoundedContextStep({
                           }
                         }
                       }}
-                      className="absolute top-2 right-2 p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
+                      className="absolute bottom-1 right-1 p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
                       aria-label="Delete context"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <X className="h-3 w-3" />
                     </button>
                   )}
               </div>
