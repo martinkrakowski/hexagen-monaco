@@ -16,7 +16,6 @@ import { useTheme } from "@/hooks/use-theme";
 import "@xyflow/react/dist/style.css";
 
 import { UnifiedBoundedContext } from "./BoundedContext";
-import { PeerContextNode } from "./peer-context-node";
 import { GroupBoundaryNode } from "./group-boundary-node";
 import type {
   HexagonNode as HexagonNodeData,
@@ -32,7 +31,7 @@ type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
 const nodeTypes = {
   hexagon: UnifiedBoundedContext,
   inner: UnifiedBoundedContext,
-  peer: PeerContextNode,
+  peer: UnifiedBoundedContext,
   group: GroupBoundaryNode,
 };
 
@@ -81,10 +80,8 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
       flowNode.style = n.style;
     }
 
-    // Use draggable property from data if present, otherwise default to true
-    if (n.draggable === false) {
-      flowNode.draggable = false;
-    }
+    // Make monorepo boundary not draggable; all other contexts draggable
+    flowNode.draggable = n.id === "monorepo-boundary" ? false : true;
 
     return flowNode;
   });
