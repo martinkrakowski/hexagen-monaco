@@ -4,8 +4,8 @@
     "rootDir": ".",
     "plugins": [
       {
-        "name": "next"
-      }
+        "name": "next",
+      },
     ],
     "allowJs": true,
     "incremental": true,
@@ -14,37 +14,48 @@
     "jsx": "preserve",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./app/*"],
-      "monaco-editor": ["./node_modules/monaco-editor"]
-    }
+      "@/*": ["./app/*", "./components/*", "./lib/*", "./hooks/*"],
+      "monaco-editor": ["./node_modules/monaco-editor"],
+    },
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "src/types/**/*.d.ts"
+    "src/types/**/*.d.ts",
+    "components/**/*",
+    "lib/**/*",
+    "hooks/**/*",
   ],
   "references": [
     {
-      "path": "../../packages/project-generation"
+      "path": "../../packages/project-generation",
     },
     {
-      "path": "../../packages/project-configuration"
+      "path": "../../packages/project-configuration",
     },
     {
-      "path": "../../packages/wizard-orchestration"
+      "path": "../../packages/wizard-orchestration",
     },
     {
-      "path": "../../packages/monaco-orchestration"
+      "path": "../../packages/monaco-orchestration",
     },
     {
-      "path": "../../packages/web-driver"
+      "path": "../../packages/web-driver",
     },
     {
-      "path": "../../packages/visualization"
+      "path": "../../packages/visualization",
     },
-    { "path": "../../packages/shared" }
+    {
+      "path": "../../packages/shared",
+    },
   ],
-  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+  ],
 }
