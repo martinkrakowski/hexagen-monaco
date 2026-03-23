@@ -29,6 +29,7 @@ import { IProjectWizardController } from "@hexagen/wizard-orchestration";
 import {
   WorkspaceGovernanceStep,
   BoundedContextStep,
+  BoundedContextSidebar,
   PeerContextMappingStep,
   PortConfigurationStep,
   SummaryStep,
@@ -222,39 +223,62 @@ export default function Home() {
               <CardHeader>
                 <CardTitle>HexaGen Project Wizard</CardTitle>
               </CardHeader>
-              <CardContent className="flex-1 flex flex-col p-8 overflow-y-auto">
-                <div className="mb-4 text-[10px] font-mono bg-black text-green-400 p-2 rounded">
-                  STEP: {currentStepIndex + 1} ({currentStep.id})
-                </div>
-
-                <div className="flex gap-2 mb-8">
-                  {wizardSteps.map((_, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm",
-                        i === currentStepIndex
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : i < currentStepIndex
-                            ? "bg-primary/20 text-primary border-primary"
-                            : "bg-muted text-muted-foreground border-muted",
-                      )}
-                    >
-                      {i + 1}
+              <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
+                {currentStepIndex === 1 ? (
+                  <FormProvider {...form}>
+                    <div className="flex flex-col h-full">
+                      <div className="shrink-0 border-b border-slate-200">
+                        <BoundedContextSidebar
+                          activeContextId={activeContextId}
+                          onContextSelect={setActiveContextId}
+                        />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <BoundedContextStep
+                          onNext={handleNext}
+                          onBack={handleBack}
+                          canProceed={canProceed}
+                          activeContextId={activeContextId}
+                        />
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  </FormProvider>
+                ) : (
+                  <div className="flex-1 flex flex-col p-8 overflow-y-auto">
+                    <div className="mb-4 text-[10px] font-mono bg-black text-green-400 p-2 rounded">
+                      STEP: {currentStepIndex + 1} ({currentStep.id})
+                    </div>
 
-                <h2 className="text-2xl font-semibold mb-2">
-                  {currentStep.title}
-                </h2>
-                <p className="text-muted-foreground mb-8 text-sm">
-                  {currentStep.description}
-                </p>
+                    <div className="flex gap-2 mb-8">
+                      {wizardSteps.map((_, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm",
+                            i === currentStepIndex
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : i < currentStepIndex
+                                ? "bg-primary/20 text-primary border-primary"
+                                : "bg-muted text-muted-foreground border-muted",
+                          )}
+                        >
+                          {i + 1}
+                        </div>
+                      ))}
+                    </div>
 
-                <div className="flex-1">
-                  <FormProvider {...form}>{renderStep()}</FormProvider>
-                </div>
+                    <h2 className="text-2xl font-semibold mb-2">
+                      {currentStep.title}
+                    </h2>
+                    <p className="text-muted-foreground mb-8 text-sm">
+                      {currentStep.description}
+                    </p>
+
+                    <div className="flex-1">
+                      <FormProvider {...form}>{renderStep()}</FormProvider>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           }
