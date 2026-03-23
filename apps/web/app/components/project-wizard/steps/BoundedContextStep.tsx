@@ -182,7 +182,7 @@ export function BoundedContextStep({
                 key={context.id}
                 // Clicking the tile changes the active context
                 onClick={() => setActiveContextId(context.id)}
-                className={`p-4 border rounded-lg ${
+                className={`relative p-4 border rounded-lg ${
                   boundedContexts.length === 1
                     ? "w-full"
                     : "min-w-[33.333%] max-w-[50%]"
@@ -193,55 +193,53 @@ export function BoundedContextStep({
                 }
                  `}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-200 text-gray-500">
-                      📦
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="font-medium text-sm">
-                        {context.name || "Unnamed Context"}
-                      </h3>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <div className="flex h-6 items-center gap-1 px-2 rounded-full bg-gray-100 text-[10px]">
-                          {(context.coreDomainEntities?.length ?? 0) +
-                            (context.useCases?.length ?? 0)}{" "}
-                          items
-                        </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-200 text-gray-500">
+                    📦
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-sm">
+                      {context.name || "Unnamed Context"}
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex h-6 items-center gap-1 px-2 rounded-full bg-gray-100 text-[10px]">
+                        {(context.coreDomainEntities?.length ?? 0) +
+                          (context.useCases?.length ?? 0)}{" "}
+                        items
                       </div>
                     </div>
                   </div>
-                  {boundedContexts.length > 1 &&
-                    boundedContexts[0].id !== context.id && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const indexToDelete = boundedContexts.findIndex(
-                            (c) => c.id === context.id,
-                          );
-                          if (indexToDelete >= 0) {
-                            const newContexts = [...boundedContexts];
-                            newContexts.splice(indexToDelete, 1);
-                            setValue("boundedContexts", newContexts);
-                            if (activeContextId === context.id) {
-                              const newActiveIndex = Math.min(
-                                indexToDelete,
-                                newContexts.length - 1,
-                              );
-                              setActiveContextId(
-                                newContexts[newActiveIndex]?.id ?? null,
-                              );
-                            }
-                          }
-                        }}
-                        className="p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
-                        aria-label="Delete context"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
                 </div>
+                {boundedContexts.length > 1 &&
+                  boundedContexts[0].id !== context.id && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const indexToDelete = boundedContexts.findIndex(
+                          (c) => c.id === context.id,
+                        );
+                        if (indexToDelete >= 0) {
+                          const newContexts = [...boundedContexts];
+                          newContexts.splice(indexToDelete, 1);
+                          setValue("boundedContexts", newContexts);
+                          if (activeContextId === context.id) {
+                            const newActiveIndex = Math.min(
+                              indexToDelete,
+                              newContexts.length - 1,
+                            );
+                            setActiveContextId(
+                              newContexts[newActiveIndex]?.id ?? null,
+                            );
+                          }
+                        }
+                      }}
+                      className="absolute top-2 right-2 p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
+                      aria-label="Delete context"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
               </div>
             ))}
           </div>
