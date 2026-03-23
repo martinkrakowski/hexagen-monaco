@@ -77,18 +77,22 @@ export function PortConfigurationStep({
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="space-y-6">
-        <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
-          <p className="text-sm text-muted-foreground">
-            No bounded contexts available. Add contexts first.
-          </p>
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-6 max-w-2xl">
+            <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
+              <p className="text-sm text-muted-foreground">
+                No bounded contexts available. Add contexts first.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-between pt-6">
+        <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2 text-sm text-muted-foreground hover:text-muted-foreground/75 transition-colors"
+            className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300"
           >
             Back
           </button>
@@ -96,121 +100,126 @@ export function PortConfigurationStep({
             type="button"
             onClick={onNext}
             disabled={!canProceed}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
           >
             Next
           </button>
-        </div>
+        </footer>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="mb-4">
-        <h2 className="text-xl font-bold">Port Configuration</h2>
-        <p className="text-sm text-muted-foreground">
-          Configure inbound (West) and outbound (East) ports for each context
-        </p>
-      </div>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="space-y-6 max-w-2xl">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Port Configuration</h2>
+            <p className="text-sm text-muted-foreground">
+              Configure inbound (West) and outbound (East) ports for each
+              context
+            </p>
+          </div>
 
-      <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
-        {boundedContexts.map((context: BoundedContext, index: number) => {
-          const portConfig = context.portConfiguration || {
-            inboundPorts: [],
-            outboundPorts: [],
-          };
+          <div className="space-y-6">
+            {boundedContexts.map((context: BoundedContext, index: number) => {
+              const portConfig = context.portConfiguration || {
+                inboundPorts: [],
+                outboundPorts: [],
+              };
 
-          return (
-            <div
-              key={context.id}
-              className="border rounded-lg p-4 space-y-4 bg-card"
-            >
-              <div className="flex items-center gap-2 border-b border-border pb-3">
-                <span className="text-xs font-mono text-muted-foreground">
-                  {index + 1}.
-                </span>
-                <h3 className="font-medium">{context.name || "Unnamed"}</h3>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                {/* Inbound Ports (West) */}
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      West: Inbound Ports
-                    </h4>
-                    <p className="text-[10px] text-muted-foreground">
-                      Driving adapters that receive requests
-                    </p>
+              return (
+                <div
+                  key={context.id}
+                  className="border rounded-lg p-4 space-y-4 bg-card"
+                >
+                  <div className="flex items-center gap-2 border-b border-border pb-3">
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {index + 1}.
+                    </span>
+                    <h3 className="font-medium">{context.name || "Unnamed"}</h3>
                   </div>
-                  <div className="space-y-2">
-                    {INBOUND_PORTS.map((port) => (
-                      <label
-                        key={port.value}
-                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                      >
-                        <input
-                          type="checkbox"
-                          name={`boundedContexts.${index}.portConfiguration.inbound.${port.value}`}
-                          checked={portConfig.inboundPorts?.includes(
-                            port.value as never,
-                          )}
-                          onChange={() =>
-                            handleTogglePort(index, "inbound", port.value)
-                          }
-                          className="h-4 w-4 accent-primary"
-                        />
-                        <span className="text-xs">{port.label}</span>
-                      </label>
-                    ))}
+
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Inbound Ports (West) */}
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                          West: Inbound Ports
+                        </h4>
+                        <p className="text-[10px] text-muted-foreground">
+                          Driving adapters that receive requests
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {INBOUND_PORTS.map((port) => (
+                          <label
+                            key={port.value}
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          >
+                            <input
+                              type="checkbox"
+                              name={`boundedContexts.${index}.portConfiguration.inbound.${port.value}`}
+                              checked={portConfig.inboundPorts?.includes(
+                                port.value as never,
+                              )}
+                              onChange={() =>
+                                handleTogglePort(index, "inbound", port.value)
+                              }
+                              className="h-4 w-4 accent-primary"
+                            />
+                            <span className="text-xs">{port.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Outbound Ports (East) */}
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                          East: Outbound Ports
+                        </h4>
+                        <p className="text-[10px] text-muted-foreground">
+                          Driven adapters that make external calls
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {OUTBOUND_PORTS.map((port) => (
+                          <label
+                            key={port.value}
+                            className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          >
+                            <input
+                              type="checkbox"
+                              name={`boundedContexts.${index}.portConfiguration.outbound.${port.value}`}
+                              checked={portConfig.outboundPorts?.includes(
+                                port.value as never,
+                              )}
+                              onChange={() =>
+                                handleTogglePort(index, "outbound", port.value)
+                              }
+                              className="h-4 w-4 accent-primary"
+                            />
+                            <span className="text-xs">{port.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {/* Outbound Ports (East) */}
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      East: Outbound Ports
-                    </h4>
-                    <p className="text-[10px] text-muted-foreground">
-                      Driven adapters that make external calls
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    {OUTBOUND_PORTS.map((port) => (
-                      <label
-                        key={port.value}
-                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                      >
-                        <input
-                          type="checkbox"
-                          name={`boundedContexts.${index}.portConfiguration.outbound.${port.value}`}
-                          checked={portConfig.outboundPorts?.includes(
-                            port.value as never,
-                          )}
-                          onChange={() =>
-                            handleTogglePort(index, "outbound", port.value)
-                          }
-                          className="h-4 w-4 accent-primary"
-                        />
-                        <span className="text-xs">{port.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      <div className="flex justify-between pt-6 border-t border-border">
+      <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
         <button
           type="button"
           onClick={onBack}
           disabled={!canProceed}
-          className="px-4 py-2 text-sm text-muted-foreground hover:text-muted-foreground/75 transition-colors disabled:opacity-50"
+          className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
         >
           Back
         </button>
@@ -218,11 +227,11 @@ export function PortConfigurationStep({
           type="button"
           onClick={onNext}
           disabled={!canProceed}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+          className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
         >
           Next
         </button>
-      </div>
+      </footer>
     </div>
   );
 }

@@ -237,7 +237,7 @@ export function BoundedContextStep({
       </div>
 
       {/* Zone C: Footer (Sticky Bottom) */}
-      <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+      <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
         <button
           type="button"
           onClick={onBack}
