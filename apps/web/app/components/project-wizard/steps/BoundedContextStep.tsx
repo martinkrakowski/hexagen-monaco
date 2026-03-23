@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useFormContext } from "react-hook-form";
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import type {
   ProjectConfig,
   BoundedContext,
@@ -102,6 +102,7 @@ export function BoundedContextStep({
   const [activeContextId, setActiveContextId] = useState<string | null>(
     boundedContexts.length > 0 ? boundedContexts[0].id : null,
   );
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const updateContext = (
     index: number,
@@ -211,35 +212,69 @@ export function BoundedContextStep({
                   </div>
                 </div>
                 {boundedContexts.length > 1 &&
-                  boundedContexts[0].id !== context.id && (
+                  boundedContexts[0].id !== context.id &&
+                  (confirmDeleteId === context.id ? (
+                    <div
+                      className="absolute bottom-1 right-1 flex items-center gap-1 bg-white/95 backdrop-blur-sm border border-destructive/30 rounded-md px-2 py-1 shadow-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <AlertTriangle className="h-3 w-3 text-destructive" />
+                      <span className="text-[10px] font-medium text-destructive">
+                        Delete?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const indexToDelete = boundedContexts.findIndex(
+                            (c) => c.id === context.id,
+                          );
+                          if (indexToDelete >= 0) {
+                            const newContexts = [...boundedContexts];
+                            newContexts.splice(indexToDelete, 1);
+                            setValue("boundedContexts", newContexts);
+                            if (activeContextId === context.id) {
+                              const newActiveIndex = Math.min(
+                                indexToDelete,
+                                newContexts.length - 1,
+                              );
+                              setActiveContextId(
+                                newContexts[newActiveIndex]?.id ?? null,
+                              );
+                            }
+                          }
+                          setConfirmDeleteId(null);
+                        }}
+                        className="p-0.5 rounded text-destructive hover:bg-destructive/20"
+                        aria-label="Confirm delete"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(null);
+                        }}
+                        className="p-0.5 rounded text-muted-foreground hover:bg-muted"
+                        aria-label="Cancel delete"
+                      >
+                        <span className="text-[10px] font-medium">No</span>
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const indexToDelete = boundedContexts.findIndex(
-                          (c) => c.id === context.id,
-                        );
-                        if (indexToDelete >= 0) {
-                          const newContexts = [...boundedContexts];
-                          newContexts.splice(indexToDelete, 1);
-                          setValue("boundedContexts", newContexts);
-                          if (activeContextId === context.id) {
-                            const newActiveIndex = Math.min(
-                              indexToDelete,
-                              newContexts.length - 1,
-                            );
-                            setActiveContextId(
-                              newContexts[newActiveIndex]?.id ?? null,
-                            );
-                          }
-                        }
+                        setConfirmDeleteId(context.id);
                       }}
-                      className="absolute bottom-1 right-1 p-1 rounded-full text-destructive hover:bg-destructive/20 hover:text-destructive/90 transition-colors"
+                      className="absolute bottom-1 right-1 p-1 rounded-full text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
                       aria-label="Delete context"
                     >
                       <X className="h-3 w-3" />
                     </button>
-                  )}
+                  ))}
               </div>
             ))}
           </div>
