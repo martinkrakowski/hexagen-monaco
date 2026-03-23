@@ -98,6 +98,9 @@ export function BoundedContextStep({
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
   const boundedContexts = watch("boundedContexts") || [];
+  const [activeContextId, setActiveContextId] = useState<string | null>(
+    boundedContexts.length > 0 ? boundedContexts[0].id : null,
+  );
 
   const updateContext = (
     index: number,
@@ -146,13 +149,22 @@ export function BoundedContextStep({
     };
     const newContexts = [...boundedContexts, newContext];
     setValue("boundedContexts", newContexts);
+    // Set the newly added context as active
+    setActiveContextId(newContext.id);
   };
 
   const handleRemoveContext = (index: number) => {
     if (boundedContexts.length <= 1) return;
+    const contextToRemove = boundedContexts[index];
     const newContexts = [...boundedContexts];
     newContexts.splice(index, 1);
     setValue("boundedContexts", newContexts);
+
+    // If we removed the active context, select another one
+    if (activeContextId === contextToRemove.id) {
+      const newActiveIndex = Math.min(index, newContexts.length - 1);
+      setActiveContextId(newContexts[newActiveIndex]?.id ?? null);
+    }
   };
 
   return (
@@ -175,72 +187,109 @@ export function BoundedContextStep({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {boundedContexts.map((context: BoundedContext, index: number) => (
-            <div
-              key={context.id}
-              className="border rounded-lg p-4 space-y-4 bg-card"
-            >
-              <div className="flex items-center justify-between">
+        <>
+          {/* --- THE TILES (Master) --- */}
+          <div className="flex gap-4 overflow-x-auto mb-6">
+            {boundedContexts.map((context: BoundedContext) => (
+              <div
+                key={context.id}
+                // Clicking the tile changes the active context
+                onClick={() => setActiveContextId(context.id)}
+                className={`p-4 border rounded-lg flex-1 shrink-0 ${
+                  activeContextId === context.id
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-300 bg-white"
+                }`}
+              >
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-muted-foreground w-6 shrink-0">
-                    {index + 1}.
-                  </span>
+                  {/* Visual Identifier (icon placeholder) */}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-200 text-gray-500">
+                    {/* TODO: Replace with actual icon based on context type */}
+                    📦
+                  </div>
+                  <div className="space-y-1">
+                    {/* Context Title */}
+                    <h3 className="font-medium text-sm">
+                      {context.name || "Unnamed Context"}
+                    </h3>
+                    {/* Complexity Metric */}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex h-6 items-center gap-1 px-2 rounded-full bg-gray-100 text-[10px]">
+                        {context.coreDomainEntities.length +
+                          context.useCases.length}{" "}
+                        items
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* --- THE FORM (Detail) --- */}
+          {/* Find the specific context and render ONLY its form */}
+          {boundedContexts.map((context: BoundedContext) => {
+            if (context.id !== activeContextId) return null; // Hide all others
+
+            return (
+              <div key={context.id} className="space-y-4">
+                {/* Field 1: Context Name (Text Input) */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Context Name
+                  </label>
                   <input
-                    name={`boundedContexts.${index}.name`}
+                    name={`boundedContexts.${boundedContexts.findIndex((c) => c.id === context.id)}.name`}
                     value={context.name}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const index = boundedContexts.findIndex(
+                        (c) => c.id === context.id,
+                      );
                       updateContext(index, (ctx) => ({
                         ...ctx,
                         name: e.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                     className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm font-medium"
                     placeholder="Context name (required)"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveContext(index)}
-                  disabled={boundedContexts.length === 1}
-                  aria-label={`Remove context ${context.name || index + 1}`}
-                  className="px-2 py-1 text-xs text-destructive hover:text-destructive/90 transition-colors disabled:opacity-50"
-                >
-                  Remove
-                </button>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
+                {/* Field 2: Core Domain Entities (Tokenized Input) */}
                 <ChipInput
                   label="Core Domain Entities"
                   placeholder="e.g. Invoice, User, Catalog"
-                  name={`boundedContexts.${index}.coreDomainEntities`}
+                  name={`boundedContexts.${boundedContexts.findIndex((c) => c.id === context.id)}.coreDomainEntities`}
                   values={context.coreDomainEntities || []}
-                  onChange={(values) =>
+                  onChange={(values) => {
+                    const index = boundedContexts.findIndex(
+                      (c) => c.id === context.id,
+                    );
                     updateContext(index, (ctx) => ({
                       ...ctx,
                       coreDomainEntities: values,
-                    }))
-                  }
+                    }));
+                  }}
                 />
+
+                {/* Field 3: Primary Use Cases (Tokenized Input) */}
                 <ChipInput
                   label="Primary Use Cases"
                   placeholder="e.g. CreateInvoice, ProcessPayment"
-                  name={`boundedContexts.${index}.useCases`}
+                  name={`boundedContexts.${boundedContexts.findIndex((c) => c.id === context.id)}.useCases`}
                   values={context.useCases || []}
-                  onChange={(values) =>
+                  onChange={(values) => {
+                    const index = boundedContexts.findIndex(
+                      (c) => c.id === context.id,
+                    );
                     updateContext(index, (ctx) => ({
                       ...ctx,
                       useCases: values,
-                    }))
-                  }
+                    }));
+                  }}
                 />
-              </div>
 
-              <div className="border-t border-border pt-4 space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Infrastructure
-                </h4>
+                {/* Fields 4 & 5: Infrastructure Targets (Split Grid Dropdowns) */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
@@ -248,13 +297,16 @@ export function BoundedContextStep({
                     </label>
                     <select
                       value={context.infrastructureTarget || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const index = boundedContexts.findIndex(
+                          (c) => c.id === context.id,
+                        );
                         updateContext(index, (ctx) => ({
                           ...ctx,
                           infrastructureTarget: e.target
                             .value as BoundedContext["infrastructureTarget"],
-                        }))
-                      }
+                        }));
+                      }}
                       className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                     >
                       <option value="" disabled>
@@ -273,13 +325,16 @@ export function BoundedContextStep({
                     </label>
                     <select
                       value={context.uiFramework || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const index = boundedContexts.findIndex(
+                          (c) => c.id === context.id,
+                        );
                         updateContext(index, (ctx) => ({
                           ...ctx,
                           uiFramework: e.target
                             .value as BoundedContext["uiFramework"],
-                        }))
-                      }
+                        }));
+                      }}
                       className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                     >
                       {uiFrameworkOptions.map((opt) => (
@@ -291,9 +346,9 @@ export function BoundedContextStep({
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            );
+          })}
+        </>
       )}
 
       <div className="flex justify-between pt-6">
