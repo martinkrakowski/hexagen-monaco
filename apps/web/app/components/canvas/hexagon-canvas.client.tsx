@@ -15,7 +15,7 @@ import { toPng } from "html-to-image";
 import { useTheme } from "@/hooks/use-theme";
 import "@xyflow/react/dist/style.css";
 
-import { HexagonNode } from "./hexagon-node";
+import { UnifiedBoundedContext } from "./BoundedContext";
 import { PeerContextNode } from "./peer-context-node";
 import { GroupBoundaryNode } from "./group-boundary-node";
 import type {
@@ -30,8 +30,8 @@ type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
 
 const nodeTypes = {
-  hexagon: HexagonNode,
-  inner: HexagonNode,
+  hexagon: UnifiedBoundedContext,
+  inner: UnifiedBoundedContext,
   peer: PeerContextNode,
   group: GroupBoundaryNode,
 };
@@ -48,11 +48,15 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   return nodes.map((node): HexagonFlowNode => {
     const n = node as HexagonNodeWithLayout;
 
-    let nodeType = n.type === "inner" ? "inner" : "hexagon";
+    let nodeType: "hexagon" | "inner" | "peer" | "group";
     if (n.id === "monorepo-boundary" || n.type === "group") {
       nodeType = "group";
     } else if (n.isPeer || n.type === "peer") {
       nodeType = "peer";
+    } else if (n.type === "inner") {
+      nodeType = "inner";
+    } else {
+      nodeType = "hexagon";
     }
 
     const flowNode: HexagonFlowNode = {
