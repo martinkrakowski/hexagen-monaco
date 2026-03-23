@@ -181,11 +181,16 @@ export function BoundedContextStep({
                 key={context.id}
                 // Clicking the tile changes the active context
                 onClick={() => setActiveContextId(context.id)}
-                className={`p-4 border rounded-lg flex-1 shrink-0 ${
+                className={`p-4 border rounded-lg ${
+                  boundedContexts.length === 1
+                    ? "w-full"
+                    : "min-w-[33.333%] max-w-[50%]"
+                } ${
                   activeContextId === context.id
                     ? "border-blue-500 bg-blue-50"
                     : "border-gray-300 bg-white"
-                }`}
+                }
+                 `}
               >
                 <div className="flex items-center gap-2">
                   {/* Visual Identifier (icon placeholder) */}
