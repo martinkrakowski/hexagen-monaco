@@ -190,27 +190,29 @@ export function SummaryStep({
       </div>
 
       <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={isGenerating}
-            className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
-          >
-            Back
-          </button>
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-        </div>
         <button
           type="button"
-          onClick={onGenerate}
-          disabled={isGenerating || boundedContexts.length === 0 || !canProceed}
-          className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={onBack}
+          disabled={isGenerating}
+          className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
         >
-          {isGenerating ? "Generating..." : "Generate Project"}
+          Back
         </button>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-slate-400">
+            Step {currentStep} of {totalSteps}
+          </span>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={
+              isGenerating || boundedContexts.length === 0 || !canProceed
+            }
+            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGenerating ? "Generating..." : "Generate Project"}
+          </button>
+        </div>
       </footer>
     </div>
   );
