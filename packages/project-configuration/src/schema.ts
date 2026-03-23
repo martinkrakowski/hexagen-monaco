@@ -95,6 +95,8 @@ export const BoundedContextSchema = z.object({
     .enum(["nestjs", "express", "serverless", "plain-ts"])
     .optional(),
   coreDomainEntities: z.array(z.string()).default([]),
+  valueObjects: z.array(z.string()).default([]),
+  domainEvents: z.array(z.string()).default([]),
   portConfiguration: PortConfigurationSchema.optional(),
   // Backward compatibility: support legacy fields
   apiFramework: z.enum(["Fastify", "Express", "NestJS"]).optional(),

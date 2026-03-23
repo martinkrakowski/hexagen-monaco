@@ -544,22 +544,7 @@ function UnifiedBoundedContextComponent({
   );
 }
 
-const UnifiedBoundedContext = memo(
-  UnifiedBoundedContextComponent,
-  (prev, next) => {
-    // Force re-render when stats change
-    const prevStats = prev.data.stats;
-    const nextStats = next.data.stats;
-    if (!prevStats && !nextStats) return false; // both null/undefined - equal
-    if (!prevStats || !nextStats) return true; // one is null - not equal
-    // Compare stats values
-    if (prevStats.aggregates !== nextStats.aggregates) return true;
-    if (prevStats.services !== nextStats.services) return true;
-    if (prevStats.events !== nextStats.events) return true;
-    if (prevStats.valueObjects !== nextStats.valueObjects) return true;
-    return false;
-  },
-);
+const UnifiedBoundedContext = memo(UnifiedBoundedContextComponent);
 
 UnifiedBoundedContext.displayName = "UnifiedBoundedContext";
 

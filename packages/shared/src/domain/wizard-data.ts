@@ -38,6 +38,10 @@ export interface BoundedContext {
   infrastructureTarget: "nestjs" | "express" | "serverless" | "plain-ts";
   // Core Domain Entities (required - comprehensive data collection)
   coreDomainEntities: string[];
+  // Value Objects (immutable objects defined by attributes)
+  valueObjects: string[];
+  // Domain Events (things that happened in the domain)
+  domainEvents: string[];
   // Domain Entities (legacy - backward compatibility)
   entities?: string[];
   // Domain Use Cases

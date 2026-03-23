@@ -128,6 +128,8 @@ export function BoundedContextStep({
       description: "",
       infrastructureTarget: "nestjs",
       coreDomainEntities: [],
+      valueObjects: [],
+      domainEvents: [],
       entities: [],
       useCases: [],
       portConfiguration: {
@@ -337,7 +339,41 @@ export function BoundedContextStep({
                   }}
                 />
 
-                {/* Fields 4 & 5: Infrastructure Targets (Split Grid Dropdowns) */}
+                {/* Field 4: Value Objects (Tokenized Input) */}
+                <ChipInput
+                  label="Value Objects"
+                  placeholder="e.g. Money, Address, Email"
+                  name={`boundedContexts.${boundedContexts.findIndex((c) => c.id === context.id)}.valueObjects`}
+                  values={context.valueObjects || []}
+                  onChange={(values) => {
+                    const index = boundedContexts.findIndex(
+                      (c) => c.id === context.id,
+                    );
+                    updateContext(index, (ctx) => ({
+                      ...ctx,
+                      valueObjects: values,
+                    }));
+                  }}
+                />
+
+                {/* Field 5: Domain Events (Tokenized Input) */}
+                <ChipInput
+                  label="Domain Events"
+                  placeholder="e.g. OrderPlaced, PaymentReceived"
+                  name={`boundedContexts.${boundedContexts.findIndex((c) => c.id === context.id)}.domainEvents`}
+                  values={context.domainEvents || []}
+                  onChange={(values) => {
+                    const index = boundedContexts.findIndex(
+                      (c) => c.id === context.id,
+                    );
+                    updateContext(index, (ctx) => ({
+                      ...ctx,
+                      domainEvents: values,
+                    }));
+                  }}
+                />
+
+                {/* Fields 6 & 7: Infrastructure Targets (Split Grid Dropdowns) */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">

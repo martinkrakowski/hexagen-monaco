@@ -74,6 +74,8 @@ export const emptyFormValues: ProjectConfig = {
       description: "",
       infrastructureTarget: "nestjs",
       coreDomainEntities: [],
+      valueObjects: [],
+      domainEvents: [],
       entities: [],
       useCases: [],
       portConfiguration: {

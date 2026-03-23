@@ -21,6 +21,10 @@ export interface HexagonNodeWithLayout extends HexagonNode {
   stats?: {
     aggregates: number;
     aggregateItems: string[];
+    valueObjects: number;
+    valueObjectItems: string[];
+    events: number;
+    eventItems: string[];
     services: number;
     serviceItems: string[];
   };
@@ -144,6 +148,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
   boundedContexts.forEach((ctx: BoundedContext, index: number) => {
     const entityItems = ctx.coreDomainEntities ?? ctx.entities ?? [];
     const useCaseItems = ctx.useCases ?? [];
+    const valueObjectItems = ctx.valueObjects ?? [];
+    const eventItems = ctx.domainEvents ?? [];
 
     // Calculate position for each context (horizontal spacing using config constants)
     const contextOffsetX = (index - (contextCount - 1) / 2) * contextSpacing;
@@ -172,6 +178,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       stats: {
         aggregates: entityItems.length,
         aggregateItems: entityItems,
+        valueObjects: valueObjectItems.length,
+        valueObjectItems: valueObjectItems,
+        events: eventItems.length,
+        eventItems: eventItems,
         services: useCaseItems.length,
         serviceItems: useCaseItems,
       },
@@ -512,6 +522,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       stats: {
         aggregates: bc.entityNames?.length ?? 0,
         aggregateItems: bc.entityNames ?? [],
+        valueObjects: 0,
+        valueObjectItems: [],
+        events: 0,
+        eventItems: [],
         services: bc.useCaseNames?.length ?? 0,
         serviceItems: bc.useCaseNames ?? [],
       },
