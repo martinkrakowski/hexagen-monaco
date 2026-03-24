@@ -1,4 +1,4 @@
-import { GraphCanvasWrapper } from "../components/canvas/graph-canvas-wrapper";
+import { GraphCanvasWrapper } from '../components/canvas/GraphCanvasWrapper';
 
 export default function ArchitectureViewerPage() {
   return (

@@ -1,21 +1,21 @@
-"use client";
+'use client';
 
-import { memo } from "react";
-import { UnifiedBoundedContext } from "./BoundedContext";
-import type { NodeProps } from "@xyflow/react";
-import type { Node } from "@xyflow/react";
+import { memo } from 'react';
+import { UnifiedBoundedContext } from './BoundedContext';
+import type { NodeProps } from '@xyflow/react';
+import type { Node } from '@xyflow/react';
 
 interface HexagonData extends Record<string, unknown> {
   label: string;
   type?:
-    | "bounded-context"
-    | "entity"
-    | "port"
-    | "use-case"
-    | "adapter"
-    | "inner";
+    | 'bounded-context'
+    | 'entity'
+    | 'port'
+    | 'use-case'
+    | 'adapter'
+    | 'inner';
   isPeer?: boolean;
-  side?: "north" | "south" | "east" | "west";
+  side?: 'north' | 'south' | 'east' | 'west';
   category?: string;
   stats?: {
     aggregates?: number;
@@ -41,7 +41,7 @@ function HexagonNodeComponent({
 
 const HexagonNode = memo(HexagonNodeComponent);
 
-HexagonNode.displayName = "HexagonNode";
+HexagonNode.displayName = 'HexagonNode';
 
 export { HexagonNode };
 export type { HexagonData };

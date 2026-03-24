@@ -10,7 +10,7 @@ import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 
 import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
-import { GraphCanvasWrapper } from '@/components/canvas/graph-canvas-wrapper';
+import { GraphCanvasWrapper } from '@/components/canvas/GraphCanvasWrapper';
 import { StepHeader } from '@/components/project-wizard/steps/StepHeader';
 
 import {
