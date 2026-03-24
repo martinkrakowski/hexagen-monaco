@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { WizardData } from "@hexagen/shared";
 
+const MAX_RETRIES = 3;
+
 export function useProjectGeneration(wizardData: WizardData) {
   const [files, setFiles] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState<boolean>(false);
@@ -8,6 +10,8 @@ export function useProjectGeneration(wizardData: WizardData) {
   const [isStale, setIsStale] = useState<boolean>(false);
 
   const lastGeneratedRef = useRef<string | null>(null);
+  const hasAttemptedRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   const generate = useCallback(
     async (force = false) => {
@@ -17,6 +21,8 @@ export function useProjectGeneration(wizardData: WizardData) {
         setIsStale(false);
         return;
       }
+
+      if (loading) return;
 
       setLoading(true);
       setError(null);
@@ -45,7 +51,9 @@ export function useProjectGeneration(wizardData: WizardData) {
         setFiles(fileMap);
         lastGeneratedRef.current = currentDataStr;
         setIsStale(false);
+        retryCountRef.current = 0;
       } catch (err: unknown) {
+        retryCountRef.current += 1;
         const message =
           err instanceof Error
             ? err.message
@@ -55,7 +63,7 @@ export function useProjectGeneration(wizardData: WizardData) {
         setLoading(false);
       }
     },
-    [wizardData],
+    [wizardData, loading],
   );
 
   // Check for staleness without triggering generation
@@ -70,9 +78,10 @@ export function useProjectGeneration(wizardData: WizardData) {
     }
   }, [wizardData]);
 
-  // Auto-generate on mount if we have no files
+  // Auto-generate once on mount if we have no files
   useEffect(() => {
-    if (files.size === 0 && !loading) {
+    if (!hasAttemptedRef.current && files.size === 0 && !loading) {
+      hasAttemptedRef.current = true;
       generate();
     }
   }, [files.size, loading, generate]);
@@ -82,6 +91,11 @@ export function useProjectGeneration(wizardData: WizardData) {
     loading,
     error,
     isStale,
-    refresh: () => generate(true),
+    canRetry: retryCountRef.current < MAX_RETRIES,
+    refresh: () => {
+      if (retryCountRef.current < MAX_RETRIES) {
+        generate(true);
+      }
+    },
   };
 }

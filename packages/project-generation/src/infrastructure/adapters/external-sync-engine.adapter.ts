@@ -8,6 +8,12 @@ import type { Result } from "@hexagen/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
+import {
+  generateRootPackageJson,
+  generateRootTsConfig,
+  generateRootTurboJson,
+  generateStubContent,
+} from "./root-files.js";
 
 const noopLogger = {
   info: () => {},
@@ -40,6 +46,9 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
         "utf8",
       );
 
+      // Create root files before engine runs
+      await this.createRootFiles(targetRoot, manifest);
+
       const flags: SyncFlags = {
         dryRun: false,
         force: true,
@@ -56,6 +65,9 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
       });
 
       await engine.run();
+
+      // Create stub files after engine runs (directories now exist)
+      await this.createStubFiles(targetRoot, manifest);
 
       const files = await this.collectFileTree(targetRoot);
 
@@ -78,6 +90,83 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
           cause: err,
         },
       };
+    }
+  }
+
+  private async createRootFiles(
+    targetRoot: string,
+    manifest: Record<string, unknown>,
+  ): Promise<void> {
+    const systemName = (manifest.system as string) || "hexagen-project";
+    await fs.writeFile(
+      path.join(targetRoot, "package.json"),
+      generateRootPackageJson(systemName),
+    );
+    await fs.writeFile(
+      path.join(targetRoot, "tsconfig.base.json"),
+      generateRootTsConfig(),
+    );
+    await fs.writeFile(
+      path.join(targetRoot, "turbo.json"),
+      generateRootTurboJson(),
+    );
+  }
+
+  private async createStubFiles(
+    targetRoot: string,
+    manifest: Record<string, unknown>,
+  ): Promise<void> {
+    const contexts = manifest.bounded_contexts as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (!contexts) return;
+
+    for (const bc of contexts) {
+      const bcName = bc.name as string;
+      const bcPath = path.join(targetRoot, "packages", bcName, "src");
+      const layers = bc.layers as Record<string, unknown> | undefined;
+
+      const inPorts = (layers?.application as Record<string, unknown>)
+        ?.ports as Record<string, string[]> | undefined;
+      const outPorts = (layers?.application as Record<string, unknown>)
+        ?.ports as Record<string, string[]> | undefined;
+      const adapters = (layers?.infrastructure as Record<string, unknown>)
+        ?.adapters as string[] | undefined;
+      const useCases = (layers?.application as Record<string, unknown>)
+        ?.use_cases as string[] | undefined;
+      const entities = (layers?.domain as Record<string, unknown>)?.entities as
+        | string[]
+        | undefined;
+      const valueObjects = (layers?.domain as Record<string, unknown>)
+        ?.value_objects as string[] | undefined;
+
+      const writeStub = async (subPath: string, fileName: string) => {
+        try {
+          const fullDir = path.join(bcPath, subPath);
+          await fs.mkdir(fullDir, { recursive: true });
+          const finalName = fileName.endsWith(".ts")
+            ? fileName
+            : `${fileName}.ts`;
+          await fs.writeFile(
+            path.join(fullDir, finalName),
+            generateStubContent(finalName),
+          );
+        } catch {
+          // Directory may not exist if SyncEngine didn't create it — skip silently
+        }
+      };
+
+      for (const p of inPorts?.in || [])
+        await writeStub("application/ports/in", p);
+      for (const p of outPorts?.out || [])
+        await writeStub("application/ports/out", p);
+      for (const a of adapters || [])
+        await writeStub("infrastructure/adapters", a);
+      for (const uc of useCases || [])
+        await writeStub("application/use-cases", uc);
+      for (const e of entities || []) await writeStub("domain/entities", e);
+      for (const vo of valueObjects || [])
+        await writeStub("domain/value_objects", vo);
     }
   }
 
