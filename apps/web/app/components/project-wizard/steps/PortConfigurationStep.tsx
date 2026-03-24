@@ -109,7 +109,7 @@ export function PortConfigurationStep({
           </p>
         </div>
         <div className="flex-1 overflow-y-auto px-6 pb-6">
-          <div className="space-y-6 max-w-2xl">
+          <div className="space-y-6 max-w-2xl lg:max-w-2xl">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
               <p className="text-sm text-muted-foreground">
                 No bounded contexts available. Add contexts first.
@@ -173,7 +173,7 @@ export function PortConfigurationStep({
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 max-w-2xl lg:max-w-2xl">
           <div className="space-y-6">
             {boundedContexts.map((context: BoundedContext, index: number) => {
               const portConfig = context.portConfiguration || {

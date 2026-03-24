@@ -60,7 +60,7 @@ export function SummaryStep({
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 max-w-2xl lg:max-w-2xl">
           <div className="space-y-4">
             {/* Workspace Governance Summary */}
             <div className="border rounded-lg p-4 bg-card">
