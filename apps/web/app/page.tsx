@@ -240,7 +240,7 @@ export default function Home() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <ResizableLayout
           left={
-            <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-background">
+            <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
               <CardHeader>
                 <CardTitle>HexaGen Project Wizard</CardTitle>
               </CardHeader>
@@ -298,7 +298,7 @@ export default function Home() {
             </Card>
           }
           middle={
-            <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-background">
+            <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
               <CardHeader className="border-b border-border">
                 <CardTitle className="text-sm text-muted-foreground">
                   Architecture Preview
