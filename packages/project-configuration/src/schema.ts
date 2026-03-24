@@ -105,12 +105,17 @@ export const BoundedContextSchema = z.object({
     .optional()
     .default(""),
   persistenceAdapter: z
-    .enum(["Prisma", "TypeORM", "Mongoose", "Drizzle"])
-    .optional(),
-  messagingAdapter: z.enum(["BullMQ", "Temporal", "RabbitMQ"]).optional(),
+    .enum(["", "Prisma", "TypeORM", "Mongoose", "Drizzle"])
+    .optional()
+    .default(""),
+  messagingAdapter: z
+    .enum(["", "BullMQ", "Temporal", "RabbitMQ"])
+    .optional()
+    .default(""),
   telemetryProvider: z
-    .enum(["OpenTelemetry", "None", "Prometheus", "Winston"])
-    .optional(),
+    .enum(["", "OpenTelemetry", "None", "Prometheus", "Winston"])
+    .optional()
+    .default(""),
   externalApiPorts: z.array(z.string()).optional(),
   llmProviders: z.array(z.string()).optional(),
   blockchainNetworks: z.array(z.string()).optional(),
