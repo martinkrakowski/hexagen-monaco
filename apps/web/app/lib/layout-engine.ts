@@ -545,13 +545,14 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     });
   });
 
-  // 4. Peer Context Mappings - create edges between bounded contexts
+  // 4. Peer Context Mappings - create edges between bounded contexts (East → West)
+  // Consumer (East/Source) calls Provider (West/Target) - follows DDD domain interface pattern
   const peerMappings = wizardData.peerMappings ?? [];
   peerMappings.forEach((mapping, index) => {
     const consumerId = mapping.consumerContext;
     const providerId = mapping.providerContext;
 
-    // Find the consumer and provider context nodes
+    // Find the context nodes
     const consumerNode = nodes.find(
       (n) =>
         n.id === consumerId ||
@@ -566,11 +567,17 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     );
 
     if (consumerNode && providerNode) {
+      // Get context names for label
+      const consumerCtx = boundedContexts.find((c) => c.id === consumerId);
+      const providerCtx = boundedContexts.find((c) => c.id === providerId);
+
       edges.push({
         id: `edge-peer-mapping-${index}`,
         source: consumerId,
+        sourceHandle: "east",
         target: providerId,
-        label: mapping.integrationPattern === "open-host" ? "OHS" : "ACL",
+        targetHandle: "west",
+        label: `${consumerCtx?.name || "?"} → ${providerCtx?.name || "?"} (${mapping.integrationPattern === "open-host" ? "OHS" : "ACL"})`,
         type: "smoothstep",
         animated: true,
       });
