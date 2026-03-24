@@ -72,7 +72,7 @@ export function PeerContextMappingStep({
 
   if (boundedContexts.length < 2) {
     return (
-      <div className="flex flex-col h-full bg-white overflow-hidden">
+      <div className="flex flex-col h-full bg-background overflow-hidden">
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30 max-w-md mx-auto">
@@ -85,16 +85,16 @@ export function PeerContextMappingStep({
             </div>
           </div>
         </div>
-        <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
+        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
           <button
             type="button"
             onClick={onBack}
-            className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300"
+            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
           >
             Back
           </button>
           <div className="flex items-center gap-4">
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-muted-foreground">
               Step {currentStep} of {totalSteps}
             </span>
             <button
@@ -111,15 +111,15 @@ export function PeerContextMappingStep({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Zone A: Mapping Info (Fixed Top) */}
       <header
         key={`header-${activeMappingId}`}
-        className="flex-shrink-0 border-b border-slate-100 p-6 bg-slate-50/50"
+        className="flex-shrink-0 border-b border-border p-6 bg-muted/50"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
               Consumer Context (Source)
             </label>
             <select
@@ -130,7 +130,7 @@ export function PeerContextMappingStep({
                 })
               }
               disabled={!activeMapping}
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-muted disabled:cursor-not-allowed"
             >
               <option value="" disabled>
                 Select Consumer
@@ -143,7 +143,7 @@ export function PeerContextMappingStep({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
               Provider Context (Target)
             </label>
             <select
@@ -154,7 +154,7 @@ export function PeerContextMappingStep({
                 })
               }
               disabled={!activeMapping}
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-muted disabled:cursor-not-allowed"
             >
               <option value="" disabled>
                 Select Provider
@@ -177,7 +177,7 @@ export function PeerContextMappingStep({
         {!activeMapping ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-foreground">
                 Select a mapping from the sidebar to edit
               </p>
             </div>
@@ -185,12 +185,12 @@ export function PeerContextMappingStep({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-2xl">
             <div>
-              <div className="border-b border-slate-200 pb-2 mb-4 flex justify-between items-end">
+              <div className="border-b border-border pb-2 mb-4 flex justify-between items-end">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest">
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
                     Integration Details
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {getContextName(activeMapping.consumerContext)} →{" "}
                     {getContextName(activeMapping.providerContext)}
                   </p>
@@ -199,7 +199,7 @@ export function PeerContextMappingStep({
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
                     Integration Pattern
                   </label>
                   <select
@@ -211,7 +211,7 @@ export function PeerContextMappingStep({
                           | "acl",
                       })
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                   >
                     <option value="open-host">Open Host Service (OHS)</option>
                     <option value="acl">Anticorruption Layer (ACL)</option>
@@ -221,12 +221,12 @@ export function PeerContextMappingStep({
             </div>
 
             <div>
-              <div className="border-b border-slate-200 pb-2 mb-4 flex justify-between items-end">
+              <div className="border-b border-border pb-2 mb-4 flex justify-between items-end">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest">
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
                     Communication
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     How contexts communicate
                   </p>
                 </div>
@@ -234,7 +234,7 @@ export function PeerContextMappingStep({
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
                     Communication Boundary
                   </label>
                   <select
@@ -246,7 +246,7 @@ export function PeerContextMappingStep({
                           | "networked",
                       })
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                   >
                     <option value="in-process">In-Process</option>
                     <option value="networked">Networked</option>
@@ -259,17 +259,17 @@ export function PeerContextMappingStep({
       </div>
 
       {/* Zone C: Footer (Sticky Bottom) */}
-      <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
+      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
         <button
           type="button"
           onClick={onBack}
           disabled={!canProceed}
-          className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
+          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
         >
           Back
         </button>
         <div className="flex items-center gap-4">
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-muted-foreground">
             Step {currentStep} of {totalSteps}
           </span>
           <button

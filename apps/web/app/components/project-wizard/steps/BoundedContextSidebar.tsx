@@ -117,12 +117,12 @@ export function BoundedContextSidebar({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-slate-200">
-      <div className="p-4 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-700">
+    <div className="flex flex-col h-full bg-background border-r border-border">
+      <div className="p-4 border-b border-border">
+        <h2 className="text-sm font-semibold text-foreground">
           Bounded Contexts
         </h2>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           {boundedContexts.length} context
           {boundedContexts.length !== 1 ? "s" : ""}
         </p>
@@ -130,7 +130,7 @@ export function BoundedContextSidebar({
 
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {boundedContexts.length === 0 ? (
-          <div className="p-4 text-center text-sm text-slate-400">
+          <div className="p-4 text-center text-sm text-muted-foreground">
             No contexts defined
           </div>
         ) : (
@@ -141,11 +141,11 @@ export function BoundedContextSidebar({
               className={`relative p-3 border rounded-lg cursor-pointer transition-all ${
                 activeContextId === context.id
                   ? "border-blue-500 bg-blue-50"
-                  : "border-slate-200 bg-white hover:border-slate-300"
+                  : "border-border bg-background hover:border-input"
               }`}
             >
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded bg-slate-100 text-slate-500">
+                <div className="flex h-8 w-8 items-center justify-center rounded bg-muted text-muted-foreground">
                   <span className="text-xs font-bold">
                     {context.name?.charAt(0).toUpperCase() || "?"}
                   </span>
@@ -163,14 +163,14 @@ export function BoundedContextSidebar({
                       onKeyDown={(e) => handleNameKeyDown(e, context.id)}
                       onClick={(e) => e.stopPropagation()}
                       placeholder="Context name..."
-                      className="w-full min-w-[100px] bg-transparent outline-none text-sm text-slate-800 placeholder-slate-400 py-0.5"
+                      className="w-full min-w-[100px] bg-transparent outline-none text-sm text-foreground placeholder-muted-foreground py-0.5"
                     />
                   ) : (
                     <>
-                      <h3 className="font-medium text-sm text-slate-800 truncate">
+                      <h3 className="font-medium text-sm text-foreground truncate">
                         {context.name || "Unnamed Context"}
                       </h3>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[10px] text-muted-foreground">
                         {(context.coreDomainEntities?.length ?? 0) +
                           (context.useCases?.length ?? 0)}{" "}
                         items
@@ -184,7 +184,7 @@ export function BoundedContextSidebar({
                 boundedContexts[0].id !== context.id &&
                 (confirmDeleteId === context.id ? (
                   <div
-                    className="absolute inset-0 flex items-center justify-center bg-white/95 backdrop-blur-sm rounded-lg gap-2"
+                    className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -207,7 +207,7 @@ export function BoundedContextSidebar({
                         e.stopPropagation();
                         setConfirmDeleteId(null);
                       }}
-                      className="px-2 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded hover:bg-slate-200"
+                      className="px-2 py-1 text-xs font-medium text-foreground bg-muted rounded hover:bg-muted"
                     >
                       No
                     </button>
@@ -219,7 +219,7 @@ export function BoundedContextSidebar({
                       e.stopPropagation();
                       setConfirmDeleteId(context.id);
                     }}
-                    className="absolute top-1 right-1 p-1 rounded text-slate-400 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                     aria-label="Delete context"
                   >
                     <X className="h-3 w-3" />
@@ -230,11 +230,11 @@ export function BoundedContextSidebar({
         )}
       </div>
 
-      <div className="p-3 border-t border-slate-100">
+      <div className="p-3 border-t border-border">
         <button
           type="button"
           onClick={handleAddContext}
-          className="w-full py-2 px-3 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-colors flex items-center justify-center gap-2"
+          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-colors flex items-center justify-center gap-2"
         >
           <Plus className="h-4 w-4" />
           Add Context

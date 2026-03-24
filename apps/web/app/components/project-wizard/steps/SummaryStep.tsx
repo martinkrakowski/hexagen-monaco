@@ -32,7 +32,7 @@ export function SummaryStep({
   const peerMappings = watch("peerMappings") || [];
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       <div className="flex-shrink-0 p-6 pb-4">
         <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
           STEP: 5 (summary)
@@ -189,17 +189,17 @@ export function SummaryStep({
         </div>
       </div>
 
-      <footer className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-10">
+      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
         <button
           type="button"
           onClick={onBack}
           disabled={isGenerating}
-          className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors border border-slate-300 disabled:opacity-50"
+          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
         >
           Back
         </button>
         <div className="flex items-center gap-4">
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-muted-foreground">
             Step {currentStep} of {totalSteps}
           </span>
           <button

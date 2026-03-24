@@ -45,13 +45,13 @@ export function ChipInput({
 
   return (
     <div className="mb-4">
-      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+      <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
         {label}
       </label>
       <div
         className={`
           p-3 
-          bg-slate-50 border border-dashed border-slate-300 
+          bg-muted border border-dashed border-input 
           rounded-lg 
           focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent
           transition-all
@@ -61,7 +61,7 @@ export function ChipInput({
           {values.map((val) => (
             <span
               key={val}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 text-xs font-medium shadow-sm h-6"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-background border border-border text-xs font-medium shadow-sm h-6"
             >
               {val}
               <button
@@ -82,7 +82,7 @@ export function ChipInput({
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           placeholder={values.length === 0 ? placeholder : "Add..."}
-          className="w-full mt-1 bg-transparent outline-none text-sm text-slate-800 placeholder-slate-400"
+          className="w-full mt-1 bg-transparent outline-none text-sm text-foreground placeholder-muted-foreground"
         />
       </div>
     </div>
