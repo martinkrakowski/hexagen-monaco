@@ -73,7 +73,7 @@ export function WorkspaceGovernanceStep({
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        <div className="space-y-6 max-w-2xl lg:max-w-2xl">
+        <div className="space-y-6">
           {/* Workspace Name */}
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
