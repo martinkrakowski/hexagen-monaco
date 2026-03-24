@@ -346,7 +346,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       });
     }
 
-    // South adapters - stacked (Messaging first, then Persistence) using config constants
+    // South adapters - stacked (Messaging first, then Persistence, then Telemetry) using config constants
     let southCount = 0;
     if (ctx.messagingAdapter) {
       adapters.push({
@@ -360,6 +360,14 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       adapters.push({
         id: `adapter-${contextId}-${ctx.persistenceAdapter}`,
         label: ctx.persistenceAdapter,
+        side: "south",
+        handleIndex: southCount++,
+      });
+    }
+    if (ctx.telemetryProvider) {
+      adapters.push({
+        id: `adapter-${contextId}-${ctx.telemetryProvider}`,
+        label: ctx.telemetryProvider,
         side: "south",
         handleIndex: southCount++,
       });
@@ -414,15 +422,26 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       } else if (
         adapter.label.toLowerCase().includes("messaging") ||
         adapter.label.toLowerCase().includes("kafka") ||
-        adapter.label.toLowerCase().includes("rabbit")
+        adapter.label.toLowerCase().includes("rabbit") ||
+        adapter.label.toLowerCase().includes("bull") ||
+        adapter.label.toLowerCase().includes("temporal")
       ) {
         typeLabel = "Messaging";
       } else if (
         adapter.label.toLowerCase().includes("prisma") ||
         adapter.label.toLowerCase().includes("typeorm") ||
+        adapter.label.toLowerCase().includes("mongoose") ||
+        adapter.label.toLowerCase().includes("drizzle") ||
         adapter.label.toLowerCase().includes("sql")
       ) {
         typeLabel = "Persistence";
+      } else if (
+        adapter.label.toLowerCase().includes("telemetry") ||
+        adapter.label.toLowerCase().includes("opentelemetry") ||
+        adapter.label.toLowerCase().includes("prometheus") ||
+        adapter.label.toLowerCase().includes("winston")
+      ) {
+        typeLabel = "Telemetry";
       }
 
       nodes.push({
