@@ -1,45 +1,48 @@
-'use client';
+"use client";
 
-import { useState, useMemo } from 'react';
-import { useForm, useWatch, FormProvider } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useState, useMemo } from "react";
+import { useForm, useWatch, FormProvider } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-import { ResizableLayout } from '@/components/layout/ResizableLayout';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Header } from './components/layout/Header';
-import { Footer } from './components/layout/Footer';
+import { ResizableLayout } from "@/components/layout/ResizableLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { ViewToggle } from "@/components/ui/ViewToggle";
+import { Header } from "./components/layout/Header";
+import { Footer } from "./components/layout/Footer";
 
-import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
-import { GraphCanvasWrapper } from '@/components/canvas/GraphCanvasWrapper';
-import { StepHeader } from '@/components/project-wizard/steps/StepHeader';
+import { MonacoEditorWrapper } from "@/components/monaco/MonacoEditorWrapper";
+import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
+import { CodeView } from "@/components/code-view/CodeView";
+import { StepHeader } from "@/components/project-wizard/steps/StepHeader";
 
 import {
   emptyFormValues,
   wizardSteps,
-} from '@/components/project-wizard/config';
+} from "@/components/project-wizard/config";
 import {
   projectConfigSchema,
   type ProjectConfig,
-} from '@hexagen/project-configuration';
+} from "@hexagen/project-configuration";
 import type {
   WizardData,
   BoundedContext,
   ExternalContext,
   PeerMapping,
-} from '@hexagen/shared';
+} from "@hexagen/shared";
 
-import { WizardStepRouter } from '@/components/project-wizard/WizardStepRouter';
+import { WizardStepRouter } from "@/components/project-wizard/WizardStepRouter";
 
 export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [activeContextId, setActiveContextId] = useState<string>('');
-  const [activeMappingId, setActiveMappingId] = useState<string>('');
+  const [activeContextId, setActiveContextId] = useState<string>("");
+  const [activeMappingId, setActiveMappingId] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"visual" | "code">("visual");
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
     defaultValues: emptyFormValues,
-    mode: 'all',
+    mode: "all",
   });
 
   const watchedValues = useWatch({ control: form.control });
@@ -56,7 +59,7 @@ export default function Home() {
   const canProceed =
     currentStepIndex === 1
       ? boundedContexts.length > 0 &&
-        boundedContexts.every((c) => c.name?.trim() !== '')
+        boundedContexts.every((c) => c.name?.trim() !== "")
       : true;
 
   const wizardData: WizardData = useMemo(
@@ -64,7 +67,7 @@ export default function Home() {
       boundedContexts,
       externalContexts,
       peerMappings,
-      workspaceScope: watchedValues.governance?.workspaceName || '',
+      workspaceScope: watchedValues.governance?.workspaceName || "",
       withLlm: !!watchedValues.withLlm,
       withBlockchain: !!watchedValues.withBlockchain,
     }),
@@ -75,26 +78,26 @@ export default function Home() {
       watchedValues.governance?.workspaceName,
       watchedValues.withLlm,
       watchedValues.withBlockchain,
-    ]
+    ],
   );
 
   const initialManifest = useMemo(
     () => JSON.stringify(watchedValues, null, 2),
-    [watchedValues]
+    [watchedValues],
   );
 
   const handleNext = async () => {
     const isValid =
-      currentStepIndex !== 1 || (await form.trigger('boundedContexts'));
+      currentStepIndex !== 1 || (await form.trigger("boundedContexts"));
 
     if (isValid) {
-      if (currentStepIndex === 2) setActiveMappingId('');
+      if (currentStepIndex === 2) setActiveMappingId("");
       setCurrentStepIndex((i) => Math.min(i + 1, totalSteps - 1));
     }
   };
 
   const handleBack = () => {
-    if (currentStepIndex === 2) setActiveMappingId('');
+    if (currentStepIndex === 2) setActiveMappingId("");
     setCurrentStepIndex((i) => Math.max(i - 1, 0));
   };
 
@@ -138,16 +141,21 @@ export default function Home() {
             }
             middle={
               <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-                <CardHeader className="border-b border-border shrink-0">
+                <CardHeader className="border-b border-border shrink-0 flex flex-row items-center justify-between space-y-0 py-3 px-4">
                   <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                     Architecture Preview
                   </CardTitle>
+                  <ViewToggle view={viewMode} onChange={setViewMode} />
                 </CardHeader>
                 <CardContent className="flex-1 p-0 overflow-hidden relative">
-                  <GraphCanvasWrapper
-                    projectId="demo"
-                    wizardData={wizardData}
-                  />
+                  {viewMode === "visual" ? (
+                    <GraphCanvasWrapper
+                      projectId="demo"
+                      wizardData={wizardData}
+                    />
+                  ) : (
+                    <CodeView />
+                  )}
                 </CardContent>
               </Card>
             }
