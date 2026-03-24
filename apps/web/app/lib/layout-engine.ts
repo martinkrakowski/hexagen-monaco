@@ -404,7 +404,10 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       let typeLabel = adapter.side === "north" ? "API" : "Infrastructure";
       if (
         adapter.label.toLowerCase().includes("react") ||
-        adapter.label.toLowerCase().includes("ui")
+        adapter.label.toLowerCase().includes("next") ||
+        adapter.label.toLowerCase().includes("remix") ||
+        adapter.label.toLowerCase().includes("vue") ||
+        adapter.label.toLowerCase().includes("angular")
       ) {
         typeLabel = "UI";
       } else if (
