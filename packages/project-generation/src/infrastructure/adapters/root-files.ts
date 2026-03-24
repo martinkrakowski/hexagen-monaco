@@ -8,9 +8,16 @@ export function generateRootPackageJson(systemName: string): string {
       workspaces: ["apps/*", "packages/*"],
       scripts: {
         build: "turbo build",
+        dev: "turbo dev",
         lint: "turbo lint",
         typecheck: "turbo typecheck",
         test: "turbo test",
+        clean: "turbo clean",
+      },
+      devDependencies: {
+        turbo: "^2.0.0",
+        typescript: "^5.5.4",
+        eslint: "^9.0.0",
       },
     },
     null,
