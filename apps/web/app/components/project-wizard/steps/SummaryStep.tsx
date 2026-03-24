@@ -63,7 +63,7 @@ export function SummaryStep({
         <div className="space-y-6">
           <div className="space-y-4">
             {/* Workspace Governance Summary */}
-            <div className="border rounded-lg p-4 bg-card">
+            <div className="border border-border rounded-lg p-4 bg-muted">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                 Workspace Governance
               </h3>
@@ -98,7 +98,7 @@ export function SummaryStep({
             </div>
 
             {/* Bounded Contexts Summary */}
-            <div className="border rounded-lg p-4 bg-card">
+            <div className="border border-border rounded-lg p-4 bg-muted">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                 Bounded Contexts ({boundedContexts.length})
               </h3>
@@ -129,7 +129,7 @@ export function SummaryStep({
 
             {/* Peer Mappings Summary */}
             {peerMappings.length > 0 && (
-              <div className="border rounded-lg p-4 bg-card">
+              <div className="border border-border rounded-lg p-4 bg-muted">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                   Peer Mappings ({peerMappings.length})
                 </h3>
@@ -164,7 +164,7 @@ export function SummaryStep({
             )}
 
             {/* Project Add-ons Summary */}
-            <div className="border rounded-lg p-4 bg-card">
+            <div className="border border-border rounded-lg p-4 bg-muted">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                 Project Add-ons
               </h3>
@@ -208,7 +208,7 @@ export function SummaryStep({
             disabled={
               isGenerating || boundedContexts.length === 0 || !canProceed
             }
-            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isGenerating ? "Generating..." : "Generate Project"}
           </button>

@@ -101,9 +101,9 @@ export function PeerMappingSidebar({
               <div
                 key={mappingId}
                 onClick={() => handleMappingClick(mappingId)}
-                className={`relative p-3 border rounded-lg cursor-pointer transition-all ${
+                className={`relative p-3 border border-border rounded-lg cursor-pointer transition-all ${
                   activeMappingId === mappingId
-                    ? "border-blue-500 bg-blue-50"
+                    ? "border-blue-500 bg-primary/10"
                     : "border-border bg-background hover:border-input"
                 }`}
               >
@@ -186,7 +186,7 @@ export function PeerMappingSidebar({
           type="button"
           onClick={handleAddMapping}
           disabled={boundedContexts.length < 2}
-          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/10/50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="h-4 w-4" />
           Add Mapping

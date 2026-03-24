@@ -100,7 +100,7 @@ export function PeerContextMappingStep({
             <button
               type="button"
               onClick={onNext}
-              className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors"
             >
               Next
             </button>
@@ -275,7 +275,7 @@ export function PeerContextMappingStep({
           <button
             type="button"
             onClick={onNext}
-            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors"
           >
             Next
           </button>

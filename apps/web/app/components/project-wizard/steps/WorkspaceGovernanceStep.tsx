@@ -211,7 +211,7 @@ export function WorkspaceGovernanceStep({
             disabled={
               !canProceed || !workspaceName.trim() || !namespacePrefix.trim()
             }
-            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next
           </button>

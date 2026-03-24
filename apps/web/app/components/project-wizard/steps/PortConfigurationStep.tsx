@@ -134,7 +134,7 @@ export function PortConfigurationStep({
               type="button"
               onClick={onNext}
               disabled={!canProceed}
-              className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
+              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50"
             >
               Next
             </button>
@@ -184,7 +184,7 @@ export function PortConfigurationStep({
               return (
                 <div
                   key={context.id}
-                  className="border rounded-lg p-4 space-y-4 bg-card"
+                  className="border border-border rounded-lg p-4 space-y-4 bg-muted"
                 >
                   <div className="flex items-center gap-2 border-b border-border pb-3">
                     <span className="text-xs font-mono text-muted-foreground">
@@ -284,7 +284,7 @@ export function PortConfigurationStep({
             type="button"
             onClick={onNext}
             disabled={!canProceed}
-            className="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors disabled:opacity-50"
+            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50"
           >
             Next
           </button>
