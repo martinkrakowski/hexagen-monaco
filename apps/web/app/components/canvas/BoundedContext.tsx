@@ -483,7 +483,7 @@ function UnifiedBoundedContextComponent({
           className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
           style={{ left: "60%" }}
         />
-        {/* South: source handles for multiple Messaging/Persistence adapters */}
+        {/* South: source handles for multiple Messaging/Persistence/Telemetry adapters */}
         <Handle
           type="source"
           position={Position.Bottom}
@@ -495,7 +495,14 @@ function UnifiedBoundedContextComponent({
           position={Position.Bottom}
           id="south-1"
           className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
-          style={{ left: "60%" }}
+          style={{ left: "35%" }}
+        />
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="south-2"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          style={{ left: "70%" }}
         />
         {/* West: target handle for upstream peer connections */}
         <Handle
