@@ -169,6 +169,8 @@ export function wizardToManifest(
         type: isShared ? "shared-kernel" : "core",
         description: bc.description || "",
         depends_on: Array.from(dependsOn),
+        uiFramework: bc.uiFramework || "Next.js",
+        apiFramework: bc.apiFramework || "Express",
         layers: {
           domain: {
             entities: bc.coreDomainEntities || [],
