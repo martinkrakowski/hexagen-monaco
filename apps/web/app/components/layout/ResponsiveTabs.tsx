@@ -27,7 +27,7 @@ export function ResponsiveTabs({ panels, defaultTab }: ResponsiveTabsProps) {
   const activePanel = panels.find((p) => p.id === activeTab);
 
   return (
-    <div className="flex flex-col h-full bg-card">
+    <div className="flex flex-col h-full w-full bg-card">
       {/* Tab Bar */}
       <div className="flex shrink-0 border-b border-border">
         {panels.map((panel) => {
