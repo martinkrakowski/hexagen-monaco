@@ -6,6 +6,7 @@ const MAX_RETRIES = 3;
 export function useProjectGeneration(wizardData: WizardData) {
   const [files, setFiles] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isStale, setIsStale] = useState<boolean>(false);
 
@@ -66,7 +67,51 @@ export function useProjectGeneration(wizardData: WizardData) {
     [wizardData, loading],
   );
 
-  // Check for staleness without triggering generation
+  const downloadZip = useCallback(async () => {
+    if (isDownloading) return;
+
+    setIsDownloading(true);
+    setError(null);
+
+    try {
+      if (isStale) {
+        await generate(true);
+      }
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wizardData,
+          outputFormat: "zip",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.error || `Download failed: ${response.statusText}`,
+        );
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${wizardData.workspaceScope || "project"}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to download zip.";
+      setError(message);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [wizardData, isStale, isDownloading, generate]);
+
   useEffect(() => {
     if (
       lastGeneratedRef.current &&
@@ -78,7 +123,6 @@ export function useProjectGeneration(wizardData: WizardData) {
     }
   }, [wizardData]);
 
-  // Auto-generate once on mount if we have no files
   useEffect(() => {
     if (!hasAttemptedRef.current && files.size === 0 && !loading) {
       hasAttemptedRef.current = true;
@@ -89,6 +133,7 @@ export function useProjectGeneration(wizardData: WizardData) {
   return {
     files,
     loading,
+    isDownloading,
     error,
     isStale,
     canRetry: retryCountRef.current < MAX_RETRIES,
@@ -97,5 +142,6 @@ export function useProjectGeneration(wizardData: WizardData) {
         generate(true);
       }
     },
+    downloadZip,
   };
 }

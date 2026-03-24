@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { FileCode, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import {
+  FileCode,
+  Loader2,
+  RefreshCw,
+  AlertCircle,
+  Download,
+} from "lucide-react";
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { MonacoViewer } from "@/components/monaco/MonacoViewer";
@@ -16,10 +22,18 @@ interface CodeViewProps {
 export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
   const [selectedFile, setSelectedFile] = useState<ViewFileNode | null>(null);
 
-  const { files, loading, error, isStale, refresh } =
-    useProjectGeneration(wizardData);
+  const {
+    files,
+    loading,
+    isDownloading,
+    error,
+    isStale,
+    refresh,
+    downloadZip,
+  } = useProjectGeneration(wizardData);
 
   const fileTree = useMemo(() => mapToFolderTree(files), [files]);
+  const isNetworkActive = loading || isDownloading;
 
   return (
     <div className="flex h-full w-full bg-slate-950 overflow-hidden text-slate-300">
@@ -27,25 +41,45 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
       <div className="w-64 border-r border-slate-800 bg-slate-900 flex flex-col hidden md:flex shrink-0">
         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider p-4 border-b border-slate-800 shrink-0 flex items-center justify-between">
           <span>Explorer</span>
-          <div className="relative">
+          <div className="flex items-center gap-3">
+            {/* Download Button */}
             <button
-              onClick={refresh}
-              disabled={loading}
-              className={`transition-colors disabled:opacity-50 ${isStale ? "text-blue-400 hover:text-blue-300" : "hover:text-slate-300"}`}
-              title={
-                isStale
-                  ? "Pending changes. Click to regenerate."
-                  : "Force Regenerate"
-              }
+              onClick={downloadZip}
+              disabled={isNetworkActive || files.size === 0}
+              className="transition-colors disabled:opacity-50 hover:text-slate-300"
+              title="Download Project (ZIP)"
             >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              {isDownloading ? (
+                <Loader2 size={14} className="animate-spin text-blue-400" />
+              ) : (
+                <Download size={14} />
+              )}
             </button>
-            {isStale && !loading && (
-              <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-              </span>
-            )}
+
+            {/* Refresh Button */}
+            <div className="relative flex items-center">
+              <button
+                onClick={refresh}
+                disabled={isNetworkActive}
+                className={`transition-colors disabled:opacity-50 ${isStale ? "text-blue-400 hover:text-blue-300" : "hover:text-slate-300"}`}
+                title={
+                  isStale
+                    ? "Pending changes. Click to regenerate."
+                    : "Force Regenerate"
+                }
+              >
+                <RefreshCw
+                  size={14}
+                  className={loading ? "animate-spin" : ""}
+                />
+              </button>
+              {isStale && !isNetworkActive && (
+                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -69,7 +103,7 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
 
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 relative">
-        {loading && files.size > 0 && (
+        {isNetworkActive && files.size > 0 && (
           <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500/20 overflow-hidden z-10">
             <div className="h-full bg-blue-500 w-1/3 animate-slide" />
           </div>
