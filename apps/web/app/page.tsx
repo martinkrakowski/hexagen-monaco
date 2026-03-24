@@ -66,6 +66,7 @@ export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [activeContextId, setActiveContextId] = useState<string>("");
+  const [activeMappingId, setActiveMappingId] = useState<string>("");
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
@@ -142,6 +143,9 @@ export default function Home() {
   const sessionId = "wizard-session-1";
 
   const handleNext = () => {
+    if (currentStepIndex === 2) {
+      setActiveMappingId("");
+    }
     dispatchIntent({
       type: "WIZARD_NEXT",
       source: "user",
@@ -151,6 +155,9 @@ export default function Home() {
   };
 
   const handleBack = () => {
+    if (currentStepIndex === 2) {
+      setActiveMappingId("");
+    }
     dispatchIntent({
       type: "WIZARD_BACK",
       source: "user",
@@ -195,6 +202,8 @@ export default function Home() {
             onNext={handleNext}
             onBack={handleBack}
             canProceed={canProceed}
+            activeMappingId={activeMappingId}
+            onMappingSelect={setActiveMappingId}
             currentStep={3}
             totalSteps={totalSteps}
           />
