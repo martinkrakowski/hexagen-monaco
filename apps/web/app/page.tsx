@@ -8,6 +8,7 @@ import { ResizableLayout } from '@/components/layout/ResizableLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
+
 import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
 import { GraphCanvasWrapper } from '@/components/canvas/graph-canvas-wrapper';
 import { StepHeader } from '@/components/project-wizard/steps/StepHeader';
@@ -20,7 +21,13 @@ import {
   projectConfigSchema,
   type ProjectConfig,
 } from '@hexagen/project-configuration';
-import type { WizardData, BoundedContext } from '@hexagen/shared';
+import type {
+  WizardData,
+  BoundedContext,
+  ExternalContext,
+  PeerMapping,
+} from '@hexagen/shared';
+
 import { WizardStepRouter } from '@/components/project-wizard/WizardStepRouter';
 
 export default function Home() {
@@ -39,8 +46,12 @@ export default function Home() {
 
   const totalSteps = wizardSteps.length;
   const currentStepConfig = wizardSteps[currentStepIndex];
+
   const boundedContexts = (watchedValues.boundedContexts ||
     []) as BoundedContext[];
+  const externalContexts = (watchedValues.externalContexts ||
+    []) as ExternalContext[];
+  const peerMappings = (watchedValues.peerMappings || []) as PeerMapping[];
 
   const canProceed =
     currentStepIndex === 1
@@ -50,14 +61,21 @@ export default function Home() {
 
   const wizardData: WizardData = useMemo(
     () => ({
-      boundedContexts: watchedValues.boundedContexts || [],
-      externalContexts: watchedValues.externalContexts || [],
-      peerMappings: watchedValues.peerMappings || [],
+      boundedContexts,
+      externalContexts,
+      peerMappings,
       workspaceScope: watchedValues.governance?.workspaceName || '',
       withLlm: !!watchedValues.withLlm,
       withBlockchain: !!watchedValues.withBlockchain,
     }),
-    [watchedValues]
+    [
+      boundedContexts,
+      externalContexts,
+      peerMappings,
+      watchedValues.governance?.workspaceName,
+      watchedValues.withLlm,
+      watchedValues.withBlockchain,
+    ]
   );
 
   const initialManifest = useMemo(
@@ -68,6 +86,7 @@ export default function Home() {
   const handleNext = async () => {
     const isValid =
       currentStepIndex !== 1 || (await form.trigger('boundedContexts'));
+
     if (isValid) {
       if (currentStepIndex === 2) setActiveMappingId('');
       setCurrentStepIndex((i) => Math.min(i + 1, totalSteps - 1));
@@ -79,9 +98,15 @@ export default function Home() {
     setCurrentStepIndex((i) => Math.max(i - 1, 0));
   };
 
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => setLoading(false), 1000);
+  };
+
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
       <Header />
+
       <main className="flex-1 flex flex-col overflow-hidden">
         <FormProvider {...form}>
           <ResizableLayout
@@ -93,6 +118,7 @@ export default function Home() {
                   title={currentStepConfig.title}
                   description={currentStepConfig.description}
                 />
+
                 <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
                   <WizardStepRouter
                     currentStepIndex={currentStepIndex}
@@ -105,19 +131,19 @@ export default function Home() {
                     onMappingSelect={setActiveMappingId}
                     onNext={handleNext}
                     onBack={handleBack}
-                    onGenerate={() => setLoading(true)}
+                    onGenerate={handleGenerate}
                   />
                 </CardContent>
               </Card>
             }
             middle={
               <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-sm">
+                <CardHeader className="border-b border-border shrink-0">
+                  <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                     Architecture Preview
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 p-0 overflow-hidden">
+                <CardContent className="flex-1 p-0 overflow-hidden relative">
                   <GraphCanvasWrapper
                     projectId="demo"
                     wizardData={wizardData}
@@ -127,10 +153,12 @@ export default function Home() {
             }
             right={
               <Card className="h-full border-0 rounded-none flex flex-col bg-card">
-                <CardHeader className="border-b border-border">
-                  <CardTitle className="text-sm">Code Editor</CardTitle>
+                <CardHeader className="border-b border-border shrink-0">
+                  <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    Code Editor
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="p-0 flex-1 overflow-hidden">
+                <CardContent className="p-0 flex-1 overflow-hidden relative">
                   <MonacoEditorWrapper
                     initialBuffer={initialManifest}
                     sessionId="wizard-session-1"
@@ -141,6 +169,7 @@ export default function Home() {
           />
         </FormProvider>
       </main>
+
       <Footer />
     </div>
   );
