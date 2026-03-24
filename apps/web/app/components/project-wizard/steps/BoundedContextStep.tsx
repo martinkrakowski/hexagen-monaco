@@ -142,7 +142,10 @@ export function BoundedContextStep({
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
       {/* Zone A: Identity (Fixed Top) */}
-      <header className="flex-shrink-0 border-b border-slate-100 p-6 bg-slate-50/50">
+      <header
+        key={`header-${activeContextId}`}
+        className="flex-shrink-0 border-b border-slate-100 p-6 bg-slate-50/50"
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
@@ -211,7 +214,10 @@ export function BoundedContextStep({
       </header>
 
       {/* Zone B: Grid (Scrollable Middle) */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div
+        key={`zone-b-${activeContextId}`}
+        className="flex-1 overflow-y-auto p-6"
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Left Column: Domain Model */}
           <div>
