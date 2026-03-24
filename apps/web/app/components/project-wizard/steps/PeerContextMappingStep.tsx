@@ -91,7 +91,7 @@ export function PeerContextMappingStep({
 
   if (boundedContexts.length < 2) {
     return (
-      <div className="flex flex-col h-full bg-background overflow-hidden">
+      <div className="flex flex-col h-full bg-card overflow-hidden">
         <div className="flex-shrink-0 p-6 pb-4">
           <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
             STEP: {currentStep} (peer_context_mapping)
@@ -140,7 +140,7 @@ export function PeerContextMappingStep({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Zone A: Mapping Info (Fixed Top) */}
       <header
         key={`header-${activeMappingId}`}

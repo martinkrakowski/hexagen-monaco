@@ -81,7 +81,7 @@ export function PortConfigurationStep({
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-background overflow-hidden">
+      <div className="flex flex-col h-full bg-card overflow-hidden">
         <div className="flex-shrink-0 p-6 pb-4">
           <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
             STEP: 4 (port_configuration)
@@ -145,7 +145,7 @@ export function PortConfigurationStep({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-card overflow-hidden">
       <div className="flex-shrink-0 p-6 pb-4">
         <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
           STEP: 4 (port_configuration)

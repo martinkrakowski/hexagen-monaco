@@ -117,7 +117,7 @@ export function BoundedContextSidebar({
   };
 
   return (
-    <div className="flex flex-col h-full bg-background border-r border-border">
+    <div className="flex flex-col h-full bg-card border-r border-border">
       <div className="p-4 border-b border-border">
         <h2 className="text-sm font-semibold text-foreground">
           Bounded Contexts

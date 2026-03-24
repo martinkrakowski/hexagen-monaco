@@ -61,7 +61,7 @@ export function BoundedContextStep({
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-background overflow-hidden">
+      <div className="flex flex-col h-full bg-card overflow-hidden">
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center">
             <h2 className="text-lg font-semibold text-foreground mb-2">
@@ -104,7 +104,7 @@ export function BoundedContextStep({
 
   if (!activeContext) {
     return (
-      <div className="flex flex-col h-full bg-background overflow-hidden">
+      <div className="flex flex-col h-full bg-card overflow-hidden">
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center">
             <p className="text-sm text-muted-foreground">Select a context to edit</p>
@@ -146,7 +146,7 @@ export function BoundedContextStep({
   const fieldPrefix = `boundedContexts.${contextIndex}`;
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Zone A: Identity (Fixed Top) */}
       <header
         key={`header-${activeContextId}`}
