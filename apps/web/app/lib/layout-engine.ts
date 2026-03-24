@@ -547,7 +547,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
 
   // 4. Peer Context Mappings - create edges between bounded contexts (East → West)
   // Consumer (East/Source) calls Provider (West/Target) - follows DDD domain interface pattern
-  // Edge routes below the hexagons to avoid penetrating the nodes
+  // Edge routes around the hexagons to avoid penetrating the nodes
   const peerMappings = wizardData.peerMappings ?? [];
   peerMappings.forEach((mapping, index) => {
     const consumerId = mapping.consumerContext;
@@ -573,19 +573,16 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       const providerCtx = boundedContexts.find((c) => c.id === providerId);
 
       // Calculate edge routing - go below the hexagons to avoid penetrating nodes
-      // Get the y position below both hexagons
       const consumerY =
         consumerNode.position.y + (consumerNode.style?.height ?? 360);
       const providerY =
         providerNode.position.y + (providerNode.style?.height ?? 360);
-      const routeY = Math.max(consumerY, providerY) + 60; // 60px buffer below hexagons
+      const routeY = Math.max(consumerY, providerY) + 80; // 80px buffer below hexagons
 
       // Calculate start/end x positions
       const consumerX =
         consumerNode.position.x + (consumerNode.style?.width ?? 360);
       const providerX = providerNode.position.x;
-
-      // Create waypoints to route below the hexagons
       const midX = (consumerX + providerX) / 2;
 
       edges.push({
@@ -597,6 +594,12 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         label: `${consumerCtx?.name || "?"} → ${providerCtx?.name || "?"} (${mapping.integrationPattern === "open-host" ? "OHS" : "ACL"})`,
         type: "smoothstep",
         animated: true,
+        style: {
+          stroke: "#64748b",
+          strokeWidth: "2",
+          strokeDasharray: "5,5",
+        },
+        markerEnd: "url(#arrow)",
       });
     }
   });

@@ -1,14 +1,23 @@
-export type EdgeType = "default" | "animated" | "smoothstep";
+export type EdgeType =
+  | "default"
+  | "animated"
+  | "smoothstep"
+  | "step"
+  | "straight"
+  | "bezier";
 
 export interface HexagonEdge {
   id: string;
   source: string;
   target: string;
-  type: EdgeType;
+  type?: EdgeType;
   label?: string;
   animated?: boolean;
   sourceHandle?: string;
   targetHandle?: string;
+  markerEnd?: string;
+  style?: Record<string, string>;
+  className?: string;
 }
 
 export function createHexagonEdge(
