@@ -303,7 +303,6 @@ export function BoundedContextStep({
                 }
                 className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
-                <option value="None">None</option>
                 {telemetryProviderOptions.map((opt) => (
                   <option key={opt} value={opt}>
                     {opt}
