@@ -7,6 +7,7 @@ import type {
   PeerContextMapping,
 } from "@hexagen/project-configuration";
 import { projectAddons } from "../config";
+import { StepHeader } from "./StepHeader";
 
 interface SummaryStepProps {
   onBack: () => void;
@@ -33,32 +34,13 @@ export function SummaryStep({
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-shrink-0 p-6 pb-4">
-        <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
-          STEP: 5 (summary)
-        </div>
-        <div className="flex gap-2 mb-4">
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            1
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            2
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            3
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            4
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-primary text-primary-foreground border-primary">
-            5
-          </div>
-        </div>
-        <h2 className="text-2xl font-semibold mb-2">Review &amp; Generate</h2>
-        <p className="text-muted-foreground mb-6 text-sm">
-          Review your configuration before generating the project.
-        </p>
-      </div>
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title="Review & Generate"
+        description="Review your configuration before generating the project."
+        debugLabel={`STEP: ${currentStep} (summary)`}
+      />
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         <div className="space-y-6">
           <div className="space-y-4">

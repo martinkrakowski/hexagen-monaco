@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useFormContext } from "react-hook-form";
 import { ChipInput } from "./ChipInput";
+import { StepHeader } from "./StepHeader";
 import type {
   ProjectConfig,
   BoundedContext,
@@ -62,6 +63,13 @@ export function BoundedContextStep({
   if (boundedContexts.length === 0) {
     return (
       <div className="flex flex-col h-full bg-card overflow-hidden">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title="Bounded Contexts"
+          description="Configure each bounded context and its domain model."
+          debugLabel={`STEP: ${currentStep} (bounded_contexts)`}
+        />
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center">
             <h2 className="text-lg font-semibold text-foreground mb-2">
@@ -105,9 +113,58 @@ export function BoundedContextStep({
   if (!activeContext) {
     return (
       <div className="flex flex-col h-full bg-card overflow-hidden">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title="Bounded Contexts"
+          description="Configure each bounded context and its domain model."
+          debugLabel={`STEP: ${currentStep} (bounded_contexts)`}
+        />
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center">
-            <p className="text-sm text-muted-foreground">Select a context to edit</p>
+            <p className="text-sm text-muted-foreground">
+              Select a context to edit
+            </p>
+          </div>
+        </div>
+        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={!canProceed}
+            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
+          >
+            Back
+          </button>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-muted-foreground">
+              Step {currentStep} of {totalSteps}
+            </span>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={
+                !canProceed ||
+                boundedContexts.some((c: BoundedContext) => !c.name?.trim())
+              }
+              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  if (!activeContext) {
+    return (
+      <div className="flex flex-col h-full bg-card overflow-hidden">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              Select a context to edit
+            </p>
           </div>
         </div>
         <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
@@ -147,35 +204,14 @@ export function BoundedContextStep({
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      {/* Zone A: Identity (Fixed Top) */}
-      <header
-        key={`header-${activeContextId}`}
-        className="flex-shrink-0 border-b border-border p-6 bg-muted/50"
-      >
-        <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
-          STEP: 2 (bounded_contexts)
-        </div>
-        <div className="flex gap-2 mb-4">
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            1
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-primary text-primary-foreground border-primary">
-            2
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            3
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            4
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm bg-muted text-muted-foreground border-muted">
-            5
-          </div>
-        </div>
-        <h2 className="text-2xl font-semibold mb-2">Bounded Contexts</h2>
-        <p className="text-muted-foreground mb-6 text-sm">
-          Configure each bounded context and its domain model.
-        </p>
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title="Bounded Contexts"
+        description="Configure each bounded context and its domain model."
+        debugLabel={`STEP: ${currentStep} (bounded_contexts)`}
+      />
+      <div className="space-y-6">
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
@@ -312,7 +348,7 @@ export function BoundedContextStep({
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Zone B: Grid (Scrollable Middle) */}
       <div
@@ -327,7 +363,9 @@ export function BoundedContextStep({
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
                   Domain Model
                 </h3>
-                <p className="text-xs text-muted-foreground mt-1">Nouns &amp; State</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Nouns &amp; State
+                </p>
               </div>
             </div>
 

@@ -22,8 +22,8 @@ const createWebLogger = (): LoggerPort => ({
   // eslint-disable-next-line no-console
   error: (msg) => console.error(`[web] ${msg}`),
   debug: (msg) => {
-    // turbo lint rule for env var - DEBUG is a common dev flag
-    // eslint-disable-next-line turbo/no-undeclared-env-vars, no-console
+    // DEBUG is a common dev flag
+    // eslint-disable-next-line no-console
     if (process.env.DEBUG) console.log(`[debug] ${msg}`);
   },
   errorWithException: (err, msg) => {

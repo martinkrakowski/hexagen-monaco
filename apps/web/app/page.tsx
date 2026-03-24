@@ -1,32 +1,32 @@
-"use client";
+'use client';
 
-import { useState, useCallback } from "react";
-import { ResizableLayout } from "@/components/layout/ResizableLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { Header } from "./components/layout/Header";
-import { Footer } from "./components/layout/Footer";
-import { cn } from "@/lib/utils";
-import { MonacoEditorWrapper } from "@/components/monaco/MonacoEditorWrapper";
-import { GraphCanvasWrapper } from "@/components/canvas/graph-canvas-wrapper";
+import { useState, useCallback } from 'react';
+import { ResizableLayout } from '@/components/layout/ResizableLayout';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Header } from './components/layout/Header';
+import { Footer } from './components/layout/Footer';
+import { cn } from '@/lib/utils';
+import { MonacoEditorWrapper } from '@/components/monaco/MonacoEditorWrapper';
+import { GraphCanvasWrapper } from '@/components/canvas/graph-canvas-wrapper';
 
 import {
   emptyFormValues,
   wizardSteps,
-} from "@/components/project-wizard/config";
-import { useForm, useWatch, FormProvider } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+} from '@/components/project-wizard/config';
+import { useForm, useWatch, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   projectConfigSchema,
   type ProjectConfig,
-} from "@hexagen/project-configuration";
+} from '@hexagen/project-configuration';
 import type {
   WizardData,
   BoundedContext,
   ExternalContext,
   PeerMapping,
-} from "@hexagen/shared";
-import { deriveActiveContext } from "@hexagen/shared";
-import { IProjectWizardController } from "@hexagen/wizard-orchestration";
+} from '@hexagen/shared';
+import { deriveActiveContext } from '@hexagen/shared';
+import { IProjectWizardController } from '@hexagen/wizard-orchestration';
 import {
   WorkspaceGovernanceStep,
   BoundedContextStep,
@@ -35,30 +35,30 @@ import {
   PeerMappingSidebar,
   PortConfigurationStep,
   SummaryStep,
-} from "@/components/project-wizard/steps";
+} from '@/components/project-wizard/steps';
 
 type Intent =
   | {
-      type: "WIZARD_NEXT";
-      source: "user" | "agent";
+      type: 'WIZARD_NEXT';
+      source: 'user' | 'agent';
       payload: Partial<ProjectConfig>;
       metadata: { confidence: number };
     }
   | {
-      type: "WIZARD_BACK";
-      source: "user" | "agent";
+      type: 'WIZARD_BACK';
+      source: 'user' | 'agent';
       payload: null;
       metadata: { confidence: number };
     }
   | {
-      type: "GENERATE_PROJECT";
-      source: "user" | "agent";
+      type: 'GENERATE_PROJECT';
+      source: 'user' | 'agent';
       payload: ProjectConfig;
       metadata: { confidence: number };
     }
   | {
-      type: "RESET";
-      source: "user" | "agent";
+      type: 'RESET';
+      source: 'user' | 'agent';
       payload: null;
       metadata: { confidence: number };
     };
@@ -66,13 +66,13 @@ type Intent =
 export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [activeContextId, setActiveContextId] = useState<string>("");
-  const [activeMappingId, setActiveMappingId] = useState<string>("");
+  const [activeContextId, setActiveContextId] = useState<string>('');
+  const [activeMappingId, setActiveMappingId] = useState<string>('');
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
     defaultValues: emptyFormValues,
-    mode: "all",
+    mode: 'all',
   });
 
   const watchedValues = useWatch({ control: form.control });
@@ -97,7 +97,7 @@ export default function Home() {
     boundedContexts: boundedContexts,
     externalContexts: externalContexts,
     peerMappings: peerMappings,
-    workspaceScope: watchedValues.governance?.workspaceName || "",
+    workspaceScope: watchedValues.governance?.workspaceName || '',
     withLlm: watchedValues.withLlm,
     withBlockchain: watchedValues.withBlockchain,
   };
@@ -115,41 +115,41 @@ export default function Home() {
   const dispatchIntent = useCallback(
     async (intent: Intent) => {
       switch (intent.type) {
-        case "WIZARD_NEXT": {
+        case 'WIZARD_NEXT': {
           const isValid =
-            currentStepIndex !== 1 || (await form.trigger("boundedContexts"));
+            currentStepIndex !== 1 || (await form.trigger('boundedContexts'));
           if (isValid) {
             setCurrentStepIndex((i) => Math.min(i + 1, wizardSteps.length - 1));
           }
           break;
         }
-        case "WIZARD_BACK":
+        case 'WIZARD_BACK':
           setCurrentStepIndex((i) => Math.max(i - 1, 0));
           break;
-        case "GENERATE_PROJECT":
+        case 'GENERATE_PROJECT':
           setLoading(true);
           setTimeout(() => setLoading(false), 1000);
           break;
-        case "RESET":
+        case 'RESET':
           form.reset(emptyFormValues);
           setCurrentStepIndex(0);
-          setActiveContextId("");
+          setActiveContextId('');
           break;
       }
     },
-    [form, currentStepIndex],
+    [form, currentStepIndex]
   );
 
   const initialManifest = JSON.stringify(watchedValues, null, 2);
-  const sessionId = "wizard-session-1";
+  const sessionId = 'wizard-session-1';
 
   const handleNext = () => {
     if (currentStepIndex === 2) {
-      setActiveMappingId("");
+      setActiveMappingId('');
     }
     dispatchIntent({
-      type: "WIZARD_NEXT",
-      source: "user",
+      type: 'WIZARD_NEXT',
+      source: 'user',
       payload: form.getValues(),
       metadata: { confidence: 1 },
     });
@@ -157,11 +157,11 @@ export default function Home() {
 
   const handleBack = () => {
     if (currentStepIndex === 2) {
-      setActiveMappingId("");
+      setActiveMappingId('');
     }
     dispatchIntent({
-      type: "WIZARD_BACK",
-      source: "user",
+      type: 'WIZARD_BACK',
+      source: 'user',
       payload: null,
       metadata: { confidence: 1 },
     });
@@ -169,8 +169,8 @@ export default function Home() {
 
   const handleGenerate = () => {
     dispatchIntent({
-      type: "GENERATE_PROJECT",
-      source: "user",
+      type: 'GENERATE_PROJECT',
+      source: 'user',
       payload: form.getValues(),
       metadata: { confidence: 1 },
     });
@@ -241,9 +241,6 @@ export default function Home() {
         <ResizableLayout
           left={
             <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-              <CardHeader>
-                <CardTitle>HexaGen Project Wizard</CardTitle>
-              </CardHeader>
               <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
                 {currentStepIndex === 1 ? (
                   <FormProvider {...form}>

@@ -6,6 +6,7 @@ import type {
   ProjectConfig,
   PeerContextMapping,
 } from "@hexagen/project-configuration";
+import { StepHeader } from "./StepHeader";
 
 interface PeerContextMappingStepProps {
   onNext: () => void;
@@ -14,25 +15,6 @@ interface PeerContextMappingStepProps {
   activeMappingId?: string;
   currentStep?: number;
   totalSteps?: number;
-}
-
-function StepIndicator({ currentStep }: { currentStep: number }) {
-  return (
-    <div className="flex gap-2 mb-4">
-      {[1, 2, 3, 4, 5].map((step) => (
-        <div
-          key={step}
-          className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm ${
-            currentStep === step
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-muted text-muted-foreground border-muted"
-          }`}
-        >
-          {step}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function PeerContextMappingStep({
@@ -92,16 +74,13 @@ export function PeerContextMappingStep({
   if (boundedContexts.length < 2) {
     return (
       <div className="flex flex-col h-full bg-card overflow-hidden">
-        <div className="flex-shrink-0 p-6 pb-4">
-          <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
-            STEP: {currentStep} (peer_context_mapping)
-          </div>
-          <StepIndicator currentStep={currentStep} />
-          <h2 className="text-2xl font-semibold mb-2">Peer Context Mappings</h2>
-          <p className="text-muted-foreground mb-6 text-sm">
-            Define how contexts interact with each other.
-          </p>
-        </div>
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title="Peer Context Mappings"
+          description="Define how contexts interact with each other."
+          debugLabel={`STEP: ${currentStep} (peer_context_mapping)`}
+        />
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-center">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30 max-w-md mx-auto">
@@ -141,70 +120,67 @@ export function PeerContextMappingStep({
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      {/* Zone A: Mapping Info (Fixed Top) */}
-      <header
-        key={`header-${activeMappingId}`}
-        className="flex-shrink-0 p-6 pb-4 bg-muted/50"
-      >
-        <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
-          STEP: {currentStep} (peer_context_mapping)
-        </div>
-        <StepIndicator currentStep={currentStep} />
-        <h2 className="text-2xl font-semibold mb-2">Peer Context Mappings</h2>
-        <p className="text-muted-foreground mb-6 text-sm">
-          Define how contexts interact with each other.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-              Consumer Context (Source)
-            </label>
-            <select
-              value={activeMapping?.consumerContext || ""}
-              onChange={(e) =>
-                handleUpdateMapping({
-                  consumerContext: e.target.value,
-                })
-              }
-              disabled={!activeMapping}
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:bg-muted disabled:cursor-not-allowed"
-            >
-              <option value="" disabled>
-                Select Consumer
-              </option>
-              {contextNames.map((ctx) => (
-                <option key={ctx.id} value={ctx.id}>
-                  {ctx.name}
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title="Peer Context Mappings"
+        description="Define how contexts interact with each other."
+        debugLabel={`STEP: ${currentStep} (peer_context_mapping)`}
+      />
+      <div className="flex-1 overflow-y-auto px-6 pb-6">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
+                Consumer Context (Source)
+              </label>
+              <select
+                value={activeMapping?.consumerContext || ""}
+                onChange={(e) =>
+                  handleUpdateMapping({
+                    consumerContext: e.target.value,
+                  })
+                }
+                disabled={!activeMapping}
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:bg-muted disabled:cursor-not-allowed"
+              >
+                <option value="" disabled>
+                  Select Consumer
                 </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-              Provider Context (Target)
-            </label>
-            <select
-              value={activeMapping?.providerContext || ""}
-              onChange={(e) =>
-                handleUpdateMapping({
-                  providerContext: e.target.value,
-                })
-              }
-              disabled={!activeMapping}
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:bg-muted disabled:cursor-not-allowed"
-            >
-              <option value="" disabled>
-                Select Provider
-              </option>
-              {contextNames.map((ctx) => (
-                <option key={ctx.id} value={ctx.id}>
-                  {ctx.name}
+                {contextNames.map((ctx) => (
+                  <option key={ctx.id} value={ctx.id}>
+                    {ctx.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
+                Provider Context (Target)
+              </label>
+              <select
+                value={activeMapping?.providerContext || ""}
+                onChange={(e) =>
+                  handleUpdateMapping({
+                    providerContext: e.target.value,
+                  })
+                }
+                disabled={!activeMapping}
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:bg-muted disabled:cursor-not-allowed"
+              >
+                <option value="" disabled>
+                  Select Provider
                 </option>
-              ))}
-            </select>
+                {contextNames.map((ctx) => (
+                  <option key={ctx.id} value={ctx.id}>
+                    {ctx.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Zone B: Grid (Scrollable Middle) */}
       <div
