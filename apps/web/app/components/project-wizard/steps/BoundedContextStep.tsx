@@ -28,6 +28,11 @@ export function BoundedContextStep({
 }: BoundedContextStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
   const boundedContexts = watch("boundedContexts") || [];
+  const [, forceUpdate] = useState(0);
+
+  useEffect(() => {
+    forceUpdate((n) => n + 1);
+  }, [activeContextId]);
 
   const activeContext = boundedContexts.find((c) => c.id === activeContextId);
 
