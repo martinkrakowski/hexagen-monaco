@@ -97,6 +97,17 @@ export interface BoundedContext {
 }
 
 /**
+ * Represents a peer-to-peer mapping between two Bounded Contexts.
+ * These define how contexts interact with each other.
+ */
+export interface PeerMapping {
+  consumerContext: string;
+  providerContext: string;
+  integrationPattern: "open-host" | "acl";
+  communicationBoundary: "in-process" | "networked";
+}
+
+/**
  * WizardData is the input port between the project wizard (controller layer)
  * and the canvas visualization use case. It represents the in-progress state
  * of the wizard at any step — all fields are optional because the diagram
@@ -112,4 +123,6 @@ export interface WizardData {
   externalContexts?: ExternalContext[];
   /** Multiple Bounded Contexts within this project */
   boundedContexts?: BoundedContext[];
+  /** Peer-to-peer context mappings */
+  peerMappings?: PeerMapping[];
 }

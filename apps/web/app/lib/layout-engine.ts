@@ -2,6 +2,7 @@ import type {
   WizardData,
   ExternalContext,
   BoundedContext,
+  PeerMapping,
 } from "@hexagen/shared";
 import type {
   HexagonNodeType,
@@ -542,6 +543,38 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       type: "smoothstep",
       animated: true,
     });
+  });
+
+  // 4. Peer Context Mappings - create edges between bounded contexts
+  const peerMappings = wizardData.peerMappings ?? [];
+  peerMappings.forEach((mapping, index) => {
+    const consumerId = mapping.consumerContext;
+    const providerId = mapping.providerContext;
+
+    // Find the consumer and provider context nodes
+    const consumerNode = nodes.find(
+      (n) =>
+        n.id === consumerId ||
+        n.id ===
+          `context-${boundedContexts.findIndex((c) => c.id === consumerId)}`,
+    );
+    const providerNode = nodes.find(
+      (n) =>
+        n.id === providerId ||
+        n.id ===
+          `context-${boundedContexts.findIndex((c) => c.id === providerId)}`,
+    );
+
+    if (consumerNode && providerNode) {
+      edges.push({
+        id: `edge-peer-mapping-${index}`,
+        source: consumerId,
+        target: providerId,
+        label: mapping.integrationPattern === "open-host" ? "OHS" : "ACL",
+        type: "smoothstep",
+        animated: true,
+      });
+    }
   });
 
   return { nodes, edges };

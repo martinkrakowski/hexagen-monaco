@@ -23,6 +23,7 @@ import type {
   WizardData,
   BoundedContext,
   ExternalContext,
+  PeerMapping,
 } from "@hexagen/shared";
 import { deriveActiveContext } from "@hexagen/shared";
 import { IProjectWizardController } from "@hexagen/wizard-orchestration";
@@ -78,6 +79,7 @@ export default function Home() {
     []) as BoundedContext[];
   const externalContexts = (watchedValues.externalContexts ||
     []) as ExternalContext[];
+  const peerMappings = (watchedValues.peerMappings || []) as PeerMapping[];
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const activeContext = deriveActiveContext(boundedContexts, activeContextId);
@@ -92,6 +94,7 @@ export default function Home() {
   const wizardData: WizardData = {
     boundedContexts: boundedContexts,
     externalContexts: externalContexts,
+    peerMappings: peerMappings,
     workspaceScope: watchedValues.governance?.workspaceName || "",
     withLlm: watchedValues.withLlm,
     withBlockchain: watchedValues.withBlockchain,

@@ -20,6 +20,7 @@ export type {
   BoundedContext,
   ContextRelationshipType,
   DomainEventRef,
+  PeerMapping,
 } from "./domain/wizard-data";
 export { deriveActiveContext } from "./domain/wizard-multi-context";
 export type { ContextUpdateCallback } from "./domain/wizard-multi-context";
