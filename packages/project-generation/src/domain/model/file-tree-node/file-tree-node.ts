@@ -1,8 +1,2 @@
-// Pure domain value object - serializable tree node for generated project structure
-
-export interface FileTreeNode {
-  name: string;
-  type: 'file' | 'directory';
-  children?: FileTreeNode[];
-  content?: string; // base64 or raw text for files
-}
+// Re-export canonical type from @hexagen/shared
+export type { FileTreeNode, FileSystemNodeType } from "@hexagen/shared";

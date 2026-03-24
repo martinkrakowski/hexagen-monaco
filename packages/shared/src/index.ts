@@ -9,6 +9,7 @@ export { MonacoSession } from "./domain/monaco-session";
 export type { SessionMetadata } from "./domain/session-metadata";
 export type { PersistenceError } from "./domain/persistence-error";
 export type { ProjectSpecification } from "./domain/project-specification";
+export type { FileTreeNode, FileSystemNodeType } from "./domain/file-tree-node";
 
 // Application exports
 export type { MonacoPersistencePort } from "./application/ports/monaco-persistence.port";
