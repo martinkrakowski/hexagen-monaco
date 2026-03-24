@@ -32,6 +32,7 @@ import {
   BoundedContextStep,
   BoundedContextSidebar,
   PeerContextMappingStep,
+  PeerMappingSidebar,
   PortConfigurationStep,
   SummaryStep,
 } from "@/components/project-wizard/steps";
@@ -203,7 +204,6 @@ export default function Home() {
             onBack={handleBack}
             canProceed={canProceed}
             activeMappingId={activeMappingId}
-            onMappingSelect={setActiveMappingId}
             currentStep={3}
             totalSteps={totalSteps}
           />
@@ -261,6 +261,29 @@ export default function Home() {
                             onBack={handleBack}
                             canProceed={canProceed}
                             activeContextId={activeContextId}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </FormProvider>
+                ) : currentStepIndex === 2 ? (
+                  <FormProvider {...form}>
+                    <div className="flex flex-col h-full">
+                      <div className="shrink-0 border-b border-slate-200">
+                        <PeerMappingSidebar
+                          activeMappingId={activeMappingId}
+                          onMappingSelect={setActiveMappingId}
+                        />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="h-full flex flex-col">
+                          <PeerContextMappingStep
+                            onNext={handleNext}
+                            onBack={handleBack}
+                            canProceed={canProceed}
+                            activeMappingId={activeMappingId}
+                            currentStep={3}
+                            totalSteps={totalSteps}
                           />
                         </div>
                       </div>
