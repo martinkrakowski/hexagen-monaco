@@ -154,7 +154,7 @@ export default function Home() {
                       wizardData={wizardData}
                     />
                   ) : (
-                    <CodeView />
+                    <CodeView wizardData={wizardData} />
                   )}
                 </CardContent>
               </Card>
