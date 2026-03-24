@@ -13,6 +13,7 @@ import {
   generateRootTsConfig,
   generateRootTurboJson,
   generateStubContent,
+  generateAppStubContent,
 } from "./root-files.js";
 
 const noopLogger = {
@@ -65,6 +66,9 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
       });
 
       await engine.run();
+
+      // Create app folders and stubs
+      await this.createAppFiles(targetRoot, manifest);
 
       // Create stub files after engine runs (directories now exist)
       await this.createStubFiles(targetRoot, manifest);
@@ -167,6 +171,86 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
       for (const e of entities || []) await writeStub("domain/entities", e);
       for (const vo of valueObjects || [])
         await writeStub("domain/value_objects", vo);
+    }
+  }
+
+  private async createAppFiles(
+    targetRoot: string,
+    manifest: Record<string, unknown>,
+  ): Promise<void> {
+    const contexts = manifest.bounded_contexts as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (!contexts) return;
+
+    // Determine which apps to generate based on framework selections
+    const appTypes = new Set<string>();
+    for (const bc of contexts) {
+      const uiFramework = bc.uiFramework as string | undefined;
+      const apiFramework = bc.apiFramework as string | undefined;
+      if (uiFramework && uiFramework !== "None") appTypes.add("web");
+      if (apiFramework && apiFramework !== "plain-ts") appTypes.add("api");
+    }
+
+    for (const appType of appTypes) {
+      const appDir = path.join(targetRoot, "apps", appType);
+      await fs.mkdir(appDir, { recursive: true });
+      await fs.mkdir(path.join(appDir, "src"), { recursive: true });
+
+      // Generate app package.json
+      const appPackageJson = {
+        name: `@${manifest.system}/${appType}`,
+        version: "0.0.0",
+        private: true,
+        type: "module",
+        scripts: {
+          build: appType === "web" ? "next build" : "tsc",
+          dev: appType === "web" ? "next dev" : "tsc --watch",
+          lint: "eslint src --ext .ts,.tsx",
+          typecheck: "tsc --noEmit",
+        },
+        dependencies: {
+          ...(appType === "web"
+            ? { next: "^15.0.0", react: "^19.0.0", "react-dom": "^19.0.0" }
+            : { fastify: "^5.0.0" }),
+        },
+        devDependencies: {
+          typescript: "^5.5.4",
+          eslint: "^9.0.0",
+          "@typescript-eslint/parser": "^8.0.0",
+          "@typescript-eslint/eslint-plugin": "^8.0.0",
+        },
+      };
+      await fs.writeFile(
+        path.join(appDir, "package.json"),
+        JSON.stringify(appPackageJson, null, 2),
+      );
+
+      // Generate app tsconfig.json
+      const appTsConfig = {
+        extends: "../../tsconfig.base.json",
+        compilerOptions: {
+          rootDir: "src",
+          outDir: "dist",
+          composite: true,
+          declaration: true,
+          emitDeclarationOnly: true,
+          jsx: appType === "web" ? "react-jsx" : "preserve",
+        },
+        include: ["src/**/*"],
+        exclude: ["node_modules", "dist"],
+      };
+      await fs.writeFile(
+        path.join(appDir, "tsconfig.json"),
+        JSON.stringify(appTsConfig, null, 2),
+      );
+
+      // Generate app entry point
+      const systemName = (manifest.system as string) || "project";
+      await fs.writeFile(
+        path.join(appDir, "src", "index.ts"),
+        generateAppStubContent(systemName, appType),
+      );
     }
   }
 

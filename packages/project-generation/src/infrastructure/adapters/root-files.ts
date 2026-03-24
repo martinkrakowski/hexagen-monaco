@@ -55,6 +55,35 @@ export function generateRootTurboJson(): string {
   );
 }
 
+export function generateAppStubContent(
+  appName: string,
+  appType: string,
+): string {
+  if (appType === "web") {
+    return `// Auto-generated Next.js application
+export default function HomePage() {
+  return <div>Welcome to ${appName}</div>;
+}
+`;
+  }
+
+  if (appType === "api") {
+    return `// Auto-generated Fastify application
+import fastify from 'fastify';
+
+const server = fastify();
+
+server.get('/', async () => {
+  return { status: 'ok' };
+});
+
+export default server;
+`;
+  }
+
+  return `// Auto-generated application\n`;
+}
+
 export function generateStubContent(fileName: string): string {
   const isTsFile = fileName.endsWith(".ts") && !fileName.endsWith("index.ts");
   if (!isTsFile) return "// Auto-generated content\n";
