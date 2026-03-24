@@ -17,6 +17,7 @@ export const messagingAdapterOptions = [
   "RabbitMQ",
 ] as const;
 export const telemetryProviderOptions = [
+  "None",
   "OpenTelemetry",
   "Prometheus",
   "Winston",

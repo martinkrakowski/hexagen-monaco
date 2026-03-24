@@ -7,7 +7,13 @@ import type {
   ProjectConfig,
   BoundedContext,
 } from "@hexagen/project-configuration";
-import { apiFrameworkOptions, uiFrameworkOptions } from "../config";
+import {
+  apiFrameworkOptions,
+  uiFrameworkOptions,
+  persistenceAdapterOptions,
+  messagingAdapterOptions,
+  telemetryProviderOptions,
+} from "../config";
 
 interface BoundedContextStepProps {
   onNext: () => void;
@@ -146,7 +152,7 @@ export function BoundedContextStep({
         key={`header-${activeContextId}`}
         className="flex-shrink-0 border-b border-slate-100 p-6 bg-slate-50/50"
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
               Context Name
@@ -194,20 +200,93 @@ export function BoundedContextStep({
               UI Frontend
             </label>
             <select
-              value={activeContext.uiFramework || ""}
+              value={activeContext.telemetryProvider || "None"}
               onChange={(e) =>
                 updateContext(contextIndex, (ctx) => ({
                   ...ctx,
-                  uiFramework: e.target.value as BoundedContext["uiFramework"],
+                  telemetryProvider: e.target
+                    .value as unknown as BoundedContext["telemetryProvider"],
                 }))
               }
               className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             >
-              {uiFrameworkOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+              <option value="None">None</option>
+              {telemetryProviderOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+              Persistence
+            </label>
+            <select
+              value={activeContext.persistenceAdapter || ""}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  persistenceAdapter: e.target
+                    .value as BoundedContext["persistenceAdapter"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            >
+              <option value="">None</option>
+              {persistenceAdapterOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+              Messaging
+            </label>
+            <select
+              value={activeContext.messagingAdapter || ""}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  messagingAdapter: e.target
+                    .value as BoundedContext["messagingAdapter"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            >
+              <option value="">None</option>
+              {messagingAdapterOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+              Telemetry
+            </label>
+            <select
+              value={activeContext.telemetryProvider || "None"}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  telemetryProvider: e.target
+                    .value as BoundedContext["telemetryProvider"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            >
+              <option value="None">None</option>
+              {telemetryProviderOptions
+                .filter((t) => t !== "None")
+                .map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
             </select>
           </div>
         </div>
