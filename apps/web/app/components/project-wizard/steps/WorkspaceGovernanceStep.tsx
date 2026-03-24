@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useFormContext } from "react-hook-form";
-import type { ProjectConfig } from "@hexagen/project-configuration";
-import { StepHeader } from "./StepHeader";
+import { useFormContext } from 'react-hook-form';
+import type { ProjectConfig } from '@hexagen/project-configuration';
+import { StepHeader } from './StepHeader';
 
 interface WorkspaceGovernanceStepProps {
   onNext: () => void;
@@ -21,39 +21,32 @@ export function WorkspaceGovernanceStep({
 }: WorkspaceGovernanceStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
-  const workspaceName = watch("governance.workspaceName") || "";
-  const packageManager = watch("governance.packageManager") || "yarn";
+  const workspaceName = watch('governance.workspaceName') || '';
+  const packageManager = watch('governance.packageManager') || 'yarn';
   const topologyStrictness =
-    watch("governance.topologyStrictness") || "flexible";
-  const namespacePrefix = watch("governance.namespacePrefix") || "@hexagen";
+    watch('governance.topologyStrictness') || 'flexible';
+  const namespacePrefix = watch('governance.namespacePrefix') || '@hexagen';
   const contextDirectoryPattern =
-    watch("governance.namingConventions.contextDirectoryPattern") ||
-    "packages/";
+    watch('governance.namingConventions.contextDirectoryPattern') ||
+    'packages/';
   const adapterSuffix =
-    watch("governance.namingConventions.adapterSuffix") || ".adapter.ts";
+    watch('governance.namingConventions.adapterSuffix') || '.adapter.ts';
 
   const handleNext = () => {
-    setValue("governance.workspaceName", workspaceName.trim());
-    setValue("governance.packageManager", packageManager);
-    setValue("governance.topologyStrictness", topologyStrictness);
-    setValue("governance.namespacePrefix", namespacePrefix.trim());
+    setValue('governance.workspaceName', workspaceName.trim());
+    setValue('governance.packageManager', packageManager);
+    setValue('governance.topologyStrictness', topologyStrictness);
+    setValue('governance.namespacePrefix', namespacePrefix.trim());
     setValue(
-      "governance.namingConventions.contextDirectoryPattern",
-      contextDirectoryPattern,
+      'governance.namingConventions.contextDirectoryPattern',
+      contextDirectoryPattern
     );
-    setValue("governance.namingConventions.adapterSuffix", adapterSuffix);
+    setValue('governance.namingConventions.adapterSuffix', adapterSuffix);
     onNext();
   };
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      <StepHeader
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-        title="Workspace Governance"
-        description="Define workspace name, package manager, and topology."
-        debugLabel={`STEP: ${currentStep} (workspace_governance)`}
-      />
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         <div className="space-y-6">
           {/* Workspace Name */}
@@ -64,7 +57,7 @@ export function WorkspaceGovernanceStep({
             <input
               value={workspaceName}
               onChange={(e) =>
-                setValue("governance.workspaceName", e.target.value)
+                setValue('governance.workspaceName', e.target.value)
               }
               className="w-full px-4 py-2 bg-background border border-input rounded-md"
               placeholder="@mycompany"
@@ -80,8 +73,8 @@ export function WorkspaceGovernanceStep({
               value={packageManager}
               onChange={(e) =>
                 setValue(
-                  "governance.packageManager",
-                  e.target.value as "yarn" | "pnpm" | "bun",
+                  'governance.packageManager',
+                  e.target.value as 'yarn' | 'pnpm' | 'bun'
                 )
               }
               className="w-full px-4 py-2 bg-background border border-input rounded-md"
@@ -101,8 +94,8 @@ export function WorkspaceGovernanceStep({
               value={topologyStrictness}
               onChange={(e) =>
                 setValue(
-                  "governance.topologyStrictness",
-                  e.target.value as "strict" | "flexible",
+                  'governance.topologyStrictness',
+                  e.target.value as 'strict' | 'flexible'
                 )
               }
               className="w-full px-4 py-2 bg-background border border-input rounded-md"
@@ -122,7 +115,7 @@ export function WorkspaceGovernanceStep({
             <input
               value={namespacePrefix}
               onChange={(e) =>
-                setValue("governance.namespacePrefix", e.target.value)
+                setValue('governance.namespacePrefix', e.target.value)
               }
               className="w-full px-4 py-2 bg-background border border-input rounded-md"
               placeholder="@hexagen"
@@ -144,8 +137,8 @@ export function WorkspaceGovernanceStep({
                   value={contextDirectoryPattern}
                   onChange={(e) =>
                     setValue(
-                      "governance.namingConventions.contextDirectoryPattern",
-                      e.target.value,
+                      'governance.namingConventions.contextDirectoryPattern',
+                      e.target.value
                     )
                   }
                   className="w-full px-3 py-2 bg-background border border-input rounded-md"
@@ -161,8 +154,8 @@ export function WorkspaceGovernanceStep({
                   value={adapterSuffix}
                   onChange={(e) =>
                     setValue(
-                      "governance.namingConventions.adapterSuffix",
-                      e.target.value,
+                      'governance.namingConventions.adapterSuffix',
+                      e.target.value
                     )
                   }
                   className="w-full px-3 py-2 bg-background border border-input rounded-md"

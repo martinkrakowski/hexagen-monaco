@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useFormContext } from "react-hook-form";
+import { useFormContext } from 'react-hook-form';
 import type {
   ProjectConfig,
   BoundedContext,
   PeerContextMapping,
-} from "@hexagen/project-configuration";
-import { projectAddons } from "../config";
-import { StepHeader } from "./StepHeader";
+} from '@hexagen/project-configuration';
+import { projectAddons } from '../config';
+import { StepHeader } from './StepHeader';
 
 interface SummaryStepProps {
   onBack: () => void;
@@ -28,19 +28,12 @@ export function SummaryStep({
 }: SummaryStepProps) {
   const { watch } = useFormContext<ProjectConfig>();
 
-  const governance = watch("governance");
-  const boundedContexts = watch("boundedContexts") || [];
-  const peerMappings = watch("peerMappings") || [];
+  const governance = watch('governance');
+  const boundedContexts = watch('boundedContexts') || [];
+  const peerMappings = watch('peerMappings') || [];
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      <StepHeader
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-        title="Review & Generate"
-        description="Review your configuration before generating the project."
-        debugLabel={`STEP: ${currentStep} (summary)`}
-      />
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         <div className="space-y-6">
           <div className="space-y-4">
@@ -51,29 +44,29 @@ export function SummaryStep({
               </h3>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Name:</span>{" "}
+                  <span className="text-muted-foreground">Name:</span>{' '}
                   <span className="font-medium">
-                    {governance?.workspaceName || "Not set"}
+                    {governance?.workspaceName || 'Not set'}
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">
                     Package Manager:
-                  </span>{" "}
+                  </span>{' '}
                   <span className="font-medium">
-                    {governance?.packageManager || "yarn"}
+                    {governance?.packageManager || 'yarn'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Topology:</span>{" "}
+                  <span className="text-muted-foreground">Topology:</span>{' '}
                   <span className="font-medium">
-                    {governance?.topologyStrictness || "flexible"}
+                    {governance?.topologyStrictness || 'flexible'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Namespace:</span>{" "}
+                  <span className="text-muted-foreground">Namespace:</span>{' '}
                   <span className="font-medium">
-                    {governance?.namespacePrefix || "@hexagen"}
+                    {governance?.namespacePrefix || '@hexagen'}
                   </span>
                 </div>
               </div>
@@ -90,9 +83,9 @@ export function SummaryStep({
                     <span className="text-xs font-mono text-muted-foreground">
                       {i + 1}.
                     </span>
-                    <span className="font-medium">{ctx.name || "Unnamed"}</span>
+                    <span className="font-medium">{ctx.name || 'Unnamed'}</span>
                     <span className="text-muted-foreground text-xs">
-                      ({ctx.infrastructureTarget || "nestjs"})
+                      ({ctx.infrastructureTarget || 'nestjs'})
                     </span>
                     {ctx.portConfiguration?.inboundPorts && (
                       <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
@@ -119,27 +112,27 @@ export function SummaryStep({
                   {peerMappings.map(
                     (mapping: PeerContextMapping, i: number) => {
                       const consumer = boundedContexts.find(
-                        (c) => c.id === mapping.consumerContext,
+                        (c) => c.id === mapping.consumerContext
                       );
                       const provider = boundedContexts.find(
-                        (c) => c.id === mapping.providerContext,
+                        (c) => c.id === mapping.providerContext
                       );
                       return (
                         <div key={i} className="text-sm">
                           <span className="font-medium">
-                            {consumer?.name || "Unknown"}
-                          </span>{" "}
-                          <span className="text-muted-foreground">→</span>{" "}
+                            {consumer?.name || 'Unknown'}
+                          </span>{' '}
+                          <span className="text-muted-foreground">→</span>{' '}
                           <span className="font-medium">
-                            {provider?.name || "Unknown"}
+                            {provider?.name || 'Unknown'}
                           </span>
                           <span className="text-xs text-muted-foreground ml-2">
-                            ({mapping.integrationPattern},{" "}
+                            ({mapping.integrationPattern},{' '}
                             {mapping.communicationBoundary})
                           </span>
                         </div>
                       );
-                    },
+                    }
                   )}
                 </div>
               </div>
@@ -192,7 +185,7 @@ export function SummaryStep({
             }
             className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isGenerating ? "Generating..." : "Generate Project"}
+            {isGenerating ? 'Generating...' : 'Generate Project'}
           </button>
         </div>
       </footer>
