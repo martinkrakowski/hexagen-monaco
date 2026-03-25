@@ -6,8 +6,8 @@ import {
   PeerMappingSidebar,
   PortConfigurationStep,
   SummaryStep,
-} from '@/components/project-wizard/steps';
-import { SidebarStepLayout } from './SidebarStepLayout';
+} from "@/components/project-wizard/steps";
+import { SidebarStepLayout } from "./SidebarStepLayout";
 
 // We define exactly what the router needs from the parent
 interface WizardStepRouterProps {
@@ -22,6 +22,7 @@ interface WizardStepRouterProps {
   onNext: () => void;
   onBack: () => void;
   onGenerate: () => void;
+  onViewModeChange: (mode: "visual" | "code") => void;
 }
 
 export function WizardStepRouter({
@@ -36,6 +37,7 @@ export function WizardStepRouter({
   onNext,
   onBack,
   onGenerate,
+  onViewModeChange,
 }: WizardStepRouterProps) {
   switch (currentStepIndex) {
     case 0:
@@ -103,6 +105,7 @@ export function WizardStepRouter({
           onGenerate={onGenerate}
           canProceed={canProceed}
           isGenerating={isGenerating}
+          onViewModeChange={onViewModeChange}
           currentStep={5}
           totalSteps={totalSteps}
         />

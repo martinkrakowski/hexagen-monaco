@@ -135,6 +135,7 @@ export default function Home() {
                     onNext={handleNext}
                     onBack={handleBack}
                     onGenerate={handleGenerate}
+                    onViewModeChange={setViewMode}
                   />
                 </CardContent>
               </Card>

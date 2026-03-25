@@ -1,19 +1,28 @@
-'use client';
+"use client";
 
-import { useFormContext } from 'react-hook-form';
+import { useState } from "react";
+import { useFormContext } from "react-hook-form";
 import type {
   ProjectConfig,
   BoundedContext,
   PeerContextMapping,
-} from '@hexagen/project-configuration';
-import { projectAddons } from '../config';
-import { StepHeader } from './StepHeader';
+} from "@hexagen/project-configuration";
+import { projectAddons } from "../config";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/Dialog";
 
 interface SummaryStepProps {
   onBack: () => void;
   onGenerate: () => void;
   canProceed: boolean;
   isGenerating: boolean;
+  onViewModeChange: (mode: "visual" | "code") => void;
   currentStep?: number;
   totalSteps?: number;
 }
@@ -23,14 +32,31 @@ export function SummaryStep({
   onGenerate,
   canProceed,
   isGenerating,
+  onViewModeChange,
   currentStep = 5,
   totalSteps = 5,
 }: SummaryStepProps) {
   const { watch } = useFormContext<ProjectConfig>();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  const governance = watch('governance');
-  const boundedContexts = watch('boundedContexts') || [];
-  const peerMappings = watch('peerMappings') || [];
+  const governance = watch("governance");
+  const boundedContexts = watch("boundedContexts") || [];
+  const peerMappings = watch("peerMappings") || [];
+
+  const handleConfirm = () => {
+    setDialogOpen(false);
+    onGenerate();
+    onViewModeChange("code");
+  };
+
+  const totalPorts = boundedContexts.reduce(
+    (sum: number, ctx: BoundedContext) => {
+      const inCount = ctx.portConfiguration?.inboundPorts?.length || 0;
+      const outCount = ctx.portConfiguration?.outboundPorts?.length || 0;
+      return sum + inCount + outCount;
+    },
+    0,
+  );
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
@@ -44,29 +70,29 @@ export function SummaryStep({
               </h3>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Name:</span>{' '}
+                  <span className="text-muted-foreground">Name:</span>{" "}
                   <span className="font-medium">
-                    {governance?.workspaceName || 'Not set'}
+                    {governance?.workspaceName || "Not set"}
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">
                     Package Manager:
-                  </span>{' '}
+                  </span>{" "}
                   <span className="font-medium">
-                    {governance?.packageManager || 'yarn'}
+                    {governance?.packageManager || "yarn"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Topology:</span>{' '}
+                  <span className="text-muted-foreground">Topology:</span>{" "}
                   <span className="font-medium">
-                    {governance?.topologyStrictness || 'flexible'}
+                    {governance?.topologyStrictness || "flexible"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Namespace:</span>{' '}
+                  <span className="text-muted-foreground">Namespace:</span>{" "}
                   <span className="font-medium">
-                    {governance?.namespacePrefix || '@hexagen'}
+                    {governance?.namespacePrefix || "@hexagen"}
                   </span>
                 </div>
               </div>
@@ -83,9 +109,9 @@ export function SummaryStep({
                     <span className="text-xs font-mono text-muted-foreground">
                       {i + 1}.
                     </span>
-                    <span className="font-medium">{ctx.name || 'Unnamed'}</span>
+                    <span className="font-medium">{ctx.name || "Unnamed"}</span>
                     <span className="text-muted-foreground text-xs">
-                      ({ctx.infrastructureTarget || 'nestjs'})
+                      ({ctx.infrastructureTarget || "nestjs"})
                     </span>
                     {ctx.portConfiguration?.inboundPorts && (
                       <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
@@ -112,27 +138,27 @@ export function SummaryStep({
                   {peerMappings.map(
                     (mapping: PeerContextMapping, i: number) => {
                       const consumer = boundedContexts.find(
-                        (c) => c.id === mapping.consumerContext
+                        (c) => c.id === mapping.consumerContext,
                       );
                       const provider = boundedContexts.find(
-                        (c) => c.id === mapping.providerContext
+                        (c) => c.id === mapping.providerContext,
                       );
                       return (
                         <div key={i} className="text-sm">
                           <span className="font-medium">
-                            {consumer?.name || 'Unknown'}
-                          </span>{' '}
-                          <span className="text-muted-foreground">→</span>{' '}
+                            {consumer?.name || "Unknown"}
+                          </span>{" "}
+                          <span className="text-muted-foreground">→</span>{" "}
                           <span className="font-medium">
-                            {provider?.name || 'Unknown'}
+                            {provider?.name || "Unknown"}
                           </span>
                           <span className="text-xs text-muted-foreground ml-2">
-                            ({mapping.integrationPattern},{' '}
+                            ({mapping.integrationPattern},{" "}
                             {mapping.communicationBoundary})
                           </span>
                         </div>
                       );
-                    }
+                    },
                   )}
                 </div>
               </div>
@@ -179,16 +205,68 @@ export function SummaryStep({
           </span>
           <button
             type="button"
-            onClick={onGenerate}
+            onClick={() => setDialogOpen(true)}
             disabled={
               isGenerating || boundedContexts.length === 0 || !canProceed
             }
             className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isGenerating ? 'Generating...' : 'Generate Project'}
+            {isGenerating ? "Generating..." : "Generate Project"}
           </button>
         </div>
       </footer>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Project</DialogTitle>
+            <DialogDescription>
+              This will scaffold your project and switch to the code editor
+              view.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Bounded Contexts</span>
+              <span className="font-medium">{boundedContexts.length}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Total Ports</span>
+              <span className="font-medium">{totalPorts}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Peer Mappings</span>
+              <span className="font-medium">{peerMappings.length}</span>
+            </div>
+            {governance?.workspaceName && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Workspace</span>
+                <span className="font-medium font-mono text-xs">
+                  {governance.workspaceName}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setDialogOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 rounded-md transition-colors border border-input"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="px-4 py-2 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors"
+            >
+              Generate &amp; Switch to Code View
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
