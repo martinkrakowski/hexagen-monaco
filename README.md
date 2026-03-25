@@ -107,7 +107,7 @@ modules:
           - git-provider-port
 ```
 
-## Quick Start
+## Quick Start (HexaGen Monaco)
 
 ```bash
 git clone git@github.com:martinkrakowski/hexagen-monaco.git
@@ -115,6 +115,28 @@ cd hexagen-monaco
 yarn install
 yarn build
 npx hexagen --help
+```
+
+## Generated Project User Flow
+
+```bash
+# 1. Download the generated project ZIP from the web UI
+# 2. Extract and enter the directory
+cd hexagen-project
+
+# 3. Enable corepack and install dependencies
+corepack enable && yarn install
+
+# 4. Start development or build
+yarn dev          # Start all packages in dev mode
+yarn build        # Build all packages
+
+# 5. Use the HexaGen CLI for architecture management
+yarn sync                    # Generate artifacts
+yarn sync:dry                # Preview changes
+yarn sync:force              # Overwrite non-generated files
+yarn lint:arch               # Validate manifest against rules
+yarn format                  # Format all TypeScript and Markdown files
 ```
 
 ## CLI Commands
