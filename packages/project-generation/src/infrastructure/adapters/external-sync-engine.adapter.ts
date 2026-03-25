@@ -16,6 +16,9 @@ import {
   generateAppStubContent,
   generateEslintConfig,
   generateBarrelContent,
+  generateLayerRules,
+  generateLinterConfig,
+  generateGeneratorConfig,
 } from "./root-files.js";
 
 const noopLogger = {
@@ -121,6 +124,26 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
     await fs.writeFile(
       path.join(targetRoot, "turbo.json"),
       generateRootTurboJson(),
+    );
+
+    // Write .architecture/ config files
+    const archDir = path.join(targetRoot, ".architecture");
+    const invariantsDir = path.join(archDir, "invariants");
+    await fs.mkdir(invariantsDir, { recursive: true });
+
+    const scope = (manifest.scope as string) || "hexagen";
+
+    await fs.writeFile(
+      path.join(invariantsDir, "layer-rules.yaml"),
+      generateLayerRules(scope),
+    );
+    await fs.writeFile(
+      path.join(invariantsDir, "linter-config.yaml"),
+      generateLinterConfig(scope),
+    );
+    await fs.writeFile(
+      path.join(archDir, "generator.config.yaml"),
+      generateGeneratorConfig(manifest),
     );
   }
 
