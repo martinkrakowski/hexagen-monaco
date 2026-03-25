@@ -1,0 +1,81 @@
+name: "Publish to NPM"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    name: "Build & Publish Packages"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare yarn@4.12.0 --activate
+
+      - name: "Install Dependencies"
+        run: yarn install --immutable
+
+      - name: "Build All Packages"
+        run: yarn turbo run build
+
+      - name: "TypeCheck All Packages"
+        run: yarn turbo run typecheck
+
+      - name: "Publish @hexagen/shared"
+        run: npm publish --access public
+        working-directory: packages/shared
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: "Wait for npm propagation"
+        run: sleep 10
+
+      - name: "Update @hexagen/sync dependency to published version"
+        run: |
+          VERSION=$(node -p "require('./packages/shared/package.json').version")
+          cd packages/sync
+          yarn remove @hexagen/shared
+          yarn add @hexagen/shared@^${VERSION}
+
+      - name: "Publish @hexagen/sync"
+        run: npm publish --access public
+        working-directory: packages/sync
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: "Wait for npm propagation"
+        run: sleep 10
+
+      - name: "Update @hexagen/arch-linter dependencies to published versions"
+        run: |
+          VERSION=$(node -p "require('./packages/shared/package.json').version")
+          cd tools/arch-linter
+          yarn remove @hexagen/shared @hexagen/sync
+          yarn add @hexagen/shared@^${VERSION} @hexagen/sync@^${VERSION}
+
+      - name: "Publish @hexagen/arch-linter"
+        run: npm publish --access public
+        working-directory: tools/arch-linter
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: "Create GitHub Release"
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

@@ -1,13 +1,23 @@
 {
   "name": "@hexagen/shared",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "description": "HexaGen shared types and utilities",
+  "license": "MIT",
   "main": "dist/index.js",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "lint": "eslint . --ext .ts",

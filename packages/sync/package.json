@@ -1,13 +1,19 @@
 {
   "name": "@hexagen/sync",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
+  "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "hexagen": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
@@ -22,7 +28,6 @@
     "monorepo",
     "code-generation"
   ],
-  "license": "MIT",
   "dependencies": {
     "@hexagen/shared": "workspace:*",
     "commander": "^14.0.3",
