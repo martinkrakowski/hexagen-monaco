@@ -4,28 +4,79 @@ import * as fs from "fs";
 import { Project } from "ts-morph";
 import * as yaml from "js-yaml";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createConsoleLogger } from "./logger.js";
 import type { Manifest } from "@hexagen/sync";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const logger = createConsoleLogger();
 
-const ROOT_DIR = path.resolve(__dirname, "..", "..", "..");
-const MANIFEST_PATH = path.join(ROOT_DIR, ".architecture/manifest.yaml");
+// ─── Dynamic Project Root Discovery ─────────────────────────────────────────
+
+function findProjectRoot(): string {
+  // A. CLI argument override (--root <path>)
+  const rootArgIndex = process.argv.indexOf("--root");
+  if (rootArgIndex !== -1 && process.argv[rootArgIndex + 1]) {
+    return path.resolve(process.argv[rootArgIndex + 1]);
+  }
+
+  // B. Environment variable override
+  if (process.env.HEXAGEN_ROOT) {
+    return path.resolve(process.env.HEXAGEN_ROOT);
+  }
+
+  // C. Walk up from cwd() to find .architecture/manifest.yaml
+  let dir = process.cwd();
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, ".architecture", "manifest.yaml"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+
+  // D. Walk up to find monorepo root (package.json with workspaces)
+  dir = process.cwd();
+  while (dir !== path.dirname(dir)) {
+    const pkgPath = path.join(dir, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        if (pkg.workspaces) return dir;
+      } catch {
+        // Ignore parse errors and continue upward
+      }
+    }
+    dir = path.dirname(dir);
+  }
+
+  // E. Fatal Error (Strict Mode)
+  logger.error(
+    "FATAL ERROR: Could not find project root. No .architecture/manifest.yaml found.",
+  );
+  logger.error(
+    "Please run this command from within a HexaGen project, or specify the root using --root <path> or the HEXAGEN_ROOT environment variable.",
+  );
+  process.exit(1);
+}
+
+const ROOT_DIR = findProjectRoot();
+
+// ─── Configuration Paths ────────────────────────────────────────────────────
+
+const MANIFEST_PATH = path.join(ROOT_DIR, ".architecture", "manifest.yaml");
 const LAYER_RULES_PATH = path.join(
   ROOT_DIR,
-  ".architecture/invariants/layer-rules.yaml",
+  ".architecture",
+  "invariants",
+  "layer-rules.yaml",
 );
 const LINTER_CONFIG_PATH = path.join(
   ROOT_DIR,
-  ".architecture/invariants/linter-config.yaml",
+  ".architecture",
+  "invariants",
+  "linter-config.yaml",
 );
 const TSCONFIG_PATH = path.join(ROOT_DIR, "tsconfig.base.json");
-const PKG_ROOT_PATH = path.join(ROOT_DIR, "packages");
-const SCOPE = "@hexagen";
+
+// ─── Interfaces ─────────────────────────────────────────────────────────────
 
 interface LayerRules {
   shared_kernel?: {
@@ -57,46 +108,81 @@ interface LinterConfig {
   };
 }
 
-let manifest: Manifest;
-let layerRules: LayerRules;
-let linterConfig: LinterConfig;
+// ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
 
+if (!fs.existsSync(MANIFEST_PATH)) {
+  logger.error(
+    `FATAL ERROR: Architecture manifest not found at ${MANIFEST_PATH}`,
+  );
+  logger.error("The linter requires a manifest to validate against. Aborting.");
+  process.exit(1);
+}
+
+let manifest: Manifest;
 try {
   const manifestContent = await fsPromises.readFile(MANIFEST_PATH, "utf8");
   manifest = (yaml.load(manifestContent) as Manifest) ?? {
     bounded_contexts: [],
   };
 } catch (e) {
-  logger.error(`Could not load architecture manifest from ${MANIFEST_PATH}`);
+  logger.error(
+    `FATAL ERROR: Could not parse architecture manifest from ${MANIFEST_PATH}`,
+  );
   process.exit(1);
 }
 
+// ─── Dynamic Scope and Workspace Path ───────────────────────────────────────
+
+const SCOPE = manifest.scope ? `@${manifest.scope}` : "@hexagen";
+
+let workspacesDir = "packages";
+if (
+  manifest.monorepo?.workspaces &&
+  Array.isArray(manifest.monorepo.workspaces)
+) {
+  const pkgWorkspace = manifest.monorepo.workspaces.find(
+    (w: string) => w.includes("/*") && !w.includes("apps/"),
+  );
+  if (pkgWorkspace) {
+    workspacesDir = pkgWorkspace.split("/")[0];
+  }
+}
+const PKG_ROOT_PATH = path.join(ROOT_DIR, workspacesDir);
+
+// ─── Load Optional Configs ──────────────────────────────────────────────────
+
+let layerRules: LayerRules;
 try {
   const layerRulesContent = await fsPromises.readFile(LAYER_RULES_PATH, "utf8");
   layerRules = (yaml.load(layerRulesContent) as LayerRules) ?? {};
-} catch (e) {
+} catch {
   logger.warn(
     `Could not load layer-rules.yaml from ${LAYER_RULES_PATH}, using defaults`,
   );
   layerRules = {};
 }
 
+let linterConfig: LinterConfig;
 try {
   const linterConfigContent = await fsPromises.readFile(
     LINTER_CONFIG_PATH,
     "utf8",
   );
   linterConfig = (yaml.load(linterConfigContent) as LinterConfig) ?? {};
-} catch (e) {
+} catch {
   logger.warn(
     `Could not load linter-config.yaml from ${LINTER_CONFIG_PATH}, using defaults`,
   );
   linterConfig = {};
 }
 
+// ─── TypeScript Project ─────────────────────────────────────────────────────
+
 const project = new Project({
   tsConfigFilePath: TSCONFIG_PATH,
 });
+
+// ─── Helper Functions ───────────────────────────────────────────────────────
 
 function isTestDoubleOrTest(filePath: string): boolean {
   const testDoubleRules = linterConfig.test_double_rules;
@@ -105,7 +191,7 @@ function isTestDoubleOrTest(filePath: string): boolean {
 }
 
 function isGlobalWhitelisted(moduleSpecifier: string): boolean {
-  const whitelist = linterConfig.global_whitelist ?? ["@hexagen/shared"];
+  const whitelist = linterConfig.global_whitelist ?? [`${SCOPE}/shared`];
   return whitelist.some((pattern) => {
     if (pattern.endsWith("/**")) {
       const prefix = pattern.slice(0, -2);
@@ -178,20 +264,22 @@ function isCrossPackageViolation(
 
 function getLayerAllowedImports(filePath: string): string[] {
   const layers = layerRules?.layers;
-  if (!layers) return ["domain", "@hexagen/shared"];
+  if (!layers) return ["domain", SCOPE];
 
   for (const [layerName, layerDef] of Object.entries(layers)) {
     if (filePath.includes(`/${layerName}/`)) {
-      return layerDef.allowed_imports ?? ["domain", "@hexagen/shared"];
+      return layerDef.allowed_imports ?? ["domain", `${SCOPE}/shared`];
     }
   }
 
-  return layers.application?.allowed_imports ?? ["domain", "@hexagen/shared"];
+  return layers.application?.allowed_imports ?? ["domain", `${SCOPE}/shared`];
 }
 
 function isSharedKernelAllowed(): boolean {
   return layerRules?.shared_kernel?.allowed_in_all_layers ?? true;
 }
+
+// ─── Main Lint Check ────────────────────────────────────────────────────────
 
 function checkArchitecturalIntegrity() {
   const errors: string[] = [];
@@ -211,6 +299,12 @@ function checkArchitecturalIntegrity() {
 
     moduleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();
+
+      // Skip build artifacts in dist/ directories
+      if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) {
+        return;
+      }
+
       const isTestDbl = isTestDoubleOrTest(filePath);
 
       const imports = file.getImportDeclarations();
@@ -245,10 +339,11 @@ function checkArchitecturalIntegrity() {
             if (sourceFile) {
               const importPath = sourceFile.getFilePath();
               const isAllowed = allowed.some((a) => {
-                if (a.startsWith("@hexagen/")) {
+                if (a.startsWith("@")) {
+                  const pkgName = a.split("/")[1];
                   return (
-                    importPath.includes(`/packages/${a.split("/")[1]}/`) ||
-                    importPath.includes(`\\packages\\${a.split("/")[1]}\\`)
+                    importPath.includes(`/${workspacesDir}/${pkgName}/`) ||
+                    importPath.includes(`\\${workspacesDir}\\${pkgName}\\`)
                   );
                 }
                 return (
@@ -269,17 +364,26 @@ function checkArchitecturalIntegrity() {
         }
 
         if (filePath.includes("/application/")) {
+          // Allow relative imports within the same package
+          if (
+            moduleSpecifier.startsWith(".") ||
+            moduleSpecifier.startsWith("/")
+          ) {
+            return;
+          }
+
           const allowed = getLayerAllowedImports(filePath);
           const sourceFile = imp.getModuleSpecifierSourceFile();
           if (sourceFile) {
             const importPath = sourceFile.getFilePath();
             const isAllowed = allowed.some((a) => {
-              if (a === "@hexagen/shared" && isSharedKernelAllowed())
+              if (a === `${SCOPE}/shared` && isSharedKernelAllowed())
                 return true;
-              if (a.startsWith("@hexagen/")) {
+              if (a.startsWith("@")) {
+                const pkgName = a.split("/")[1];
                 return (
-                  importPath.includes(`/packages/${a.split("/")[1]}/`) ||
-                  importPath.includes(`\\packages\\${a.split("/")[1]}\\`)
+                  importPath.includes(`/${workspacesDir}/${pkgName}/`) ||
+                  importPath.includes(`\\${workspacesDir}\\${pkgName}\\`)
                 );
               }
               return (
@@ -309,7 +413,11 @@ function checkArchitecturalIntegrity() {
   }
 }
 
+// ─── Entry Point ────────────────────────────────────────────────────────────
+
 logger.info("Running Architectural Integrity Linter...");
+logger.info(`Project root: ${ROOT_DIR}`);
+logger.info(`Scope: ${SCOPE}`);
 checkArchitecturalIntegrity();
 
 export type { LoggerPort } from "./logger.js";
