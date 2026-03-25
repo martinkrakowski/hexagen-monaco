@@ -14,6 +14,8 @@ import {
   generateRootTurboJson,
   generateStubContent,
   generateAppStubContent,
+  generateEslintConfig,
+  generateBarrelContent,
 } from "./root-files.js";
 
 const noopLogger = {
@@ -72,6 +74,12 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
 
       // Create stub files after engine runs (directories now exist)
       await this.createStubFiles(targetRoot, manifest);
+
+      // Create ESLint config for each package
+      await this.createEslintConfigs(targetRoot, manifest);
+
+      // Create barrel files for empty directories
+      await this.createBarrelFiles(targetRoot);
 
       const files = await this.collectFileTree(targetRoot);
 
@@ -155,8 +163,10 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
             path.join(fullDir, finalName),
             generateStubContent(finalName),
           );
-        } catch {
-          // Directory may not exist if SyncEngine didn't create it — skip silently
+        } catch (e) {
+          console.warn(
+            `[ExternalSyncEngineAdapter] Failed to write stub ${fileName}: ${e instanceof Error ? e.message : String(e)}`,
+          );
         }
       };
 
@@ -171,6 +181,64 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
       for (const e of entities || []) await writeStub("domain/entities", e);
       for (const vo of valueObjects || [])
         await writeStub("domain/value_objects", vo);
+    }
+  }
+
+  private async createEslintConfigs(
+    targetRoot: string,
+    manifest: Record<string, unknown>,
+  ): Promise<void> {
+    const contexts = manifest.bounded_contexts as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (!contexts) return;
+
+    const eslintConfig = generateEslintConfig();
+
+    for (const bc of contexts) {
+      const bcName = bc.name as string;
+      const bcDir = path.join(targetRoot, "packages", bcName);
+      await fs.writeFile(path.join(bcDir, "eslint.config.js"), eslintConfig);
+    }
+  }
+
+  private async createBarrelFiles(targetRoot: string): Promise<void> {
+    const barrelContent = generateBarrelContent();
+    const packagesDir = path.join(targetRoot, "packages");
+
+    try {
+      const packages = await fs.readdir(packagesDir, { withFileTypes: true });
+      for (const pkg of packages) {
+        if (!pkg.isDirectory()) continue;
+        const srcDir = path.join(packagesDir, pkg.name, "src");
+        await this.writeBarrelsRecursive(srcDir, barrelContent);
+      }
+    } catch {
+      // packages dir may not exist yet
+    }
+  }
+
+  private async writeBarrelsRecursive(
+    dir: string,
+    barrelContent: string,
+  ): Promise<void> {
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      const dirs = entries.filter((e) => e.isDirectory());
+      const files = entries.filter((e) => e.isFile());
+
+      // Write barrel if directory has no index.ts
+      const hasIndex = files.some((f) => f.name === "index.ts");
+      if (!hasIndex && dirs.length > 0) {
+        await fs.writeFile(path.join(dir, "index.ts"), barrelContent);
+      }
+
+      // Recurse into subdirectories
+      for (const d of dirs) {
+        await this.writeBarrelsRecursive(path.join(dir, d.name), barrelContent);
+      }
+    } catch {
+      // Directory may not exist
     }
   }
 

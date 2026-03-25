@@ -60,6 +60,7 @@ export function generateRootTurboJson(): string {
       $schema: "https://turbo.build/schema.json",
       tasks: {
         build: { dependsOn: ["^build"], outputs: ["dist/**"] },
+        dev: { cache: false, persistent: true },
         lint: { dependsOn: ["^build"] },
         typecheck: { outputs: [], cache: true },
         test: { dependsOn: ["^build"] },
@@ -110,4 +111,28 @@ export function generateStubContent(fileName: string): string {
     .join("");
 
   return `// Auto-generated stub\nexport interface ${interfaceName} {\n  // Implementation pending\n}\n`;
+}
+
+export function generateEslintConfig(): string {
+  return `import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**'],
+  },
+);
+`;
+}
+
+export function generateBarrelContent(): string {
+  return "export {};\n";
 }
