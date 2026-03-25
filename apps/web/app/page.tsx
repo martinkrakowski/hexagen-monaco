@@ -1,12 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useForm, useWatch, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import yaml from "js-yaml";
 
 import { ResizableLayout } from "@/components/layout/ResizableLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { ViewToggle } from "@/components/ui/ViewToggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/Dialog";
+import { FileDropZone } from "@/components/ui/FileDropZone";
 import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
 
@@ -31,6 +40,8 @@ import type {
 } from "@hexagen/shared";
 
 import { WizardStepRouter } from "@/components/project-wizard/WizardStepRouter";
+import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
+import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
 
 export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -38,6 +49,8 @@ export default function Home() {
   const [activeContextId, setActiveContextId] = useState<string>("");
   const [activeMappingId, setActiveMappingId] = useState<string>("");
   const [viewMode, setViewMode] = useState<"visual" | "code">("visual");
+  const [mode, setMode] = useState<"genesis" | "edit">("genesis");
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
@@ -106,9 +119,28 @@ export default function Home() {
     setTimeout(() => setLoading(false), 1000);
   };
 
+  const handleManifestLoaded = useCallback(
+    (yamlContent: string) => {
+      try {
+        const manifest = yaml.load(yamlContent) as Record<string, unknown>;
+        const wizardData = manifestToWizardData(
+          manifest as Parameters<typeof manifestToWizardData>[0],
+        );
+        const formValues = wizardDataToFormValues(wizardData);
+        form.reset(formValues);
+        setMode("edit");
+        setShowLoadDialog(false);
+        setCurrentStepIndex(0);
+      } catch {
+        // Error handling will be shown in the dialog
+      }
+    },
+    [form],
+  );
+
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-      <Header />
+      <Header onLoadManifest={() => setShowLoadDialog(true)} mode={mode} />
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <FormProvider {...form}>
@@ -180,6 +212,22 @@ export default function Home() {
       </main>
 
       <Footer />
+
+      <Dialog open={showLoadDialog} onClose={() => setShowLoadDialog(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Load Manifest</DialogTitle>
+            <DialogDescription>
+              Drop your existing{" "}
+              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                manifest.yaml
+              </code>{" "}
+              to populate the wizard.
+            </DialogDescription>
+          </DialogHeader>
+          <FileDropZone onFileLoaded={handleManifestLoaded} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

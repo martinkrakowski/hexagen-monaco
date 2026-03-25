@@ -7,3 +7,4 @@ export {
   DialogDescription,
   DialogFooter,
 } from "./Dialog";
+export { FileDropZone } from "./FileDropZone";

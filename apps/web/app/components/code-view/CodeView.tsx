@@ -7,11 +7,13 @@ import {
   RefreshCw,
   AlertCircle,
   Download,
+  Archive,
 } from "lucide-react";
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { MonacoViewer } from "@/components/monaco/MonacoViewer";
 import { useProjectGeneration } from "@/hooks/use-project-generation";
+import { useArchitectureDownload } from "@/hooks/use-architecture-download";
 import type { WizardData } from "@hexagen/shared";
 import type { ViewFileNode } from "./types";
 
@@ -32,6 +34,9 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
     downloadZip,
   } = useProjectGeneration(wizardData);
 
+  const { downloadArchitectureZip, isDownloading: isDownloadingArch } =
+    useArchitectureDownload(wizardData);
+
   const fileTree = useMemo(() => mapToFolderTree(files), [files]);
   const isNetworkActive = loading || isDownloading;
 
@@ -42,7 +47,21 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider p-4 border-b border-slate-800 shrink-0 flex items-center justify-between">
           <span>Explorer</span>
           <div className="flex items-center gap-3">
-            {/* Download Button */}
+            {/* Architecture Download Button */}
+            <button
+              onClick={downloadArchitectureZip}
+              disabled={isDownloadingArch}
+              className="transition-colors disabled:opacity-50 hover:text-slate-300"
+              title="Download Architecture (.architecture/)"
+            >
+              {isDownloadingArch ? (
+                <Loader2 size={14} className="animate-spin text-blue-400" />
+              ) : (
+                <Archive size={14} />
+              )}
+            </button>
+
+            {/* Full Project Download Button */}
             <button
               onClick={downloadZip}
               disabled={isNetworkActive || files.size === 0}
