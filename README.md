@@ -164,6 +164,26 @@ npx hexagen arch edit --editor vim # Use vim instead of nano
 npx hexagen arch edit --validate-only  # Validate without editing
 ```
 
+## Architecture Linter
+
+The `hexagen-lint` command validates your project's architectural integrity against the manifest. It discovers the project root using the following priority:
+
+1. `--root <path>` CLI argument (explicit override)
+2. `HEXAGEN_ROOT` environment variable
+3. Walk-up from `cwd()` to find `.architecture/manifest.yaml`
+4. Walk-up to find `package.json` with `workspaces` field
+
+```bash
+# Direct usage
+hexagen-lint --root /path/to/project
+
+# Via environment variable
+HEXAGEN_ROOT=/path/to/project hexagen-lint
+
+# CI/CD usage
+yarn lint:arch
+```
+
 ---
 
 ## License
