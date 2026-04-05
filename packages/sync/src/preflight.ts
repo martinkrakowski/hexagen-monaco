@@ -32,9 +32,9 @@ export async function ensureDependenciesBuilt(
     if (stderr) logger.warn(stderr);
     logger.info("Pre‑flight build completed.");
   } catch (err: any) {
-    // Include actual error output for debugging
     const errorDetails = err.stderr || err.stdout || err.message || err;
-    logger.error(`Pre‑flight build failed: ${errorDetails}`);
-    throw err;
+    logger.error(`Pre-flight build failed. Aborting sync.`);
+    logger.error(`Build error: ${errorDetails}`);
+    throw new Error("Preflight build failed — sync aborted");
   }
 }

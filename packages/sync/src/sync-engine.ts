@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { SyncFlags, SyncConfig } from "./config.js";
 import { MigrationReport } from "./migration-report.js";
+import { LockFile } from "./lock.js";
 
 import { runArchLinter } from "./linter.js";
 import { ensureLayerFolders } from "./generators/layer-folders.js";
@@ -117,6 +118,32 @@ export class SyncEngine {
         err instanceof Error ? err.message : "Unknown parse error";
       throw new Error(`Failed to parse manifest: ${message}`);
     }
+  }
+
+  private validateManifest(): void {
+    const { logger } = this.partialConfig;
+    const contexts = this.manifest.bounded_contexts ?? [];
+
+    const names = contexts.map((c) => c.name).filter(Boolean);
+    const duplicates = names.filter((name, i) => names.indexOf(name) !== i);
+
+    if (duplicates.length > 0) {
+      throw new Error(
+        `Invalid manifest: duplicate bounded context names: ${duplicates.join(", ")}`,
+      );
+    }
+
+    for (const ctx of contexts) {
+      if (!ctx?.name) {
+        logger.warn("Skipping bounded context with missing name");
+        continue;
+      }
+      if (!ctx?.type) {
+        logger.warn(`Bounded context "${ctx.name}" missing type field`);
+      }
+    }
+
+    logger.debug("[Manifest] Validation passed");
   }
 
   private getConfig(): SyncConfig {
@@ -245,6 +272,7 @@ export class SyncEngine {
   async run(): Promise<void> {
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
     const start = Date.now();
+    let lockFile: LockFile | null = null;
 
     logger.info(
       dryRun ? "[DRY-RUN MODE] Starting sync..." : "Starting sync...",
@@ -252,12 +280,28 @@ export class SyncEngine {
 
     // Ensure a clean git tree before mutating anything (unless --allow-dirty or external mode)
     if (mode === "self-regen" && !allowDirty) {
-      const { stdout: gitStatus } = await execAsync("git status --porcelain");
-      if (gitStatus && gitStatus.trim().length > 0) {
-        logger.error(
-          "Git working tree is dirty. Commit or stash changes, or use --allow-dirty to proceed.",
-        );
-        throw new Error("Dirty git tree");
+      try {
+        const { stdout: gitStatus } = await execAsync("git status --porcelain");
+        if (gitStatus && gitStatus.trim().length > 0) {
+          logger.error(
+            "Git working tree is dirty. Commit or stash changes, or use --allow-dirty to proceed.",
+          );
+          throw new Error("Dirty git tree");
+        }
+      } catch (gitErr) {
+        if (gitErr instanceof Error) {
+          if (gitErr.message.includes("not a git repository")) {
+            logger.error("Git operation failed: not a git repository");
+            throw new Error("Git operation failed: repository not found");
+          }
+          if ("code" in gitErr && gitErr.code === "ENOENT") {
+            logger.error("Git operation failed: git command not found");
+            throw new Error("Git operation failed: git not installed");
+          }
+          // Re-throw for outer handler
+          throw gitErr;
+        }
+        throw new Error("Git operation failed: unknown error");
       }
     } else if (mode === "external") {
       logger.info("Skipping git check (external mode)");
@@ -268,12 +312,28 @@ export class SyncEngine {
     try {
       this.workspaceRoot = await this.findWorkspaceRoot();
       await this.loadManifest();
+      this.validateManifest();
 
       this.fullConfig = {
         ...this.partialConfig,
         workspaceRoot: this.workspaceRoot,
         manifest: this.manifest,
       } as const;
+
+      // Acquire file lock for generator.config.yaml (skip in dry-run and external mode)
+      if (!dryRun && mode === "self-regen") {
+        lockFile = new LockFile(this.workspaceRoot);
+        try {
+          await lockFile.acquire();
+        } catch (lockErr) {
+          logger.error(
+            lockErr instanceof Error
+              ? lockErr.message
+              : "Failed to acquire lock",
+          );
+          throw new Error("Sync aborted: another sync is in progress");
+        }
+      }
 
       // Pre-flight: build any stale packages (skip in external mode)
       if (mode === "self-regen") {
@@ -327,6 +387,16 @@ export class SyncEngine {
           );
         }
         process.exit(1);
+      }
+    } finally {
+      if (lockFile) {
+        try {
+          await lockFile.release();
+        } catch (releaseErr) {
+          logger.warn(
+            `Lock release failed: ${releaseErr instanceof Error ? releaseErr.message : releaseErr}`,
+          );
+        }
       }
     }
   }
