@@ -2,7 +2,6 @@ import type {
   WizardData,
   ExternalContext,
   BoundedContext,
-  PeerMapping,
 } from "@hexagen/shared";
 import type {
   HexagonNodeType,
@@ -590,19 +589,6 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       // Get context names for label
       const consumerCtx = boundedContexts.find((c) => c.id === consumerId);
       const providerCtx = boundedContexts.find((c) => c.id === providerId);
-
-      // Calculate edge routing - go below the hexagons to avoid penetrating nodes
-      const consumerY =
-        consumerNode.position.y + (consumerNode.style?.height ?? 360);
-      const providerY =
-        providerNode.position.y + (providerNode.style?.height ?? 360);
-      const routeY = Math.max(consumerY, providerY) + 80; // 80px buffer below hexagons
-
-      // Calculate start/end x positions
-      const consumerX =
-        consumerNode.position.x + (consumerNode.style?.width ?? 360);
-      const providerX = providerNode.position.x;
-      const midX = (consumerX + providerX) / 2;
 
       edges.push({
         id: `edge-peer-mapping-${index}`,

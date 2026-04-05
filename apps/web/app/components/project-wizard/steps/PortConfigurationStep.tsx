@@ -1,12 +1,11 @@
-'use client';
+"use client";
 
-import { useFormContext } from 'react-hook-form';
+import { useFormContext } from "react-hook-form";
 import type {
   ProjectConfig,
   BoundedContext,
   PortConfiguration,
-} from '@hexagen/project-configuration';
-import { StepHeader } from './StepHeader';
+} from "@hexagen/project-configuration";
 
 interface PortConfigurationStepProps {
   onNext: () => void;
@@ -17,17 +16,17 @@ interface PortConfigurationStepProps {
 }
 
 const INBOUND_PORTS = [
-  { value: 'rest-controller', label: 'REST Controller' },
-  { value: 'graphql-resolver', label: 'GraphQL Resolver' },
-  { value: 'event-listener', label: 'Event/Queue Listener' },
-  { value: 'cli-command', label: 'CLI Command' },
+  { value: "rest-controller", label: "REST Controller" },
+  { value: "graphql-resolver", label: "GraphQL Resolver" },
+  { value: "event-listener", label: "Event/Queue Listener" },
+  { value: "cli-command", label: "CLI Command" },
 ] as const;
 
 const OUTBOUND_PORTS = [
-  { value: 'relational-db', label: 'Relational DB Repository' },
-  { value: 'document-db', label: 'Document DB Repository' },
-  { value: 'external-service-client', label: 'External Service Client' },
-  { value: 'message-publisher', label: 'Message Publisher' },
+  { value: "relational-db", label: "Relational DB Repository" },
+  { value: "document-db", label: "Document DB Repository" },
+  { value: "external-service-client", label: "External Service Client" },
+  { value: "message-publisher", label: "Message Publisher" },
 ] as const;
 
 export function PortConfigurationStep({
@@ -39,12 +38,12 @@ export function PortConfigurationStep({
 }: PortConfigurationStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
-  const boundedContexts = watch('boundedContexts') || [];
+  const boundedContexts = watch("boundedContexts") || [];
 
   const handleTogglePort = (
     contextIndex: number,
-    direction: 'inbound' | 'outbound',
-    port: string
+    direction: "inbound" | "outbound",
+    port: string,
   ) => {
     const currentContext = boundedContexts[contextIndex];
     if (!currentContext) return;
@@ -61,23 +60,23 @@ export function PortConfigurationStep({
       portConfiguration: nextPortConfig,
     };
 
-    if (direction === 'inbound') {
+    if (direction === "inbound") {
       const currentPorts = nextPortConfig.inboundPorts;
       const newPorts = currentPorts.includes(port as never)
         ? currentPorts.filter((p) => p !== port)
-        : [...currentPorts, port as PortConfiguration['inboundPorts'][number]];
+        : [...currentPorts, port as PortConfiguration["inboundPorts"][number]];
       nextPortConfig.inboundPorts = newPorts;
     } else {
       const currentPorts = nextPortConfig.outboundPorts;
       const newPorts = currentPorts.includes(port as never)
         ? currentPorts.filter((p) => p !== port)
-        : [...currentPorts, port as PortConfiguration['outboundPorts'][number]];
+        : [...currentPorts, port as PortConfiguration["outboundPorts"][number]];
       nextPortConfig.outboundPorts = newPorts;
     }
 
     const nextContexts = [...boundedContexts];
     nextContexts[contextIndex] = nextContext;
-    setValue('boundedContexts', nextContexts);
+    setValue("boundedContexts", nextContexts);
   };
 
   if (boundedContexts.length === 0) {
@@ -139,7 +138,7 @@ export function PortConfigurationStep({
                     <span className="text-xs font-mono text-muted-foreground">
                       {index + 1}.
                     </span>
-                    <h3 className="font-medium">{context.name || 'Unnamed'}</h3>
+                    <h3 className="font-medium">{context.name || "Unnamed"}</h3>
                   </div>
 
                   <div className="grid grid-cols-2 gap-6">
@@ -163,10 +162,10 @@ export function PortConfigurationStep({
                               type="checkbox"
                               name={`boundedContexts.${index}.portConfiguration.inbound.${port.value}`}
                               checked={portConfig.inboundPorts?.includes(
-                                port.value as never
+                                port.value as never,
                               )}
                               onChange={() =>
-                                handleTogglePort(index, 'inbound', port.value)
+                                handleTogglePort(index, "inbound", port.value)
                               }
                               className="h-4 w-4 accent-primary"
                             />
@@ -196,10 +195,10 @@ export function PortConfigurationStep({
                               type="checkbox"
                               name={`boundedContexts.${index}.portConfiguration.outbound.${port.value}`}
                               checked={portConfig.outboundPorts?.includes(
-                                port.value as never
+                                port.value as never,
                               )}
                               onChange={() =>
-                                handleTogglePort(index, 'outbound', port.value)
+                                handleTogglePort(index, "outbound", port.value)
                               }
                               className="h-4 w-4 accent-primary"
                             />

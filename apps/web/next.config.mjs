@@ -39,7 +39,7 @@ const nextConfig = {
   },
 
   // Webpack configuration for monorepo package resolution
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     // Resolve workspace packages from the monorepo root node_modules
     config.resolve.modules = [
       path.resolve(monorepoRoot, "node_modules"),

@@ -54,7 +54,7 @@ export function PeerMappingSidebar({
 
   const handleDeleteMapping = (mappingId: string) => {
     const indexToDelete = peerMappings.findIndex(
-      (m: PeerContextMapping, i: number) =>
+      (m: PeerContextMapping) =>
         `${m.consumerContext}-${m.providerContext}` === mappingId,
     );
     if (indexToDelete >= 0) {
@@ -92,7 +92,7 @@ export function PeerMappingSidebar({
             No mappings defined
           </div>
         ) : (
-          peerMappings.map((mapping: PeerContextMapping, index: number) => {
+          peerMappings.map((mapping: PeerContextMapping) => {
             const mappingId = `${mapping.consumerContext}-${mapping.providerContext}`;
             const consumerName = getContextName(mapping.consumerContext);
             const providerName = getContextName(mapping.providerContext);

@@ -1,12 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useState, useEffect } from "react";
+import { useFormContext } from "react-hook-form";
 import type {
   ProjectConfig,
   PeerContextMapping,
-} from '@hexagen/project-configuration';
-import { StepHeader } from './StepHeader';
+} from "@hexagen/project-configuration";
 
 interface PeerContextMappingStepProps {
   onNext: () => void;
@@ -26,8 +25,8 @@ export function PeerContextMappingStep({
   totalSteps = 5,
 }: PeerContextMappingStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
-  const boundedContexts = watch('boundedContexts') || [];
-  const peerMappings = watch('peerMappings') || [];
+  const boundedContexts = watch("boundedContexts") || [];
+  const peerMappings = watch("peerMappings") || [];
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
@@ -37,8 +36,8 @@ export function PeerContextMappingStep({
   const contextNames = boundedContexts.map(
     (ctx: { id: string; name?: string }) => ({
       id: ctx.id,
-      name: ctx.name || 'Unnamed Context',
-    })
+      name: ctx.name || "Unnamed Context",
+    }),
   );
 
   const getActiveMapping = (): PeerContextMapping | null => {
@@ -46,7 +45,7 @@ export function PeerContextMappingStep({
     return (
       peerMappings.find(
         (m: PeerContextMapping) =>
-          `${m.consumerContext}-${m.providerContext}` === activeMappingId
+          `${m.consumerContext}-${m.providerContext}` === activeMappingId,
       ) || null
     );
   };
@@ -54,21 +53,21 @@ export function PeerContextMappingStep({
   const activeMapping = getActiveMapping();
   const activeMappingIndex = peerMappings.findIndex(
     (m: PeerContextMapping) =>
-      `${m.consumerContext}-${m.providerContext}` === activeMappingId
+      `${m.consumerContext}-${m.providerContext}` === activeMappingId,
   );
 
   const handleUpdateMapping = (updates: Partial<PeerContextMapping>) => {
     if (activeMappingIndex < 0) return;
     const newMappings = peerMappings.map(
       (mapping: PeerContextMapping, i: number) =>
-        i === activeMappingIndex ? { ...mapping, ...updates } : mapping
+        i === activeMappingIndex ? { ...mapping, ...updates } : mapping,
     );
-    setValue('peerMappings', newMappings);
+    setValue("peerMappings", newMappings);
   };
 
   const getContextName = (id: string): string => {
     const ctx = boundedContexts.find((c: { id: string }) => c.id === id);
-    return ctx?.name || 'Unnamed';
+    return ctx?.name || "Unnamed";
   };
 
   if (boundedContexts.length < 2) {
@@ -121,7 +120,7 @@ export function PeerContextMappingStep({
                 Consumer Context (Source)
               </label>
               <select
-                value={activeMapping?.consumerContext || ''}
+                value={activeMapping?.consumerContext || ""}
                 onChange={(e) =>
                   handleUpdateMapping({
                     consumerContext: e.target.value,
@@ -145,7 +144,7 @@ export function PeerContextMappingStep({
                 Provider Context (Target)
               </label>
               <select
-                value={activeMapping?.providerContext || ''}
+                value={activeMapping?.providerContext || ""}
                 onChange={(e) =>
                   handleUpdateMapping({
                     providerContext: e.target.value,
@@ -190,7 +189,7 @@ export function PeerContextMappingStep({
                     Integration Details
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {getContextName(activeMapping.consumerContext)} →{' '}
+                    {getContextName(activeMapping.consumerContext)} →{" "}
                     {getContextName(activeMapping.providerContext)}
                   </p>
                 </div>
@@ -206,8 +205,8 @@ export function PeerContextMappingStep({
                     onChange={(e) =>
                       handleUpdateMapping({
                         integrationPattern: e.target.value as
-                          | 'open-host'
-                          | 'acl',
+                          | "open-host"
+                          | "acl",
                       })
                     }
                     className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
@@ -241,8 +240,8 @@ export function PeerContextMappingStep({
                     onChange={(e) =>
                       handleUpdateMapping({
                         communicationBoundary: e.target.value as
-                          | 'in-process'
-                          | 'networked',
+                          | "in-process"
+                          | "networked",
                       })
                     }
                     className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none"

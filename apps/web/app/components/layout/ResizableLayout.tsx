@@ -10,7 +10,6 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { ResponsiveTabs, type TabPanel } from "./ResponsiveTabs";
-import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 interface ResizableLayoutProps {
   left: React.ReactNode;
@@ -138,9 +137,7 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
         </Panel>
       </PanelGroup>
 
-      {rightCollapsed && (
-        <CollapsedStrip side="right" onExpand={expandRight} />
-      )}
+      {rightCollapsed && <CollapsedStrip side="right" onExpand={expandRight} />}
     </div>
   );
 }
@@ -151,31 +148,19 @@ function MobileLayout({ left, middle, right }: ResizableLayoutProps) {
       id: "wizard",
       title: "Wizard",
       icon: "wizard",
-      content: (
-        <div className="h-full overflow-auto">
-          {left}
-        </div>
-      ),
+      content: <div className="h-full overflow-auto">{left}</div>,
     },
     {
       id: "preview",
       title: "Preview",
       icon: "preview",
-      content: (
-        <div className="h-full overflow-hidden">
-          {middle}
-        </div>
-      ),
+      content: <div className="h-full overflow-hidden">{middle}</div>,
     },
     {
       id: "ai",
       title: "AI Architect",
       icon: "ai",
-      content: (
-        <div className="h-full overflow-hidden">
-          {right}
-        </div>
-      ),
+      content: <div className="h-full overflow-hidden">{right}</div>,
     },
   ];
 
@@ -187,8 +172,6 @@ function MobileLayout({ left, middle, right }: ResizableLayoutProps) {
 }
 
 export function ResizableLayout(props: ResizableLayoutProps) {
-  const breakpoint = useBreakpoint();
-
   return (
     <div className="h-screen w-full overflow-hidden p-5 bg-background">
       <DesktopLayout {...props} />

@@ -1,20 +1,19 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useFormContext } from 'react-hook-form';
-import { ChipInput } from './ChipInput';
-import { StepHeader } from './StepHeader';
+import { useState, useEffect } from "react";
+import { useFormContext } from "react-hook-form";
+import { ChipInput } from "./ChipInput";
 import type {
   ProjectConfig,
   BoundedContext,
-} from '@hexagen/project-configuration';
+} from "@hexagen/project-configuration";
 import {
   apiFrameworkOptions,
   uiFrameworkOptions,
   persistenceAdapterOptions,
   messagingAdapterOptions,
   telemetryProviderOptions,
-} from '../config';
+} from "../config";
 
 interface BoundedContextStepProps {
   onNext: () => void;
@@ -34,7 +33,7 @@ export function BoundedContextStep({
   totalSteps = 4,
 }: BoundedContextStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
-  const boundedContexts = watch('boundedContexts') || [];
+  const boundedContexts = watch("boundedContexts") || [];
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
@@ -45,12 +44,12 @@ export function BoundedContextStep({
 
   const updateContext = (
     index: number,
-    updater: (ctx: BoundedContext) => BoundedContext
+    updater: (ctx: BoundedContext) => BoundedContext,
   ) => {
     const nextContexts = boundedContexts.map(
-      (ctx: BoundedContext, i: number) => (i === index ? updater(ctx) : ctx)
+      (ctx: BoundedContext, i: number) => (i === index ? updater(ctx) : ctx),
     );
-    setValue('boundedContexts', nextContexts, {
+    setValue("boundedContexts", nextContexts, {
       shouldDirty: true,
       shouldValidate: true,
     });
@@ -184,7 +183,7 @@ export function BoundedContextStep({
   }
 
   const contextIndex = boundedContexts.findIndex(
-    (c) => c.id === activeContextId
+    (c) => c.id === activeContextId,
   );
   const fieldPrefix = `boundedContexts.${contextIndex}`;
 
@@ -215,12 +214,12 @@ export function BoundedContextStep({
                 API Backend
               </label>
               <select
-                value={activeContext.infrastructureTarget || ''}
+                value={activeContext.infrastructureTarget || ""}
                 onChange={(e) =>
                   updateContext(contextIndex, (ctx) => ({
                     ...ctx,
                     infrastructureTarget: e.target
-                      .value as BoundedContext['infrastructureTarget'],
+                      .value as BoundedContext["infrastructureTarget"],
                   }))
                 }
                 className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -240,12 +239,12 @@ export function BoundedContextStep({
                 UI Frontend
               </label>
               <select
-                value={activeContext.uiFramework || ''}
+                value={activeContext.uiFramework || ""}
                 onChange={(e) =>
                   updateContext(contextIndex, (ctx) => ({
                     ...ctx,
                     uiFramework: e.target
-                      .value as BoundedContext['uiFramework'],
+                      .value as BoundedContext["uiFramework"],
                   }))
                 }
                 className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -262,12 +261,12 @@ export function BoundedContextStep({
                 Persistence
               </label>
               <select
-                value={activeContext.persistenceAdapter || ''}
+                value={activeContext.persistenceAdapter || ""}
                 onChange={(e) =>
                   updateContext(contextIndex, (ctx) => ({
                     ...ctx,
                     persistenceAdapter: e.target
-                      .value as BoundedContext['persistenceAdapter'],
+                      .value as BoundedContext["persistenceAdapter"],
                   }))
                 }
                 className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -285,12 +284,12 @@ export function BoundedContextStep({
                 Messaging
               </label>
               <select
-                value={activeContext.messagingAdapter || ''}
+                value={activeContext.messagingAdapter || ""}
                 onChange={(e) =>
                   updateContext(contextIndex, (ctx) => ({
                     ...ctx,
                     messagingAdapter: e.target
-                      .value as BoundedContext['messagingAdapter'],
+                      .value as BoundedContext["messagingAdapter"],
                   }))
                 }
                 className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -308,12 +307,12 @@ export function BoundedContextStep({
                 Telemetry
               </label>
               <select
-                value={activeContext.telemetryProvider || 'None'}
+                value={activeContext.telemetryProvider || "None"}
                 onChange={(e) =>
                   updateContext(contextIndex, (ctx) => ({
                     ...ctx,
                     telemetryProvider: e.target
-                      .value as unknown as BoundedContext['telemetryProvider'],
+                      .value as unknown as BoundedContext["telemetryProvider"],
                   }))
                 }
                 className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -359,7 +358,6 @@ export function BoundedContextStep({
                   coreDomainEntities: values,
                 }))
               }
-              stableHeight
             />
 
             <ChipInput
@@ -373,7 +371,6 @@ export function BoundedContextStep({
                   valueObjects: values,
                 }))
               }
-              stableHeight
             />
           </div>
 
@@ -401,7 +398,6 @@ export function BoundedContextStep({
                   useCases: values,
                 }))
               }
-              stableHeight
             />
 
             <ChipInput
@@ -415,7 +411,6 @@ export function BoundedContextStep({
                   domainEvents: values,
                 }))
               }
-              stableHeight
             />
           </div>
         </div>

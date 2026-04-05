@@ -8,7 +8,6 @@ interface ChipInputProps {
   values: string[];
   onChange: (values: string[]) => void;
   name: string;
-  stableHeight?: boolean;
 }
 
 export function ChipInput({
@@ -17,7 +16,6 @@ export function ChipInput({
   values,
   onChange,
   name,
-  stableHeight = false,
 }: ChipInputProps) {
   const [inputValue, setInputValue] = useState("");
 
