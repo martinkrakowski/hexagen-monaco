@@ -1,24 +1,68 @@
 import type { Manifest } from "./types/manifest.js";
-import { type LoggerPort, type LoggerConfig } from "@hexagen/shared";
+import { LogLevel, type LoggerPort, type LoggerConfig } from "@hexagen/shared";
 
 export type { LoggerPort, LoggerConfig };
 
-const internalLogger: LoggerPort = {
-  error: (msg) => console.error(`[sync] ${msg}`),
-  warn: (msg) => console.warn(`[sync] ${msg}`),
-  info: (msg) => console.log(`[sync] ${msg}`),
-  debug: (msg) => {
-    if (process.env.DEBUG) console.log(`[debug] ${msg}`);
-  },
-  errorWithException: (err, msg) => {
-    const errorMessage =
-      msg ?? (err instanceof Error ? err.message : String(err));
-    console.error(`[sync] ${errorMessage}`);
-    if (err instanceof Error && err.stack) {
-      console.error(err.stack);
-    }
-  },
-};
+interface LoggerOptions {
+  minLevel?: LogLevel;
+  includeTimestamps?: boolean;
+}
+
+function createPrefixedLogger(
+  prefix: string,
+  options: LoggerOptions = {},
+): LoggerPort {
+  const minLevel = options.minLevel ?? LogLevel.INFO;
+  const includeTimestamps = options.includeTimestamps ?? true;
+
+  const levels = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR];
+  const currentLevelIndex = levels.indexOf(minLevel);
+
+  function shouldLog(level: LogLevel): boolean {
+    const messageLevelIndex = levels.indexOf(level);
+    return messageLevelIndex >= currentLevelIndex;
+  }
+
+  function formatMessage(level: LogLevel, message: string): string {
+    const timestamp = includeTimestamps ? new Date().toISOString() : "";
+    return timestamp
+      ? `${timestamp} [${level}] ${prefix} ${message}`
+      : `[${level}] ${prefix} ${message}`;
+  }
+
+  return {
+    error: (msg, ctx) => {
+      if (!shouldLog(LogLevel.ERROR)) return;
+      console.error(formatMessage(LogLevel.ERROR, msg), ctx ?? "");
+    },
+    warn: (msg, ctx) => {
+      if (!shouldLog(LogLevel.WARN)) return;
+      console.warn(formatMessage(LogLevel.WARN, msg), ctx ?? "");
+    },
+    info: (msg, ctx) => {
+      if (!shouldLog(LogLevel.INFO)) return;
+      console.info(formatMessage(LogLevel.INFO, msg), ctx ?? "");
+    },
+    debug: (msg, ctx) => {
+      if (!shouldLog(LogLevel.DEBUG)) return;
+      console.debug(formatMessage(LogLevel.DEBUG, msg), ctx ?? "");
+    },
+    errorWithException: (err, msg, ctx) => {
+      const errorMessage =
+        msg ?? (err instanceof Error ? err.message : String(err));
+      const errorContext = {
+        ...ctx,
+        exceptionType: err instanceof Error ? err.constructor.name : "unknown",
+      };
+      console.error(formatMessage(LogLevel.ERROR, errorMessage), errorContext);
+      if (err instanceof Error && err.stack) {
+        console.error(err.stack);
+      }
+    },
+  };
+}
+
+const internalLogger = createPrefixedLogger("[sync]");
 
 // Flags-only (what parseArgs can provide)
 export interface SyncFlags {

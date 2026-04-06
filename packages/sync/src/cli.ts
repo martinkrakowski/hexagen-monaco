@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import type { SyncFlags } from "./config.js";
-import { type LoggerPort } from "@hexagen/shared";
 import { SyncEngine } from "./sync-engine.js";
 import { listCommand, validateCommand } from "./commands/arch/index.js";
 import { portCommander } from "./commands/arch/port.js";
@@ -10,29 +8,29 @@ import { contextCommander } from "./commands/arch/context/command.js";
 import { removeCommander } from "./commands/arch/remove.js";
 import { diffCommander } from "./commands/arch/diff.js";
 import { editCommander } from "./commands/arch/edit.js";
+import { LogLevel, type LoggerPort } from "@hexagen/shared";
 
-const internalLogger: LoggerPort = {
-  info: (msg) => console.log(`[sync] ${msg}`),
-  warn: (msg) => console.warn(`[sync] ${msg}`),
-  error: (msg) => console.error(`[sync] ${msg}`),
-  debug: (msg) => {
-    if (process.env.DEBUG) console.log(`[debug] ${msg}`);
-  },
-  errorWithException: (err, msg) => {
-    const errorMessage =
-      msg ?? (err instanceof Error ? err.message : String(err));
-    console.error(`[sync] ${errorMessage}`);
-    if (err instanceof Error && err.stack) {
-      console.error(err.stack);
-    }
-  },
-};
+function createLogger(prefix: string): LoggerPort {
+  return {
+    error: (msg, ctx) => console.error(`[sync] ${msg}`, ctx ?? ""),
+    warn: (msg, ctx) => console.warn(`[sync] ${msg}`, ctx ?? ""),
+    info: (msg, ctx) => console.log(`[sync] ${msg}`, ctx ?? ""),
+    debug: (msg, ctx) => {
+      if (process.env.DEBUG) console.log(`[debug] ${msg}`, ctx ?? "");
+    },
+    errorWithException: (err, msg, ctx) => {
+      const errorMessage =
+        msg ?? (err instanceof Error ? err.message : String(err));
+      console.error(`[sync] ${errorMessage}`, ctx ?? "");
+      if (err instanceof Error && err.stack) {
+        console.error(err.stack);
+      }
+    },
+  };
+}
 
-/**
- * CLI entry point for @hexagen/sync.
- * This is the ONLY file that should ever touch process.argv.
- * Refactored to use commander.js for subcommand routing.
- */
+const logger = createLogger("[sync]");
+
 function buildProgram(): Command {
   const program = new Command();
 
@@ -53,14 +51,14 @@ function buildProgram(): Command {
     .option("--allow-dirty", "Skip git clean check (for development)")
     .option("--strict", "Fail on architecture linter warnings")
     .action(async (options) => {
-      const flags: SyncFlags = {
+      const flags = {
         dryRun: options.dryRun ?? false,
         force: options.force ?? false,
         forceRoot: options.forceRoot ?? false,
         allowDirty: options.allowDirty ?? false,
         strict: options.strict ?? false,
-        mode: "self-regen",
-        logger: internalLogger,
+        mode: "self-regen" as const,
+        logger,
       };
 
       try {
