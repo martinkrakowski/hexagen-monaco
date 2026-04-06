@@ -1,0 +1,368 @@
+import type { MCPServerPort } from "../../application/ports/in/mcp-server.port.js";
+import type { AddDependencyToolUseCase } from "../../application/use-cases/add-dependency-tool.use-case.js";
+import type { AuditBoundariesToolUseCase } from "../../application/use-cases/audit-boundaries-tool.use-case.js";
+import type { CreateAdapterToolUseCase } from "../../application/use-cases/create-adapter-tool.use-case.js";
+import type { CreatePortToolUseCase } from "../../application/use-cases/create-port-tool.use-case.js";
+import type { GetGraphResourceUseCase } from "../../application/use-cases/get-graph-resource.use-case.js";
+import type { GetLinterReportResourceUseCase } from "../../application/use-cases/get-linter-report-resource.use-case.js";
+import type { GetManifestResourceUseCase } from "../../application/use-cases/get-manifest-resource.use-case.js";
+import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
+
+interface MCPServerAdapterDependencies {
+  getManifestResourceUseCase: GetManifestResourceUseCase;
+  getGraphResourceUseCase: GetGraphResourceUseCase;
+  getLinterReportResourceUseCase: GetLinterReportResourceUseCase;
+  auditBoundariesToolUseCase: AuditBoundariesToolUseCase;
+  scaffoldModuleToolUseCase?: ScaffoldModuleToolUseCase;
+  addDependencyToolUseCase?: AddDependencyToolUseCase;
+  createPortToolUseCase?: CreatePortToolUseCase;
+  createAdapterToolUseCase?: CreateAdapterToolUseCase;
+}
+
+interface MCPServerRuntime {
+  connect(transport: unknown): Promise<void>;
+  setRequestHandler(
+    schema: unknown,
+    handler: (request: unknown) => Promise<unknown>,
+  ): void;
+  close?: () => Promise<void> | void;
+}
+
+interface MCPSchemas {
+  CallToolRequestSchema: unknown;
+  ListToolsRequestSchema: unknown;
+  ListResourcesRequestSchema: unknown;
+  ReadResourceRequestSchema: unknown;
+}
+
+export class MCPServerAdapter implements MCPServerPort {
+  private server: MCPServerRuntime | null = null;
+
+  constructor(private readonly dependencies: MCPServerAdapterDependencies) {}
+
+  async start(): Promise<void> {
+    const sdkServerModulePath = "@modelcontextprotocol/sdk/server/index.js";
+    const sdkStdioModulePath = "@modelcontextprotocol/sdk/server/stdio.js";
+    const sdkTypesModulePath = "@modelcontextprotocol/sdk/types.js";
+
+    const sdkServerModule = (await import(sdkServerModulePath)) as {
+      Server: new (
+        info: { name: string; version: string },
+        options: {
+          capabilities: {
+            tools: Record<string, never>;
+            resources: Record<string, never>;
+          };
+        },
+      ) => MCPServerRuntime;
+    };
+
+    const sdkStdioModule = (await import(sdkStdioModulePath)) as {
+      StdioServerTransport: new () => unknown;
+    };
+
+    const sdkTypesModule = (await import(sdkTypesModulePath)) as MCPSchemas;
+
+    this.server = new sdkServerModule.Server(
+      {
+        name: "hexagen-mcp-engine",
+        version: "0.1.0",
+      },
+      {
+        capabilities: {
+          tools: {},
+          resources: {},
+        },
+      },
+    );
+
+    this.registerResourceHandlers(this.server, sdkTypesModule);
+    this.registerToolHandlers(this.server, sdkTypesModule);
+
+    const transport = new sdkStdioModule.StdioServerTransport();
+    await this.server.connect(transport);
+  }
+
+  async stop(): Promise<void> {
+    if (this.server?.close) {
+      await this.server.close();
+    }
+  }
+
+  private registerResourceHandlers(
+    server: MCPServerRuntime,
+    schemas: MCPSchemas,
+  ): void {
+    server.setRequestHandler(schemas.ListResourcesRequestSchema, async () => {
+      return {
+        resources: [
+          {
+            uri: "architecture://manifest",
+            name: "Architecture Manifest",
+            description: "HexaGen architecture manifest",
+            mimeType: "application/json",
+          },
+          {
+            uri: "architecture://graph",
+            name: "Architecture Graph",
+            description: "Bounded context dependency graph",
+            mimeType: "application/json",
+          },
+          {
+            uri: "architecture://linter-report",
+            name: "Architecture Linter Report",
+            description: "Latest architecture lint report",
+            mimeType: "application/json",
+          },
+        ],
+      };
+    });
+
+    server.setRequestHandler(
+      schemas.ReadResourceRequestSchema,
+      async (request: unknown) => {
+        const req = request as { params: { uri: string } };
+        const uri = req.params.uri;
+
+        if (uri === "architecture://manifest") {
+          const resource =
+            await this.dependencies.getManifestResourceUseCase.execute();
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(resource, null, 2),
+              },
+            ],
+          };
+        }
+
+        if (uri === "architecture://graph") {
+          const resource =
+            await this.dependencies.getGraphResourceUseCase.execute();
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(resource, null, 2),
+              },
+            ],
+          };
+        }
+
+        if (uri === "architecture://linter-report") {
+          const resource =
+            await this.dependencies.getLinterReportResourceUseCase.execute();
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(resource, null, 2),
+              },
+            ],
+          };
+        }
+
+        throw new Error(`Unknown resource: ${uri}`);
+      },
+    );
+  }
+
+  private registerToolHandlers(
+    server: MCPServerRuntime,
+    schemas: MCPSchemas,
+  ): void {
+    server.setRequestHandler(schemas.ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          {
+            name: "hexagen_audit_boundaries",
+            description:
+              "Runs architecture linter and returns structured report",
+            inputSchema: {
+              type: "object",
+              properties: {
+                dry_run: { type: "boolean" },
+              },
+            },
+          },
+          {
+            name: "hexagen_scaffold_module",
+            description: "Scaffold a module for a specific layer",
+            inputSchema: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                layer: {
+                  type: "string",
+                  enum: ["domain", "application", "infrastructure"],
+                },
+                dry_run: { type: "boolean" },
+              },
+              required: ["name", "layer"],
+            },
+          },
+          {
+            name: "hexagen_add_dependency",
+            description: "Safely add dependency relation in manifest",
+            inputSchema: {
+              type: "object",
+              properties: {
+                source_module: { type: "string" },
+                target_module: { type: "string" },
+                dry_run: { type: "boolean" },
+              },
+              required: ["source_module", "target_module"],
+            },
+          },
+          {
+            name: "hexagen_create_port",
+            description: "Create a new port contract",
+            inputSchema: {
+              type: "object",
+              properties: {
+                domain_name: { type: "string" },
+                port_name: { type: "string" },
+                type: { type: "string", enum: ["inbound", "outbound"] },
+                dry_run: { type: "boolean" },
+              },
+              required: ["domain_name", "port_name", "type"],
+            },
+          },
+          {
+            name: "hexagen_create_adapter",
+            description: "Create a new infrastructure adapter",
+            inputSchema: {
+              type: "object",
+              properties: {
+                port_name: { type: "string" },
+                infrastructure_name: { type: "string" },
+                dry_run: { type: "boolean" },
+              },
+              required: ["port_name", "infrastructure_name"],
+            },
+          },
+        ],
+      };
+    });
+
+    server.setRequestHandler(
+      schemas.CallToolRequestSchema,
+      async (request: unknown) => {
+        try {
+          const req = request as {
+            params: {
+              name: string;
+              arguments?: Record<string, unknown>;
+            };
+          };
+          const name = req.params.name;
+          const args = req.params.arguments ?? {};
+
+          if (name === "hexagen_audit_boundaries") {
+            const result =
+              await this.dependencies.auditBoundariesToolUseCase.execute({
+                dry_run: (args.dry_run as boolean | undefined) ?? true,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_scaffold_module") {
+            if (!this.dependencies.scaffoldModuleToolUseCase) {
+              throw new Error("hexagen_scaffold_module is not configured");
+            }
+
+            const result =
+              await this.dependencies.scaffoldModuleToolUseCase.execute({
+                name: String(args.name ?? ""),
+                layer: String(args.layer ?? "domain") as
+                  | "domain"
+                  | "application"
+                  | "infrastructure",
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_add_dependency") {
+            if (!this.dependencies.addDependencyToolUseCase) {
+              throw new Error("hexagen_add_dependency is not configured");
+            }
+
+            const result =
+              await this.dependencies.addDependencyToolUseCase.execute({
+                sourceModule: String(args.source_module ?? ""),
+                targetModule: String(args.target_module ?? ""),
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_create_port") {
+            if (!this.dependencies.createPortToolUseCase) {
+              throw new Error("hexagen_create_port is not configured");
+            }
+
+            const result =
+              await this.dependencies.createPortToolUseCase.execute({
+                domain_name: String(args.domain_name ?? ""),
+                port_name: String(args.port_name ?? ""),
+                type: String(args.type ?? "inbound") as "inbound" | "outbound",
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_create_adapter") {
+            if (!this.dependencies.createAdapterToolUseCase) {
+              throw new Error("hexagen_create_adapter is not configured");
+            }
+
+            const result =
+              await this.dependencies.createAdapterToolUseCase.execute({
+                port_name: String(args.port_name ?? ""),
+                infrastructure_name: String(args.infrastructure_name ?? ""),
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          throw new Error(`Unknown tool: ${name}`);
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: error instanceof Error ? error.message : String(error),
+              },
+            ],
+          };
+        }
+      },
+    );
+  }
+}
