@@ -1,6 +1,8 @@
 generator:
-  version: '1.0'
-  description: 'Global invariants and safety rules that apply to every generated project and slice'
+  version: "1.0"
+  description: "Global invariants and safety rules that apply to every generated project and slice"
+  # Auto-updated during sync - do not edit manually
+  generatedAt: "2026-04-05T00:00:00Z"
 
   invariants:
     - name: composite-safety
@@ -10,43 +12,43 @@ generator:
       failure: abort-and-cleanup
 
     - name: barrel-ownership-boundary
-      description: 'Barrels may only re-export types owned by the current bounded context (upward reachability). Never re-export types from another package (downward ownership boundary). Validate both directions.'
+      description: "Barrels may only re-export types owned by the current bounded context (upward reachability). Never re-export types from another package (downward ownership boundary). Validate both directions."
       priority: critical
       failure: abort-and-cleanup
 
     - name: port-single-ownership
-      description: 'Each port interface belongs to exactly one bounded context. No duplicates. Generator maintains and auto-updates a central ownership map in generator.config.yaml.'
+      description: "Each port interface belongs to exactly one bounded context. No duplicates. Generator maintains and auto-updates a central ownership map in generator.config.yaml."
       priority: critical
       failure: abort-and-cleanup
 
     - name: dependency-consistency
-      description: 'Every @hexagen/* import must have a matching entry in package.json dependencies. Generator auto-adds missing dependencies.'
+      description: "Every @hexagen/* import must have a matching entry in package.json dependencies. Generator auto-adds missing dependencies."
       priority: high
       failure: abort
 
     - name: self-import-prevention
-      description: 'No package imports itself by name. Convert to relative paths automatically.'
+      description: "No package imports itself by name. Convert to relative paths automatically."
       priority: high
       failure: abort
 
     - name: signature-synchronization
-      description: 'Generated consumers must derive exact signatures from the canonical port at generation time. Read port definition before generating callers.'
+      description: "Generated consumers must derive exact signatures from the canonical port at generation time. Read port definition before generating callers."
       priority: high
       failure: abort
 
     - name: no-empty-stubs
-      description: 'No empty barrels (export {}) or debug scaffolding files in src/. Omit barrel file entirely until it has real exports.'
+      description: "No empty barrels (export {}) or debug scaffolding files in src/. Omit barrel file entirely until it has real exports."
       priority: medium
       enforcement: generation-time
       failure: warn-and-continue
 
     - name: exports-field-mandatory
-      description: 'Every package.json must include a complete exports map for subpath imports. Main and types point to dist/index.js and dist/index.d.ts.'
+      description: "Every package.json must include a complete exports map for subpath imports. Main and types point to dist/index.js and dist/index.d.ts."
       priority: medium
       failure: warn-and-continue
 
     - name: test-double-parity
-      description: 'Every file placed under __tests__/doubles/ must implement exactly the same interface as the canonical port it fakes. Must return Result<T,E> and must not add extra methods or change signatures.'
+      description: "Every file placed under __tests__/doubles/ must implement exactly the same interface as the canonical port it fakes. Must return Result<T,E> and must not add extra methods or change signatures."
       priority: medium
       enforcement: bootstrap
       failure: warn-and-continue
@@ -130,5 +132,5 @@ generator:
       RunProjectGenerationPort: project-generation
 
   diagram-notes:
-    - 'Diagram omits medium-priority steps (no-empty-stubs, exports-field-mandatory) as they are not exercised by the main happy path.'
-    - 'All critical/high steps have explicit failure routing. Medium steps are warn-and-continue only.'
+    - "Diagram omits medium-priority steps (no-empty-stubs, exports-field-mandatory) as they are not exercised by the main happy path."
+    - "All critical/high steps have explicit failure routing. Medium steps are warn-and-continue only."
