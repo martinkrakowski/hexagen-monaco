@@ -89,7 +89,12 @@ export const PeerContextMappingSchema = z.object({
 // --- 4. Enhanced Bounded Context (New with backward compatibility) ---
 export const BoundedContextSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, "Context name is required"),
+  name: z
+    .string()
+    .min(
+      1,
+      "Please enter a name for this bounded context (e.g., 'UserService', 'OrderProcessing')",
+    ),
   description: z.string().optional(),
   infrastructureTarget: z
     .enum(["nestjs", "express", "serverless", "plain-ts"])

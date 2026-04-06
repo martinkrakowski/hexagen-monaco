@@ -114,9 +114,57 @@ export default function Home() {
     setCurrentStepIndex((i) => Math.max(i - 1, 0));
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setLoading(true);
-    setTimeout(() => setLoading(false), 1000);
+    try {
+      // Validate the form using trigger
+      const isValid = await form.trigger();
+      if (!isValid) {
+        setLoading(false);
+        return;
+      }
+
+      const formData = form.getValues();
+      const wizardData = {
+        boundedContexts: formData.boundedContexts || [],
+        externalContexts: formData.externalContexts || [],
+        peerMappings: formData.peerMappings || [],
+        workspaceScope: formData.governance?.workspaceName || "",
+        withLlm: !!formData.withLlm,
+        withBlockchain: !!formData.withBlockchain,
+      };
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ wizardData }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Generation failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.files) {
+        // Handle JSON response (for code view)
+        // For now, we'll just show success - in a full implementation,
+        // this would update the code view with generated files
+        console.log("Generated files:", result.files);
+      } else if (result.success) {
+        // Handle success response
+        console.log("Project generation initiated:", result);
+      }
+
+      // In a real app, we might show a success notification or navigate to results
+    } catch (error) {
+      console.error("Generation error:", error);
+      // In a real app, we'd show an error message to the user
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleManifestLoaded = useCallback(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTheme } from "../../hooks/use-theme";
+import { useTheme } from "@/hooks/use-theme";
 import { Sun, Moon, Upload } from "lucide-react";
 
 interface HeaderProps {
