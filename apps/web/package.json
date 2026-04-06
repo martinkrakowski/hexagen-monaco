@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",
+    "@hexagen/agentic-interaction": "workspace:*",
+    "@hexagen/messaging": "workspace:*",
     "@hexagen/monaco-orchestration": "workspace:*",
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/project-generation": "workspace:*",

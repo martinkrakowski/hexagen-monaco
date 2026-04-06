@@ -6,42 +6,53 @@ import type { MonacoPersistencePort } from "@hexagen/monaco-orchestration";
 import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
 import type { LoggerPort } from "@hexagen/shared";
 import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
+import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
+import type { LLMProviderPort } from "@hexagen/agentic-interaction";
 import {
   LocalStoragePersistenceAdapter,
   ArchitectureGraphProviderAdapter,
 } from "@hexagen/web-driver";
-
-// Note: LocalStoragePersistenceAdapter and ArchitectureGraphProviderAdapter are imported through barrel exports.
-// Direct adapter imports bypass package boundary integrity; all adapters must be re-exported at @hexagen/web-driver root.
+import {
+  InMemoryEventBusAdapter,
+  InMemoryIntentBusAdapter,
+} from "@hexagen/messaging";
+import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 
 const createWebLogger = (): LoggerPort => ({
-  // eslint-disable-next-line no-console
   info: (msg) => console.log(`[web] ${msg}`),
-  // eslint-disable-next-line no-console
   warn: (msg) => console.warn(`[web] ${msg}`),
-  // eslint-disable-next-line no-console
   error: (msg) => console.error(`[web] ${msg}`),
   debug: (msg) => {
-    // DEBUG is a common dev flag
-    // eslint-disable-next-line no-console
     if (process.env.DEBUG) console.log(`[debug] ${msg}`);
   },
   errorWithException: (err, msg) => {
     const errorMessage =
       msg ?? (err instanceof Error ? err.message : String(err));
-    // eslint-disable-next-line no-console
     console.error(`[web] ${errorMessage}`);
     if (err instanceof Error && err.stack) {
-      // eslint-disable-next-line no-console
       console.error(err.stack);
     }
   },
 });
 
-// Note: LocalStoragePersistenceAdapter is allowed direct import because it is in the same bounded context (web-driver).
-// All external ports must come from root barrels.
-// Note: Project generation imports are in separate file (wire.project-generation.ts)
-// to avoid Node.js dependencies being bundled into client components.
+const createEventBus = (): EventBusPort => new InMemoryEventBusAdapter();
+
+const createIntentBus = (): IntentBusPort => new InMemoryIntentBusAdapter();
+
+const createLLMProvider = (): LLMProviderPort => {
+  const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
+  const baseUrl =
+    process.env.NEXT_PUBLIC_LLM_BASE_URL || "https://api.openai.com/v1";
+  const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+
+  if (!apiKey) {
+    console.warn(
+      "[LLMProviderPort] No API key configured - LLM features will be disabled",
+    );
+  }
+
+  return new ServerLLMAdapter(apiKey, baseUrl, model);
+};
 
 /**
  * Simple registry-based composition for ports used by web-driver use-cases.
@@ -59,10 +70,9 @@ export const wireDependencies = () => {
   // Logger port → console logger for web app
   registry.set("LoggerPort", createWebLogger() satisfies LoggerPort);
 
-  // Download project port → placeholder (to be replaced with jszip / zip adapter later)
+  // Download project port → placeholder
   registry.set("DownloadProjectPort", {
     downloadProject: async (_project: Project) => {
-      // eslint-disable-next-line no-console
       console.warn("[DownloadProjectPort] Not implemented yet", _project);
       return {
         success: false as const,
@@ -80,7 +90,17 @@ export const wireDependencies = () => {
     new ArchitectureGraphProviderAdapter() satisfies IArchitectureGraphProviderPort,
   );
 
-  // Future ports/adapters go here
+  // Event Bus → in-memory implementation
+  registry.set("EventBusPort", createEventBus() satisfies EventBusPort);
+
+  // Intent Bus → in-memory implementation
+  registry.set("IntentBusPort", createIntentBus() satisfies IntentBusPort);
+
+  // LLM Provider → server adapter with env config
+  registry.set(
+    "LLMProviderPort",
+    createLLMProvider() satisfies LLMProviderPort,
+  );
 
   return {
     get: <T>(portName: string): T => {
@@ -90,7 +110,6 @@ export const wireDependencies = () => {
       }
       return instance as T;
     },
-    // For tests/mocking
     register: (portName: string, instance: unknown) => {
       registry.set(portName, instance);
     },
@@ -113,3 +132,11 @@ export const getArchitectureGraphProvider = () =>
   );
 
 export const getLogger = () => dependencies.get<LoggerPort>("LoggerPort");
+
+export const getEventBus = () => dependencies.get<EventBusPort>("EventBusPort");
+
+export const getIntentBus = () =>
+  dependencies.get<IntentBusPort>("IntentBusPort");
+
+export const getLLMProvider = () =>
+  dependencies.get<LLMProviderPort>("LLMProviderPort");

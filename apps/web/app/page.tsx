@@ -16,10 +16,10 @@ import {
   DialogDescription,
 } from "@/components/ui/Dialog";
 import { FileDropZone } from "@/components/ui/FileDropZone";
+import { AIArchitectPanel } from "@/components/agent/AIArchitectPanel";
+
 import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
-
-import { MonacoEditorWrapper } from "@/components/monaco/MonacoEditorWrapper";
 import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
 import { CodeView } from "@/components/code-view/CodeView";
 import { StepHeader } from "@/components/project-wizard/steps/StepHeader";
@@ -92,11 +92,6 @@ export default function Home() {
       watchedValues.withLlm,
       watchedValues.withBlockchain,
     ],
-  );
-
-  const initialManifest = useMemo(
-    () => JSON.stringify(watchedValues, null, 2),
-    [watchedValues],
   );
 
   const handleNext = async () => {
@@ -241,19 +236,11 @@ export default function Home() {
               </Card>
             }
             right={
-              <Card className="h-full border-0 rounded-none flex flex-col bg-card">
-                <CardHeader className="border-b border-border shrink-0">
-                  <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    Code Editor
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 flex-1 overflow-hidden relative">
-                  <MonacoEditorWrapper
-                    initialBuffer={initialManifest}
-                    sessionId="wizard-session-1"
-                  />
-                </CardContent>
-              </Card>
+              <AIArchitectPanel
+                onSendMessage={async (message) => {
+                  console.log("Chat message:", message);
+                }}
+              />
             }
           />
         </FormProvider>

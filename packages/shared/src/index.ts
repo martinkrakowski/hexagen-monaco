@@ -28,5 +28,5 @@ export type { ContextUpdateCallback } from "./domain/wizard-multi-context";
 
 // Error/Result exports
 export type { Result } from "./errors/result";
-export { ok } from "./errors/result-helpers";
+export { ok, err } from "./errors/result-helpers";
 export { BaseError } from "./errors/base.error";

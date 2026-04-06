@@ -126,7 +126,7 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
         >
           <Card className="h-full overflow-hidden border border-border rounded-lg">
             <PanelHeader
-              title="Monaco AI Architect"
+              title="AI Governance"
               side="right"
               onCollapse={collapseRight}
             />
@@ -158,7 +158,7 @@ function MobileLayout({ left, middle, right }: ResizableLayoutProps) {
     },
     {
       id: "ai",
-      title: "AI Architect",
+      title: "AI Governance",
       icon: "ai",
       content: <div className="h-full overflow-hidden">{right}</div>,
     },

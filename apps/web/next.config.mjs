@@ -19,12 +19,15 @@ const nextConfig = {
 
   // Workspace packages to transpile
   transpilePackages: [
+    "@hexagen/agentic-interaction",
+    "@hexagen/messaging",
     "@hexagen/monaco-orchestration",
     "@hexagen/project-configuration",
     "@hexagen/project-generation",
     "@hexagen/shared",
     "@hexagen/visualization",
     "@hexagen/web-driver",
+    "@hexagen/wizard-orchestration",
   ],
 
   // Ensure proper build output handling for monorepo environments
@@ -57,6 +60,14 @@ const nextConfig = {
     // Ensure proper resolution of @hexagen/* packages
     config.resolve.alias = {
       ...config.resolve.alias,
+      "@hexagen/agentic-interaction": path.resolve(
+        monorepoRoot,
+        "packages/agentic-interaction/src",
+      ),
+      "@hexagen/messaging": path.resolve(
+        monorepoRoot,
+        "packages/messaging/src",
+      ),
       "@hexagen/monaco-orchestration": path.resolve(
         monorepoRoot,
         "packages/monaco-orchestration/src",
@@ -77,6 +88,10 @@ const nextConfig = {
       "@hexagen/web-driver": path.resolve(
         monorepoRoot,
         "packages/web-driver/src",
+      ),
+      "@hexagen/wizard-orchestration": path.resolve(
+        monorepoRoot,
+        "packages/wizard-orchestration/src",
       ),
     };
 
@@ -87,6 +102,14 @@ const nextConfig = {
   turbopack: {
     root: monorepoRoot,
     resolveAlias: {
+      "@hexagen/agentic-interaction": path.resolve(
+        monorepoRoot,
+        "packages/agentic-interaction/src",
+      ),
+      "@hexagen/messaging": path.resolve(
+        monorepoRoot,
+        "packages/messaging/src",
+      ),
       "@hexagen/monaco-orchestration": path.resolve(
         monorepoRoot,
         "packages/monaco-orchestration/src",
@@ -107,6 +130,10 @@ const nextConfig = {
       "@hexagen/web-driver": path.resolve(
         monorepoRoot,
         "packages/web-driver/src",
+      ),
+      "@hexagen/wizard-orchestration": path.resolve(
+        monorepoRoot,
+        "packages/wizard-orchestration/src",
       ),
     },
     resolveExtensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
