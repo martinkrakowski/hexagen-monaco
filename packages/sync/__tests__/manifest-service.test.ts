@@ -91,7 +91,7 @@ async function withTempManifest(
   await withTempManifest(validManifestYaml, async (_workspaceRoot, tempDir) => {
     const writeResult = await saveManifest(tempDir, {
       system: "test-system",
-      boundedContexts: [],
+      bounded_contexts: [],
     } as Manifest);
     assert.strictEqual(writeResult.success, true, "Should save manifest");
     console.log("✅ saveManifest: success");

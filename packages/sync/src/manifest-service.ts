@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { execSync } from "node:child_process";
 import type { Manifest } from "./types/manifest.js";
 import { ok, err, type Result } from "./domain/result.js";
+import { ManifestSchema } from "@hexagen/shared";
 
 export type { Result };
 
@@ -22,19 +23,16 @@ export async function loadManifest(
     }
 
     const parsed = yaml.load(content) as Manifest;
-
-    if (typeof parsed !== "object" || parsed === null) {
+    // Validate against Zod schema
+    const validationResult = ManifestSchema.safeParse(parsed);
+    if (!validationResult.success) {
       return err(
-        new Error("manifest.yaml does not contain a valid YAML object"),
+        new Error(
+          `Manifest validation failed: ${validationResult.error.message}`,
+        ),
       );
     }
-
-    if (!parsed.boundedContexts && !parsed.bounded_contexts) {
-      return err(
-        new Error('manifest.yaml must contain "boundedContexts" field'),
-      );
-    }
-
+    // Return validated manifest (cast to Manifest type since we know it's valid)
     return ok(parsed);
   } catch (errObj) {
     if (
