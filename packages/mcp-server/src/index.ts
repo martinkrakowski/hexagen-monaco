@@ -12,6 +12,11 @@ import type { ManifestWritePort } from "./application/ports/out/manifest-write.p
 import type { ProjectConfigurationReadPort } from "./application/ports/out/project-configuration-read.port.js";
 import type { LinterPort } from "./application/ports/out/linter.port.js";
 import type { SyncEnginePort } from "./application/ports/out/sync-engine.port.js";
+import { LinterAdapter } from "./infrastructure/adapters/linter.adapter.js";
+import { ManifestWriteAdapter } from "./infrastructure/adapters/manifest-write.adapter.js";
+import { ProjectConfigurationReadAdapter } from "./infrastructure/adapters/project-configuration-read.adapter.js";
+import { SyncEngineAdapter } from "./infrastructure/adapters/sync-engine.adapter.js";
+import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-event-bus.adapter.js";
 
 export interface MCPCompositionRoot {
   projectConfigurationReadPort: ProjectConfigurationReadPort;
@@ -19,6 +24,23 @@ export interface MCPCompositionRoot {
   manifestWritePort: ManifestWritePort;
   linterPort: LinterPort;
   eventBusPort: EventBusPort;
+}
+
+export function createDefaultMCPCompositionRoot(
+  workspaceRoot: string = process.cwd(),
+): MCPCompositionRoot {
+  const syncEnginePort = new SyncEngineAdapter(workspaceRoot);
+  const manifestWritePort = new ManifestWriteAdapter(workspaceRoot);
+
+  return {
+    projectConfigurationReadPort: new ProjectConfigurationReadAdapter(
+      workspaceRoot,
+    ),
+    syncEnginePort,
+    manifestWritePort,
+    linterPort: new LinterAdapter(syncEnginePort),
+    eventBusPort: new InMemoryEventBusAdapter(),
+  };
 }
 
 export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
@@ -62,4 +84,10 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
 export async function startMCPServer(root: MCPCompositionRoot): Promise<void> {
   const server = createMCPServer(root);
   await server.start();
+}
+
+export async function startDefaultMCPServer(
+  workspaceRoot: string = process.cwd(),
+): Promise<void> {
+  await startMCPServer(createDefaultMCPCompositionRoot(workspaceRoot));
 }

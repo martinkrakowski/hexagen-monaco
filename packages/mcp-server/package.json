@@ -5,6 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "hexagen-mcp": "dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +18,8 @@
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test __tests__/**/*.test.ts"
+    "test": "tsx --test __tests__/**/*.test.ts",
+    "start": "node dist/cli.js"
   },
   "dependencies": {
     "@hexagen/messaging": "workspace:*",
@@ -23,6 +27,7 @@
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "js-yaml": "^4.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
