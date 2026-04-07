@@ -5,18 +5,24 @@
 import {
   GenerateProjectUseCase,
   ExternalSyncEngineAdapter,
-  JsZipCreatorAdapter,
+  ArchiveExporterAdapter,
+  GitHubExporterAdapter,
 } from "@hexagen/project-generation";
 
 let generateProjectUseCase: GenerateProjectUseCase | null = null;
 
-export const getGenerateProject = (): GenerateProjectUseCase => {
+export const getGenerateProject = (
+  destination: "archive" | "github" = "archive",
+): GenerateProjectUseCase => {
   if (!generateProjectUseCase) {
     const externalGenerator = new ExternalSyncEngineAdapter();
-    const zipCreator = new JsZipCreatorAdapter();
+    const exporter =
+      destination === "github"
+        ? new GitHubExporterAdapter()
+        : new ArchiveExporterAdapter();
     generateProjectUseCase = new GenerateProjectUseCase(
       externalGenerator,
-      zipCreator,
+      exporter,
     );
   }
   return generateProjectUseCase;

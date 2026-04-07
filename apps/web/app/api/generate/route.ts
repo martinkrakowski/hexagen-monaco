@@ -5,19 +5,27 @@ import { NextResponse } from "next/server";
 import { getLogger } from "@/lib/wire";
 import { getGenerateProject } from "@/lib/wire.project-generation";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
-import path from "node:path";
-import os from "node:os";
+import type { ExportConfig } from "@hexagen/project-generation";
 
 interface GenerateRequestBody {
   wizardData?: Record<string, unknown>;
   manifest?: Record<string, unknown>;
-  outputFormat?: "files" | "zip" | "json";
+  destination?: "archive" | "github";
+  githubConfig?: {
+    repoName: string;
+    isPrivate: boolean;
+  };
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as GenerateRequestBody;
-    const { wizardData, manifest, outputFormat = "zip" } = body;
+    const {
+      wizardData,
+      manifest,
+      destination = "archive",
+      githubConfig,
+    } = body;
 
     const finalManifest =
       manifest ||
@@ -28,14 +36,27 @@ export async function POST(request: Request) {
             bounded_contexts: [],
           });
 
-    const projectId = `generated-${Date.now()}`;
-    const tempDir = path.join(os.tmpdir(), projectId);
+    const exportConfig: ExportConfig = {
+      destination,
+    };
 
-    const useCase = getGenerateProject();
+    if (destination === "github" && githubConfig) {
+      // TODO: Inject from session when NextAuth is configured
+      // const session = await getServerSession(authOptions);
+      // const token = session?.accessToken;
+      // const owner = session?.user?.name;
+      exportConfig.github = {
+        token: process.env.GITHUB_TOKEN ?? "",
+        owner: process.env.GITHUB_OWNER ?? "",
+        repoName: githubConfig.repoName,
+        isPrivate: githubConfig.isPrivate,
+      };
+    }
+
+    const useCase = getGenerateProject(destination);
     const result = await useCase.execute({
-      targetRoot: tempDir,
       manifest: finalManifest,
-      outputFormat: outputFormat === "json" ? "files" : "zip",
+      exportConfig,
     });
 
     if (!result.success) {
@@ -45,16 +66,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { project, zipBuffer } = result.value;
+    const { project, destinationUrl, zipBuffer } = result.value;
 
-    // JSON mode for the Code View — return file map as plain object
-    if (outputFormat === "json") {
-      const filesObject = Object.fromEntries(project.files);
-      return NextResponse.json({ files: filesObject });
-    }
-
-    // ZIP mode — return binary response
-    if (zipBuffer) {
+    // Archive mode — return binary response
+    if (destination === "archive" && zipBuffer) {
       return new NextResponse(new Uint8Array(zipBuffer), {
         status: 200,
         headers: {
@@ -64,11 +79,21 @@ export async function POST(request: Request) {
       });
     }
 
-    // Metadata fallback
+    // GitHub mode — return the repo URL
+    if (destination === "github") {
+      return NextResponse.json({
+        success: true,
+        message: "Project pushed to GitHub",
+        repositoryUrl: destinationUrl,
+        projectName: project.name,
+        fileCount: project.files.size,
+      });
+    }
+
+    // Fallback
     return NextResponse.json({
       success: true,
       message: "Project generated successfully",
-      projectId,
       projectName: project.name,
       fileCount: project.files.size,
     });
