@@ -17,6 +17,7 @@
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:^",
+    "@octokit/rest": "^20.1.0",
     "js-yaml": "^4.1.1",
     "jszip": "^3.10.1",
     "zod": "^3.x.x"

@@ -386,12 +386,13 @@ bounded_contexts:
       application:
         use_cases:
           - GenerateProjectUseCase
-        ports:
-          in:
-            - RunProjectGenerationPort
-          out:
-            - ExternalProjectGeneratorPort
-            - ZipCreatorPort
+      ports:
+        in:
+          - RunProjectGenerationPort
+        out:
+          - ExternalProjectGeneratorPort
+          - ZipCreatorPort
+          - ProjectExporterPort
       infrastructure:
         adapters:
           - ExternalSyncEngineAdapter
