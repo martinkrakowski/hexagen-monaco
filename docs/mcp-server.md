@@ -204,7 +204,7 @@ If you host MCP remotely:
   "mcp": {
     "hexagen-remote": {
       "type": "remote",
-      "url": "https://mcp.host/endpoint"
+      "url": "https://mcp.krakowski.cloud/endpoint"
     }
   }
 }
@@ -216,6 +216,10 @@ After saving config and starting OpenCode:
 
 - Run `opencode mcp list` in terminal
 - Or use `/mcp` inside OpenCode UI
+
+Reference walkthrough:
+
+- [Connecting Custom Tools to OpenCode](https://www.youtube.com/watch?v=nUCwPxMgz_8)
 
 ## Operational Notes
 
