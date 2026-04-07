@@ -58,6 +58,7 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
   );
   const scaffoldModuleToolUseCase = new ScaffoldModuleToolUseCase(
     root.syncEnginePort,
+    root.manifestWritePort,
     root.eventBusPort,
   );
   const addDependencyToolUseCase = new AddDependencyToolUseCase(

@@ -17,11 +17,11 @@ monorepo:
       - prettier
     rules:
       no-console: warn
-      "@typescript-eslint/no-explicit-any": error
+      '@typescript-eslint/no-explicit-any': error
       no-restricted-imports:
         patterns:
           - group:
-              - "@hexagen/*"
+              - '@hexagen/*'
             message: Cross-package imports must go through barrel files.
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
@@ -45,13 +45,13 @@ monorepo:
       declaration: true
       emitDeclarationOnly: true
       paths:
-        "@hexagen/*":
+        '@hexagen/*':
           - packages/*/src/index.ts
-        "@hexagen/shared":
+        '@hexagen/shared':
           - packages/shared/src/index.ts
-        "@hexagen/shared/*":
+        '@hexagen/shared/*':
           - packages/shared/src/*
-        "@/*":
+        '@/*':
           - apps/web/src/*
           - apps/web/app/*
     include: []
@@ -80,7 +80,7 @@ monorepo:
       references: []
   turboConfig:
     globalDependencies:
-      - "**/.env.*"
+      - '**/.env.*'
     pipeline:
       clean:
         cache: false
@@ -90,7 +90,7 @@ monorepo:
         outputs:
           - dist/**
           - .next/**
-          - "!.next/cache/**"
+          - '!.next/cache/**'
       lint:
         dependsOn:
           - ^build
@@ -146,8 +146,8 @@ generator:
         devDependencies:
           typescript: ^5.5.4
           eslint: ^9.0.0
-          "@typescript-eslint/parser": ^8.0.0
-          "@typescript-eslint/eslint-plugin": ^8.0.0
+          '@typescript-eslint/parser': ^8.0.0
+          '@typescript-eslint/eslint-plugin': ^8.0.0
           eslint-config-prettier: ^9.1.0
 bounded_contexts:
   - name: shared
@@ -297,7 +297,7 @@ bounded_contexts:
             - ArchitectureGraphProviderPort
     generator:
       dependencies:
-        "@dagrejs/dagre": ^2.0.4
+        '@dagrejs/dagre': ^2.0.4
   - name: messaging
     type: supporting
     description: Domain events, intent bus, pluggable transports
@@ -362,7 +362,7 @@ bounded_contexts:
     driver_for: apps/web
     generator:
       dependencies:
-        "@xyflow/react": ^12.10.1
+        '@xyflow/react': ^12.10.1
     depends_on:
       - monaco-orchestration
       - visualization
@@ -397,6 +397,45 @@ bounded_contexts:
         adapters:
           - ExternalSyncEngineAdapter
           - JsZipCreatorAdapter
+  - name: mcp-server
+    type: core
+    description: >-
+      MCP server — exposes architectural tools and resources over stdio
+      transport for AI agent interaction (audit, scaffold, dependency
+      management)
+    layers:
+      domain: {}
+      application:
+        use_cases:
+          - GetManifestResourceUseCase
+          - GetGraphResourceUseCase
+          - GetLinterReportResourceUseCase
+          - AuditBoundariesToolUseCase
+          - ScaffoldModuleToolUseCase
+          - AddDependencyToolUseCase
+          - CreatePortToolUseCase
+          - CreateAdapterToolUseCase
+        ports:
+          in:
+            - McpServerPort
+          out:
+            - ProjectConfigurationReadPort
+            - ManifestWritePort
+            - LinterPort
+            - SyncEnginePort
+      infrastructure:
+        adapters:
+          - MCPServerAdapter
+          - ProjectConfigurationReadAdapter
+          - ManifestWriteAdapter
+          - LinterAdapter
+          - SyncEngineAdapter
+          - InMemoryEventBusAdapter
+    depends_on:
+      - shared
+      - messaging
+      - project-configuration
+      - sync
 apps:
   - name: web
     driver: next.js

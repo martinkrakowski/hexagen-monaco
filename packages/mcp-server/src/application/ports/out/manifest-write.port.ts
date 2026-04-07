@@ -5,6 +5,11 @@ export interface AddDependencyCommand {
   targetModule: string;
 }
 
+export interface RegisterBoundedContextCommand {
+  name: string;
+  type?: "core" | "supporting" | "driver" | "shared-kernel";
+}
+
 export interface ManifestWritePort {
   validateDependency(
     command: AddDependencyCommand,
@@ -12,4 +17,7 @@ export interface ManifestWritePort {
   addDependency(
     command: AddDependencyCommand,
   ): Promise<Result<{ updated: boolean }>>;
+  registerBoundedContext(
+    command: RegisterBoundedContextCommand,
+  ): Promise<Result<{ registered: boolean; alreadyExisted: boolean }>>;
 }

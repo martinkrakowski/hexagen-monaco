@@ -30,3 +30,11 @@ package_rules:
       - "@hexagen/shared"
     # project-configuration should only import from shared kernel.
     # Sync types should come from shared kernel after consolidation.
+
+  - name: "mcp-server"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/messaging"
+    # mcp-server uses EventBusPort from messaging for domain event publication.
+    # All other dependencies (sync, project-configuration) are accessed via
+    # their file-system adapters (execSync, YAML reads), not direct imports.

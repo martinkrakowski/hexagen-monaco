@@ -1,4 +1,5 @@
 import type { EventBusPort } from "@hexagen/messaging";
+import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 import type { SyncEnginePort } from "../ports/out/sync-engine.port.js";
 
 export interface ScaffoldModuleInput {
@@ -11,11 +12,13 @@ export interface ScaffoldModuleOutput {
   dryRun: boolean;
   message: string;
   filesCreated: string[];
+  registeredInManifest: boolean;
 }
 
 export class ScaffoldModuleToolUseCase {
   constructor(
     private readonly syncEnginePort: SyncEnginePort,
+    private readonly manifestWritePort: ManifestWritePort,
     private readonly eventBusPort: EventBusPort,
   ) {}
 
@@ -29,16 +32,26 @@ export class ScaffoldModuleToolUseCase {
         dryRun: true,
         message: `Dry-run successful. Module ${input.name} can be scaffolded in ${input.layer}.`,
         filesCreated: [],
+        registeredInManifest: false,
       };
     }
 
-    const result = await this.syncEnginePort.scaffoldModule({
+    const scaffoldResult = await this.syncEnginePort.scaffoldModule({
       name: input.name,
       layer: input.layer,
     });
 
-    if (!result.success) {
-      throw result.error;
+    if (!scaffoldResult.success) {
+      throw scaffoldResult.error;
+    }
+
+    const registerResult = await this.manifestWritePort.registerBoundedContext({
+      name: input.name,
+      type: "core",
+    });
+
+    if (!registerResult.success) {
+      throw registerResult.error;
     }
 
     this.eventBusPort.publish({
@@ -51,10 +64,20 @@ export class ScaffoldModuleToolUseCase {
       source: "mcp-server",
     });
 
+    const { filesCreated } = scaffoldResult.value;
+    const { registered, alreadyExisted } = registerResult.value;
+
+    const manifestNote = alreadyExisted
+      ? " (already in manifest)"
+      : registered
+        ? " and registered in manifest"
+        : "";
+
     return {
       dryRun: false,
-      message: `Scaffolded module ${input.name}.`,
-      filesCreated: result.value.filesCreated,
+      message: `Scaffolded module ${input.name}${manifestNote}.`,
+      filesCreated,
+      registeredInManifest: registered,
     };
   }
 }

@@ -159,31 +159,47 @@ export class SyncEngineAdapter implements SyncEnginePort {
         exclude: ["node_modules", "dist"],
       };
 
-      await fs.writeFile(
-        packageJsonPath,
-        JSON.stringify(packageJsonContent, null, 2) + "\n",
-        "utf-8",
-      );
-      await fs.writeFile(
-        tsconfigPath,
-        JSON.stringify(tsconfigContent, null, 2) + "\n",
-        "utf-8",
-      );
-      await fs.writeFile(
-        indexPath,
-        `export const ${toKebabCase(command.name).replace(/-/g, "_")} = "${command.layer}";\n`,
-        "utf-8",
-      );
+      const filesCreated: string[] = [];
+
+      const fileExists = async (p: string): Promise<boolean> => {
+        try {
+          await fs.access(p);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      if (!(await fileExists(packageJsonPath))) {
+        await fs.writeFile(
+          packageJsonPath,
+          JSON.stringify(packageJsonContent, null, 2) + "\n",
+          "utf-8",
+        );
+        filesCreated.push(path.relative(this.workspaceRoot, packageJsonPath));
+      }
+
+      if (!(await fileExists(tsconfigPath))) {
+        await fs.writeFile(
+          tsconfigPath,
+          JSON.stringify(tsconfigContent, null, 2) + "\n",
+          "utf-8",
+        );
+        filesCreated.push(path.relative(this.workspaceRoot, tsconfigPath));
+      }
+
+      if (!(await fileExists(indexPath))) {
+        await fs.writeFile(
+          indexPath,
+          `export const ${toKebabCase(command.name).replace(/-/g, "_")} = "${command.layer}";\n`,
+          "utf-8",
+        );
+        filesCreated.push(path.relative(this.workspaceRoot, indexPath));
+      }
 
       return {
         success: true,
-        value: {
-          filesCreated: [
-            path.relative(this.workspaceRoot, packageJsonPath),
-            path.relative(this.workspaceRoot, tsconfigPath),
-            path.relative(this.workspaceRoot, indexPath),
-          ],
-        },
+        value: { filesCreated },
       };
     } catch (error) {
       return {

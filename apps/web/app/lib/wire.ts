@@ -2,7 +2,7 @@
 // Centralized dependency composition root for web driver
 // All cross-package imports go through root barrels only (lint-enforced)
 
-import type { MonacoPersistencePort } from "@hexagen/monaco-orchestration";
+import type { MonacoPersistencePort } from "@hexagen/shared";
 import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
 import type { LoggerPort } from "@hexagen/shared";
 import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";

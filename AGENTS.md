@@ -286,7 +286,7 @@ packages/<name>/
 
 ```ts
 type Result<T, E = Error> =
-  | { success: true; data: T }
+  | { success: true; value: T }
   | { success: false; error: E };
 ```
 
