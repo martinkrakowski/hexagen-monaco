@@ -9,21 +9,13 @@ import {
   GitHubExporterAdapter,
 } from "@hexagen/project-generation";
 
-let generateProjectUseCase: GenerateProjectUseCase | null = null;
-
 export const getGenerateProject = (
   destination: "archive" | "github" = "archive",
 ): GenerateProjectUseCase => {
-  if (!generateProjectUseCase) {
-    const externalGenerator = new ExternalSyncEngineAdapter();
-    const exporter =
-      destination === "github"
-        ? new GitHubExporterAdapter()
-        : new ArchiveExporterAdapter();
-    generateProjectUseCase = new GenerateProjectUseCase(
-      externalGenerator,
-      exporter,
-    );
-  }
-  return generateProjectUseCase;
+  const externalGenerator = new ExternalSyncEngineAdapter();
+  const exporter =
+    destination === "github"
+      ? new GitHubExporterAdapter()
+      : new ArchiveExporterAdapter();
+  return new GenerateProjectUseCase(externalGenerator, exporter);
 };

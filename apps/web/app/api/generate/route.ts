@@ -1,11 +1,12 @@
 // apps/web/app/api/generate/route.ts
 // Endpoint to generate a new project from spec
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getLogger } from "@/lib/wire";
 import { getGenerateProject } from "@/lib/wire.project-generation";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
 import type { ExportConfig } from "@hexagen/project-generation";
+import { getToken } from "next-auth/jwt";
 
 interface GenerateRequestBody {
   wizardData?: Record<string, unknown>;
@@ -14,10 +15,11 @@ interface GenerateRequestBody {
   githubConfig?: {
     repoName: string;
     isPrivate: boolean;
+    owner?: string;
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as GenerateRequestBody;
     const {
@@ -40,14 +42,42 @@ export async function POST(request: Request) {
       destination,
     };
 
-    if (destination === "github" && githubConfig) {
-      // TODO: Inject from session when NextAuth is configured
-      // const session = await getServerSession(authOptions);
-      // const token = session?.accessToken;
-      // const owner = session?.user?.name;
+    if (destination === "github") {
+      if (!githubConfig) {
+        return NextResponse.json(
+          { error: "Missing GitHub configuration" },
+          { status: 400 },
+        );
+      }
+
+      const token = await getToken({
+        req: request,
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+
+      const accessToken =
+        typeof token?.accessToken === "string" ? token.accessToken : null;
+      const owner =
+        githubConfig.owner ??
+        (typeof token?.name === "string" ? token.name : "");
+
+      if (!accessToken) {
+        return NextResponse.json(
+          { error: "Unauthorized: GitHub session token not found" },
+          { status: 401 },
+        );
+      }
+
+      if (!owner) {
+        return NextResponse.json(
+          { error: "Missing GitHub repository owner" },
+          { status: 400 },
+        );
+      }
+
       exportConfig.github = {
-        token: process.env.GITHUB_TOKEN ?? "",
-        owner: process.env.GITHUB_OWNER ?? "",
+        token: accessToken,
+        owner,
         repoName: githubConfig.repoName,
         isPrivate: githubConfig.isPrivate,
       };

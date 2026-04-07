@@ -132,6 +132,12 @@ export const wizardSteps = [
     fields: ["boundedContexts"],
   },
   {
+    id: "github_export",
+    title: "GitHub Export",
+    description: "Configure GitHub repository for project export.",
+    fields: ["gitHubExport"],
+  },
+  {
     id: "project_addons",
     title: "Project Add-ons",
     description: "Enable optional features like LLM or blockchain support.",

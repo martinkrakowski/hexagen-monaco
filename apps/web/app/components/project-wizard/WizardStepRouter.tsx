@@ -6,6 +6,7 @@ import {
   PeerMappingSidebar,
   PortConfigurationStep,
   SummaryStep,
+  GitHubExportStep,
 } from "@/components/project-wizard/steps";
 import { SidebarStepLayout } from "./SidebarStepLayout";
 
@@ -100,13 +101,23 @@ export function WizardStepRouter({
       );
     case 4:
       return (
+        <GitHubExportStep
+          onNext={onNext}
+          onBack={onBack}
+          canProceed={canProceed}
+          currentStep={5}
+          totalSteps={totalSteps}
+        />
+      );
+    case 5:
+      return (
         <SummaryStep
           onBack={onBack}
           onGenerate={onGenerate}
           canProceed={canProceed}
           isGenerating={isGenerating}
           onViewModeChange={onViewModeChange}
-          currentStep={5}
+          currentStep={6}
           totalSteps={totalSteps}
         />
       );
