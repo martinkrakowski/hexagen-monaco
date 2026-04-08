@@ -27,7 +27,14 @@
     "lint": "turbo lint && yarn lint:arch",
     "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",
     "typecheck": "turbo run typecheck",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ],
+    "*.{ts,tsx,md,json}": "prettier --check"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -40,7 +47,9 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-config-turbo": "^1.13.3",
     "eslint-plugin-import": "^2.29.1",
+    "husky": "^9.1.7",
     "jsdom": "^29.0.0",
+    "lint-staged": "^16.4.0",
     "lru-cache": "^7.18.3",
     "prettier": "^3.2.5",
     "turbo": "^1.13.3",

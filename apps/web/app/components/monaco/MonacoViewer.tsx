@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
+import { useTheme } from "@/hooks/use-theme";
 
 interface MonacoViewerProps {
   content: string;
@@ -12,11 +13,25 @@ export const MonacoViewer: React.FC<MonacoViewerProps> = ({
   content,
   language = "plaintext",
 }) => {
+  const { theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const monacoTheme = mounted
+    ? theme === "dark"
+      ? "vs-dark"
+      : "vs"
+    : "vs-dark";
+
   return (
     <Editor
+      key={monacoTheme}
       height="100%"
       language={language}
-      theme="vs-dark"
+      theme={monacoTheme}
       value={content}
       options={{
         readOnly: true,
