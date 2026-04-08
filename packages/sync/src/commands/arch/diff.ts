@@ -28,7 +28,7 @@ function getManifestPath(cwd: string): string {
   return join(cwd, ".architecture", "manifest.yaml");
 }
 
-function loadManifestFromPath(path: string): Result<Manifest> {
+function loadManifestFromPath(path: string): Result<Manifest, Error> {
   const result = yamlService.loadManifest(path);
   if (!result.success) {
     return err(result.error);
@@ -36,7 +36,7 @@ function loadManifestFromPath(path: string): Result<Manifest> {
   return ok(result.value);
 }
 
-function loadManifestFromGit(cwd: string): Result<Manifest> {
+function loadManifestFromGit(cwd: string): Result<Manifest, Error> {
   try {
     const content = execSync("git show HEAD:.architecture/manifest.yaml", {
       cwd,

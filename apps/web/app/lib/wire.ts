@@ -1,6 +1,9 @@
 // apps/web/app/lib/wire.ts
 // Centralized dependency composition root for web driver
 // All cross-package imports go through root barrels only (lint-enforced)
+/* eslint-disable no-console */
+// Console is intentional here: this file implements LoggerPort and emits
+// startup diagnostics. All other application code must use LoggerPort instead.
 
 import type { MonacoPersistencePort } from "@hexagen/shared";
 import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
@@ -70,10 +73,9 @@ export const wireDependencies = () => {
   // Logger port → console logger for web app
   registry.set("LoggerPort", createWebLogger() satisfies LoggerPort);
 
-  // Download project port → placeholder
+  // Download project port → not yet implemented; returns structured failure
   registry.set("DownloadProjectPort", {
     downloadProject: async (_project: Project) => {
-      console.warn("[DownloadProjectPort] Not implemented yet", _project);
       return {
         success: false as const,
         error: {

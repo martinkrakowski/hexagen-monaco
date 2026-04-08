@@ -47,7 +47,9 @@ export const GitHubExportStep = ({
   const isAuthenticated = status === "authenticated";
 
   const isFormValid = useMemo(() => {
-    return isAuthenticated && repoName.trim().length > 0;
+    // GitHub export is optional - can proceed without authentication
+    // If not authenticated, skip the GitHub export step (generate locally only)
+    return !isAuthenticated || repoName.trim().length > 0;
   }, [isAuthenticated, repoName]);
 
   const persistRepoName = (value: string) => {
@@ -82,8 +84,11 @@ export const GitHubExportStep = ({
   };
 
   const handleContinue = () => {
+    // GitHub export is optional - allow continuing without authentication
     if (!isAuthenticated) {
-      setUiError("Sign in with GitHub before continuing.");
+      // User not authenticated - will generate locally only, skip GitHub export
+      setValue("gitHubExport", undefined, { shouldDirty: true });
+      onNext();
       return;
     }
 
@@ -92,8 +97,11 @@ export const GitHubExportStep = ({
       return;
     }
 
-    if (session?.user?.name) {
-      setValue("gitHubExport.owner", session.user.name, { shouldDirty: true });
+    // Prefer login (GitHub username) over name (display name) — the GitHub
+    // API requires username for repository ownership, not the display name.
+    const ownerLogin = session?.user?.login;
+    if (ownerLogin) {
+      setValue("gitHubExport.owner", ownerLogin, { shouldDirty: true });
     }
 
     setUiError(null);

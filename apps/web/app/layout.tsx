@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
+import { AuthProvider } from "./components/providers/AuthProvider";
 
 export const metadata: Metadata = {
   title: "HexaGen Monaco — Hexagonal Generator",
@@ -49,7 +50,9 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

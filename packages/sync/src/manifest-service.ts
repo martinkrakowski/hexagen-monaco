@@ -10,7 +10,7 @@ export type { Result };
 
 export async function loadManifest(
   workspaceRoot: string,
-): Promise<Result<Manifest>> {
+): Promise<Result<Manifest, Error>> {
   try {
     const manifestPath = path.join(
       workspaceRoot,
@@ -49,7 +49,7 @@ export async function loadManifest(
 
 export async function validateManifest(
   workspaceRoot: string,
-): Promise<Result<{ valid: boolean; errors: string[] }>> {
+): Promise<Result<{ valid: boolean; errors: string[] }, Error>> {
   try {
     execSync("yarn workspace @hexagen/arch-linter lint:arch", {
       cwd: workspaceRoot,
@@ -73,7 +73,7 @@ export async function validateManifest(
 export async function saveManifest(
   workspaceRoot: string,
   manifest: Manifest,
-): Promise<Result<void>> {
+): Promise<Result<void, Error>> {
   try {
     const manifestPath = path.join(
       workspaceRoot,

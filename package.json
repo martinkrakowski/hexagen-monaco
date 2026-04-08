@@ -41,6 +41,7 @@
     "eslint-config-turbo": "^1.13.3",
     "eslint-plugin-import": "^2.29.1",
     "jsdom": "^29.0.0",
+    "lru-cache": "^7.18.3",
     "prettier": "^3.2.5",
     "turbo": "^1.13.3",
     "typescript": "^5.4.5",

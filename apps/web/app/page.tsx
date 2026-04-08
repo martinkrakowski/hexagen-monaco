@@ -42,6 +42,7 @@ import type {
 import { WizardStepRouter } from "@/components/project-wizard/WizardStepRouter";
 import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
 import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
+import { getLogger } from "@/lib/wire";
 
 export default function Home() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -147,15 +148,17 @@ export default function Home() {
         // Handle JSON response (for code view)
         // For now, we'll just show success - in a full implementation,
         // this would update the code view with generated files
-        console.log("Generated files:", result.files);
+        getLogger().info(`Generated files: ${JSON.stringify(result.files)}`);
       } else if (result.success) {
         // Handle success response
-        console.log("Project generation initiated:", result);
+        getLogger().info(
+          `Project generation initiated: ${JSON.stringify(result)}`,
+        );
       }
 
       // In a real app, we might show a success notification or navigate to results
     } catch (error) {
-      console.error("Generation error:", error);
+      getLogger().errorWithException(error, "Generation error");
       // In a real app, we'd show an error message to the user
     } finally {
       setLoading(false);
@@ -238,7 +241,7 @@ export default function Home() {
             right={
               <AIArchitectPanel
                 onSendMessage={async (message) => {
-                  console.log("Chat message:", message);
+                  getLogger().info(`Chat message: ${message}`);
                 }}
               />
             }

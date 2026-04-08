@@ -12,6 +12,7 @@ interface GenerateRequestBody {
   wizardData?: Record<string, unknown>;
   manifest?: Record<string, unknown>;
   destination?: "archive" | "github";
+  outputFormat?: "json" | "zip";
   githubConfig?: {
     repoName: string;
     isPrivate: boolean;
@@ -22,12 +23,11 @@ interface GenerateRequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as GenerateRequestBody;
-    const {
-      wizardData,
-      manifest,
-      destination = "archive",
-      githubConfig,
-    } = body;
+    const { wizardData, manifest, outputFormat = "json", githubConfig } = body;
+
+    // Use outputFormat to determine what to return
+    // outputFormat: "json" returns file map, "zip" returns binary
+    const destination = body.destination ?? "archive";
 
     const finalManifest =
       manifest ||
@@ -55,11 +55,9 @@ export async function POST(request: NextRequest) {
         secret: process.env.NEXTAUTH_SECRET,
       });
 
-      const accessToken =
-        typeof token?.accessToken === "string" ? token.accessToken : null;
-      const owner =
-        githubConfig.owner ??
-        (typeof token?.name === "string" ? token.name : "");
+      // token.accessToken and token.login are typed via next-auth.d.ts augmentation.
+      const accessToken = token?.accessToken ?? null;
+      const owner = githubConfig.owner ?? token?.login ?? "";
 
       if (!accessToken) {
         return NextResponse.json(
@@ -98,8 +96,8 @@ export async function POST(request: NextRequest) {
 
     const { project, destinationUrl, zipBuffer } = result.value;
 
-    // Archive mode — return binary response
-    if (destination === "archive" && zipBuffer) {
+    // ZIP output format — return binary response
+    if (outputFormat === "zip" && zipBuffer) {
       return new NextResponse(new Uint8Array(zipBuffer), {
         status: 200,
         headers: {
@@ -109,23 +107,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // GitHub mode — return the repo URL
-    if (destination === "github") {
-      return NextResponse.json({
-        success: true,
-        message: "Project pushed to GitHub",
-        repositoryUrl: destinationUrl,
-        projectName: project.name,
-        fileCount: project.files.size,
-      });
-    }
+    // Default: JSON output — return file map
+    const filesObj: Record<string, string> = {};
+    project.files.forEach((content, path) => {
+      filesObj[path] = content;
+    });
 
-    // Fallback
     return NextResponse.json({
       success: true,
       message: "Project generated successfully",
       projectName: project.name,
       fileCount: project.files.size,
+      files: filesObj,
     });
   } catch (err) {
     const logger = getLogger();
