@@ -53,19 +53,9 @@ export function MonacoEditorWrapper({
   const [content, setContent] = useState(initialBuffer);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
 
   const { theme } = useTheme();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const monacoTheme = mounted
-    ? theme === "dark"
-      ? "vs-dark"
-      : "vs"
-    : "vs-dark";
+  const monacoTheme = theme === "dark" ? "vs-dark" : "vs";
 
   const persistence = getMonacoPersistence();
 
@@ -169,7 +159,7 @@ export function MonacoEditorWrapper({
         </div>
       ) : (
         <Editor
-          key={`${monacoTheme}-${sessionId}-${language}`}
+          key={`editor-${monacoTheme}`}
           height="100%"
           language={language}
           value={content}
@@ -182,7 +172,6 @@ export function MonacoEditorWrapper({
             lineNumbers: "on",
             scrollBeyondLastLine: false,
             automaticLayout: true,
-            bracketPairColorization: { enabled: false },
           }}
         />
       )}
