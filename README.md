@@ -69,6 +69,7 @@ The system treats architecture as something that evolves over time. Instead of g
 - **Monorepo Engine:** Yarn 4 + Turborepo
 - **Language:** TypeScript (Composite Projects)
 - **Frontend Core:** React / Next.js
+- **TUI:** Ink (React for CLIs)
 - **Manifest:** YAML
 - **Analysis:** Babel/AST for semantic patching
 
@@ -117,6 +118,25 @@ cd hexagen-monaco
 yarn install
 yarn build
 npx hexagen --help
+```
+
+## Terminal UI (TUI)
+
+HexaGen includes a terminal-based dashboard (`apps/tui`) built with [Ink](https://github.com/vadimdemedes/ink) for navigating and governing architecture directly from the command line.
+
+**Features:**
+
+- Three-pane layout: Navigation Tree, Rule Engine, Violation Inspector
+- Live updates via filesystem watching (manifest and dependency changes)
+- AI-assisted refactoring of architectural violations via local MCP server
+- Keyboard-driven: `j/k` navigate, `Tab` switch pane, `r` refactor with AI, `u` refresh, `q` quit
+
+```bash
+# Start the TUI
+yarn workspace @hexagen/tui dev
+
+# Or after building
+yarn workspace @hexagen/tui start
 ```
 
 ## Generated Project User Flow
