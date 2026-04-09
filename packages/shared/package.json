@@ -24,9 +24,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "js-yaml": "^4.1.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   }

@@ -817,7 +817,9 @@ __metadata:
   resolution: "@hexagen/agentic-interaction@workspace:packages/agentic-interaction"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -861,7 +863,9 @@ __metadata:
   resolution: "@hexagen/architectural-enforcement@workspace:packages/architectural-enforcement"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -872,7 +876,9 @@ __metadata:
   resolution: "@hexagen/code-generation@workspace:packages/code-generation"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -883,7 +889,9 @@ __metadata:
   resolution: "@hexagen/deployment@workspace:packages/deployment"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -898,9 +906,10 @@ __metadata:
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
     "@modelcontextprotocol/sdk": "npm:^1.0.0"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
     eslint: "npm:^8.57.0"
-    js-yaml: "npm:^4.1.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
     zod: "npm:^3.23.8"
@@ -914,7 +923,9 @@ __metadata:
   resolution: "@hexagen/messaging@workspace:packages/messaging"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -925,7 +936,9 @@ __metadata:
   resolution: "@hexagen/monaco-orchestration@workspace:packages/monaco-orchestration"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -936,7 +949,9 @@ __metadata:
   resolution: "@hexagen/persistence@workspace:packages/persistence"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -982,7 +997,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/shared@workspace:packages/shared"
   dependencies:
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.0.0"
     zod: "npm:^3.23.8"
   languageName: unknown
@@ -1028,7 +1045,9 @@ __metadata:
   resolution: "@hexagen/visualization@workspace:packages/visualization"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
   languageName: unknown
@@ -1040,7 +1059,9 @@ __metadata:
   dependencies:
     "@hexagen/shared": "workspace:*"
     "@hexagen/visualization": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.0.0"
   languageName: unknown
   linkType: soft
@@ -1050,7 +1071,9 @@ __metadata:
   resolution: "@hexagen/wizard-orchestration@workspace:packages/wizard-orchestration"
   dependencies:
     "@hexagen/shared": "workspace:*"
+    "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
+    js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.0.0"
     zod: "npm:^3.23.8"
   languageName: unknown
