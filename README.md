@@ -1,3 +1,5 @@
+This project is currently under development progressing towards the first working release.
+
 # HexaGen Monaco — Architecture Governance Engine
 
 [![Architectural Integrity Check](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml/badge.svg)](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml)
