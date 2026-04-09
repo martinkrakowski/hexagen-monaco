@@ -28,7 +28,7 @@ export const MonacoViewer: React.FC<MonacoViewerProps> = ({
 
   return (
     <Editor
-      key={monacoTheme}
+      key={`${monacoTheme}-${language}`}
       height="100%"
       language={language}
       theme={monacoTheme}
