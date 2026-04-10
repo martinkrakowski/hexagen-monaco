@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, createContext, useContext } from "react";
 import { CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Textarea";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { AgentMessage } from "./AgentMessage";
 import { Loader2, Send, Bot } from "lucide-react";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
   id: string;
@@ -13,6 +15,56 @@ interface ChatMessage {
   content: string;
   timestamp: number;
 }
+
+// ─── Context ─────────────────────────────────────────────────────────────────
+
+interface ChatContextValue {
+  isLoading: boolean;
+}
+
+const ChatContext = createContext<ChatContextValue>({ isLoading: false });
+
+function useChatContext() {
+  return useContext(ChatContext);
+}
+
+// ─── Subcomponents ───────────────────────────────────────────────────────────
+
+function LoadingIndicator() {
+  const { isLoading } = useChatContext();
+  if (!isLoading) return null;
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span className="text-sm">Thinking...</span>
+    </div>
+  );
+}
+
+interface SendButtonProps {
+  onClick: () => void;
+  hasInput: boolean;
+}
+
+function SendButton({ onClick, hasInput }: SendButtonProps) {
+  const { isLoading } = useChatContext();
+  return (
+    <PrimaryButton
+      onClick={onClick}
+      disabled={!hasInput || isLoading}
+      size="icon"
+      className="shrink-0"
+    >
+      {isLoading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Send className="h-4 w-4" />
+      )}
+    </PrimaryButton>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 interface AgentChatPanelProps {
   onSendMessage?: (message: string) => Promise<void>;
@@ -55,7 +107,7 @@ export function AgentChatPanel({
     if (onSendMessage) {
       try {
         await onSendMessage(userMessage.content);
-      } catch (error) {
+      } catch {
         const errorMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
@@ -75,49 +127,35 @@ export function AgentChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-card">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-        <Bot className="h-4 w-4 text-primary" />
-        <span className="text-sm font-medium">AI Assistant</span>
-      </div>
+    <ChatContext.Provider value={{ isLoading }}>
+      <div className="flex flex-col h-full bg-card">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+          <Bot className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">AI Assistant</span>
+        </div>
 
-      <CardContent className="flex-1 overflow-auto p-3 space-y-3">
-        {messages.map((message) => (
-          <AgentMessage key={message.id} message={message} />
-        ))}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Thinking...</span>
+        <CardContent className="flex-1 overflow-auto p-3 space-y-3">
+          {messages.map((message) => (
+            <AgentMessage key={message.id} message={message} />
+          ))}
+          <LoadingIndicator />
+          <div ref={messagesEndRef} />
+        </CardContent>
+
+        <div className="p-3 border-t border-border">
+          <div className="flex gap-2">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your architecture..."
+              className="min-h-[60px] resize-none"
+              disabled={isLoading}
+            />
+            <SendButton onClick={handleSend} hasInput={!!input.trim()} />
           </div>
-        )}
-        <div ref={messagesEndRef} />
-      </CardContent>
-
-      <div className="p-3 border-t border-border">
-        <div className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about your architecture..."
-            className="min-h-[60px] resize-none"
-            disabled={isLoading}
-          />
-          <PrimaryButton
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            size="icon"
-            className="shrink-0"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </PrimaryButton>
         </div>
       </div>
-    </div>
+    </ChatContext.Provider>
   );
 }

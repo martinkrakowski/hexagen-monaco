@@ -4,13 +4,14 @@ import React, { useState, useMemo } from "react";
 import {
   FileCode,
   Loader2,
-  RefreshCw,
   AlertCircle,
   Download,
   Archive,
+  RefreshCw,
 } from "lucide-react";
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
+import { ExplorerToolbar } from "./ExplorerToolbar";
 import { MonacoViewer } from "@/components/monaco/MonacoViewer";
 import { useProjectGeneration } from "@/hooks/use-project-generation";
 import { useArchitectureDownload } from "@/hooks/use-architecture-download";
@@ -44,14 +45,12 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
     <div className="flex h-full w-full bg-background overflow-hidden text-foreground">
       {/* Sidebar */}
       <div className="w-64 border-r border-border bg-muted flex flex-col hidden md:flex shrink-0">
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider p-4 border-b border-border shrink-0 flex items-center justify-between">
-          <span>Explorer</span>
-          <div className="flex items-center gap-3">
-            {/* Architecture Download Button */}
-            <button
+        <ExplorerToolbar.Root isNetworkActive={isNetworkActive}>
+          <ExplorerToolbar.Label>Explorer</ExplorerToolbar.Label>
+          <ExplorerToolbar.Actions>
+            <ExplorerToolbar.ActionButton
               onClick={downloadArchitectureZip}
               disabled={isDownloadingArch}
-              className="transition-colors disabled:opacity-50 hover:text-foreground"
               title="Download Architecture (.architecture/)"
             >
               {isDownloadingArch ? (
@@ -59,13 +58,11 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
               ) : (
                 <Archive size={14} />
               )}
-            </button>
+            </ExplorerToolbar.ActionButton>
 
-            {/* Full Project Download Button */}
-            <button
+            <ExplorerToolbar.ActionButton
               onClick={downloadZip}
               disabled={isNetworkActive || files.size === 0}
-              className="transition-colors disabled:opacity-50 hover:text-foreground"
               title="Download Project (ZIP)"
             >
               {isDownloading ? (
@@ -73,34 +70,13 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
               ) : (
                 <Download size={14} />
               )}
-            </button>
+            </ExplorerToolbar.ActionButton>
 
-            {/* Refresh Button */}
-            <div className="relative flex items-center">
-              <button
-                onClick={refresh}
-                disabled={isNetworkActive}
-                className={`transition-colors disabled:opacity-50 ${isStale ? "text-blue-400 hover:text-blue-300" : "hover:text-foreground"}`}
-                title={
-                  isStale
-                    ? "Pending changes. Click to regenerate."
-                    : "Force Regenerate"
-                }
-              >
-                <RefreshCw
-                  size={14}
-                  className={loading ? "animate-spin" : ""}
-                />
-              </button>
-              {isStale && !isNetworkActive && (
-                <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+            <ExplorerToolbar.StaleIndicator isStale={isStale} onClick={refresh}>
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            </ExplorerToolbar.StaleIndicator>
+          </ExplorerToolbar.Actions>
+        </ExplorerToolbar.Root>
 
         {error ? (
           <div className="p-4 text-red-400 text-sm flex items-start gap-2">

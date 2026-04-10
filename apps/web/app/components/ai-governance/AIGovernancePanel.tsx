@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { CardContent } from "@/components/ui/Card";
+import { Tabs } from "@/components/ui/Tabs";
 import {
   AlertTriangle,
   CheckCircle,
@@ -51,71 +51,46 @@ export function AIGovernancePanel({
   onRefresh,
   isLoading = false,
 }: AIGovernancePanelProps) {
-  const [activeTab, setActiveTab] = useState<
-    "violations" | "suggestions" | "status"
-  >("violations");
-
   return (
     <div className="flex flex-col h-full bg-card">
-      <div className="flex border-b border-border shrink-0">
-        <button
-          onClick={() => setActiveTab("violations")}
-          className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-            activeTab === "violations"
-              ? "text-primary border-b-2 border-primary bg-muted/50"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Violations ({violations.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("suggestions")}
-          className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-            activeTab === "suggestions"
-              ? "text-primary border-b-2 border-primary bg-muted/50"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          AI Suggestions ({suggestions.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("status")}
-          className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
-            activeTab === "status"
-              ? "text-primary border-b-2 border-primary bg-muted/50"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Port/Adapter Status
-        </button>
-      </div>
+      <Tabs.Root defaultTab="violations">
+        <Tabs.List>
+          <Tabs.Trigger value="violations">
+            Violations ({violations.length})
+          </Tabs.Trigger>
+          <Tabs.Trigger value="suggestions">
+            AI Suggestions ({suggestions.length})
+          </Tabs.Trigger>
+          <Tabs.Trigger value="status">Port/Adapter Status</Tabs.Trigger>
+        </Tabs.List>
 
-      <div className="flex justify-end px-2 py-1 border-b border-border shrink-0">
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
-        >
-          {isLoading ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3 w-3" />
-          )}
-          {isLoading ? "Analyzing..." : "Refresh"}
-        </button>
-      </div>
+        <div className="flex justify-end px-2 py-1 border-b border-border shrink-0">
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+          >
+            {isLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            {isLoading ? "Analyzing..." : "Refresh"}
+          </button>
+        </div>
 
-      <CardContent className="flex-1 overflow-auto p-3">
-        {activeTab === "violations" && (
-          <ViolationList violations={violations} />
-        )}
-        {activeTab === "suggestions" && (
-          <SuggestionList suggestions={suggestions} />
-        )}
-        {activeTab === "status" && (
-          <PortAdapterStatusList status={portAdapterStatus} />
-        )}
-      </CardContent>
+        <CardContent className="flex-1 overflow-auto p-3">
+          <Tabs.Content value="violations">
+            <ViolationList violations={violations} />
+          </Tabs.Content>
+          <Tabs.Content value="suggestions">
+            <SuggestionList suggestions={suggestions} />
+          </Tabs.Content>
+          <Tabs.Content value="status">
+            <PortAdapterStatusList status={portAdapterStatus} />
+          </Tabs.Content>
+        </CardContent>
+      </Tabs.Root>
     </div>
   );
 }
