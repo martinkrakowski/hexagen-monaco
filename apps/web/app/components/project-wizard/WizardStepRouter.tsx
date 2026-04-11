@@ -22,6 +22,7 @@ interface WizardStepRouterProps {
   onMappingSelect: (id: string) => void;
   onNext: () => void;
   onBack: () => void;
+  onShowSavedProjects: () => void;
   onGenerate: () => void;
   onViewModeChange: (mode: "visual" | "code") => void;
 }
@@ -37,6 +38,7 @@ export function WizardStepRouter({
   onMappingSelect,
   onNext,
   onBack,
+  onShowSavedProjects,
   onGenerate,
   onViewModeChange,
 }: WizardStepRouterProps) {
@@ -45,8 +47,8 @@ export function WizardStepRouter({
       return (
         <WorkspaceGovernanceStep
           onNext={onNext}
-          onBack={onBack}
-          canProceed={canProceed} // Handled specifically for step 0 in parent
+          onShowSavedProjects={onShowSavedProjects}
+          canProceed={canProceed}
           currentStep={1}
           totalSteps={totalSteps}
         />

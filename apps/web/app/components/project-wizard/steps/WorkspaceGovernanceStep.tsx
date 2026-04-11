@@ -5,7 +5,7 @@ import type { ProjectConfig } from "@hexagen/project-configuration";
 
 interface WorkspaceGovernanceStepProps {
   onNext: () => void;
-  onBack: () => void;
+  onShowSavedProjects: () => void;
   canProceed: boolean;
   currentStep?: number;
   totalSteps?: number;
@@ -13,7 +13,7 @@ interface WorkspaceGovernanceStepProps {
 
 export function WorkspaceGovernanceStep({
   onNext,
-  onBack,
+  onShowSavedProjects,
   canProceed,
   currentStep = 1,
   totalSteps = 5,
@@ -169,11 +169,10 @@ export function WorkspaceGovernanceStep({
       <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
         <button
           type="button"
-          onClick={onBack}
-          disabled={!canProceed}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
+          onClick={onShowSavedProjects}
+          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
         >
-          Back
+          Previous Projects
         </button>
         <div className="flex items-center gap-4">
           <span className="text-xs text-muted-foreground">

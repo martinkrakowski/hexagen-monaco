@@ -40,8 +40,11 @@ import type {
 } from "@hexagen/shared";
 
 import { WizardStepRouter } from "@/components/project-wizard/WizardStepRouter";
+import { SavedProjectsList } from "@/components/project-wizard/SavedProjectsList";
 import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
 import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
+import { wizardToManifest } from "@/lib/wizard-to-manifest";
+import { useSavedProjects } from "@/hooks/use-saved-projects";
 import { getLogger } from "@/lib/wire";
 
 export default function Home() {
@@ -52,6 +55,10 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<"visual" | "code">("visual");
   const [mode, setMode] = useState<"genesis" | "edit">("genesis");
   const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [showSavedProjects, setShowSavedProjects] = useState(false);
+
+  const { projects, saveProject, loadProject, deleteProject, renameProject } =
+    useSavedProjects();
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
@@ -110,6 +117,26 @@ export default function Home() {
     setCurrentStepIndex((i) => Math.max(i - 1, 0));
   };
 
+  const handleShowSavedProjects = () => {
+    setShowSavedProjects(true);
+  };
+
+  const handleLoadProject = (id: string) => {
+    const saved = loadProject(id);
+    if (saved) {
+      form.reset(saved.formState);
+      setMode("edit");
+      setCurrentStepIndex(0);
+      setShowSavedProjects(false);
+    }
+  };
+
+  function formatTimestamp(): string {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  }
+
   const handleGenerate = async () => {
     setLoading(true);
     try {
@@ -156,6 +183,12 @@ export default function Home() {
         );
       }
 
+      const projectName = `${formData.governance?.workspaceName || "project"}-${formatTimestamp()}`;
+      const manifestYaml = yaml.dump(
+        wizardToManifest(wizardData as Parameters<typeof wizardToManifest>[0]),
+      );
+      saveProject(projectName, formData, manifestYaml);
+
       // In a real app, we might show a success notification or navigate to results
     } catch (error) {
       getLogger().errorWithException(error, "Generation error");
@@ -201,20 +234,31 @@ export default function Home() {
                 />
 
                 <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
-                  <WizardStepRouter
-                    currentStepIndex={currentStepIndex}
-                    totalSteps={totalSteps}
-                    canProceed={canProceed}
-                    isGenerating={loading}
-                    activeContextId={activeContextId}
-                    activeMappingId={activeMappingId}
-                    onContextSelect={setActiveContextId}
-                    onMappingSelect={setActiveMappingId}
-                    onNext={handleNext}
-                    onBack={handleBack}
-                    onGenerate={handleGenerate}
-                    onViewModeChange={setViewMode}
-                  />
+                  {showSavedProjects ? (
+                    <SavedProjectsList
+                      projects={projects}
+                      onLoad={handleLoadProject}
+                      onDelete={deleteProject}
+                      onRename={renameProject}
+                      onBackToWizard={() => setShowSavedProjects(false)}
+                    />
+                  ) : (
+                    <WizardStepRouter
+                      currentStepIndex={currentStepIndex}
+                      totalSteps={totalSteps}
+                      canProceed={canProceed}
+                      isGenerating={loading}
+                      activeContextId={activeContextId}
+                      activeMappingId={activeMappingId}
+                      onContextSelect={setActiveContextId}
+                      onMappingSelect={setActiveMappingId}
+                      onNext={handleNext}
+                      onBack={handleBack}
+                      onShowSavedProjects={handleShowSavedProjects}
+                      onGenerate={handleGenerate}
+                      onViewModeChange={setViewMode}
+                    />
+                  )}
                 </CardContent>
               </Card>
             }
