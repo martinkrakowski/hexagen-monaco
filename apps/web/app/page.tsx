@@ -226,13 +226,6 @@ export default function Home() {
           <ResizableLayout
             left={
               <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-                <StepHeader
-                  currentStep={currentStepIndex + 1}
-                  totalSteps={totalSteps}
-                  title={currentStepConfig.title}
-                  description={currentStepConfig.description}
-                />
-
                 <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
                   {showSavedProjects ? (
                     <SavedProjectsList
@@ -243,21 +236,30 @@ export default function Home() {
                       onBackToWizard={() => setShowSavedProjects(false)}
                     />
                   ) : (
-                    <WizardStepRouter
-                      currentStepIndex={currentStepIndex}
-                      totalSteps={totalSteps}
-                      canProceed={canProceed}
-                      isGenerating={loading}
-                      activeContextId={activeContextId}
-                      activeMappingId={activeMappingId}
-                      onContextSelect={setActiveContextId}
-                      onMappingSelect={setActiveMappingId}
-                      onNext={handleNext}
-                      onBack={handleBack}
-                      onShowSavedProjects={handleShowSavedProjects}
-                      onGenerate={handleGenerate}
-                      onViewModeChange={setViewMode}
-                    />
+                    <>
+                      <StepHeader
+                        currentStep={currentStepIndex + 1}
+                        totalSteps={totalSteps}
+                        title={currentStepConfig.title}
+                        description={currentStepConfig.description}
+                      />
+
+                      <WizardStepRouter
+                        currentStepIndex={currentStepIndex}
+                        totalSteps={totalSteps}
+                        canProceed={canProceed}
+                        isGenerating={loading}
+                        activeContextId={activeContextId}
+                        activeMappingId={activeMappingId}
+                        onContextSelect={setActiveContextId}
+                        onMappingSelect={setActiveMappingId}
+                        onNext={handleNext}
+                        onBack={handleBack}
+                        onShowSavedProjects={handleShowSavedProjects}
+                        onGenerate={handleGenerate}
+                        onViewModeChange={setViewMode}
+                      />
+                    </>
                   )}
                 </CardContent>
               </Card>
