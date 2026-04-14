@@ -81,6 +81,14 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
 
     flowNode.draggable = n.id === "monorepo-boundary" ? false : true;
 
+    // Entity and use-case satellite nodes must render above edge lines so that
+    // connecting lines from parent to deeper children do not visually pass
+    // through shallower sibling nodes.
+    const satelliteTypes = ["entity", "use-case", "adapter", "port"];
+    if (n.type && satelliteTypes.includes(n.type)) {
+      flowNode.zIndex = 10;
+    }
+
     return flowNode;
   });
 }

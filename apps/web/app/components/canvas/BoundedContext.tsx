@@ -74,25 +74,6 @@ const SATELLITE_NODE_STYLES: Record<
   },
 };
 
-// Left-strip mini card styles for inner nodes (Domain, Use Cases)
-const INNER_NODE_STYLES: Record<
-  string,
-  { strip: string; bodyBg: string; border: string; handleColor: string }
-> = {
-  "bounded-context": {
-    strip: "bg-sky-500",
-    bodyBg: "bg-card",
-    border: "border-sky-500/20",
-    handleColor: "!bg-sky-500",
-  },
-  inner: {
-    strip: "bg-stone-500",
-    bodyBg: "bg-card",
-    border: "border-stone-500/20",
-    handleColor: "!bg-stone-500",
-  },
-};
-
 const DOMAIN_COMPASS = [
   {
     key: "aggregates",
@@ -219,29 +200,23 @@ function UnifiedBoundedContextComponent({
     items: string[];
   } | null>(null);
 
-  // Inner nodes (Domain / Use Cases) — left-strip mini card (40px height)
+  // Inner nodes (Domain / Use Cases) — column header labels (28px height)
   if (nodeType === "inner") {
-    const styles = INNER_NODE_STYLES.inner;
     return (
       <div
-        style={{ width: 120, height: 40 }}
-        className={`relative flex items-center rounded-lg border text-xs font-medium transition-colors select-none ${styles.bodyBg} ${styles.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
+        style={{ width: 140, height: 28 }}
+        className="relative flex flex-col items-center justify-center select-none"
       >
-        <div className={`w-1.5 h-full ${styles.strip} rounded-l-lg`} />
-        <span className="px-2 truncate text-center leading-tight">
+        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
           {String(data.label || "")}
         </span>
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="west"
-          className={`${styles.handleColor} !w-2.5 !h-2.5 -left-1.5`}
-        />
+        <div className="w-full h-px bg-muted-foreground/20 mt-1" />
+        {/* South handle for entity/use-case connections */}
         <Handle
           type="source"
-          position={Position.Right}
-          id="east"
-          className={`${styles.handleColor} !w-2.5 !h-2.5 -right-1.5`}
+          position={Position.Bottom}
+          id="south"
+          className="!bg-muted-foreground/30 !w-2 !h-2"
         />
       </div>
     );
@@ -376,7 +351,7 @@ function UnifiedBoundedContextComponent({
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
           fill="transparent"
           stroke="currentColor"
-          strokeWidth="2.2"
+          strokeWidth="1.2"
           className={`transition-[stroke,opacity] duration-500 ${
             selected
               ? "text-primary"

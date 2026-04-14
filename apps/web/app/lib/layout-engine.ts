@@ -53,35 +53,33 @@ const LAYOUT_CONFIG = {
 
   // Inner node positions (inside root hexagon - 500px)
   DOMAIN_NODE_X: 110,
-  DOMAIN_NODE_Y: 400,
+  DOMAIN_NODE_Y: 340,
   USECASES_NODE_X: 275,
-  USECASES_NODE_Y: 400,
+  USECASES_NODE_Y: 340,
 
   // Satellite/peer hexagon inner node positions (360px hex - at bottom, spread apart)
   SATELLITE_DOMAIN_X: 50,
-  SATELLITE_DOMAIN_Y: 314,
+  SATELLITE_DOMAIN_Y: 248,
   SATELLITE_USECASES_X: 240,
-  SATELLITE_USECASES_Y: 314,
+  SATELLITE_USECASES_Y: 248,
 
   // Entity satellites positioning (root hex)
-  ENTITY_COL_WIDTH: 50,
-  ENTITY_ROW_HEIGHT: 40,
-  ENTITY_START_X: 30,
-  ENTITY_START_Y: 560,
+  ENTITY_ROW_HEIGHT: 120,
+  ENTITY_START_X: -170,
+  ENTITY_START_Y: 750,
 
-  // Entity satellites positioning (satellite hex - below Domain)
-  SATELLITE_ENTITY_START_X: -20,
-  SATELLITE_ENTITY_START_Y: 700,
+  // Entity satellites positioning (satellite hex)
+  SATELLITE_ENTITY_START_X: -220,
+  SATELLITE_ENTITY_START_Y: 900,
 
   // Use case satellites positioning (root hex)
-  USECASE_COL_WIDTH: 50,
-  USECASE_ROW_HEIGHT: 40,
-  USECASE_START_X: 420,
-  USECASE_START_Y: 560,
+  USECASE_ROW_HEIGHT: 120,
+  USECASE_X_OFFSET: -20,
+  USECASE_START_Y: 750,
 
-  // Use case satellites positioning (satellite hex - below Use Cases)
-  SATELLITE_USECASE_START_X: 320,
-  SATELLITE_USECASE_START_Y: 700,
+  // Use case satellites positioning (satellite hex)
+  SATELLITE_USECASE_X_OFFSET: -20,
+  SATELLITE_USECASE_START_Y: 900,
 
   // Adapter positions (north/south of hex)
   NORTH_OFFSET_BASE: 280,
@@ -90,14 +88,15 @@ const LAYOUT_CONFIG = {
   SOUTH_OFFSET_ADDITIONAL: 80,
   SOUTH_OFFSET_STEP: 120,
 
+  // Adapter label X positions — split by side to avoid overlap with child node columns
+  NORTH_ADAPTER_X_OFFSET: 230, // north adapters (API, UI) — roughly centred under hex
+  SOUTH_ADAPTER_X_OFFSET: 460, // south adapters (Messaging, Persistence, Telemetry) — right of use-case column
+
   // Port satellites (west/east driving/driven)
-  WEST_PORT_OFFSET_X: -380,
-  EAST_PORT_OFFSET_X: 700,
+  WEST_PORT_OFFSET_X: -480,
+  EAST_PORT_OFFSET_X: 775,
   PORT_OFFSET_BASE_Y: -40,
   PORT_OFFSET_STEP_Y: 100,
-
-  // Adapter label X position
-  ADAPTER_LABEL_X: 230,
 
   // External peer positioning
   PEER_OFFSET_LEFT: -400,
@@ -126,7 +125,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     LAYOUT_CONFIG.GROUP_MIN_WIDTH,
     contextCount * contextSpacing + 400,
   );
-  const groupHeight = 1400;
+  const groupHeight = 2200;
 
   // Place group centered in viewport
   const groupX = canvasCenterX - groupWidth / 2;
@@ -213,8 +212,8 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       ? LAYOUT_CONFIG.ENTITY_START_Y
       : LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y;
     const useCaseStartX = isRootContext
-      ? LAYOUT_CONFIG.USECASE_START_X
-      : LAYOUT_CONFIG.SATELLITE_USECASE_START_X;
+      ? hexX + LAYOUT_CONFIG.USECASE_X_OFFSET
+      : hexX + LAYOUT_CONFIG.SATELLITE_USECASE_X_OFFSET;
     const useCaseStartY = isRootContext
       ? LAYOUT_CONFIG.USECASE_START_Y
       : LAYOUT_CONFIG.SATELLITE_USECASE_START_Y;
@@ -245,27 +244,21 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
       position: { x: useCasesX, y: useCasesY },
     });
 
-    // Entity satellites - absolute positioning for satellites
+    // Entity satellites - single column, one node per row
     entityItems.forEach((name: string, i: number) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
       const posX = isRootContext
-        ? entityStartX + col * LAYOUT_CONFIG.ENTITY_COL_WIDTH
-        : hexX +
-          LAYOUT_CONFIG.SATELLITE_ENTITY_START_X +
-          col * LAYOUT_CONFIG.ENTITY_COL_WIDTH;
+        ? entityStartX
+        : hexX + LAYOUT_CONFIG.SATELLITE_ENTITY_START_X;
       const posY = isRootContext
-        ? entityStartY + row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
+        ? entityStartY + i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
         : hexY +
           LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y +
-          row * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT;
+          i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT;
       nodes.push({
         id: `entity-${contextId}-${i}`,
         label: name,
         type: "entity" as HexagonNodeType,
         category: "Entity",
-        parentId: isRootContext ? contextId : undefined,
-        extent: isRootContext ? "parent" : undefined,
         position: { x: posX, y: posY },
       });
       // Edge from domain (south handle) to entity (north handle)
@@ -276,30 +269,25 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         target: `entity-${contextId}-${i}`,
         targetHandle: "north",
         type: "smoothstep",
+        animated: true,
       });
     });
 
-    // Use case satellites - absolute positioning for satellites
+    // Use case satellites - single column, one node per row
     useCaseItems.forEach((name: string, i: number) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
       const posX = isRootContext
-        ? useCaseStartX + col * LAYOUT_CONFIG.USECASE_COL_WIDTH
-        : hexX +
-          LAYOUT_CONFIG.SATELLITE_USECASE_START_X +
-          col * LAYOUT_CONFIG.USECASE_COL_WIDTH;
+        ? useCaseStartX
+        : hexX + LAYOUT_CONFIG.SATELLITE_USECASE_X_OFFSET;
       const posY = isRootContext
-        ? useCaseStartY + row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
+        ? useCaseStartY + i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
         : hexY +
           LAYOUT_CONFIG.SATELLITE_USECASE_START_Y +
-          row * LAYOUT_CONFIG.USECASE_ROW_HEIGHT;
+          i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT;
       nodes.push({
         id: `usecase-${contextId}-${i}`,
         label: name,
         type: "use-case" as HexagonNodeType,
         category: "Use Case",
-        parentId: isRootContext ? contextId : undefined,
-        extent: isRootContext ? "parent" : undefined,
         position: { x: posX, y: posY },
       });
       // Edge from use cases (south handle) to use case (north handle)
@@ -310,6 +298,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         target: `usecase-${contextId}-${i}`,
         targetHandle: "north",
         type: "smoothstep",
+        animated: true,
       });
     });
 
@@ -448,7 +437,14 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         type: "port" as HexagonNodeType,
         label: adapter.label,
         category: typeLabel,
-        position: { x: hexX + LAYOUT_CONFIG.ADAPTER_LABEL_X, y: yOffset },
+        position: {
+          x:
+            hexX +
+            (adapter.side === "north"
+              ? LAYOUT_CONFIG.NORTH_ADAPTER_X_OFFSET
+              : LAYOUT_CONFIG.SOUTH_ADAPTER_X_OFFSET),
+          y: yOffset,
+        },
         side: adapter.side,
       });
 
