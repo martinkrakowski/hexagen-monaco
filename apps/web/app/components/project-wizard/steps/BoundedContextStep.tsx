@@ -190,7 +190,7 @@ export function BoundedContextStep({
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Zone A: Form Fields (Fixed Top) */}
-      <div className="shrink-0 p-3 space-y-3 border-b border-border">
+      <div className="shrink-0 p-2 space-y-3 border-b border-border">
         <div className="w-full">
           <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
             Context Name
@@ -329,11 +329,11 @@ export function BoundedContextStep({
       {/* Zone B: Scrollable Middle - Stacked Fields */}
       <div
         key={`zone-b-${activeContextId}`}
-        className="flex-1 overflow-y-auto p-3 space-y-6"
+        className="flex-1 overflow-y-auto space-y-6"
       >
         {/* Domain Model - Full Width */}
-        <div className="max-w-md">
-          <div className="border-b border-border pb-2 mb-4">
+        <div className="w-full">
+          <div className="w-full border-b border-border mb-4 p-3">
             <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
               Domain Model
             </h3>
@@ -342,7 +342,7 @@ export function BoundedContextStep({
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="p-2 space-y-4">
             <ChipInput
               label="Core Domain Entities"
               placeholder="e.g. User, Product"
@@ -372,8 +372,8 @@ export function BoundedContextStep({
         </div>
 
         {/* Domain Logic - Full Width, Below Domain Model */}
-        <div className="max-w-md">
-          <div className="border-b border-border pb-2 mb-4">
+        <div className="w-full">
+          <div className="w-full border-b border-t border-border mb-4 p-3">
             <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
               Domain Logic
             </h3>
@@ -382,7 +382,7 @@ export function BoundedContextStep({
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="p-2 space-y-4">
             <ChipInput
               label="Primary Use Cases"
               placeholder="e.g. PlaceOrder"

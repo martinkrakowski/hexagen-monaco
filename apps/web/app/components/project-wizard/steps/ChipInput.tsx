@@ -46,7 +46,7 @@ export function ChipInput({
       <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
         {label}
       </label>
-      <div className="p-3 bg-muted border border-dashed border-input rounded-lg focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition-[box-shadow,border-color]">
+      <div className="p-3 border border-dashed border-input rounded-lg focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition-[box-shadow,border-color]">
         <div className="flex flex-wrap gap-1">
           {values.map((val) => (
             <span
