@@ -49,7 +49,7 @@ function List({
     <div
       role="tablist"
       className={cn(
-        "flex border-b border-border bg-card/50 shrink-0",
+        "flex border-b border-border bg-card/50 shrink-0 px-4 py-3",
         className,
       )}
     >

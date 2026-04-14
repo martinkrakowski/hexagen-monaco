@@ -26,7 +26,7 @@ interface PanelHeaderProps {
 function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
   const Icon = side === "left" ? ChevronLeft : ChevronRight;
   return (
-    <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-card/30 h-[var(--panel-header-h)]">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0">
       <span className="font-semibold text-sm truncate">{title}</span>
       <button
         type="button"
@@ -95,7 +95,7 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
               side="left"
               onCollapse={collapseLeft}
             />
-            <CardContent className="p-0 h-[calc(100%-var(--panel-header-h))] overflow-auto custom-scrollbar">
+            <CardContent className="p-0 h-[calc(100%-2.875rem)] overflow-auto custom-scrollbar">
               {left}
             </CardContent>
           </Card>
