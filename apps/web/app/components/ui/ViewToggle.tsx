@@ -32,24 +32,26 @@ const ViewToggle = React.forwardRef<HTMLDivElement, ViewToggleProps>(
           {/* Track */}
           <div className="w-16 h-8 bg-muted rounded-full border-2 border-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 transition-colors peer-checked:bg-primary/10" />
 
-          {/* Thumb */}
-          <div className="absolute left-1 top-1 w-6 h-6 bg-background rounded-full shadow-sm transition-all flex items-center justify-center peer-checked:translate-x-8">
+          {/* Thumb — uses transition-transform only (not transition-all) */}
+          <div className="absolute left-1 top-1 w-6 h-6 bg-background rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
             {view === "visual" ? (
-              <Eye className="h-3.5 w-3.5 text-primary" />
+              <Eye aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
             ) : (
-              <Code className="h-3.5 w-3.5 text-primary" />
+              <Code aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
             )}
           </div>
 
-          {/* Background Icons (Ghost) */}
+          {/* Background icons (decorative ghost state indicators) */}
           <div className="absolute inset-0 flex items-center justify-between px-2.5 pointer-events-none">
             <Eye
+              aria-hidden="true"
               className={cn(
                 "h-3.5 w-3.5 transition-opacity",
                 view === "visual" ? "opacity-0" : "opacity-20",
               )}
             />
             <Code
+              aria-hidden="true"
               className={cn(
                 "h-3.5 w-3.5 transition-opacity",
                 view === "code" ? "opacity-0" : "opacity-20",

@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-// ─── Context ────────────────────────────────────────────────────────────────
+// ─── Context ─────────────────────────────────────────────────────────────────
 
 interface TabsContextValue {
   activeTab: string;
@@ -19,7 +19,7 @@ function useTabsContext(): TabsContextValue {
   return ctx;
 }
 
-// ─── Root ────────────────────────────────────────────────────────────────────
+// ─── Root ─────────────────────────────────────────────────────────────────────
 
 interface RootProps {
   defaultTab: string;
@@ -36,7 +36,7 @@ function Root({ defaultTab, children, className }: RootProps) {
   );
 }
 
-// ─── List ────────────────────────────────────────────────────────────────────
+// ─── List ─────────────────────────────────────────────────────────────────────
 
 function List({
   children,
@@ -46,13 +46,16 @@ function List({
   className?: string;
 }) {
   return (
-    <div className={cn("flex border-b border-border shrink-0", className)}>
+    <div
+      role="tablist"
+      className={cn("flex border-b border-border shrink-0", className)}
+    >
       {children}
     </div>
   );
 }
 
-// ─── Trigger ─────────────────────────────────────────────────────────────────
+// ─── Trigger ──────────────────────────────────────────────────────────────────
 
 interface TriggerProps {
   value: string;
@@ -63,11 +66,47 @@ interface TriggerProps {
 function Trigger({ value, children, className }: TriggerProps) {
   const { activeTab, setActiveTab } = useTabsContext();
   const isActive = activeTab === value;
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const list = e.currentTarget.closest('[role="tablist"]');
+    if (!list) return;
+    const tabs = Array.from(list.querySelectorAll<HTMLElement>('[role="tab"]'));
+    const idx = tabs.indexOf(e.currentTarget);
+
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = tabs[(idx + 1) % tabs.length];
+      next?.click();
+      next?.focus();
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = tabs[(idx - 1 + tabs.length) % tabs.length];
+      prev?.click();
+      prev?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      tabs[0]?.click();
+      tabs[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      tabs[tabs.length - 1]?.click();
+      tabs[tabs.length - 1]?.focus();
+    }
+  };
+
   return (
     <button
+      type="button"
+      role="tab"
+      aria-selected={isActive}
+      aria-controls={`tabpanel-${value}`}
+      id={`tab-${value}`}
+      tabIndex={isActive ? 0 : -1}
       onClick={() => setActiveTab(value)}
+      onKeyDown={handleKeyDown}
       className={cn(
         "flex-1 flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         isActive
           ? "text-primary border-b-2 border-primary bg-muted/50"
           : "text-muted-foreground hover:text-foreground",
@@ -79,7 +118,7 @@ function Trigger({ value, children, className }: TriggerProps) {
   );
 }
 
-// ─── Content ─────────────────────────────────────────────────────────────────
+// ─── Content ──────────────────────────────────────────────────────────────────
 
 interface ContentProps {
   value: string;
@@ -91,10 +130,21 @@ function Content({ value, children, className }: ContentProps) {
   const { activeTab } = useTabsContext();
   if (activeTab !== value) return null;
   return (
-    <div className={cn("flex-1 overflow-hidden", className)}>{children}</div>
+    <div
+      role="tabpanel"
+      id={`tabpanel-${value}`}
+      aria-labelledby={`tab-${value}`}
+      tabIndex={0}
+      className={cn(
+        "flex-1 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
-// ─── Export ──────────────────────────────────────────────────────────────────
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 export const Tabs = { Root, List, Trigger, Content };

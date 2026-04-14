@@ -3,6 +3,12 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/*
+ * DialogIdContext threads the auto-generated title id from Dialog → DialogTitle
+ * so callers never need to manage aria-labelledby manually.
+ */
+const DialogIdContext = React.createContext<string>("");
+
 interface DialogProps {
   open: boolean;
   onClose: () => void;
@@ -11,6 +17,7 @@ interface DialogProps {
 
 function Dialog({ open, onClose, children }: DialogProps) {
   const dialogRef = React.useRef<HTMLDialogElement>(null);
+  const titleId = React.useId();
 
   React.useEffect(() => {
     const dialog = dialogRef.current;
@@ -28,14 +35,18 @@ function Dialog({ open, onClose, children }: DialogProps) {
   };
 
   return (
-    <dialog
-      ref={dialogRef}
-      onClose={onClose}
-      onClick={handleBackdropClick}
-      className="backdrop:bg-black/50 bg-transparent p-0 m-0 max-w-none max-h-none w-full h-full open:flex items-center justify-center"
-    >
-      {children}
-    </dialog>
+    <DialogIdContext.Provider value={titleId}>
+      <dialog
+        ref={dialogRef}
+        onClose={onClose}
+        onClick={handleBackdropClick}
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="backdrop:bg-[hsl(var(--overlay)/0.5)] bg-transparent p-0 m-0 max-w-none max-h-none w-full h-full open:flex items-center justify-center"
+      >
+        {children}
+      </dialog>
+    </DialogIdContext.Provider>
   );
 }
 Dialog.displayName = "Dialog";
@@ -47,7 +58,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
     <div
       ref={ref}
       className={cn(
-        "bg-card text-card-foreground border border-border rounded-xl shadow-lg p-6 w-full max-w-md",
+        "bg-card text-card-foreground border border-border rounded-lg shadow-lg p-6 w-full max-w-md overscroll-contain",
         className,
       )}
       onClick={(e) => e.stopPropagation()}
@@ -75,16 +86,20 @@ DialogHeader.displayName = "DialogHeader";
 const DialogTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <h2
-    ref={ref}
-    className={cn(
-      "text-lg font-semibold leading-none tracking-tight",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, ...props }, ref) => {
+  const id = React.useContext(DialogIdContext);
+  return (
+    <h2
+      ref={ref}
+      id={id || undefined}
+      className={cn(
+        "text-lg font-semibold leading-none tracking-tight",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 DialogTitle.displayName = "DialogTitle";
 
 const DialogDescription = React.forwardRef<

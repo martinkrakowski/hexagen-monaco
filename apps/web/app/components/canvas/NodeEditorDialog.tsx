@@ -2,6 +2,14 @@
 
 import { useState, useEffect } from "react";
 import type { HexagonNode, HexagonNodeType } from "@hexagen/visualization";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
 
 const NODE_TYPES: HexagonNodeType[] = [
   "bounded-context",
@@ -46,27 +54,14 @@ export function NodeEditorDialog({
     onClose();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      onClose();
-    }
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onClose}
-      onKeyDown={handleKeyDown}
-      tabIndex={-1}
-      role="dialog"
-    >
-      <div
-        className="bg-background rounded-lg shadow-lg p-6 w-[400px] border border-border"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold mb-4">Edit Node</h2>
+    <Dialog open={isOpen} onClose={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Node</DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 mt-4">
           <div>
             <label
               className="block text-sm font-medium mb-1"
@@ -78,7 +73,7 @@ export function NodeEditorDialog({
               id="node-type"
               value={type}
               onChange={(e) => setType(e.target.value as HexagonNodeType)}
-              className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {NODE_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -95,33 +90,22 @@ export function NodeEditorDialog({
             >
               Label
             </label>
-            <input
+            <Input
               id="node-label"
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium rounded-md border border-input hover:bg-muted"
-          >
+          <PrimaryButton variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Save
-          </button>
+          </PrimaryButton>
+          <PrimaryButton onClick={handleSave}>Save</PrimaryButton>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

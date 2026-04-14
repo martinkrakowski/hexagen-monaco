@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, FolderOpen, Pencil, Trash2 } from "lucide-react";
+import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import type { SavedProject } from "@/hooks/use-saved-projects";
 
 interface SavedProjectsListProps {
@@ -68,7 +69,10 @@ export function SavedProjectsList({
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         {projects.length === 0 ? (
           <div className="text-center py-12">
-            <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <FolderOpen
+              aria-hidden="true"
+              className="h-12 w-12 mx-auto text-muted-foreground mb-4"
+            />
             <p className="text-muted-foreground">No saved projects yet.</p>
             <p className="text-sm text-muted-foreground mt-1">
               Generate a project to save it here.
@@ -83,24 +87,29 @@ export function SavedProjectsList({
               >
                 {deletingId === project.id ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <AlertTriangle
+                      aria-hidden="true"
+                      className="h-4 w-4 text-destructive"
+                    />
                     <span className="text-xs font-medium text-destructive">
                       Delete?
                     </span>
-                    <button
-                      type="button"
+                    <PrimaryButton
+                      variant="destructive"
+                      size="sm"
                       onClick={() => handleDeleteConfirm(project.id)}
-                      className="px-2 py-1 text-xs font-medium text-white bg-destructive rounded hover:bg-destructive/90"
+                      className="h-auto px-2 py-1 text-xs"
                     >
                       Yes
-                    </button>
-                    <button
-                      type="button"
+                    </PrimaryButton>
+                    <PrimaryButton
+                      variant="outline"
+                      size="sm"
                       onClick={() => setDeletingId(null)}
-                      className="px-2 py-1 text-xs font-medium text-foreground bg-muted rounded hover:bg-muted"
+                      className="h-auto px-2 py-1 text-xs"
                     >
                       No
-                    </button>
+                    </PrimaryButton>
                   </div>
                 ) : (
                   <>
@@ -116,7 +125,7 @@ export function SavedProjectsList({
                                 handleSaveRename(project.id);
                               if (e.key === "Escape") handleCancelRename();
                             }}
-                            className="w-full px-2 py-1 bg-muted border border-input rounded text-sm text-foreground outline-none"
+                            className="w-full px-2 py-1 bg-muted border border-input rounded text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             autoFocus
                           />
                         ) : (
@@ -136,29 +145,31 @@ export function SavedProjectsList({
                         ` • Updated: ${formatDate(project.updatedAt)}`}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
+                      <PrimaryButton
+                        size="sm"
                         onClick={() => onLoad(project.id)}
-                        className="px-3 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md transition-colors"
+                        className="h-auto px-3 py-1.5 text-xs"
                       >
                         Load
-                      </button>
-                      <button
-                        type="button"
+                      </PrimaryButton>
+                      <PrimaryButton
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleStartRename(project)}
-                        className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted hover:bg-muted/80 rounded-md transition-colors border border-input flex items-center gap-1"
+                        className="h-auto px-3 py-1.5 text-xs"
                       >
-                        <Pencil className="h-3 w-3" />
+                        <Pencil aria-hidden="true" className="h-3 w-3 mr-1" />
                         Rename
-                      </button>
-                      <button
-                        type="button"
+                      </PrimaryButton>
+                      <PrimaryButton
+                        variant="outline"
+                        size="sm"
                         onClick={() => setDeletingId(project.id)}
-                        className="px-3 py-1.5 text-xs font-medium text-destructive bg-muted hover:bg-destructive/10 rounded-md transition-colors border border-input flex items-center gap-1 ml-auto"
+                        className="h-auto px-3 py-1.5 text-xs text-destructive hover:text-destructive ml-auto"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 aria-hidden="true" className="h-3 w-3 mr-1" />
                         Delete
-                      </button>
+                      </PrimaryButton>
                     </div>
                   </>
                 )}
@@ -169,13 +180,9 @@ export function SavedProjectsList({
       </div>
 
       <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onBackToWizard}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
-        >
+        <PrimaryButton variant="outline" onClick={onBackToWizard}>
           Back to Wizard
-        </button>
+        </PrimaryButton>
       </footer>
     </div>
   );

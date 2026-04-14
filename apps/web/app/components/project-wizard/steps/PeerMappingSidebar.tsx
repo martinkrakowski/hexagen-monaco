@@ -73,10 +73,6 @@ export function PeerMappingSidebar({
     setConfirmDeleteId(null);
   };
 
-  const handleMappingClick = (mappingId: string) => {
-    onMappingSelect(mappingId);
-  };
-
   return (
     <div className="flex flex-col h-full bg-card border-r border-border">
       <div className="p-4 border-b border-border">
@@ -98,18 +94,19 @@ export function PeerMappingSidebar({
             const providerName = getContextName(mapping.providerContext);
 
             return (
-              <div
+              <button
                 key={mappingId}
-                onClick={() => handleMappingClick(mappingId)}
-                className={`relative p-3 border border-border rounded-lg cursor-pointer transition-all ${
+                type="button"
+                onClick={() => onMappingSelect(mappingId)}
+                className={`relative w-full text-left p-3 border border-border rounded-lg cursor-pointer transition-[border-color,background-color] ${
                   activeMappingId === mappingId
-                    ? "border-blue-500 bg-primary/10"
+                    ? "border-primary bg-primary/10"
                     : "border-border bg-background hover:border-input"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded bg-muted text-muted-foreground">
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight aria-hidden="true" className="h-4 w-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-sm text-foreground truncate">
@@ -137,7 +134,10 @@ export function PeerMappingSidebar({
                       className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                      <AlertTriangle
+                        aria-hidden="true"
+                        className="h-4 w-4 text-destructive"
+                      />
                       <span className="text-xs font-medium text-destructive">
                         Delete?
                       </span>
@@ -147,7 +147,7 @@ export function PeerMappingSidebar({
                           e.stopPropagation();
                           handleDeleteMapping(mappingId);
                         }}
-                        className="px-2 py-1 text-xs font-medium text-white bg-destructive rounded hover:bg-destructive/90"
+                        className="px-2 py-1 text-xs font-medium text-destructive-foreground bg-destructive rounded hover:bg-destructive/90"
                       >
                         Yes
                       </button>
@@ -172,10 +172,10 @@ export function PeerMappingSidebar({
                       className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                       aria-label="Delete mapping"
                     >
-                      <X className="h-3 w-3" />
+                      <X aria-hidden="true" className="h-3 w-3" />
                     </button>
                   ))}
-              </div>
+              </button>
             );
           })
         )}
@@ -186,9 +186,9 @@ export function PeerMappingSidebar({
           type="button"
           onClick={handleAddMapping}
           disabled={boundedContexts.length < 2}
-          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/10/50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Plus className="h-4 w-4" />
+          <Plus aria-hidden="true" className="h-4 w-4" />
           Add Mapping
         </button>
       </div>

@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useCallback, useMemo, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -10,19 +10,19 @@ import {
   type Edge as FlowEdge,
   type Connection,
   type ColorMode,
-} from '@xyflow/react';
-import { toPng } from 'html-to-image';
-import { useTheme } from '@/hooks/use-theme';
-import '@xyflow/react/dist/style.css';
+} from "@xyflow/react";
+import { toPng } from "html-to-image";
+import { useTheme } from "@/hooks/use-theme";
+import "@xyflow/react/dist/style.css";
 
-import { UnifiedBoundedContext } from './BoundedContext';
-import { GroupBoundaryNode } from './GroupBoundaryNode';
+import { UnifiedBoundedContext } from "./BoundedContext";
+import { GroupBoundaryNode } from "./GroupBoundaryNode";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
-} from '@hexagen/visualization';
-import type { Result } from '@hexagen/shared';
-import type { HexagonNodeWithLayout } from '../../lib/layout-engine';
+} from "@hexagen/visualization";
+import type { Result } from "@hexagen/shared";
+import type { HexagonNodeWithLayout } from "../../lib/layout-engine";
 
 type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 
@@ -47,15 +47,15 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   return nodes.map((node): HexagonFlowNode => {
     const n = node as HexagonNodeWithLayout;
 
-    let nodeType: 'hexagon' | 'inner' | 'peer' | 'group';
-    if (n.id === 'monorepo-boundary' || n.type === 'group') {
-      nodeType = 'group';
-    } else if (n.isPeer || n.type === 'peer') {
-      nodeType = 'peer';
-    } else if (n.type === 'inner') {
-      nodeType = 'inner';
+    let nodeType: "hexagon" | "inner" | "peer" | "group";
+    if (n.id === "monorepo-boundary" || n.type === "group") {
+      nodeType = "group";
+    } else if (n.isPeer || n.type === "peer") {
+      nodeType = "peer";
+    } else if (n.type === "inner") {
+      nodeType = "inner";
     } else {
-      nodeType = 'hexagon';
+      nodeType = "hexagon";
     }
 
     const flowNode: HexagonFlowNode = {
@@ -81,7 +81,7 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
     }
 
     // Make monorepo boundary not draggable; all other contexts draggable
-    flowNode.draggable = n.id === 'monorepo-boundary' ? false : true;
+    flowNode.draggable = n.id === "monorepo-boundary" ? false : true;
 
     return flowNode;
   });
@@ -92,14 +92,16 @@ function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    type: edge.type === 'animated' ? 'default' : (edge.type ?? 'default'),
-    animated: edge.type === 'animated' || !!edge.animated,
+    type: edge.type === "animated" ? "default" : (edge.type ?? "default"),
+    animated: edge.type === "animated" || !!edge.animated,
     label: edge.label,
     sourceHandle: edge.sourceHandle,
     targetHandle: edge.targetHandle,
     // SK (Shared Kernel) gets a visually heavier edge to convey tight coupling
+    // SK (Shared Kernel) edges use violet to convey tight coupling.
+    // This is an intentional data-vis colour, consistent across themes.
     style:
-      edge.label === 'SK' ? { strokeWidth: 4, stroke: '#a78bfa' } : undefined,
+      edge.label === "SK" ? { strokeWidth: 4, stroke: "#a78bfa" } : undefined,
   }));
 }
 
@@ -111,7 +113,7 @@ export function HexagonCanvas({
   onExportClick,
 }: HexagonCanvasProps) {
   const { theme } = useTheme();
-  const colorMode: ColorMode = theme === 'dark' ? 'dark' : 'light';
+  const colorMode: ColorMode = theme === "dark" ? "dark" : "light";
 
   // Add timestamp to key to force React Flow to re-render nodes when data changes
   const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
@@ -124,14 +126,20 @@ export function HexagonCanvas({
   > => {
     try {
       const viewport = document.querySelector(
-        '.react-flow__viewport'
+        ".react-flow__viewport",
       ) as HTMLElement | null;
       if (!viewport) {
-        return { success: false, error: new Error('Viewport not found') };
+        return { success: false, error: new Error("Viewport not found") };
       }
 
+      // Derive background colour from the active theme's CSS variable
+      const bgChannels = getComputedStyle(document.documentElement)
+        .getPropertyValue("--background")
+        .trim();
+      const backgroundColor = bgChannels ? `hsl(${bgChannels})` : "#ffffff";
+
       const dataUrl = await toPng(viewport, {
-        backgroundColor: '#ffffff',
+        backgroundColor,
         pixelRatio: 2,
       });
 
@@ -152,13 +160,13 @@ export function HexagonCanvas({
 
   const isValidConnection = useCallback(
     (connection: FlowEdge | Connection): boolean => {
-      const sourceHandle = connection.sourceHandle ?? '';
-      const targetHandle = connection.targetHandle ?? '';
+      const sourceHandle = connection.sourceHandle ?? "";
+      const targetHandle = connection.targetHandle ?? "";
 
       // Rule 1: Event handles must pair pub_ ↔ sub_ exclusively.
       // Prevents domain event ports from accidentally plugging into cardinal handles.
-      const isSourceEvent = sourceHandle.startsWith('pub_');
-      const isTargetEvent = targetHandle.startsWith('sub_');
+      const isSourceEvent = sourceHandle.startsWith("pub_");
+      const isTargetEvent = targetHandle.startsWith("sub_");
       if (isSourceEvent || isTargetEvent) {
         return isSourceEvent && isTargetEvent;
       }
@@ -166,7 +174,7 @@ export function HexagonCanvas({
       // Rule 2: Wizard-generated satellite nodes must connect to their designated
       // cardinal handle on root-core. Manually added nodes (no side) connect freely.
       const targetNode = nodes.find((n) => n.id === connection.target);
-      if (targetNode?.id === 'root-core') {
+      if (targetNode?.id === "root-core") {
         const sourceNode = nodes.find((n) => n.id === connection.source) as
           | HexagonNodeWithLayout
           | undefined;
@@ -176,7 +184,7 @@ export function HexagonCanvas({
 
       return true;
     },
-    [nodes]
+    [nodes],
   );
 
   const handleNodeDragStop = useCallback(
@@ -185,7 +193,7 @@ export function HexagonCanvas({
         onNodeDragStop({ ...node.data, position: node.position });
       }
     },
-    [onNodeDragStop]
+    [onNodeDragStop],
   );
 
   const handleNodeDoubleClick = useCallback(
@@ -194,7 +202,7 @@ export function HexagonCanvas({
         onNodeDoubleClick(node.data);
       }
     },
-    [onNodeDoubleClick]
+    [onNodeDoubleClick],
   );
 
   return (
@@ -214,7 +222,11 @@ export function HexagonCanvas({
           variant={BackgroundVariant.Dots}
           gap={16}
           size={1}
-          color={theme === 'dark' ? '#6e7681' : '#9ca3af'}
+          color={`hsl(${
+            getComputedStyle(document.documentElement)
+              .getPropertyValue("--border")
+              .trim() || (theme === "dark" ? "217 33% 17%" : "220 13% 91%")
+          })`}
           style={{ opacity: 1 }}
         />
         <Controls className="bg-background border-border" />

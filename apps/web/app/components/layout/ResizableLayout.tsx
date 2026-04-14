@@ -26,14 +26,15 @@ interface PanelHeaderProps {
 function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
   const Icon = side === "left" ? ChevronLeft : ChevronRight;
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
+    <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30 h-[var(--panel-header-h)]">
       <span className="font-semibold text-sm truncate">{title}</span>
       <button
+        type="button"
         onClick={onCollapse}
         aria-label={`Collapse ${title}`}
-        className="p-1 hover:bg-muted rounded transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+        className="p-1 hover:bg-muted rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
       >
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
       </button>
     </div>
   );
@@ -49,11 +50,12 @@ function CollapsedStrip({ side, onExpand }: CollapsedStripProps) {
   return (
     <div className="flex items-start justify-center w-8 shrink-0 border border-border rounded-lg bg-card pt-2">
       <button
+        type="button"
         onClick={onExpand}
         aria-label={`Expand ${side} panel`}
-        className="p-1 hover:bg-muted rounded transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+        className="p-1 hover:bg-muted rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
       >
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
       </button>
     </div>
   );
@@ -75,7 +77,7 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
       {leftCollapsed && <CollapsedStrip side="left" onExpand={expandLeft} />}
 
       <PanelGroup direction="horizontal" className="flex-1 h-full">
-        {/* Left Sidebar - Wizard */}
+        {/* Left Sidebar — Wizard */}
         <Panel
           ref={leftPanelRef}
           id="left"
@@ -93,16 +95,17 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
               side="left"
               onCollapse={collapseLeft}
             />
-            <CardContent className="p-0 h-[calc(100%-40px)] overflow-auto">
+            {/* h-[calc(100%-var(--panel-header-h))] keeps this in sync with PanelHeader height */}
+            <CardContent className="p-0 h-[calc(100%-var(--panel-header-h))] overflow-auto">
               {left}
             </CardContent>
           </Card>
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-1 bg-blue transition-colors cursor-col-resize p-2" />
+        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/40 transition-colors cursor-col-resize" />
 
-        {/* Middle Pane - Main Content / Preview */}
+        {/* Middle Pane — Main Content / Preview */}
         <Panel defaultSize={50} minSize={30}>
           <Card className="h-full overflow-hidden border border-border rounded-lg">
             {middle}
@@ -110,9 +113,9 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-1 bg-blue transition-colors cursor-col-resize p-2" />
+        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/40 transition-colors cursor-col-resize" />
 
-        {/* Right Sidebar - AI / Monaco */}
+        {/* Right Sidebar — AI / Monaco */}
         <Panel
           ref={rightPanelRef}
           id="right"
@@ -130,7 +133,7 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
               side="right"
               onCollapse={collapseRight}
             />
-            <CardContent className="p-0 h-[calc(100%-40px)] overflow-hidden">
+            <CardContent className="p-0 h-[calc(100%-var(--panel-header-h))] overflow-hidden">
               {right}
             </CardContent>
           </Card>
@@ -173,7 +176,7 @@ function MobileLayout({ left, middle, right }: ResizableLayoutProps) {
 
 export function ResizableLayout(props: ResizableLayoutProps) {
   return (
-    <div className="h-screen w-full overflow-hidden p-5 bg-background">
+    <div className="h-screen w-full overflow-hidden p-4 bg-background">
       <DesktopLayout {...props} />
       <MobileLayout {...props} />
     </div>

@@ -46,15 +46,7 @@ export function ChipInput({
       <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
         {label}
       </label>
-      <div
-        className={`
-          p-3 
-          bg-muted border border-dashed border-input 
-          rounded-lg 
-          focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent
-          transition-all
-        `}
-      >
+      <div className="p-3 bg-muted border border-dashed border-input rounded-lg focus-within:ring-2 focus-within:ring-ring focus-within:border-transparent transition-[box-shadow,border-color]">
         <div className="flex flex-wrap gap-1">
           {values.map((val) => (
             <span
@@ -66,7 +58,7 @@ export function ChipInput({
                 type="button"
                 aria-label={`Remove ${val}`}
                 onClick={() => handleRemove(val)}
-                className="text-red-400 hover:text-red-600 ml-0.5 text-sm font-bold leading-none"
+                className="text-destructive hover:text-destructive/80 ml-0.5 text-sm font-bold leading-none"
               >
                 &times;
               </button>

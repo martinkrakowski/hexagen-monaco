@@ -135,12 +135,13 @@ export function BoundedContextSidebar({
           </div>
         ) : (
           boundedContexts.map((context: BoundedContext) => (
-            <div
+            <button
               key={context.id}
+              type="button"
               onClick={() => handleContextClick(context.id)}
-              className={`relative p-3 border border-border rounded-lg cursor-pointer transition-all ${
+              className={`relative w-full text-left p-3 border border-border rounded-lg cursor-pointer transition-[border-color,background-color] ${
                 activeContextId === context.id
-                  ? "border-blue-500 bg-primary/10"
+                  ? "border-primary bg-primary/10"
                   : "border-border bg-background hover:border-input"
               }`}
             >
@@ -187,7 +188,10 @@ export function BoundedContextSidebar({
                     className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <AlertTriangle
+                      aria-hidden="true"
+                      className="h-4 w-4 text-destructive"
+                    />
                     <span className="text-xs font-medium text-destructive">
                       Delete?
                     </span>
@@ -197,7 +201,7 @@ export function BoundedContextSidebar({
                         e.stopPropagation();
                         handleDeleteContext(context.id);
                       }}
-                      className="px-2 py-1 text-xs font-medium text-white bg-destructive rounded hover:bg-destructive/90"
+                      className="px-2 py-1 text-xs font-medium text-destructive-foreground bg-destructive rounded hover:bg-destructive/90"
                     >
                       Yes
                     </button>
@@ -222,10 +226,10 @@ export function BoundedContextSidebar({
                     className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                     aria-label="Delete context"
                   >
-                    <X className="h-3 w-3" />
+                    <X aria-hidden="true" className="h-3 w-3" />
                   </button>
                 ))}
-            </div>
+            </button>
           ))
         )}
       </div>
@@ -234,9 +238,9 @@ export function BoundedContextSidebar({
         <button
           type="button"
           onClick={handleAddContext}
-          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/10/50 transition-colors flex items-center justify-center gap-2"
+          className="w-full py-2 px-3 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
         >
-          <Plus className="h-4 w-4" />
+          <Plus aria-hidden="true" className="h-4 w-4" />
           Add Context
         </button>
       </div>

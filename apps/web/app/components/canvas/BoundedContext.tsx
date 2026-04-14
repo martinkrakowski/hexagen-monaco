@@ -149,7 +149,7 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--overlay)/0.4)] backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -251,7 +251,7 @@ function UnifiedBoundedContextComponent({
               type="source"
               position={Position.Top}
               id="north"
-              className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
             />
           )}
           {/* South handle: hexagon connects TO adapter, so adapter needs TARGET handle */}
@@ -260,7 +260,7 @@ function UnifiedBoundedContextComponent({
               type="target"
               position={Position.Bottom}
               id="south"
-              className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
             />
           )}
           {/* Default left/right handles for horizontal connections */}
@@ -270,13 +270,13 @@ function UnifiedBoundedContextComponent({
                 type="target"
                 position={Position.Left}
                 id="west"
-                className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
               />
               <Handle
                 type="source"
                 position={Position.Right}
                 id="east"
-                className={`${styles.handleColor} !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]`}
+                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
               />
             </>
           )}
@@ -361,64 +361,67 @@ function UnifiedBoundedContextComponent({
         <polygon
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
           fill="transparent"
-          stroke={selected ? "#38bdf8" : "currentColor"}
+          stroke="currentColor"
           strokeWidth="2.2"
-          className="text-muted-foreground/30 dark:text-white/20 transition-all duration-500 group-hover:stroke-sky-400"
+          className={`transition-[stroke,opacity] duration-500 ${
+            selected
+              ? "text-primary"
+              : "text-muted-foreground/30 dark:text-white/20 group-hover:text-primary"
+          }`}
         />
         {/* Quadrant labels - always show for all contexts */}
-        <text
-          x="50"
-          y="-3"
-          textAnchor="middle"
-          fill="#475569"
-          fontSize="4"
-          fontFamily="monospace"
-          letterSpacing="0.8"
-          fontWeight="700"
-        >
-          PRESENTATION
-        </text>
-        <text
-          x="50"
-          y="104"
-          textAnchor="middle"
-          fill="#475569"
-          fontSize="4"
-          fontFamily="monospace"
-          letterSpacing="0.8"
-          fontWeight="700"
-        >
-          INFRASTRUCTURE
-        </text>
-        <text
-          x="-2"
-          y="52"
-          textAnchor="end"
-          fill="#475569"
-          fontSize="4"
-          fontFamily="monospace"
-          letterSpacing="0.8"
-          fontWeight="700"
-        >
-          DRIVING
-        </text>
-        <text
-          x="108"
-          y="52"
-          textAnchor="start"
-          fill="#475569"
-          fontSize="4"
-          fontFamily="monospace"
-          letterSpacing="0.8"
-          fontWeight="700"
-        >
-          DRIVEN
-        </text>
+        {/* Quadrant labels — fill="currentColor" inherits from className text-* */}
+        <g className="fill-muted-foreground">
+          <text
+            x="50"
+            y="-3"
+            textAnchor="middle"
+            fontSize="4"
+            fontFamily="monospace"
+            letterSpacing="0.8"
+            fontWeight="700"
+          >
+            PRESENTATION
+          </text>
+          <text
+            x="50"
+            y="104"
+            textAnchor="middle"
+            fontSize="4"
+            fontFamily="monospace"
+            letterSpacing="0.8"
+            fontWeight="700"
+          >
+            INFRASTRUCTURE
+          </text>
+          <text
+            x="-2"
+            y="52"
+            textAnchor="end"
+            fontSize="4"
+            fontFamily="monospace"
+            letterSpacing="0.8"
+            fontWeight="700"
+          >
+            DRIVING
+          </text>
+          <text
+            x="108"
+            y="52"
+            textAnchor="start"
+            fontSize="4"
+            fontFamily="monospace"
+            letterSpacing="0.8"
+            fontWeight="700"
+          >
+            DRIVEN
+          </text>
+        </g>
       </svg>
 
       <div className="z-10 flex flex-col items-center justify-center gap-3">
         {/* Project name */}
-        <div className="text-center text-slate-900 dark:text-slate-100 uppercase tracking-widest leading-tight text-base font-black italic">
+        <div className="text-center text-foreground uppercase tracking-widest leading-tight text-base font-black italic">
           {String(data.label || "")
             .split("\n")
             .map((line, i) => (
@@ -438,15 +441,17 @@ function UnifiedBoundedContextComponent({
         {/* Domain Compass — always show for all contexts */}
         <div className="grid grid-cols-2 gap-x-10 gap-y-5">
           {DOMAIN_COMPASS.map(({ key, itemsKey, label, Icon, color }) => (
-            <div
+            <button
               key={key}
-              className="flex flex-col items-center opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+              type="button"
+              className="flex flex-col items-center opacity-70 hover:opacity-100 transition-opacity cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               onClick={() =>
                 setActiveCompass({
                   label,
                   items: getStatItems(data.stats, itemsKey),
                 })
               }
+              aria-label={`View ${label}`}
             >
               <Icon size={16} className={color} />
               <span className="text-[7px] uppercase tracking-tighter font-bold text-muted-foreground mt-1">
@@ -455,7 +460,7 @@ function UnifiedBoundedContextComponent({
               <span className="text-xs font-mono text-foreground">
                 {getStatCount(data.stats, key)}
               </span>
-            </div>
+            </button>
           ))}
         </div>
         {activeCompass && (
@@ -474,13 +479,13 @@ function UnifiedBoundedContextComponent({
           type="target"
           position={Position.Top}
           id="north-0"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
         />
         <Handle
           type="target"
           position={Position.Top}
           id="north-1"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
           style={{ left: "60%" }}
         />
         {/* South: source handles for multiple Messaging/Persistence/Telemetry adapters */}
@@ -488,20 +493,20 @@ function UnifiedBoundedContextComponent({
           type="source"
           position={Position.Bottom}
           id="south-0"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="south-1"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
           style={{ left: "35%" }}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="south-2"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
           style={{ left: "70%" }}
         />
         {/* West: target handle for upstream peer connections */}
@@ -509,14 +514,14 @@ function UnifiedBoundedContextComponent({
           type="target"
           position={Position.Left}
           id="west"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900 shadow-[0_0_10px_rgba(56,189,248,0.5)]"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
         />
         {/* East: source handle for downstream peer connections */}
         <Handle
           type="source"
           position={Position.Right}
           id="east"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-slate-900"
+          className="!bg-sky-500 !w-3 !h-3 border-2 border-background"
         />
         {/* Dynamic event handles — published (right face, amber) */}
         {(data.publishedEvents ?? []).slice(0, 5).map((evt, i) => (
@@ -528,7 +533,7 @@ function UnifiedBoundedContextComponent({
             style={{
               top: getSlottedOffsets((data.publishedEvents ?? []).length)[i],
             }}
-            className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
+            className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-background !rounded-sm"
             title={`Publishes: ${evt.label}`}
           />
         ))}
@@ -542,7 +547,7 @@ function UnifiedBoundedContextComponent({
             style={{
               top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i],
             }}
-            className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-slate-900 !rounded-sm"
+            className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-background !rounded-sm"
             title={`Subscribes to: ${evt.label}`}
           />
         ))}

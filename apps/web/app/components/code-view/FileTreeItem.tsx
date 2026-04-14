@@ -36,11 +36,11 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
     if (!node.language)
       return <File size={14} className="text-muted-foreground" />;
     if (["typescript", "javascript"].includes(node.language))
-      return <FileCode size={14} className="text-blue-400" />;
+      return <FileCode size={14} className="text-primary" />;
     if (node.language === "json")
       return <FileJson size={14} className="text-yellow-400" />;
     if (node.language === "markdown")
-      return <FileText size={14} className="text-sky-400" />;
+      return <FileText size={14} className="text-primary/70" />;
     return <File size={14} className="text-muted-foreground" />;
   };
 
@@ -73,9 +73,9 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
           {isFile ? (
             getFileIcon()
           ) : isOpen ? (
-            <FolderOpen size={14} className="text-blue-500" />
+            <FolderOpen size={14} className="text-primary" />
           ) : (
-            <Folder size={14} className="text-blue-500" />
+            <Folder size={14} className="text-primary" />
           )}
         </span>
         <span className="truncate">{node.name}</span>

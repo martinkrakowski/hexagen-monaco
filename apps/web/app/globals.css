@@ -4,16 +4,35 @@
 @tailwind utilities;
 
 /*
- * Hexagen Design System - Dark-first, developer-tool aesthetic
- * See AGENTS.md design documentation for full token specification
+ * Hexagen Design System — Dark-first, developer-tool aesthetic
+ *
+ * Token conventions:
+ *   --background / --foreground     Page surface + body text
+ *   --card / --card-foreground      Elevated surfaces (panels, cards)
+ *   --muted / --muted-foreground    Subdued fills and secondary text
+ *   --secondary                     Alternative fills, slightly distinct from muted
+ *   --accent                        Interactive highlight (hover, active)
+ *   --primary                       Brand colour (blue)
+ *   --destructive                   Error / danger colour (red)
+ *   --border                        Decorative dividers
+ *   --input                         Form field borders (slightly more prominent)
+ *   --ring                          Focus ring colour
+ *   --overlay                       Modal backdrop (RGB channels, no hsl() wrapper)
+ *   --panel-header-h                Height of panel header (used in layout calc)
+ *   --radius                        Base border radius
+ *
+ * Font variables:
+ *   --app-font-sans is injected by next/font on <html> — do not redefine here.
+ *   --app-font-mono is a system-font stack.
  */
 
 :root {
-  /* Font families */
-  --app-font-sans: "Inter", sans-serif;
-  --app-font-mono: "Menlo", monospace;
+  /* Mono font — system stack, no external dependency */
+  --app-font-mono: "Menlo", "Monaco", "Cascadia Code", "Courier New", monospace;
 
-  /* Light Mode Colors */
+  /* ── Light Mode ───────────────────────────────────────────────────────────── */
+  color-scheme: light;
+
   --background: 220 16% 96%;
   --foreground: 222 47% 11%;
 
@@ -21,7 +40,7 @@
   --card-foreground: 222 47% 11%;
   --card-border: 220 13% 91%;
 
-  /* Sidebar - stays dark in light mode */
+  /* Sidebar stays dark in light mode */
   --sidebar: 222 47% 11%;
   --sidebar-foreground: 215 20% 85%;
   --sidebar-border: 217 33% 20%;
@@ -34,28 +53,43 @@
   --primary: 226 70% 55%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 14% 93%;
+  /* secondary — alternative surface, visually distinct from muted */
+  --secondary: 220 14% 89%;
   --secondary-foreground: 222 47% 11%;
 
+  /* muted — subdued neutral fill */
   --muted: 220 14% 93%;
   --muted-foreground: 220 9% 46%;
 
-  --accent: 220 14% 93%;
-  --accent-foreground: 222 47% 11%;
+  /* accent — interactive highlight (hover states, active indicators) */
+  --accent: 226 70% 94%;
+  --accent-foreground: 226 70% 30%;
 
+  /* form field borders — slightly more prominent than decorative borders */
   --border: 220 13% 91%;
-  --input: 220 13% 91%;
+  --input: 220 13% 87%;
   --ring: 226 70% 55%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
 
-  /* Radius */
+  /* popover — alias to card */
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  /* overlay — used for modal backdrops via hsl(var(--overlay) / alpha) */
+  --overlay: 0 0 0;
+
   --radius: 0.5rem;
+
+  /* layout */
+  --panel-header-h: 2.5rem;
 }
 
-/* Dark Mode */
+/* ── Dark Mode ──────────────────────────────────────────────────────────────── */
 .dark {
+  color-scheme: dark;
+
   --background: 222 47% 7%;
   --foreground: 213 31% 91%;
 
@@ -63,7 +97,7 @@
   --card-foreground: 213 31% 91%;
   --card-border: 217 33% 17%;
 
-  /* Sidebar - deepest surface */
+  /* Sidebar — deepest surface */
   --sidebar: 222 47% 6%;
   --sidebar-foreground: 215 20% 75%;
   --sidebar-border: 217 33% 14%;
@@ -76,29 +110,35 @@
   --primary: 226 70% 58%;
   --primary-foreground: 0 0% 100%;
 
+  --secondary: 217 33% 16%;
+  --secondary-foreground: 215 20% 75%;
+
   --muted: 217 33% 13%;
   --muted-foreground: 215 20% 55%;
 
-  --secondary: 217 33% 13%;
-  --secondary-foreground: 215 20% 75%;
-
-  --accent: 217 33% 13%;
-  --accent-foreground: 215 20% 75%;
+  --accent: 226 30% 14%;
+  --accent-foreground: 226 70% 75%;
 
   --border: 217 33% 17%;
-  --input: 217 33% 17%;
+  --input: 217 33% 22%;
   --ring: 226 70% 58%;
 
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
+
+  --popover: 222 47% 10%;
+  --popover-foreground: 213 31% 91%;
+
+  --overlay: 0 0 0;
 }
 
-/* Base styles */
+/* ── Base styles ────────────────────────────────────────────────────────────── */
 @layer base {
   body {
-    font-family: var(--app-font-sans);
+    font-family: var(--app-font-sans, system-ui, sans-serif);
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+    min-height: 100vh;
   }
 
   code,
@@ -108,25 +148,19 @@
   }
 }
 
-/* Animation utilities */
-@layer utilities {
-  .animate-in {
-    animation: animate-in 0.3s ease-out;
-  }
-
-  @keyframes animate-in {
-    from {
-      opacity: 0;
-      transform: translateY(1rem);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+/* ── Motion preferences ─────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* React Flow dark mode overrides */
+/* ── React Flow overrides ───────────────────────────────────────────────────── */
 .react-flow__node-group {
   background: transparent !important;
   border: none !important;
@@ -136,12 +170,10 @@
   background: transparent !important;
 }
 
-/* ReactFlow main pane - transparent so background shows through */
 .react-flow__pane {
   background: transparent !important;
 }
 
-/* Background layer */
 .react-flow__background {
   background: hsl(var(--background)) !important;
 }

@@ -56,21 +56,35 @@ export function FileDropZone({
     if (file) readFile(file);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      inputRef.current?.click();
+    }
+  };
+
   return (
     <div className={cn("flex flex-col items-center", className)}>
       <div
+        role="button"
+        tabIndex={0}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={handleKeyDown}
+        aria-label="Upload manifest YAML file — click or drop to browse"
         className={cn(
-          "w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
+          "w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors touch-manipulation",
           isDragging
             ? "border-primary bg-primary/5"
             : "border-border hover:border-primary/50 hover:bg-muted/50",
         )}
       >
-        <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-3" />
+        <Upload
+          aria-hidden="true"
+          className="mx-auto h-8 w-8 text-muted-foreground mb-3"
+        />
         <p className="text-sm font-medium text-foreground">
           Drop a{" "}
           <code className="text-xs bg-muted px-1 py-0.5 rounded">
@@ -84,10 +98,15 @@ export function FileDropZone({
           type="file"
           accept={accept}
           onChange={handleChange}
+          aria-label="Upload manifest file"
           className="hidden"
         />
       </div>
-      {error && <p className="text-xs text-destructive mt-2">{error}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-destructive mt-2">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

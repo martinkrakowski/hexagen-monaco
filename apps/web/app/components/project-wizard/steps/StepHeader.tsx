@@ -26,6 +26,7 @@ export function StepHeader({
         {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
           <div
             key={step}
+            aria-current={currentStep === step ? "step" : undefined}
             className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm ${
               currentStep === step
                 ? "bg-primary text-primary-foreground border-primary"
