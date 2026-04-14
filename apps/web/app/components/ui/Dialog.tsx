@@ -58,7 +58,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
     <div
       ref={ref}
       className={cn(
-        "bg-card text-card-foreground border border-border rounded-lg shadow-lg p-6 w-full max-w-md overscroll-contain",
+        "bg-card text-card-foreground border border-border rounded-md shadow-lg p-6 w-full max-w-md overscroll-contain",
         className,
       )}
       onClick={(e) => e.stopPropagation()}

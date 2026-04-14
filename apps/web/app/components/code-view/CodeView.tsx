@@ -54,7 +54,7 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
               title="Download Architecture (.architecture/)"
             >
               {isDownloadingArch ? (
-                <Loader2 size={14} className="animate-spin text-blue-400" />
+                <Loader2 size={14} className="animate-spin text-primary" />
               ) : (
                 <Archive size={14} />
               )}
@@ -66,7 +66,7 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
               title="Download Project (ZIP)"
             >
               {isDownloading ? (
-                <Loader2 size={14} className="animate-spin text-blue-400" />
+                <Loader2 size={14} className="animate-spin text-primary" />
               ) : (
                 <Download size={14} />
               )}
@@ -79,7 +79,7 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
         </ExplorerToolbar.Root>
 
         {error ? (
-          <div className="p-4 text-red-400 text-sm flex items-start gap-2">
+          <div className="p-4 text-destructive text-sm flex items-start gap-2">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -99,25 +99,27 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
       {/* Main Editor Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background relative">
         {isNetworkActive && files.size > 0 && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500/20 overflow-hidden z-10">
-            <div className="h-full bg-blue-500 w-1/3 animate-slide" />
+          <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 overflow-hidden z-10">
+            <div className="h-full bg-primary w-1/3 animate-slide" />
           </div>
         )}
 
         {selectedFile ? (
           <div className="flex flex-col h-full">
-            <div className="px-4 py-2 border-b border-border bg-muted/50 flex items-center justify-between text-sm text-muted-foreground">
-              <div className="flex items-center">
-                <FileCode className="h-4 w-4 mr-2 text-muted-foreground" />
-                {selectedFile.id}
+            <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center justify-between text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <FileCode className="h-4 w-4" />
+                <span className="text-foreground font-medium">
+                  {selectedFile.id}
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 {isStale && (
-                  <span className="text-xs text-blue-400 italic">
+                  <span className="text-xs text-warning italic">
                     Out of sync
                   </span>
                 )}
-                <div className="text-xs uppercase bg-muted px-2 py-1 rounded">
+                <div className="text-xs uppercase bg-muted px-2 py-1 rounded border border-border">
                   {selectedFile.language}
                 </div>
               </div>
@@ -132,7 +134,7 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
-            <div className="p-4 rounded-full mb-4 bg-muted">
+            <div className="p-4 rounded-md mb-4 bg-muted border border-border">
               <FileCode className="h-10 w-10 opacity-30" />
             </div>
             <h3 className="text-lg font-medium text-foreground">

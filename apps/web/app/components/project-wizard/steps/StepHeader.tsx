@@ -16,9 +16,9 @@ export function StepHeader({
   debugLabel,
 }: StepHeaderProps) {
   return (
-    <div className="flex-shrink-0 p-6 pb-4">
+    <div className="flex-shrink-0 p-5 pb-4">
       {debugLabel && (
-        <div className="text-[10px] font-mono bg-black text-green-400 p-2 rounded mb-4">
+        <div className="text-[10px] font-mono bg-muted text-muted-foreground p-2 rounded border border-border mb-4">
           {debugLabel}
         </div>
       )}
@@ -27,7 +27,7 @@ export function StepHeader({
           <div
             key={step}
             aria-current={currentStep === step ? "step" : undefined}
-            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm ${
+            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-medium ${
               currentStep === step
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-muted text-muted-foreground border-muted"
@@ -37,8 +37,8 @@ export function StepHeader({
           </div>
         ))}
       </div>
-      <h2 className="text-2xl font-semibold mb-2">{title}</h2>
-      <p className="text-muted-foreground mb-6 text-sm">{description}</p>
+      <h2 className="text-xl font-semibold mb-2">{title}</h2>
+      <p className="text-muted-foreground text-sm">{description}</p>
     </div>
   );
 }

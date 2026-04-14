@@ -64,11 +64,11 @@ export function AIGovernancePanel({
           <Tabs.Trigger value="status">Port/Adapter Status</Tabs.Trigger>
         </Tabs.List>
 
-        <div className="flex justify-end px-2 py-1 border-b border-border shrink-0">
+        <div className="flex justify-end px-2 py-1.5 border-b border-border shrink-0 bg-card/50">
           <button
             onClick={onRefresh}
             disabled={isLoading}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-md disabled:opacity-50 transition-colors"
           >
             {isLoading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -79,7 +79,7 @@ export function AIGovernancePanel({
           </button>
         </div>
 
-        <CardContent className="flex-1 overflow-auto p-3">
+        <CardContent className="flex-1 overflow-auto p-3 custom-scrollbar">
           <Tabs.Content value="violations">
             <ViolationList violations={violations} />
           </Tabs.Content>
@@ -99,7 +99,7 @@ function ViolationList({ violations }: { violations: Violation[] }) {
   if (violations.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <CheckCircle className="h-8 w-8 text-green-500 mb-2" />
+        <CheckCircle className="h-8 w-8 text-success mb-2" />
         <p className="text-sm">No violations detected</p>
       </div>
     );
@@ -110,22 +110,22 @@ function ViolationList({ violations }: { violations: Violation[] }) {
       {violations.map((violation) => (
         <div
           key={violation.id}
-          className={`p-3 rounded-lg border ${
+          className={`p-3 rounded-md border ${
             violation.severity === "HIGH"
-              ? "bg-red-500/10 border-red-500/30"
+              ? "bg-destructive/5 border-destructive/30"
               : violation.severity === "MEDIUM"
-                ? "bg-orange-500/10 border-orange-500/30"
-                : "bg-blue-500/10 border-blue-500/30"
+                ? "bg-warning/5 border-warning/30"
+                : "bg-info/5 border-info/30"
           }`}
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start gap-2.5">
             <AlertTriangle
               className={`h-4 w-4 mt-0.5 shrink-0 ${
                 violation.severity === "HIGH"
-                  ? "text-red-500"
+                  ? "text-destructive"
                   : violation.severity === "MEDIUM"
-                    ? "text-orange-500"
-                    : "text-blue-500"
+                    ? "text-warning"
+                    : "text-info"
               }`}
             />
             <div className="flex-1 min-w-0">
@@ -133,17 +133,17 @@ function ViolationList({ violations }: { violations: Violation[] }) {
                 {violation.message}
               </p>
               {violation.context && (
-                <p className="text-xs text-muted-foreground mt-1 font-mono">
+                <p className="text-xs text-muted-foreground mt-1.5 font-mono">
                   {violation.context}
                 </p>
               )}
               <span
-                className={`inline-block mt-2 px-1.5 py-0.5 text-xs rounded ${
+                className={`inline-block mt-2 px-2 py-0.5 text-xs rounded font-medium ${
                   violation.severity === "HIGH"
-                    ? "bg-red-500/20 text-red-400"
+                    ? "bg-destructive/10 text-destructive"
                     : violation.severity === "MEDIUM"
-                      ? "bg-orange-500/20 text-orange-400"
-                      : "bg-blue-500/20 text-blue-400"
+                      ? "bg-warning/10 text-warning"
+                      : "bg-info/10 text-info"
                 }`}
               >
                 {violation.severity}
@@ -172,17 +172,17 @@ function SuggestionList({ suggestions }: { suggestions: AISuggestion[] }) {
       {suggestions.map((suggestion) => (
         <div
           key={suggestion.id}
-          className="p-3 rounded-lg border bg-cyan-500/10 border-cyan-500/30"
+          className="p-3 rounded-md border bg-info/5 border-info/30"
         >
-          <div className="flex items-start gap-2">
-            <Lightbulb className="h-4 w-4 mt-0.5 shrink-0 text-cyan-400" />
+          <div className="flex items-start gap-2.5">
+            <Lightbulb className="h-4 w-4 mt-0.5 shrink-0 text-info" />
             <div className="flex-1 min-w-0">
               <p className="text-sm text-foreground">{suggestion.message}</p>
               <div className="flex items-center justify-between mt-2">
                 <span className="text-xs text-muted-foreground capitalize">
                   {suggestion.category.replace("-", " ")}
                 </span>
-                <span className="text-xs text-cyan-400">
+                <span className="text-xs text-info font-medium">
                   {suggestion.confidence}% confidence
                 </span>
               </div>
@@ -198,15 +198,18 @@ function PortAdapterStatusList({ status }: { status: PortAdapterStatus[] }) {
   return (
     <div className="space-y-2">
       {status.map((item) => (
-        <div key={item.context} className="p-3 rounded-lg border border-border">
+        <div
+          key={item.context}
+          className="p-3 rounded-md border border-border bg-card"
+        >
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-foreground">
               {item.context}
             </span>
             {item.complete ? (
-              <CheckCircle className="h-4 w-4 text-green-500" />
+              <CheckCircle className="h-4 w-4 text-success" />
             ) : (
-              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              <AlertTriangle className="h-4 w-4 text-warning" />
             )}
           </div>
           <div className="flex gap-4 mt-2 text-xs text-muted-foreground">

@@ -39,44 +39,44 @@ const RECT_STYLES: Record<
   { fill: string; stroke: string; text: string; handleColor: string }
 > = {
   entity: {
-    fill: "bg-emerald-500/10 dark:bg-emerald-500/20",
-    stroke: "border-emerald-500",
-    text: "text-emerald-700 dark:text-emerald-400",
+    fill: "bg-emerald-500/10 dark:bg-emerald-500/15",
+    stroke: "border-emerald-500/50",
+    text: "text-emerald-700 dark:text-emerald-300",
     handleColor: "!bg-emerald-500",
   },
   port: {
-    fill: "bg-violet-500/10 dark:bg-violet-500/20",
-    stroke: "border-violet-500",
-    text: "text-violet-700 dark:text-violet-400",
+    fill: "bg-violet-500/10 dark:bg-violet-500/15",
+    stroke: "border-violet-500/50",
+    text: "text-violet-700 dark:text-violet-300",
     handleColor: "!bg-violet-500",
   },
   "use-case": {
-    fill: "bg-amber-500/10 dark:bg-amber-500/20",
-    stroke: "border-amber-500",
-    text: "text-amber-700 dark:text-amber-400",
+    fill: "bg-amber-500/10 dark:bg-amber-500/15",
+    stroke: "border-amber-500/50",
+    text: "text-amber-700 dark:text-amber-300",
     handleColor: "!bg-amber-500",
   },
   adapter: {
-    fill: "bg-blue-500/10 dark:bg-blue-500/20",
-    stroke: "border-blue-500",
-    text: "text-blue-700 dark:text-blue-400",
-    handleColor: "!bg-blue-500",
+    fill: "bg-sky-500/10 dark:bg-sky-500/15",
+    stroke: "border-sky-500/50",
+    text: "text-sky-700 dark:text-sky-300",
+    handleColor: "!bg-sky-500",
   },
 };
 
 // Visual tokens for bounded-context and inner types
 const BC_STYLES = {
   "bounded-context": {
-    fill: "bg-sky-500/10 dark:bg-sky-500/20",
-    stroke: "border-sky-500",
-    text: "text-sky-700 dark:text-sky-400",
+    fill: "bg-sky-500/10 dark:bg-sky-500/15",
+    stroke: "border-sky-500/50",
+    text: "text-sky-700 dark:text-sky-300",
     handleColor: "!bg-sky-500",
   },
   inner: {
-    fill: "bg-slate-500/10 dark:bg-slate-500/20",
-    stroke: "border-slate-500",
-    text: "text-slate-700 dark:text-slate-400",
-    handleColor: "!bg-slate-500",
+    fill: "bg-stone-500/10 dark:bg-stone-500/15",
+    stroke: "border-stone-500/50",
+    text: "text-stone-700 dark:text-stone-300",
+    handleColor: "!bg-stone-500",
   },
 };
 
@@ -86,28 +86,28 @@ const DOMAIN_COMPASS = [
     itemsKey: "aggregateItems",
     label: "Aggregates",
     Icon: Package,
-    color: "text-amber-400",
+    color: "text-amber-500",
   },
   {
     key: "valueObjects",
     itemsKey: "valueObjectItems",
     label: "Value Objects",
     Icon: Gem,
-    color: "text-emerald-400",
+    color: "text-emerald-500",
   },
   {
     key: "events",
     itemsKey: "eventItems",
     label: "Events",
     Icon: Zap,
-    color: "text-purple-400",
+    color: "text-violet-500",
   },
   {
     key: "services",
     itemsKey: "serviceItems",
     label: "Services",
     Icon: Settings2,
-    color: "text-sky-400",
+    color: "text-sky-500",
   },
 ] as const;
 

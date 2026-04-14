@@ -29,7 +29,7 @@ export function ResponsiveTabs({ panels, defaultTab }: ResponsiveTabsProps) {
   return (
     <div className="flex flex-col h-full w-full bg-card">
       {/* Tab Bar */}
-      <div className="flex shrink-0 border-b border-border">
+      <div className="flex shrink-0 border-b border-border bg-card">
         {panels.map((panel) => {
           const IconComponent = panel.icon ? ICONS[panel.icon] : null;
           const isActive = activeTab === panel.id;
@@ -39,9 +39,9 @@ export function ResponsiveTabs({ panels, defaultTab }: ResponsiveTabsProps) {
               key={panel.id}
               type="button"
               onClick={() => setActiveTab(panel.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium transition-colors ${
                 isActive
-                  ? "text-primary border-b-2 border-primary bg-primary/5"
+                  ? "text-primary border-b-2 border-primary bg-card"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               }`}
             >
@@ -53,9 +53,7 @@ export function ResponsiveTabs({ panels, defaultTab }: ResponsiveTabsProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {activePanel?.content}
-      </div>
+      <div className="flex-1 overflow-hidden">{activePanel?.content}</div>
     </div>
   );
 }

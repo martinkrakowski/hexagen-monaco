@@ -12,33 +12,36 @@ export const Header = ({ onLoadManifest, mode }: HeaderProps) => {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header className="w-full p-5 pl-6 pb-1 bg-background flex items-center justify-between">
-      <h1 className="text-2xl font-bold p-1">
-        Hexagen Monaco Project Generator
-      </h1>
+    <header className="w-full px-6 py-4 bg-card border-b border-border flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3">
+        <div className="h-8 w-8 bg-primary text-primary-foreground flex items-center justify-center rounded-sm text-sm font-bold">
+          H
+        </div>
+        <h1 className="text-lg font-semibold tracking-tight">HexaGen</h1>
+      </div>
+      <div className="flex items-center gap-2">
         {mode === "edit" && (
-          <span className="text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-1 rounded">
+          <span className="text-xs font-medium bg-warning/10 text-warning px-2 py-1 rounded border border-warning/20">
             Editing loaded project
           </span>
         )}
         <button
           onClick={onLoadManifest}
-          className="p-2 rounded-lg hover:bg-accent transition-colors"
+          className="p-2 rounded-md hover:bg-muted transition-colors"
           aria-label="Load manifest"
           title="Load manifest.yaml"
         >
-          <Upload className="w-5 h-5 text-foreground" />
+          <Upload className="w-4 h-4" />
         </button>
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-lg hover:bg-accent transition-colors"
+          className="p-2 rounded-md hover:bg-muted transition-colors"
           aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
         >
           {theme === "dark" ? (
-            <Moon className="w-5 h-5 text-sidebar-foreground" />
+            <Moon className="w-4 h-4" />
           ) : (
-            <Sun className="w-5 h-5 text-foreground" />
+            <Sun className="w-4 h-4" />
           )}
         </button>
       </div>

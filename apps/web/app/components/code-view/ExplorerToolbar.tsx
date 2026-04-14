@@ -21,7 +21,7 @@ function useToolbarContext(): ExplorerToolbarContextValue {
   return ctx;
 }
 
-// ─── Root ────────────────────────────────────────────────────────────────────
+// ─── Root ───────────────────────────────────────────────────────────────────
 
 interface RootProps {
   isNetworkActive: boolean;
@@ -34,7 +34,7 @@ function Root({ isNetworkActive, children, className }: RootProps) {
     <ExplorerToolbarContext.Provider value={{ isNetworkActive }}>
       <div
         className={cn(
-          "text-xs font-semibold text-muted-foreground uppercase tracking-wider p-4 border-b border-border shrink-0 flex items-center justify-between",
+          "text-xs font-semibold text-muted-foreground uppercase tracking-wider p-3 border-b border-border shrink-0 flex items-center justify-between bg-card/50",
           className,
         )}
       >
@@ -53,7 +53,7 @@ function Label({ children }: { children: ReactNode }) {
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 function Actions({ children }: { children: ReactNode }) {
-  return <div className="flex items-center gap-3">{children}</div>;
+  return <div className="flex items-center gap-2.5">{children}</div>;
 }
 
 // ─── Button ──────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ function ActionButton({
       disabled={disabled}
       title={title}
       className={cn(
-        "transition-colors disabled:opacity-50 hover:text-foreground",
+        "p-1.5 rounded-md transition-colors hover:bg-muted disabled:opacity-50 text-muted-foreground hover:text-foreground",
         className,
       )}
     >
@@ -107,18 +107,18 @@ function StaleIndicator({ isStale, onClick, children }: StaleIndicatorProps) {
           isStale ? "Pending changes. Click to regenerate." : "Force Regenerate"
         }
         className={cn(
-          "transition-colors disabled:opacity-50",
+          "p-1.5 rounded-md transition-colors disabled:opacity-50",
           isStale
-            ? "text-blue-400 hover:text-blue-300"
-            : "hover:text-foreground",
+            ? "text-warning hover:text-warning/80"
+            : "text-muted-foreground hover:text-foreground",
         )}
       >
         {children}
       </button>
       {isStale && !isNetworkActive && (
-        <span className="absolute -top-1 -right-1 flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-warning" />
         </span>
       )}
     </div>

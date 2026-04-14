@@ -38,7 +38,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
     if (["typescript", "javascript"].includes(node.language))
       return <FileCode size={14} className="text-primary" />;
     if (node.language === "json")
-      return <FileJson size={14} className="text-yellow-400" />;
+      return <FileJson size={14} className="text-warning" />;
     if (node.language === "markdown")
       return <FileText size={14} className="text-primary/70" />;
     return <File size={14} className="text-muted-foreground" />;
@@ -48,7 +48,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
     <div>
       <div
         className={cn(
-          "flex items-center py-1 px-2 cursor-pointer hover:bg-muted/50 text-sm select-none transition-colors group",
+          "flex items-center py-1.5 px-2 cursor-pointer hover:bg-muted/50 text-sm select-none transition-colors group",
           isSelected
             ? "bg-primary/10 text-primary font-medium"
             : "text-muted-foreground",

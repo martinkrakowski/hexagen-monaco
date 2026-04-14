@@ -53,7 +53,7 @@ function SendButton({ onClick, hasInput }: SendButtonProps) {
       onClick={onClick}
       disabled={!hasInput || isLoading}
       size="icon"
-      className="shrink-0"
+      className="shrink-0 h-9 w-9"
     >
       {isLoading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -129,12 +129,12 @@ export function AgentChatPanel({
   return (
     <ChatContext.Provider value={{ isLoading }}>
       <div className="flex flex-col h-full bg-card">
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
           <Bot className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">AI Assistant</span>
         </div>
 
-        <CardContent className="flex-1 overflow-auto p-3 space-y-3">
+        <CardContent className="flex-1 overflow-auto p-3 space-y-3 custom-scrollbar">
           {messages.map((message) => (
             <AgentMessage key={message.id} message={message} />
           ))}
@@ -142,14 +142,14 @@ export function AgentChatPanel({
           <div ref={messagesEndRef} />
         </CardContent>
 
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border bg-card/50">
           <div className="flex gap-2">
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask about your architecture..."
-              className="min-h-[60px] resize-none"
+              className="min-h-[60px] resize-none text-sm"
               disabled={isLoading}
             />
             <SendButton onClick={handleSend} hasInput={!!input.trim()} />

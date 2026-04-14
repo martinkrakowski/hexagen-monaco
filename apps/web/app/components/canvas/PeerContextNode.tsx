@@ -59,13 +59,13 @@ function PeerContextNodeComponent({ data }: NodeProps<Node<PeerNodeData>>) {
         type="target"
         position={Position.Left}
         id="inbound-left"
-        className="!bg-violet-500 !w-3 !h-3 !border-2 !border-background shadow-sm"
+        className="!bg-violet-500 !w-3 !h-3 !border-2 !border-background"
       />
       <Handle
         type="source"
         position={Position.Right}
         id="outbound-right"
-        className="!bg-amber-500 !w-3 !h-3 !border-2 !border-background shadow-sm"
+        className="!bg-amber-500 !w-3 !h-3 !border-2 !border-background"
       />
     </div>
   );

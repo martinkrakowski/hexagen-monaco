@@ -48,7 +48,10 @@ function List({
   return (
     <div
       role="tablist"
-      className={cn("flex border-b border-border shrink-0", className)}
+      className={cn(
+        "flex border-b border-border bg-card/50 shrink-0",
+        className,
+      )}
     >
       {children}
     </div>
@@ -105,11 +108,11 @@ function Trigger({ value, children, className }: TriggerProps) {
       onClick={() => setActiveTab(value)}
       onKeyDown={handleKeyDown}
       className={cn(
-        "flex-1 flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium transition-colors",
+        "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         isActive
-          ? "text-primary border-b-2 border-primary bg-muted/50"
-          : "text-muted-foreground hover:text-foreground",
+          ? "text-primary border-b-2 border-primary bg-card"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
         className,
       )}
     >
@@ -118,7 +121,7 @@ function Trigger({ value, children, className }: TriggerProps) {
   );
 }
 
-// ─── Content ──────────────────────────────────────────────────────────────────
+// ─── Content ─────────────────────────────────────────────────────────────────
 
 interface ContentProps {
   value: string;
