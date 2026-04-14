@@ -223,7 +223,7 @@ export function HexagonCanvas({
         isValidConnection={isValidConnection}
         fitView
         colorMode={colorMode}
-        className="bg-background"
+        className="bg-card"
         proOptions={{ hideAttribution: true }}
       >
         <Background

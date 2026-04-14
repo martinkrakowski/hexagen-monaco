@@ -199,7 +199,7 @@
 }
 
 .react-flow__background {
-  background: hsl(var(--background)) !important;
+  background: hsl(var(--card)) !important;
 }
 
 /* ── Custom scrollbar for panels ───────────────────────────────────────────── */

@@ -89,7 +89,7 @@ const LAYOUT_CONFIG = {
   SOUTH_OFFSET_STEP: 120,
 
   // Adapter label X positions — split by side to avoid overlap with child node columns
-  NORTH_ADAPTER_X_OFFSET: 230, // north adapters (API, UI) — roughly centred under hex
+  NORTH_ADAPTER_X_OFFSET: 330, // north adapters (API, UI) — roughly centred under hex
   SOUTH_ADAPTER_X_OFFSET: 460, // south adapters (Messaging, Persistence, Telemetry) — right of use-case column
 
   // Port satellites (west/east driving/driven)
