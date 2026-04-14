@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { type NodeProps, type Node } from '@xyflow/react';
+import { memo } from "react";
+import { type NodeProps, type Node } from "@xyflow/react";
 
 export type GroupBoundaryData = {
   label: string;
@@ -14,10 +14,10 @@ function GroupBoundaryNodeComponent({
 
   return (
     <div
-      className="w-full h-full bg-transparent border-2 border-dashed border-border rounded-3xl pointer-events-none"
-      style={{ width, height, backgroundColor: 'transparent' }}
+      className="w-full h-full bg-card/[0.015] border border-dashed border-border/50 rounded-3xl pointer-events-none"
+      style={{ width, height, backgroundColor: "transparent" }}
     >
-      <div className="absolute top-6 right-8 text-right">
+      <div className="absolute top-5 left-6 text-left">
         <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
           {data.label}
         </div>

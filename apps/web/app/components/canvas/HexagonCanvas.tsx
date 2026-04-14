@@ -6,6 +6,7 @@ import {
   Background,
   Controls,
   BackgroundVariant,
+  MarkerType,
   type Node as FlowNode,
   type Edge as FlowEdge,
   type Connection,
@@ -17,6 +18,7 @@ import "@xyflow/react/dist/style.css";
 
 import { UnifiedBoundedContext } from "./BoundedContext";
 import { GroupBoundaryNode } from "./GroupBoundaryNode";
+import { PeerContextNode } from "./PeerContextNode";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
@@ -31,7 +33,7 @@ type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
 const nodeTypes = {
   hexagon: UnifiedBoundedContext,
   inner: UnifiedBoundedContext,
-  peer: UnifiedBoundedContext,
+  peer: PeerContextNode,
   group: GroupBoundaryNode,
 };
 
@@ -65,22 +67,18 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
       data: node as HexagonNodeDataRecord,
     };
 
-    // Pass parentId for grouping - establishes parent-child relationship
     if (n.parentId) {
       flowNode.parentId = n.parentId;
     }
 
-    // Pass extent to make child position relative to parent
     if (n.extent) {
       flowNode.extent = n.extent;
     }
 
-    // Pass style (width/height) for parent container bounds
     if (n.style) {
       flowNode.style = n.style;
     }
 
-    // Make monorepo boundary not draggable; all other contexts draggable
     flowNode.draggable = n.id === "monorepo-boundary" ? false : true;
 
     return flowNode;
@@ -88,21 +86,28 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
 }
 
 function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
-  return edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: edge.type === "animated" ? "default" : (edge.type ?? "default"),
-    animated: edge.type === "animated" || !!edge.animated,
-    label: edge.label,
-    sourceHandle: edge.sourceHandle,
-    targetHandle: edge.targetHandle,
-    // SK (Shared Kernel) gets a visually heavier edge to convey tight coupling
-    // SK (Shared Kernel) edges use violet to convey tight coupling.
-    // This is an intentional data-vis colour, consistent across themes.
-    style:
-      edge.label === "SK" ? { strokeWidth: 4, stroke: "#a78bfa" } : undefined,
-  }));
+  return edges.map((edge) => {
+    const isSK = edge.label === "SK";
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: edge.type === "animated" ? "default" : (edge.type ?? "smoothstep"),
+      animated: edge.type === "animated" || !!edge.animated,
+      label: edge.label,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+      style: isSK
+        ? { strokeWidth: 3, stroke: "#a78bfa" }
+        : { strokeWidth: 1.5, stroke: "hsl(var(--foreground) / 0.35)" },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 14,
+        height: 14,
+        color: isSK ? "#a78bfa" : "hsl(var(--foreground) / 0.35)",
+      },
+    };
+  });
 }
 
 export function HexagonCanvas({
@@ -115,7 +120,6 @@ export function HexagonCanvas({
   const { theme } = useTheme();
   const colorMode: ColorMode = theme === "dark" ? "dark" : "light";
 
-  // Add timestamp to key to force React Flow to re-render nodes when data changes
   const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
   const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
 
@@ -132,7 +136,6 @@ export function HexagonCanvas({
         return { success: false, error: new Error("Viewport not found") };
       }
 
-      // Derive background colour from the active theme's CSS variable
       const bgChannels = getComputedStyle(document.documentElement)
         .getPropertyValue("--background")
         .trim();
@@ -163,16 +166,12 @@ export function HexagonCanvas({
       const sourceHandle = connection.sourceHandle ?? "";
       const targetHandle = connection.targetHandle ?? "";
 
-      // Rule 1: Event handles must pair pub_ ↔ sub_ exclusively.
-      // Prevents domain event ports from accidentally plugging into cardinal handles.
       const isSourceEvent = sourceHandle.startsWith("pub_");
       const isTargetEvent = targetHandle.startsWith("sub_");
       if (isSourceEvent || isTargetEvent) {
         return isSourceEvent && isTargetEvent;
       }
 
-      // Rule 2: Wizard-generated satellite nodes must connect to their designated
-      // cardinal handle on root-core. Manually added nodes (no side) connect freely.
       const targetNode = nodes.find((n) => n.id === connection.target);
       if (targetNode?.id === "root-core") {
         const sourceNode = nodes.find((n) => n.id === connection.source) as
@@ -217,19 +216,20 @@ export function HexagonCanvas({
         fitView
         colorMode={colorMode}
         className="bg-background"
+        proOptions={{ hideAttribution: true }}
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={16}
-          size={1}
+          gap={20}
+          size={1.5}
           color={`hsl(${
             getComputedStyle(document.documentElement)
-              .getPropertyValue("--border")
-              .trim() || (theme === "dark" ? "217 33% 17%" : "220 13% 91%")
-          })`}
-          style={{ opacity: 1 }}
+              .getPropertyValue("--muted-foreground")
+              .trim() || (theme === "dark" ? "35 5% 35%" : "35 5% 65%")
+          } / 0.4)`}
+          style={{ opacity: 0.8 }}
         />
-        <Controls className="bg-background border-border" />
+        <Controls className="bg-card border border-border shadow-md rounded-lg [&_.react-flow__controls-button]:border-border [&_.react-flow__controls-button]:bg-card [&_.react-flow__controls-button]:text-foreground" />
       </ReactFlow>
     </div>
   );

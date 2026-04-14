@@ -22,18 +22,18 @@ function PeerContextNodeComponent({ data }: NodeProps<Node<PeerNodeData>>) {
   };
 
   return (
-    <div className="relative w-[180px] h-[180px] flex items-center justify-center">
+    <div className="relative w-[180px] h-[180px] flex items-center justify-center shadow-lg">
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <circle
           cx="90"
           cy="90"
           r="85"
           style={{
-            fill: "hsl(var(--card) / 0.8)",
+            fill: "hsl(var(--card))",
             stroke: "hsl(var(--border))",
           }}
           strokeWidth="2"
-          strokeDasharray="6 4"
+          strokeDasharray="8 3"
         />
       </svg>
 

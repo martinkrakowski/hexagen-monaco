@@ -59,42 +59,42 @@ const LAYOUT_CONFIG = {
 
   // Satellite/peer hexagon inner node positions (360px hex - at bottom, spread apart)
   SATELLITE_DOMAIN_X: 50,
-  SATELLITE_DOMAIN_Y: 320,
+  SATELLITE_DOMAIN_Y: 314,
   SATELLITE_USECASES_X: 240,
-  SATELLITE_USECASES_Y: 320,
+  SATELLITE_USECASES_Y: 314,
 
   // Entity satellites positioning (root hex)
   ENTITY_COL_WIDTH: 50,
   ENTITY_ROW_HEIGHT: 40,
   ENTITY_START_X: 30,
-  ENTITY_START_Y: 460,
+  ENTITY_START_Y: 560,
 
   // Entity satellites positioning (satellite hex - below Domain)
   SATELLITE_ENTITY_START_X: -20,
-  SATELLITE_ENTITY_START_Y: 600,
+  SATELLITE_ENTITY_START_Y: 700,
 
   // Use case satellites positioning (root hex)
   USECASE_COL_WIDTH: 50,
   USECASE_ROW_HEIGHT: 40,
   USECASE_START_X: 420,
-  USECASE_START_Y: 460,
+  USECASE_START_Y: 560,
 
   // Use case satellites positioning (satellite hex - below Use Cases)
   SATELLITE_USECASE_START_X: 320,
-  SATELLITE_USECASE_START_Y: 600,
+  SATELLITE_USECASE_START_Y: 700,
 
   // Adapter positions (north/south of hex)
-  NORTH_OFFSET_BASE: 220,
-  NORTH_OFFSET_STEP: 100,
-  SOUTH_OFFSET_BASE: 520,
-  SOUTH_OFFSET_ADDITIONAL: 60,
-  SOUTH_OFFSET_STEP: 100,
+  NORTH_OFFSET_BASE: 280,
+  NORTH_OFFSET_STEP: 120,
+  SOUTH_OFFSET_BASE: 600,
+  SOUTH_OFFSET_ADDITIONAL: 80,
+  SOUTH_OFFSET_STEP: 120,
 
   // Port satellites (west/east driving/driven)
-  WEST_PORT_OFFSET_X: -220,
-  EAST_PORT_OFFSET_X: 520,
+  WEST_PORT_OFFSET_X: -380,
+  EAST_PORT_OFFSET_X: 700,
   PORT_OFFSET_BASE_Y: -40,
-  PORT_OFFSET_STEP_Y: 80,
+  PORT_OFFSET_STEP_Y: 100,
 
   // Adapter label X position
   ADAPTER_LABEL_X: 230,
@@ -126,7 +126,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     LAYOUT_CONFIG.GROUP_MIN_WIDTH,
     contextCount * contextSpacing + 400,
   );
-  const groupHeight = 1000;
+  const groupHeight = 1400;
 
   // Place group centered in viewport
   const groupX = canvasCenterX - groupWidth / 2;

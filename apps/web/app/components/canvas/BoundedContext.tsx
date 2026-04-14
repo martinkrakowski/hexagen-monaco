@@ -33,49 +33,62 @@ interface BoundedContextData extends Record<string, unknown> {
   parentId?: string;
 }
 
-// Visual tokens per type for rectangular nodes (all non-root nodes)
-const RECT_STYLES: Record<
+// Two-zone card styles for satellite nodes (entity, port, use-case, adapter)
+const SATELLITE_NODE_STYLES: Record<
   "entity" | "port" | "use-case" | "adapter",
-  { fill: string; stroke: string; text: string; handleColor: string }
+  {
+    headerBg: string;
+    bodyBg: string;
+    border: string;
+    handleColor: string;
+    headerText: string;
+  }
 > = {
   entity: {
-    fill: "bg-emerald-500/10 dark:bg-emerald-500/15",
-    stroke: "border-emerald-500/50",
-    text: "text-emerald-700 dark:text-emerald-300",
+    headerBg: "bg-emerald-600",
+    bodyBg: "bg-card",
+    border: "border-emerald-500/30",
     handleColor: "!bg-emerald-500",
+    headerText: "text-white",
   },
   port: {
-    fill: "bg-violet-500/10 dark:bg-violet-500/15",
-    stroke: "border-violet-500/50",
-    text: "text-violet-700 dark:text-violet-300",
+    headerBg: "bg-violet-600",
+    bodyBg: "bg-card",
+    border: "border-violet-500/30",
     handleColor: "!bg-violet-500",
+    headerText: "text-white",
   },
   "use-case": {
-    fill: "bg-amber-500/10 dark:bg-amber-500/15",
-    stroke: "border-amber-500/50",
-    text: "text-amber-700 dark:text-amber-300",
+    headerBg: "bg-amber-600",
+    bodyBg: "bg-card",
+    border: "border-amber-500/30",
     handleColor: "!bg-amber-500",
+    headerText: "text-white",
   },
   adapter: {
-    fill: "bg-sky-500/10 dark:bg-sky-500/15",
-    stroke: "border-sky-500/50",
-    text: "text-sky-700 dark:text-sky-300",
+    headerBg: "bg-sky-600",
+    bodyBg: "bg-card",
+    border: "border-sky-500/30",
     handleColor: "!bg-sky-500",
+    headerText: "text-white",
   },
 };
 
-// Visual tokens for bounded-context and inner types
-const BC_STYLES = {
+// Left-strip mini card styles for inner nodes (Domain, Use Cases)
+const INNER_NODE_STYLES: Record<
+  string,
+  { strip: string; bodyBg: string; border: string; handleColor: string }
+> = {
   "bounded-context": {
-    fill: "bg-sky-500/10 dark:bg-sky-500/15",
-    stroke: "border-sky-500/50",
-    text: "text-sky-700 dark:text-sky-300",
+    strip: "bg-sky-500",
+    bodyBg: "bg-card",
+    border: "border-sky-500/20",
     handleColor: "!bg-sky-500",
   },
   inner: {
-    fill: "bg-stone-500/10 dark:bg-stone-500/15",
-    stroke: "border-stone-500/50",
-    text: "text-stone-700 dark:text-stone-300",
+    strip: "bg-stone-500",
+    bodyBg: "bg-card",
+    border: "border-stone-500/20",
     handleColor: "!bg-stone-500",
   },
 };
@@ -111,7 +124,6 @@ const DOMAIN_COMPASS = [
   },
 ] as const;
 
-// Helper functions for stats
 type CompassKey = (typeof DOMAIN_COMPASS)[number]["label"];
 type CompassCountKey = (typeof DOMAIN_COMPASS)[number]["key"];
 type CompassItemsKey = (typeof DOMAIN_COMPASS)[number]["itemsKey"];
@@ -131,14 +143,12 @@ function getStatItems(
   return stats?.[key] ?? [];
 }
 
-// Helper function for slotted event handles
 function getSlottedOffsets(count: number): string[] {
   const safeCount = Math.min(count, 5);
   const startY = 50 - ((safeCount - 1) * 7.5) / 2;
   return Array.from({ length: safeCount }, (_, i) => `${startY + i * 7.5}%`);
 }
 
-// Compass modal component
 interface CompassModalProps {
   label: CompassKey | string;
   items: string[];
@@ -209,28 +219,49 @@ function UnifiedBoundedContextComponent({
     items: string[];
   } | null>(null);
 
-  // Rectangular node (entity, port, use-case, adapter)
+  // Inner nodes (Domain / Use Cases) — left-strip mini card (40px height)
+  if (nodeType === "inner") {
+    const styles = INNER_NODE_STYLES.inner;
+    return (
+      <div
+        style={{ width: 120, height: 40 }}
+        className={`relative flex items-center rounded-lg border text-xs font-medium transition-colors select-none ${styles.bodyBg} ${styles.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
+      >
+        <div className={`w-1.5 h-full ${styles.strip} rounded-l-lg`} />
+        <span className="px-2 truncate text-center leading-tight">
+          {String(data.label || "")}
+        </span>
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="west"
+          className={`${styles.handleColor} !w-2.5 !h-2.5 -left-1.5`}
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="east"
+          className={`${styles.handleColor} !w-2.5 !h-2.5 -right-1.5`}
+        />
+      </div>
+    );
+  }
+
+  // Two-zone satellite card nodes (entity, port, use-case, adapter — NOT inner)
   if (!isHexagon) {
-    // Determine styles based on node type
     const styles =
-      nodeType === "inner"
-        ? BC_STYLES.inner
-        : nodeType === "entity"
-          ? RECT_STYLES.entity
-          : nodeType === "port"
-            ? RECT_STYLES.port
-            : nodeType === "use-case"
-              ? RECT_STYLES["use-case"]
-              : nodeType === "adapter"
-                ? RECT_STYLES.adapter
-                : BC_STYLES["bounded-context"];
+      nodeType === "entity"
+        ? SATELLITE_NODE_STYLES.entity
+        : nodeType === "port"
+          ? SATELLITE_NODE_STYLES.port
+          : nodeType === "use-case"
+            ? SATELLITE_NODE_STYLES["use-case"]
+            : nodeType === "adapter"
+              ? SATELLITE_NODE_STYLES.adapter
+              : SATELLITE_NODE_STYLES.entity;
 
-    // Inner category nodes (parentId set) render as compact labels
-    const isInner = !!data.parentId;
-    const isDomainOrUseCases = nodeType === "inner";
-
-    // Standalone port/adapters get cardinal handles for edge connections
-    if (nodeType === "port" && !isInner) {
+    // Port nodes with north/south handles
+    if (nodeType === "port") {
       const side = data.side as "north" | "south" | undefined;
       const showNorth = side === "north";
       const showSouth = side === "south";
@@ -238,104 +269,87 @@ function UnifiedBoundedContextComponent({
       return (
         <div
           style={{ width: 140, height: 72 }}
-          className={`relative flex items-center justify-center rounded-md border-2 text-xs font-medium transition-colors select-none ${styles.fill} ${styles.stroke} ${styles.text} ${selected ? "ring-2 ring-ring ring-offset-2" : ""}`}
+          className={`relative rounded-lg border overflow-hidden transition-colors select-none ${styles.bodyBg} ${styles.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
         >
-          {data.category && (
-            <span className="absolute -top-2.5 right-2 px-1.5 py-px text-[8px] font-mono bg-background border border-border text-muted-foreground rounded-sm truncate max-w-[100px]">
-              {String(data.category)}
+          {/* Header zone — category as label */}
+          <div
+            className={`h-7 ${styles.headerBg} flex items-center justify-center ${styles.headerText} text-xs font-semibold truncate px-2`}
+          >
+            {data.category ? String(data.category).toUpperCase() : "PORT"}
+          </div>
+          {/* Body zone — service name as plain text */}
+          <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
+            <span className="text-xs font-medium text-foreground text-center truncate">
+              {String(data.label || "")}
             </span>
-          )}
-          {/* North handle: adapter connects TO hexagon, so adapter needs SOURCE handle */}
+          </div>
+          {/* Handles */}
           {showNorth && (
             <Handle
               type="source"
               position={Position.Top}
               id="north"
-              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
             />
           )}
-          {/* South handle: hexagon connects TO adapter, so adapter needs TARGET handle */}
           {showSouth && (
             <Handle
               type="target"
               position={Position.Bottom}
               id="south"
-              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
             />
           )}
-          {/* Default left/right handles for horizontal connections */}
           {!showNorth && !showSouth && (
             <>
               <Handle
                 type="target"
                 position={Position.Left}
                 id="west"
-                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
               />
               <Handle
                 type="source"
                 position={Position.Right}
                 id="east"
-                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
               />
             </>
           )}
-          <span className={`px-2 truncate text-center leading-tight`}>
-            {String(data.label || "")}
-          </span>
         </div>
       );
     }
 
-    // Entity/use-case satellites (with or without category) get top/bottom handles
-    // Inner nodes (Domain/Use Cases static nodes) also get handles regardless of category
-    const nodeWidth = isInner ? 120 : 140;
-    const nodeHeight = isInner ? 36 : 72;
+    // Entity / use-case / adapter nodes with north/south handles
+    const nodeWidth = 140;
+    const nodeHeight = 72;
 
     return (
       <div
         style={{ width: nodeWidth, height: nodeHeight }}
-        className={`relative flex items-center justify-center rounded-md border-2 text-xs font-medium transition-colors select-none ${styles.fill} ${styles.stroke} ${styles.text} ${selected ? "ring-2 ring-ring ring-offset-2" : ""}`}
+        className={`relative rounded-lg border overflow-hidden transition-colors select-none ${styles.bodyBg} ${styles.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
       >
-        {data.category && !isDomainOrUseCases && (
-          <span className="absolute -top-2.5 right-2 px-1.5 py-px text-[8px] font-mono bg-background border border-border text-muted-foreground rounded-sm truncate max-w-[100px]">
-            {String(data.category)}
-          </span>
-        )}
-        {/* Top handle for parent connection - render for all non-entity/use-case nodes */}
-        {!isDomainOrUseCases && (
-          <Handle
-            type="target"
-            position={Position.Top}
-            id="north"
-            className={`${styles.handleColor} !w-2.5 !h-2.5`}
-          />
-        )}
-        {/* Inner nodes (Domain/Use Cases) always render west/east handles */}
-        {isDomainOrUseCases && (
-          <>
-            {/* Left handle for domain nodes (west connection to parent hexagon) */}
-            <Handle
-              type="target"
-              position={Position.Left}
-              id="west"
-              className={`${styles.handleColor} !w-2.5 !h-2.5`}
-            />
-            {/* Right handle for use cases nodes (east connection to children) */}
-            <Handle
-              type="source"
-              position={Position.Right}
-              id="east"
-              className={`${styles.handleColor} !w-2.5 !h-2.5`}
-            />
-          </>
-        )}
-        <span
-          className={`px-2 truncate text-center leading-tight ${isInner ? "max-w-[100px]" : "max-w-[120px]"}`}
+        {/* Header zone — category as label */}
+        <div
+          className={`h-7 ${styles.headerBg} flex items-center justify-center ${styles.headerText} text-xs font-semibold truncate px-2`}
         >
-          {String(data.label || "")}
-        </span>
-        {/* Bottom handle for child connections */}
+          {data.category
+            ? String(data.category).toUpperCase()
+            : nodeType.toUpperCase()}
+        </div>
+        {/* Body zone — label as plain text */}
+        <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
+          <span className="text-xs font-medium text-foreground text-center truncate">
+            {String(data.label || "")}
+          </span>
+        </div>
+        {/* Handles */}
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="north"
+          className={`${styles.handleColor} !w-2.5 !h-2.5`}
+        />
         <Handle
           type="source"
           position={Position.Bottom}
@@ -346,7 +360,7 @@ function UnifiedBoundedContextComponent({
     );
   }
 
-  // Hexagonal node: all contexts use same size as root for consistency
+  // Hexagonal bounded context — minimal visual tweaks to existing design
   const dimension = 500;
 
   return (
@@ -356,7 +370,7 @@ function UnifiedBoundedContextComponent({
     >
       <svg
         viewBox="0 0 100 100"
-        className="absolute inset-0 w-full h-full drop-shadow-2xl overflow-visible"
+        className="absolute inset-0 w-full h-full drop-shadow-xl overflow-visible"
       >
         <polygon
           points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
@@ -369,8 +383,6 @@ function UnifiedBoundedContextComponent({
               : "text-muted-foreground/30 dark:text-white/20 group-hover:text-primary"
           }`}
         />
-        {/* Quadrant labels - always show for all contexts */}
-        {/* Quadrant labels — fill="currentColor" inherits from className text-* */}
         <g className="fill-muted-foreground">
           <text
             x="50"
@@ -420,7 +432,6 @@ function UnifiedBoundedContextComponent({
       </svg>
 
       <div className="z-10 flex flex-col items-center justify-center gap-3">
-        {/* Project name */}
         <div className="text-center text-foreground uppercase tracking-widest leading-tight text-base font-black italic">
           {String(data.label || "")
             .split("\n")
@@ -438,7 +449,6 @@ function UnifiedBoundedContextComponent({
             ))}
         </div>
 
-        {/* Domain Compass — always show for all contexts */}
         <div className="grid grid-cols-2 gap-x-10 gap-y-5">
           {DOMAIN_COMPASS.map(({ key, itemsKey, label, Icon, color }) => (
             <button
@@ -472,9 +482,7 @@ function UnifiedBoundedContextComponent({
         )}
       </div>
 
-      {/* All hexagonal contexts get the same handle configuration */}
       <>
-        {/* North: target handles for multiple API/UI adapters */}
         <Handle
           type="target"
           position={Position.Top}
@@ -488,7 +496,6 @@ function UnifiedBoundedContextComponent({
           className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
           style={{ left: "60%" }}
         />
-        {/* South: source handles for multiple Messaging/Persistence/Telemetry adapters */}
         <Handle
           type="source"
           position={Position.Bottom}
@@ -509,21 +516,18 @@ function UnifiedBoundedContextComponent({
           className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
           style={{ left: "70%" }}
         />
-        {/* West: target handle for upstream peer connections */}
         <Handle
           type="target"
           position={Position.Left}
           id="west"
           className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
         />
-        {/* East: source handle for downstream peer connections */}
         <Handle
           type="source"
           position={Position.Right}
           id="east"
           className="!bg-sky-500 !w-3 !h-3 border-2 border-background"
         />
-        {/* Dynamic event handles — published (right face, amber) */}
         {(data.publishedEvents ?? []).slice(0, 5).map((evt, i) => (
           <Handle
             key={evt.id}
@@ -537,7 +541,6 @@ function UnifiedBoundedContextComponent({
             title={`Publishes: ${evt.label}`}
           />
         ))}
-        {/* Dynamic event handles — subscribed (left face, violet) */}
         {(data.subscribedEvents ?? []).slice(0, 5).map((evt, i) => (
           <Handle
             key={evt.id}
