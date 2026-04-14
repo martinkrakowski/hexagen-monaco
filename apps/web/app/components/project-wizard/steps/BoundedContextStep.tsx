@@ -191,7 +191,7 @@ export function BoundedContextStep({
     <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Zone A: Form Fields (Fixed Top) */}
       <div className="shrink-0 p-3 space-y-3 border-b border-border">
-        <div className="max-w-md">
+        <div className="w-full">
           <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
             Context Name
           </label>
@@ -208,7 +208,7 @@ export function BoundedContextStep({
             placeholder="e.g. SalesContext"
           />
         </div>
-        <div className="max-w-md space-y-3">
+        <div className="space-y-3">
           <div>
             <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
               API Backend
@@ -326,25 +326,23 @@ export function BoundedContextStep({
         </div>
       </div>
 
-      {/* Zone B: Grid (Scrollable Middle) */}
+      {/* Zone B: Scrollable Middle - Stacked Fields */}
       <div
         key={`zone-b-${activeContextId}`}
-        className="flex-1 overflow-y-auto p-6"
+        className="flex-1 overflow-y-auto p-3 space-y-6"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Left Column: Domain Model */}
-          <div>
-            <div className="border-b border-border pb-2 mb-4 flex justify-between items-end">
-              <div>
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
-                  Domain Model
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Nouns &amp; State
-                </p>
-              </div>
-            </div>
+        {/* Domain Model - Full Width */}
+        <div className="max-w-md">
+          <div className="border-b border-border pb-2 mb-4">
+            <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
+              Domain Model
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Nouns &amp; State
+            </p>
+          </div>
 
+          <div className="space-y-4">
             <ChipInput
               label="Core Domain Entities"
               placeholder="e.g. User, Product"
@@ -371,20 +369,20 @@ export function BoundedContextStep({
               }
             />
           </div>
+        </div>
 
-          {/* Right Column: Domain Logic */}
-          <div>
-            <div className="border-b border-border pb-2 mb-4 flex justify-between items-end">
-              <div>
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
-                  Domain Logic
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Verbs &amp; Action
-                </p>
-              </div>
-            </div>
+        {/* Domain Logic - Full Width, Below Domain Model */}
+        <div className="max-w-md">
+          <div className="border-b border-border pb-2 mb-4">
+            <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
+              Domain Logic
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Verbs &amp; Action
+            </p>
+          </div>
 
+          <div className="space-y-4">
             <ChipInput
               label="Primary Use Cases"
               placeholder="e.g. PlaceOrder"
