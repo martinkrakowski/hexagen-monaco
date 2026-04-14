@@ -189,141 +189,139 @@ export function BoundedContextStep({
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="space-y-6">
-        <div className="space-y-4">
+      {/* Zone A: Form Fields (Fixed Top) */}
+      <div className="shrink-0 p-3 space-y-3 border-b border-border">
+        <div className="max-w-md">
+          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+            Context Name
+          </label>
+          <input
+            type="text"
+            value={activeContext.name}
+            onChange={(e) =>
+              updateContext(contextIndex, (ctx) => ({
+                ...ctx,
+                name: e.target.value,
+              }))
+            }
+            className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent outline-none bg-background"
+            placeholder="e.g. SalesContext"
+          />
+        </div>
+        <div className="max-w-md space-y-3">
           <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-              Context Name
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+              API Backend
             </label>
-            <input
-              type="text"
-              value={activeContext.name}
+            <select
+              value={activeContext.infrastructureTarget || ""}
               onChange={(e) =>
                 updateContext(contextIndex, (ctx) => ({
                   ...ctx,
-                  name: e.target.value,
+                  infrastructureTarget: e.target
+                    .value as BoundedContext["infrastructureTarget"],
                 }))
               }
-              className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              placeholder="e.g. SalesContext"
-            />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-                API Backend
-              </label>
-              <select
-                value={activeContext.infrastructureTarget || ""}
-                onChange={(e) =>
-                  updateContext(contextIndex, (ctx) => ({
-                    ...ctx,
-                    infrastructureTarget: e.target
-                      .value as BoundedContext["infrastructureTarget"],
-                  }))
-                }
-                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                <option value="" disabled>
-                  Select Backend
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+            >
+              <option value="" disabled>
+                Select Backend
+              </option>
+              {apiFrameworkOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
-                {apiFrameworkOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-                UI Frontend
-              </label>
-              <select
-                value={activeContext.uiFramework || ""}
-                onChange={(e) =>
-                  updateContext(contextIndex, (ctx) => ({
-                    ...ctx,
-                    uiFramework: e.target
-                      .value as BoundedContext["uiFramework"],
-                  }))
-                }
-                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                {uiFrameworkOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-                Persistence
-              </label>
-              <select
-                value={activeContext.persistenceAdapter || ""}
-                onChange={(e) =>
-                  updateContext(contextIndex, (ctx) => ({
-                    ...ctx,
-                    persistenceAdapter: e.target
-                      .value as BoundedContext["persistenceAdapter"],
-                  }))
-                }
-                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                <option value="">None</option>
-                {persistenceAdapterOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-                Messaging
-              </label>
-              <select
-                value={activeContext.messagingAdapter || ""}
-                onChange={(e) =>
-                  updateContext(contextIndex, (ctx) => ({
-                    ...ctx,
-                    messagingAdapter: e.target
-                      .value as BoundedContext["messagingAdapter"],
-                  }))
-                }
-                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                <option value="">None</option>
-                {messagingAdapterOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
-                Telemetry
-              </label>
-              <select
-                value={activeContext.telemetryProvider || "None"}
-                onChange={(e) =>
-                  updateContext(contextIndex, (ctx) => ({
-                    ...ctx,
-                    telemetryProvider: e.target
-                      .value as unknown as BoundedContext["telemetryProvider"],
-                  }))
-                }
-                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                {telemetryProviderOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+              UI Frontend
+            </label>
+            <select
+              value={activeContext.uiFramework || ""}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  uiFramework: e.target.value as BoundedContext["uiFramework"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+            >
+              {uiFrameworkOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Persistence
+            </label>
+            <select
+              value={activeContext.persistenceAdapter || ""}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  persistenceAdapter: e.target
+                    .value as BoundedContext["persistenceAdapter"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+            >
+              <option value="">None</option>
+              {persistenceAdapterOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Messaging
+            </label>
+            <select
+              value={activeContext.messagingAdapter || ""}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  messagingAdapter: e.target
+                    .value as BoundedContext["messagingAdapter"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+            >
+              <option value="">None</option>
+              {messagingAdapterOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Telemetry
+            </label>
+            <select
+              value={activeContext.telemetryProvider || "None"}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  telemetryProvider: e.target
+                    .value as unknown as BoundedContext["telemetryProvider"],
+                }))
+              }
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+            >
+              {telemetryProviderOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
