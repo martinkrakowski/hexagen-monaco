@@ -46,7 +46,7 @@ export function WorkspaceGovernanceStep({
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
         <div className="space-y-6">
           {/* Workspace Name */}
           <div className="space-y-2">
@@ -122,7 +122,7 @@ export function WorkspaceGovernanceStep({
           </div>
 
           {/* Naming Conventions */}
-          <div className="border-t border-border pt-4">
+          <div className="p-0">
             <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
               Naming Conventions
             </h3>
