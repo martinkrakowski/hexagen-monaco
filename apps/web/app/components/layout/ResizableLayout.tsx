@@ -7,7 +7,7 @@ import {
   PanelResizeHandle,
   ImperativePanelHandle,
 } from "react-resizable-panels";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { ResponsiveTabs, type TabPanel } from "./ResponsiveTabs";
 
@@ -26,7 +26,7 @@ interface PanelHeaderProps {
 function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
   const Icon = side === "left" ? ChevronLeft : ChevronRight;
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 h-12">
       <span className="font-semibold text-sm truncate">{title}</span>
       <button
         type="button"
@@ -95,14 +95,16 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
               side="left"
               onCollapse={collapseLeft}
             />
-            <CardContent className="p-0 h-[calc(100%-2.875rem)] overflow-auto custom-scrollbar">
+            <CardContent className="p-0 h-[calc(100%-3rem)] overflow-auto custom-scrollbar">
               {left}
             </CardContent>
           </Card>
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/40 transition-colors cursor-col-resize rounded-full" />
+        <PanelResizeHandle className="w-3 bg-background hover:bg-accent transition-colors cursor-col-resize flex items-center justify-center">
+          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+        </PanelResizeHandle>
 
         {/* Middle Pane — Main Content / Preview */}
         <Panel defaultSize={50} minSize={30}>
@@ -112,7 +114,9 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/40 transition-colors cursor-col-resize rounded-full" />
+        <PanelResizeHandle className="w-3 bg-background hover:bg-accent transition-colors cursor-col-resize flex items-center justify-center">
+          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+        </PanelResizeHandle>
 
         {/* Right Sidebar — AI / Monaco */}
         <Panel
@@ -132,7 +136,7 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
               side="right"
               onCollapse={collapseRight}
             />
-            <CardContent className="p-0 h-[calc(100%-var(--panel-header-h))] overflow-hidden">
+            <CardContent className="p-0 h-[calc(100%-3rem)] overflow-hidden">
               {right}
             </CardContent>
           </Card>

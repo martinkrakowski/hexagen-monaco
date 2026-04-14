@@ -266,7 +266,7 @@ export default function Home() {
             }
             middle={
               <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-                <CardHeader className="border-b border-border shrink-0 flex flex-row items-center justify-between space-y-0 py-3 px-4">
+                <CardHeader className="border-b border-border shrink-0 flex flex-row items-center justify-between space-y-0 py-3 px-4 h-12">
                   <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                     Architecture Preview
                   </CardTitle>
