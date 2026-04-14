@@ -135,10 +135,16 @@ export function BoundedContextSidebar({
           </div>
         ) : (
           boundedContexts.map((context: BoundedContext) => (
-            <button
+            <div
               key={context.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => handleContextClick(context.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  handleContextClick(context.id);
+                }
+              }}
               className={`relative w-full text-left p-3 border border-border rounded-lg cursor-pointer transition-[border-color,background-color] ${
                 activeContextId === context.id
                   ? "border-primary bg-primary/10"
@@ -217,19 +223,25 @@ export function BoundedContextSidebar({
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     onClick={(e) => {
                       e.stopPropagation();
                       setConfirmDeleteId(context.id);
                     }}
-                    className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        setConfirmDeleteId(context.id);
+                      }
+                    }}
+                    className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                     aria-label="Delete context"
                   >
                     <X aria-hidden="true" className="h-3 w-3" />
-                  </button>
+                  </span>
                 ))}
-            </button>
+            </div>
           ))
         )}
       </div>

@@ -94,10 +94,16 @@ export function PeerMappingSidebar({
             const providerName = getContextName(mapping.providerContext);
 
             return (
-              <button
+              <div
                 key={mappingId}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => onMappingSelect(mappingId)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    onMappingSelect(mappingId);
+                  }
+                }}
                 className={`relative w-full text-left p-3 border border-border rounded-lg cursor-pointer transition-[border-color,background-color] ${
                   activeMappingId === mappingId
                     ? "border-primary bg-primary/10"
@@ -163,19 +169,25 @@ export function PeerMappingSidebar({
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
+                    <span
+                      role="button"
+                      tabIndex={0}
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmDeleteId(mappingId);
                       }}
-                      className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          setConfirmDeleteId(mappingId);
+                        }
+                      }}
+                      className="absolute top-1 right-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                       aria-label="Delete mapping"
                     >
                       <X aria-hidden="true" className="h-3 w-3" />
-                    </button>
+                    </span>
                   ))}
-              </button>
+              </div>
             );
           })
         )}
