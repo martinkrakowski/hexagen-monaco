@@ -1,6 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*", "NODE_ENV"],
+  "globalEnv": [
+    "DEBUG",
+    "NEXT_PUBLIC_LLM_API_KEY",
+    "NEXT_PUBLIC_LLM_BASE_URL",
+    "NEXT_PUBLIC_LLM_MODEL"
+  ],
   "pipeline": {
     "build": {
       "dependsOn": ["^build"],

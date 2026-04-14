@@ -16,6 +16,10 @@ export type {
 
 // Application exports
 export type { MonacoPersistencePort } from "./application/ports/monaco-persistence.port.js";
+export type {
+  WizardPersistencePort,
+  WizardDraft,
+} from "./application/ports/wizard-persistence.port.js";
 
 // Canvas / wizard exports
 export type {

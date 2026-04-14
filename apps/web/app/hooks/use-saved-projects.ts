@@ -97,6 +97,19 @@ export function useSavedProjects() {
     [projects],
   );
 
+  const updateProject = useCallback(
+    (id: string, formState: ProjectConfig, manifestYaml: string): void => {
+      const updated = projects.map((p) =>
+        p.id === id
+          ? { ...p, formState, manifestYaml, updatedAt: Date.now() }
+          : p,
+      );
+      setProjects(updated);
+      writeToStorage(updated);
+    },
+    [projects],
+  );
+
   if (!mounted) {
     return {
       projects: [] as SavedProject[],
@@ -104,6 +117,7 @@ export function useSavedProjects() {
       loadProject: () => undefined,
       deleteProject: () => {},
       renameProject: () => {},
+      updateProject: () => {},
     };
   }
 
@@ -113,5 +127,6 @@ export function useSavedProjects() {
     loadProject,
     deleteProject,
     renameProject,
+    updateProject,
   };
 }

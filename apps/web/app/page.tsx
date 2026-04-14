@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useForm, useWatch, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import yaml from "js-yaml";
@@ -45,6 +45,7 @@ import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
 import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
 import { useSavedProjects } from "@/hooks/use-saved-projects";
+import { useWizardDraft } from "@/hooks/use-wizard-draft";
 import { getLogger } from "@/lib/wire";
 
 export default function Home() {
@@ -54,11 +55,31 @@ export default function Home() {
   const [activeMappingId, setActiveMappingId] = useState<string>("");
   const [viewMode, setViewMode] = useState<"visual" | "code">("visual");
   const [mode, setMode] = useState<"genesis" | "edit">("genesis");
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [showSavedProjects, setShowSavedProjects] = useState(false);
 
-  const { projects, saveProject, loadProject, deleteProject, renameProject } =
-    useSavedProjects();
+  const {
+    projects,
+    saveProject,
+    loadProject,
+    deleteProject,
+    renameProject,
+    updateProject,
+  } = useSavedProjects();
+
+  const {
+    draft,
+    saveDraft,
+    clearDraft,
+    loading: draftLoading,
+  } = useWizardDraft();
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  // Fires resume dialog only once — on initial mount after draft loading completes.
+  // Subsequent draft changes (from autosave) must never re-trigger the dialog.
+  const initialDraftChecked = useRef(false);
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
@@ -102,13 +123,49 @@ export default function Home() {
     ],
   );
 
+  // Show resume dialog once — only when a draft already existed at page load.
+  // Depends only on draftLoading so autosave-triggered draft changes never re-fire it.
+  useEffect(() => {
+    if (!draftLoading && !initialDraftChecked.current) {
+      initialDraftChecked.current = true;
+      if (draft && !hasGenerated) {
+        setShowResumeDialog(true);
+      }
+    }
+  }, [draftLoading, draft, hasGenerated]);
+
+  // Autosave draft after each step completion
+  useEffect(() => {
+    if (currentStepIndex > 0 && !hasGenerated && !draftLoading) {
+      const timeout = setTimeout(() => {
+        saveDraft(form.getValues(), currentStepIndex);
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [currentStepIndex, watchedValues, hasGenerated, draftLoading, saveDraft]);
+
+  // beforeunload warning when draft exists and not generated
+  useEffect(() => {
+    if (draft && !hasGenerated) {
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        e.preventDefault();
+        e.returnValue = "";
+      };
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () =>
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+    }
+  }, [draft, hasGenerated]);
+
   const handleNext = async () => {
     const isValid =
       currentStepIndex !== 1 || (await form.trigger("boundedContexts"));
 
     if (isValid) {
       if (currentStepIndex === 2) setActiveMappingId("");
-      setCurrentStepIndex((i) => Math.min(i + 1, totalSteps - 1));
+      const nextStep = Math.min(currentStepIndex + 1, totalSteps - 1);
+      setCurrentStepIndex(nextStep);
+      saveDraft(form.getValues(), nextStep);
     }
   };
 
@@ -121,13 +178,15 @@ export default function Home() {
     setShowSavedProjects(true);
   };
 
-  const handleLoadProject = (id: string) => {
+  const handleLoadProject = async (id: string) => {
     const saved = loadProject(id);
     if (saved) {
       form.reset(saved.formState);
       setMode("edit");
+      setLoadedProjectId(id);
       setCurrentStepIndex(0);
       setShowSavedProjects(false);
+      await clearDraft();
     }
   };
 
@@ -188,6 +247,8 @@ export default function Home() {
         wizardToManifest(wizardData as Parameters<typeof wizardToManifest>[0]),
       );
       saveProject(projectName, formData, manifestYaml);
+      await clearDraft();
+      setHasGenerated(true);
 
       // In a real app, we might show a success notification or navigate to results
     } catch (error) {
@@ -217,9 +278,71 @@ export default function Home() {
     [form],
   );
 
+  const handleResumeDraft = () => {
+    if (draft) {
+      form.reset(draft.formState as ProjectConfig);
+      setCurrentStepIndex(0);
+      setMode("edit");
+      setShowResumeDialog(false);
+      setShowSavedProjects(false);
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    await clearDraft();
+    setShowResumeDialog(false);
+  };
+
+  // Generates a manifestYaml snapshot from current form values (best-effort).
+  const buildManifestYaml = () => {
+    const formData = form.getValues();
+    const data = {
+      boundedContexts: formData.boundedContexts || [],
+      externalContexts: formData.externalContexts || [],
+      peerMappings: formData.peerMappings || [],
+      workspaceScope: formData.governance?.workspaceName || "",
+      withLlm: !!formData.withLlm,
+      withBlockchain: !!formData.withBlockchain,
+    };
+    return yaml.dump(
+      wizardToManifest(data as Parameters<typeof wizardToManifest>[0]),
+    );
+  };
+
+  const handleNewProjectClick = () => {
+    setShowNewProjectDialog(true);
+  };
+
+  const handleSaveAndNew = () => {
+    if (loadedProjectId) {
+      updateProject(loadedProjectId, form.getValues(), buildManifestYaml());
+    }
+    form.reset(emptyFormValues);
+    setCurrentStepIndex(0);
+    setMode("genesis");
+    setLoadedProjectId(null);
+    setHasGenerated(false);
+    setShowNewProjectDialog(false);
+    setShowSavedProjects(false);
+  };
+
+  const handleDiscardAndNew = () => {
+    form.reset(emptyFormValues);
+    setCurrentStepIndex(0);
+    setMode("genesis");
+    setLoadedProjectId(null);
+    setHasGenerated(false);
+    setShowNewProjectDialog(false);
+    setShowSavedProjects(false);
+  };
+
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-      <Header onLoadManifest={() => setShowLoadDialog(true)} mode={mode} />
+      <Header
+        onLoadManifest={() => setShowLoadDialog(true)}
+        isEditing={mode === "edit"}
+        onNewProject={handleNewProjectClick}
+      />
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <FormProvider {...form}>
@@ -234,6 +357,10 @@ export default function Home() {
                       onDelete={deleteProject}
                       onRename={renameProject}
                       onBackToWizard={() => setShowSavedProjects(false)}
+                      draft={draft}
+                      onResumeDraft={handleResumeDraft}
+                      onDiscardDraft={handleDiscardDraft}
+                      loadedProjectId={loadedProjectId}
                     />
                   ) : (
                     <>
@@ -310,6 +437,112 @@ export default function Home() {
             </DialogDescription>
           </DialogHeader>
           <FileDropZone onFileLoaded={handleManifestLoaded} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showResumeDialog}
+        onClose={() => setShowResumeDialog(false)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resume Your Project?</DialogTitle>
+            <DialogDescription>
+              {draft &&
+                (draft.formState as ProjectConfig).governance
+                  ?.workspaceName && (
+                  <span className="block font-medium text-foreground mb-1">
+                    {
+                      (draft.formState as ProjectConfig).governance
+                        ?.workspaceName
+                    }
+                  </span>
+                )}
+              You have an unsaved project last edited{" "}
+              {draft
+                ? new Intl.DateTimeFormat("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  }).format(new Date(draft.updatedAt))
+                : "recently"}
+              . It was last saved on{" "}
+              <span className="font-medium text-foreground">
+                Step {(draft?.savedAtStep ?? 0) + 1} of {totalSteps}
+                {" — "}
+                {wizardSteps[draft?.savedAtStep ?? 0]?.title ?? ""}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <button
+              type="button"
+              onClick={handleResumeDraft}
+              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium"
+            >
+              Resume — Step {(draft?.savedAtStep ?? 0) + 1} of {totalSteps}
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="flex-1 px-4 py-2 border border-input bg-background rounded-md hover:bg-muted text-sm"
+            >
+              Discard
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            Clicking &quot;Discard&quot; will permanently delete your unsaved
+            progress.
+          </p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showNewProjectDialog}
+        onClose={() => setShowNewProjectDialog(false)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start a New Project?</DialogTitle>
+            <DialogDescription>
+              {loadedProjectId &&
+                (() => {
+                  const p = loadProject(loadedProjectId);
+                  return p ? (
+                    <span className="block font-medium text-foreground mb-1">
+                      {p.formState.governance?.workspaceName || p.name}
+                    </span>
+                  ) : null;
+                })()}
+              You are currently editing a project. Would you like to save your
+              changes before starting a new one, or discard them?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 mt-4">
+            <button
+              type="button"
+              onClick={handleSaveAndNew}
+              className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium"
+            >
+              Save Changes &amp; Start New
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardAndNew}
+              className="w-full px-4 py-2 border border-destructive text-destructive rounded-md hover:bg-destructive/10 text-sm"
+            >
+              Discard Changes &amp; Start New
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewProjectDialog(false)}
+              className="w-full px-4 py-2 border border-input bg-background rounded-md hover:bg-muted text-sm"
+            >
+              Cancel
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

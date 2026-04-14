@@ -1,14 +1,19 @@
 "use client";
 
 import { useTheme } from "@/hooks/use-theme";
-import { Sun, Moon, Upload } from "lucide-react";
+import { Sun, Moon, Upload, PlusCircle } from "lucide-react";
 
 interface HeaderProps {
   onLoadManifest: () => void;
-  mode: "genesis" | "edit";
+  onNewProject?: () => void;
+  isEditing?: boolean;
 }
 
-export const Header = ({ onLoadManifest, mode }: HeaderProps) => {
+export const Header = ({
+  onLoadManifest,
+  onNewProject,
+  isEditing = false,
+}: HeaderProps) => {
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -20,11 +25,19 @@ export const Header = ({ onLoadManifest, mode }: HeaderProps) => {
         <h1 className="text-lg font-semibold tracking-tight">HexaGen</h1>
       </div>
       <div className="flex items-center gap-2">
-        {mode === "edit" && (
-          <span className="text-xs font-medium bg-warning/10 text-warning px-2 py-1 rounded border border-warning/20">
-            Editing loaded project
+        {isEditing && (
+          <span className="text-xs font-medium text-muted-foreground px-2 py-1 border border-border rounded-md">
+            Editing
           </span>
         )}
+        <button
+          onClick={onNewProject}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          title="Save current project and start a new one"
+        >
+          <PlusCircle className="w-3.5 h-3.5" />
+          New Project
+        </button>
         <button
           onClick={onLoadManifest}
           className="p-2 rounded-md hover:bg-muted transition-colors"

@@ -366,6 +366,7 @@ bounded_contexts:
     depends_on:
       - monaco-orchestration
       - visualization
+      - wizard-orchestration
     wiring:
       - Intent Bus dispatches to projections/use-case factories only
       - >-

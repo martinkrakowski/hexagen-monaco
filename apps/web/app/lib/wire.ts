@@ -5,8 +5,11 @@
 // Console is intentional here: this file implements LoggerPort and emits
 // startup diagnostics. All other application code must use LoggerPort instead.
 
-import type { MonacoPersistencePort } from "@hexagen/shared";
-import type { DownloadProjectPort, Project } from "@hexagen/web-driver";
+import type {
+  MonacoPersistencePort,
+  WizardPersistencePort,
+} from "@hexagen/shared";
+import type { DownloadProjectPort } from "@hexagen/web-driver";
 import type { LoggerPort } from "@hexagen/shared";
 import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
 import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
@@ -65,9 +68,16 @@ export const wireDependencies = () => {
   const registry = new Map<string, unknown>();
 
   // Monaco persistence port → concrete localStorage adapter
+  const localStorageAdapter = new LocalStoragePersistenceAdapter();
   registry.set(
     "MonacoPersistencePort",
-    new LocalStoragePersistenceAdapter() satisfies MonacoPersistencePort,
+    localStorageAdapter satisfies MonacoPersistencePort,
+  );
+
+  // Wizard persistence port → same localStorage adapter
+  registry.set(
+    "WizardPersistencePort",
+    localStorageAdapter satisfies WizardPersistencePort,
   );
 
   // Logger port → console logger for web app
@@ -75,7 +85,7 @@ export const wireDependencies = () => {
 
   // Download project port → not yet implemented; returns structured failure
   registry.set("DownloadProjectPort", {
-    downloadProject: async (_project: Project) => {
+    downloadProject: async () => {
       return {
         success: false as const,
         error: {
@@ -142,3 +152,6 @@ export const getIntentBus = () =>
 
 export const getLLMProvider = () =>
   dependencies.get<LLMProviderPort>("LLMProviderPort");
+
+export const getWizardPersistence = () =>
+  dependencies.get<WizardPersistencePort>("WizardPersistencePort");
