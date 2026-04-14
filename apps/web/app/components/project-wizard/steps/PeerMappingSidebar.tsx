@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFormContext } from "react-hook-form";
 import { AlertTriangle, ArrowRight, Plus, X } from "lucide-react";
 import type {
@@ -36,6 +36,15 @@ export function PeerMappingSidebar({
     const ctx = boundedContexts.find((c: { id: string }) => c.id === id);
     return ctx?.name || "Unnamed";
   };
+
+  useEffect(() => {
+    if (peerMappings.length > 0 && !activeMappingId) {
+      const firstMapping = peerMappings[0];
+      onMappingSelect(
+        `${firstMapping.consumerContext}-${firstMapping.providerContext}`,
+      );
+    }
+  }, [peerMappings, activeMappingId, onMappingSelect]);
 
   const handleAddMapping = () => {
     if (boundedContexts.length < 2) return;
