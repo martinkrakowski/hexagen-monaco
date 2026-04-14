@@ -30,6 +30,12 @@ export function BoundedContextSidebar({
     }
   }, [editingContextId]);
 
+  useEffect(() => {
+    if (boundedContexts.length > 0 && !activeContextId) {
+      onContextSelect(boundedContexts[0].id);
+    }
+  }, [boundedContexts, activeContextId, onContextSelect]);
+
   const handleAddContext = () => {
     const newContext: BoundedContext = {
       id: uuidv4(),
@@ -63,6 +69,7 @@ export function BoundedContextSidebar({
     const newContexts = [...boundedContexts, newContext];
     setValue("boundedContexts", newContexts);
     setEditingContextId(newContext.id);
+    onContextSelect(newContext.id);
   };
 
   const handleDeleteContext = (contextId: string) => {
