@@ -22,7 +22,6 @@ import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
 import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
 import { CodeView } from "@/components/code-view/CodeView";
-import { useSharedState } from "@/hooks/use-shared-state";
 
 import {
   emptyFormValues,
@@ -121,16 +120,6 @@ export default function Home() {
       watchedValues.withBlockchain,
     ],
   );
-
-  // Emit wizard-change events so all panels stay in sync
-  const { emitWizardChange } = useSharedState();
-  const wizardDataRef = useRef(wizardData);
-  useEffect(() => {
-    // Skip the initial render — only emit on actual changes
-    if (wizardDataRef.current === wizardData) return;
-    wizardDataRef.current = wizardData;
-    emitWizardChange({ type: "wizard-change", data: wizardData });
-  }, [wizardData, emitWizardChange]);
 
   // Show resume dialog once — only when a draft already existed at page load.
   // Depends only on draftLoading so autosave-triggered draft changes never re-fire it.
