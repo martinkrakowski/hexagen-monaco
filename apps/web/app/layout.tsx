@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider } from "./components/providers/AuthProvider";
+import { SharedStateProvider } from "@/hooks/use-shared-state";
 
 /*
  * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
@@ -66,7 +67,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <SharedStateProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </SharedStateProvider>
         </ThemeProvider>
       </body>
     </html>

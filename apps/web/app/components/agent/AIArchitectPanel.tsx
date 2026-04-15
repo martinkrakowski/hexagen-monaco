@@ -1,11 +1,13 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { AgentChatPanel } from "./AgentChatPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
-import { Bot, FileText } from "lucide-react";
+import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
+import { Bot, FileText, RefreshCw } from "lucide-react";
 
 interface AIArchitectPanelProps {
   onSendMessage?: (message: string) => Promise<void>;
@@ -17,6 +19,11 @@ export function AIArchitectPanel({
   isLoading = false,
 }: AIArchitectPanelProps) {
   const { data, isLoading: isGovernanceLoading, refresh } = useGovernanceData();
+  const [lastCodeUpdate, setLastCodeUpdate] = useState<string | null>(null);
+
+  useCodeChangeSubscription((event) => {
+    setLastCodeUpdate(new Date().toLocaleTimeString());
+  }, []);
 
   return (
     <Card className="h-full border-0 rounded-none flex flex-col bg-card">
@@ -34,13 +41,21 @@ export function AIArchitectPanel({
 
         <CardContent className="flex-1 p-0 overflow-hidden h-full">
           <Tabs.Content value="governance" className="h-full">
-            <AIGovernancePanel
-              violations={data.violations}
-              suggestions={data.suggestions}
-              portAdapterStatus={data.portAdapterStatus}
-              onRefresh={refresh}
-              isLoading={isGovernanceLoading}
-            />
+            <div className="relative h-full">
+              {lastCodeUpdate && (
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground bg-muted/80 rounded-md backdrop-blur-sm">
+                  <RefreshCw className="h-3 w-3" />
+                  Updated: {lastCodeUpdate}
+                </div>
+              )}
+              <AIGovernancePanel
+                violations={data.violations}
+                suggestions={data.suggestions}
+                portAdapterStatus={data.portAdapterStatus}
+                onRefresh={refresh}
+                isLoading={isGovernanceLoading}
+              />
+            </div>
           </Tabs.Content>
           <Tabs.Content value="chat" className="h-full">
             <AgentChatPanel

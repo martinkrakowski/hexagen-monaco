@@ -4574,6 +4574,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"eslint-plugin-turbo@npm:^2.9.6":
+  version: 2.9.6
+  resolution: "eslint-plugin-turbo@npm:2.9.6"
+  dependencies:
+    dotenv: "npm:16.0.3"
+  peerDependencies:
+    eslint: ">6.6.0"
+    turbo: ">2.0.0"
+  checksum: 10c0/3ed7b28f1165e209e316025998ff715a0bf1251776f5eb40b749726c0bf957670fe4a79c25f18b526c565321bec233789dcdbcec8a2f2b093f80e52c23d8cd47
+  languageName: node
+  linkType: hard
+
 "eslint-scope@npm:^7.2.2":
   version: 7.2.2
   resolution: "eslint-scope@npm:7.2.2"
@@ -5602,6 +5614,7 @@ __metadata:
     eslint-config-prettier: "npm:^10.1.8"
     eslint-config-turbo: "npm:^1.13.3"
     eslint-plugin-import: "npm:^2.29.1"
+    eslint-plugin-turbo: "npm:^2.9.6"
     husky: "npm:^9.1.7"
     jsdom: "npm:^29.0.0"
     lint-staged: "npm:^16.4.0"

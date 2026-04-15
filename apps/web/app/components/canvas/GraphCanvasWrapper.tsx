@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCanvasState } from "../../hooks/use-canvas-state";
+import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
 import { HexagonCanvas, CanvasToolbar, NodeEditorDialog } from "./index";
 import type { Result, WizardData } from "@hexagen/shared";
 
@@ -19,6 +20,11 @@ export function GraphCanvasWrapper({
   const [exportHandler, setExportHandler] = useState<
     (() => Promise<Result<Blob, Error>>) | null
   >(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useCodeChangeSubscription(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   const handleExportClick = useCallback(
     (handler: () => Promise<Result<Blob, Error>>) => {
@@ -77,7 +83,7 @@ export function GraphCanvasWrapper({
 
   return (
     <ReactFlowProvider>
-      <div className="w-full h-full min-h-[400px] relative">
+      <div key={refreshKey} className="w-full h-full min-h-[400px] relative">
         <HexagonCanvas
           nodes={state.nodes}
           edges={state.edges}
