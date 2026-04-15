@@ -12,6 +12,7 @@ import {
 } from "@/hooks/use-shared-state";
 import { Bot, FileText, RefreshCw, Code2 } from "lucide-react";
 import { MonacoEditorWrapper } from "@/components/monaco/MonacoEditorWrapper";
+import { EditableMonaco } from "@/components/monaco/EditableMonaco";
 
 interface AIArchitectPanelProps {
   onSendMessage?: (message: string) => Promise<void>;
@@ -50,8 +51,8 @@ export function AIArchitectPanel({
 
         <CardContent className="flex-1 p-0 overflow-hidden h-full">
           <Tabs.Content value="editor" className="h-full">
-            <MonacoEditorWrapper
-              initialBuffer={lastCodeChange?.content || ""}
+            <EditableMonaco
+              initialContent={lastCodeChange?.content || ""}
               sessionId="ai-panel-editor"
               language="yaml"
             />
