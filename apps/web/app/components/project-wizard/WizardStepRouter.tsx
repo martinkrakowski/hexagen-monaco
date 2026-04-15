@@ -1,14 +1,11 @@
 import {
   WorkspaceGovernanceStep,
   BoundedContextStep,
-  BoundedContextSidebar,
   PeerContextMappingStep,
-  PeerMappingSidebar,
   PortConfigurationStep,
   SummaryStep,
   GitHubExportStep,
 } from "@/components/project-wizard/steps";
-import { SidebarStepLayout } from "./SidebarStepLayout";
 import { wizardSteps } from "./config";
 
 // We define exactly what the router needs from the parent
@@ -62,47 +59,31 @@ export function WizardStepRouter({
       );
     case 1:
       return (
-        <SidebarStepLayout
-          sidebar={
-            <BoundedContextSidebar
-              activeContextId={activeContextId}
-              onContextSelect={onContextSelect}
-            />
-          }
-        >
-          <BoundedContextStep
-            onNext={onNext}
-            onBack={onBack}
-            canProceed={canProceed}
-            activeContextId={activeContextId}
-            currentStep={2}
-            totalSteps={totalSteps}
-            title={title}
-            description={description}
-          />
-        </SidebarStepLayout>
+        <BoundedContextStep
+          onNext={onNext}
+          onBack={onBack}
+          canProceed={canProceed}
+          activeContextId={activeContextId}
+          onContextSelect={onContextSelect}
+          currentStep={2}
+          totalSteps={totalSteps}
+          title={title}
+          description={description}
+        />
       );
     case 2:
       return (
-        <SidebarStepLayout
-          sidebar={
-            <PeerMappingSidebar
-              activeMappingId={activeMappingId}
-              onMappingSelect={onMappingSelect}
-            />
-          }
-        >
-          <PeerContextMappingStep
-            onNext={onNext}
-            onBack={onBack}
-            canProceed={canProceed}
-            activeMappingId={activeMappingId}
-            currentStep={3}
-            totalSteps={totalSteps}
-            title={title}
-            description={description}
-          />
-        </SidebarStepLayout>
+        <PeerContextMappingStep
+          onNext={onNext}
+          onBack={onBack}
+          canProceed={canProceed}
+          activeMappingId={activeMappingId}
+          onMappingSelect={onMappingSelect}
+          currentStep={3}
+          totalSteps={totalSteps}
+          title={title}
+          description={description}
+        />
       );
     case 3:
       return (
