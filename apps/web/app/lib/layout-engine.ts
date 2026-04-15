@@ -58,10 +58,10 @@ const LAYOUT_CONFIG = {
   USECASES_NODE_Y: 340,
 
   // Satellite/peer hexagon inner node positions (360px hex - at bottom, spread apart)
-  SATELLITE_DOMAIN_X: 50,
-  SATELLITE_DOMAIN_Y: 248,
-  SATELLITE_USECASES_X: 240,
-  SATELLITE_USECASES_Y: 248,
+  SATELLITE_DOMAIN_X: 100,
+  SATELLITE_DOMAIN_Y: 280,
+  SATELLITE_USECASES_X: 290,
+  SATELLITE_USECASES_Y: 280,
 
   // Entity satellites positioning (root hex)
   ENTITY_ROW_HEIGHT: 120,
@@ -150,11 +150,15 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     const valueObjectItems = ctx.valueObjects ?? [];
     const eventItems = ctx.domainEvents ?? [];
 
+    // Stagger bounded contexts on Y axis: 0, -150, +150, -150, +150...
+    // This creates a staggered visual rendering allowing lines to be easily seen
+    const yStagger = index === 0 ? 0 : index % 2 === 0 ? 150 : -150;
+
     // Calculate position for each context (horizontal spacing using config constants)
     const contextOffsetX = (index - (contextCount - 1) / 2) * contextSpacing;
     const hexX =
       groupCenterX + contextOffsetX + LAYOUT_CONFIG.HEX_POSITION_OFFSET_X;
-    const hexY = groupCenterY + LAYOUT_CONFIG.HEX_POSITION_OFFSET_Y;
+    const hexY = groupCenterY + LAYOUT_CONFIG.HEX_POSITION_OFFSET_Y + yStagger;
 
     // Hexagon - root is ROOT_HEX_DIMENSION, non-root (satellite) uses SATELLITE_HEX_DIMENSION
     const hexDimension =
@@ -597,7 +601,7 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
         animated: true,
         style: {
           stroke: "#64748b",
-          strokeWidth: "2",
+          strokeWidth: "4",
           strokeDasharray: "5,5",
         },
         markerEnd: "url(#arrow)",
