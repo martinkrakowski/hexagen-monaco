@@ -9,6 +9,7 @@ export class LockFile {
   private readonly fsImpl: typeof fs;
   private readonly logger: typeof console;
   private locked = false;
+  private handle: Awaited<ReturnType<typeof fs.open>> | null = null;
 
   constructor(
     private readonly workspaceRoot: string,
@@ -26,7 +27,7 @@ export class LockFile {
     }
 
     try {
-      await this.fsImpl.open(this.lockPath, "wx");
+      this.handle = await this.fsImpl.open(this.lockPath, "wx");
       this.locked = true;
       this.logger.debug("[LockFile] Acquired lock");
     } catch (err) {
@@ -46,6 +47,10 @@ export class LockFile {
     }
 
     try {
+      if (this.handle) {
+        await this.handle.close();
+        this.handle = null;
+      }
       await this.fsImpl.unlink(this.lockPath);
       this.locked = false;
       this.logger.debug("[LockFile] Released lock");
@@ -53,6 +58,7 @@ export class LockFile {
       if (err instanceof Error && "code" in err && err.code === "ENOENT") {
         this.logger.warn("[LockFile] Lock file already removed");
         this.locked = false;
+        this.handle = null;
         return;
       }
       throw err;
@@ -61,12 +67,16 @@ export class LockFile {
 
   async forceRelease(): Promise<void> {
     try {
+      if (this.handle) {
+        await this.handle.close();
+        this.handle = null;
+      }
       await this.fsImpl.unlink(this.lockPath);
       this.locked = false;
       this.logger.debug("[LockFile] Force released lock");
     } catch {
-      // Ignore - lock may not exist
       this.locked = false;
+      this.handle = null;
     }
   }
 }
