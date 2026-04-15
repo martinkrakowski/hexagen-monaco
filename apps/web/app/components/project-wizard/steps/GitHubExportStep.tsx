@@ -122,7 +122,7 @@ export const GitHubExportStep = ({
         title={title || "GitHub Export"}
         description={description || "Configure GitHub export."}
       />
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6">
         <Card className="w-full border border-border">
           <CardHeader>
             <CardTitle className="text-lg font-medium">
@@ -131,8 +131,8 @@ export const GitHubExportStep = ({
           </CardHeader>
 
           <CardContent className="space-y-6">
-            <div className="border border-border rounded-lg p-4 bg-muted/40">
-              <div className="flex items-center justify-between gap-4">
+            <div className="border border-border rounded-lg p-2 bg-muted/40">
+              <div className="space-y-3">
                 <div>
                   <p className="text-sm font-medium">GitHub Connection</p>
                   <p className="text-xs text-muted-foreground">
@@ -143,19 +143,22 @@ export const GitHubExportStep = ({
                 </div>
 
                 {isAuthenticated ? (
-                  <PrimaryButton
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={authPending}
-                    onClick={handleSignOut}
-                  >
-                    {authPending ? "Signing out..." : "Sign Out"}
-                  </PrimaryButton>
+                  <div className="flex justify-end">
+                    <PrimaryButton
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={authPending}
+                      onClick={handleSignOut}
+                    >
+                      {authPending ? "Signing out..." : "Sign Out"}
+                    </PrimaryButton>
+                  </div>
                 ) : (
                   <PrimaryButton
                     type="button"
                     size="sm"
+                    className="w-full"
                     disabled={authPending}
                     onClick={handleSignIn}
                   >
