@@ -33,7 +33,51 @@ interface BoundedContextData extends Record<string, unknown> {
   parentId?: string;
 }
 
-// Two-zone card styles for satellite nodes (entity, port, use-case, adapter)
+const PORT_CATEGORY_COLORS: Record<
+  "driving" | "driven" | "presentation" | "infrastructure",
+  {
+    headerBg: string;
+    bodyBg: string;
+    border: string;
+    handleColor: string;
+    headerText: string;
+    hexColor: string;
+  }
+> = {
+  driving: {
+    headerBg: "bg-blue-600",
+    bodyBg: "bg-card",
+    border: "border-blue-500/30",
+    handleColor: "!bg-blue-500",
+    headerText: "text-white",
+    hexColor: "#3b82f6",
+  },
+  driven: {
+    headerBg: "bg-orange-600",
+    bodyBg: "bg-card",
+    border: "border-orange-500/30",
+    handleColor: "!bg-orange-500",
+    headerText: "text-white",
+    hexColor: "#f97316",
+  },
+  presentation: {
+    headerBg: "bg-rose-600",
+    bodyBg: "bg-card",
+    border: "border-rose-500/30",
+    handleColor: "!bg-rose-500",
+    headerText: "text-white",
+    hexColor: "#f43f5e",
+  },
+  infrastructure: {
+    headerBg: "bg-teal-600",
+    bodyBg: "bg-card",
+    border: "border-teal-500/30",
+    handleColor: "!bg-teal-500",
+    headerText: "text-white",
+    hexColor: "#14b8a6",
+  },
+};
+
 const SATELLITE_NODE_STYLES: Record<
   "entity" | "port" | "use-case" | "adapter",
   {
@@ -73,6 +117,16 @@ const SATELLITE_NODE_STYLES: Record<
     headerText: "text-white",
   },
 };
+
+type PortCategoryKey = keyof typeof PORT_CATEGORY_COLORS;
+
+function getPortCategoryStyle(
+  category: string | undefined,
+): (typeof PORT_CATEGORY_COLORS)[PortCategoryKey] | null {
+  if (!category) return null;
+  const key = category.toLowerCase() as PortCategoryKey;
+  return PORT_CATEGORY_COLORS[key] ?? null;
+}
 
 const DOMAIN_COMPASS = [
   {
@@ -241,14 +295,17 @@ function UnifiedBoundedContextComponent({
       const showNorth = side === "north";
       const showSouth = side === "south";
 
+      const categoryStyle = getPortCategoryStyle(data.category);
+      const stylesToUse = categoryStyle ?? styles;
+
       return (
         <div
           style={{ width: 140, height: 72 }}
-          className={`relative rounded-lg border overflow-hidden transition-colors select-none ${styles.bodyBg} ${styles.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
+          className={`relative rounded-lg border overflow-hidden transition-colors select-none ${stylesToUse.bodyBg} ${stylesToUse.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
         >
           {/* Header zone — category as label */}
           <div
-            className={`h-7 ${styles.headerBg} flex items-center justify-center ${styles.headerText} text-xs font-semibold truncate px-2`}
+            className={`h-7 ${stylesToUse.headerBg} flex items-center justify-center ${stylesToUse.headerText} text-xs font-semibold truncate px-2`}
           >
             {data.category ? String(data.category).toUpperCase() : "PORT"}
           </div>
@@ -264,7 +321,7 @@ function UnifiedBoundedContextComponent({
               type="source"
               position={Position.Top}
               id="north"
-              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
+              className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
             />
           )}
           {showSouth && (
@@ -272,7 +329,7 @@ function UnifiedBoundedContextComponent({
               type="target"
               position={Position.Bottom}
               id="south"
-              className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
+              className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
             />
           )}
           {!showNorth && !showSouth && (
@@ -281,13 +338,13 @@ function UnifiedBoundedContextComponent({
                 type="target"
                 position={Position.Left}
                 id="west"
-                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
+                className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
               />
               <Handle
                 type="source"
                 position={Position.Right}
                 id="east"
-                className={`${styles.handleColor} !w-3 !h-3 border-2 border-background`}
+                className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
               />
             </>
           )}
@@ -538,5 +595,5 @@ const UnifiedBoundedContext = memo(UnifiedBoundedContextComponent);
 
 UnifiedBoundedContext.displayName = "UnifiedBoundedContext";
 
-export { UnifiedBoundedContext };
+export { UnifiedBoundedContext, PORT_CATEGORY_COLORS };
 export type { UnifiedBoundedContextProps };
