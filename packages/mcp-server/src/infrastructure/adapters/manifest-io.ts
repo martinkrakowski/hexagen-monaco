@@ -35,6 +35,10 @@ export async function writeManifestDocument(
   manifest: ManifestDocument,
 ): Promise<void> {
   const manifestPath = path.join(workspaceRoot, ".architecture/manifest.yaml");
-  const content = yaml.dump(manifest, { indent: 2 });
+  const content = yaml.dump(manifest, {
+    indent: 2,
+    sortKeys: false,
+    lineWidth: 0,
+  });
   await fs.writeFile(manifestPath, content, "utf-8");
 }

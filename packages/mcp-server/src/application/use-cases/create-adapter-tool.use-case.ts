@@ -1,4 +1,5 @@
-import type { SyncEnginePort } from "../ports/out/sync-engine.port.js";
+import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
+import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
 export interface CreateAdapterInput {
   port_name: string;
@@ -13,11 +14,18 @@ export interface CreateAdapterOutput {
 }
 
 export class CreateAdapterToolUseCase {
-  constructor(private readonly syncEnginePort: SyncEnginePort) {}
+  constructor(
+    private readonly scaffoldingPort: ScaffoldingPort,
+    private readonly manifestWritePort: ManifestWritePort,
+  ) {}
 
   async execute(input: CreateAdapterInput): Promise<CreateAdapterOutput> {
     if (!input.port_name.trim() || !input.infrastructure_name.trim()) {
       throw new Error("port_name and infrastructure_name are required");
+    }
+
+    if (!/Port$/.test(input.port_name)) {
+      throw new Error("port_name must end with 'Port' (e.g., 'PaymentPort')");
     }
 
     if (input.dry_run ?? false) {
@@ -27,19 +35,29 @@ export class CreateAdapterToolUseCase {
       };
     }
 
-    const result = await this.syncEnginePort.createAdapter({
+    const fileResult = await this.scaffoldingPort.createAdapter({
       portName: input.port_name,
       infrastructureName: input.infrastructure_name,
     });
 
-    if (!result.success) {
-      throw result.error;
+    if (!fileResult.success) {
+      throw fileResult.error;
+    }
+
+    const registerResult = await this.manifestWritePort.registerAdapter({
+      contextName: input.infrastructure_name,
+      adapterName: input.port_name.replace(/Port$/, "") + "Adapter",
+      portName: input.port_name,
+    });
+
+    if (!registerResult.success) {
+      throw registerResult.error;
     }
 
     return {
       dryRun: false,
-      fileCreated: result.value.fileCreated,
-      message: `Adapter for ${input.port_name} created.`,
+      fileCreated: fileResult.value.fileCreated,
+      message: `Adapter for ${input.port_name} created and registered in manifest.`,
     };
   }
 }
