@@ -67,11 +67,15 @@ export function PeerContextMappingStep({
       (m: PeerContextMapping) => getMappingId(m) === activeMappingId,
     );
     if (activeIndex < 0) return;
+    const updatedMapping = { ...peerMappings[activeIndex], ...updates };
     const newMappings = peerMappings.map(
       (mapping: PeerContextMapping, i: number) =>
-        i === activeIndex ? { ...mapping, ...updates } : mapping,
+        i === activeIndex ? updatedMapping : mapping,
     );
     setValue("peerMappings", newMappings);
+    if (updates.consumerContext || updates.providerContext) {
+      onMappingSelect?.(getMappingId(updatedMapping));
+    }
   };
 
   const getContextName = (id: string): string => {
