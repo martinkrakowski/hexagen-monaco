@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { AgentChatPanel } from "./AgentChatPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
+import { useSharedState } from "@/hooks/use-shared-state";
 import { Bot, FileText } from "lucide-react";
 
 interface AIArchitectPanelProps {
@@ -17,6 +19,23 @@ export function AIArchitectPanel({
   isLoading = false,
 }: AIArchitectPanelProps) {
   const { data, isLoading: isGovernanceLoading, refresh } = useGovernanceData();
+  const { subscribe } = useSharedState();
+
+  // Auto-refresh governance data when any panel emits a change.
+  // Debounce to avoid hammering the API during rapid wizard edits.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        refresh();
+      }, 1000);
+    });
+    return () => {
+      unsubscribe();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [subscribe, refresh]);
 
   return (
     <Card className="h-full border-0 rounded-none flex flex-col bg-card">
