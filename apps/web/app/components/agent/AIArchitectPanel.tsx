@@ -6,8 +6,12 @@ import { Tabs } from "@/components/ui/Tabs";
 import { AgentChatPanel } from "./AgentChatPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
-import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
-import { Bot, FileText, RefreshCw } from "lucide-react";
+import {
+  useCodeChangeSubscription,
+  useSharedState,
+} from "@/hooks/use-shared-state";
+import { Bot, FileText, RefreshCw, Code2 } from "lucide-react";
+import { MonacoEditorWrapper } from "@/components/monaco/MonacoEditorWrapper";
 
 interface AIArchitectPanelProps {
   onSendMessage?: (message: string) => Promise<void>;
@@ -20,6 +24,7 @@ export function AIArchitectPanel({
 }: AIArchitectPanelProps) {
   const { data, isLoading: isGovernanceLoading, refresh } = useGovernanceData();
   const [lastCodeUpdate, setLastCodeUpdate] = useState<string | null>(null);
+  const { lastCodeChange } = useSharedState();
 
   useCodeChangeSubscription((event) => {
     setLastCodeUpdate(new Date().toLocaleTimeString());
@@ -27,8 +32,12 @@ export function AIArchitectPanel({
 
   return (
     <Card className="h-full border-0 rounded-none flex flex-col bg-card">
-      <Tabs.Root defaultTab="governance" className="flex-1 overflow-hidden">
+      <Tabs.Root defaultTab="editor" className="flex-1 overflow-hidden">
         <Tabs.List>
+          <Tabs.Trigger value="editor">
+            <Code2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Editor</span>
+          </Tabs.Trigger>
           <Tabs.Trigger value="governance">
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Governance</span>
@@ -40,6 +49,13 @@ export function AIArchitectPanel({
         </Tabs.List>
 
         <CardContent className="flex-1 p-0 overflow-hidden h-full">
+          <Tabs.Content value="editor" className="h-full">
+            <MonacoEditorWrapper
+              initialBuffer={lastCodeChange?.content || ""}
+              sessionId="ai-panel-editor"
+              language="yaml"
+            />
+          </Tabs.Content>
           <Tabs.Content value="governance" className="h-full">
             <div className="relative h-full">
               {lastCodeUpdate && (
