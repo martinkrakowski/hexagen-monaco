@@ -6,6 +6,8 @@ import type {
   BoundedContext,
   PortConfiguration,
 } from "@hexagen/project-configuration";
+import { StepHeader } from "./StepHeader";
+import { WizardFooter } from "../WizardFooter";
 
 interface PortConfigurationStepProps {
   onNext: () => void;
@@ -13,6 +15,8 @@ interface PortConfigurationStepProps {
   canProceed: boolean;
   currentStep?: number;
   totalSteps?: number;
+  title?: string;
+  description?: string;
 }
 
 const INBOUND_PORTS = [
@@ -34,7 +38,9 @@ export function PortConfigurationStep({
   onBack,
   canProceed,
   currentStep = 4,
-  totalSteps = 4,
+  totalSteps = 6,
+  title,
+  description,
 }: PortConfigurationStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
@@ -81,46 +87,40 @@ export function PortConfigurationStep({
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-card overflow-hidden">
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
-          <div className="space-y-6">
-            <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
-              <p className="text-sm text-muted-foreground">
-                No bounded contexts available. Add contexts first.
-              </p>
-            </div>
+      <div className="flex flex-col h-full bg-card">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title={title || "Ports Configuration"}
+          description={description || "Configure ports for each context."}
+        />
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 px-4">
+          <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30">
+            <p className="text-sm text-muted-foreground">
+              No bounded contexts available. Add contexts first.
+            </p>
           </div>
         </div>
-
-        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
-          >
-            Back
-          </button>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
-            <button
-              type="button"
-              onClick={onNext}
-              disabled={!canProceed}
-              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </footer>
+        <WizardFooter
+          onBack={onBack}
+          onNext={onNext}
+          canProceed={canProceed}
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+    <div className="flex flex-col h-full bg-card">
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title={title || "Ports Configuration"}
+        description={description || "Configure ports for each context."}
+      />
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         <div className="space-y-6">
           <div className="space-y-6">
             {boundedContexts.map((context: BoundedContext, index: number) => {
@@ -215,29 +215,13 @@ export function PortConfigurationStep({
         </div>
       </div>
 
-      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={!canProceed}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-        >
-          Back
-        </button>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={!canProceed}
-            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      </footer>
+      <WizardFooter
+        onBack={onBack}
+        onNext={onNext}
+        canProceed={canProceed}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+      />
     </div>
   );
 }

@@ -6,6 +6,8 @@ import type {
   ProjectConfig,
   PeerContextMapping,
 } from "@hexagen/project-configuration";
+import { StepHeader } from "./StepHeader";
+import { WizardFooter } from "../WizardFooter";
 
 interface PeerContextMappingStepProps {
   onNext: () => void;
@@ -14,6 +16,8 @@ interface PeerContextMappingStepProps {
   activeMappingId?: string;
   currentStep?: number;
   totalSteps?: number;
+  title?: string;
+  description?: string;
 }
 
 export function PeerContextMappingStep({
@@ -22,7 +26,9 @@ export function PeerContextMappingStep({
   canProceed,
   activeMappingId,
   currentStep = 3,
-  totalSteps = 5,
+  totalSteps = 6,
+  title,
+  description,
 }: PeerContextMappingStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
   const boundedContexts = watch("boundedContexts") || [];
@@ -72,8 +78,14 @@ export function PeerContextMappingStep({
 
   if (boundedContexts.length < 2) {
     return (
-      <div className="flex flex-col h-full bg-card overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center">
+      <div className="flex flex-col h-full bg-card">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title={title || "Peer Context Mappings"}
+          description={description || "Define how contexts interact."}
+        />
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 px-4">
           <div className="text-center">
             <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/30 max-w-md mx-auto">
               <p className="text-sm text-muted-foreground mb-2">
@@ -85,34 +97,28 @@ export function PeerContextMappingStep({
             </div>
           </div>
         </div>
-        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
-          >
-            Back
-          </button>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
-            <button
-              type="button"
-              onClick={onNext}
-              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        </footer>
+        <WizardFooter
+          onBack={onBack}
+          onNext={onNext}
+          canProceed={canProceed}
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+    <div className="flex flex-col h-full bg-card">
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title={title || "Peer Context Mappings"}
+        description={description || "Define how contexts interact."}
+      />
+
+      {/* Zone A: Consumer/Provider selectors - fixed */}
+      <div className="shrink-0 px-6 pt-4">
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -170,7 +176,7 @@ export function PeerContextMappingStep({
       {/* Zone B: Grid (Scrollable Middle) */}
       <div
         key={`zone-b-${activeMappingId}`}
-        className="flex-1 overflow-y-auto p-6"
+        className="flex-1 min-h-0 overflow-y-auto p-6"
       >
         {!activeMapping ? (
           <div className="flex items-center justify-center h-full">
@@ -256,29 +262,14 @@ export function PeerContextMappingStep({
         )}
       </div>
 
-      {/* Zone C: Footer (Sticky Bottom) */}
-      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={!canProceed}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-        >
-          Back
-        </button>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-          <button
-            type="button"
-            onClick={onNext}
-            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors"
-          >
-            Next
-          </button>
-        </div>
-      </footer>
+      {/* Fixed Footer */}
+      <WizardFooter
+        onBack={onBack}
+        onNext={onNext}
+        canProceed={canProceed}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+      />
     </div>
   );
 }

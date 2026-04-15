@@ -9,6 +9,7 @@ import {
   GitHubExportStep,
 } from "@/components/project-wizard/steps";
 import { SidebarStepLayout } from "./SidebarStepLayout";
+import { wizardSteps } from "./config";
 
 // We define exactly what the router needs from the parent
 interface WizardStepRouterProps {
@@ -42,6 +43,10 @@ export function WizardStepRouter({
   onGenerate,
   onViewModeChange,
 }: WizardStepRouterProps) {
+  const currentStepConfig = wizardSteps[currentStepIndex];
+  const title = currentStepConfig?.title ?? "";
+  const description = currentStepConfig?.description ?? "";
+
   switch (currentStepIndex) {
     case 0:
       return (
@@ -51,6 +56,8 @@ export function WizardStepRouter({
           canProceed={canProceed}
           currentStep={1}
           totalSteps={totalSteps}
+          title={title}
+          description={description}
         />
       );
     case 1:
@@ -68,6 +75,10 @@ export function WizardStepRouter({
             onBack={onBack}
             canProceed={canProceed}
             activeContextId={activeContextId}
+            currentStep={2}
+            totalSteps={totalSteps}
+            title={title}
+            description={description}
           />
         </SidebarStepLayout>
       );
@@ -88,6 +99,8 @@ export function WizardStepRouter({
             activeMappingId={activeMappingId}
             currentStep={3}
             totalSteps={totalSteps}
+            title={title}
+            description={description}
           />
         </SidebarStepLayout>
       );
@@ -99,6 +112,8 @@ export function WizardStepRouter({
           canProceed={canProceed}
           currentStep={4}
           totalSteps={totalSteps}
+          title={title}
+          description={description}
         />
       );
     case 4:
@@ -109,6 +124,8 @@ export function WizardStepRouter({
           canProceed={canProceed}
           currentStep={5}
           totalSteps={totalSteps}
+          title={title}
+          description={description}
         />
       );
     case 5:
@@ -121,6 +138,8 @@ export function WizardStepRouter({
           onViewModeChange={onViewModeChange}
           currentStep={6}
           totalSteps={totalSteps}
+          title={title}
+          description={description}
         />
       );
     default:

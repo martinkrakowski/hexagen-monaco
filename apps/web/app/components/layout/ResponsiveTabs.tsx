@@ -53,7 +53,7 @@ export function ResponsiveTabs({ panels, defaultTab }: ResponsiveTabsProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">{activePanel?.content}</div>
+      <div className="flex-1 overflow-auto">{activePanel?.content}</div>
     </div>
   );
 }

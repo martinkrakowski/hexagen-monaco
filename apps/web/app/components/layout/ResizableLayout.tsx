@@ -89,13 +89,13 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
           onCollapse={() => setLeftCollapsed(true)}
           onExpand={() => setLeftCollapsed(false)}
         >
-          <Card className="h-full overflow-hidden border border-border rounded-md">
+          <Card className="h-full border border-border rounded-md flex flex-col">
             <PanelHeader
               title="HexaGen Project Wizard"
               side="left"
               onCollapse={collapseLeft}
             />
-            <CardContent className="p-0 h-[calc(100%-3rem)] overflow-auto custom-scrollbar">
+            <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
               {left}
             </CardContent>
           </Card>

@@ -6,6 +6,8 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
+import { StepHeader } from "./StepHeader";
+import { WizardFooter } from "../WizardFooter";
 
 interface GitHubExportStepProps {
   onNext: () => void;
@@ -13,6 +15,8 @@ interface GitHubExportStepProps {
   canProceed: boolean;
   currentStep: number;
   totalSteps: number;
+  title?: string;
+  description?: string;
 }
 
 type WizardFormValues = {
@@ -29,6 +33,8 @@ export const GitHubExportStep = ({
   canProceed,
   currentStep,
   totalSteps,
+  title,
+  description,
 }: GitHubExportStepProps) => {
   const { getValues, setValue } = useFormContext<WizardFormValues>();
   const { data: session, status } = useSession();
@@ -109,8 +115,14 @@ export const GitHubExportStep = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+    <div className="flex flex-col h-full bg-card">
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title={title || "GitHub Export"}
+        description={description || "Configure GitHub export."}
+      />
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         <Card className="w-full border border-border">
           <CardHeader>
             <CardTitle className="text-lg font-medium">
@@ -188,24 +200,13 @@ export const GitHubExportStep = ({
         </Card>
       </div>
 
-      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <PrimaryButton type="button" variant="outline" onClick={onBack}>
-          Back
-        </PrimaryButton>
-
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-          <PrimaryButton
-            type="button"
-            onClick={handleContinue}
-            disabled={!canProceed || !isFormValid}
-          >
-            Continue
-          </PrimaryButton>
-        </div>
-      </footer>
+      <WizardFooter
+        onBack={onBack}
+        onNext={handleContinue}
+        canProceed={canProceed && isFormValid}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+      />
     </div>
   );
 };

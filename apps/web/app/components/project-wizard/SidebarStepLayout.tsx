@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode } from "react";
 
 interface SidebarStepLayoutProps {
   sidebar: ReactNode;
@@ -12,9 +12,7 @@ export function SidebarStepLayout({
   return (
     <div className="flex flex-col h-full w-full">
       <div className="shrink-0 border-b border-border">{sidebar}</div>
-      <div className="flex-1 overflow-hidden h-full flex flex-col">
-        {children}
-      </div>
+      <div className="flex-1 min-h-0 flex flex-col">{children}</div>
     </div>
   );
 }

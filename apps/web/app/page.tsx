@@ -22,7 +22,6 @@ import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
 import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
 import { CodeView } from "@/components/code-view/CodeView";
-import { StepHeader } from "@/components/project-wizard/steps/StepHeader";
 
 import {
   emptyFormValues,
@@ -90,7 +89,6 @@ export default function Home() {
   const watchedValues = useWatch({ control: form.control });
 
   const totalSteps = wizardSteps.length;
-  const currentStepConfig = wizardSteps[currentStepIndex];
 
   const boundedContexts = (watchedValues.boundedContexts ||
     []) as BoundedContext[];
@@ -348,48 +346,35 @@ export default function Home() {
         <FormProvider {...form}>
           <ResizableLayout
             left={
-              <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-                <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
-                  {showSavedProjects ? (
-                    <SavedProjectsList
-                      projects={projects}
-                      onLoad={handleLoadProject}
-                      onDelete={deleteProject}
-                      onRename={renameProject}
-                      onBackToWizard={() => setShowSavedProjects(false)}
-                      draft={draft}
-                      onResumeDraft={handleResumeDraft}
-                      onDiscardDraft={handleDiscardDraft}
-                      loadedProjectId={loadedProjectId}
-                    />
-                  ) : (
-                    <>
-                      <StepHeader
-                        currentStep={currentStepIndex + 1}
-                        totalSteps={totalSteps}
-                        title={currentStepConfig.title}
-                        description={currentStepConfig.description}
-                      />
-
-                      <WizardStepRouter
-                        currentStepIndex={currentStepIndex}
-                        totalSteps={totalSteps}
-                        canProceed={canProceed}
-                        isGenerating={loading}
-                        activeContextId={activeContextId}
-                        activeMappingId={activeMappingId}
-                        onContextSelect={setActiveContextId}
-                        onMappingSelect={setActiveMappingId}
-                        onNext={handleNext}
-                        onBack={handleBack}
-                        onShowSavedProjects={handleShowSavedProjects}
-                        onGenerate={handleGenerate}
-                        onViewModeChange={setViewMode}
-                      />
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+              showSavedProjects ? (
+                <SavedProjectsList
+                  projects={projects}
+                  onLoad={handleLoadProject}
+                  onDelete={deleteProject}
+                  onRename={renameProject}
+                  onBackToWizard={() => setShowSavedProjects(false)}
+                  draft={draft}
+                  onResumeDraft={handleResumeDraft}
+                  onDiscardDraft={handleDiscardDraft}
+                  loadedProjectId={loadedProjectId}
+                />
+              ) : (
+                <WizardStepRouter
+                  currentStepIndex={currentStepIndex}
+                  totalSteps={totalSteps}
+                  canProceed={canProceed}
+                  isGenerating={loading}
+                  activeContextId={activeContextId}
+                  activeMappingId={activeMappingId}
+                  onContextSelect={setActiveContextId}
+                  onMappingSelect={setActiveMappingId}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onShowSavedProjects={handleShowSavedProjects}
+                  onGenerate={handleGenerate}
+                  onViewModeChange={setViewMode}
+                />
+              )
             }
             middle={
               <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">

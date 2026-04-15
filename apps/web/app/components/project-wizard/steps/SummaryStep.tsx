@@ -16,6 +16,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/Dialog";
+import { StepHeader } from "./StepHeader";
+import { WizardFooter } from "../WizardFooter";
 
 interface SummaryStepProps {
   onBack: () => void;
@@ -25,6 +27,8 @@ interface SummaryStepProps {
   onViewModeChange: (mode: "visual" | "code") => void;
   currentStep?: number;
   totalSteps?: number;
+  title?: string;
+  description?: string;
 }
 
 export function SummaryStep({
@@ -33,8 +37,10 @@ export function SummaryStep({
   canProceed,
   isGenerating,
   onViewModeChange,
-  currentStep = 5,
-  totalSteps = 5,
+  currentStep = 6,
+  totalSteps = 6,
+  title,
+  description,
 }: SummaryStepProps) {
   const { watch } = useFormContext<ProjectConfig>();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -59,8 +65,14 @@ export function SummaryStep({
   );
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+    <div className="flex flex-col h-full bg-card">
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title={title || "Project Summary"}
+        description={description || "Review your project configuration."}
+      />
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         <div className="space-y-6">
           <div className="space-y-4">
             {/* Workspace Governance Summary */}
@@ -190,31 +202,15 @@ export function SummaryStep({
         </div>
       </div>
 
-      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={isGenerating}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-        >
-          Back
-        </button>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            disabled={
-              isGenerating || boundedContexts.length === 0 || !canProceed
-            }
-            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isGenerating ? "Generating..." : "Generate Project"}
-          </button>
-        </div>
-      </footer>
+      <WizardFooter
+        onBack={onBack}
+        onGenerate={() => setDialogOpen(true)}
+        canProceed={canProceed && boundedContexts.length > 0}
+        isGenerating={isGenerating}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        showNext={false}
+      />
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
         <DialogContent>

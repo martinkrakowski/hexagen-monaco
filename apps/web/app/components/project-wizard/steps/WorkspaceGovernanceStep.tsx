@@ -2,6 +2,8 @@
 
 import { useFormContext } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
+import { StepHeader } from "./StepHeader";
+import { WizardFooter } from "../WizardFooter";
 
 interface WorkspaceGovernanceStepProps {
   onNext: () => void;
@@ -9,6 +11,8 @@ interface WorkspaceGovernanceStepProps {
   canProceed: boolean;
   currentStep?: number;
   totalSteps?: number;
+  title?: string;
+  description?: string;
 }
 
 export function WorkspaceGovernanceStep({
@@ -16,7 +20,9 @@ export function WorkspaceGovernanceStep({
   onShowSavedProjects,
   canProceed,
   currentStep = 1,
-  totalSteps = 5,
+  totalSteps = 6,
+  title,
+  description,
 }: WorkspaceGovernanceStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
 
@@ -45,8 +51,14 @@ export function WorkspaceGovernanceStep({
   };
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+    <div className="flex flex-col h-full bg-card">
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title={title || "Workspace Governance"}
+        description={description || "Define workspace settings."}
+      />
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
         <div className="space-y-6">
           {/* Workspace Name */}
           <div className="space-y-2">
@@ -166,30 +178,16 @@ export function WorkspaceGovernanceStep({
         </div>
       </div>
 
-      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onShowSavedProjects}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
-        >
-          Previous Projects
-        </button>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={
-              !canProceed || !workspaceName.trim() || !namespacePrefix.trim()
-            }
-            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-      </footer>
+      <WizardFooter
+        onShowSavedProjects={onShowSavedProjects}
+        onNext={handleNext}
+        canProceed={Boolean(
+          canProceed && workspaceName.trim() && namespacePrefix.trim(),
+        )}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        showBack={false}
+      />
     </div>
   );
 }

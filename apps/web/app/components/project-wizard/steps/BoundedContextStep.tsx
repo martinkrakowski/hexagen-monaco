@@ -14,6 +14,8 @@ import {
   messagingAdapterOptions,
   telemetryProviderOptions,
 } from "../config";
+import { StepHeader } from "./StepHeader";
+import { WizardFooter } from "../WizardFooter";
 
 interface BoundedContextStepProps {
   onNext: () => void;
@@ -22,6 +24,8 @@ interface BoundedContextStepProps {
   activeContextId?: string;
   currentStep?: number;
   totalSteps?: number;
+  title?: string;
+  description?: string;
 }
 
 export function BoundedContextStep({
@@ -30,7 +34,9 @@ export function BoundedContextStep({
   canProceed,
   activeContextId,
   currentStep = 2,
-  totalSteps = 4,
+  totalSteps = 6,
+  title,
+  description,
 }: BoundedContextStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
   const boundedContexts = watch("boundedContexts") || [];
@@ -55,14 +61,24 @@ export function BoundedContextStep({
     });
   };
 
-  const handleNext = () => {
-    onNext();
-  };
+  const contextIndex = boundedContexts.findIndex(
+    (c) => c.id === activeContextId,
+  );
+  const fieldPrefix = `boundedContexts.${contextIndex}`;
+
+  const isNextDisabled =
+    !canProceed || boundedContexts.some((c: BoundedContext) => !c.name?.trim());
 
   if (boundedContexts.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-card overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center">
+      <div className="flex flex-col h-full bg-card">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title={title || "Bounded Contexts"}
+          description={description || "Add and configure bounded contexts."}
+        />
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 px-4">
           <div className="text-center">
             <h2 className="text-lg font-semibold text-foreground mb-2">
               No Bounded Contexts
@@ -72,373 +88,285 @@ export function BoundedContextStep({
             </p>
           </div>
         </div>
-        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={!canProceed}
-            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-          >
-            Back
-          </button>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={
-                !canProceed ||
-                boundedContexts.some((c: BoundedContext) => !c.name?.trim())
-              }
-              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </footer>
+        <WizardFooter
+          onBack={onBack}
+          onNext={onNext}
+          canProceed={canProceed}
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
       </div>
     );
   }
 
   if (!activeContext) {
     return (
-      <div className="flex flex-col h-full bg-card overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center">
+      <div className="flex flex-col h-full bg-card">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title={title || "Bounded Contexts"}
+          description={description || "Add and configure bounded contexts."}
+        />
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 px-4">
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               Select a context to edit
             </p>
           </div>
         </div>
-        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={!canProceed}
-            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-          >
-            Back
-          </button>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={
-                !canProceed ||
-                boundedContexts.some((c: BoundedContext) => !c.name?.trim())
-              }
-              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </footer>
+        <WizardFooter
+          onBack={onBack}
+          onNext={onNext}
+          canProceed={canProceed}
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
       </div>
     );
   }
-
-  if (!activeContext) {
-    return (
-      <div className="flex flex-col h-full bg-card overflow-hidden">
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Select a context to edit
-            </p>
-          </div>
-        </div>
-        <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={!canProceed}
-            className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-          >
-            Back
-          </button>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={
-                !canProceed ||
-                boundedContexts.some((c: BoundedContext) => !c.name?.trim())
-              }
-              className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </footer>
-      </div>
-    );
-  }
-
-  const contextIndex = boundedContexts.findIndex(
-    (c) => c.id === activeContextId,
-  );
-  const fieldPrefix = `boundedContexts.${contextIndex}`;
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
-      {/* Zone A: Form Fields (Fixed Top) */}
-      <div className="shrink-0 p-2 space-y-3 border-b border-border">
-        <div className="w-full">
-          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
-            Context Name
-          </label>
-          <input
-            type="text"
-            value={activeContext.name}
-            onChange={(e) =>
-              updateContext(contextIndex, (ctx) => ({
-                ...ctx,
-                name: e.target.value,
-              }))
-            }
-            className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent outline-none bg-background"
-            placeholder="e.g. SalesContext"
-          />
+    <div className="flex flex-col h-full bg-card">
+      <StepHeader
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        title={title || "Bounded Contexts"}
+        description={description || "Add and configure bounded contexts."}
+      />
+
+      {/* Scrollable form content */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Zone A: Context Name and Selectors */}
+        <div className="shrink-0 p-2 space-y-3 border-b border-border">
+          <div className="w-full">
+            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Context Name
+            </label>
+            <input
+              type="text"
+              value={activeContext.name}
+              onChange={(e) =>
+                updateContext(contextIndex, (ctx) => ({
+                  ...ctx,
+                  name: e.target.value,
+                }))
+              }
+              className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent outline-none bg-background"
+              placeholder="e.g. SalesContext"
+            />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+                API Backend
+              </label>
+              <select
+                value={activeContext.infrastructureTarget || ""}
+                onChange={(e) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    infrastructureTarget: e.target
+                      .value as BoundedContext["infrastructureTarget"],
+                  }))
+                }
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+              >
+                <option value="" disabled>
+                  Select Backend
+                </option>
+                {apiFrameworkOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+                UI Frontend
+              </label>
+              <select
+                value={activeContext.uiFramework || ""}
+                onChange={(e) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    uiFramework: e.target
+                      .value as BoundedContext["uiFramework"],
+                  }))
+                }
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+              >
+                {uiFrameworkOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+                Persistence
+              </label>
+              <select
+                value={activeContext.persistenceAdapter || ""}
+                onChange={(e) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    persistenceAdapter: e.target
+                      .value as BoundedContext["persistenceAdapter"],
+                  }))
+                }
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+              >
+                <option value="">None</option>
+                {persistenceAdapterOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+                Messaging
+              </label>
+              <select
+                value={activeContext.messagingAdapter || ""}
+                onChange={(e) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    messagingAdapter: e.target
+                      .value as BoundedContext["messagingAdapter"],
+                  }))
+                }
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+              >
+                <option value="">None</option>
+                {messagingAdapterOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+                Telemetry
+              </label>
+              <select
+                value={activeContext.telemetryProvider || "None"}
+                onChange={(e) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    telemetryProvider: e.target
+                      .value as unknown as BoundedContext["telemetryProvider"],
+                  }))
+                }
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
+              >
+                {telemetryProviderOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
-              API Backend
-            </label>
-            <select
-              value={activeContext.infrastructureTarget || ""}
-              onChange={(e) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  infrastructureTarget: e.target
-                    .value as BoundedContext["infrastructureTarget"],
-                }))
-              }
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
-            >
-              <option value="" disabled>
-                Select Backend
-              </option>
-              {apiFrameworkOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+
+        {/* Zone B: Domain Model and Domain Logic */}
+        <div key={`zone-b-${activeContextId}`} className="space-y-6 p-2">
+          {/* Domain Model - Full Width */}
+          <div className="w-full">
+            <div className="w-full border-b border-border mb-4 p-3">
+              <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
+                Domain Model
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Nouns &amp; State
+              </p>
+            </div>
+
+            <div className="p-2 space-y-4">
+              <ChipInput
+                label="Core Domain Entities"
+                placeholder="e.g. User, Product"
+                name={`${fieldPrefix}.coreDomainEntities`}
+                values={activeContext.coreDomainEntities || []}
+                onChange={(values) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    coreDomainEntities: values,
+                  }))
+                }
+              />
+
+              <ChipInput
+                label="Value Objects"
+                placeholder="e.g. Money, Address"
+                name={`${fieldPrefix}.valueObjects`}
+                values={activeContext.valueObjects || []}
+                onChange={(values) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    valueObjects: values,
+                  }))
+                }
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
-              UI Frontend
-            </label>
-            <select
-              value={activeContext.uiFramework || ""}
-              onChange={(e) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  uiFramework: e.target.value as BoundedContext["uiFramework"],
-                }))
-              }
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
-            >
-              {uiFrameworkOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
-              Persistence
-            </label>
-            <select
-              value={activeContext.persistenceAdapter || ""}
-              onChange={(e) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  persistenceAdapter: e.target
-                    .value as BoundedContext["persistenceAdapter"],
-                }))
-              }
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
-            >
-              <option value="">None</option>
-              {persistenceAdapterOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
-              Messaging
-            </label>
-            <select
-              value={activeContext.messagingAdapter || ""}
-              onChange={(e) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  messagingAdapter: e.target
-                    .value as BoundedContext["messagingAdapter"],
-                }))
-              }
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
-            >
-              <option value="">None</option>
-              {messagingAdapterOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
-              Telemetry
-            </label>
-            <select
-              value={activeContext.telemetryProvider || "None"}
-              onChange={(e) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  telemetryProvider: e.target
-                    .value as unknown as BoundedContext["telemetryProvider"],
-                }))
-              }
-              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-ring focus:border-transparent outline-none"
-            >
-              {telemetryProviderOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
+
+          {/* Domain Logic - Full Width, Below Domain Model */}
+          <div className="w-full">
+            <div className="w-full border-b border-t border-border mb-4 p-3">
+              <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
+                Domain Logic
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Verbs &amp; Action
+              </p>
+            </div>
+
+            <div className="p-2 space-y-4">
+              <ChipInput
+                label="Primary Use Cases"
+                placeholder="e.g. PlaceOrder"
+                name={`${fieldPrefix}.useCases`}
+                values={activeContext.useCases || []}
+                onChange={(values) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    useCases: values,
+                  }))
+                }
+              />
+
+              <ChipInput
+                label="Domain Events"
+                placeholder="e.g. OrderPlaced"
+                name={`${fieldPrefix}.domainEvents`}
+                values={activeContext.domainEvents || []}
+                onChange={(values) =>
+                  updateContext(contextIndex, (ctx) => ({
+                    ...ctx,
+                    domainEvents: values,
+                  }))
+                }
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Zone B: Scrollable Middle - Stacked Fields */}
-      <div
-        key={`zone-b-${activeContextId}`}
-        className="flex-1 overflow-y-auto space-y-6"
-      >
-        {/* Domain Model - Full Width */}
-        <div className="w-full">
-          <div className="w-full border-b border-border mb-4 p-3">
-            <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
-              Domain Model
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Nouns &amp; State
-            </p>
-          </div>
-
-          <div className="p-2 space-y-4">
-            <ChipInput
-              label="Core Domain Entities"
-              placeholder="e.g. User, Product"
-              name={`${fieldPrefix}.coreDomainEntities`}
-              values={activeContext.coreDomainEntities || []}
-              onChange={(values) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  coreDomainEntities: values,
-                }))
-              }
-            />
-
-            <ChipInput
-              label="Value Objects"
-              placeholder="e.g. Money, Address"
-              name={`${fieldPrefix}.valueObjects`}
-              values={activeContext.valueObjects || []}
-              onChange={(values) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  valueObjects: values,
-                }))
-              }
-            />
-          </div>
-        </div>
-
-        {/* Domain Logic - Full Width, Below Domain Model */}
-        <div className="w-full">
-          <div className="w-full border-b border-t border-border mb-4 p-3">
-            <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
-              Domain Logic
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Verbs &amp; Action
-            </p>
-          </div>
-
-          <div className="p-2 space-y-4">
-            <ChipInput
-              label="Primary Use Cases"
-              placeholder="e.g. PlaceOrder"
-              name={`${fieldPrefix}.useCases`}
-              values={activeContext.useCases || []}
-              onChange={(values) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  useCases: values,
-                }))
-              }
-            />
-
-            <ChipInput
-              label="Domain Events"
-              placeholder="e.g. OrderPlaced"
-              name={`${fieldPrefix}.domainEvents`}
-              values={activeContext.domainEvents || []}
-              onChange={(values) =>
-                updateContext(contextIndex, (ctx) => ({
-                  ...ctx,
-                  domainEvents: values,
-                }))
-              }
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Zone C: Footer (Sticky Bottom) */}
-      <footer className="flex-shrink-0 bg-background border-t border-border p-4 flex justify-between items-center z-10">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={!canProceed}
-          className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input disabled:opacity-50"
-        >
-          Back
-        </button>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Step {currentStep} of {totalSteps}
-          </span>
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={
-              !canProceed ||
-              boundedContexts.some((c: BoundedContext) => !c.name?.trim())
-            }
-            className="px-8 py-2.5 text-sm font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-md shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-      </footer>
+      {/* Fixed Footer */}
+      <WizardFooter
+        onBack={onBack}
+        onNext={onNext}
+        canProceed={!isNextDisabled}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+      />
     </div>
   );
 }

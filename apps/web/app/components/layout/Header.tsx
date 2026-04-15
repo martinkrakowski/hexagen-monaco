@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "@/hooks/use-theme";
-import { Sun, Moon, Import, PlusCircle } from "lucide-react";
+import { Sun, Moon, Import, PlusCircle, Hexagon } from "lucide-react";
 import { HeaderMenu } from "./HeaderMenu";
 
 interface HeaderProps {
@@ -21,7 +21,7 @@ export const Header = ({
     <header className="w-full px-6 py-4 bg-card border-b border-border flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3">
         <div className="h-8 w-8 bg-primary text-primary-foreground flex items-center justify-center rounded-sm text-sm font-bold">
-          H
+          <Hexagon />
         </div>
         <h1 className="text-lg font-semibold tracking-tight">HexaGen-Monaco</h1>
       </div>
