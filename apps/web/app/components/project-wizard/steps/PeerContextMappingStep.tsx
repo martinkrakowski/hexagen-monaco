@@ -270,7 +270,7 @@ export function PeerContextMappingStep({
         </button>
 
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">
                 Consumer Context (Source)
@@ -319,7 +319,7 @@ export function PeerContextMappingStep({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
             <div>
               <div className="border-b border-border pb-2 mb-4">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
