@@ -13,6 +13,7 @@ import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
 import { MonacoViewer } from "@/components/monaco/MonacoViewer";
+import { EditableMonaco } from "@/components/monaco/EditableMonaco";
 import { useProjectGeneration } from "@/hooks/use-project-generation";
 import { useArchitectureDownload } from "@/hooks/use-architecture-download";
 import type { WizardData } from "@hexagen/shared";
@@ -126,9 +127,10 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
             </div>
 
             <div className="flex-1 overflow-hidden">
-              <MonacoViewer
-                content={selectedFile.content || ""}
+              <EditableMonaco
+                initialContent={selectedFile.content || ""}
                 language={selectedFile.language}
+                sessionId={`code-view-${selectedFile.id}`}
               />
             </div>
           </div>
