@@ -37,17 +37,17 @@ interface PortAdapterStatus {
 }
 
 interface AIGovernancePanelProps {
-  violations?: Violation[];
-  suggestions?: AISuggestion[];
-  portAdapterStatus?: PortAdapterStatus[];
+  violations: Violation[];
+  suggestions: AISuggestion[];
+  portAdapterStatus: PortAdapterStatus[];
   onRefresh?: () => void;
   isLoading?: boolean;
 }
 
 export function AIGovernancePanel({
-  violations = mockViolations,
-  suggestions = mockSuggestions,
-  portAdapterStatus = mockPortAdapterStatus,
+  violations,
+  suggestions,
+  portAdapterStatus,
   onRefresh,
   isLoading = false,
 }: AIGovernancePanelProps) {
@@ -221,66 +221,3 @@ function PortAdapterStatusList({ status }: { status: PortAdapterStatus[] }) {
     </div>
   );
 }
-
-// Mock data for demonstration
-const mockViolations: Violation[] = [
-  {
-    id: "1",
-    type: "error",
-    message: "Cyclic dependency detected",
-    context: "wizard-orchestration → messaging → wizard-orchestration",
-    severity: "HIGH",
-  },
-  {
-    id: "2",
-    type: "warning",
-    message: "Port Adapter Gap",
-    context: "agentic-interaction: missing ManifestReaderPort implementation",
-    severity: "MEDIUM",
-  },
-  {
-    id: "3",
-    type: "warning",
-    message: "Unused port detected",
-    context: "monaco-orchestration: UndoLastPatchPort has no consumers",
-    severity: "LOW",
-  },
-];
-
-const mockSuggestions: AISuggestion[] = [
-  {
-    id: "1",
-    message:
-      "Consider splitting 'agentic-interaction' into two contexts: governance and provider-integration",
-    confidence: 87,
-    category: "context-split",
-  },
-  {
-    id: "2",
-    message:
-      "Add an Anti-Corruption Layer between visualization and sync contexts",
-    confidence: 72,
-    category: "dependency-cleanup",
-  },
-  {
-    id: "3",
-    message:
-      "Define a new port 'ArchitecturalSnapshotPort' in persistence for versioning",
-    confidence: 65,
-    category: "port-definition",
-  },
-];
-
-const mockPortAdapterStatus: PortAdapterStatus[] = [
-  { context: "shared", ports: 2, adapters: 0, complete: false },
-  { context: "project-configuration", ports: 5, adapters: 3, complete: false },
-  { context: "sync", ports: 1, adapters: 2, complete: true },
-  { context: "wizard-orchestration", ports: 4, adapters: 1, complete: false },
-  { context: "monaco-orchestration", ports: 4, adapters: 2, complete: false },
-  { context: "visualization", ports: 2, adapters: 1, complete: false },
-  { context: "messaging", ports: 2, adapters: 0, complete: false },
-  { context: "persistence", ports: 0, adapters: 0, complete: true },
-  { context: "agentic-interaction", ports: 2, adapters: 0, complete: false },
-  { context: "web-driver", ports: 1, adapters: 3, complete: true },
-  { context: "project-generation", ports: 1, adapters: 2, complete: true },
-];

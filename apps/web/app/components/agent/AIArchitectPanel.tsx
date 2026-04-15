@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { AgentChatPanel } from "./AgentChatPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
+import { useGovernanceData } from "@/hooks/use-governance-data";
 import { Bot, FileText } from "lucide-react";
 
 interface AIArchitectPanelProps {
@@ -15,6 +16,8 @@ export function AIArchitectPanel({
   onSendMessage,
   isLoading = false,
 }: AIArchitectPanelProps) {
+  const { data, isLoading: isGovernanceLoading, refresh } = useGovernanceData();
+
   return (
     <Card className="h-full border-0 rounded-none flex flex-col bg-card">
       <Tabs.Root defaultTab="governance" className="flex-1 overflow-hidden">
@@ -32,9 +35,11 @@ export function AIArchitectPanel({
         <CardContent className="flex-1 p-0 overflow-hidden h-full">
           <Tabs.Content value="governance" className="h-full">
             <AIGovernancePanel
-              onRefresh={() => {
-                /* TODO: wire to live data */
-              }}
+              violations={data.violations}
+              suggestions={data.suggestions}
+              portAdapterStatus={data.portAdapterStatus}
+              onRefresh={refresh}
+              isLoading={isGovernanceLoading}
             />
           </Tabs.Content>
           <Tabs.Content value="chat" className="h-full">
