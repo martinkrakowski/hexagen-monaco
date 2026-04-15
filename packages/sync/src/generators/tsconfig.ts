@@ -4,6 +4,10 @@ import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { MigrationReport } from "../migration-report.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 
+type ReportRecorder = {
+  record: (type: string, target: string, message: string) => void;
+};
+
 /**
  * Generates tsconfig.json for each module with proper composite references.
  * Uses safeWriteFile for dry-run safety, protection, and idempotency.
@@ -18,10 +22,10 @@ export async function generateTsconfig(
   const result = createEmptyResult();
   const filePath = path.join(moduleDir, "tsconfig.json");
 
-  // Skip tsconfig generation for the sync package itself.
-  // The sync package needs special config (emitDeclarationOnly: false) to emit JS files
-  // for the CLI, which differs from the standard declaration-only config.
-  if (moduleName === "sync") {
+  // Skip tsconfig generation for packages that need special config.
+  // These packages are imported at runtime by Node.js (CLI tools) and need
+  // emitDeclarationOnly: false to emit JS files, not just declarations.
+  if (moduleName === "sync" || moduleName === "shared") {
     result.skipped.push(filePath);
     return result;
   }
@@ -54,7 +58,7 @@ export async function generateTsconfig(
     filePath,
     content,
     config,
-    report as any,
+    report as ReportRecorder | undefined,
   );
   if (status === "created") result.created.push(filePath);
   if (status === "updated") result.updated.push(filePath);
@@ -90,7 +94,7 @@ export async function generateTsconfigTest(
     filePath,
     content,
     config,
-    report as any,
+    report as ReportRecorder | undefined,
   );
   if (status === "created") result.created.push(filePath);
   if (status === "updated") result.updated.push(filePath);
