@@ -7,6 +7,7 @@ import { AgentChatPanel } from "./AgentChatPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
+import { governanceState } from "@/lib/governance-state";
 import { Bot, FileText } from "lucide-react";
 
 interface AIArchitectPanelProps {
@@ -18,15 +19,28 @@ export function AIArchitectPanel({
   onSendMessage,
   isLoading = false,
 }: AIArchitectPanelProps) {
-  const { data, isLoading: isGovernanceLoading, refresh } = useGovernanceData();
+  const {
+    data,
+    isLoading: isGovernanceLoading,
+    refresh,
+    refreshWithData,
+  } = useGovernanceData();
 
   // Re-fetch governance data when the code editor emits a save.
-  // Debounce to avoid hammering the API.
+  // Uses the dynamic POST endpoint with current manifestYaml + openFileContent.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useCodeChangeSubscription(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      refresh();
+      const { currentManifestYaml, currentOpenFileContent } = governanceState;
+      if (currentManifestYaml) {
+        refreshWithData(
+          currentManifestYaml,
+          currentOpenFileContent || undefined,
+        );
+      } else {
+        refresh();
+      }
     }, 1000);
   });
 

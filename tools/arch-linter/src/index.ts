@@ -61,7 +61,15 @@ const ROOT_DIR = findProjectRoot();
 
 // ─── Configuration Paths ────────────────────────────────────────────────────
 
-const MANIFEST_PATH = path.join(ROOT_DIR, ".architecture", "manifest.yaml");
+// --manifest <path> overrides the default manifest location.
+// When provided, the linter reads this file instead of .architecture/manifest.yaml.
+// All other config paths (layer-rules, linter-config, tsconfig) still resolve
+// from ROOT_DIR so that the linter can still find the project's invariants.
+const manifestArgIndex = process.argv.indexOf("--manifest");
+const MANIFEST_PATH =
+  manifestArgIndex !== -1 && process.argv[manifestArgIndex + 1]
+    ? path.resolve(process.argv[manifestArgIndex + 1])
+    : path.join(ROOT_DIR, ".architecture", "manifest.yaml");
 const LAYER_RULES_PATH = path.join(
   ROOT_DIR,
   ".architecture",
