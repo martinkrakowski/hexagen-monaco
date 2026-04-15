@@ -120,7 +120,7 @@ export function PortConfigurationStep({
         title={title || "Ports Configuration"}
         description={description || "Configure ports for each context."}
       />
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-6">
         <div className="space-y-6">
           <div className="space-y-6">
             {boundedContexts.map((context: BoundedContext, index: number) => {
@@ -132,16 +132,16 @@ export function PortConfigurationStep({
               return (
                 <div
                   key={context.id}
-                  className="border border-border rounded-lg p-4 space-y-4 bg-muted"
+                  className="border border-border rounded-lg p-0 space-y-4 bg-card"
                 >
-                  <div className="flex items-center gap-2 border-b border-border pb-3">
+                  <div className="flex items-center gap-2 border-b border-border p-2">
                     <span className="text-xs font-mono text-muted-foreground">
                       {index + 1}.
                     </span>
                     <h3 className="font-medium">{context.name || "Unnamed"}</h3>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-2 gap-6 pt-0 p-2">
                     {/* Inbound Ports (West) */}
                     <div className="space-y-3">
                       <div>

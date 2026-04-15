@@ -321,7 +321,7 @@ export function PeerContextMappingStep({
 
           <div className="space-y-6">
             <div>
-              <div className="border-b border-border pb-2 mb-4">
+              <div className="pb-2 mb-4">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
                   Integration Details
                 </h3>
@@ -355,7 +355,7 @@ export function PeerContextMappingStep({
             </div>
 
             <div>
-              <div className="border-b border-border pb-2 mb-4">
+              <div className="pb-2 mb-4">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">
                   Communication
                 </h3>

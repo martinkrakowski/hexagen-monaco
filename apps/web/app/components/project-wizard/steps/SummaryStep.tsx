@@ -72,11 +72,11 @@ export function SummaryStep({
         title={title || "Project Summary"}
         description={description || "Review your project configuration."}
       />
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-4">
         <div className="space-y-6">
           <div className="space-y-4">
             {/* Workspace Governance Summary */}
-            <div className="border border-border rounded-lg p-4 bg-muted">
+            <div className="border border-border rounded-lg p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                 Workspace Governance
               </h3>
@@ -111,7 +111,7 @@ export function SummaryStep({
             </div>
 
             {/* Bounded Contexts Summary */}
-            <div className="border border-border rounded-lg p-4 bg-muted">
+            <div className="border border-border rounded-lg p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                 Bounded Contexts ({boundedContexts.length})
               </h3>
@@ -142,7 +142,7 @@ export function SummaryStep({
 
             {/* Peer Mappings Summary */}
             {peerMappings.length > 0 && (
-              <div className="border border-border rounded-lg p-4 bg-muted">
+              <div className="border border-border rounded-lg p-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                   Peer Mappings ({peerMappings.length})
                 </h3>
@@ -177,7 +177,7 @@ export function SummaryStep({
             )}
 
             {/* Project Add-ons Summary */}
-            <div className="border border-border rounded-lg p-4 bg-muted">
+            <div className="border border-border rounded-lg p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                 Project Add-ons
               </h3>
