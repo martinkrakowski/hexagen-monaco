@@ -7,4 +7,6 @@ export * from "./create-port-tool.use-case.js";
 export * from "./get-graph-resource.use-case.js";
 export * from "./get-linter-report-resource.use-case.js";
 export * from "./get-manifest-resource.use-case.js";
+export * from "./remove-context-tool.use-case.js";
+export * from "./remove-port-tool.use-case.js";
 export * from "./scaffold-module-tool.use-case.js";

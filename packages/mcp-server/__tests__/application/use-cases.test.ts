@@ -13,14 +13,20 @@ import type { LinterPort } from "../../src/application/ports/out/linter.port.js"
 import type {
   ManifestWritePort,
   AddDependencyCommand,
+  RegisterBoundedContextCommand,
+  RegisterPortCommand,
+  RegisterAdapterCommand,
+  RemovePortCommand,
+  RemoveContextCommand,
 } from "../../src/application/ports/out/manifest-write.port.js";
+import type { ArchitectureQueryPort } from "../../src/application/ports/out/sync-engine.port.js";
 import type { ProjectConfigurationReadPort } from "../../src/application/ports/out/project-configuration-read.port.js";
 import type {
   CreateAdapterCommand,
   CreatePortCommand,
   ScaffoldModuleCommand,
-  SyncEnginePort,
-} from "../../src/application/ports/out/sync-engine.port.js";
+  ScaffoldingPort,
+} from "../../src/application/ports/out/scaffolding.port.js";
 
 class ProjectConfigurationReadFake implements ProjectConfigurationReadPort {
   async getManifest() {
@@ -39,7 +45,7 @@ class ProjectConfigurationReadFake implements ProjectConfigurationReadPort {
   }
 }
 
-class SyncEngineFake implements SyncEnginePort {
+class SyncEngineFake implements ArchitectureQueryPort, ScaffoldingPort {
   async getArchitectureGraph() {
     const payload: ArchitectureGraph = {
       nodes: [
@@ -109,6 +115,34 @@ class ManifestWriteFake implements ManifestWritePort {
     void _command;
     return { success: true as const, value: { updated: true } };
   }
+
+  async registerBoundedContext(_command: RegisterBoundedContextCommand) {
+    void _command;
+    return {
+      success: true as const,
+      value: { registered: true, alreadyExisted: false },
+    };
+  }
+
+  async registerPort(_command: RegisterPortCommand) {
+    void _command;
+    return { success: true as const, value: { registered: true } };
+  }
+
+  async registerAdapter(_command: RegisterAdapterCommand) {
+    void _command;
+    return { success: true as const, value: { registered: true } };
+  }
+
+  async removePort(_command: RemovePortCommand) {
+    void _command;
+    return { success: true as const, value: { removed: true } };
+  }
+
+  async removeContext(_command: RemoveContextCommand) {
+    void _command;
+    return { success: true as const, value: { removed: true } };
+  }
 }
 
 class EventBusFake implements EventBusPort {
@@ -135,11 +169,13 @@ class EventBusFake implements EventBusPort {
   ).execute();
   assert.ok(manifestResource);
 
-  const graphResource = await new GetGraphResourceUseCase(sync).execute();
+  const graphResource = await new GetGraphResourceUseCase(
+    sync as ArchitectureQueryPort,
+  ).execute();
   assert.strictEqual(graphResource.nodes.length, 1);
 
   const linterResource = await new GetLinterReportResourceUseCase(
-    sync,
+    sync as ArchitectureQueryPort,
   ).execute();
   assert.strictEqual(linterResource.isCompliant, true);
 
@@ -147,11 +183,13 @@ class EventBusFake implements EventBusPort {
   assert.strictEqual(auditResult.report.scannedFilesCount, 8);
 
   const scaffoldResult = await new ScaffoldModuleToolUseCase(
-    sync,
+    sync as ScaffoldingPort,
+    manifestWrite,
     eventBus,
   ).execute({
     name: "mcp-server",
     layer: "infrastructure",
+    context_type: "supporting",
     dry_run: true,
   });
   assert.strictEqual(scaffoldResult.dryRun, true);
@@ -166,7 +204,10 @@ class EventBusFake implements EventBusPort {
   });
   assert.strictEqual(dependencyResult.updated, true);
 
-  const createPortResult = await new CreatePortToolUseCase(sync).execute({
+  const createPortResult = await new CreatePortToolUseCase(
+    sync as ScaffoldingPort,
+    manifestWrite,
+  ).execute({
     domain_name: "billing",
     port_name: "PaymentGatewayPort",
     type: "outbound",
@@ -174,7 +215,10 @@ class EventBusFake implements EventBusPort {
   });
   assert.ok(createPortResult.fileCreated);
 
-  const createAdapterResult = await new CreateAdapterToolUseCase(sync).execute({
+  const createAdapterResult = await new CreateAdapterToolUseCase(
+    sync as ScaffoldingPort,
+    manifestWrite,
+  ).execute({
     port_name: "PaymentGatewayPort",
     infrastructure_name: "stripe-billing",
     dry_run: false,

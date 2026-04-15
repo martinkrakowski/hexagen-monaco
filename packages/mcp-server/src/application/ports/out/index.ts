@@ -3,4 +3,5 @@
 export * from "./linter.port.js";
 export * from "./manifest-write.port.js";
 export * from "./project-configuration-read.port.js";
+export * from "./scaffolding.port.js";
 export * from "./sync-engine.port.js";

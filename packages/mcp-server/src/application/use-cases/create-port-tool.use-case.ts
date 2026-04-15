@@ -1,4 +1,5 @@
-import type { SyncEnginePort } from "../ports/out/sync-engine.port.js";
+import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
+import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
 export interface CreatePortInput {
   domain_name: string;
@@ -14,7 +15,10 @@ export interface CreatePortOutput {
 }
 
 export class CreatePortToolUseCase {
-  constructor(private readonly syncEnginePort: SyncEnginePort) {}
+  constructor(
+    private readonly scaffoldingPort: ScaffoldingPort,
+    private readonly manifestWritePort: ManifestWritePort,
+  ) {}
 
   async execute(input: CreatePortInput): Promise<CreatePortOutput> {
     if (!input.domain_name.trim() || !input.port_name.trim()) {
@@ -28,20 +32,30 @@ export class CreatePortToolUseCase {
       };
     }
 
-    const result = await this.syncEnginePort.createPort({
+    const fileResult = await this.scaffoldingPort.createPort({
       domainName: input.domain_name,
       portName: input.port_name,
       type: input.type,
     });
 
-    if (!result.success) {
-      throw result.error;
+    if (!fileResult.success) {
+      throw fileResult.error;
+    }
+
+    const registerResult = await this.manifestWritePort.registerPort({
+      contextName: input.domain_name,
+      portName: input.port_name,
+      direction: input.type === "inbound" ? "in" : "out",
+    });
+
+    if (!registerResult.success) {
+      throw registerResult.error;
     }
 
     return {
       dryRun: false,
-      fileCreated: result.value.fileCreated,
-      message: `Port ${input.port_name} created.`,
+      fileCreated: fileResult.value.fileCreated,
+      message: `Port ${input.port_name} created and registered in manifest.`,
     };
   }
 }

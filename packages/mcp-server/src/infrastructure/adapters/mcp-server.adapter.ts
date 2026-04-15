@@ -6,6 +6,8 @@ import type { CreatePortToolUseCase } from "../../application/use-cases/create-p
 import type { GetGraphResourceUseCase } from "../../application/use-cases/get-graph-resource.use-case.js";
 import type { GetLinterReportResourceUseCase } from "../../application/use-cases/get-linter-report-resource.use-case.js";
 import type { GetManifestResourceUseCase } from "../../application/use-cases/get-manifest-resource.use-case.js";
+import type { RemoveContextToolUseCase } from "../../application/use-cases/remove-context-tool.use-case.js";
+import type { RemovePortToolUseCase } from "../../application/use-cases/remove-port-tool.use-case.js";
 import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
 
 interface MCPServerAdapterDependencies {
@@ -13,10 +15,12 @@ interface MCPServerAdapterDependencies {
   getGraphResourceUseCase: GetGraphResourceUseCase;
   getLinterReportResourceUseCase: GetLinterReportResourceUseCase;
   auditBoundariesToolUseCase: AuditBoundariesToolUseCase;
-  scaffoldModuleToolUseCase?: ScaffoldModuleToolUseCase;
-  addDependencyToolUseCase?: AddDependencyToolUseCase;
-  createPortToolUseCase?: CreatePortToolUseCase;
-  createAdapterToolUseCase?: CreateAdapterToolUseCase;
+  scaffoldModuleToolUseCase: ScaffoldModuleToolUseCase;
+  addDependencyToolUseCase: AddDependencyToolUseCase;
+  createPortToolUseCase: CreatePortToolUseCase;
+  createAdapterToolUseCase: CreateAdapterToolUseCase;
+  removePortToolUseCase: RemovePortToolUseCase;
+  removeContextToolUseCase: RemoveContextToolUseCase;
 }
 
 interface MCPServerRuntime {
@@ -200,6 +204,10 @@ export class MCPServerAdapter implements MCPServerPort {
                   type: "string",
                   enum: ["domain", "application", "infrastructure"],
                 },
+                context_type: {
+                  type: "string",
+                  enum: ["core", "supporting", "driver", "shared-kernel"],
+                },
                 dry_run: { type: "boolean" },
               },
               required: ["name", "layer"],
@@ -245,6 +253,32 @@ export class MCPServerAdapter implements MCPServerPort {
               required: ["port_name", "infrastructure_name"],
             },
           },
+          {
+            name: "hexagen_remove_port",
+            description: "Remove a port from a bounded context",
+            inputSchema: {
+              type: "object",
+              properties: {
+                context_name: { type: "string" },
+                port_name: { type: "string" },
+                direction: { type: "string", enum: ["inbound", "outbound"] },
+                dry_run: { type: "boolean" },
+              },
+              required: ["context_name", "port_name", "direction"],
+            },
+          },
+          {
+            name: "hexagen_remove_context",
+            description: "Remove a bounded context from the manifest",
+            inputSchema: {
+              type: "object",
+              properties: {
+                context_name: { type: "string" },
+                dry_run: { type: "boolean" },
+              },
+              required: ["context_name"],
+            },
+          },
         ],
       };
     });
@@ -275,10 +309,6 @@ export class MCPServerAdapter implements MCPServerPort {
           }
 
           if (name === "hexagen_scaffold_module") {
-            if (!this.dependencies.scaffoldModuleToolUseCase) {
-              throw new Error("hexagen_scaffold_module is not configured");
-            }
-
             const result =
               await this.dependencies.scaffoldModuleToolUseCase.execute({
                 name: String(args.name ?? ""),
@@ -286,6 +316,12 @@ export class MCPServerAdapter implements MCPServerPort {
                   | "domain"
                   | "application"
                   | "infrastructure",
+                context_type: args.context_type as
+                  | "core"
+                  | "supporting"
+                  | "driver"
+                  | "shared-kernel"
+                  | undefined,
                 dry_run: (args.dry_run as boolean | undefined) ?? false,
               });
             return {
@@ -296,10 +332,6 @@ export class MCPServerAdapter implements MCPServerPort {
           }
 
           if (name === "hexagen_add_dependency") {
-            if (!this.dependencies.addDependencyToolUseCase) {
-              throw new Error("hexagen_add_dependency is not configured");
-            }
-
             const result =
               await this.dependencies.addDependencyToolUseCase.execute({
                 sourceModule: String(args.source_module ?? ""),
@@ -314,10 +346,6 @@ export class MCPServerAdapter implements MCPServerPort {
           }
 
           if (name === "hexagen_create_port") {
-            if (!this.dependencies.createPortToolUseCase) {
-              throw new Error("hexagen_create_port is not configured");
-            }
-
             const result =
               await this.dependencies.createPortToolUseCase.execute({
                 domain_name: String(args.domain_name ?? ""),
@@ -333,14 +361,40 @@ export class MCPServerAdapter implements MCPServerPort {
           }
 
           if (name === "hexagen_create_adapter") {
-            if (!this.dependencies.createAdapterToolUseCase) {
-              throw new Error("hexagen_create_adapter is not configured");
-            }
-
             const result =
               await this.dependencies.createAdapterToolUseCase.execute({
                 port_name: String(args.port_name ?? ""),
                 infrastructure_name: String(args.infrastructure_name ?? ""),
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_remove_port") {
+            const result =
+              await this.dependencies.removePortToolUseCase.execute({
+                context_name: String(args.context_name ?? ""),
+                port_name: String(args.port_name ?? ""),
+                direction: String(args.direction ?? "inbound") as
+                  | "inbound"
+                  | "outbound",
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_remove_context") {
+            const result =
+              await this.dependencies.removeContextToolUseCase.execute({
+                context_name: String(args.context_name ?? ""),
                 dry_run: (args.dry_run as boolean | undefined) ?? false,
               });
             return {

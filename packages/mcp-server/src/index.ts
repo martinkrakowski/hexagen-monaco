@@ -7,11 +7,14 @@ import { CreatePortToolUseCase } from "./application/use-cases/create-port-tool.
 import { GetGraphResourceUseCase } from "./application/use-cases/get-graph-resource.use-case.js";
 import { GetLinterReportResourceUseCase } from "./application/use-cases/get-linter-report-resource.use-case.js";
 import { GetManifestResourceUseCase } from "./application/use-cases/get-manifest-resource.use-case.js";
+import { RemoveContextToolUseCase } from "./application/use-cases/remove-context-tool.use-case.js";
+import { RemovePortToolUseCase } from "./application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "./application/use-cases/scaffold-module-tool.use-case.js";
+import type { ArchitectureQueryPort } from "./application/ports/out/sync-engine.port.js";
 import type { ManifestWritePort } from "./application/ports/out/manifest-write.port.js";
 import type { ProjectConfigurationReadPort } from "./application/ports/out/project-configuration-read.port.js";
 import type { LinterPort } from "./application/ports/out/linter.port.js";
-import type { SyncEnginePort } from "./application/ports/out/sync-engine.port.js";
+import type { ScaffoldingPort } from "./application/ports/out/scaffolding.port.js";
 import { LinterAdapter } from "./infrastructure/adapters/linter.adapter.js";
 import { ManifestWriteAdapter } from "./infrastructure/adapters/manifest-write.adapter.js";
 import { ProjectConfigurationReadAdapter } from "./infrastructure/adapters/project-configuration-read.adapter.js";
@@ -20,7 +23,8 @@ import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-eve
 
 export interface MCPCompositionRoot {
   projectConfigurationReadPort: ProjectConfigurationReadPort;
-  syncEnginePort: SyncEnginePort;
+  architectureQueryPort: ArchitectureQueryPort;
+  scaffoldingPort: ScaffoldingPort;
   manifestWritePort: ManifestWritePort;
   linterPort: LinterPort;
   eventBusPort: EventBusPort;
@@ -29,16 +33,17 @@ export interface MCPCompositionRoot {
 export function createDefaultMCPCompositionRoot(
   workspaceRoot: string = process.cwd(),
 ): MCPCompositionRoot {
-  const syncEnginePort = new SyncEngineAdapter(workspaceRoot);
+  const syncEngineAdapter = new SyncEngineAdapter(workspaceRoot);
   const manifestWritePort = new ManifestWriteAdapter(workspaceRoot);
 
   return {
     projectConfigurationReadPort: new ProjectConfigurationReadAdapter(
       workspaceRoot,
     ),
-    syncEnginePort,
+    architectureQueryPort: syncEngineAdapter,
+    scaffoldingPort: syncEngineAdapter,
     manifestWritePort,
-    linterPort: new LinterAdapter(syncEnginePort),
+    linterPort: new LinterAdapter(syncEngineAdapter),
     eventBusPort: new InMemoryEventBusAdapter(),
   };
 }
@@ -48,16 +53,16 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     root.projectConfigurationReadPort,
   );
   const getGraphResourceUseCase = new GetGraphResourceUseCase(
-    root.syncEnginePort,
+    root.architectureQueryPort,
   );
   const getLinterReportResourceUseCase = new GetLinterReportResourceUseCase(
-    root.syncEnginePort,
+    root.architectureQueryPort,
   );
   const auditBoundariesToolUseCase = new AuditBoundariesToolUseCase(
     root.linterPort,
   );
   const scaffoldModuleToolUseCase = new ScaffoldModuleToolUseCase(
-    root.syncEnginePort,
+    root.scaffoldingPort,
     root.manifestWritePort,
     root.eventBusPort,
   );
@@ -65,9 +70,21 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     root.manifestWritePort,
     root.eventBusPort,
   );
-  const createPortToolUseCase = new CreatePortToolUseCase(root.syncEnginePort);
+  const createPortToolUseCase = new CreatePortToolUseCase(
+    root.scaffoldingPort,
+    root.manifestWritePort,
+  );
   const createAdapterToolUseCase = new CreateAdapterToolUseCase(
-    root.syncEnginePort,
+    root.scaffoldingPort,
+    root.manifestWritePort,
+  );
+  const removePortToolUseCase = new RemovePortToolUseCase(
+    root.manifestWritePort,
+    root.eventBusPort,
+  );
+  const removeContextToolUseCase = new RemoveContextToolUseCase(
+    root.manifestWritePort,
+    root.eventBusPort,
   );
 
   return new MCPServerAdapter({
@@ -79,6 +96,8 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     addDependencyToolUseCase,
     createPortToolUseCase,
     createAdapterToolUseCase,
+    removePortToolUseCase,
+    removeContextToolUseCase,
   });
 }
 

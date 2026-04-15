@@ -8,11 +8,14 @@ import { CreatePortToolUseCase } from "../../../src/application/use-cases/create
 import { GetGraphResourceUseCase } from "../../../src/application/use-cases/get-graph-resource.use-case.js";
 import { GetLinterReportResourceUseCase } from "../../../src/application/use-cases/get-linter-report-resource.use-case.js";
 import { GetManifestResourceUseCase } from "../../../src/application/use-cases/get-manifest-resource.use-case.js";
+import { RemoveContextToolUseCase } from "../../../src/application/use-cases/remove-context-tool.use-case.js";
+import { RemovePortToolUseCase } from "../../../src/application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "../../../src/application/use-cases/scaffold-module-tool.use-case.js";
+import type { ArchitectureQueryPort } from "../../../src/application/ports/out/sync-engine.port.js";
+import type { ScaffoldingPort } from "../../../src/application/ports/out/scaffolding.port.js";
 import type { LinterPort } from "../../../src/application/ports/out/linter.port.js";
 import type { ManifestWritePort } from "../../../src/application/ports/out/manifest-write.port.js";
 import type { ProjectConfigurationReadPort } from "../../../src/application/ports/out/project-configuration-read.port.js";
-import type { SyncEnginePort } from "../../../src/application/ports/out/sync-engine.port.js";
 
 const projectRead: ProjectConfigurationReadPort = {
   async getManifest() {
@@ -23,7 +26,7 @@ const projectRead: ProjectConfigurationReadPort = {
   },
 };
 
-const sync: SyncEnginePort = {
+const sync: ArchitectureQueryPort & ScaffoldingPort = {
   async getArchitectureGraph() {
     return { success: true, value: { nodes: [], edges: [] } };
   },
@@ -70,6 +73,24 @@ const manifestWrite: ManifestWritePort = {
   async addDependency() {
     return { success: true, value: { updated: true } };
   },
+  async registerBoundedContext() {
+    return {
+      success: true,
+      value: { registered: true, alreadyExisted: false },
+    };
+  },
+  async registerPort() {
+    return { success: true, value: { registered: true } };
+  },
+  async registerAdapter() {
+    return { success: true, value: { registered: true } };
+  },
+  async removePort() {
+    return { success: true, value: { removed: true } };
+  },
+  async removeContext() {
+    return { success: true, value: { removed: true } };
+  },
 };
 
 class EventBusFake implements EventBusPort {
@@ -91,13 +112,22 @@ class EventBusFake implements EventBusPort {
     getGraphResourceUseCase: new GetGraphResourceUseCase(sync),
     getLinterReportResourceUseCase: new GetLinterReportResourceUseCase(sync),
     auditBoundariesToolUseCase: new AuditBoundariesToolUseCase(linter),
-    scaffoldModuleToolUseCase: new ScaffoldModuleToolUseCase(sync, eventBus),
+    scaffoldModuleToolUseCase: new ScaffoldModuleToolUseCase(
+      sync,
+      manifestWrite,
+      eventBus,
+    ),
     addDependencyToolUseCase: new AddDependencyToolUseCase(
       manifestWrite,
       eventBus,
     ),
-    createPortToolUseCase: new CreatePortToolUseCase(sync),
-    createAdapterToolUseCase: new CreateAdapterToolUseCase(sync),
+    createPortToolUseCase: new CreatePortToolUseCase(sync, manifestWrite),
+    createAdapterToolUseCase: new CreateAdapterToolUseCase(sync, manifestWrite),
+    removePortToolUseCase: new RemovePortToolUseCase(manifestWrite, eventBus),
+    removeContextToolUseCase: new RemoveContextToolUseCase(
+      manifestWrite,
+      eventBus,
+    ),
   });
 
   assert.ok(adapter, "adapter should be constructible with all dependencies");

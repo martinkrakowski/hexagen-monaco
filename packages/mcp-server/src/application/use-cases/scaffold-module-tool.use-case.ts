@@ -1,10 +1,11 @@
 import type { EventBusPort } from "@hexagen/messaging";
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
-import type { SyncEnginePort } from "../ports/out/sync-engine.port.js";
+import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
 export interface ScaffoldModuleInput {
   name: string;
   layer: "domain" | "application" | "infrastructure";
+  context_type?: "core" | "supporting" | "driver" | "shared-kernel";
   dry_run?: boolean;
 }
 
@@ -17,7 +18,7 @@ export interface ScaffoldModuleOutput {
 
 export class ScaffoldModuleToolUseCase {
   constructor(
-    private readonly syncEnginePort: SyncEnginePort,
+    private readonly scaffoldingPort: ScaffoldingPort,
     private readonly manifestWritePort: ManifestWritePort,
     private readonly eventBusPort: EventBusPort,
   ) {}
@@ -36,7 +37,7 @@ export class ScaffoldModuleToolUseCase {
       };
     }
 
-    const scaffoldResult = await this.syncEnginePort.scaffoldModule({
+    const scaffoldResult = await this.scaffoldingPort.scaffoldModule({
       name: input.name,
       layer: input.layer,
     });
@@ -47,7 +48,7 @@ export class ScaffoldModuleToolUseCase {
 
     const registerResult = await this.manifestWritePort.registerBoundedContext({
       name: input.name,
-      type: "core",
+      type: input.context_type ?? "core",
     });
 
     if (!registerResult.success) {
