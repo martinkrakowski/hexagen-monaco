@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { project, destinationUrl, zipBuffer } = result.value;
+    const { project, zipBuffer } = result.value;
 
     // ZIP output format — return binary response
     if (outputFormat === "zip" && zipBuffer) {

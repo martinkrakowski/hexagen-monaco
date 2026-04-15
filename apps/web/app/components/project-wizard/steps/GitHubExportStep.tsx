@@ -53,8 +53,12 @@ export const GitHubExportStep = ({
   const isAuthenticated = status === "authenticated";
 
   const isFormValid = useMemo(() => {
-    // GitHub export is optional - can proceed without authentication
-    // If not authenticated, skip the GitHub export step (generate locally only)
+    if (isAuthenticated && repoName.trim().length > 0) {
+      const validRepoPattern = /^[a-zA-Z0-9._-]+$/;
+      if (!validRepoPattern.test(repoName.trim())) {
+        return false;
+      }
+    }
     return !isAuthenticated || repoName.trim().length > 0;
   }, [isAuthenticated, repoName]);
 
@@ -73,8 +77,12 @@ export const GitHubExportStep = ({
     setAuthPending(true);
     setUiError(null);
     try {
-      await signIn("github");
-    } finally {
+      await signIn("github", {
+        redirect: true,
+        callbackUrl: window.location.href,
+      });
+    } catch {
+      setUiError("Failed to sign in with GitHub. Please try again.");
       setAuthPending(false);
     }
   };
