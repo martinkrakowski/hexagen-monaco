@@ -16,7 +16,7 @@ import { toPng } from "html-to-image";
 import { useTheme } from "@/hooks/use-theme";
 import "@xyflow/react/dist/style.css";
 
-import { UnifiedBoundedContext } from "./BoundedContext";
+import { UnifiedBoundedContext, PORT_CATEGORY_COLORS } from "./BoundedContext";
 import { GroupBoundaryNode } from "./GroupBoundaryNode";
 import { PeerContextNode } from "./PeerContextNode";
 import type {
@@ -93,9 +93,40 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   });
 }
 
-function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
+function getEdgeColor(
+  sourceNode: HexagonNodeData | undefined,
+  isSK: boolean,
+): string {
+  if (isSK) return "#a78bfa";
+
+  if (sourceNode?.type === "port") {
+    const nodeWithCategory = sourceNode as HexagonNodeData & {
+      category?: string;
+    };
+    if (nodeWithCategory.category) {
+      const categoryKey =
+        nodeWithCategory.category.toLowerCase() as keyof typeof PORT_CATEGORY_COLORS;
+      const categoryStyle = PORT_CATEGORY_COLORS[categoryKey];
+      if (categoryStyle) {
+        return categoryStyle.hexColor;
+      }
+    }
+  }
+
+  return "hsl(var(--foreground) / 0.35)";
+}
+
+function mapToFlowEdges(
+  edges: HexagonEdge[],
+  nodes: HexagonNodeData[],
+): FlowEdge[] {
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
   return edges.map((edge) => {
     const isSK = edge.label === "SK";
+    const sourceNode = nodeMap.get(edge.source);
+    const edgeColor = getEdgeColor(sourceNode, isSK);
+
     return {
       id: edge.id,
       source: edge.source,
@@ -106,13 +137,13 @@ function mapToFlowEdges(edges: HexagonEdge[]): FlowEdge[] {
       sourceHandle: edge.sourceHandle,
       targetHandle: edge.targetHandle,
       style: isSK
-        ? { strokeWidth: 3, stroke: "#a78bfa" }
-        : { strokeWidth: 1.5, stroke: "hsl(var(--foreground) / 0.35)" },
+        ? { strokeWidth: 3, stroke: edgeColor }
+        : { strokeWidth: 1.5, stroke: edgeColor },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 14,
         height: 14,
-        color: isSK ? "#a78bfa" : "hsl(var(--foreground) / 0.35)",
+        color: edgeColor,
       },
     };
   });
@@ -129,7 +160,7 @@ export function HexagonCanvas({
   const colorMode: ColorMode = theme === "dark" ? "dark" : "light";
 
   const flowNodes = useMemo(() => mapToFlowNodes(nodes), [nodes]);
-  const flowEdges = useMemo(() => mapToFlowEdges(edges), [edges]);
+  const flowEdges = useMemo(() => mapToFlowEdges(edges, nodes), [edges, nodes]);
 
   const initialExportDone = useRef(false);
 
