@@ -22,6 +22,7 @@ import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
 import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
 import { CodeView } from "@/components/code-view/CodeView";
+import { governanceState } from "@/lib/governance-state";
 
 import {
   emptyFormValues,
@@ -248,7 +249,8 @@ export default function Home() {
       await clearDraft();
       setHasGenerated(true);
 
-      // In a real app, we might show a success notification or navigate to results
+      // Store manifest for governance panel and trigger refresh
+      governanceState.currentManifestYaml = manifestYaml;
     } catch (error) {
       getLogger().errorWithException(error, "Generation error");
       // In a real app, we'd show an error message to the user
@@ -292,6 +294,7 @@ export default function Home() {
   };
 
   // Generates a manifestYaml snapshot from current form values (best-effort).
+  // Also stores it in governanceState so the governance panel can read it.
   const buildManifestYaml = () => {
     const formData = form.getValues();
     const data = {
@@ -302,9 +305,11 @@ export default function Home() {
       withLlm: !!formData.withLlm,
       withBlockchain: !!formData.withBlockchain,
     };
-    return yaml.dump(
+    const manifestYaml = yaml.dump(
       wizardToManifest(data as Parameters<typeof wizardToManifest>[0]),
     );
+    governanceState.currentManifestYaml = manifestYaml;
+    return manifestYaml;
   };
 
   const handleNewProjectClick = () => {

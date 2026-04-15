@@ -7,11 +7,13 @@ import { useTheme } from "@/hooks/use-theme";
 interface MonacoViewerProps {
   content: string;
   language?: string;
+  readOnly?: boolean;
 }
 
 export const MonacoViewer: React.FC<MonacoViewerProps> = ({
   content,
   language = "plaintext",
+  readOnly = false,
 }) => {
   const { theme } = useTheme();
 
@@ -28,7 +30,7 @@ export const MonacoViewer: React.FC<MonacoViewerProps> = ({
       theme={theme === "dark" ? "vs-dark" : "vs"}
       value={content}
       options={{
-        readOnly: true,
+        readOnly,
         minimap: { enabled: false },
         wordWrap: "on",
         scrollBeyondLastLine: false,

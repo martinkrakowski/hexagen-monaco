@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 interface Violation {
   id: string;
@@ -38,18 +38,27 @@ interface UseGovernanceDataReturn {
   data: GovernanceData;
   isLoading: boolean;
   error: string | null;
+  /** Manual refresh — re-fetches from the legacy GET endpoints (disk-based). */
   refresh: () => void;
+  /** Refresh with dynamic data — posts manifestYaml + openFileContent to /api/governance/refresh. */
+  refreshWithData: (
+    manifestYaml: string,
+    openFileContent?: string,
+  ) => Promise<void>;
 }
 
+const emptyData: GovernanceData = {
+  violations: [],
+  suggestions: [],
+  portAdapterStatus: [],
+};
+
 export function useGovernanceData(): UseGovernanceDataReturn {
-  const [data, setData] = useState<GovernanceData>({
-    violations: [],
-    suggestions: [],
-    portAdapterStatus: [],
-  });
+  const [data, setData] = useState<GovernanceData>(emptyData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Legacy refresh — GET from separate endpoints (reads from disk)
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -90,14 +99,49 @@ export function useGovernanceData(): UseGovernanceDataReturn {
     }
   }, []);
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  // Dynamic refresh — POST manifest + open file content to combined endpoint
+  const refreshWithData = useCallback(
+    async (manifestYaml: string, openFileContent?: string) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const res = await fetch("/api/governance/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ manifestYaml, openFileContent }),
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          setError(result.error || "Governance refresh failed");
+          return;
+        }
+
+        setData({
+          violations: result.violations || [],
+          suggestions: result.suggestions || [],
+          portAdapterStatus: result.portAdapterStatus || [],
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to refresh governance data",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
 
   return {
     data,
     isLoading,
     error,
     refresh: fetchAll,
+    refreshWithData,
   };
 }
