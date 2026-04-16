@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   FileCode,
   Loader2,
@@ -12,7 +12,6 @@ import {
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
-import { MonacoViewer } from "@/components/monaco/MonacoViewer";
 import { EditableMonaco } from "@/components/monaco/EditableMonaco";
 import { useProjectGeneration } from "@/hooks/use-project-generation";
 import { useArchitectureDownload } from "@/hooks/use-architecture-download";
@@ -21,11 +20,19 @@ import type { ViewFileNode } from "./types";
 
 interface CodeViewProps {
   wizardData: WizardData;
+  selectedFileId: string | null;
+  editedFiles: Map<string, string>;
+  onFileSelect: (fileId: string | null) => void;
+  onFileContentChange: (fileId: string, content: string) => void;
 }
 
-export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
-  const [selectedFile, setSelectedFile] = useState<ViewFileNode | null>(null);
-
+export const CodeView: React.FC<CodeViewProps> = ({
+  wizardData,
+  selectedFileId,
+  editedFiles,
+  onFileSelect,
+  onFileContentChange,
+}) => {
   const {
     files,
     loading,
@@ -35,6 +42,23 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
     refresh,
     downloadZip,
   } = useProjectGeneration(wizardData);
+
+  const selectedFile = useMemo((): ViewFileNode | null => {
+    if (!selectedFileId) return null;
+    const content = files.get(selectedFileId);
+    if (!content) return null;
+    return {
+      id: selectedFileId,
+      name: selectedFileId.split("/").pop() || selectedFileId,
+      type: "file",
+      language: selectedFileId.split(".").pop() || "text",
+      content,
+    };
+  }, [selectedFileId, files]);
+
+  const displayContent = selectedFileId
+    ? (editedFiles.get(selectedFileId) ?? files.get(selectedFileId) ?? "")
+    : "";
 
   const { downloadArchitectureZip, isDownloading: isDownloadingArch } =
     useArchitectureDownload(wizardData);
@@ -91,8 +115,10 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
         ) : (
           <FileTree
             data={fileTree}
-            selectedId={selectedFile?.id || null}
-            onSelect={setSelectedFile}
+            selectedId={selectedFileId}
+            onSelect={(node) =>
+              onFileSelect(node?.type === "file" ? node.id : null)
+            }
           />
         )}
       </div>
@@ -128,9 +154,14 @@ export const CodeView: React.FC<CodeViewProps> = ({ wizardData }) => {
 
             <div className="flex-1 overflow-hidden">
               <EditableMonaco
-                initialContent={selectedFile.content || ""}
+                initialContent={displayContent}
                 language={selectedFile.language}
                 sessionId={`code-view-${selectedFile.id}`}
+                onSave={(content) => {
+                  if (selectedFileId) {
+                    onFileContentChange(selectedFileId, content);
+                  }
+                }}
               />
             </div>
           </div>

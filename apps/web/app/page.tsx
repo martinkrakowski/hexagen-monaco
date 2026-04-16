@@ -58,6 +58,10 @@ export default function Home() {
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [showSavedProjects, setShowSavedProjects] = useState(false);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [editedFiles, setEditedFiles] = useState<Map<string, string>>(
+    new Map(),
+  );
 
   const {
     projects,
@@ -339,6 +343,21 @@ export default function Home() {
     setShowSavedProjects(false);
   };
 
+  const handleFileSelect = useCallback((fileId: string | null) => {
+    setSelectedFileId(fileId);
+  }, []);
+
+  const handleFileContentChange = useCallback(
+    (fileId: string, content: string) => {
+      setEditedFiles((prev) => {
+        const next = new Map(prev);
+        next.set(fileId, content);
+        return next;
+      });
+    },
+    [],
+  );
+
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
       <Header
@@ -396,7 +415,13 @@ export default function Home() {
                       wizardData={wizardData}
                     />
                   ) : (
-                    <CodeView wizardData={wizardData} />
+                    <CodeView
+                      wizardData={wizardData}
+                      selectedFileId={selectedFileId}
+                      editedFiles={editedFiles}
+                      onFileSelect={handleFileSelect}
+                      onFileContentChange={handleFileContentChange}
+                    />
                   )}
                 </CardContent>
               </Card>
