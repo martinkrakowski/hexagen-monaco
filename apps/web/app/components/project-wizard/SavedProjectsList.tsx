@@ -107,7 +107,7 @@ export function SavedProjectsList({
           <div className="space-y-3">
             {draft && (
               <div className="relative p-4 border border-yellow-500/50 rounded-lg bg-yellow-500/5">
-                {showDiscardDraft ? (
+                {showDiscardDraft && (
                   <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2">
                     <AlertTriangle
                       aria-hidden="true"
@@ -136,112 +136,116 @@ export function SavedProjectsList({
                       No
                     </PrimaryButton>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-700 dark:text-yellow-300">
-                        Draft
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Step {(draft.savedAtStep ?? 0) + 1} of 6
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Last saved: {formatDate(draft.updatedAt)}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <PrimaryButton
-                        size="sm"
-                        onClick={onResumeDraft}
-                        className="h-auto px-3 py-1.5 text-xs"
-                      >
-                        <FileEdit aria-hidden="true" className="h-3 w-3 mr-1" />
-                        Resume
-                      </PrimaryButton>
-                      <PrimaryButton
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowDiscardDraft(true)}
-                        className="h-auto px-3 py-1.5 text-xs text-destructive hover:text-destructive"
-                      >
-                        <Trash2 aria-hidden="true" className="h-3 w-3 mr-1" />
-                        Discard
-                      </PrimaryButton>
-                    </div>
-                  </>
                 )}
-              </div>
-            )}
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className="relative p-4 border border-border rounded-lg bg-background"
-              >
-                {deletingId === project.id ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2">
-                    <AlertTriangle
-                      aria-hidden="true"
-                      className="h-4 w-4 text-destructive"
-                    />
-                    <span className="text-xs font-medium text-destructive">
-                      Delete?
+                <div className={showDiscardDraft ? "invisible" : ""}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-700 dark:text-yellow-300">
+                      Draft
                     </span>
+                    <span className="text-xs text-muted-foreground">
+                      Step {(draft.savedAtStep ?? 0) + 1} of 6
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Last saved: {formatDate(draft.updatedAt)}
+                  </p>
+                  <div className="flex items-center gap-2">
                     <PrimaryButton
-                      variant="destructive"
                       size="sm"
-                      onClick={() => handleDeleteConfirm(project.id)}
-                      className="h-auto px-2 py-1 text-xs"
+                      onClick={onResumeDraft}
+                      className="h-auto px-3 py-1.5 text-xs"
                     >
-                      Yes
+                      <FileEdit aria-hidden="true" className="h-3 w-3 mr-1" />
+                      Resume
                     </PrimaryButton>
                     <PrimaryButton
                       variant="outline"
                       size="sm"
-                      onClick={() => setDeletingId(null)}
-                      className="h-auto px-2 py-1 text-xs"
+                      onClick={() => setShowDiscardDraft(true)}
+                      className="h-auto px-3 py-1.5 text-xs text-destructive hover:text-destructive"
                     >
-                      No
+                      <Trash2 aria-hidden="true" className="h-3 w-3 mr-1" />
+                      Discard
                     </PrimaryButton>
                   </div>
-                ) : pendingLoadId === project.id ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-3 p-4">
-                    <div className="flex items-center gap-2">
+                </div>
+              </div>
+            )}
+            {projects.map((project) => {
+              const isDeleting = deletingId === project.id;
+              const isPendingLoad = pendingLoadId === project.id;
+              const hasOverlay = isDeleting || isPendingLoad;
+              return (
+                <div
+                  key={project.id}
+                  className="relative p-4 border border-border rounded-lg bg-background"
+                >
+                  {isDeleting && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2">
                       <AlertTriangle
                         aria-hidden="true"
-                        className="h-4 w-4 text-yellow-500 shrink-0"
+                        className="h-4 w-4 text-destructive"
                       />
-                      <span className="text-xs font-medium text-foreground">
-                        Load this project?
+                      <span className="text-xs font-medium text-destructive">
+                        Delete?
                       </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Your unsaved draft will be permanently lost.
-                    </p>
-                    <div className="flex gap-2">
                       <PrimaryButton
                         variant="destructive"
                         size="sm"
-                        onClick={() => {
-                          const id = pendingLoadId;
-                          setPendingLoadId(null);
-                          onLoad(id);
-                        }}
-                        className="h-auto px-3 py-1 text-xs"
+                        onClick={() => handleDeleteConfirm(project.id)}
+                        className="h-auto px-2 py-1 text-xs"
                       >
-                        Load & Discard Draft
+                        Yes
                       </PrimaryButton>
                       <PrimaryButton
                         variant="outline"
                         size="sm"
-                        onClick={() => setPendingLoadId(null)}
-                        className="h-auto px-3 py-1 text-xs"
+                        onClick={() => setDeletingId(null)}
+                        className="h-auto px-2 py-1 text-xs"
                       >
-                        Cancel
+                        No
                       </PrimaryButton>
                     </div>
-                  </div>
-                ) : (
-                  <>
+                  )}
+                  {isPendingLoad && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-3 p-4">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle
+                          aria-hidden="true"
+                          className="h-4 w-4 text-yellow-500 shrink-0"
+                        />
+                        <span className="text-xs font-medium text-foreground">
+                          Load this project?
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center">
+                        Your unsaved draft will be permanently lost.
+                      </p>
+                      <div className="flex gap-2">
+                        <PrimaryButton
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            const id = pendingLoadId;
+                            setPendingLoadId(null);
+                            onLoad(id);
+                          }}
+                          className="h-auto px-3 py-1 text-xs"
+                        >
+                          Load & Discard Draft
+                        </PrimaryButton>
+                        <PrimaryButton
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPendingLoadId(null)}
+                          className="h-auto px-3 py-1 text-xs"
+                        >
+                          Cancel
+                        </PrimaryButton>
+                      </div>
+                    </div>
+                  )}
+                  <div className={hasOverlay ? "invisible" : ""}>
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
                         {renamingId === project.id ? (
@@ -306,10 +310,10 @@ export function SavedProjectsList({
                         Delete
                       </PrimaryButton>
                     </div>
-                  </>
-                )}
-              </div>
-            ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
