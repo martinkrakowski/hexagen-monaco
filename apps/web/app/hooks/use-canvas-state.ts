@@ -10,10 +10,7 @@ import {
   RenderHexagonCanvasUseCase,
   createCanvasViewport,
 } from "@hexagen/visualization";
-import {
-  getArchitectureGraphProvider,
-  getWizardPersistence,
-} from "../lib/wire";
+import { getArchitectureGraphProvider } from "../lib/wire";
 import type { WizardData } from "@hexagen/shared";
 import {
   generateHexagonalContextMap,
@@ -39,6 +36,7 @@ interface UseCanvasStateResult extends Omit<GraphState, "selectedNodeId"> {
     updates: Pick<HexagonNode, "label" | "type">,
   ) => void;
   onCloseEditor: () => void;
+  clearCanvasLayout: () => void;
 }
 
 interface UseCanvasStateError {
@@ -107,17 +105,9 @@ export function useCanvasState(
   const {
     nodePositions,
     isLoaded: layoutLoaded,
-    setSessionId: setLayoutSessionId,
     updateNodePosition,
+    clearLayout,
   } = useCanvasLayout();
-
-  const initializeSessionId = useCallback(async () => {
-    const wizardPersistence = getWizardPersistence();
-    const draftResult = await wizardPersistence.loadDraft();
-    if (draftResult.success && draftResult.value?.sessionId) {
-      await setLayoutSessionId(draftResult.value.sessionId);
-    }
-  }, [setLayoutSessionId]);
 
   const applySavedPositions = useCallback(
     (nodes: HexagonNode[]): HexagonNode[] => {
@@ -136,13 +126,12 @@ export function useCanvasState(
   );
 
   const loadGraph = useCallback(async () => {
-    // Clear any previous errors before loading new data
     setError(null);
 
-    // Initialize session ID from draft
-    await initializeSessionId();
+    if (!layoutLoaded) {
+      return;
+    }
 
-    // Wizard path: generate strategic context map
     if (wizardData?.boundedContexts?.length) {
       const { nodes, edges } = generateHexagonalContextMap(wizardData);
       const nodesWithPositions = applySavedPositions(nodes);
@@ -154,7 +143,6 @@ export function useCanvasState(
       return;
     }
 
-    // Demo path: load from provider with dagre layout
     const provider = getArchitectureGraphProvider();
     const result = await provider.getArchitectureGraph(projectId);
 
@@ -179,16 +167,17 @@ export function useCanvasState(
       edges,
       viewport: renderResult.viewport,
     });
-  }, [projectId, wizardData, initializeSessionId, applySavedPositions]);
+  }, [projectId, layoutLoaded, applySavedPositions]);
 
-  // Reset error when component mounts or wizard data changes significantly
   useEffect(() => {
     setError(null);
   }, [wizardData?.boundedContexts?.length]);
 
   useEffect(() => {
-    loadGraph();
-  }, [loadGraph, wizardData]);
+    if (layoutLoaded) {
+      loadGraph();
+    }
+  }, [layoutLoaded, loadGraph]);
 
   const onNodeDragStop = useCallback(
     (node: HexagonNode) => {
@@ -209,8 +198,6 @@ export function useCanvasState(
 
   const onAddNode = useCallback(() => {
     setState((prev) => {
-      // Place new node near existing content — offset from root-core if present,
-      // otherwise offset from the first node, otherwise use a fixed fallback.
       const root = prev.nodes.find((n) => n.id === "root-core");
       const anchor = root ?? prev.nodes[0];
       const position = anchor
@@ -218,9 +205,6 @@ export function useCanvasState(
         : { x: 100, y: 100 };
       const newNode = createDefaultHexagonNode("entity", "New Node", position);
 
-      // No auto-edge: manually added nodes have no cardinal side, so connecting
-      // them programmatically always defaults to the nearest handle ("north").
-      // The user draws the connection manually to choose the correct handle.
       return {
         ...prev,
         nodes: [...prev.nodes, newNode],
@@ -230,9 +214,7 @@ export function useCanvasState(
     });
   }, []);
 
-  const onExportImage = useCallback(() => {
-    // TODO: implement export to PNG/SVG via html-to-image
-  }, []);
+  const onExportImage = useCallback(() => {}, []);
 
   const onUpdateNode = useCallback(
     (nodeId: string, updates: Pick<HexagonNode, "label" | "type">) => {
@@ -250,6 +232,10 @@ export function useCanvasState(
     setState((prev) => ({ ...prev, selectedNodeId: undefined }));
   }, []);
 
+  const handleClearCanvasLayout = useCallback(async () => {
+    await clearLayout();
+  }, [clearLayout]);
+
   if (error) {
     return { error };
   }
@@ -265,5 +251,6 @@ export function useCanvasState(
     onExportImage,
     onUpdateNode,
     onCloseEditor,
+    clearCanvasLayout: handleClearCanvasLayout,
   };
 }

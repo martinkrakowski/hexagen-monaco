@@ -95,7 +95,7 @@ export class LocalStorageCanvasLayoutAdapter implements CanvasLayoutPersistenceP
     }
 
     const posObj = positions as Record<string, unknown>;
-    for (const [key, value] of Object.entries(posObj)) {
+    for (const [, value] of Object.entries(posObj)) {
       if (
         !value ||
         typeof value !== "object" ||

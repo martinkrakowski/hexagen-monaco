@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { PersistedCanvasLayout, NodePosition } from "@hexagen/shared";
-import { getCanvasLayoutPersistence, getWizardPersistence } from "@/lib/wire";
+import {
+  getCanvasLayoutPersistence,
+  getWizardPersistence,
+  getLogger,
+} from "@/lib/wire";
 
 const DEBOUNCE_MS = 500;
 
@@ -42,7 +46,9 @@ export function useCanvasLayout() {
       const persistence = getCanvasLayoutPersistence();
       const result = await persistence.saveCanvasLayout(sessionId, layout);
       if (!result.success) {
-        getCanvasLayoutPersistence();
+        getLogger().warn(
+          `Failed to persist canvas layout: ${result.error.message}`,
+        );
       }
     },
     [],
