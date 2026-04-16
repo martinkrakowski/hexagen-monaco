@@ -205,7 +205,6 @@ export function EditableMonaco({
           {showDiscardDialog && (
             <div className="mt-4 rounded-lg overflow-hidden border border-border h-[40vh]">
               <DiffEditor
-                key={`diff-editor-${sessionId}`}
                 original={baselineContent}
                 modified={content}
                 language={language}

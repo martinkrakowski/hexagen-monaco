@@ -14,6 +14,7 @@ export interface WizardDraft {
   readonly formState: Record<string, unknown>;
   readonly createdAt: number;
   readonly updatedAt: number;
+  readonly sessionId?: string;
 }
 
 export interface WizardPersistencePort {

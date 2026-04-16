@@ -46,6 +46,7 @@ import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
 import { useSavedProjects } from "@/hooks/use-saved-projects";
 import { useWizardDraft } from "@/hooks/use-wizard-draft";
+import { useEditorWorkspace } from "@/hooks/use-editor-workspace";
 import { getLogger } from "@/lib/wire";
 
 export default function Home() {
@@ -58,10 +59,23 @@ export default function Home() {
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(null);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [showSavedProjects, setShowSavedProjects] = useState(false);
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [editedFiles, setEditedFiles] = useState<Map<string, string>>(
-    new Map(),
-  );
+
+  const {
+    state: editorWorkspace,
+    setSessionId: setEditorSessionId,
+    clearSession: clearEditorSession,
+    updateFile,
+    selectFile: editorSelectFile,
+    markFileSaved,
+  } = useEditorWorkspace();
+
+  const editedFilesContentMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [k, v] of editorWorkspace.files) {
+      m.set(k, v.content);
+    }
+    return m;
+  }, [editorWorkspace.files]);
 
   const {
     projects,
@@ -190,6 +204,7 @@ export default function Home() {
       setCurrentStepIndex(0);
       setShowSavedProjects(false);
       await clearDraft();
+      setEditorSessionId(crypto.randomUUID());
     }
   };
 
@@ -252,6 +267,9 @@ export default function Home() {
       saveProject(projectName, formData, manifestYaml);
       await clearDraft();
       setHasGenerated(true);
+
+      // Initialize new editor workspace session
+      setEditorSessionId(crypto.randomUUID());
 
       // Store manifest for governance panel and trigger refresh
       governanceState.currentManifestYaml = manifestYaml;
@@ -331,6 +349,7 @@ export default function Home() {
     setHasGenerated(false);
     setShowNewProjectDialog(false);
     setShowSavedProjects(false);
+    clearEditorSession();
   };
 
   const handleDiscardAndNew = () => {
@@ -341,21 +360,28 @@ export default function Home() {
     setHasGenerated(false);
     setShowNewProjectDialog(false);
     setShowSavedProjects(false);
+    clearEditorSession();
   };
 
-  const handleFileSelect = useCallback((fileId: string | null) => {
-    setSelectedFileId(fileId);
-  }, []);
+  const handleFileSelect = useCallback(
+    (fileId: string | null) => {
+      editorSelectFile(fileId);
+    },
+    [editorSelectFile],
+  );
 
   const handleFileContentChange = useCallback(
     (fileId: string, content: string) => {
-      setEditedFiles((prev) => {
-        const next = new Map(prev);
-        next.set(fileId, content);
-        return next;
-      });
+      updateFile(fileId, content);
     },
-    [],
+    [updateFile],
+  );
+
+  const handleFileSave = useCallback(
+    (fileId: string) => {
+      markFileSaved(fileId);
+    },
+    [markFileSaved],
   );
 
   return (
@@ -417,10 +443,11 @@ export default function Home() {
                   ) : (
                     <CodeView
                       wizardData={wizardData}
-                      selectedFileId={selectedFileId}
-                      editedFiles={editedFiles}
+                      selectedFileId={editorWorkspace.selectedFileId}
+                      editedFiles={editedFilesContentMap}
                       onFileSelect={handleFileSelect}
                       onFileContentChange={handleFileContentChange}
+                      onFileSave={handleFileSave}
                     />
                   )}
                 </CardContent>

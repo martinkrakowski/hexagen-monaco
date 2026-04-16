@@ -24,6 +24,7 @@ interface CodeViewProps {
   editedFiles: Map<string, string>;
   onFileSelect: (fileId: string | null) => void;
   onFileContentChange: (fileId: string, content: string) => void;
+  onFileSave?: (fileId: string) => void;
 }
 
 export const CodeView: React.FC<CodeViewProps> = ({
@@ -32,6 +33,7 @@ export const CodeView: React.FC<CodeViewProps> = ({
   editedFiles,
   onFileSelect,
   onFileContentChange,
+  onFileSave,
 }) => {
   const {
     files,
@@ -160,6 +162,7 @@ export const CodeView: React.FC<CodeViewProps> = ({
                 onSave={(content) => {
                   if (selectedFileId) {
                     onFileContentChange(selectedFileId, content);
+                    onFileSave?.(selectedFileId);
                   }
                 }}
               />
