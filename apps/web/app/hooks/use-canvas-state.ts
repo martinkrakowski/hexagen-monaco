@@ -16,6 +16,7 @@ import {
   generateHexagonalContextMap,
   type HexagonNodeWithLayout,
 } from "../lib/layout-engine";
+import { useCanvasLayout } from "./use-canvas-layout";
 
 interface GraphState {
   nodes: HexagonNode[];
@@ -35,6 +36,7 @@ interface UseCanvasStateResult extends Omit<GraphState, "selectedNodeId"> {
     updates: Pick<HexagonNode, "label" | "type">,
   ) => void;
   onCloseEditor: () => void;
+  clearCanvasLayout: () => void;
 }
 
 interface UseCanvasStateError {
@@ -100,22 +102,47 @@ export function useCanvasState(
   });
   const [error, setError] = useState<Error | null>(null);
 
+  const {
+    nodePositions,
+    isLoaded: layoutLoaded,
+    updateNodePosition,
+    clearLayout,
+  } = useCanvasLayout();
+
+  const applySavedPositions = useCallback(
+    (nodes: HexagonNode[]): HexagonNode[] => {
+      if (!layoutLoaded || Object.keys(nodePositions).length === 0) {
+        return nodes;
+      }
+      return nodes.map((node) => {
+        const savedPosition = nodePositions[node.id];
+        if (savedPosition) {
+          return { ...node, position: savedPosition };
+        }
+        return node;
+      });
+    },
+    [nodePositions, layoutLoaded],
+  );
+
   const loadGraph = useCallback(async () => {
-    // Clear any previous errors before loading new data
     setError(null);
 
-    // Wizard path: generate strategic context map
+    if (!layoutLoaded) {
+      return;
+    }
+
     if (wizardData?.boundedContexts?.length) {
       const { nodes, edges } = generateHexagonalContextMap(wizardData);
+      const nodesWithPositions = applySavedPositions(nodes);
       setState({
-        nodes,
+        nodes: nodesWithPositions,
         edges,
         viewport: createCanvasViewport(),
       });
       return;
     }
 
-    // Demo path: load from provider with dagre layout
     const provider = getArchitectureGraphProvider();
     const result = await provider.getArchitectureGraph(projectId);
 
@@ -126,38 +153,44 @@ export function useCanvasState(
 
     const { nodes, edges } = result.data;
     const laidOutNodes = applyDagreLayout(nodes, edges);
+    const nodesWithPositions = applySavedPositions(laidOutNodes);
 
     const useCase = new RenderHexagonCanvasUseCase();
     const renderResult = await useCase.render({
       canvasId: projectId,
-      nodes: laidOutNodes,
+      nodes: nodesWithPositions,
       edges,
     });
 
     setState({
-      nodes: laidOutNodes,
+      nodes: nodesWithPositions,
       edges,
       viewport: renderResult.viewport,
     });
-  }, [projectId, wizardData]);
+  }, [projectId, layoutLoaded, applySavedPositions]);
 
-  // Reset error when component mounts or wizard data changes significantly
   useEffect(() => {
     setError(null);
   }, [wizardData?.boundedContexts?.length]);
 
   useEffect(() => {
-    loadGraph();
-  }, [loadGraph, wizardData]);
+    if (layoutLoaded) {
+      loadGraph();
+    }
+  }, [layoutLoaded, loadGraph]);
 
-  const onNodeDragStop = useCallback((node: HexagonNode) => {
-    setState((prev) => ({
-      ...prev,
-      nodes: prev.nodes.map((n) =>
-        n.id === node.id ? { ...n, position: node.position } : n,
-      ),
-    }));
-  }, []);
+  const onNodeDragStop = useCallback(
+    (node: HexagonNode) => {
+      updateNodePosition(node.id, node.position);
+      setState((prev) => ({
+        ...prev,
+        nodes: prev.nodes.map((n) =>
+          n.id === node.id ? { ...n, position: node.position } : n,
+        ),
+      }));
+    },
+    [updateNodePosition],
+  );
 
   const onNodeDoubleClick = useCallback((node: HexagonNode) => {
     setState((prev) => ({ ...prev, selectedNodeId: node.id }));
@@ -165,8 +198,6 @@ export function useCanvasState(
 
   const onAddNode = useCallback(() => {
     setState((prev) => {
-      // Place new node near existing content — offset from root-core if present,
-      // otherwise offset from the first node, otherwise use a fixed fallback.
       const root = prev.nodes.find((n) => n.id === "root-core");
       const anchor = root ?? prev.nodes[0];
       const position = anchor
@@ -174,9 +205,6 @@ export function useCanvasState(
         : { x: 100, y: 100 };
       const newNode = createDefaultHexagonNode("entity", "New Node", position);
 
-      // No auto-edge: manually added nodes have no cardinal side, so connecting
-      // them programmatically always defaults to the nearest handle ("north").
-      // The user draws the connection manually to choose the correct handle.
       return {
         ...prev,
         nodes: [...prev.nodes, newNode],
@@ -186,9 +214,7 @@ export function useCanvasState(
     });
   }, []);
 
-  const onExportImage = useCallback(() => {
-    // TODO: implement export to PNG/SVG via html-to-image
-  }, []);
+  const onExportImage = useCallback(() => {}, []);
 
   const onUpdateNode = useCallback(
     (nodeId: string, updates: Pick<HexagonNode, "label" | "type">) => {
@@ -206,6 +232,10 @@ export function useCanvasState(
     setState((prev) => ({ ...prev, selectedNodeId: undefined }));
   }, []);
 
+  const handleClearCanvasLayout = useCallback(async () => {
+    await clearLayout();
+  }, [clearLayout]);
+
   if (error) {
     return { error };
   }
@@ -221,5 +251,6 @@ export function useCanvasState(
     onExportImage,
     onUpdateNode,
     onCloseEditor,
+    clearCanvasLayout: handleClearCanvasLayout,
   };
 }
