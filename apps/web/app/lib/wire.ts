@@ -6,6 +6,7 @@
 // startup diagnostics. All other application code must use LoggerPort instead.
 
 import type {
+  EditorWorkspacePersistencePort,
   MonacoPersistencePort,
   WizardPersistencePort,
 } from "@hexagen/shared";
@@ -78,6 +79,12 @@ export const wireDependencies = () => {
   registry.set(
     "WizardPersistencePort",
     localStorageAdapter satisfies WizardPersistencePort,
+  );
+
+  // Editor workspace persistence port → same localStorage adapter
+  registry.set(
+    "EditorWorkspacePersistencePort",
+    localStorageAdapter satisfies EditorWorkspacePersistencePort,
   );
 
   // Logger port → console logger for web app
@@ -155,3 +162,8 @@ export const getLLMProvider = () =>
 
 export const getWizardPersistence = () =>
   dependencies.get<WizardPersistencePort>("WizardPersistencePort");
+
+export const getEditorWorkspacePersistence = () =>
+  dependencies.get<EditorWorkspacePersistencePort>(
+    "EditorWorkspacePersistencePort",
+  );

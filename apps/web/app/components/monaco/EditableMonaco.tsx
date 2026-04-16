@@ -202,24 +202,26 @@ export function EditableMonaco({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 rounded-lg overflow-hidden border border-border h-[40vh]">
-            <DiffEditor
-              original={baselineContent}
-              modified={content}
-              language={language}
-              theme={monacoTheme}
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                fontSize: 12,
-                scrollBeyondLastLine: false,
-                renderSideBySide: true,
-                automaticLayout: true,
-                fontFamily:
-                  "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-              }}
-            />
-          </div>
+          {showDiscardDialog && (
+            <div className="mt-4 rounded-lg overflow-hidden border border-border h-[40vh]">
+              <DiffEditor
+                original={baselineContent}
+                modified={content}
+                language={language}
+                theme={monacoTheme}
+                options={{
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  fontSize: 12,
+                  scrollBeyondLastLine: false,
+                  renderSideBySide: true,
+                  automaticLayout: true,
+                  fontFamily:
+                    "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+                }}
+              />
+            </div>
+          )}
 
           <DialogFooter className="mt-4">
             <button

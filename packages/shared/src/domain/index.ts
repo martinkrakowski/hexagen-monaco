@@ -7,6 +7,7 @@ export * from "./logger-config.js";
 export * from "./logger-port.js";
 export * from "./monaco-session.js";
 export * from "./persistence-error.js";
+export * from "./persisted-editor-workspace.js";
 export * from "./project-specification.js";
 export * from "./session-metadata.js";
 export * from "./wizard-data.js";

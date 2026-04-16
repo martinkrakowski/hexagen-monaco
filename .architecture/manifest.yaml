@@ -158,6 +158,7 @@ bounded_contexts:
         value_objects:
           - CustomError
           - Identifier
+          - PersistedEditorWorkspace
   - name: project-configuration
     type: core
     description: Governance core — manifest parsing, validation, project topology
@@ -347,6 +348,7 @@ bounded_contexts:
         ports:
           out:
             - DownloadProjectPort
+            - EditorWorkspacePersistencePort
       application:
         use_cases:
           - ProjectViewProjectionUseCase

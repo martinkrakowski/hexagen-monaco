@@ -10,12 +10,17 @@ export type { SessionMetadata } from "./domain/session-metadata.js";
 export type { PersistenceError } from "./domain/persistence-error.js";
 export type { ProjectSpecification } from "./domain/project-specification.js";
 export type {
+  PersistedEditorWorkspace,
+  PersistedEditorWorkspaceFile,
+} from "./domain/persisted-editor-workspace.js";
+export type {
   FileTreeNode,
   FileSystemNodeType,
 } from "./domain/file-tree-node.js";
 
 // Application exports
 export type { MonacoPersistencePort } from "./application/ports/monaco-persistence.port.js";
+export type { EditorWorkspacePersistencePort } from "./application/ports/editor-workspace-persistence.port.js";
 export type {
   WizardPersistencePort,
   WizardDraft,
