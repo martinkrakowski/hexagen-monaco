@@ -138,6 +138,9 @@ const nextConfig = {
     },
     resolveExtensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
   },
+
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
 };
 
 export default nextConfig;

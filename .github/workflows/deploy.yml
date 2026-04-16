@@ -1,0 +1,53 @@
+name: Deploy to Production VPS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          docker-images: false
+
+      - name: Build Docker Image
+        run: |
+          docker build -f apps/web/Dockerfile -t hexagen-monaco-web:prod .
+
+      - name: Save Image to tar.gz
+        run: |
+          docker save hexagen-monaco-web:prod | gzip > hexagen-web.tar.gz
+
+      - name: Transfer tar.gz to VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "hexagen-web.tar.gz"
+          target: "/opt/hexagen-monaco/"
+          overwrite: true
+
+      - name: Execute Deployment Commands on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: AUTH_SECRET
+          script: |
+            cd /opt/hexagen-monaco
+            echo "AUTH_SECRET=$AUTH_SECRET" > .env
+            docker compose down
+            docker rmi hexagen-monaco-web:prod || true
+            docker load < hexagen-web.tar.gz
+            docker compose up -d
+            rm hexagen-web.tar.gz
+            docker system prune -a -f --volumes

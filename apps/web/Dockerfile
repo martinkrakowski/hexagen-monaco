@@ -13,8 +13,12 @@ COPY . .
 # Install all dependencies (including dev) – Yarn 2+ uses `yarn install`
 RUN echo 'nodeLinker: node-modules' > .yarnrc.yml && yarn install
 
-# Build all packages using turbo
-RUN yarn turbo build
+# Hard cap Node.js memory to 4GB to leave 3GB for Docker/Ubuntu OS
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build only the web app and its dependencies, one at a time (memory optimization)
+RUN yarn turbo build --filter=web... --concurrency=1
 
 # ---------- 2️⃣  Runtime stage ----------
 FROM node:20-alpine AS runner
@@ -29,9 +33,6 @@ RUN adduser -S nextjs -u 1001
 
 # Copy the entire standalone directory to preserve monorepo structure
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-
-# Copy node_modules (with nodeLinker: node-modules, packages are here)
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Copy static assets to the mirrored path
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
