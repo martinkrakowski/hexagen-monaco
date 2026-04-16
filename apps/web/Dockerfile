@@ -11,7 +11,7 @@ WORKDIR /app
 COPY . .
 
 # Install all dependencies (including dev) – Yarn 2+ uses `yarn install`
-RUN yarn install
+RUN echo 'nodeLinker: node-modules' > .yarnrc.yml && yarn install
 
 # Build all packages using turbo
 RUN yarn turbo build
@@ -27,16 +27,20 @@ RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
-# Copy the entire standalone directory to preserve monorepo structure and hoisted node_modules
+# Copy the entire standalone directory to preserve monorepo structure
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 
-# Copy the static assets to the mirrored path
+# Copy node_modules (with nodeLinker: node-modules, packages are here)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Copy static assets to the mirrored path
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV NODE_ENV=production
+ENV YARN_ENABLE_IMMUTABLE_INSTALLS=false
 
-# Execute the server from its mirrored path
+# Execute the server - Yarn PnP will resolve modules via .pnp.cjs and .yarn/
 CMD ["node", "apps/web/server.js"]
