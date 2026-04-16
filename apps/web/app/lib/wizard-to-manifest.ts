@@ -7,7 +7,22 @@ const getAdapterName = (type: string) => `${type}.adapter.ts`;
 export function wizardToManifest(
   wizardData: WizardData,
 ): Record<string, unknown> {
-  const systemName = wizardData.workspaceScope || "hexagen-project";
+  const governance = wizardData.governance;
+  const systemName = governance?.workspaceName || "hexagen-project";
+  const namespace = governance?.namespacePrefix || "@hexagen";
+  const template = governance?.workspaceTemplate || "modular-monolith";
+  const packageManagerId = governance?.packageManager || "yarn";
+  const isStrictTemplate =
+    template === "strict-enterprise" || template === "micro-frontend";
+
+  // Each package manager has its own versioning — do not append yarn's version
+  const packageManagerVersions: Record<string, string> = {
+    yarn: "yarn@4.12.0",
+    pnpm: "pnpm@9.0.0",
+    bun: "bun@1.1.0",
+  };
+  const packageManager =
+    packageManagerVersions[packageManagerId] ?? packageManagerId;
 
   const boundedContexts = wizardData.boundedContexts
     ? [...wizardData.boundedContexts]
@@ -51,10 +66,11 @@ export function wizardToManifest(
 
   return {
     system: systemName,
-    scope: systemName,
-    architecture: "modular-monolith",
+    scope: namespace,
+    architecture: template,
+    workspaceTemplate: template,
     monorepo: {
-      packageManager: "yarn@4.12.0",
+      packageManager,
       linker: "node-modules",
       buildTool: "turbo",
       workspaces: ["apps/*", "packages/*"],
@@ -131,10 +147,11 @@ export function wizardToManifest(
       wizardData.externalContexts?.map((ext) => ({
         name: ext.name,
         type: "web",
-        depends_on:
-          wizardData.peerMappings
-            ?.filter((m) => m.consumerContext === ext.id)
-            ?.map((m) => m.providerContext) || [],
+        depends_on: isStrictTemplate
+          ? []
+          : wizardData.peerMappings
+              ?.filter((m) => m.consumerContext === ext.id)
+              ?.map((m) => m.providerContext) || [],
       })) || [],
     bounded_contexts: boundedContexts.map((bc) => {
       const isShared = bc.name.toLowerCase().includes("shared");
@@ -155,14 +172,19 @@ export function wizardToManifest(
       const dependsOn = new Set<string>();
       if (!isShared) dependsOn.add("shared");
 
-      wizardData.peerMappings
-        ?.filter((m) => m.consumerContext === bc.id)
-        ?.forEach((m) => {
-          const provider = boundedContexts.find(
-            (p) => p.id === m.providerContext,
-          );
-          if (provider) dependsOn.add(provider.name);
-        });
+      // For strict templates (strict-enterprise, micro-frontend), peer context
+      // dependencies are NOT added to depends_on. Cross-context communication
+      // must go through event-bus or network boundaries, not direct imports.
+      if (!isStrictTemplate) {
+        wizardData.peerMappings
+          ?.filter((m) => m.consumerContext === bc.id)
+          ?.forEach((m) => {
+            const provider = boundedContexts.find(
+              (p) => p.id === m.providerContext,
+            );
+            if (provider) dependsOn.add(provider.name);
+          });
+      }
 
       return {
         name: bc.name,

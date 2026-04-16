@@ -132,14 +132,16 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
     await fs.mkdir(invariantsDir, { recursive: true });
 
     const scope = (manifest.scope as string) || "hexagen";
+    const template =
+      (manifest.workspaceTemplate as string) || "modular-monolith";
 
     await fs.writeFile(
       path.join(invariantsDir, "layer-rules.yaml"),
-      generateLayerRules(scope),
+      generateLayerRules(scope, template),
     );
     await fs.writeFile(
       path.join(invariantsDir, "linter-config.yaml"),
-      generateLinterConfig(scope),
+      generateLinterConfig(scope, template),
     );
     await fs.writeFile(
       path.join(archDir, "generator.config.yaml"),

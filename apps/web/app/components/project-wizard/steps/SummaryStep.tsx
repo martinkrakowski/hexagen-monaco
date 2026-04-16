@@ -7,7 +7,7 @@ import type {
   BoundedContext,
   PeerContextMapping,
 } from "@hexagen/project-configuration";
-import { projectAddons } from "../config";
+import { getWorkspaceTemplate } from "@hexagen/shared";
 import {
   Dialog,
   DialogContent,
@@ -176,26 +176,18 @@ export function SummaryStep({
               </div>
             )}
 
-            {/* Project Add-ons Summary */}
+            {/* Workspace Template Summary */}
             <div className="border border-border rounded-lg p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
-                Project Add-ons
+                Workspace Template
               </h3>
               <div className="space-y-2">
-                {projectAddons.map((addon) => (
-                  <div key={addon.id} className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      name={addon.id}
-                      checked={
-                        watch(addon.id as keyof ProjectConfig) as boolean
-                      }
-                      readOnly
-                      className="h-4 w-4 accent-primary"
-                    />
-                    <label className="text-sm">{addon.title}</label>
-                  </div>
-                ))}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium">
+                    {getWorkspaceTemplate(watch("governance.workspaceTemplate"))
+                      ?.title ?? "Not selected"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

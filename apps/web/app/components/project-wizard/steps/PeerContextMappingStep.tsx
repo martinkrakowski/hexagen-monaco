@@ -7,6 +7,7 @@ import type {
   ProjectConfig,
   PeerContextMapping,
 } from "@hexagen/project-configuration";
+import { getWorkspaceTemplate } from "@hexagen/shared";
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
 
@@ -36,6 +37,10 @@ export function PeerContextMappingStep({
   const { watch, setValue } = useFormContext<ProjectConfig>();
   const boundedContexts = watch("boundedContexts") || [];
   const peerMappings = watch("peerMappings") || [];
+  const workspaceTemplate =
+    watch("governance.workspaceTemplate") || "modular-monolith";
+  const template = getWorkspaceTemplate(workspaceTemplate);
+  const isStrictTemplate = template?.rules.strictness === "strict";
 
   const [view, setView] = useState<"menu" | "form">("menu");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -89,7 +94,7 @@ export function PeerContextMappingStep({
       consumerContext: boundedContexts[0]?.id || "",
       providerContext: boundedContexts[1]?.id || "",
       integrationPattern: "open-host",
-      communicationBoundary: "in-process",
+      communicationBoundary: isStrictTemplate ? "networked" : "in-process",
     };
     setValue("peerMappings", [...peerMappings, newMapping]);
     onMappingSelect?.(getMappingId(newMapping));
@@ -380,9 +385,17 @@ export function PeerContextMappingStep({
                     }
                     className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                   >
-                    <option value="in-process">In-Process</option>
+                    {!isStrictTemplate && (
+                      <option value="in-process">In-Process</option>
+                    )}
                     <option value="networked">Networked</option>
                   </select>
+                  {isStrictTemplate && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      In-process communication is not allowed in this template.
+                      All cross-context calls must be networked.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

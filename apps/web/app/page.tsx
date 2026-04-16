@@ -122,22 +122,24 @@ export default function Home() {
       : true;
 
   const wizardData: WizardData = useMemo(
-    () => ({
-      boundedContexts,
-      externalContexts,
-      peerMappings,
-      workspaceScope: watchedValues.governance?.workspaceName || "",
-      withLlm: !!watchedValues.withLlm,
-      withBlockchain: !!watchedValues.withBlockchain,
-    }),
-    [
-      boundedContexts,
-      externalContexts,
-      peerMappings,
-      watchedValues.governance?.workspaceName,
-      watchedValues.withLlm,
-      watchedValues.withBlockchain,
-    ],
+    () =>
+      ({
+        boundedContexts,
+        externalContexts,
+        peerMappings,
+        governance: watchedValues.governance ?? {
+          workspaceName: "@hexagen",
+          workspaceTemplate: "modular-monolith",
+          packageManager: "yarn",
+          topologyStrictness: "flexible",
+          namespacePrefix: "@hexagen",
+          namingConventions: {
+            contextDirectoryPattern: "packages/",
+            adapterSuffix: ".adapter.ts",
+          },
+        },
+      }) as WizardData,
+    [boundedContexts, externalContexts, peerMappings, watchedValues.governance],
   );
 
   // Show resume dialog once — only when a draft already existed at page load.
@@ -225,14 +227,12 @@ export default function Home() {
       }
 
       const formData = form.getValues();
-      const wizardData = {
+      const wizardData: WizardData = {
         boundedContexts: formData.boundedContexts || [],
         externalContexts: formData.externalContexts || [],
         peerMappings: formData.peerMappings || [],
-        workspaceScope: formData.governance?.workspaceName || "",
-        withLlm: !!formData.withLlm,
-        withBlockchain: !!formData.withBlockchain,
-      };
+        governance: formData.governance,
+      } as WizardData;
 
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -319,17 +319,13 @@ export default function Home() {
   // Also stores it in governanceState so the governance panel can read it.
   const buildManifestYaml = () => {
     const formData = form.getValues();
-    const data = {
+    const data: WizardData = {
       boundedContexts: formData.boundedContexts || [],
       externalContexts: formData.externalContexts || [],
       peerMappings: formData.peerMappings || [],
-      workspaceScope: formData.governance?.workspaceName || "",
-      withLlm: !!formData.withLlm,
-      withBlockchain: !!formData.withBlockchain,
-    };
-    const manifestYaml = yaml.dump(
-      wizardToManifest(data as Parameters<typeof wizardToManifest>[0]),
-    );
+      governance: formData.governance,
+    } as WizardData;
+    const manifestYaml = yaml.dump(wizardToManifest(data));
     governanceState.currentManifestYaml = manifestYaml;
     return manifestYaml;
   };

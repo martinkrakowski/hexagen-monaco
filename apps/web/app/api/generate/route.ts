@@ -32,7 +32,9 @@ export async function POST(request: NextRequest) {
     const finalManifest =
       manifest ||
       (wizardData
-        ? wizardToManifest(wizardData)
+        ? wizardToManifest(
+            wizardData as unknown as Parameters<typeof wizardToManifest>[0],
+          )
         : {
             system: "project",
             bounded_contexts: [],

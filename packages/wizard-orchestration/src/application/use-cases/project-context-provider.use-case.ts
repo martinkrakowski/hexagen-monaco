@@ -7,13 +7,12 @@ import type {
 } from "@hexagen/shared";
 
 export interface ProjectContext {
-  workspaceScope: string;
   boundedContexts: BoundedContext[];
   externalContexts: ExternalContext[];
   peerMappings: PeerMapping[];
   currentStep: string;
-  withLlm: boolean;
-  withBlockchain: boolean;
+  workspaceTemplate: string;
+  workspaceName: string;
   summary: ProjectSummary;
 }
 
@@ -38,13 +37,13 @@ export class ProjectContextProviderUseCase {
     const summary = this.computeSummary(wizardData);
 
     const context: ProjectContext = {
-      workspaceScope: wizardData.workspaceScope || "Untitled Project",
       boundedContexts: wizardData.boundedContexts || [],
       externalContexts: wizardData.externalContexts || [],
       peerMappings: wizardData.peerMappings || [],
       currentStep,
-      withLlm: wizardData.withLlm ?? false,
-      withBlockchain: wizardData.withBlockchain ?? false,
+      workspaceName: wizardData.governance?.workspaceName || "Untitled Project",
+      workspaceTemplate:
+        wizardData.governance?.workspaceTemplate || "modular-monolith",
       summary,
     };
 

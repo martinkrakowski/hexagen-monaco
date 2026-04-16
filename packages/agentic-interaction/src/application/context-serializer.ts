@@ -58,14 +58,14 @@ export function serializeProjectContext(
   const sections: string[] = [];
 
   sections.push(
-    `# Project: ${wizardData.workspaceScope || "Untitled Project"}`,
+    `# Project: ${wizardData.governance?.workspaceName || "Untitled Project"}`,
   );
   sections.push(`## Summary`);
   sections.push(`- Total Bounded Contexts: ${summary.totalContexts}`);
   sections.push(`- Total Ports: ${summary.totalPorts}`);
   sections.push(`- Current Wizard Step: ${input.currentStep}`);
   sections.push(
-    `- Features: ${[wizardData.withLlm ? "LLM" : null, wizardData.withBlockchain ? "Blockchain" : null].filter(Boolean).join(", ") || "None"}`,
+    `- Workspace Template: ${wizardData.governance?.workspaceTemplate || "modular-monolith"}`,
   );
 
   sections.push(`## Bounded Contexts`);

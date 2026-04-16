@@ -137,11 +137,8 @@ export function generateBarrelContent(): string {
   return "export {};\n";
 }
 
-export function generateLayerRules(scope: string): string {
-  return `# HexaGen — Architectural Invariants
-# Governs the dependency flow between layers and packages.
-
-shared_kernel:
+export function generateLayerRules(scope: string, template?: string): string {
+  const commonLayers = `shared_kernel:
   package: "@${scope}/shared"
   allowed_in_all_layers: true
 
@@ -158,10 +155,64 @@ layers:
     access_rule: "adapters"
     allowed_imports: ["domain", "application", "@${scope}/shared"]
 `;
+
+  if (template === "strict-enterprise") {
+    return `# HexaGen — Architectural Invariants
+# Template: strict-enterprise — event-bus boundaries
+
+${commonLayers}
+cross_context:
+  deny_direct_imports: true
+  required_communication: "event-bus"
+  allowed_broker_patterns:
+    - "event-bus"
+    - "message-queue"
+`;
+  }
+
+  if (template === "micro-frontend") {
+    return `# HexaGen — Architectural Invariants
+# Template: micro-frontend — networked boundaries
+
+${commonLayers}
+cross_context:
+  deny_direct_imports: true
+  required_communication: "network"
+  allowed_broker_patterns:
+    - "network-rpc"
+    - "http-api"
+`;
+  }
+
+  return `# HexaGen — Architectural Invariants
+# Template: ${template || "modular-monolith"} (flexible mode)
+
+${commonLayers}`;
 }
 
-export function generateLinterConfig(scope: string): string {
+export function generateLinterConfig(scope: string, template?: string): string {
+  const isStrict =
+    template === "strict-enterprise" || template === "micro-frontend";
+
+  if (isStrict) {
+    return `# Rules for @hexagen/arch-linter
+# Template: ${template} (strict mode)
+
+global_whitelist:
+  - "@${scope}/shared"
+  - "@${scope}/shared/**"
+
+cross_context_rules:
+  deny_sibling_imports: true
+  require_port_interface: true
+
+test_double_rules:
+  allowed_cross_package_imports: true
+`;
+  }
+
   return `# Rules for @hexagen/arch-linter
+# Template: ${template || "modular-monolith"} (flexible mode)
 
 global_whitelist:
   - "@${scope}/shared"
@@ -178,6 +229,9 @@ export function generateGeneratorConfig(
   const contexts =
     (manifest.bounded_contexts as Array<Record<string, unknown>> | undefined) ??
     [];
+
+  const workspaceTemplate =
+    (manifest.workspaceTemplate as string) || "modular-monolith";
 
   const ownershipEntries: string[] = [];
   for (const bc of contexts) {
@@ -234,6 +288,7 @@ export function generateGeneratorConfig(
   return `generator:
   version: "1.0"
   description: "Global invariants and safety rules"
+  workspace_template: "${workspaceTemplate}"
 
   invariants:
     - name: composite-safety
