@@ -167,7 +167,7 @@ export function useCanvasState(
       edges,
       viewport: renderResult.viewport,
     });
-  }, [projectId, layoutLoaded, applySavedPositions]);
+  }, [projectId, layoutLoaded, wizardData, applySavedPositions]);
 
   useEffect(() => {
     setError(null);
@@ -177,7 +177,7 @@ export function useCanvasState(
     if (layoutLoaded) {
       loadGraph();
     }
-  }, [layoutLoaded, loadGraph]);
+  }, [layoutLoaded, wizardData, loadGraph]);
 
   const onNodeDragStop = useCallback(
     (node: HexagonNode) => {
