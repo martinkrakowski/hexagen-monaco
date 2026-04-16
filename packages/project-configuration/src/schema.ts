@@ -1,57 +1,33 @@
 import { z } from "zod";
 
-// Legacy bounded context schema (backward compatibility) - kept for reference
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _legacyBoundedContextSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  apiFramework: z.enum(["Fastify", "Express", "NestJS"]).optional(),
-  uiFramework: z
-    .enum(["Next.js", "React Router", "Remix", "Angular", "Vue.js"])
-    .optional(),
-  persistenceAdapter: z
-    .enum(["Prisma", "TypeORM", "Mongoose", "Drizzle"])
-    .optional(),
-  messagingAdapter: z.enum(["BullMQ", "Temporal", "RabbitMQ"]).optional(),
-  telemetryProvider: z
-    .enum(["OpenTelemetry", "None", "Prometheus", "Winston"])
-    .optional(),
-  externalApiPorts: z.array(z.string()).optional(),
-  llmProviders: z.array(z.string()).optional(),
-  blockchainNetworks: z.array(z.string()).optional(),
-  authenticationProvider: z.string().optional(),
-  emailService: z.string().optional(),
-  paymentGateway: z.string().optional(),
-  storageProvider: z.string().optional(),
-  searchService: z.string().optional(),
-  webhookEndpoints: z.array(z.string()).optional(),
-  entities: z.array(z.string()).optional(),
-  useCases: z.array(z.string()).optional(),
-});
+import type {
+  WorkspaceTemplateId,
+  WorkspaceTemplate,
+  WorkspaceTemplateRule,
+} from "@hexagen/shared";
 
-// Legacy external context schema (backward compatibility) - kept for reference
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _legacyExternalContextSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  relationshipType: z.enum(["U", "D", "ACL", "SK", "P", "OHS"]).optional(),
-  isEventDriven: z.boolean().optional(),
-  entityNames: z.array(z.string()).optional(),
-  useCaseNames: z.array(z.string()).optional(),
-});
+export type { WorkspaceTemplateId, WorkspaceTemplate, WorkspaceTemplateRule };
+export { workspaceTemplates, getWorkspaceTemplate } from "@hexagen/shared";
 
-// --- 1. Workspace Governance (New) ---
+// --- 1. Workspace Governance (Updated with workspaceTemplate) ---
 export const WorkspaceGovernanceSchema = z.object({
   workspaceName: z.string().min(1, "Workspace name is required"),
-  packageManager: z.enum(["yarn", "pnpm", "bun"]).optional(),
-  topologyStrictness: z.enum(["strict", "flexible"]).optional(),
-  namespacePrefix: z.string().optional(),
+  workspaceTemplate: z
+    .enum(["modular-monolith", "strict-enterprise", "micro-frontend"])
+    .default("modular-monolith"),
+  workspaceDescription: z.string().optional(),
+  packageManager: z.enum(["yarn", "pnpm", "bun"]).default("yarn"),
+  topologyStrictness: z.enum(["strict", "flexible"]).default("flexible"),
+  namespacePrefix: z.string().default("@hexagen"),
   namingConventions: z
     .object({
       contextDirectoryPattern: z.string().default("packages/"),
       adapterSuffix: z.string().default(".adapter.ts"),
     })
-    .optional(),
+    .default({
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".adapter.ts",
+    }),
 });
 
 // --- 2. Port Configurations (New) ---
@@ -144,16 +120,11 @@ export const ExternalContextSchema = z.object({
   useCaseNames: z.array(z.string()).optional(),
 });
 
-// --- 6. The Root Aggregate: Project Spec (New with backward compatibility) ---
+// --- 6. The Root Aggregate: Project Spec (Workspace Templates) ---
 export const ProjectSpecSchema = z.object({
-  // Legacy fields (backward compatibility)
-  withLlm: z.boolean().default(false),
-  withBlockchain: z.boolean().default(false),
-  workspaceScope: z.string().min(1).default("@hexagen"),
   boundedContexts: z.array(BoundedContextSchema).default([]),
   externalContexts: z.array(ExternalContextSchema).default([]),
-  // New fields
-  governance: WorkspaceGovernanceSchema.optional(),
+  governance: WorkspaceGovernanceSchema,
   peerMappings: z.array(PeerContextMappingSchema).default([]),
 });
 

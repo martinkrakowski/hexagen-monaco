@@ -22,7 +22,8 @@ export function useArchitectureDownload(wizardData: WizardData) {
       archFolder?.file("manifest.yaml", yamlContent);
 
       const blob = await zip.generateAsync({ type: "blob" });
-      const projectName = wizardData.workspaceScope || "hexagen-project";
+      const projectName =
+        wizardData.governance?.workspaceName || "hexagen-project";
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

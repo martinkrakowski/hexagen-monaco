@@ -98,7 +98,7 @@ export function useProjectGeneration(wizardData: WizardData) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${wizardData.workspaceScope || "project"}.zip`;
+      a.download = `${wizardData.governance?.workspaceName || "project"}.zip`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

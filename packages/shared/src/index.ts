@@ -29,6 +29,7 @@ export type {
 // Canvas / wizard exports
 export type {
   WizardData,
+  WizardGovernance,
   ExternalContext,
   BoundedContext,
   ContextRelationshipType,

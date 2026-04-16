@@ -3,19 +3,25 @@ import type { ProjectConfig } from "@hexagen/project-configuration";
 import { emptyFormValues } from "@/components/project-wizard/config";
 
 export function wizardDataToFormValues(wizardData: WizardData): ProjectConfig {
+  const src = wizardData.governance;
+  const fallback = emptyFormValues.governance;
   return {
     ...emptyFormValues,
-    withLlm: wizardData.withLlm ?? false,
-    withBlockchain: wizardData.withBlockchain ?? false,
-    workspaceScope: wizardData.workspaceScope ?? "@hexagen",
     governance: {
-      workspaceName: wizardData.workspaceScope ?? "@hexagen",
-      packageManager: "yarn",
-      topologyStrictness: "flexible",
-      namespacePrefix: wizardData.workspaceScope ?? "@hexagen",
+      workspaceName: src?.workspaceName ?? fallback.workspaceName,
+      workspaceTemplate: src?.workspaceTemplate ?? fallback.workspaceTemplate,
+      workspaceDescription: src?.workspaceDescription,
+      packageManager: src?.packageManager ?? fallback.packageManager,
+      topologyStrictness:
+        src?.topologyStrictness ?? fallback.topologyStrictness,
+      namespacePrefix: src?.namespacePrefix ?? fallback.namespacePrefix,
       namingConventions: {
-        contextDirectoryPattern: "packages/",
-        adapterSuffix: ".adapter.ts",
+        contextDirectoryPattern:
+          src?.namingConventions?.contextDirectoryPattern ??
+          fallback.namingConventions.contextDirectoryPattern,
+        adapterSuffix:
+          src?.namingConventions?.adapterSuffix ??
+          fallback.namingConventions.adapterSuffix,
       },
     },
     boundedContexts: (wizardData.boundedContexts || []).map((bc) => ({

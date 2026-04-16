@@ -1,5 +1,24 @@
+import type { WorkspaceTemplateId } from "../types/governance.js";
+
 /** DDD relationship types used to classify cross-context dependencies. */
 export type ContextRelationshipType = "U" | "D" | "ACL" | "SK" | "P" | "OHS";
+
+/**
+ * Governance configuration carried in WizardData.
+ * Mirrors WorkspaceGovernanceSchema without depending on project-configuration.
+ */
+export interface WizardGovernance {
+  workspaceName: string;
+  workspaceTemplate: WorkspaceTemplateId;
+  workspaceDescription?: string;
+  packageManager?: "yarn" | "pnpm" | "bun";
+  topologyStrictness?: "strict" | "flexible";
+  namespacePrefix?: string;
+  namingConventions?: {
+    contextDirectoryPattern?: string;
+    adapterSuffix?: string;
+  };
+}
 
 /**
  * A domain event reference — a named signal that a Bounded Context publishes
@@ -114,15 +133,12 @@ export interface PeerMapping {
  * renders incrementally as the user fills each step.
  */
 export interface WizardData {
-  /** Project-wide workspace scope */
-  workspaceScope?: string;
-  /** Project-level addons */
-  withLlm?: boolean;
-  withBlockchain?: boolean;
   /** Strategic landscape: peer Bounded Contexts in the outer orbit ring */
   externalContexts?: ExternalContext[];
   /** Multiple Bounded Contexts within this project */
   boundedContexts?: BoundedContext[];
   /** Peer-to-peer context mappings */
   peerMappings?: PeerMapping[];
+  /** Governance configuration including workspace template */
+  governance: WizardGovernance;
 }

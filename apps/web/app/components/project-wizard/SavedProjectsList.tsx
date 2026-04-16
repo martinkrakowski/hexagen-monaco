@@ -264,7 +264,7 @@ export function SavedProjectsList({
                         )}
                         <p className="text-xs text-muted-foreground mt-1">
                           {project.formState.governance?.workspaceName ||
-                            project.formState.workspaceScope}
+                            "Untitled"}
                         </p>
                       </div>
                     </div>

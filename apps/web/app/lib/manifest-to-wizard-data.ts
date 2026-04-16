@@ -70,13 +70,19 @@ interface ManifestApp {
 interface Manifest {
   system?: string;
   scope?: string;
+  workspaceTemplate?: string;
   bounded_contexts?: ManifestBoundedContext[];
   apps?: ManifestApp[];
   monorepo?: Record<string, unknown>;
 }
 
+function isStrictManifest(template: string | undefined): boolean {
+  return template === "strict-enterprise" || template === "micro-frontend";
+}
+
 function rebuildPeerMappings(
   contexts: ManifestBoundedContext[],
+  template?: string,
 ): WizardData["peerMappings"] {
   const mappings: NonNullable<WizardData["peerMappings"]> = [];
   const nameToId = new Map<string, string>();
@@ -84,6 +90,10 @@ function rebuildPeerMappings(
   for (const ctx of contexts) {
     nameToId.set(ctx.name, crypto.randomUUID());
   }
+
+  // For strict templates depends_on contains only "shared" — there are no
+  // peer package imports to reconstruct as peer mappings.
+  if (isStrictManifest(template)) return mappings;
 
   for (const ctx of contexts) {
     if (!ctx.depends_on) continue;
@@ -105,6 +115,7 @@ function rebuildPeerMappings(
 export function manifestToWizardData(manifest: Manifest): WizardData {
   const rawContexts = manifest.bounded_contexts || [];
   const rawApps = manifest.apps || [];
+  const template = manifest.workspaceTemplate || "modular-monolith";
 
   const nameToId = new Map<string, string>();
   for (const ctx of rawContexts) {
@@ -164,11 +175,21 @@ export function manifestToWizardData(manifest: Manifest): WizardData {
   }));
 
   return {
-    workspaceScope: manifest.scope || manifest.system || "@hexagen",
-    withLlm: false,
-    withBlockchain: false,
     boundedContexts,
     externalContexts,
-    peerMappings: rebuildPeerMappings(rawContexts),
+    peerMappings: rebuildPeerMappings(rawContexts, template),
+    governance: {
+      workspaceName: manifest.scope || manifest.system || "@hexagen",
+      workspaceTemplate:
+        template as WizardData["governance"]["workspaceTemplate"],
+      workspaceDescription: undefined,
+      packageManager: "yarn",
+      topologyStrictness: isStrictManifest(template) ? "strict" : "flexible",
+      namespacePrefix: manifest.scope || "@hexagen",
+      namingConventions: {
+        contextDirectoryPattern: "packages/",
+        adapterSuffix: ".adapter.ts",
+      },
+    },
   };
 }

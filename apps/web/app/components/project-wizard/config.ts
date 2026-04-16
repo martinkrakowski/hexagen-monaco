@@ -55,11 +55,10 @@ export {
 };
 
 export const emptyFormValues: ProjectConfig = {
-  withLlm: false,
-  withBlockchain: false,
-  workspaceScope: "@hexagen",
   governance: {
     workspaceName: "@hexagen",
+    workspaceTemplate: "modular-monolith",
+    workspaceDescription: undefined,
     packageManager: "yarn",
     topologyStrictness: "flexible",
     namespacePrefix: "@hexagen",
@@ -93,19 +92,6 @@ export const emptyFormValues: ProjectConfig = {
   peerMappings: [],
 };
 
-export const projectAddons = [
-  {
-    id: "withLlm" as const,
-    title: "LLM-Optimized Hexagonal Project",
-    description: "Add-on for multi-LLM apps.",
-  },
-  {
-    id: "withBlockchain" as const,
-    title: "Blockchain-Optimized Hexagonal Project",
-    description: "Add-on for multi-chain apps.",
-  },
-];
-
 export const wizardSteps = [
   {
     id: "workspace_governance",
@@ -138,9 +124,9 @@ export const wizardSteps = [
     fields: ["gitHubExport"],
   },
   {
-    id: "project_addons",
-    title: "Project Add-ons",
-    description: "Enable optional features like LLM or blockchain support.",
-    fields: ["withLlm", "withBlockchain"],
+    id: "summary",
+    title: "Project Summary",
+    description: "Review your project configuration.",
+    fields: [],
   },
 ];
