@@ -10,12 +10,16 @@ import {
   RenderHexagonCanvasUseCase,
   createCanvasViewport,
 } from "@hexagen/visualization";
-import { getArchitectureGraphProvider } from "../lib/wire";
+import {
+  getArchitectureGraphProvider,
+  getWizardPersistence,
+} from "../lib/wire";
 import type { WizardData } from "@hexagen/shared";
 import {
   generateHexagonalContextMap,
   type HexagonNodeWithLayout,
 } from "../lib/layout-engine";
+import { useCanvasLayout } from "./use-canvas-layout";
 
 interface GraphState {
   nodes: HexagonNode[];
@@ -100,15 +104,50 @@ export function useCanvasState(
   });
   const [error, setError] = useState<Error | null>(null);
 
+  const {
+    nodePositions,
+    isLoaded: layoutLoaded,
+    setSessionId: setLayoutSessionId,
+    updateNodePosition,
+  } = useCanvasLayout();
+
+  const initializeSessionId = useCallback(async () => {
+    const wizardPersistence = getWizardPersistence();
+    const draftResult = await wizardPersistence.loadDraft();
+    if (draftResult.success && draftResult.value?.sessionId) {
+      await setLayoutSessionId(draftResult.value.sessionId);
+    }
+  }, [setLayoutSessionId]);
+
+  const applySavedPositions = useCallback(
+    (nodes: HexagonNode[]): HexagonNode[] => {
+      if (!layoutLoaded || Object.keys(nodePositions).length === 0) {
+        return nodes;
+      }
+      return nodes.map((node) => {
+        const savedPosition = nodePositions[node.id];
+        if (savedPosition) {
+          return { ...node, position: savedPosition };
+        }
+        return node;
+      });
+    },
+    [nodePositions, layoutLoaded],
+  );
+
   const loadGraph = useCallback(async () => {
     // Clear any previous errors before loading new data
     setError(null);
 
+    // Initialize session ID from draft
+    await initializeSessionId();
+
     // Wizard path: generate strategic context map
     if (wizardData?.boundedContexts?.length) {
       const { nodes, edges } = generateHexagonalContextMap(wizardData);
+      const nodesWithPositions = applySavedPositions(nodes);
       setState({
-        nodes,
+        nodes: nodesWithPositions,
         edges,
         viewport: createCanvasViewport(),
       });
@@ -126,20 +165,21 @@ export function useCanvasState(
 
     const { nodes, edges } = result.data;
     const laidOutNodes = applyDagreLayout(nodes, edges);
+    const nodesWithPositions = applySavedPositions(laidOutNodes);
 
     const useCase = new RenderHexagonCanvasUseCase();
     const renderResult = await useCase.render({
       canvasId: projectId,
-      nodes: laidOutNodes,
+      nodes: nodesWithPositions,
       edges,
     });
 
     setState({
-      nodes: laidOutNodes,
+      nodes: nodesWithPositions,
       edges,
       viewport: renderResult.viewport,
     });
-  }, [projectId, wizardData]);
+  }, [projectId, wizardData, initializeSessionId, applySavedPositions]);
 
   // Reset error when component mounts or wizard data changes significantly
   useEffect(() => {
@@ -150,14 +190,18 @@ export function useCanvasState(
     loadGraph();
   }, [loadGraph, wizardData]);
 
-  const onNodeDragStop = useCallback((node: HexagonNode) => {
-    setState((prev) => ({
-      ...prev,
-      nodes: prev.nodes.map((n) =>
-        n.id === node.id ? { ...n, position: node.position } : n,
-      ),
-    }));
-  }, []);
+  const onNodeDragStop = useCallback(
+    (node: HexagonNode) => {
+      updateNodePosition(node.id, node.position);
+      setState((prev) => ({
+        ...prev,
+        nodes: prev.nodes.map((n) =>
+          n.id === node.id ? { ...n, position: node.position } : n,
+        ),
+      }));
+    },
+    [updateNodePosition],
+  );
 
   const onNodeDoubleClick = useCallback((node: HexagonNode) => {
     setState((prev) => ({ ...prev, selectedNodeId: node.id }));

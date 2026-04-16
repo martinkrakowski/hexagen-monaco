@@ -159,6 +159,7 @@ bounded_contexts:
           - CustomError
           - Identifier
           - PersistedEditorWorkspace
+          - PersistedCanvasLayout
   - name: project-configuration
     type: core
     description: Governance core — manifest parsing, validation, project topology
@@ -349,6 +350,7 @@ bounded_contexts:
           out:
             - DownloadProjectPort
             - EditorWorkspacePersistencePort
+            - CanvasLayoutPersistencePort
       application:
         use_cases:
           - ProjectViewProjectionUseCase
@@ -359,6 +361,7 @@ bounded_contexts:
       infrastructure:
         adapters:
           - LocalStoragePersistenceAdapter
+          - LocalStorageCanvasLayoutAdapter
           - WebContainerPreviewAdapter
           - ArchitectureGraphProviderAdapter
     driver_for: apps/web

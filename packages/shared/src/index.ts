@@ -14,6 +14,10 @@ export type {
   PersistedEditorWorkspaceFile,
 } from "./domain/persisted-editor-workspace.js";
 export type {
+  PersistedCanvasLayout,
+  NodePosition,
+} from "./domain/persisted-canvas-layout.js";
+export type {
   FileTreeNode,
   FileSystemNodeType,
 } from "./domain/file-tree-node.js";
@@ -21,6 +25,7 @@ export type {
 // Application exports
 export type { MonacoPersistencePort } from "./application/ports/monaco-persistence.port.js";
 export type { EditorWorkspacePersistencePort } from "./application/ports/editor-workspace-persistence.port.js";
+export type { CanvasLayoutPersistencePort } from "./application/ports/canvas-layout-persistence.port.js";
 export type {
   WizardPersistencePort,
   WizardDraft,

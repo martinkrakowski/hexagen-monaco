@@ -6,6 +6,7 @@
 // startup diagnostics. All other application code must use LoggerPort instead.
 
 import type {
+  CanvasLayoutPersistencePort,
   EditorWorkspacePersistencePort,
   MonacoPersistencePort,
   WizardPersistencePort,
@@ -17,6 +18,7 @@ import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
 import type { LLMProviderPort } from "@hexagen/agentic-interaction";
 import {
   LocalStoragePersistenceAdapter,
+  LocalStorageCanvasLayoutAdapter,
   ArchitectureGraphProviderAdapter,
 } from "@hexagen/web-driver";
 import {
@@ -85,6 +87,13 @@ export const wireDependencies = () => {
   registry.set(
     "EditorWorkspacePersistencePort",
     localStorageAdapter satisfies EditorWorkspacePersistencePort,
+  );
+
+  // Canvas layout persistence port → dedicated adapter
+  const canvasLayoutAdapter = new LocalStorageCanvasLayoutAdapter();
+  registry.set(
+    "CanvasLayoutPersistencePort",
+    canvasLayoutAdapter satisfies CanvasLayoutPersistencePort,
   );
 
   // Logger port → console logger for web app
@@ -167,3 +176,6 @@ export const getEditorWorkspacePersistence = () =>
   dependencies.get<EditorWorkspacePersistencePort>(
     "EditorWorkspacePersistencePort",
   );
+
+export const getCanvasLayoutPersistence = () =>
+  dependencies.get<CanvasLayoutPersistencePort>("CanvasLayoutPersistencePort");
