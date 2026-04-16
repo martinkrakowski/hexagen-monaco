@@ -115,6 +115,7 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
+      - AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 ```
 
 ### 3. Start the Container
@@ -148,6 +149,22 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
 
 ## Troubleshooting
 
+### 500 errors on `/api/auth/session`
+
+**Symptom:** API routes return 500 with `[next-auth][error][NO_SECRET]`
+
+**Cause:** Missing `AUTH_SECRET` environment variable in production.
+
+**Solution:**
+
+1. Generate a secret: `openssl rand -base64 32`
+2. Add to `docker-compose.yml`:
+   ```yaml
+   environment:
+     - AUTH_SECRET=<your-secret>
+   ```
+3. Restart: `docker compose down && docker compose up -d`
+
 ### `MODULE_NOT_FOUND` error for `next`
 
 **Symptom:** Container logs show `Error: Cannot find module 'next'`
@@ -180,7 +197,24 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
 
 ## Environment Variables
 
-The following environment variables can be passed to the container:
+The following environment variables are required or available for the container:
+
+### Required for Production
+
+| Variable      | Description                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| `AUTH_SECRET` | Secret for NextAuth JWT signing. **Required in production.** Generate with `openssl rand -base64 32` |
+
+### Optional Authentication
+
+If using GitHub OAuth login:
+
+| Variable        | Description                    |
+| --------------- | ------------------------------ |
+| `GITHUB_ID`     | GitHub OAuth app client ID     |
+| `GITHUB_SECRET` | GitHub OAuth app client secret |
+
+### Optional Configuration
 
 | Variable             | Default      | Description                               |
 | -------------------- | ------------ | ----------------------------------------- |
@@ -188,6 +222,23 @@ The following environment variables can be passed to the container:
 | `PORT`               | `3000`       | Port the server listens on                |
 | `HOSTNAME`           | `0.0.0.0`    | Host the server binds to                  |
 | `KEEP_ALIVE_TIMEOUT` | (none)       | Server keep-alive timeout in milliseconds |
+
+### Generating AUTH_SECRET
+
+```bash
+# Generate a secure secret
+openssl rand -base64 32
+```
+
+Add the generated value to your `docker-compose.yml`:
+
+```yaml
+environment:
+  - NODE_ENV=production
+  - AUTH_SECRET=<paste-generated-secret-here>
+```
+
+> **Security Note:** Never commit secrets to git. Environment variables should be managed on the VPS directly in `docker-compose.yml` or via a secrets manager.
 
 ## Updating the Deployment
 
