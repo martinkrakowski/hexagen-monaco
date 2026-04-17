@@ -1,6 +1,6 @@
 "use client";
 
-import type { LLMEngineStatus } from "@hexagen/web-driver";
+import type { LLMEngineStatus } from "@hexagen/local-llm";
 import { Cpu, AlertTriangle, Loader2 } from "lucide-react";
 
 interface LLMStatusPillProps {

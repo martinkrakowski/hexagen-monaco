@@ -10,6 +10,7 @@ import type {
   ModelConfig,
   ModelMetadata,
 } from "../../domain/value-objects/index.js";
+import { DEFAULT_MODEL_ID } from "../../domain/value-objects/index.js";
 
 interface WebLLMEngine {
   chat: {
@@ -46,13 +47,13 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   private engine: WebLLMEngine | null = null;
   private loadedModelId: string | null = null;
   private progressCallback: LLMProgressCallback | null = null;
+  private workerUrl: string | null = null;
   private worker: Worker | null = null;
   private config: WebLLMAdapterConfig;
 
   constructor(config: WebLLMAdapterConfig = {}) {
     this.config = {
-      defaultModelId:
-        config.defaultModelId ?? "Phi-3-mini-4k-instruct-q4f16_1-MLC",
+      defaultModelId: config.defaultModelId ?? DEFAULT_MODEL_ID,
       webllmCdnUrl:
         config.webllmCdnUrl ??
         "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js",
@@ -133,8 +134,8 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       `;
 
       const blob = new Blob([workerScript], { type: "application/javascript" });
-      const workerUrl = URL.createObjectURL(blob);
-      this.worker = new Worker(workerUrl);
+      this.workerUrl = URL.createObjectURL(blob);
+      this.worker = new Worker(this.workerUrl);
 
       return new Promise((resolve) => {
         if (!this.worker) {
@@ -247,16 +248,17 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     const messageHandler = (e: MessageEvent<WorkerMessage>) => {
       const msg = e.data;
       if (msg.type === "chunk") {
-        pendingChunks.push(msg.data as string);
         if (resolveNext) {
           resolveNext(ok(msg.data as string));
           resolveNext = null;
+        } else {
+          pendingChunks.push(msg.data as string);
         }
       } else if (msg.type === "done") {
         streamDone = true;
         clearTimeout(timeoutId);
         if (resolveNext) {
-          resolveNext(err(new Error("Stream ended before any result")));
+          resolveNext(ok("[DONE]"));
           resolveNext = null;
         }
       } else if (msg.type === "error") {
@@ -281,12 +283,19 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         },
       });
 
-      while (!streamDone && !streamError) {
+      while (!streamError) {
+        if (streamDone) {
+          while (pendingChunks.length > 0) {
+            yield ok(pendingChunks.shift()!);
+          }
+          break;
+        }
         const nextResult = await new Promise<Result<string>>((resolve) => {
           resolveNext = resolve;
         });
-        yield nextResult;
         if (!nextResult.success) break;
+        if (nextResult.value === "[DONE]") break;
+        yield nextResult;
       }
 
       if (streamError) {
@@ -314,6 +323,10 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   dispose(): void {
+    if (this.workerUrl) {
+      URL.revokeObjectURL(this.workerUrl);
+      this.workerUrl = null;
+    }
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;

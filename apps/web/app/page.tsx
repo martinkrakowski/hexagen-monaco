@@ -453,13 +453,7 @@ export default function Home() {
                 </CardContent>
               </Card>
             }
-            right={
-              <AIArchitectPanel
-                onSendMessage={async (message) => {
-                  getLogger().info(`Chat message: ${message}`);
-                }}
-              />
-            }
+            right={<AIArchitectPanel />}
           />
         </FormProvider>
       </main>

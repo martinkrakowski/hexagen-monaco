@@ -4,6 +4,7 @@ import { useLocalLLM } from "@/hooks/use-local-llm";
 import { OptInCard } from "./OptInCard";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { LocalChatInterface } from "./LocalChatInterface";
+import { UnavailableCard } from "./UnavailableCard";
 
 export function LocalAssistantPanel() {
   const {
@@ -21,6 +22,12 @@ export function LocalAssistantPanel() {
   const showProgress = status === "downloading" || status === "loading_vram";
   const showError = status === "error";
   const showChat = status === "ready";
+  const showUnavailable =
+    status === "no_webgpu" || status === "unsupported_browser";
+
+  if (showUnavailable) {
+    return <UnavailableCard status={status} />;
+  }
 
   if (showOptIn) {
     return <OptInCard onInitialize={initializeModel} isInitializing={false} />;

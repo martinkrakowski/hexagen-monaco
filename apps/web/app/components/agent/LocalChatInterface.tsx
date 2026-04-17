@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, createContext, useContext } from "react";
 import { CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Textarea";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
-import { AgentMessage } from "./AgentMessage";
+import { LocalAgentMessage } from "./LocalAgentMessage";
 import type { ChatMessage } from "@/hooks/use-local-llm";
 import { Loader2, Send, Bot } from "lucide-react";
 
@@ -97,7 +97,7 @@ export function LocalChatInterface({
 
         <CardContent className="flex-1 overflow-auto p-3 space-y-3 custom-scrollbar">
           {messages.map((message) => (
-            <AgentMessage key={message.id} message={message} />
+            <LocalAgentMessage key={message.id} message={message} />
           ))}
           <LoadingIndicator />
           <div ref={messagesEndRef} />

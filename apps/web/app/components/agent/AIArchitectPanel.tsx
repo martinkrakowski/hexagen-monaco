@@ -10,15 +10,7 @@ import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
 import { governanceState } from "@/lib/governance-state";
 import { Bot, FileText } from "lucide-react";
 
-interface AIArchitectPanelProps {
-  onSendMessage?: (message: string) => Promise<void>;
-  isLoading?: boolean;
-}
-
-export function AIArchitectPanel({
-  onSendMessage,
-  isLoading = false,
-}: AIArchitectPanelProps) {
+export function AIArchitectPanel() {
   const {
     data,
     isLoading: isGovernanceLoading,

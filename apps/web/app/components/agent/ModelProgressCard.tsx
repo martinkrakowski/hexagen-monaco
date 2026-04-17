@@ -1,6 +1,6 @@
 "use client";
 
-import type { LLMEngineStatus } from "@hexagen/web-driver";
+import type { LLMEngineStatus } from "@hexagen/local-llm";
 
 interface ModelProgressCardProps {
   status: LLMEngineStatus;

@@ -14,10 +14,11 @@ import type {
   LLMMessage,
   LLMProgress,
 } from "@hexagen/local-llm";
+import { DEFAULT_MODEL_ID } from "@hexagen/local-llm";
 import type { WebGPUDetectorPort } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
-import type { LLMEngineState, LLMEngineStatus } from "@hexagen/web-driver";
-import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/web-driver";
+import type { LLMEngineState, LLMEngineStatus } from "@hexagen/local-llm";
+import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
 import { getLocalLLMProvider, getWebGPUDetector } from "@/lib/wire";
 
 export interface ChatMessage {
@@ -71,6 +72,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const adapterRef = useRef<LocalLLMProviderPort | null>(null);
   const webgpuRef = useRef<WebGPUDetectorPort | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isInitializingRef = useRef(false);
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   const [engineState, setEngineState] = useState<LLMEngineState>(
     LLM_ENGINE_INITIAL_STATE,
@@ -79,10 +82,17 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   const initializeModel = useCallback(async () => {
     const adapter = adapterRef.current;
     if (!adapter) return;
+    if (isInitializingRef.current) return;
+    if (engineState.status === "ready") return;
 
+    isInitializingRef.current = true;
     setEngineState((prev: LLMEngineState) => ({
       ...prev,
       status: "downloading",
@@ -90,7 +100,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     }));
 
     const initResult = await adapter.initialize(
-      { modelId: "Phi-3-mini-4k-instruct-q4f16_1-MLC" },
+      { modelId: DEFAULT_MODEL_ID },
       (progress: LLMProgress) => {
         const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
         const browserSupported = typeof OffscreenCanvas !== "undefined";
@@ -121,93 +131,90 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         loadedModelId: adapter.getLoadedModel()?.modelId ?? null,
       }));
     }
-  }, []);
+    isInitializingRef.current = false;
+  }, [engineState.status]);
 
-  const sendMessage = useCallback(
-    async (content: string) => {
-      const adapter = adapterRef.current;
-      if (!adapter) return;
+  const sendMessage = useCallback(async (content: string) => {
+    const adapter = adapterRef.current;
+    if (!adapter) return;
 
-      const userMsg: ChatMessage = {
-        id: `user-${Date.now()}`,
-        role: "user",
-        content,
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content,
+      timestamp: Date.now(),
+    };
+    setMessages((prev: ChatMessage[]) => [...prev, userMsg]);
+    setIsStreaming(true);
+
+    const assistantMsgId = `assistant-${Date.now()}`;
+    setMessages((prev: ChatMessage[]) => [
+      ...prev,
+      {
+        id: assistantMsgId,
+        role: "assistant",
+        content: "",
         timestamp: Date.now(),
-      };
-      setMessages((prev: ChatMessage[]) => [...prev, userMsg]);
-      setIsStreaming(true);
+      },
+    ]);
 
-      const assistantMsgId = `assistant-${Date.now()}`;
-      setMessages((prev: ChatMessage[]) => [
-        ...prev,
-        {
-          id: assistantMsgId,
-          role: "assistant",
-          content: "",
-          timestamp: Date.now(),
-        },
-      ]);
+    abortControllerRef.current = new AbortController();
 
-      abortControllerRef.current = new AbortController();
+    try {
+      const currentMessages = messagesRef.current;
+      const historyMessages: LLMMessage[] = [
+        ...currentMessages.map((m: ChatMessage) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+        { role: "user" as const, content },
+      ];
 
-      try {
-        const historyMessages: LLMMessage[] = [
-          ...messages.map((m: ChatMessage) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          })),
-          { role: "user" as const, content },
-        ];
+      const stream = adapter.streamComplete({
+        model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
+        messages: historyMessages,
+        temperature: 0.7,
+        maxTokens: 2048,
+        stream: true,
+      });
 
-        const stream = adapter.streamComplete({
-          model:
-            adapter.getLoadedModel()?.modelId ??
-            "Phi-3-mini-4k-instruct-q4f16_1-MLC",
-          messages: historyMessages,
-          temperature: 0.7,
-          maxTokens: 2048,
-          stream: true,
-        });
-
-        for await (const result of stream) {
-          if (abortControllerRef.current?.signal.aborted) break;
-          if (result.success) {
-            setMessages((prev: ChatMessage[]) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              if (last?.id === assistantMsgId) {
-                last.content += result.value;
-              }
-              return updated;
-            });
-          } else {
-            setMessages((prev: ChatMessage[]) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              if (last?.id === assistantMsgId) {
-                last.content = `Error: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
-              }
-              return updated;
-            });
-          }
+      for await (const result of stream) {
+        if (abortControllerRef.current?.signal.aborted) break;
+        if (result.success) {
+          setMessages((prev: ChatMessage[]) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.id === assistantMsgId) {
+              last.content += result.value;
+            }
+            return updated;
+          });
+        } else {
+          setMessages((prev: ChatMessage[]) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last?.id === assistantMsgId) {
+              last.content = `Error: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
+            }
+            return updated;
+          });
         }
-      } catch (error: unknown) {
-        setMessages((prev: ChatMessage[]) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last?.id === assistantMsgId) {
-            last.content =
-              error instanceof Error ? error.message : "An error occurred";
-          }
-          return updated;
-        });
-      } finally {
-        setIsStreaming(false);
-        abortControllerRef.current = null;
       }
-    },
-    [messages],
-  );
+    } catch (error: unknown) {
+      setMessages((prev: ChatMessage[]) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last?.id === assistantMsgId) {
+          last.content =
+            error instanceof Error ? error.message : "An error occurred";
+        }
+        return updated;
+      });
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
+    }
+  }, []);
 
   const clearError = useCallback(() => {
     setEngineState((prev: LLMEngineState) => ({ ...prev, errorMessage: null }));

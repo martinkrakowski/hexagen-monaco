@@ -1067,6 +1067,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/web-driver@workspace:packages/web-driver"
   dependencies:
+    "@hexagen/local-llm": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"

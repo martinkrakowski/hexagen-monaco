@@ -178,6 +178,8 @@ export function MonacoEditorWrapper({
     }
   }, [sessionId, undoLastPatchUseCase, projectCurrentBufferStateUseCase]);
 
+  const { engineState } = useLocalLLM();
+
   if (error) {
     return (
       <div className="flex items-center justify-center h-full text-destructive">
@@ -185,8 +187,6 @@ export function MonacoEditorWrapper({
       </div>
     );
   }
-
-  const { engineState } = useLocalLLM();
 
   return (
     <div className="flex flex-col h-full">

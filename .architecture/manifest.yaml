@@ -346,7 +346,6 @@ bounded_contexts:
         entities:
           - Project
           - MonacoSessionState
-          - LLMEngineState
         ports:
           out:
             - DownloadProjectPort
@@ -457,6 +456,7 @@ bounded_contexts:
         value_objects:
           - LLMProgress
           - ModelMetadata
+          - LLMEngineState
       application:
         use_cases:
           - InitializeModelUseCase

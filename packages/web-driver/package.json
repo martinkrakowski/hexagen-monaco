@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hexagen/local-llm": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/visualization": "workspace:*",
     "js-yaml": "^4.1.1"
