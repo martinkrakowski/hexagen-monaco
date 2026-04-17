@@ -12,6 +12,7 @@ export function LocalAssistantPanel() {
     messages,
     isStreaming,
     initializeModel,
+    cancelDownload,
     sendMessage,
     clearError,
   } = useLocalLLM();
@@ -39,6 +40,7 @@ export function LocalAssistantPanel() {
         status={status}
         progress={progress}
         errorMessage={errorMessage}
+        onCancel={cancelDownload}
         onRetry={clearError}
       />
     );

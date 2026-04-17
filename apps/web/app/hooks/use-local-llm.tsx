@@ -33,6 +33,7 @@ interface LocalLLMContextValue {
   messages: ChatMessage[];
   isStreaming: boolean;
   initializeModel: () => Promise<void>;
+  cancelDownload: () => void;
   sendMessage: (content: string) => Promise<void>;
   clearError: () => void;
 }
@@ -74,6 +75,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const isInitializingRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const cancelInitRef = useRef<(() => void) | null>(null);
 
   const [engineState, setEngineState] = useState<LLMEngineState>(
     LLM_ENGINE_INITIAL_STATE,
@@ -99,18 +101,42 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       progress: 0,
     }));
 
-    const initResult = await adapter.initialize(
-      { modelId: DEFAULT_MODEL_ID },
-      (progress: LLMProgress) => {
-        const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
-        const browserSupported = typeof OffscreenCanvas !== "undefined";
-        setEngineState((prev: LLMEngineState) => ({
-          ...prev,
-          status: deriveStatus(progress, webgpuSupported, browserSupported),
-          progress: progress.progress,
-        }));
-      },
-    );
+    const cancelPromise = new Promise<Result<void>>((_, reject) => {
+      cancelInitRef.current = () => reject(new Error("download-cancelled"));
+    });
+
+    let initResult: Result<void>;
+    try {
+      initResult = await Promise.race([
+        adapter.initialize(
+          { modelId: DEFAULT_MODEL_ID },
+          (progress: LLMProgress) => {
+            const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
+            const browserSupported = typeof OffscreenCanvas !== "undefined";
+            setEngineState((prev: LLMEngineState) => ({
+              ...prev,
+              status: deriveStatus(progress, webgpuSupported, browserSupported),
+              progress: progress.progress,
+            }));
+          },
+        ),
+        cancelPromise,
+      ]);
+    } catch {
+      // cancelled — terminate the worker, reset to opt_in
+      adapter.dispose();
+      cancelInitRef.current = null;
+      isInitializingRef.current = false;
+      setEngineState((prev: LLMEngineState) => ({
+        ...prev,
+        status: "opt_in",
+        progress: 0,
+        errorMessage: null,
+      }));
+      return;
+    }
+
+    cancelInitRef.current = null;
 
     if (!initResult.success) {
       const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
@@ -216,6 +242,13 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     }
   }, []);
 
+  const cancelDownload = useCallback(() => {
+    if (cancelInitRef.current) {
+      cancelInitRef.current();
+      cancelInitRef.current = null;
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setEngineState((prev: LLMEngineState) => ({ ...prev, errorMessage: null }));
   }, []);
@@ -269,6 +302,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         messages,
         isStreaming,
         initializeModel,
+        cancelDownload,
         sendMessage,
         clearError,
       }}

@@ -6,6 +6,7 @@ interface ModelProgressCardProps {
   status: LLMEngineStatus;
   progress: number;
   errorMessage: string | null;
+  onCancel?: () => void;
   onRetry?: () => void;
 }
 
@@ -13,9 +14,11 @@ export function ModelProgressCard({
   status,
   progress,
   errorMessage,
+  onCancel,
   onRetry,
 }: ModelProgressCardProps) {
   const percent = Math.round(progress * 100);
+  const isInProgress = status === "downloading" || status === "loading_vram";
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-6 gap-4">
@@ -63,6 +66,15 @@ export function ModelProgressCard({
           style={{ width: `${percent}%` }}
         />
       </div>
+      {isInProgress && onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs text-muted-foreground hover:text-foreground underline hover:no-underline transition-colors"
+        >
+          Cancel download
+        </button>
+      )}
       {status === "error" && errorMessage && (
         <p className="text-xs text-destructive text-center max-w-[260px]">
           {errorMessage}
