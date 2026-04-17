@@ -26,5 +26,5 @@ export const DEFAULT_TUNING_CONFIG = {
   maxTokens: 768,
   frequencyPenalty: 0.3,
   presencePenalty: 0.0,
-  repetitionPenalty: 1.2,
+  repetitionPenalty: 1.4,
 } as const;
