@@ -34,7 +34,7 @@ function validateContextName(name: string): {
   if (!name.trim()) {
     errors.push("name is required");
   } else if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(name)) {
-    errors.push("name must be lowercase snake_case (e.g., 'user-management')");
+    errors.push("name must be lowercase kebab-case (e.g., 'user-management')");
   } else if (name.length < 3) {
     errors.push("name must be at least 3 characters");
   } else if (name.length > 50) {
@@ -56,10 +56,6 @@ export class CreateContextToolUseCase {
   ) {}
 
   async execute(input: CreateContextInput): Promise<CreateContextOutput> {
-    if (!input.name.trim()) {
-      throw new Error("name is required");
-    }
-
     if (!input.type || !VALID_CONTEXT_TYPES.includes(input.type)) {
       throw new Error(`type must be one of: ${VALID_CONTEXT_TYPES.join(", ")}`);
     }
@@ -93,7 +89,7 @@ export class CreateContextToolUseCase {
 
     const { registered, alreadyExisted } = registerResult.value;
 
-    if (!alreadyExisted && registered) {
+    if (registered) {
       this.eventBusPort.publish({
         type: "ContextCreated",
         payload: {
