@@ -31,6 +31,7 @@ interface WebLLMEngine {
 
 export interface WebLLMAdapterConfig {
   defaultModelId?: string;
+  webllmCdnUrl?: string;
 }
 
 export class WebLLMAdapter implements LocalLLMProviderPort {
@@ -44,6 +45,9 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     this.config = {
       defaultModelId:
         config.defaultModelId ?? "Phi-3-mini-4k-instruct-q4f16_1-MLC",
+      webllmCdnUrl:
+        config.webllmCdnUrl ??
+        "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js",
     };
   }
 
@@ -61,13 +65,15 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         }
       };
 
+      const webllmUrl = this.config.webllmCdnUrl!;
+
       const workerScript = `
         let engine = null;
         self.onmessage = async function(e) {
           const { type, data } = e.data;
           if (type === 'init') {
             try {
-              const webllmJs = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js';
+              const webllmJs = data.webllmUrl || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js';
               await import(webllmJs);
               
               const CreateWebWorkerMLCEngine = self.createMLCEngine || self.WebLLMEngine?.CreateWebWorkerMLCEngine;
@@ -87,13 +93,30 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
           } else if (type === 'generate') {
             try {
               const messages = data.messages.map(m => ({ role: m.role, content: m.content }));
-              const result = await engine.chat.completions.create({
-                messages,
-                temperature: data.temperature ?? 0.7,
-                max_tokens: data.maxTokens ?? 2048,
-                stream: false
-              });
-              self.postMessage({ type: 'result', data: result.choices[0]?.message?.content || '' });
+              const stream = data.stream ?? false;
+              if (stream) {
+                const stream = await engine.chat.completions.create({
+                  messages,
+                  temperature: data.temperature ?? 0.7,
+                  max_tokens: data.maxTokens ?? 2048,
+                  stream: true
+                });
+                for await (const chunk of stream) {
+                  const content = chunk.choices[0]?.delta?.content;
+                  if (content) {
+                    self.postMessage({ type: 'chunk', data: content });
+                  }
+                }
+                self.postMessage({ type: 'done', data: '' });
+              } else {
+                const result = await engine.chat.completions.create({
+                  messages,
+                  temperature: data.temperature ?? 0.7,
+                  max_tokens: data.maxTokens ?? 2048,
+                  stream: false
+                });
+                self.postMessage({ type: 'result', data: result.choices[0]?.message?.content || '' });
+              }
             } catch (err) {
               self.postMessage({ type: 'error', data: err.message });
             }
@@ -127,7 +150,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
         this.worker.postMessage({
           type: "init",
-          data: { modelId },
+          data: { modelId, webllmUrl },
         });
       });
     } catch (error) {
@@ -234,5 +257,6 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     }
     this.engine = null;
     this.loadedModelId = null;
+    this.progressCallback = null;
   }
 }
