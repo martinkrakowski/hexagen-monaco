@@ -142,7 +142,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         type: "generate",
         data: {
           messages: request.messages,
-          temperature: request.temperature ?? 0.7,
+          temperature: request.temperature ?? 0.6,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
           topK: request.topK,
@@ -208,7 +208,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         type: "generate",
         data: {
           messages: request.messages,
-          temperature: request.temperature ?? 0.7,
+          temperature: request.temperature ?? 0.6,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
           topK: request.topK,
@@ -248,12 +248,12 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
     return {
       modelId: this.loadedModelId,
-      vendor: "Google",
-      parameterSize: "2B",
-      quantizeLevel: "q4f16",
-      contextLength: 8192,
-      vocabularySize: 256000,
-      recommendedTemperature: 0.45,
+      vendor: "Alibaba",
+      parameterSize: "3B",
+      quantizeLevel: "q4f16_1",
+      contextLength: 32768,
+      vocabularySize: 151936,
+      recommendedTemperature: 0.6,
       isLoaded: true,
     };
   }

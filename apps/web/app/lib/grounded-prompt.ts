@@ -128,7 +128,7 @@ export function prunedHistoryWindow(
   messages: ChatMessage[],
   systemPrompt: string,
   userMessage: string,
-  maxContextTokens: number = 8192,
+  maxContextTokens: number = 32768,
   safetyMargin: number = 0.85,
 ): Array<{ role: "user" | "assistant"; content: string }> {
   const budget = maxContextTokens * safetyMargin;

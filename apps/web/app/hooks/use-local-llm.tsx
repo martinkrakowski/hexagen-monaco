@@ -270,7 +270,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
         const totalTokens =
           estimateTokens(systemPrompt) + estimateTokens(content) + 200;
-        const maxTokens = adapter.getLoadedModel()?.contextLength || 8192;
+        const maxTokens = adapter.getLoadedModel()?.contextLength || 32768;
 
         if (totalTokens > maxTokens * 0.9) {
           throw new Error(
@@ -288,7 +288,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         messagesRef.current,
         systemPrompt,
         content,
-        adapter.getLoadedModel()?.contextLength || 8192,
+        adapter.getLoadedModel()?.contextLength || 32768,
       );
 
       const historyMessages: LLMMessage[] = [
