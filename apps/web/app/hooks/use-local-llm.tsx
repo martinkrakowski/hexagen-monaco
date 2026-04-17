@@ -48,6 +48,10 @@ interface LocalLLMContextValue {
   initializeModel: () => Promise<void>;
   cancelDownload: () => void;
   sendMessage: (content: string) => Promise<void>;
+  sendGovernanceMessage: (
+    content: string,
+    systemPrompt: string,
+  ) => Promise<void>;
   clearError: () => void;
 }
 
@@ -339,6 +343,87 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     }
   }, []);
 
+  const sendGovernanceMessage = useCallback(
+    async (content: string, systemPrompt: string) => {
+      const adapter = adapterRef.current;
+      if (!adapter) return;
+
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content,
+        timestamp: Date.now(),
+      };
+      setMessages((prev: ChatMessage[]) => [...prev, userMsg]);
+      setIsStreaming(true);
+
+      const assistantMsgId = `assistant-${Date.now()}`;
+      setMessages((prev: ChatMessage[]) => [
+        ...prev,
+        {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          timestamp: Date.now(),
+        },
+      ]);
+
+      abortControllerRef.current = new AbortController();
+
+      try {
+        const historyMessages: LLMMessage[] = [
+          { role: "system", content: systemPrompt },
+          { role: "user" as const, content },
+        ];
+
+        const stream = adapter.streamComplete({
+          model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
+          messages: historyMessages,
+          temperature: 0.7,
+          maxTokens: 2048,
+          stream: true,
+        });
+
+        for await (const result of stream) {
+          if (abortControllerRef.current?.signal.aborted) break;
+          if (result.success) {
+            setMessages((prev: ChatMessage[]) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.id === assistantMsgId) {
+                last.content += result.value;
+              }
+              return updated;
+            });
+          } else {
+            setMessages((prev: ChatMessage[]) => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last?.id === assistantMsgId) {
+                last.content = `Error: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
+              }
+              return updated;
+            });
+          }
+        }
+      } catch (error: unknown) {
+        setMessages((prev: ChatMessage[]) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last?.id === assistantMsgId) {
+            last.content =
+              error instanceof Error ? error.message : "An error occurred";
+          }
+          return updated;
+        });
+      } finally {
+        setIsStreaming(false);
+        abortControllerRef.current = null;
+      }
+    },
+    [],
+  );
+
   const cancelDownload = useCallback(() => {
     localStorage.removeItem(AUTO_LOAD_KEY);
     if (cancelInitRef.current) {
@@ -436,6 +521,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         initializeModel,
         cancelDownload,
         sendMessage,
+        sendGovernanceMessage,
         clearError,
       }}
     >
@@ -444,10 +530,21 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   );
 }
 
+const DEFAULT_LLM_VALUE: LocalLLMContextValue = {
+  engineState: LLM_ENGINE_INITIAL_STATE,
+  messages: [],
+  isStreaming: false,
+  initializeModel: async () => {},
+  cancelDownload: () => {},
+  sendMessage: async () => {},
+  sendGovernanceMessage: async () => {},
+  clearError: () => {},
+};
+
 export function useLocalLLM(): LocalLLMContextValue {
   const context = useContext(LocalLLMContext);
   if (!context) {
-    throw new Error("useLocalLLM must be used within a LocalLLMProvider");
+    return DEFAULT_LLM_VALUE;
   }
   return context;
 }

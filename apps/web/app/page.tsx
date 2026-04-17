@@ -21,7 +21,7 @@ import {
   DialogDescription,
 } from "@/components/ui/Dialog";
 import { FileDropZone } from "@/components/ui/FileDropZone";
-import { AIArchitectPanel } from "@/components/agent/AIArchitectPanel";
+import { GovernancePanelWrapper } from "@/components/agent/GovernancePanelWrapper";
 
 import { Header } from "./components/layout/Header";
 import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
@@ -453,7 +453,12 @@ export default function Home() {
                 </CardContent>
               </Card>
             }
-            right={<AIArchitectPanel />}
+            right={
+              <GovernancePanelWrapper
+                wizardData={wizardData}
+                currentStepIndex={currentStepIndex}
+              />
+            }
           />
         </FormProvider>
       </main>
