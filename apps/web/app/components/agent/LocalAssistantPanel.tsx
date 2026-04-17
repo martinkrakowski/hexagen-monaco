@@ -1,12 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import { OptInCard } from "./OptInCard";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
+import { ModelSettingsView } from "./ModelSettingsView";
 import { WakingUpCard } from "./WakingUpCard";
 import { LocalChatInterface } from "./LocalChatInterface";
 import { UnavailableCard } from "./UnavailableCard";
+
+type PanelView = "main" | "model-settings";
 
 export function LocalAssistantPanel() {
   const {
@@ -20,7 +24,10 @@ export function LocalAssistantPanel() {
     loadedModel,
     switchModel,
     deleteCachedModel,
+    hasModelInCache,
   } = useLocalLLM();
+
+  const [panelView, setPanelView] = useState<PanelView>("main");
 
   const { status, progress, errorMessage, autoLoading } = engineState;
 
@@ -32,6 +39,11 @@ export function LocalAssistantPanel() {
     status === "downloading" || (status === "loading_vram" && !autoLoading);
   const showError = status === "error";
   const showChat = status === "ready";
+
+  // If status changes away from ready, auto-navigate back to main view
+  if (panelView === "model-settings" && status !== "ready") {
+    setPanelView("main");
+  }
 
   if (showUnavailable) {
     return <UnavailableCard status={status} />;
@@ -76,16 +88,32 @@ export function LocalAssistantPanel() {
     );
   }
 
+  // Show model settings view when requested
+  if (panelView === "model-settings" && showChat) {
+    return (
+      <ModelSettingsView
+        currentModelId={engineState.loadedModelId}
+        loadedModel={loadedModel}
+        messagesLength={messages.length}
+        onSwitchModel={switchModel}
+        onDeleteModel={deleteCachedModel}
+        hasModelInCache={hasModelInCache}
+        onBack={() => setPanelView("main")}
+        isLoading={
+          engineState.status === "downloading" ||
+          engineState.status === "loading_vram"
+        }
+      />
+    );
+  }
+
   if (showChat) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex items-center justify-end px-4 py-2 border-b border-border shrink-0">
           <ModelFooterIndicator
             modelId={engineState.loadedModelId}
-            loadedModel={loadedModel}
-            messagesLength={messages.length}
-            onSelectModel={switchModel}
-            onDeleteModel={deleteCachedModel}
+            onOpenSettings={() => setPanelView("model-settings")}
             isLoading={false}
           />
         </div>

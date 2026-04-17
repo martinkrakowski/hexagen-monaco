@@ -23,7 +23,10 @@ import { OptInCard } from "./OptInCard";
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
+import { ModelSettingsView } from "./ModelSettingsView";
 import { UnavailableCard } from "./UnavailableCard";
+
+type PanelView = "main" | "model-settings";
 
 interface GovernanceAssistantPanelProps {
   wizardData: WizardData;
@@ -440,8 +443,10 @@ export function GovernanceAssistantPanel({
     loadedModel,
     switchModel,
     deleteCachedModel,
+    hasModelInCache,
   } = useLocalLLM();
 
+  const [panelView, setPanelView] = useState<PanelView>("main");
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
 
   const questions = useMemo(() => getQuestions(), [getQuestions]);
@@ -543,6 +548,30 @@ export function GovernanceAssistantPanel({
     }
   };
 
+  // If status changes away from ready, auto-navigate back to main view
+  if (panelView === "model-settings" && status !== "ready") {
+    setPanelView("main");
+  }
+
+  // Show model settings view when requested
+  if (panelView === "model-settings" && status === "ready") {
+    return (
+      <ModelSettingsView
+        currentModelId={llmEngineState.loadedModelId}
+        loadedModel={loadedModel}
+        messagesLength={messages.length}
+        onSwitchModel={switchModel}
+        onDeleteModel={deleteCachedModel}
+        hasModelInCache={hasModelInCache}
+        onBack={() => setPanelView("main")}
+        isLoading={
+          llmEngineState.status === "downloading" ||
+          llmEngineState.status === "loading_vram"
+        }
+      />
+    );
+  }
+
   return (
     <div className="h-full flex flex-col bg-card">
       <div className="px-5 pt-5 pb-4 flex-shrink-0">
@@ -558,10 +587,7 @@ export function GovernanceAssistantPanel({
           <div className="flex items-center gap-2">
             <ModelFooterIndicator
               modelId={llmEngineState.loadedModelId}
-              loadedModel={loadedModel}
-              messagesLength={messages.length}
-              onSelectModel={switchModel}
-              onDeleteModel={deleteCachedModel}
+              onOpenSettings={() => setPanelView("model-settings")}
               isLoading={
                 llmEngineState.status === "downloading" ||
                 llmEngineState.status === "loading_vram"

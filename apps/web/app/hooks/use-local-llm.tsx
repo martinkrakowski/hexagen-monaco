@@ -60,6 +60,7 @@ interface LocalLLMContextValue {
   clearError: () => void;
   switchModel: (modelId: string) => Promise<void>;
   deleteCachedModel: (modelId: string) => Promise<void>;
+  hasModelInCache: (modelId: string) => Promise<boolean>;
 }
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
@@ -545,6 +546,21 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     [engineState.loadedModelId],
   );
 
+  const hasModelInCache = useCallback(
+    async (modelId: string): Promise<boolean> => {
+      const adapter = adapterRef.current;
+      if (!adapter) return false;
+
+      try {
+        return await adapter.hasModelInCache(modelId);
+      } catch {
+        // Non-fatal — assume not cached if query fails
+        return false;
+      }
+    },
+    [],
+  );
+
   // Effect 1: Wire adapters and run WebGPU detection on mount.
   useEffect(() => {
     setMounted(true);
@@ -636,6 +652,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         clearError,
         switchModel,
         deleteCachedModel,
+        hasModelInCache,
       }}
     >
       {children}
@@ -655,6 +672,7 @@ const DEFAULT_LLM_VALUE: LocalLLMContextValue = {
   clearError: () => {},
   switchModel: async () => {},
   deleteCachedModel: async () => {},
+  hasModelInCache: async () => false,
 };
 
 export function useLocalLLM(): LocalLLMContextValue {
