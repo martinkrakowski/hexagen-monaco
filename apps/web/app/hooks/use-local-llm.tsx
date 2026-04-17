@@ -21,6 +21,16 @@ import type { LLMEngineState, LLMEngineStatus } from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
 import { getLocalLLMProvider, getWebGPUDetector } from "@/lib/wire";
 
+import {
+  buildGroundedSystemPrompt,
+  chunkEditorBuffer,
+  estimateTokens,
+  prunedHistoryWindow,
+  type GovernancePayload,
+  type EditorState as EditorContextState,
+} from "@/lib/grounded-prompt";
+import { useEditor } from "@/contexts/EditorContext";
+
 /** localStorage key persisted after a successful model load. */
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 
@@ -103,6 +113,15 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [governancePayload, setGovernancePayload] =
+    useState<GovernancePayload | null>(null);
+
+  const { editorState } = useEditor();
+  const editorStateRef = useRef<EditorContextState>(editorState);
+
+  useEffect(() => {
+    editorStateRef.current = editorState;
+  }, [editorState]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -222,12 +241,55 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     abortControllerRef.current = new AbortController();
 
     try {
-      const currentMessages = messagesRef.current;
+      // Build grounded system prompt.
+      let systemPrompt: string;
+      try {
+        if (!governancePayload) {
+          throw new Error("Governance context not loaded");
+        }
+
+        const { content: editorChunk, lineEnd } = chunkEditorBuffer(
+          editorStateRef.current.content,
+          5120,
+        );
+
+        const editorContext = {
+          ...editorStateRef.current,
+          content: editorChunk,
+          lineEnd,
+        };
+
+        systemPrompt = buildGroundedSystemPrompt({
+          governance: governancePayload,
+          editor: editorContext,
+        });
+
+        const totalTokens =
+          estimateTokens(systemPrompt) + estimateTokens(content) + 200;
+        const maxTokens = adapter.getLoadedModel()?.contextLength || 4096;
+
+        if (totalTokens > maxTokens * 0.9) {
+          throw new Error(
+            `System prompt + message (${totalTokens} tokens) exceeds safe limit`,
+          );
+        }
+      } catch (promptError) {
+        console.warn("Failed to build grounded prompt:", promptError);
+        systemPrompt =
+          "You are HexaGen Monaco AI. Assist with the architecture project.";
+      }
+
+      // Apply history pruning.
+      const pruned = prunedHistoryWindow(
+        messagesRef.current,
+        systemPrompt,
+        content,
+        adapter.getLoadedModel()?.contextLength || 4096,
+      );
+
       const historyMessages: LLMMessage[] = [
-        ...currentMessages.map((m: ChatMessage) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
+        { role: "system", content: systemPrompt },
+        ...pruned,
         { role: "user" as const, content },
       ];
 
@@ -336,6 +398,26 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     setEngineState((prev: LLMEngineState) => ({ ...prev, autoLoading: true }));
     initializeModel();
   }, [engineState.status, initializeModel]);
+
+  // Effect 3: Fetch governance context once when model is ready.
+  useEffect(() => {
+    if (engineState.status !== "ready") return;
+    if (governancePayload) return;
+
+    const fetchGovernance = async () => {
+      try {
+        const res = await fetch("/api/llm/context");
+        if (res.ok) {
+          const payload = await res.json();
+          setGovernancePayload(payload);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch governance context:", err);
+      }
+    };
+
+    fetchGovernance();
+  }, [engineState.status, governancePayload]);
 
   if (!mounted) {
     return (
