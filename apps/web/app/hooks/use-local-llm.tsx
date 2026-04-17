@@ -399,9 +399,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     initializeModel();
   }, [engineState.status, initializeModel]);
 
-  // Effect 3: Fetch governance context once when model is ready.
+  // Effect 3: Fetch governance context on mount (independent of model state).
+  // This ensures governance is available when the user sends the first message.
   useEffect(() => {
-    if (engineState.status !== "ready") return;
     if (governancePayload) return;
 
     const fetchGovernance = async () => {
@@ -417,7 +417,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     };
 
     fetchGovernance();
-  }, [engineState.status, governancePayload]);
+  }, []);
 
   if (!mounted) {
     return (

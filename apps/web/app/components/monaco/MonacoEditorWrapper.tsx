@@ -27,6 +27,7 @@ interface MonacoEditorWrapperProps {
   initialBuffer: string;
   sessionId: string;
   language?: string;
+  filename?: string;
   onSave?: (content: string) => void;
 }
 
@@ -54,6 +55,7 @@ export function MonacoEditorWrapper({
   initialBuffer,
   sessionId,
   language = "yaml",
+  filename = "manifest.yaml",
   onSave,
 }: MonacoEditorWrapperProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -163,7 +165,7 @@ export function MonacoEditorWrapper({
       updateEditorState({
         content: value,
         lineEnd: lineCount,
-        filename: language || "yaml",
+        filename: filename,
         language: language || "yaml",
       });
     }
