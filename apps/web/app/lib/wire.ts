@@ -144,7 +144,13 @@ export const wireDependencies = () => {
   );
 
   // Local LLM Provider → WebLLM browser adapter (singleton, lazily initialized)
-  const localLLMAdapter = new WebLLMAdapter();
+  // Worker is bundled by webpack 5 via new URL() static analysis — no CDN required.
+  const localLLMAdapter = new WebLLMAdapter({
+    createWorker: () =>
+      new Worker(new URL("../workers/webllm.worker.ts", import.meta.url), {
+        type: "module",
+      }),
+  });
   registry.set(
     "LocalLLMProviderPort",
     localLLMAdapter satisfies LocalLLMProviderPort,

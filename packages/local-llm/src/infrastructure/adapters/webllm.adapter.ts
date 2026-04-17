@@ -12,27 +12,14 @@ import type {
 } from "../../domain/value-objects/index.js";
 import { DEFAULT_MODEL_ID } from "../../domain/value-objects/index.js";
 
-interface WebLLMEngine {
-  chat: {
-    completions: {
-      create(options: {
-        messages: Array<{ role: string; content: string }>;
-        temperature?: number;
-        max_tokens?: number;
-        stream?: boolean;
-      }): AsyncIterable<{
-        choices: Array<{
-          delta: { role: string; content: string };
-          finish_reason: string | null;
-        }>;
-      }>;
-    };
-  };
-}
-
 export interface WebLLMAdapterConfig {
   defaultModelId?: string;
-  webllmCdnUrl?: string;
+  /**
+   * Factory that creates the WebLLM Worker.
+   * In Next.js (webpack 5) supply this via new URL() so the worker is bundled:
+   *   createWorker: () => new Worker(new URL('../workers/webllm.worker.ts', import.meta.url), { type: 'module' })
+   */
+  createWorker?: () => Worker;
 }
 
 type WorkerMessage =
@@ -44,19 +31,15 @@ type WorkerMessage =
   | { type: "error"; data: string };
 
 export class WebLLMAdapter implements LocalLLMProviderPort {
-  private engine: WebLLMEngine | null = null;
   private loadedModelId: string | null = null;
   private progressCallback: LLMProgressCallback | null = null;
-  private workerUrl: string | null = null;
   private worker: Worker | null = null;
   private config: WebLLMAdapterConfig;
 
   constructor(config: WebLLMAdapterConfig = {}) {
     this.config = {
       defaultModelId: config.defaultModelId ?? DEFAULT_MODEL_ID,
-      webllmCdnUrl:
-        config.webllmCdnUrl ??
-        "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js",
+      createWorker: config.createWorker,
     };
   }
 
@@ -65,92 +48,20 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     onProgress: LLMProgressCallback,
   ): Promise<Result<void>> {
     try {
+      const { createWorker } = this.config;
+      if (!createWorker) {
+        return err(
+          new Error(
+            "WebLLMAdapter requires a createWorker factory. " +
+              "Provide one via WebLLMAdapterConfig.createWorker.",
+          ),
+        );
+      }
+
       this.progressCallback = onProgress;
       const modelId = config.modelId || this.config.defaultModelId!;
 
-      const progressHandler = (progress: LLMProgress): void => {
-        if (this.progressCallback) {
-          this.progressCallback(progress);
-        }
-      };
-
-      const webllmUrl = this.config.webllmCdnUrl!;
-
-      const workerScript = `
-        let engine = null;
-        self.onmessage = async function(e) {
-          const { type, data } = e.data;
-          if (type === 'init') {
-            try {
-              const webllmUrl = data.webllmUrl || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js';
-              const mlc = await import(webllmUrl);
-              const CreateMLCEngine = mlc.CreateMLCEngine ?? mlc.default?.CreateMLCEngine;
-              if (!CreateMLCEngine) {
-                throw new Error('WebLLM CreateMLCEngine not found in module exports');
-              }
-              engine = await CreateMLCEngine(
-                data.modelId,
-                {
-                  initProgressCallback: (mlcProgress) => {
-                    const text = (mlcProgress.text || '').toLowerCase();
-                    let phase = 'loading-model';
-                    if (text.includes('compil') || text.includes('shader')) {
-                      phase = 'compiling-shader';
-                    } else if (text.includes('init') && !text.includes('loading')) {
-                      phase = 'initializing-engine';
-                    }
-                    self.postMessage({
-                      type: 'progress',
-                      data: {
-                        progress: mlcProgress.progress ?? 0,
-                        text: mlcProgress.text ?? '',
-                        phase,
-                      }
-                    });
-                  }
-                }
-              );
-              self.postMessage({ type: 'ready' });
-            } catch (err) {
-              self.postMessage({ type: 'error', data: err.message });
-            }
-          } else if (type === 'generate') {
-            try {
-              const messages = data.messages.map(m => ({ role: m.role, content: m.content }));
-              const stream = data.stream ?? false;
-              if (stream) {
-                const streamResult = await engine.chat.completions.create({
-                  messages,
-                  temperature: data.temperature ?? 0.7,
-                  max_tokens: data.maxTokens ?? 2048,
-                  stream: true
-                });
-                for await (const chunk of streamResult) {
-                  const content = chunk.choices[0]?.delta?.content;
-                  if (content) {
-                    self.postMessage({ type: 'chunk', data: content });
-                  }
-                }
-                self.postMessage({ type: 'done', data: '' });
-              } else {
-                const result = await engine.chat.completions.create({
-                  messages,
-                  temperature: data.temperature ?? 0.7,
-                  max_tokens: data.maxTokens ?? 2048,
-                  stream: false
-                });
-                self.postMessage({ type: 'result', data: result.choices[0]?.message?.content || '' });
-              }
-            } catch (err) {
-              self.postMessage({ type: 'error', data: err.message });
-            }
-          }
-        };
-      `;
-
-      const blob = new Blob([workerScript], { type: "application/javascript" });
-      this.workerUrl = URL.createObjectURL(blob);
-      this.worker = new Worker(this.workerUrl, { type: "module" });
+      this.worker = createWorker();
 
       return new Promise((resolve) => {
         if (!this.worker) {
@@ -159,23 +70,23 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         }
 
         const messageHandler = (e: MessageEvent) => {
-          const { type, data } = e.data;
-          if (type === "progress") {
-            progressHandler(data as LLMProgress);
-          } else if (type === "ready") {
+          const msg = e.data as WorkerMessage;
+          if (msg.type === "progress") {
+            if (this.progressCallback) {
+              this.progressCallback(msg.data);
+            }
+          } else if (msg.type === "ready") {
             this.loadedModelId = modelId;
             resolve(ok(undefined));
-          } else if (type === "error") {
-            resolve(err(new Error(`WebLLM initialization failed: ${data}`)));
+          } else if (msg.type === "error") {
+            resolve(
+              err(new Error(`WebLLM initialization failed: ${msg.data}`)),
+            );
           }
         };
 
         this.worker.addEventListener("message", messageHandler);
-
-        this.worker.postMessage({
-          type: "init",
-          data: { modelId, webllmUrl },
-        });
+        this.worker.postMessage({ type: "init", data: { modelId } });
       });
     } catch (error) {
       return err(error instanceof Error ? error : new Error(String(error)));
@@ -200,8 +111,8 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       }, 120000);
 
       const messageHandler = (e: MessageEvent) => {
-        const { type, data } = e.data;
-        if (type === "result") {
+        const msg = e.data as WorkerMessage;
+        if (msg.type === "result") {
           clearTimeout(timeoutId);
           this.worker?.removeEventListener("message", messageHandler);
           const response: LLMCompletionResponse = {
@@ -211,17 +122,17 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
               {
                 message: {
                   role: "assistant",
-                  content: data as string,
+                  content: msg.data as string,
                 },
                 finishReason: "stop",
               },
             ],
           };
           resolve(ok(response));
-        } else if (type === "error") {
+        } else if (msg.type === "error") {
           clearTimeout(timeoutId);
           this.worker?.removeEventListener("message", messageHandler);
-          resolve(err(new Error(`Generation failed: ${data}`)));
+          resolve(err(new Error(`Generation failed: ${msg.data}`)));
         }
       };
 
@@ -338,15 +249,10 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   dispose(): void {
-    if (this.workerUrl) {
-      URL.revokeObjectURL(this.workerUrl);
-      this.workerUrl = null;
-    }
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
     }
-    this.engine = null;
     this.loadedModelId = null;
     this.progressCallback = null;
   }
