@@ -8,6 +8,7 @@ export interface AddDependencyCommand {
 export interface RegisterBoundedContextCommand {
   name: string;
   type?: "core" | "supporting" | "driver" | "shared-kernel";
+  description?: string;
 }
 
 export interface RegisterPortCommand {

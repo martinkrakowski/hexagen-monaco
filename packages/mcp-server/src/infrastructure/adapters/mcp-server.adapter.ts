@@ -2,6 +2,7 @@ import type { MCPServerPort } from "../../application/ports/in/mcp-server.port.j
 import type { AddDependencyToolUseCase } from "../../application/use-cases/add-dependency-tool.use-case.js";
 import type { AuditBoundariesToolUseCase } from "../../application/use-cases/audit-boundaries-tool.use-case.js";
 import type { CreateAdapterToolUseCase } from "../../application/use-cases/create-adapter-tool.use-case.js";
+import type { CreateContextToolUseCase } from "../../application/use-cases/create-context-tool.use-case.js";
 import type { CreatePortToolUseCase } from "../../application/use-cases/create-port-tool.use-case.js";
 import type { GetGraphResourceUseCase } from "../../application/use-cases/get-graph-resource.use-case.js";
 import type { GetLinterReportResourceUseCase } from "../../application/use-cases/get-linter-report-resource.use-case.js";
@@ -21,6 +22,7 @@ interface MCPServerAdapterDependencies {
   createAdapterToolUseCase: CreateAdapterToolUseCase;
   removePortToolUseCase: RemovePortToolUseCase;
   removeContextToolUseCase: RemoveContextToolUseCase;
+  createContextToolUseCase: CreateContextToolUseCase;
 }
 
 interface MCPServerRuntime {
@@ -279,6 +281,23 @@ export class MCPServerAdapter implements MCPServerPort {
               required: ["context_name"],
             },
           },
+          {
+            name: "hexagen_create_context",
+            description: "Create a new bounded context in the manifest",
+            inputSchema: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                type: {
+                  type: "string",
+                  enum: ["core", "supporting", "driver", "shared-kernel"],
+                },
+                description: { type: "string" },
+                dry_run: { type: "boolean" },
+              },
+              required: ["name", "type"],
+            },
+          },
         ],
       };
     });
@@ -395,6 +414,25 @@ export class MCPServerAdapter implements MCPServerPort {
             const result =
               await this.dependencies.removeContextToolUseCase.execute({
                 context_name: String(args.context_name ?? ""),
+                dry_run: (args.dry_run as boolean | undefined) ?? false,
+              });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_create_context") {
+            const result =
+              await this.dependencies.createContextToolUseCase.execute({
+                name: String(args.name ?? ""),
+                type: String(args.type ?? "core") as
+                  | "core"
+                  | "supporting"
+                  | "driver"
+                  | "shared-kernel",
+                description: args.description as string | undefined,
                 dry_run: (args.dry_run as boolean | undefined) ?? false,
               });
             return {
