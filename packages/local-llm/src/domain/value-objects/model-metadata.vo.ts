@@ -21,7 +21,7 @@ export const RECOMMENDED_TEMPERATURE = 0.7;
 
 export const DEFAULT_TUNING_CONFIG = {
   temperature: 0.7,
-  topP: 0.9,
+  topP: undefined,
   topK: undefined,
   maxTokens: 768,
   frequencyPenalty: 0.3,
