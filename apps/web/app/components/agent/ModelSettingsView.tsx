@@ -352,7 +352,7 @@ function ModelCard({
                   Active
                 </span>
               )}
-              {cacheStatus?.isCached && !isCurrent && (
+              {cacheStatus?.isCached && (
                 <span className="inline-flex items-center rounded-full bg-blue/10 px-1.5 py-0.5 text-[10px] font-medium text-blue shrink-0">
                   Cached
                 </span>
@@ -375,7 +375,7 @@ function ModelCard({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {cacheStatus && cacheStatus.isCached && (
+            {cacheStatus && (cacheStatus.isCached || isCurrent) && (
               <button
                 onClick={onDelete}
                 disabled={isLoading || isDeleting}
