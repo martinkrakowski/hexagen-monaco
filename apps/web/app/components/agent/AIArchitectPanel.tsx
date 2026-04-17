@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
-import { AgentChatPanel } from "./AgentChatPanel";
+import { LocalAssistantPanel } from "./LocalAssistantPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
@@ -75,10 +75,7 @@ export function AIArchitectPanel({
             />
           </Tabs.Content>
           <Tabs.Content value="chat" className="h-full">
-            <AgentChatPanel
-              onSendMessage={onSendMessage}
-              isLoading={isLoading}
-            />
+            <LocalAssistantPanel />
           </Tabs.Content>
         </CardContent>
       </Tabs.Root>

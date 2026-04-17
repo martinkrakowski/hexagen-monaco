@@ -19,10 +19,10 @@ interface WebLLMEngine {
         temperature?: number;
         max_tokens?: number;
         stream?: boolean;
-      }): Promise<{
+      }): AsyncIterable<{
         choices: Array<{
-          message: { role: string; content: string };
-          finish_reason: string;
+          delta: { role: string; content: string };
+          finish_reason: string | null;
         }>;
       }>;
     };
@@ -33,6 +33,14 @@ export interface WebLLMAdapterConfig {
   defaultModelId?: string;
   webllmCdnUrl?: string;
 }
+
+type WorkerMessage =
+  | { type: "progress"; data: LLMProgress }
+  | { type: "ready" }
+  | { type: "result"; data: string }
+  | { type: "chunk"; data: string }
+  | { type: "done" }
+  | { type: "error"; data: string };
 
 export class WebLLMAdapter implements LocalLLMProviderPort {
   private engine: WebLLMEngine | null = null;
@@ -75,12 +83,12 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
             try {
               const webllmJs = data.webllmUrl || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js';
               await import(webllmJs);
-              
+
               const CreateWebWorkerMLCEngine = self.createMLCEngine || self.WebLLMEngine?.CreateWebWorkerMLCEngine;
               if (!CreateWebWorkerMLCEngine) {
                 throw new Error('WebLLM engine not available');
               }
-              
+
               engine = await CreateWebWorkerMLCEngine(
                 new URL(webllmJs, import.meta.url),
                 data.modelId,
@@ -95,13 +103,13 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
               const messages = data.messages.map(m => ({ role: m.role, content: m.content }));
               const stream = data.stream ?? false;
               if (stream) {
-                const stream = await engine.chat.completions.create({
+                const streamResult = await engine.chat.completions.create({
                   messages,
                   temperature: data.temperature ?? 0.7,
                   max_tokens: data.maxTokens ?? 2048,
                   stream: true
                 });
-                for await (const chunk of stream) {
+                for await (const chunk of streamResult) {
                   const content = chunk.choices[0]?.delta?.content;
                   if (content) {
                     self.postMessage({ type: 'chunk', data: content });
@@ -209,6 +217,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
           messages: request.messages,
           temperature: request.temperature ?? 0.7,
           maxTokens: request.maxTokens ?? 2048,
+          stream: false,
         },
       });
     });
@@ -222,16 +231,70 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       return;
     }
 
-    try {
-      const result = await this.complete(request);
-      if (result.success) {
-        const content = result.value.choices[0]?.message?.content ?? "";
-        yield ok(content);
-      } else {
-        yield err(result.error);
+    const pendingChunks: string[] = [];
+    let resolveNext: ((value: Result<string>) => void) | null = null;
+    let streamDone = false;
+    let streamError: Error | null = null;
+
+    const timeoutId = setTimeout(() => {
+      streamError = new Error("Streaming request timed out");
+      if (resolveNext) {
+        resolveNext(err(streamError));
+        resolveNext = null;
       }
-    } catch (error) {
-      yield err(error instanceof Error ? error : new Error(String(error)));
+    }, 120000);
+
+    const messageHandler = (e: MessageEvent<WorkerMessage>) => {
+      const msg = e.data;
+      if (msg.type === "chunk") {
+        pendingChunks.push(msg.data as string);
+        if (resolveNext) {
+          resolveNext(ok(msg.data as string));
+          resolveNext = null;
+        }
+      } else if (msg.type === "done") {
+        streamDone = true;
+        clearTimeout(timeoutId);
+        if (resolveNext) {
+          resolveNext(err(new Error("Stream ended before any result")));
+          resolveNext = null;
+        }
+      } else if (msg.type === "error") {
+        streamError = new Error(`Generation failed: ${msg.data}`);
+        clearTimeout(timeoutId);
+        if (resolveNext) {
+          resolveNext(err(streamError));
+          resolveNext = null;
+        }
+      }
+    };
+
+    try {
+      this.worker.addEventListener("message", messageHandler);
+      this.worker.postMessage({
+        type: "generate",
+        data: {
+          messages: request.messages,
+          temperature: request.temperature ?? 0.7,
+          maxTokens: request.maxTokens ?? 2048,
+          stream: true,
+        },
+      });
+
+      while (!streamDone && !streamError) {
+        const nextResult = await new Promise<Result<string>>((resolve) => {
+          resolveNext = resolve;
+        });
+        yield nextResult;
+        if (!nextResult.success) break;
+      }
+
+      if (streamError) {
+        yield err(streamError);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      this.worker?.removeEventListener("message", messageHandler);
     }
   }
 

@@ -24,6 +24,10 @@ import type { LoggerPort } from "@hexagen/shared";
 import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
 import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
 import type { LLMProviderPort } from "@hexagen/agentic-interaction";
+import type {
+  LocalLLMProviderPort,
+  WebGPUDetectorPort,
+} from "@hexagen/local-llm";
 import {
   LocalStoragePersistenceAdapter,
   LocalStorageCanvasLayoutAdapter,
@@ -34,6 +38,7 @@ import {
   InMemoryIntentBusAdapter,
 } from "@hexagen/messaging";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+import { WebLLMAdapter, WebGPUCapabilityAdapter } from "@hexagen/local-llm";
 
 const createWebLogger = (): LoggerPort => ({
   info: (msg) => console.log(`[web] ${msg}`),
@@ -138,6 +143,19 @@ export const wireDependencies = () => {
     createLLMProvider() satisfies LLMProviderPort,
   );
 
+  // Local LLM Provider → WebLLM browser adapter (singleton, lazily initialized)
+  const localLLMAdapter = new WebLLMAdapter();
+  registry.set(
+    "LocalLLMProviderPort",
+    localLLMAdapter satisfies LocalLLMProviderPort,
+  );
+
+  // WebGPU Detector → browser capability adapter
+  registry.set(
+    "WebGPUDetectorPort",
+    new WebGPUCapabilityAdapter() satisfies WebGPUDetectorPort,
+  );
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);
@@ -187,3 +205,9 @@ export const getEditorWorkspacePersistence = () =>
 
 export const getCanvasLayoutPersistence = () =>
   dependencies.get<CanvasLayoutPersistencePort>("CanvasLayoutPersistencePort");
+
+export const getLocalLLMProvider = () =>
+  dependencies.get<LocalLLMProviderPort>("LocalLLMProviderPort");
+
+export const getWebGPUDetector = () =>
+  dependencies.get<WebGPUDetectorPort>("WebGPUDetectorPort");

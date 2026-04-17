@@ -1,5 +1,7 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import { Bot, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +42,15 @@ export function AgentMessage({ message }: AgentMessageProps) {
             : "bg-primary/10 text-foreground border border-primary/20",
         )}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        ) : (
+          <div className="markdown-content">
+            <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground mt-1">
           {new Date(message.timestamp).toLocaleTimeString([], {
             hour: "2-digit",

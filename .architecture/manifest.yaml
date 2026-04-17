@@ -346,6 +346,7 @@ bounded_contexts:
         entities:
           - Project
           - MonacoSessionState
+          - LLMEngineState
         ports:
           out:
             - DownloadProjectPort

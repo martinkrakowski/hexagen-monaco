@@ -19,6 +19,8 @@ import type {
 import { getMonacoPersistence } from "@/lib/wire";
 import { useTheme } from "@/hooks/use-theme";
 import { useSharedState } from "@/hooks/use-shared-state";
+import { useLocalLLM } from "@/hooks/use-local-llm";
+import { LLMStatusPill } from "@/components/agent/LLMStatusPill";
 
 interface MonacoEditorWrapperProps {
   initialBuffer: string;
@@ -184,6 +186,8 @@ export function MonacoEditorWrapper({
     );
   }
 
+  const { engineState } = useLocalLLM();
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card shrink-0">
@@ -195,19 +199,22 @@ export function MonacoEditorWrapper({
             <span className="text-xs text-amber-500">Unsaved changes</span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleManualSave}
-          disabled={isSaving || !hasUnsavedChanges}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isSaving ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
-          )}
-          Save
-        </button>
+        <div className="flex items-center gap-2">
+          <LLMStatusPill status={engineState.status} />
+          <button
+            type="button"
+            onClick={handleManualSave}
+            disabled={isSaving || !hasUnsavedChanges}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            Save
+          </button>
+        </div>
       </div>
       {loading ? (
         <div className="flex items-center justify-center h-full">
