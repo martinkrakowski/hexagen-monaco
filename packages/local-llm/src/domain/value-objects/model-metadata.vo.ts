@@ -17,13 +17,13 @@ export interface ModelConfig {
 
 export const DEFAULT_MODEL_ID = "gemma-2-2b-it-q4f16_1-MLC";
 
-export const RECOMMENDED_TEMPERATURE = 0.45;
+export const RECOMMENDED_TEMPERATURE = 0.6;
 
 export const DEFAULT_TUNING_CONFIG = {
-  temperature: 0.45,
+  temperature: 0.6,
   topP: 0.9,
-  topK: 64,
+  topK: undefined,
   maxTokens: 768,
-  frequencyPenalty: 0.15,
+  frequencyPenalty: 0.4,
   presencePenalty: 0.0,
 } as const;

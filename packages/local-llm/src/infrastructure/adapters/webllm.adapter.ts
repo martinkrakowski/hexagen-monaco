@@ -142,7 +142,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         type: "generate",
         data: {
           messages: request.messages,
-          temperature: request.temperature ?? 0.45,
+          temperature: request.temperature ?? 0.6,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
           topK: request.topK,
@@ -207,7 +207,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         type: "generate",
         data: {
           messages: request.messages,
-          temperature: request.temperature ?? 0.45,
+          temperature: request.temperature ?? 0.6,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
           topK: request.topK,
