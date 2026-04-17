@@ -56,12 +56,21 @@ export function ModelSettingsView({
 
       // Query in parallel
       const results = await Promise.all(
-        LOCAL_MODELS.map((model) =>
-          hasModelInCache(model.id).then((isCached) => ({
-            modelId: model.id,
-            isCached,
-          })),
-        ),
+        LOCAL_MODELS.map(async (model) => {
+          try {
+            const isCached = await hasModelInCache(model.id);
+            return {
+              modelId: model.id,
+              isCached,
+            };
+          } catch {
+            // If query fails, assume not cached
+            return {
+              modelId: model.id,
+              isCached: false,
+            };
+          }
+        }),
       );
 
       const finalStatus = new Map<string, ModelCacheStatus>();
@@ -366,7 +375,7 @@ function ModelCard({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {cacheStatus?.isCached && (
+            {cacheStatus && cacheStatus.isCached && (
               <button
                 onClick={onDelete}
                 disabled={isLoading || isDeleting}
