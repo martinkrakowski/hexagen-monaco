@@ -82,16 +82,13 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
           const { type, data } = e.data;
           if (type === 'init') {
             try {
-              const webllmJs = data.webllmUrl || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js';
-              await import(webllmJs);
-
-              const CreateWebWorkerMLCEngine = self.createMLCEngine || self.WebLLMEngine?.CreateWebWorkerMLCEngine;
-              if (!CreateWebWorkerMLCEngine) {
-                throw new Error('WebLLM engine not available');
+              const webllmUrl = data.webllmUrl || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.0/dist/webllm.js';
+              const mlc = await import(webllmUrl);
+              const CreateMLCEngine = mlc.CreateMLCEngine ?? mlc.default?.CreateMLCEngine;
+              if (!CreateMLCEngine) {
+                throw new Error('WebLLM CreateMLCEngine not found in module exports');
               }
-
-              engine = await CreateWebWorkerMLCEngine(
-                new URL(webllmJs, import.meta.url),
+              engine = await CreateMLCEngine(
                 data.modelId,
                 { initProgressCallback: (progress) => self.postMessage({ type: 'progress', data: progress }) }
               );
@@ -135,7 +132,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
       const blob = new Blob([workerScript], { type: "application/javascript" });
       this.workerUrl = URL.createObjectURL(blob);
-      this.worker = new Worker(this.workerUrl);
+      this.worker = new Worker(this.workerUrl, { type: "module" });
 
       return new Promise((resolve) => {
         if (!this.worker) {
