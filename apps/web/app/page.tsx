@@ -19,7 +19,6 @@ import { FileDropZone } from "@/components/ui/FileDropZone";
 import { AIArchitectPanel } from "@/components/agent/AIArchitectPanel";
 
 import { Header } from "./components/layout/Header";
-import { Footer } from "./components/layout/Footer";
 import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
 import { CodeView } from "@/components/code-view/CodeView";
 import { governanceState } from "@/lib/governance-state";
@@ -459,8 +458,6 @@ export default function Home() {
           />
         </FormProvider>
       </main>
-
-      <Footer />
 
       <Dialog open={showLoadDialog} onClose={() => setShowLoadDialog(false)}>
         <DialogContent>
