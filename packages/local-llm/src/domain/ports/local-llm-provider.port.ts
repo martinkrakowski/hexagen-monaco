@@ -19,6 +19,7 @@ export interface LLMCompletionRequest {
   topK?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  repetitionPenalty?: number;
   stream?: boolean;
 }
 

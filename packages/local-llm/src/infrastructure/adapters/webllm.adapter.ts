@@ -142,12 +142,13 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         type: "generate",
         data: {
           messages: request.messages,
-          temperature: request.temperature ?? 0.6,
+          temperature: request.temperature ?? 0.7,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
           topK: request.topK,
           frequencyPenalty: request.frequencyPenalty,
           presencePenalty: request.presencePenalty,
+          repetitionPenalty: request.repetitionPenalty,
           stream: false,
         },
       });
@@ -207,12 +208,13 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         type: "generate",
         data: {
           messages: request.messages,
-          temperature: request.temperature ?? 0.6,
+          temperature: request.temperature ?? 0.7,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
           topK: request.topK,
           frequencyPenalty: request.frequencyPenalty,
           presencePenalty: request.presencePenalty,
+          repetitionPenalty: request.repetitionPenalty,
           stream: true,
         },
       });

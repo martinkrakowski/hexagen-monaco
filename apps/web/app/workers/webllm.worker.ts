@@ -53,12 +53,13 @@ self.onmessage = async (e: MessageEvent) => {
       if (stream) {
         const streamResult = await engine.chat.completions.create({
           messages,
-          temperature: data.temperature ?? 0.6,
+          temperature: data.temperature ?? 0.7,
           max_tokens: data.maxTokens ?? 768,
           top_p: data.topP,
           top_k: data.topK,
           frequency_penalty: data.frequencyPenalty,
           presence_penalty: data.presencePenalty,
+          repetition_penalty: data.repetitionPenalty,
           stream: true,
         });
         for await (const chunk of streamResult) {
@@ -71,12 +72,13 @@ self.onmessage = async (e: MessageEvent) => {
       } else {
         const result = await engine.chat.completions.create({
           messages,
-          temperature: data.temperature ?? 0.6,
+          temperature: data.temperature ?? 0.7,
           max_tokens: data.maxTokens ?? 768,
           top_p: data.topP,
           top_k: data.topK,
           frequency_penalty: data.frequencyPenalty,
           presence_penalty: data.presencePenalty,
+          repetition_penalty: data.repetitionPenalty,
           stream: false,
         });
         self.postMessage({
