@@ -131,15 +131,19 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         adapter.initialize(
           { modelId: DEFAULT_MODEL_ID },
           (progress: LLMProgress) => {
+            const text = (progress.text || "").toLowerCase();
+            const isNetworkFetch =
+              text.includes("fetching") &&
+              !text.includes("loading model from cache");
             setEngineState((prev: LLMEngineState) => ({
               ...prev,
               status: progressToStatus(progress.phase),
               progress: progress.progress,
-              // Clear autoLoading the moment we detect actual download activity.
-              // A cache-hit skips "loading-model" entirely, so this is safe:
-              // autoLoading stays true only on a clean cache-hit.
-              autoLoading:
-                prev.autoLoading && progress.phase !== "loading-model",
+              // Only clear autoLoading when an actual network download is underway.
+              // WebLLM fires "Fetching param cache[N/M]..." for network fetch (cache miss)
+              // and "Loading model from cache[N/M]..." for a cache-to-GPU load (cache hit).
+              // We must NOT clear on "Loading model from cache" — that is a warm cache hit.
+              autoLoading: prev.autoLoading && !isNetworkFetch,
             }));
           },
         ),
