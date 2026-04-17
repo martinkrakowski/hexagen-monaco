@@ -15,6 +15,6 @@ export interface ModelConfig {
   maxTokens?: number;
 }
 
-export const DEFAULT_MODEL_ID = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
+export const DEFAULT_MODEL_ID = "Gemma-2B-it-q4f32f16-MLC";
 
-export const RECOMMENDED_TEMPERATURE = 0.2;
+export const RECOMMENDED_TEMPERATURE = 0.45;

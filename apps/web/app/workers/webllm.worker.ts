@@ -53,8 +53,8 @@ self.onmessage = async (e: MessageEvent) => {
       if (stream) {
         const streamResult = await engine.chat.completions.create({
           messages,
-          temperature: data.temperature ?? 0.7,
-          max_tokens: data.maxTokens ?? 2048,
+          temperature: data.temperature ?? 0.45,
+          max_tokens: data.maxTokens ?? 768,
           stream: true,
         });
         for await (const chunk of streamResult) {
@@ -67,8 +67,8 @@ self.onmessage = async (e: MessageEvent) => {
       } else {
         const result = await engine.chat.completions.create({
           messages,
-          temperature: data.temperature ?? 0.7,
-          max_tokens: data.maxTokens ?? 2048,
+          temperature: data.temperature ?? 0.45,
+          max_tokens: data.maxTokens ?? 768,
           stream: false,
         });
         self.postMessage({

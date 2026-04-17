@@ -238,12 +238,12 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
     return {
       modelId: this.loadedModelId,
-      vendor: "MLC AI",
-      parameterSize: "3.8B",
-      quantizeLevel: "q4f16_1",
-      contextLength: 4096,
-      vocabularySize: 32064,
-      recommendedTemperature: 0.2,
+      vendor: "Google",
+      parameterSize: "2B",
+      quantizeLevel: "q4f16",
+      contextLength: 8192,
+      vocabularySize: 256000,
+      recommendedTemperature: 0.45,
       isLoaded: true,
     };
   }

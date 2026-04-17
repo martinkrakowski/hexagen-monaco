@@ -270,7 +270,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
         const totalTokens =
           estimateTokens(systemPrompt) + estimateTokens(content) + 200;
-        const maxTokens = adapter.getLoadedModel()?.contextLength || 4096;
+        const maxTokens = adapter.getLoadedModel()?.contextLength || 8192;
 
         if (totalTokens > maxTokens * 0.9) {
           throw new Error(
@@ -288,7 +288,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         messagesRef.current,
         systemPrompt,
         content,
-        adapter.getLoadedModel()?.contextLength || 4096,
+        adapter.getLoadedModel()?.contextLength || 8192,
       );
 
       const historyMessages: LLMMessage[] = [
@@ -300,8 +300,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       const stream = adapter.streamComplete({
         model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
         messages: historyMessages,
-        temperature: 0.7,
-        maxTokens: 2048,
+        temperature: 0.45,
+        maxTokens: 768,
         stream: true,
       });
 
@@ -379,8 +379,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         const stream = adapter.streamComplete({
           model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
           messages: historyMessages,
-          temperature: 0.7,
-          maxTokens: 2048,
+          temperature: 0.45,
+          maxTokens: 768,
           stream: true,
         });
 
