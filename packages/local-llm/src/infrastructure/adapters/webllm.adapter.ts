@@ -163,44 +163,49 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       return;
     }
 
-    const pendingChunks: string[] = [];
-    let resolveNext: ((value: Result<string>) => void) | null = null;
-    let streamDone = false;
-    let streamError: Error | null = null;
+    // FIFO queue + notify pattern: the Worker message handler (producer) enqueues
+    // items; the async generator loop (consumer) drains them. A single `notify`
+    // callback is stored so the consumer can await the next item without polling.
+    // This avoids the dual-path (resolveNext / pendingChunks) race where a chunk
+    // arriving between `if (resolveNext)` and `else` could be handled by both
+    // branches on a microtask boundary.
+    type QueueItem =
+      | { kind: "chunk"; value: string }
+      | { kind: "done" }
+      | { kind: "error"; error: Error };
 
-    const timeoutId = setTimeout(() => {
-      streamError = new Error("Streaming request timed out");
-      if (resolveNext) {
-        resolveNext(err(streamError));
-        resolveNext = null;
+    const queue: QueueItem[] = [];
+    let notify: (() => void) | null = null;
+
+    const enqueue = (item: QueueItem) => {
+      queue.push(item);
+      if (notify) {
+        const fn = notify;
+        notify = null;
+        fn();
       }
-    }, 120000);
+    };
 
     const messageHandler = (e: MessageEvent<WorkerMessage>) => {
       const msg = e.data;
       if (msg.type === "chunk") {
-        if (resolveNext) {
-          resolveNext(ok(msg.data as string));
-          resolveNext = null;
-        } else {
-          pendingChunks.push(msg.data as string);
-        }
+        enqueue({ kind: "chunk", value: msg.data as string });
       } else if (msg.type === "done") {
-        streamDone = true;
-        clearTimeout(timeoutId);
-        if (resolveNext) {
-          resolveNext(ok("[DONE]"));
-          resolveNext = null;
-        }
+        enqueue({ kind: "done" });
       } else if (msg.type === "error") {
-        streamError = new Error(`Generation failed: ${msg.data}`);
-        clearTimeout(timeoutId);
-        if (resolveNext) {
-          resolveNext(err(streamError));
-          resolveNext = null;
-        }
+        enqueue({
+          kind: "error",
+          error: new Error(`Generation failed: ${msg.data}`),
+        });
       }
     };
+
+    const timeoutId = setTimeout(() => {
+      enqueue({
+        kind: "error",
+        error: new Error("Streaming request timed out"),
+      });
+    }, 120000);
 
     try {
       this.worker.addEventListener("message", messageHandler);
@@ -219,23 +224,21 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         },
       });
 
-      while (!streamError) {
-        if (streamDone) {
-          while (pendingChunks.length > 0) {
-            yield ok(pendingChunks.shift()!);
+      while (true) {
+        while (queue.length > 0) {
+          const item = queue.shift()!;
+          if (item.kind === "chunk") {
+            yield ok(item.value);
+          } else if (item.kind === "done") {
+            return;
+          } else {
+            yield err(item.error);
+            return;
           }
-          break;
         }
-        const nextResult = await new Promise<Result<string>>((resolve) => {
-          resolveNext = resolve;
+        await new Promise<void>((resolve) => {
+          notify = resolve;
         });
-        if (!nextResult.success) break;
-        if (nextResult.value === "[DONE]") break;
-        yield nextResult;
-      }
-
-      if (streamError) {
-        yield err(streamError);
       }
     } finally {
       clearTimeout(timeoutId);
