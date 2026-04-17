@@ -365,28 +365,30 @@ function ModelCard({
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            {isCurrent ? (
+          <div className="flex items-center gap-2 shrink-0">
+            {cacheStatus?.isCached && (
               <button
                 onClick={onDelete}
                 disabled={isLoading || isDeleting}
                 className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+                title="Delete cached model"
               >
                 Delete
               </button>
-            ) : (
-              <button
-                onClick={() => onSelectModel(descriptor.id)}
-                disabled={isLoading || isSwitching}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-              >
-                {isSwitching && isPendingSwitch
-                  ? "Switching…"
+            )}
+            <button
+              onClick={() => onSelectModel(descriptor.id)}
+              disabled={isLoading || isSwitching || isCurrent}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              {isSwitching && isPendingSwitch
+                ? "Switching…"
+                : isCurrent
+                  ? "Active"
                   : cacheStatus?.isCached
                     ? "Switch"
                     : "Download"}
-              </button>
-            )}
+            </button>
           </div>
         </div>
       </div>
