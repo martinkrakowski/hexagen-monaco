@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider } from "./components/providers/AuthProvider";
 import { SharedStateProvider } from "@/hooks/use-shared-state";
 import { LocalLLMProvider } from "@/hooks/use-local-llm";
+import { EditorProvider } from "@/contexts/EditorContext";
 
 /*
  * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
@@ -69,9 +70,11 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <SharedStateProvider>
-            <LocalLLMProvider>
-              <AuthProvider>{children}</AuthProvider>
-            </LocalLLMProvider>
+            <EditorProvider>
+              <LocalLLMProvider>
+                <AuthProvider>{children}</AuthProvider>
+              </LocalLLMProvider>
+            </EditorProvider>
           </SharedStateProvider>
         </ThemeProvider>
       </body>

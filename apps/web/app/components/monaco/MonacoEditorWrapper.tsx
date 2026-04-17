@@ -20,6 +20,7 @@ import { getMonacoPersistence } from "@/lib/wire";
 import { useTheme } from "@/hooks/use-theme";
 import { useSharedState } from "@/hooks/use-shared-state";
 import { useLocalLLM } from "@/hooks/use-local-llm";
+import { useEditor } from "@/contexts/EditorContext";
 import { LLMStatusPill } from "@/components/agent/LLMStatusPill";
 
 interface MonacoEditorWrapperProps {
@@ -64,6 +65,8 @@ export function MonacoEditorWrapper({
 
   const { theme } = useTheme();
   const monacoTheme = theme === "dark" ? "vs-dark" : "vs";
+
+  const { updateEditorState } = useEditor();
 
   const persistence = getMonacoPersistence();
   const { emitCodeChange } = useSharedState();
@@ -155,6 +158,14 @@ export function MonacoEditorWrapper({
       setContent(value);
       setHasUnsavedChanges(true);
       saveSession(value);
+
+      const lineCount = value.split("\n").length;
+      updateEditorState({
+        content: value,
+        lineEnd: lineCount,
+        filename: language || "yaml",
+        language: language || "yaml",
+      });
     }
   };
 
