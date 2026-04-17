@@ -41,6 +41,7 @@ const nextConfig = {
   // Workspace packages to transpile
   transpilePackages: [
     "@hexagen/agentic-interaction",
+    "@hexagen/local-llm",
     "@hexagen/messaging",
     "@hexagen/monaco-orchestration",
     "@hexagen/project-configuration",
@@ -116,6 +117,10 @@ const nextConfig = {
         monorepoRoot,
         "packages/web-driver/src",
       ),
+      "@hexagen/local-llm": path.resolve(
+        monorepoRoot,
+        "packages/local-llm/src",
+      ),
       "@hexagen/wizard-orchestration": path.resolve(
         monorepoRoot,
         "packages/wizard-orchestration/src",
@@ -157,6 +162,10 @@ const nextConfig = {
       "@hexagen/web-driver": path.resolve(
         monorepoRoot,
         "packages/web-driver/src",
+      ),
+      "@hexagen/local-llm": path.resolve(
+        monorepoRoot,
+        "packages/local-llm/src",
       ),
       "@hexagen/wizard-orchestration": path.resolve(
         monorepoRoot,
