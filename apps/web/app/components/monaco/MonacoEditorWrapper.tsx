@@ -200,7 +200,10 @@ export function MonacoEditorWrapper({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <LLMStatusPill status={engineState.status} />
+          <LLMStatusPill
+            status={engineState.status}
+            autoLoading={engineState.autoLoading}
+          />
           <button
             type="button"
             onClick={handleManualSave}

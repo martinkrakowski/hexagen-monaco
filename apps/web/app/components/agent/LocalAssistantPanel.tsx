@@ -3,6 +3,7 @@
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import { OptInCard } from "./OptInCard";
 import { ModelProgressCard } from "./ModelProgressCard";
+import { WakingUpCard } from "./WakingUpCard";
 import { LocalChatInterface } from "./LocalChatInterface";
 import { UnavailableCard } from "./UnavailableCard";
 
@@ -17,14 +18,16 @@ export function LocalAssistantPanel() {
     clearError,
   } = useLocalLLM();
 
-  const { status, progress, errorMessage } = engineState;
+  const { status, progress, errorMessage, autoLoading } = engineState;
 
-  const showOptIn = status === "opt_in" || status === "unavailable";
-  const showProgress = status === "downloading" || status === "loading_vram";
-  const showError = status === "error";
-  const showChat = status === "ready";
   const showUnavailable =
     status === "no_webgpu" || status === "unsupported_browser";
+  const showOptIn = status === "opt_in" || status === "unavailable";
+  const showWakingUp = status === "loading_vram" && autoLoading;
+  const showProgress =
+    status === "downloading" || (status === "loading_vram" && !autoLoading);
+  const showError = status === "error";
+  const showChat = status === "ready";
 
   if (showUnavailable) {
     return <UnavailableCard status={status} />;
@@ -32,6 +35,10 @@ export function LocalAssistantPanel() {
 
   if (showOptIn) {
     return <OptInCard onInitialize={initializeModel} isInitializing={false} />;
+  }
+
+  if (showWakingUp) {
+    return <WakingUpCard onCancel={cancelDownload} />;
   }
 
   if (showProgress) {

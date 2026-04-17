@@ -13,6 +13,8 @@ export interface LLMEngineState {
   progress: number;
   loadedModelId: string | null;
   errorMessage: string | null;
+  /** True while the engine is being auto-initialised on mount from a cached model. */
+  autoLoading: boolean;
 }
 
 export const createLLMEngineState = (
@@ -20,11 +22,13 @@ export const createLLMEngineState = (
   progress = 0,
   loadedModelId: string | null = null,
   errorMessage: string | null = null,
+  autoLoading = false,
 ): LLMEngineState => ({
   status,
   progress,
   loadedModelId,
   errorMessage,
+  autoLoading,
 });
 
 export const LLM_ENGINE_INITIAL_STATE: LLMEngineState = {
@@ -32,4 +36,5 @@ export const LLM_ENGINE_INITIAL_STATE: LLMEngineState = {
   progress: 0,
   loadedModelId: null,
   errorMessage: null,
+  autoLoading: false,
 };

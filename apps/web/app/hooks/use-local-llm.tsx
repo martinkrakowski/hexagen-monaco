@@ -21,6 +21,9 @@ import type { LLMEngineState, LLMEngineStatus } from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
 import { getLocalLLMProvider, getWebGPUDetector } from "@/lib/wire";
 
+/** localStorage key persisted after a successful model load. */
+const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -91,6 +94,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const isInitializingRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   const cancelInitRef = useRef<(() => void) | null>(null);
+  /** Guards against StrictMode double-fire and repeated auto-init attempts. */
+  const hasAttemptedAutoInitRef = useRef(false);
 
   const [engineState, setEngineState] = useState<LLMEngineState>(
     LLM_ENGINE_INITIAL_STATE,
@@ -130,13 +135,20 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
               ...prev,
               status: progressToStatus(progress.phase),
               progress: progress.progress,
+              // Clear autoLoading the moment we detect actual download activity.
+              // A cache-hit skips "loading-model" entirely, so this is safe:
+              // autoLoading stays true only on a clean cache-hit.
+              autoLoading:
+                prev.autoLoading && progress.phase !== "loading-model",
             }));
           },
         ),
         cancelPromise,
       ]);
     } catch {
-      // cancelled — terminate the worker, reset to opt_in
+      // Cancelled — terminate the worker, reset to opt_in, clear the auto-load
+      // flag so a refresh doesn't re-trigger the failed/cancelled auto-init.
+      localStorage.removeItem(AUTO_LOAD_KEY);
       adapter.dispose();
       cancelInitRef.current = null;
       isInitializingRef.current = false;
@@ -145,6 +157,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         status: "opt_in",
         progress: 0,
         errorMessage: null,
+        autoLoading: false,
       }));
       return;
     }
@@ -152,21 +165,26 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     cancelInitRef.current = null;
 
     if (!initResult.success) {
+      // On error also clear the flag — prevents an auto-fail loop on next mount.
+      localStorage.removeItem(AUTO_LOAD_KEY);
       const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
       const browserSupported = typeof OffscreenCanvas !== "undefined";
       setEngineState((prev: LLMEngineState) => ({
         ...prev,
         status: deriveStatus(null, webgpuSupported, browserSupported),
+        autoLoading: false,
         errorMessage:
           initResult.error instanceof Error
             ? initResult.error.message
             : String(initResult.error),
       }));
     } else {
+      localStorage.setItem(AUTO_LOAD_KEY, "true");
       setEngineState((prev: LLMEngineState) => ({
         ...prev,
         status: "ready",
         progress: 1,
+        autoLoading: false,
         loadedModelId: adapter.getLoadedModel()?.modelId ?? null,
       }));
     }
@@ -256,6 +274,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   }, []);
 
   const cancelDownload = useCallback(() => {
+    localStorage.removeItem(AUTO_LOAD_KEY);
     if (cancelInitRef.current) {
       cancelInitRef.current();
       cancelInitRef.current = null;
@@ -266,6 +285,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     setEngineState((prev: LLMEngineState) => ({ ...prev, errorMessage: null }));
   }, []);
 
+  // Effect 1: Wire adapters and run WebGPU detection on mount.
   useEffect(() => {
     setMounted(true);
     adapterRef.current = getLocalLLMProvider();
@@ -299,6 +319,19 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       adapterRef.current?.dispose();
     };
   }, []);
+
+  // Effect 2: Auto-init when WebGPU detection resolves to opt_in and the
+  // localStorage flag signals a previously loaded model in IndexedDB cache.
+  // Runs reactively so it fires after Effect 1 sets status to "opt_in".
+  useEffect(() => {
+    if (hasAttemptedAutoInitRef.current) return;
+    if (engineState.status !== "opt_in") return;
+    if (localStorage.getItem(AUTO_LOAD_KEY) !== "true") return;
+
+    hasAttemptedAutoInitRef.current = true;
+    setEngineState((prev: LLMEngineState) => ({ ...prev, autoLoading: true }));
+    initializeModel();
+  }, [engineState.status, initializeModel]);
 
   if (!mounted) {
     return (

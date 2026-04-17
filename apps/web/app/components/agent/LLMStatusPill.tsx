@@ -5,9 +5,13 @@ import { Cpu, AlertTriangle, Loader2 } from "lucide-react";
 
 interface LLMStatusPillProps {
   status: LLMEngineStatus;
+  autoLoading?: boolean;
 }
 
-export function LLMStatusPill({ status }: LLMStatusPillProps) {
+export function LLMStatusPill({
+  status,
+  autoLoading = false,
+}: LLMStatusPillProps) {
   if (status === "unavailable" || status === "opt_in") return null;
 
   return (
@@ -19,7 +23,11 @@ export function LLMStatusPill({ status }: LLMStatusPillProps) {
         <>
           <Loader2 className="h-3 w-3 animate-spin text-primary" />
           <span className="text-primary">
-            {status === "downloading" ? "Downloading" : "Loading"}
+            {status === "downloading"
+              ? "Downloading"
+              : autoLoading
+                ? "Waking up"
+                : "Loading"}
           </span>
         </>
       ) : status === "ready" ? (

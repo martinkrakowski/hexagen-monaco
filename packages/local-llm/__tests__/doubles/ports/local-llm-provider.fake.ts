@@ -40,7 +40,7 @@ export class FakeLocalLLMProviderPort implements LocalLLMProviderPort {
     if (this.config.initializeResult) {
       return this.config.initializeResult;
     }
-    const progress = { phase: "ready" as const, progress: 1, timeElapsed: 0 };
+    const progress = { phase: "ready" as const, progress: 1, text: "" };
     onProgress(progress);
     return { success: true };
   }
