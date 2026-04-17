@@ -15,7 +15,7 @@ export interface ModelConfig {
   maxTokens?: number;
 }
 
-export const DEFAULT_MODEL_ID = "Gemma-2B-it-q4f32f16-MLC";
+export const DEFAULT_MODEL_ID = "gemma-2-2b-it-q4f16_1-MLC";
 
 export const RECOMMENDED_TEMPERATURE = 0.45;
 
