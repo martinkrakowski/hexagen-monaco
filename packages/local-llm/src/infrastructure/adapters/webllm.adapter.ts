@@ -90,7 +90,25 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
               }
               engine = await CreateMLCEngine(
                 data.modelId,
-                { initProgressCallback: (progress) => self.postMessage({ type: 'progress', data: progress }) }
+                {
+                  initProgressCallback: (mlcProgress) => {
+                    const text = (mlcProgress.text || '').toLowerCase();
+                    let phase = 'loading-model';
+                    if (text.includes('compil') || text.includes('shader')) {
+                      phase = 'compiling-shader';
+                    } else if (text.includes('init') && !text.includes('loading')) {
+                      phase = 'initializing-engine';
+                    }
+                    self.postMessage({
+                      type: 'progress',
+                      data: {
+                        progress: mlcProgress.progress ?? 0,
+                        text: mlcProgress.text ?? '',
+                        phase,
+                      }
+                    });
+                  }
+                }
               );
               self.postMessage({ type: 'ready' });
             } catch (err) {

@@ -61,7 +61,22 @@ function deriveStatus(
     case "error":
       return "error";
     default:
-      return "opt_in";
+      return "downloading";
+  }
+}
+
+function progressToStatus(phase: LLMProgress["phase"]): LLMEngineStatus {
+  switch (phase) {
+    case "ready":
+      return "ready";
+    case "error":
+      return "error";
+    case "compiling-shader":
+    case "initializing-engine":
+      return "loading_vram";
+    case "loading-model":
+    default:
+      return "downloading";
   }
 }
 
@@ -111,11 +126,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         adapter.initialize(
           { modelId: DEFAULT_MODEL_ID },
           (progress: LLMProgress) => {
-            const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
-            const browserSupported = typeof OffscreenCanvas !== "undefined";
             setEngineState((prev: LLMEngineState) => ({
               ...prev,
-              status: deriveStatus(progress, webgpuSupported, browserSupported),
+              status: progressToStatus(progress.phase),
               progress: progress.progress,
             }));
           },
