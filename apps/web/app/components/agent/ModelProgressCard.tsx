@@ -70,7 +70,7 @@ export function ModelProgressCard({
                 : "Preparing Model"}
           </h3>
         )}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground font-mono">
           {status === "downloading"
             ? `Downloading model weights… ${percent}%`
             : status === "loading_vram"
