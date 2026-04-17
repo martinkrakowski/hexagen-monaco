@@ -110,6 +110,14 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const cancelInitRef = useRef<(() => void) | null>(null);
   /** Guards against StrictMode double-fire and repeated auto-init attempts. */
   const hasAttemptedAutoInitRef = useRef(false);
+  /**
+   * Synchronous guard against concurrent streaming calls. `isStreaming` state
+   * cannot serve this role because React batches state updates — two rapid
+   * sendMessage calls would both observe `false` before the first
+   * `setIsStreaming(true)` resolves. The ref is set synchronously at the top
+   * of each send function and cleared in `finally`.
+   */
+  const isStreamingRef = useRef(false);
 
   const [engineState, setEngineState] = useState<LLMEngineState>(
     LLM_ENGINE_INITIAL_STATE,
@@ -221,6 +229,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const sendMessage = useCallback(async (content: string) => {
     const adapter = adapterRef.current;
     if (!adapter) return;
+    if (isStreamingRef.current) return;
+    isStreamingRef.current = true;
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -306,6 +316,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         topK: DEFAULT_TUNING_CONFIG.topK,
         frequencyPenalty: DEFAULT_TUNING_CONFIG.frequencyPenalty,
         presencePenalty: DEFAULT_TUNING_CONFIG.presencePenalty,
+        repetitionPenalty: DEFAULT_TUNING_CONFIG.repetitionPenalty,
         stream: true,
       });
 
@@ -313,12 +324,12 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         if (abortControllerRef.current?.signal.aborted) break;
         if (result.success) {
           setMessages((prev: ChatMessage[]) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last?.id === assistantMsgId) {
-              last.content += result.value;
-            }
-            return updated;
+            const last = prev[prev.length - 1];
+            if (!last || last.id !== assistantMsgId) return prev;
+            return [
+              ...prev.slice(0, -1),
+              { ...last, content: last.content + result.value },
+            ];
           });
         } else {
           setMessages((prev: ChatMessage[]) => {
@@ -343,6 +354,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       });
     } finally {
       setIsStreaming(false);
+      isStreamingRef.current = false;
       abortControllerRef.current = null;
     }
   }, []);
@@ -351,6 +363,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     async (content: string, systemPrompt: string) => {
       const adapter = adapterRef.current;
       if (!adapter) return;
+      if (isStreamingRef.current) return;
+      isStreamingRef.current = true;
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -389,6 +403,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           topK: DEFAULT_TUNING_CONFIG.topK,
           frequencyPenalty: DEFAULT_TUNING_CONFIG.frequencyPenalty,
           presencePenalty: DEFAULT_TUNING_CONFIG.presencePenalty,
+          repetitionPenalty: DEFAULT_TUNING_CONFIG.repetitionPenalty,
           stream: true,
         });
 
@@ -396,12 +411,12 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           if (abortControllerRef.current?.signal.aborted) break;
           if (result.success) {
             setMessages((prev: ChatMessage[]) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              if (last?.id === assistantMsgId) {
-                last.content += result.value;
-              }
-              return updated;
+              const last = prev[prev.length - 1];
+              if (!last || last.id !== assistantMsgId) return prev;
+              return [
+                ...prev.slice(0, -1),
+                { ...last, content: last.content + result.value },
+              ];
             });
           } else {
             setMessages((prev: ChatMessage[]) => {
@@ -426,6 +441,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         });
       } finally {
         setIsStreaming(false);
+        isStreamingRef.current = false;
         abortControllerRef.current = null;
       }
     },
