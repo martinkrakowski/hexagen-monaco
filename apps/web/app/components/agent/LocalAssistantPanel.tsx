@@ -3,6 +3,7 @@
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import { OptInCard } from "./OptInCard";
 import { ModelProgressCard } from "./ModelProgressCard";
+import { ModelFooterIndicator } from "./ModelFooterIndicator";
 import { WakingUpCard } from "./WakingUpCard";
 import { LocalChatInterface } from "./LocalChatInterface";
 import { UnavailableCard } from "./UnavailableCard";
@@ -16,6 +17,9 @@ export function LocalAssistantPanel() {
     cancelDownload,
     sendMessage,
     clearError,
+    loadedModel,
+    switchModel,
+    deleteCachedModel,
   } = useLocalLLM();
 
   const { status, progress, errorMessage, autoLoading } = engineState;
@@ -49,6 +53,12 @@ export function LocalAssistantPanel() {
         errorMessage={errorMessage}
         onCancel={cancelDownload}
         onRetry={clearError}
+        model={loadedModel}
+        modelId={
+          status === "downloading"
+            ? (engineState.loadedModelId ?? undefined)
+            : undefined
+        }
       />
     );
   }
@@ -60,17 +70,31 @@ export function LocalAssistantPanel() {
         progress={progress}
         errorMessage={errorMessage}
         onRetry={initializeModel}
+        model={loadedModel}
+        modelId={engineState.loadedModelId ?? undefined}
       />
     );
   }
 
   if (showChat) {
     return (
-      <LocalChatInterface
-        messages={messages}
-        isStreaming={isStreaming}
-        onSendMessage={sendMessage}
-      />
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-end px-4 py-2 border-b border-border shrink-0">
+          <ModelFooterIndicator
+            modelId={engineState.loadedModelId}
+            loadedModel={loadedModel}
+            messagesLength={messages.length}
+            onSelectModel={switchModel}
+            onDeleteModel={deleteCachedModel}
+            isLoading={false}
+          />
+        </div>
+        <LocalChatInterface
+          messages={messages}
+          isStreaming={isStreaming}
+          onSendMessage={sendMessage}
+        />
+      </div>
     );
   }
 

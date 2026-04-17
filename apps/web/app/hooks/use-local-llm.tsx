@@ -17,7 +17,11 @@ import type {
 import { DEFAULT_MODEL_ID, DEFAULT_TUNING_CONFIG } from "@hexagen/local-llm";
 import type { WebGPUDetectorPort } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
-import type { LLMEngineState, LLMEngineStatus } from "@hexagen/local-llm";
+import type {
+  LLMEngineState,
+  LLMEngineStatus,
+  ModelMetadata,
+} from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
 import { getLocalLLMProvider, getWebGPUDetector } from "@/lib/wire";
 
@@ -45,7 +49,8 @@ interface LocalLLMContextValue {
   engineState: LLMEngineState;
   messages: ChatMessage[];
   isStreaming: boolean;
-  initializeModel: () => Promise<void>;
+  loadedModel: ModelMetadata | null;
+  initializeModel: (modelId?: string) => Promise<void>;
   cancelDownload: () => void;
   sendMessage: (content: string) => Promise<void>;
   sendGovernanceMessage: (
@@ -53,6 +58,8 @@ interface LocalLLMContextValue {
     systemPrompt: string,
   ) => Promise<void>;
   clearError: () => void;
+  switchModel: (modelId: string) => Promise<void>;
+  deleteCachedModel: (modelId: string) => Promise<void>;
 }
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
@@ -128,6 +135,19 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const [governancePayload, setGovernancePayload] =
     useState<GovernancePayload | null>(null);
 
+  const [loadedModel, setLoadedModel] = useState<ModelMetadata | null>(null);
+
+  useEffect(() => {
+    if (
+      engineState.status === "ready" ||
+      engineState.status === "loading_vram"
+    ) {
+      setLoadedModel(adapterRef.current?.getLoadedModel() ?? null);
+    } else {
+      setLoadedModel(null);
+    }
+  }, [engineState.status, engineState.loadedModelId]);
+
   const { editorState } = useEditor();
   const editorStateRef = useRef<EditorContextState>(editorState);
 
@@ -139,92 +159,97 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     messagesRef.current = messages;
   }, [messages]);
 
-  const initializeModel = useCallback(async () => {
-    const adapter = adapterRef.current;
-    if (!adapter) return;
-    if (isInitializingRef.current) return;
-    if (engineState.status === "ready") return;
+  const initializeModel = useCallback(
+    async (modelId?: string) => {
+      const adapter = adapterRef.current;
+      if (!adapter) return;
+      if (isInitializingRef.current) return;
+      if (engineState.status === "ready" && adapter.getLoadedModel() !== null)
+        return;
 
-    isInitializingRef.current = true;
-    setEngineState((prev: LLMEngineState) => ({
-      ...prev,
-      status: "downloading",
-      progress: 0,
-    }));
-
-    const cancelPromise = new Promise<Result<void>>((_, reject) => {
-      cancelInitRef.current = () => reject(new Error("download-cancelled"));
-    });
-
-    let initResult: Result<void>;
-    try {
-      initResult = await Promise.race([
-        adapter.initialize(
-          { modelId: DEFAULT_MODEL_ID },
-          (progress: LLMProgress) => {
-            const text = (progress.text || "").toLowerCase();
-            const isNetworkFetch =
-              text.includes("fetching") &&
-              !text.includes("loading model from cache");
-            setEngineState((prev: LLMEngineState) => ({
-              ...prev,
-              status: progressToStatus(progress.phase),
-              progress: progress.progress,
-              // Only clear autoLoading when an actual network download is underway.
-              // WebLLM fires "Fetching param cache[N/M]..." for network fetch (cache miss)
-              // and "Loading model from cache[N/M]..." for a cache-to-GPU load (cache hit).
-              // We must NOT clear on "Loading model from cache" — that is a warm cache hit.
-              autoLoading: prev.autoLoading && !isNetworkFetch,
-            }));
-          },
-        ),
-        cancelPromise,
-      ]);
-    } catch {
-      // Cancelled — terminate the worker, reset to opt_in, clear the auto-load
-      // flag so a refresh doesn't re-trigger the failed/cancelled auto-init.
-      localStorage.removeItem(AUTO_LOAD_KEY);
-      adapter.dispose();
-      cancelInitRef.current = null;
-      isInitializingRef.current = false;
+      const targetModelId = modelId ?? DEFAULT_MODEL_ID;
+      isInitializingRef.current = true;
       setEngineState((prev: LLMEngineState) => ({
         ...prev,
-        status: "opt_in",
+        status: "downloading",
         progress: 0,
-        errorMessage: null,
-        autoLoading: false,
       }));
-      return;
-    }
 
-    cancelInitRef.current = null;
+      const cancelPromise = new Promise<Result<void>>((_, reject) => {
+        cancelInitRef.current = () => reject(new Error("download-cancelled"));
+      });
 
-    if (!initResult.success) {
-      // On error also clear the flag — prevents an auto-fail loop on next mount.
-      localStorage.removeItem(AUTO_LOAD_KEY);
-      const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
-      const browserSupported = typeof OffscreenCanvas !== "undefined";
-      setEngineState((prev: LLMEngineState) => ({
-        ...prev,
-        status: deriveStatus(null, webgpuSupported, browserSupported),
-        autoLoading: false,
-        errorMessage:
-          initResult.error instanceof Error
-            ? initResult.error.message
-            : String(initResult.error),
-      }));
-    } else {
-      localStorage.setItem(AUTO_LOAD_KEY, "true");
-      setEngineState((prev: LLMEngineState) => ({
-        ...prev,
-        status: "ready",
-        progress: 1,
-        autoLoading: false,
-        loadedModelId: adapter.getLoadedModel()?.modelId ?? null,
-      }));
-    }
-    isInitializingRef.current = false;
-  }, [engineState.status]);
+      let initResult: Result<void>;
+      try {
+        initResult = await Promise.race([
+          adapter.initialize(
+            { modelId: targetModelId },
+            (progress: LLMProgress) => {
+              const text = (progress.text || "").toLowerCase();
+              const isNetworkFetch =
+                text.includes("fetching") &&
+                !text.includes("loading model from cache");
+              setEngineState((prev: LLMEngineState) => ({
+                ...prev,
+                status: progressToStatus(progress.phase),
+                progress: progress.progress,
+                // Only clear autoLoading when an actual network download is underway.
+                // WebLLM fires "Fetching param cache[N/M]..." for network fetch (cache miss)
+                // and "Loading model from cache[N/M]..." for a cache-to-GPU load (cache hit).
+                // We must NOT clear on "Loading model from cache" — that is a warm cache hit.
+                autoLoading: prev.autoLoading && !isNetworkFetch,
+              }));
+            },
+          ),
+          cancelPromise,
+        ]);
+      } catch {
+        // Cancelled — terminate the worker, reset to opt_in, clear the auto-load
+        // flag so a refresh doesn't re-trigger the failed/cancelled auto-init.
+        localStorage.removeItem(AUTO_LOAD_KEY);
+        adapter.dispose();
+        cancelInitRef.current = null;
+        isInitializingRef.current = false;
+        setEngineState((prev: LLMEngineState) => ({
+          ...prev,
+          status: "opt_in",
+          progress: 0,
+          errorMessage: null,
+          autoLoading: false,
+        }));
+        return;
+      }
+
+      cancelInitRef.current = null;
+
+      if (!initResult.success) {
+        // On error also clear the flag — prevents an auto-fail loop on next mount.
+        localStorage.removeItem(AUTO_LOAD_KEY);
+        const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
+        const browserSupported = typeof OffscreenCanvas !== "undefined";
+        setEngineState((prev: LLMEngineState) => ({
+          ...prev,
+          status: deriveStatus(null, webgpuSupported, browserSupported),
+          autoLoading: false,
+          errorMessage:
+            initResult.error instanceof Error
+              ? initResult.error.message
+              : String(initResult.error),
+        }));
+      } else {
+        localStorage.setItem(AUTO_LOAD_KEY, "true");
+        setEngineState((prev: LLMEngineState) => ({
+          ...prev,
+          status: "ready",
+          progress: 1,
+          autoLoading: false,
+          loadedModelId: adapter.getLoadedModel()?.modelId ?? null,
+        }));
+      }
+      isInitializingRef.current = false;
+    },
+    [engineState.status],
+  );
 
   const sendMessage = useCallback(async (content: string) => {
     const adapter = adapterRef.current;
@@ -288,6 +313,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           );
         }
       } catch (promptError) {
+        // eslint-disable-next-line no-console
         console.warn("Failed to build grounded prompt:", promptError);
         systemPrompt =
           "You are HexaGen Monaco AI. Assist with the architecture project.";
@@ -460,6 +486,65 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     setEngineState((prev: LLMEngineState) => ({ ...prev, errorMessage: null }));
   }, []);
 
+  const switchModel = useCallback(
+    async (modelId: string) => {
+      if (modelId === engineState.loadedModelId) return;
+
+      const adapter = adapterRef.current;
+
+      if (isInitializingRef.current) {
+        cancelInitRef.current?.();
+        cancelInitRef.current = null;
+        isInitializingRef.current = false;
+        adapter?.dispose();
+      } else {
+        adapter?.dispose();
+      }
+
+      localStorage.removeItem(AUTO_LOAD_KEY);
+      setMessages([]);
+      setLoadedModel(null);
+      setEngineState((prev: LLMEngineState) => ({
+        ...prev,
+        status: "opt_in",
+        loadedModelId: null,
+        errorMessage: null,
+        autoLoading: false,
+      }));
+
+      await initializeModel(modelId);
+    },
+    [engineState.loadedModelId, initializeModel],
+  );
+
+  const deleteCachedModel = useCallback(
+    async (modelId: string) => {
+      const adapter = adapterRef.current;
+      if (!adapter) return;
+
+      try {
+        await adapter.deleteCachedModel(modelId);
+      } catch {
+        // Non-fatal — model cache may already be gone
+      }
+
+      if (modelId === engineState.loadedModelId) {
+        adapter.dispose();
+        setMessages([]);
+        setLoadedModel(null);
+        localStorage.removeItem(AUTO_LOAD_KEY);
+        setEngineState((prev: LLMEngineState) => ({
+          ...prev,
+          status: "opt_in",
+          loadedModelId: null,
+          errorMessage: null,
+          autoLoading: false,
+        }));
+      }
+    },
+    [engineState.loadedModelId],
+  );
+
   // Effect 1: Wire adapters and run WebGPU detection on mount.
   useEffect(() => {
     setMounted(true);
@@ -521,6 +606,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           setGovernancePayload(payload);
         }
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.warn("Failed to fetch governance context:", err);
       }
     };
@@ -542,11 +628,14 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         engineState,
         messages,
         isStreaming,
+        loadedModel,
         initializeModel,
         cancelDownload,
         sendMessage,
         sendGovernanceMessage,
         clearError,
+        switchModel,
+        deleteCachedModel,
       }}
     >
       {children}
@@ -558,11 +647,14 @@ const DEFAULT_LLM_VALUE: LocalLLMContextValue = {
   engineState: LLM_ENGINE_INITIAL_STATE,
   messages: [],
   isStreaming: false,
+  loadedModel: null,
   initializeModel: async () => {},
   cancelDownload: () => {},
   sendMessage: async () => {},
   sendGovernanceMessage: async () => {},
   clearError: () => {},
+  switchModel: async () => {},
+  deleteCachedModel: async () => {},
 };
 
 export function useLocalLLM(): LocalLLMContextValue {

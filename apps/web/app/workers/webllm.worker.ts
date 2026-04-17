@@ -89,5 +89,36 @@ self.onmessage = async (e: MessageEvent) => {
     } catch (err: any) {
       self.postMessage({ type: "error", data: err?.message ?? String(err) });
     }
+  } else if (type === "has-model-in-cache") {
+    try {
+      const { hasModelInCache } = await import("@mlc-ai/web-llm");
+      const isCached = await hasModelInCache(data.modelId);
+      self.postMessage({
+        type: "has-model-in-cache-result",
+        data: { modelId: data.modelId, isCached },
+      });
+    } catch {
+      self.postMessage({
+        type: "has-model-in-cache-result",
+        data: { modelId: data.modelId, isCached: false },
+      });
+    }
+  } else if (type === "delete-cached-model") {
+    try {
+      const { deleteModelAllInfoInCache } = await import("@mlc-ai/web-llm");
+      await deleteModelAllInfoInCache(data.modelId);
+      self.postMessage({
+        type: "delete-cached-model-result",
+        data: { modelId: data.modelId },
+      });
+    } catch (err: any) {
+      self.postMessage({
+        type: "delete-cached-model-result",
+        data: {
+          modelId: data.modelId,
+          error: err?.message ?? String(err),
+        },
+      });
+    }
   }
 };

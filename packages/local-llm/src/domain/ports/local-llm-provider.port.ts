@@ -47,6 +47,18 @@ export interface LocalLLMProviderPort {
   ): Promise<Result<LLMCompletionResponse>>;
   streamComplete(request: LLMCompletionRequest): AsyncGenerator<Result<string>>;
   getLoadedModel(): ModelMetadata | null;
+  /**
+   * Check whether a model's weights are cached locally (IndexedDB or Cache API).
+   * Runs on the main thread — the adapter proxies this to the worker, which
+   * has access to WebLLM's cache utility functions.
+   */
+  hasModelInCache(modelId: string): Promise<boolean>;
+  /**
+   * Delete all cached data for a model (weights + WASM + config).
+   * After deletion, the model must be re-downloaded if selected again.
+   * If the deleted model is currently loaded, the engine is also disposed.
+   */
+  deleteCachedModel(modelId: string): Promise<void>;
   dispose(): void;
 }
 
@@ -60,6 +72,8 @@ export function isLocalLLMProviderPort(
     typeof p.complete === "function" &&
     typeof p.streamComplete === "function" &&
     typeof p.getLoadedModel === "function" &&
+    typeof p.hasModelInCache === "function" &&
+    typeof p.deleteCachedModel === "function" &&
     typeof p.dispose === "function"
   );
 }

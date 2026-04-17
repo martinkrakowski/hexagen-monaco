@@ -22,6 +22,7 @@ import {
 import { OptInCard } from "./OptInCard";
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
+import { ModelFooterIndicator } from "./ModelFooterIndicator";
 import { UnavailableCard } from "./UnavailableCard";
 
 interface GovernanceAssistantPanelProps {
@@ -430,8 +431,16 @@ export function GovernanceAssistantPanel({
     engineState,
     isStreaming,
   } = useGovernanceAssistant(wizardData, currentStepIndex);
-  const { messages, initializeModel, cancelDownload, clearError } =
-    useLocalLLM();
+  const {
+    messages,
+    initializeModel,
+    cancelDownload,
+    clearError,
+    engineState: llmEngineState,
+    loadedModel,
+    switchModel,
+    deleteCachedModel,
+  } = useLocalLLM();
 
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
 
@@ -496,6 +505,12 @@ export function GovernanceAssistantPanel({
             progress={progress}
             errorMessage={errorMessage}
             onCancel={cancelDownload}
+            model={loadedModel}
+            modelId={
+              status === "downloading"
+                ? (llmEngineState.loadedModelId ?? undefined)
+                : undefined
+            }
           />
         </LifecycleCard>
       </div>
@@ -511,6 +526,8 @@ export function GovernanceAssistantPanel({
             progress={progress}
             errorMessage={errorMessage}
             onRetry={clearError}
+            model={loadedModel}
+            modelId={llmEngineState.loadedModelId ?? undefined}
           />
         </LifecycleCard>
       </div>
@@ -528,7 +545,46 @@ export function GovernanceAssistantPanel({
 
   return (
     <div className="h-full flex flex-col bg-card">
-      <PanelHeader onRefresh={onRefresh} isLoading={isLoading} />
+      <div className="px-5 pt-5 pb-4 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <ShieldCheck size={14} className="text-primary" strokeWidth={2} />
+            </div>
+            <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
+              Governance
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <ModelFooterIndicator
+              modelId={llmEngineState.loadedModelId}
+              loadedModel={loadedModel}
+              messagesLength={messages.length}
+              onSelectModel={switchModel}
+              onDeleteModel={deleteCachedModel}
+              isLoading={
+                llmEngineState.status === "downloading" ||
+                llmEngineState.status === "loading_vram"
+              }
+            />
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
+              title="Refresh checks"
+            >
+              <RefreshCw
+                size={14}
+                className={isLoading ? "animate-spin" : ""}
+              />
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground font-normal pl-[38px]">
+          Governance Assistant
+        </p>
+      </div>
       <GradientDivider />
       <StepPills currentStepIndex={currentStepIndex} />
 

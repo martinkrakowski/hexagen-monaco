@@ -261,6 +261,70 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     };
   }
 
+  hasModelInCache(modelId: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.worker) {
+        resolve(false);
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        this.worker?.removeEventListener("message", handler);
+        resolve(false);
+      }, 10000);
+
+      const handler = (e: MessageEvent) => {
+        if (
+          e.data?.type === "has-model-in-cache-result" &&
+          e.data?.modelId === modelId
+        ) {
+          clearTimeout(timeoutId);
+          this.worker!.removeEventListener("message", handler);
+          resolve(e.data?.isCached === true);
+        }
+      };
+      this.worker.addEventListener("message", handler);
+      this.worker.postMessage({
+        type: "has-model-in-cache",
+        data: { modelId },
+      });
+    });
+  }
+
+  deleteCachedModel(modelId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        resolve();
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        this.worker?.removeEventListener("message", handler);
+        reject(new Error("Delete model cache timed out"));
+      }, 10000);
+
+      const handler = (e: MessageEvent) => {
+        if (
+          e.data?.type === "delete-cached-model-result" &&
+          e.data?.modelId === modelId
+        ) {
+          clearTimeout(timeoutId);
+          this.worker!.removeEventListener("message", handler);
+          if (e.data?.error) {
+            reject(new Error(e.data.error));
+          } else {
+            resolve();
+          }
+        }
+      };
+      this.worker.addEventListener("message", handler);
+      this.worker.postMessage({
+        type: "delete-cached-model",
+        data: { modelId },
+      });
+    });
+  }
+
   dispose(): void {
     if (this.worker) {
       this.worker.terminate();
