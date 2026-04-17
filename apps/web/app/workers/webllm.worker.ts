@@ -55,6 +55,10 @@ self.onmessage = async (e: MessageEvent) => {
           messages,
           temperature: data.temperature ?? 0.45,
           max_tokens: data.maxTokens ?? 768,
+          top_p: data.topP,
+          top_k: data.topK,
+          frequency_penalty: data.frequencyPenalty,
+          presence_penalty: data.presencePenalty,
           stream: true,
         });
         for await (const chunk of streamResult) {
@@ -69,6 +73,10 @@ self.onmessage = async (e: MessageEvent) => {
           messages,
           temperature: data.temperature ?? 0.45,
           max_tokens: data.maxTokens ?? 768,
+          top_p: data.topP,
+          top_k: data.topK,
+          frequency_penalty: data.frequencyPenalty,
+          presence_penalty: data.presencePenalty,
           stream: false,
         });
         self.postMessage({

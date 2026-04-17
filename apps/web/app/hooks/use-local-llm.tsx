@@ -14,7 +14,7 @@ import type {
   LLMMessage,
   LLMProgress,
 } from "@hexagen/local-llm";
-import { DEFAULT_MODEL_ID } from "@hexagen/local-llm";
+import { DEFAULT_MODEL_ID, DEFAULT_TUNING_CONFIG } from "@hexagen/local-llm";
 import type { WebGPUDetectorPort } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
 import type { LLMEngineState, LLMEngineStatus } from "@hexagen/local-llm";
@@ -300,8 +300,12 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       const stream = adapter.streamComplete({
         model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
         messages: historyMessages,
-        temperature: 0.45,
-        maxTokens: 768,
+        temperature: DEFAULT_TUNING_CONFIG.temperature,
+        maxTokens: DEFAULT_TUNING_CONFIG.maxTokens,
+        topP: DEFAULT_TUNING_CONFIG.topP,
+        topK: DEFAULT_TUNING_CONFIG.topK,
+        frequencyPenalty: DEFAULT_TUNING_CONFIG.frequencyPenalty,
+        presencePenalty: DEFAULT_TUNING_CONFIG.presencePenalty,
         stream: true,
       });
 
@@ -379,8 +383,12 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         const stream = adapter.streamComplete({
           model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
           messages: historyMessages,
-          temperature: 0.45,
-          maxTokens: 768,
+          temperature: DEFAULT_TUNING_CONFIG.temperature,
+          maxTokens: DEFAULT_TUNING_CONFIG.maxTokens,
+          topP: DEFAULT_TUNING_CONFIG.topP,
+          topK: DEFAULT_TUNING_CONFIG.topK,
+          frequencyPenalty: DEFAULT_TUNING_CONFIG.frequencyPenalty,
+          presencePenalty: DEFAULT_TUNING_CONFIG.presencePenalty,
           stream: true,
         });
 

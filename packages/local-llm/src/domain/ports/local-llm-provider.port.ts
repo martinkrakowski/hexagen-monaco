@@ -15,6 +15,10 @@ export interface LLMCompletionRequest {
   messages: LLMMessage[];
   temperature?: number;
   maxTokens?: number;
+  topP?: number;
+  topK?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   stream?: boolean;
 }
 
