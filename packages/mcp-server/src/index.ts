@@ -3,6 +3,7 @@ import type { EventBusPort } from "@hexagen/messaging";
 import { AddDependencyToolUseCase } from "./application/use-cases/add-dependency-tool.use-case.js";
 import { AuditBoundariesToolUseCase } from "./application/use-cases/audit-boundaries-tool.use-case.js";
 import { CreateAdapterToolUseCase } from "./application/use-cases/create-adapter-tool.use-case.js";
+import { CreateContextToolUseCase } from "./application/use-cases/create-context-tool.use-case.js";
 import { CreatePortToolUseCase } from "./application/use-cases/create-port-tool.use-case.js";
 import { GetGraphResourceUseCase } from "./application/use-cases/get-graph-resource.use-case.js";
 import { GetLinterReportResourceUseCase } from "./application/use-cases/get-linter-report-resource.use-case.js";
@@ -86,6 +87,10 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     root.manifestWritePort,
     root.eventBusPort,
   );
+  const createContextToolUseCase = new CreateContextToolUseCase(
+    root.manifestWritePort,
+    root.eventBusPort,
+  );
 
   return new MCPServerAdapter({
     getManifestResourceUseCase,
@@ -98,6 +103,7 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     createAdapterToolUseCase,
     removePortToolUseCase,
     removeContextToolUseCase,
+    createContextToolUseCase,
   });
 }
 

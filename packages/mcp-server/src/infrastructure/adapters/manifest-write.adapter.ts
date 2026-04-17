@@ -116,16 +116,19 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         };
       }
 
-      contexts.push({
+      const newContext: Record<string, unknown> = {
         name: command.name,
         type: command.type ?? "core",
-        description: "",
         layers: {
           domain: { entities: [], value_objects: [] },
           application: { use_cases: [], ports: { in: [], out: [] } },
           infrastructure: { adapters: [] },
         },
-      });
+      };
+      if (command.description) {
+        newContext.description = command.description;
+      }
+      contexts.push(newContext as (typeof contexts)[number]);
 
       manifest.bounded_contexts = contexts;
       await this.atomicWrite(manifest as Record<string, unknown>);
