@@ -1,12 +1,33 @@
 // apps/web/next.config.mjs
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Monorepo root is two levels up from apps/web
 const monorepoRoot = path.resolve(__dirname, "../..");
+
+// Read version from root package.json
+const pkg = JSON.parse(
+  readFileSync(path.join(monorepoRoot, "package.json"), "utf-8"),
+);
+
+// Capture git commit hash at build time (graceful fallback for environments
+// where git may not be available, e.g. certain Docker build stages)
+let gitHash = "dev";
+try {
+  gitHash = execSync("git rev-parse --short HEAD", {
+    cwd: monorepoRoot,
+    timeout: 5000,
+  })
+    .toString()
+    .trim();
+} catch {
+  // git unavailable — leave as 'dev'
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -39,6 +60,12 @@ const nextConfig = {
   experimental: {
     // Allow importing from directories outside of the app (monorepo packages)
     externalDir: true,
+  },
+
+  // Injected at build time for observability (not runtime-configured secrets)
+  env: {
+    APP_VERSION: pkg.version,
+    COMMIT_HASH: gitHash,
   },
 
   // Webpack configuration for monorepo package resolution

@@ -5,6 +5,14 @@
 // Console is intentional here: this file implements LoggerPort and emits
 // startup diagnostics. All other application code must use LoggerPort instead.
 
+// Emit build info once on client bootstrap — intentional per eslint-disable above
+if (typeof window !== "undefined") {
+  console.info(
+    `%c HexaGen v${process.env.APP_VERSION ?? "local"} · ${process.env.COMMIT_HASH ?? "dev"} `,
+    "background: #1e1e2e; color: #a6e3a1; border-radius: 3px; padding: 2px 6px; font-family: monospace;",
+  );
+}
+
 import type {
   CanvasLayoutPersistencePort,
   EditorWorkspacePersistencePort,

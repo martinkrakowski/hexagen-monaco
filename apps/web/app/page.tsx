@@ -1,5 +1,10 @@
 "use client";
 
+// wireDependencies is invoked as a module-side-effect here; the composition root
+// registers all ports as singletons and emits the build-info log on client bootstrap.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { wireDependencies } from "./lib/wire";
+
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useForm, useWatch, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
