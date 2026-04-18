@@ -83,8 +83,10 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
             }
           } else if (msg.type === "ready") {
             this.loadedModelId = domainModelId;
+            this.worker?.removeEventListener("message", messageHandler);
             resolve(ok(undefined));
           } else if (msg.type === "error") {
+            this.worker?.removeEventListener("message", messageHandler);
             resolve(
               err(new Error(`WebLLM initialization failed: ${msg.data}`)),
             );
