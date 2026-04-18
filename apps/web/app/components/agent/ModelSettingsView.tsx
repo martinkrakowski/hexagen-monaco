@@ -280,20 +280,20 @@ export function ModelSettingsView({
             </div>
           </div>
         )}
-
-        {/* Storage Info */}
-        {totalCached > 0 && (
-          <div className="mt-6 rounded-lg border border-border bg-muted/20 p-4">
-            <h3 className="text-[12px] font-semibold text-foreground mb-2">
-              Storage Info
-            </h3>
-            <p className="text-[11px] text-muted-foreground">
-              {totalCached} model{totalCached !== 1 ? "s" : ""} cached (
-              {totalCachedSize.toFixed(2)} GB)
-            </p>
-          </div>
-        )}
       </div>
+
+      {/* Footer - Storage Info */}
+      {totalCached > 0 && (
+        <footer className="flex-shrink-0 bg-background border-t border-border p-4">
+          <div className="text-[11px] text-muted-foreground">
+            <span className="font-medium">
+              {totalCached} model{totalCached !== 1 ? "s" : ""} cached
+            </span>
+            <span className="mx-2">·</span>
+            <span>{totalCachedSize.toFixed(2)} GB</span>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
