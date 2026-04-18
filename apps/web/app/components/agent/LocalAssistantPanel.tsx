@@ -50,7 +50,12 @@ export function LocalAssistantPanel() {
   }
 
   if (showOptIn) {
-    return <OptInCard onInitialize={initializeModel} isInitializing={false} />;
+    return (
+      <OptInCard
+        onInitialize={() => initializeModel()}
+        isInitializing={false}
+      />
+    );
   }
 
   if (showWakingUp) {
@@ -81,7 +86,7 @@ export function LocalAssistantPanel() {
         status={status}
         progress={progress}
         errorMessage={errorMessage}
-        onRetry={initializeModel}
+        onRetry={() => initializeModel()}
         model={loadedModel}
         modelId={engineState.loadedModelId ?? undefined}
       />
