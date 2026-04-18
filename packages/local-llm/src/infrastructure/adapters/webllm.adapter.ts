@@ -11,10 +11,8 @@ import type {
   LLMProgressCallback,
   ModelMetadata,
 } from "../../domain/value-objects/index.js";
-import {
-  DEFAULT_MODEL_ID,
-  MODEL_METADATA_MAP,
-} from "../../domain/value-objects/index.js";
+import { DEFAULT_MODEL_ID } from "../../domain/value-objects/model-id.vo.js";
+import { MODEL_METADATA_MAP } from "../../domain/value-objects/model-metadata.vo.js";
 import { domainIdToMlcId, mlcIdToDomainId } from "./webllm-model-mapper.js";
 
 export interface WebLLMAdapterConfig {
