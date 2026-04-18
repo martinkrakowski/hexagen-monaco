@@ -77,6 +77,7 @@ interface LocalLLMContextValue {
   sendGovernanceMessage: (
     content: string,
     systemPrompt: string,
+    history?: LLMMessage[],
   ) => Promise<void>;
   clearError: () => void;
   switchModel: (modelId: DomainModelId) => Promise<void>;
@@ -423,7 +424,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   }, []);
 
   const sendGovernanceMessage = useCallback(
-    async (content: string, systemPrompt: string) => {
+    async (content: string, systemPrompt: string, history?: LLMMessage[]) => {
       const adapter = adapterRef.current;
       if (!adapter) return;
       if (isStreamingRef.current) return;
@@ -452,10 +453,16 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       abortControllerRef.current = new AbortController();
 
       try {
-        const historyMessages: LLMMessage[] = [
-          { role: "system", content: systemPrompt },
-          { role: "user" as const, content },
-        ];
+        const historyMessages: LLMMessage[] = history
+          ? [
+              { role: "system", content: systemPrompt },
+              ...history,
+              { role: "user" as const, content },
+            ]
+          : [
+              { role: "system", content: systemPrompt },
+              { role: "user" as const, content },
+            ];
 
         const loadedModel = adapter.getLoadedModel();
         const stream = adapter.streamComplete({
