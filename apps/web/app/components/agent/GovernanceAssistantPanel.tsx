@@ -271,11 +271,21 @@ function SuggestionItem({
   );
 }
 
-function SectionLabel({ label }: { label: string }) {
+function SectionLabel({
+  label,
+  icon: Icon = Plus,
+}: {
+  label: string;
+  icon?: React.ComponentType<{
+    size: number;
+    className: string;
+    strokeWidth: number;
+  }>;
+}) {
   return (
     <div className="flex items-center gap-2 mb-3">
       <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
-        <Plus size={10} className="text-primary" strokeWidth={2.5} />
+        <Icon size={10} className="text-primary" strokeWidth={2.5} />
       </div>
       <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
         {label}
@@ -606,24 +616,27 @@ export function GovernanceAssistantPanel({
   return (
     <div className="h-full flex flex-col bg-card">
       <StepPills currentStepIndex={currentStepIndex} />
-      <div className="h-px mx-5 bg-gradient-to-r from-transparent via-border to-transparent" />
+      <div className="h-px mx-5 mb-5 bg-gradient-to-r from-transparent via-border to-transparent" />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
         <StatusSummaryCard violations={violations} suggestions={suggestions} />
 
         {violations.length > 0 && (
-          <div className="space-y-2 mt-4">
-            {violations.map((v) => (
-              <ViolationItem
-                key={v.id}
-                violation={v}
-                isSelected={
-                  activeItem?.type === "violation" &&
-                  activeItem.item.id === v.id
-                }
-                onSelect={() => selectItem({ type: "violation", item: v })}
-              />
-            ))}
+          <div className="mt-5 px-3">
+            <SectionLabel label="Violations" icon={ShieldCheck} />
+            <div className="space-y-2">
+              {violations.map((v) => (
+                <ViolationItem
+                  key={v.id}
+                  violation={v}
+                  isSelected={
+                    activeItem?.type === "violation" &&
+                    activeItem.item.id === v.id
+                  }
+                  onSelect={() => selectItem({ type: "violation", item: v })}
+                />
+              ))}
+            </div>
           </div>
         )}
 
