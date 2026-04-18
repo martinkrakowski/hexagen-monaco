@@ -28,6 +28,7 @@ import type {
   LocalLLMProviderPort,
   WebGPUDetectorPort,
   HardwareProfilerPort,
+  ChatPersistencePort,
 } from "@hexagen/local-llm";
 import {
   LocalStoragePersistenceAdapter,
@@ -43,6 +44,7 @@ import {
   WebLLMAdapter,
   WebGPUCapabilityAdapter,
   BrowserHardwareProfilerAdapter,
+  IDBChatPersistenceAdapter,
 } from "@hexagen/local-llm";
 
 const createWebLogger = (): LoggerPort => ({
@@ -173,6 +175,12 @@ export const wireDependencies = () => {
     new BrowserHardwareProfilerAdapter() satisfies HardwareProfilerPort,
   );
 
+  // Chat Persistence → IndexedDB adapter
+  registry.set(
+    "ChatPersistencePort",
+    new IDBChatPersistenceAdapter() satisfies ChatPersistencePort,
+  );
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);
@@ -231,3 +239,6 @@ export const getWebGPUDetector = () =>
 
 export const getHardwareProfiler = () =>
   dependencies.get<HardwareProfilerPort>("HardwareProfilerPort");
+
+export const getChatPersistence = () =>
+  dependencies.get<ChatPersistencePort>("ChatPersistencePort");

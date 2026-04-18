@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
-    "@hexagen/shared": "workspace:*"
+    "@hexagen/shared": "workspace:*",
+    "idb-keyval": "^6.2.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

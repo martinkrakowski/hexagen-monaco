@@ -14,6 +14,7 @@ import type {
   LLMMessage,
   LLMProgress,
   DomainModelId,
+  ChatMessage,
 } from "@hexagen/local-llm";
 import {
   DEFAULT_MODEL_ID,
@@ -29,7 +30,14 @@ import type {
   ModelMetadata,
 } from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
-import { getLocalLLMProvider, getWebGPUDetector } from "@/lib/wire";
+
+// Re-export for backward compatibility with existing components
+export type { ChatMessage };
+import {
+  getLocalLLMProvider,
+  getWebGPUDetector,
+  getChatPersistence,
+} from "@/lib/wire";
 
 import {
   buildGroundedSystemPrompt,
@@ -56,13 +64,6 @@ const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 
 /** localStorage key - set to "true" when the user explicitly cancels setup from the missing-model screen. */
 const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-}
 
 interface LocalLLMContextValue {
   engineState: LLMEngineState;
@@ -156,6 +157,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const [governancePayload, setGovernancePayload] =
     useState<GovernancePayload | null>(null);
 
@@ -706,6 +708,25 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     };
   }, []);
 
+  // Effect 1b: Load chat history from IndexedDB on mount (independent of model state).
+  useEffect(() => {
+    if (isHistoryLoaded) return; // Already loaded
+
+    const port = getChatPersistence();
+    port
+      .loadChatHistory()
+      .then((result: Result<ChatMessage[]>) => {
+        if (result.success && result.value.length > 0) {
+          setMessages(result.value);
+        }
+        setIsHistoryLoaded(true);
+      })
+      .catch(() => {
+        // Non-fatal — allow app to proceed even if load fails
+        setIsHistoryLoaded(true);
+      });
+  }, [isHistoryLoaded]);
+
   // Effect 2: Auto-init when WebGPU detection resolves to opt_in and the
   // localStorage flag signals a previously loaded model in IndexedDB cache.
   // Runs reactively so it fires after Effect 1 sets status to "opt_in".
@@ -806,6 +827,19 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
     fetchGovernance();
   }, []);
+
+  // Effect 4: Persist chat history when streaming completes and history is loaded.
+  // Only saves after initial load to avoid persisting partial states on mount.
+  useEffect(() => {
+    if (!isHistoryLoaded || isStreaming || messages.length === 0) return;
+
+    const port = getChatPersistence();
+    port.saveChatHistory(messages).catch(() => {
+      // Non-fatal — allow app to proceed even if save fails
+      // eslint-disable-next-line no-console
+      console.warn("Failed to save chat history");
+    });
+  }, [isHistoryLoaded, isStreaming, messages]);
 
   if (!mounted) {
     return (
