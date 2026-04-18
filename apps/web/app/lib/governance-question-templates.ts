@@ -54,12 +54,6 @@ export type WizardStepId =
   | "github_export"
   | "summary";
 
-export const FOLLOW_UP_INSTRUCTION = `\n\nFollow-up Questions Requirement:
-After your answer, output a JSON array of 3-5 follow-up question objects in this exact format (no other text after it):
-[{"type":"guidance","label":"question text here"},{"type":"guidance","label":"another question"}]
-All follow-up question labels must be in English.
-Output the raw JSON array directly. Do not wrap it in code fences, backticks, or markdown formatting. Do not include any commentary after the JSON array.`;
-
 export const STEP_QUESTIONS: Record<WizardStepId, PrebakedQuestion[]> = {
   workspace_governance: [
     { id: "topology", type: "guidance", label: "Strict vs flexible topology?" },
@@ -253,19 +247,113 @@ Answer the user's question: "${question.label}"
 Be concise and beginner-friendly, 2-4 sentences max.`;
 }
 
-export function buildFollowUpPrompt(
-  questionLabel: string,
-  previousAnswer: string,
-  wizardContext: string,
-): string {
-  return `You are a Hexagonal Architecture expert.
+/**
+ * Follow-up question templates displayed after step question answers.
+ * These are deterministic, template-based suggestions for deeper exploration.
+ */
+export const STEP_FOLLOW_UPS: Record<WizardStepId, PrebakedQuestion[]> = {
+  workspace_governance: [
+    {
+      id: "strict-impl",
+      type: "guidance",
+      label: "How do I enforce strict topology rules?",
+    },
+    {
+      id: "flexible-trade",
+      type: "guidance",
+      label: "What trade-offs come with flexible topology?",
+    },
+  ],
+  bounded_contexts: [
+    {
+      id: "context-size",
+      type: "guidance",
+      label: "How large should a bounded context be?",
+    },
+    {
+      id: "context-coupling",
+      type: "guidance",
+      label: "How do I reduce coupling between contexts?",
+    },
+  ],
+  peer_mappings: [
+    {
+      id: "acl-when",
+      type: "guidance",
+      label: "When should I implement an Anti-Corruption Layer?",
+    },
+    {
+      id: "partnership-pattern",
+      type: "guidance",
+      label: "How does Partnership pattern differ from other mappings?",
+    },
+  ],
+  ports_configuration: [
+    {
+      id: "port-design",
+      type: "guidance",
+      label: "What makes a good port interface design?",
+    },
+    {
+      id: "multiple-adapters",
+      type: "guidance",
+      label: "Can I have multiple adapters for one port?",
+    },
+  ],
+  github_export: [
+    {
+      id: "monorepo-benefits",
+      type: "guidance",
+      label: "What are the benefits of a monorepo structure?",
+    },
+    {
+      id: "deploy-strategy",
+      type: "guidance",
+      label: "How do I deploy from this generated structure?",
+    },
+  ],
+  summary: [
+    {
+      id: "next-steps",
+      type: "guidance",
+      label: "What should I do after finalizing this architecture?",
+    },
+    {
+      id: "evolve-over-time",
+      type: "guidance",
+      label: "How can I evolve this architecture as requirements change?",
+    },
+  ],
+};
 
-PREVIOUS CONVERSATION:
-User: ${questionLabel}
-Assistant: ${previousAnswer}
+/**
+ * Follow-up suggestions for violation answers.
+ */
+export const VIOLATION_FOLLOW_UPS: PrebakedQuestion[] = [
+  {
+    id: "similar-rules",
+    type: "guidance",
+    label: "Are there other similar rules I should know about?",
+  },
+  {
+    id: "prevention",
+    type: "guidance",
+    label: "How can I prevent this violation in the future?",
+  },
+];
 
-WIZARD CONTEXT:
-${wizardContext}
-
-Answer the user's follow-up question helpfully.`;
-}
+/**
+ * Follow-up suggestions for suggestion answers.
+ */
+export const SUGGESTION_FOLLOW_UPS: PrebakedQuestion[] = [
+  {
+    id: "implementation-details",
+    type: "guidance",
+    label: "What are the implementation details for this?",
+  },
+  {
+    id: "related-recommendations",
+    type: "guidance",
+    label: "Are there related recommendations I should consider?",
+  },
+];

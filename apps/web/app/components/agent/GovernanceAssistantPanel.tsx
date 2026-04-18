@@ -35,103 +35,6 @@ const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 type PanelView = "main" | "model-settings";
 
-/**
- * Extracts follow-up question JSON from LLM output.
- * Handles both raw JSON and markdown-wrapped JSON formats.
- * Returns cleaned content (everything before the JSON) and parsed questions array.
- * On parse failure, returns full content and empty questions array.
- * Filters out non-English (CJK) follow-up labels.
- */
-function extractFollowUpJson(raw: string): {
-  cleanContent: string;
-  questions: PrebakedQuestion[];
-} {
-  if (!raw) return { cleanContent: "", questions: [] };
-
-  // Try matching markdown-wrapped JSON first (```json ... ``` or ``` ... ```)
-  const fenceMatch = raw.match(
-    /```(?:json)?\s*(\[\s*\{[\s\S]*?\}\s*\])\s*```\s*$/,
-  );
-  const jsonStr = fenceMatch?.[1];
-
-  // Fall back to raw JSON at end of string
-  const rawMatch = !jsonStr ? raw.match(/(\[\s*\{[\s\S]*\}\s*\])\s*$/) : null;
-  const finalJsonStr = jsonStr || rawMatch?.[1];
-
-  let cleanContent = raw;
-  let questions: PrebakedQuestion[] = [];
-
-  // If no complete JSON found, check for streaming JSON start patterns
-  // and truncate to hide incomplete JSON from user during streaming
-  if (!finalJsonStr) {
-    const streamingTruncateMatch = raw.match(
-      /(?:```(?:json)?\s*(?:\[[\s\S]*)?|(?:\n|\r\n)\[(?:\s*\{[\s\S]*)?)$/,
-    );
-    if (streamingTruncateMatch) {
-      // Truncate at the start of the JSON block pattern
-      const truncateIndex = raw.indexOf(streamingTruncateMatch[0]);
-      if (truncateIndex > 0) {
-        cleanContent = raw.slice(0, truncateIndex).trim();
-      }
-    }
-    return { cleanContent, questions };
-  }
-
-  // Complete JSON found — parse it
-  try {
-    const parsed = JSON.parse(finalJsonStr);
-    if (!Array.isArray(parsed)) {
-      // Extract clean content: everything before the JSON
-      const matchIndex = fenceMatch
-        ? raw.indexOf(fenceMatch[0])
-        : rawMatch
-          ? raw.indexOf(rawMatch[1])
-          : -1;
-
-      cleanContent = matchIndex >= 0 ? raw.slice(0, matchIndex).trim() : raw;
-      return { cleanContent, questions: [] };
-    }
-
-    questions = parsed
-      .map((item: Record<string, unknown>, idx: number) => ({
-        id: `followup-${Date.now()}-${idx}`,
-        type: (item.type as PrebakedQuestion["type"]) || "guidance",
-        label: String(item.label ?? ""),
-      }))
-      .filter((q: PrebakedQuestion) => q.label.length > 0)
-      // Filter out non-English (CJK) labels — reject if contains Chinese/Japanese/Korean characters
-      .filter(
-        (q: PrebakedQuestion) =>
-          !/[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff]/.test(
-            q.label,
-          ),
-      );
-
-    // Extract clean content: everything before the JSON
-    const matchIndex = fenceMatch
-      ? raw.indexOf(fenceMatch[0])
-      : rawMatch
-        ? raw.indexOf(rawMatch[1])
-        : -1;
-
-    cleanContent = matchIndex >= 0 ? raw.slice(0, matchIndex).trim() : raw;
-
-    return { cleanContent, questions };
-  } catch {
-    // Malformed JSON during streaming — truncate to hide it
-    const streamingTruncateMatch = raw.match(
-      /(?:```(?:json)?\s*(?:\[[\s\S]*)?|(?:\n|\r\n)\[(?:\s*\{[\s\S]*)?)$/,
-    );
-    if (streamingTruncateMatch) {
-      const truncateIndex = raw.indexOf(streamingTruncateMatch[0]);
-      if (truncateIndex > 0) {
-        cleanContent = raw.slice(0, truncateIndex).trim();
-      }
-    }
-    return { cleanContent, questions: [] };
-  }
-}
-
 interface GovernanceAssistantPanelProps {
   wizardData: WizardData;
   currentStepIndex: number;
@@ -558,8 +461,8 @@ export function GovernanceAssistantPanel({
     selectItem,
     askQuestion,
     askStepQuestion,
-    askFollowUpQuestion,
     getQuestions,
+    getFollowUpQuestions,
     stepQuestions,
     engineState,
     isStreaming,
@@ -611,11 +514,6 @@ export function GovernanceAssistantPanel({
     return "";
   }, [messages]);
 
-  const parsedLastMessage = useMemo<{
-    cleanContent: string;
-    questions: PrebakedQuestion[];
-  }>(() => extractFollowUpJson(lastAssistantMessage), [lastAssistantMessage]);
-
   // When model becomes ready after auto-navigation to settings (from
   // requires_model), return to main so the user sees governance content
   // instead of being stuck in settings they didn't explicitly open.
@@ -626,11 +524,11 @@ export function GovernanceAssistantPanel({
     }
   }, [llmEngineState.status]);
 
-  // Populate follow-up state from parsed message when streaming completes
+  // Populate follow-up state from templates when streaming completes
   useEffect(() => {
     if (isStreaming) return;
-    setFollowUpQuestions(parsedLastMessage.questions);
-  }, [isStreaming, parsedLastMessage]);
+    setFollowUpQuestions(getFollowUpQuestions());
+  }, [isStreaming, getFollowUpQuestions]);
 
   // Clear follow-ups when context changes to prevent leakage
   useEffect(() => {
@@ -757,7 +655,11 @@ export function GovernanceAssistantPanel({
 
   const handleFollowUpClick = (q: PrebakedQuestion) => {
     setFollowUpQuestions([]);
-    askFollowUpQuestion(q.label, parsedLastMessage.cleanContent);
+    if (activeItem) {
+      askQuestion(q);
+    } else {
+      askStepQuestion(q);
+    }
   };
 
   // When the engine explicitly requires a model, force-navigate to the settings
@@ -899,7 +801,7 @@ export function GovernanceAssistantPanel({
 
         {lastAssistantMessage && (
           <div className="mt-4">
-            <AnswerArea content={parsedLastMessage.cleanContent} />
+            <AnswerArea content={lastAssistantMessage} />
           </div>
         )}
 
