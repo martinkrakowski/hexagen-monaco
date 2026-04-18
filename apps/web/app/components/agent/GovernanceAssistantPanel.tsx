@@ -10,6 +10,7 @@ import {
   type AISuggestion,
   type PrebakedQuestion,
 } from "@/lib/governance-question-templates";
+import type { ConversationEntry } from "@/hooks/use-governance-assistant";
 import {
   Check,
   ChevronDown,
@@ -388,6 +389,31 @@ function AnswerArea({ content }: { content: string }) {
   );
 }
 
+function ThreadEntry({
+  entry,
+  isCurrentlyStreaming,
+  streamingContent,
+}: {
+  entry: ConversationEntry;
+  isCurrentlyStreaming: boolean;
+  streamingContent: string;
+}) {
+  const content = isCurrentlyStreaming ? streamingContent : entry.answer;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
+          <MessageSquare size={10} className="text-primary" strokeWidth={2.5} />
+        </div>
+        <p className="text-[11px] font-medium text-primary">
+          {entry.questionLabel}
+        </p>
+      </div>
+      <AnswerArea content={content} />
+    </div>
+  );
+}
+
 function PanelFooter({
   modelId,
   onOpenSettings,
@@ -463,6 +489,7 @@ export function GovernanceAssistantPanel({
     askStepQuestion,
     getQuestions,
     getFollowUpQuestions,
+    conversationThread,
     stepQuestions,
     engineState,
     isStreaming,
@@ -524,11 +551,14 @@ export function GovernanceAssistantPanel({
     }
   }, [llmEngineState.status]);
 
-  // Populate follow-up state from templates when streaming completes
+  // Populate follow-up state from templates when streaming completes and there's at least one answer
   useEffect(() => {
     if (isStreaming) return;
-    setFollowUpQuestions(getFollowUpQuestions());
-  }, [isStreaming, getFollowUpQuestions]);
+    const hasCompletedAnswer = conversationThread.some((e) => e.answer !== "");
+    if (hasCompletedAnswer) {
+      setFollowUpQuestions(getFollowUpQuestions());
+    }
+  }, [isStreaming, getFollowUpQuestions, conversationThread]);
 
   // Clear follow-ups when context changes to prevent leakage
   useEffect(() => {
@@ -799,9 +829,21 @@ export function GovernanceAssistantPanel({
           </div>
         </div>
 
-        {lastAssistantMessage && (
-          <div className="mt-4">
-            <AnswerArea content={lastAssistantMessage} />
+        {conversationThread.length > 0 && (
+          <div className="mt-4 space-y-4">
+            {conversationThread.map((entry, i) => {
+              const isLast = i === conversationThread.length - 1;
+              const isCurrentlyStreaming =
+                isStreaming && isLast && !entry.answer;
+              return (
+                <ThreadEntry
+                  key={entry.id}
+                  entry={entry}
+                  isCurrentlyStreaming={isCurrentlyStreaming}
+                  streamingContent={lastAssistantMessage}
+                />
+              );
+            })}
           </div>
         )}
 
