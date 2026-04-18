@@ -327,7 +327,7 @@ bounded_contexts:
         adapters: []
   - name: agentic-interaction
     type: supporting
-    description: AI assistant integration — ports for LLM providers, suggestion engine
+    description: AI assistant integration — ports for LLM providers, suggestion engine, cloud chat
     layers:
       domain:
         value_objects:
@@ -338,6 +338,10 @@ bounded_contexts:
           out:
             - LLMProviderPort
             - SuggestionEnginePort
+            - CloudLLMProviderPort
+      infrastructure:
+        adapters:
+          - OpenAICompatibleAdapter
   - name: web-driver
     type: driver
     description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI

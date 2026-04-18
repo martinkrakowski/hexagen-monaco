@@ -10,3 +10,10 @@ export type {
   AISuggestion,
   SuggestionRequest,
 } from "./ports/suggestion-engine.port";
+export type {
+  CloudLLMProviderPort,
+  CloudLLMMessage,
+  CloudLLMCompletionRequest,
+  CloudLLMCompletionResponse,
+} from "./ports/cloud-llm-provider.port";
+export { isCloudLLMProviderPort } from "./ports/cloud-llm-provider.port";
