@@ -85,6 +85,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   private progressCallback: LLMProgressCallback | null = null;
   private worker: Worker | null = null;
   private config: WebLLMAdapterConfig;
+  private _disposed = false;
 
   constructor(config: WebLLMAdapterConfig = {}) {
     this.config = {
@@ -116,6 +117,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         return err(new Error(`Unknown model ID: ${String(domainModelId)}`));
       }
 
+      this._disposed = false;
       this.worker = createWorker();
 
       return new Promise((resolve) => {
@@ -315,7 +317,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
   async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
     const worker = this.worker;
-    if (!worker) {
+    if (!worker || this._disposed) {
       return false;
     }
 
@@ -352,7 +354,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     }
 
     const worker = this.worker;
-    if (worker) {
+    if (worker && !this._disposed) {
       return new Promise((resolve) => {
         const timeoutId = setTimeout(() => {
           worker.removeEventListener("message", handler);
@@ -391,6 +393,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   dispose(): void {
+    this._disposed = true;
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
