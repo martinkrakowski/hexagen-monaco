@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { ArrowLeft } from "lucide-react";
+import { ModelFooterIndicator } from "./ModelFooterIndicator";
 
 interface ModelSettingsViewProps {
   currentModelId: DomainModelId | null;
@@ -331,13 +332,20 @@ export function ModelSettingsView({
 
       {/* Footer - Storage Info */}
       {totalCached > 0 && (
-        <footer className="flex-shrink-0 bg-background border-t border-border p-4">
-          <div className="text-[11px] text-muted-foreground">
-            <span className="font-medium">
-              {totalCached} model{totalCached !== 1 ? "s" : ""} cached
-            </span>
-            <span className="mx-2">·</span>
-            <span>{totalCachedSize.toFixed(2)} GB</span>
+        <footer className="flex-shrink-0 p-2 border-t border-border bg-background">
+          <div className="flex items-center justify-between gap-4 w-full">
+            <div className="text-[11px] text-muted-foreground">
+              <span className="font-medium">
+                {totalCached} model{totalCached !== 1 ? "s" : ""} cached
+              </span>
+              <span className="mx-2">·</span>
+              <span>{totalCachedSize.toFixed(2)} GB</span>
+            </div>
+            <ModelFooterIndicator
+              modelId={currentModelId}
+              onOpenSettings={() => {}}
+              isLoading={isLoading}
+            />
           </div>
         </footer>
       )}

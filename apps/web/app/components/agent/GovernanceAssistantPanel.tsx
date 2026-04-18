@@ -386,38 +386,25 @@ function PanelFooter({
   modelId,
   onOpenSettings,
   isLoading,
-  onRefresh,
 }: {
   modelId: DomainModelId | null;
   onOpenSettings: () => void;
   isLoading: boolean;
-  onRefresh: () => void;
 }) {
   return (
-    <div className="flex-shrink-0 px-5 py-3 border-t border-card-border bg-card">
-      <div className="flex items-center justify-between">
+    <div className="flex-shrink-0 p-2 border-t border-border bg-background">
+      <div className="flex items-center justify-between gap-4 w-full">
         <div className="flex items-center gap-2">
           <Info size={12} className="text-muted-foreground/60" />
           <p className="text-[11px] text-muted-foreground/60">
             Click a question to get an AI-powered answer
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <ModelFooterIndicator
-            modelId={modelId}
-            onOpenSettings={onOpenSettings}
-            isLoading={isLoading}
-          />
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={isLoading}
-            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
-            title="Refresh checks"
-          >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-          </button>
-        </div>
+        <ModelFooterIndicator
+          modelId={modelId}
+          onOpenSettings={onOpenSettings}
+          isLoading={isLoading}
+        />
       </div>
     </div>
   );
@@ -619,24 +606,58 @@ export function GovernanceAssistantPanel({
       <div className="h-px mx-5 mb-3 bg-gradient-to-r from-transparent via-border to-transparent" />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
-        <SectionLabel label="Violations" icon={ShieldCheck} />
-        <StatusSummaryCard violations={violations} suggestions={suggestions} />
-
-        {violations.length > 0 && (
-          <div className="space-y-2 mt-4">
-            {violations.map((v) => (
-              <ViolationItem
-                key={v.id}
-                violation={v}
-                isSelected={
-                  activeItem?.type === "violation" &&
-                  activeItem.item.id === v.id
-                }
-                onSelect={() => selectItem({ type: "violation", item: v })}
+        <div className="mt-2">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
+                <ShieldCheck
+                  size={10}
+                  className="text-primary"
+                  strokeWidth={2.5}
+                />
+              </div>
+              <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+                Governance Checks
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
+              title="Refresh checks"
+              aria-label="Refresh governance checks"
+            >
+              <RefreshCw
+                size={14}
+                className={isLoading ? "animate-spin" : ""}
               />
-            ))}
+            </button>
           </div>
-        )}
+          <StatusSummaryCard
+            violations={violations}
+            suggestions={suggestions}
+          />
+        </div>
+
+        <div className="mt-5">
+          <SectionLabel label="Violations" icon={ShieldCheck} />
+          {violations.length > 0 && (
+            <div className="space-y-2 mt-4">
+              {violations.map((v) => (
+                <ViolationItem
+                  key={v.id}
+                  violation={v}
+                  isSelected={
+                    activeItem?.type === "violation" &&
+                    activeItem.item.id === v.id
+                  }
+                  onSelect={() => selectItem({ type: "violation", item: v })}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {suggestions.length > 0 && (
           <div className="space-y-2 mt-4">
@@ -685,7 +706,6 @@ export function GovernanceAssistantPanel({
           llmEngineState.status === "downloading" ||
           llmEngineState.status === "loading_vram"
         }
-        onRefresh={onRefresh}
       />
     </div>
   );
