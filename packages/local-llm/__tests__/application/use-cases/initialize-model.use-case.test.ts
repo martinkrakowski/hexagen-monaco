@@ -1,26 +1,18 @@
 import assert from "node:assert";
 import { FakeLocalLLMProviderPort } from "../../doubles/ports/local-llm-provider.fake.js";
 import { InitializeModelUseCase } from "../../../src/application/use-cases/initialize-model.use-case.js";
+import { DomainModelId } from "../../../src/domain/value-objects/model-id.vo.js";
+import { MODEL_METADATA_MAP } from "../../../src/domain/value-objects/model-metadata.vo.js";
 
-const MODEL_ID = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
+const MODEL_ID = DomainModelId.PHI3_MINI;
 
 (async () => {
   const fakeProvider = new FakeLocalLLMProviderPort({
-    loadedModelMetadata: {
-      modelId: MODEL_ID,
-      vendor: "MLC AI",
-      parameterSize: "3.8B",
-      quantizeLevel: "q4f16_1",
-      contextLength: 4096,
-      vocabularySize: 32064,
-      recommendedTemperature: 0.2,
-      isLoaded: true,
-    },
+    loadedModelMetadata: MODEL_METADATA_MAP[MODEL_ID],
   });
 
   const useCase = new InitializeModelUseCase(fakeProvider);
 
-  // 1️⃣ Happy path — initialize succeeds and returns model metadata
   let progressCalled = false;
   const result = await useCase.execute({
     config: { modelId: MODEL_ID },

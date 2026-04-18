@@ -20,7 +20,6 @@ export function LocalAssistantPanel() {
     initializeModel,
     cancelDownload,
     sendMessage,
-    clearError,
     loadedModel,
     switchModel,
     deleteCachedModel,
@@ -69,7 +68,7 @@ export function LocalAssistantPanel() {
         progress={progress}
         errorMessage={errorMessage}
         onCancel={cancelDownload}
-        onRetry={clearError}
+        onRetry={() => initializeModel()}
         model={loadedModel}
         modelId={
           status === "downloading"

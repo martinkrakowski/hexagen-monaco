@@ -1,35 +1,31 @@
 import assert from "node:assert";
 import { FakeLocalLLMProviderPort } from "../../doubles/ports/local-llm-provider.fake.js";
 import { StreamGenerateUseCase } from "../../../src/application/use-cases/stream-generate.use-case.js";
+import { DomainModelId } from "../../../src/domain/value-objects/model-id.vo.js";
+import { MODEL_METADATA_MAP } from "../../../src/domain/value-objects/model-metadata.vo.js";
 
 const CHUNKS = ["Hello", " ", "world", "!"];
-const MODEL_ID = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
+const MODEL_ID = DomainModelId.PHI3_MINI;
 
 (async () => {
   // 1️⃣ Happy path — yields all chunks in order
   const happyProvider = new FakeLocalLLMProviderPort({
     streamChunks: CHUNKS,
-    loadedModelMetadata: {
-      modelId: MODEL_ID,
-      vendor: "MLC AI",
-      parameterSize: "3.8B",
-      quantizeLevel: "q4f16_1",
-      contextLength: 4096,
-      vocabularySize: 32064,
-      recommendedTemperature: 0.2,
-      isLoaded: true,
-    },
+    loadedModelMetadata: MODEL_METADATA_MAP[MODEL_ID],
   });
   const happyUseCase = new StreamGenerateUseCase(happyProvider);
   const collected: string[] = [];
 
   for await (const result of happyUseCase.execute({
     request: {
-      model: MODEL_ID,
+      modelId: MODEL_ID,
       messages: [{ role: "user", content: "Hello" }],
     },
   })) {
-    assert(result.success, `Unexpected error: ${result.error?.message}`);
+    assert(
+      result.success,
+      `Unexpected error: ${result.success === false && result.error instanceof Error ? result.error.message : "unknown"}`,
+    );
     collected.push(result.value!);
   }
 
@@ -48,15 +44,18 @@ const MODEL_ID = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
   let errorReceived = false;
   for await (const result of errorUseCase.execute({
     request: {
-      model: MODEL_ID,
+      modelId: MODEL_ID,
       messages: [{ role: "user", content: "Hello" }],
     },
   })) {
     assert(!result.success, "Expected error result");
-    assert(
-      result.error?.message === "Worker terminated unexpectedly",
-      `Expected 'Worker terminated unexpectedly', got: ${result.error?.message}`,
-    );
+    if (!result.success) {
+      assert(
+        result.error instanceof Error &&
+          result.error.message === "Worker terminated unexpectedly",
+        `Expected 'Worker terminated unexpectedly', got: ${result.error instanceof Error ? result.error.message : String(result.error)}`,
+      );
+    }
     errorReceived = true;
   }
   assert(errorReceived, "Expected at least one error result");
@@ -70,7 +69,7 @@ const MODEL_ID = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for await (const _unused of emptyUseCase.execute({
     request: {
-      model: MODEL_ID,
+      modelId: MODEL_ID,
       messages: [{ role: "user", content: "Hello" }],
     },
   })) {
@@ -88,7 +87,7 @@ const MODEL_ID = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
 
   for await (const result of disposedUseCase.execute({
     request: {
-      model: MODEL_ID,
+      modelId: MODEL_ID,
       messages: [{ role: "user", content: "Hello" }],
     },
   })) {

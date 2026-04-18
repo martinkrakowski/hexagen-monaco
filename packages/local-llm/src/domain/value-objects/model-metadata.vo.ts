@@ -52,6 +52,10 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   },
 };
 
+export function getModelMetadata(modelId: DomainModelId): ModelMetadata {
+  return MODEL_METADATA_MAP[modelId];
+}
+
 export const RECOMMENDED_TEMPERATURE = 0.6;
 
 export const DEFAULT_TUNING_CONFIG = {

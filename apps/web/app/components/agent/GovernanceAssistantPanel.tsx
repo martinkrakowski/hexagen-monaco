@@ -438,7 +438,6 @@ export function GovernanceAssistantPanel({
     messages,
     initializeModel,
     cancelDownload,
-    clearError,
     engineState: llmEngineState,
     loadedModel,
     switchModel,
@@ -485,7 +484,10 @@ export function GovernanceAssistantPanel({
     return (
       <div className="h-full">
         <LifecycleCard onRefresh={onRefresh} isLoading={isLoading}>
-          <OptInCard onInitialize={initializeModel} isInitializing={false} />
+          <OptInCard
+            onInitialize={() => initializeModel()}
+            isInitializing={false}
+          />
         </LifecycleCard>
       </div>
     );
@@ -530,7 +532,7 @@ export function GovernanceAssistantPanel({
             status={status}
             progress={progress}
             errorMessage={errorMessage}
-            onRetry={clearError}
+            onRetry={() => initializeModel()}
             model={loadedModel}
             modelId={llmEngineState.loadedModelId ?? undefined}
           />
