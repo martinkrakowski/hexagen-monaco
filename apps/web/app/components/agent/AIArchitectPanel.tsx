@@ -13,6 +13,7 @@ import { Bot, FileText, Loader2 } from "lucide-react";
 
 const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
+const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 export function AIArchitectPanel() {
   const [isCheckingCache, setIsCheckingCache] = useState(true);
@@ -65,15 +66,20 @@ export function AIArchitectPanel() {
       // Check both keys: HAS_ENABLED_KEY (new) and AUTO_LOAD_KEY (legacy).
       // Users from before HAS_ENABLED_KEY was introduced only have AUTO_LOAD_KEY.
       const isOptedIn =
-        localStorage.getItem(HAS_ENABLED_KEY) !== null ||
-        localStorage.getItem(AUTO_LOAD_KEY) === "true";
+        localStorage.getItem(OPT_OUT_KEY) !== "true" &&
+        (localStorage.getItem(HAS_ENABLED_KEY) !== null ||
+          localStorage.getItem(AUTO_LOAD_KEY) === "true");
 
-      // Opted-In Hold: If user is opted in but the engine is still in its
-      // transit state (opt_in before auto-load starts) or actively loading,
-      // hold the spinner until the engine transitions to an active state.
+      // Opted-In Hold: hold the spinner while auto-load is imminent or in
+      // progress. The hold is conditional on AUTO_LOAD_KEY still being set —
+      // if the user cancelled a download we clear that key, so the hold must
+      // not fire (otherwise the spinner blocks forever waiting for an
+      // Effect 2 that will never run).
+      const willAutoLoad = localStorage.getItem(AUTO_LOAD_KEY) === "true";
       if (
         isOptedIn &&
-        (engineState.status === "opt_in" || engineState.autoLoading)
+        ((engineState.status === "opt_in" && willAutoLoad) ||
+          engineState.autoLoading)
       ) {
         return;
       }

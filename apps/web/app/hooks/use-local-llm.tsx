@@ -53,6 +53,9 @@ const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 /** localStorage key - set to "true" after user successfully enables Local AI for the first time. Cleared only on explicit opt-out. */
 const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 
+/** localStorage key - set to "true" when the user explicitly cancels setup from the missing-model screen. */
+const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -187,6 +190,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         return;
 
       const targetModelId = modelId ?? DEFAULT_MODEL_ID;
+      localStorage.removeItem(OPT_OUT_KEY);
       isInitializingRef.current = true;
       setEngineState((prev: LLMEngineState) => ({
         ...prev,
@@ -224,15 +228,14 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         ]);
       } catch {
         // Cancelled — terminate the worker.
-        // If user has previously enabled (HAS_ENABLED_KEY set), go to "requires_model"
-        // so they'll see ModelSettingsView instead of OptInCard.
-        // Always clear LAST_MODEL_KEY, but preserve AUTO_LOAD_KEY if previously enabled.
+        // Always clear AUTO_LOAD_KEY and LAST_MODEL_KEY so a subsequent page
+        // reload does not attempt a silent background download. HAS_ENABLED_KEY
+        // is preserved if set, keeping the user in "requires_model" routing
+        // rather than dropping them back to the first-time OptIn screen.
         const hasPreviouslyEnabled =
-          localStorage.getItem(HAS_ENABLED_KEY) === "true";
+          localStorage.getItem(HAS_ENABLED_KEY) !== null;
+        localStorage.removeItem(AUTO_LOAD_KEY);
         localStorage.removeItem(LAST_MODEL_KEY);
-        if (!hasPreviouslyEnabled) {
-          localStorage.removeItem(AUTO_LOAD_KEY);
-        }
         adapter.dispose();
         cancelInitRef.current = null;
         isInitializingRef.current = false;
@@ -263,6 +266,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         }));
       } else {
         // Success: store the last-used model ID, auto-load flag, and has-enabled flag
+        localStorage.removeItem(OPT_OUT_KEY);
         localStorage.setItem(AUTO_LOAD_KEY, "true");
         localStorage.setItem(LAST_MODEL_KEY, targetModelId);
         // Only set HAS_ENABLED_KEY on first successful enable, never clear it on cancel/switch
@@ -508,14 +512,13 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   );
 
   const cancelDownload = useCallback(() => {
-    // Check both keys for backward compatibility with users who only have AUTO_LOAD_KEY
-    const hasPreviouslyEnabled =
-      localStorage.getItem(HAS_ENABLED_KEY) !== null ||
-      localStorage.getItem(AUTO_LOAD_KEY) === "true";
+    // Always clear both the auto-load flag and the last-model key on a manual
+    // cancel. HAS_ENABLED_KEY is sufficient to remember that the user has
+    // previously opted in — leaving AUTO_LOAD_KEY alive without a verified
+    // cached model would trigger a silent background download on the next page
+    // load, trapping the user behind a global spinner.
+    localStorage.removeItem(AUTO_LOAD_KEY);
     localStorage.removeItem(LAST_MODEL_KEY);
-    if (!hasPreviouslyEnabled) {
-      localStorage.removeItem(AUTO_LOAD_KEY);
-    }
     if (cancelInitRef.current) {
       cancelInitRef.current();
       cancelInitRef.current = null;
@@ -524,13 +527,19 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
   const cancelFromRequiresModel = useCallback(() => {
     // User clicked "Cancel Setup" in the warning banner — opt out completely
+    localStorage.setItem(OPT_OUT_KEY, "true");
     localStorage.removeItem(HAS_ENABLED_KEY);
     localStorage.removeItem(AUTO_LOAD_KEY);
     localStorage.removeItem(LAST_MODEL_KEY);
+    hasAttemptedAutoInitRef.current = false;
+    adapterRef.current?.dispose();
+    setMessages([]);
+    setLoadedModel(null);
     setEngineState((prev: LLMEngineState) => ({
       ...prev,
       status: "opt_in",
       progress: 0,
+      loadedModelId: null,
       errorMessage: null,
       autoLoading: false,
     }));
@@ -651,7 +660,8 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     // Backfill HAS_ENABLED_KEY so the opted-in hold logic works for existing users.
     if (
       localStorage.getItem(AUTO_LOAD_KEY) === "true" &&
-      localStorage.getItem(HAS_ENABLED_KEY) === null
+      localStorage.getItem(HAS_ENABLED_KEY) === null &&
+      localStorage.getItem(OPT_OUT_KEY) !== "true"
     ) {
       localStorage.setItem(HAS_ENABLED_KEY, "true");
     }
@@ -694,22 +704,67 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   useEffect(() => {
     if (hasAttemptedAutoInitRef.current) return;
     if (engineState.status !== "opt_in") return;
-    if (localStorage.getItem(AUTO_LOAD_KEY) !== "true") return;
 
-    hasAttemptedAutoInitRef.current = true;
+    if (localStorage.getItem(OPT_OUT_KEY) === "true") {
+      // Explicit opt-out is authoritative across reloads.
+      // Clear any stale restore hints so the user stays on the OptIn screen.
+      hasAttemptedAutoInitRef.current = true;
+      localStorage.removeItem(HAS_ENABLED_KEY);
+      localStorage.removeItem(AUTO_LOAD_KEY);
+      localStorage.removeItem(LAST_MODEL_KEY);
+      return;
+    }
 
-    // Attempt to restore the last-used model, fall back to DEFAULT_MODEL_ID
-    const lastModelStr = localStorage.getItem(LAST_MODEL_KEY);
-    const lastModelParsed = lastModelStr
-      ? parseDomainModelId(lastModelStr)
-      : null;
-    const modelToLoad = lastModelParsed?.success
-      ? lastModelParsed.value
-      : DEFAULT_MODEL_ID;
+    if (localStorage.getItem(AUTO_LOAD_KEY) === "true") {
+      // Attempt to restore the last-used model, fall back to DEFAULT_MODEL_ID
+      const lastModelStr = localStorage.getItem(LAST_MODEL_KEY);
+      const lastModelParsed = lastModelStr
+        ? parseDomainModelId(lastModelStr)
+        : null;
+      const modelToLoad = lastModelParsed?.success
+        ? lastModelParsed.value
+        : DEFAULT_MODEL_ID;
 
-    setEngineState((prev: LLMEngineState) => ({ ...prev, autoLoading: true }));
-    initializeModel(modelToLoad);
-  }, [engineState.status, initializeModel]);
+      hasAttemptedAutoInitRef.current = true;
+
+      // Only auto-load if the target model is actually in cache.
+      // If it is not cached (e.g. the user cancelled mid-download on the previous
+      // session), silently downloading a potentially multi-GB model behind a
+      // global spinner is unacceptable. Instead, clear the stale AUTO_LOAD_KEY
+      // and transition to "requires_model" so the user can choose a model
+      // explicitly from the settings view.
+      hasModelInCache(modelToLoad).then((isCached) => {
+        if (isCached) {
+          setEngineState((prev: LLMEngineState) => ({
+            ...prev,
+            autoLoading: true,
+          }));
+          initializeModel(modelToLoad);
+        } else {
+          localStorage.removeItem(AUTO_LOAD_KEY);
+          setEngineState((prev: LLMEngineState) => ({
+            ...prev,
+            status: "requires_model",
+            autoLoading: false,
+          }));
+        }
+      });
+    } else if (localStorage.getItem(HAS_ENABLED_KEY) !== null) {
+      // Previously opted in but no AUTO_LOAD_KEY (e.g. after cancel or cache
+      // clear). Transition to "requires_model" so the UI shows the model
+      // selection screen instead of a stuck spinner. Without this branch,
+      // status remains "opt_in" indefinitely, trapping opted-in users behind
+      // the Opted-In Hold spinner.
+      hasAttemptedAutoInitRef.current = true;
+      setEngineState((prev: LLMEngineState) => ({
+        ...prev,
+        status: "requires_model",
+        autoLoading: false,
+      }));
+    }
+    // If neither branch matches, the user has never opted in.
+    // Status stays "opt_in" and the OptInCard is shown.
+  }, [engineState.status, initializeModel, hasModelInCache]);
 
   // Effect 3: Fetch governance context on mount (independent of model state).
   // This ensures governance is available when the user sends the first message.

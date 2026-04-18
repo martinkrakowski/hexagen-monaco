@@ -316,14 +316,39 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
-    const worker = this.worker;
-    if (!worker || this._disposed) {
+    const mlcModelId = MLC_IDS[modelId as string];
+    if (!mlcModelId) {
       return false;
     }
 
-    return new Promise((resolve, reject) => {
-      const mlcModelId = MLC_IDS[modelId as string];
+    const activeWorker = !this._disposed ? this.worker : null;
+    if (activeWorker) {
+      return this.probeCacheViaWorker(activeWorker, mlcModelId);
+    }
 
+    const { createWorker } = this.config;
+    if (createWorker) {
+      const tempWorker = createWorker();
+      try {
+        return await this.probeCacheViaWorker(tempWorker, mlcModelId);
+      } finally {
+        tempWorker.terminate();
+      }
+    }
+
+    try {
+      const { hasModelInCache } = await import("@mlc-ai/web-llm");
+      return await hasModelInCache(mlcModelId);
+    } catch {
+      return false;
+    }
+  }
+
+  private probeCacheViaWorker(
+    worker: Worker,
+    mlcModelId: string,
+  ): Promise<boolean> {
+    return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         worker.removeEventListener("message", handler);
         reject(new Error("hasModelInCache timed out after 60s"));

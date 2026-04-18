@@ -176,9 +176,17 @@ export function ModelSettingsView({
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2.5">
             <button
-              onClick={onBack}
+              type="button"
+              onClick={
+                requiresModelWarning && onCancelSetup ? onCancelSetup : onBack
+              }
               className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors"
-              title="Back to governance"
+              title={
+                requiresModelWarning ? "Cancel setup" : "Back to governance"
+              }
+              aria-label={
+                requiresModelWarning ? "Cancel setup" : "Back to governance"
+              }
             >
               <ArrowLeft size={14} />
             </button>

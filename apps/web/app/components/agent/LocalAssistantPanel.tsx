@@ -74,8 +74,9 @@ export function LocalAssistantPanel() {
       // Check both keys: HAS_ENABLED_KEY (new) and AUTO_LOAD_KEY (legacy).
       // Users from before HAS_ENABLED_KEY was introduced only have AUTO_LOAD_KEY.
       const isOptedIn =
-        localStorage.getItem("hexagen:local-llm:has-enabled") !== null ||
-        localStorage.getItem("hexagen:local-llm:auto-load") === "true";
+        localStorage.getItem("hexagen:local-llm:opted-out") !== "true" &&
+        (localStorage.getItem("hexagen:local-llm:has-enabled") !== null ||
+          localStorage.getItem("hexagen:local-llm:auto-load") === "true");
 
       // Opted-In Hold: If user is opted in but the engine is still in its
       // transit state (opt_in before auto-load) or actively loading,
@@ -92,11 +93,17 @@ export function LocalAssistantPanel() {
 
         if (!isMounted) return;
 
+        // CRITICAL: Check isOptedIn FIRST before any cached-model logic.
+        // After cancelFromRequiresModel(), localStorage has NO keys set
+        // (HAS_ENABLED_KEY cleared), so isOptedIn = false. This path must
+        // take precedence over cachedModelsExist to route to OptInCard.
         if (!isOptedIn) {
           setViewState("optIn");
           return;
         }
 
+        // Only show settings if opted-in AND there's a model problem.
+        // This covers: requires_model, or no loaded model but cached models exist.
         if (
           engineState.status === "requires_model" ||
           (!engineState.loadedModelId && cachedModelsExist)
@@ -375,49 +382,10 @@ export function LocalAssistantPanel() {
   }
 
   if (
-    (viewState === "settings" || showRequiresModel) &&
-    panelView === "model-settings"
+    viewState === "settings" ||
+    showRequiresModel ||
+    (panelView === "model-settings" && showChat)
   ) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex border-b border-border shrink-0">
-          <button
-            type="button"
-            className="flex-1 py-2 text-sm font-medium border-b-2 border-primary text-foreground"
-          >
-            Local
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("cloud")}
-            className="flex-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Cloud
-          </button>
-        </div>
-        <ModelSettingsView
-          currentModelId={engineState.loadedModelId}
-          loadedModel={loadedModel}
-          messagesLength={messages.length}
-          onSwitchModel={switchModel}
-          onDeleteModel={deleteCachedModel}
-          hasModelInCache={hasModelInCache}
-          onBack={() => {
-            setPanelView("main");
-          }}
-          isLoading={
-            engineState.status === "downloading" ||
-            engineState.status === "loading_vram"
-          }
-          onSwitchToCloud={() => setMode("cloud")}
-          requiresModelWarning={viewState === "settings" || showRequiresModel}
-          onCancelSetup={cancelFromRequiresModel}
-        />
-      </div>
-    );
-  }
-
-  if (panelView === "model-settings" && showChat) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex border-b border-border shrink-0">
@@ -448,6 +416,8 @@ export function LocalAssistantPanel() {
             engineState.status === "loading_vram"
           }
           onSwitchToCloud={() => setMode("cloud")}
+          requiresModelWarning={viewState === "settings" || showRequiresModel}
+          onCancelSetup={cancelFromRequiresModel}
         />
       </div>
     );

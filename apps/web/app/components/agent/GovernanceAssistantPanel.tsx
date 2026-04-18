@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import type { WizardData } from "@hexagen/shared";
 import type { DomainModelId } from "@hexagen/local-llm";
 import { useGovernanceAssistant } from "@/hooks/use-governance-assistant";
@@ -30,6 +30,7 @@ import { UnavailableCard } from "./UnavailableCard";
 
 const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
+const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 type PanelView = "main" | "model-settings";
 
@@ -468,6 +469,7 @@ export function GovernanceAssistantPanel({
     messages,
     initializeModel,
     cancelDownload,
+    cancelFromRequiresModel,
     engineState: llmEngineState,
     loadedModel,
     switchModel,
@@ -477,6 +479,33 @@ export function GovernanceAssistantPanel({
 
   const [panelView, setPanelView] = useState<PanelView>("main");
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+  const autoNavigatedToSettings = useRef(false);
+
+  const handleOpenSettings = useCallback(() => {
+    autoNavigatedToSettings.current = false;
+    setPanelView("model-settings");
+  }, []);
+
+  const handleBackFromSettings = useCallback(() => {
+    autoNavigatedToSettings.current = false;
+    setPanelView("main");
+  }, []);
+
+  const handleCancelSetup = useCallback(() => {
+    autoNavigatedToSettings.current = false;
+    setPanelView("main");
+    cancelFromRequiresModel();
+  }, [cancelFromRequiresModel]);
+
+  // When model becomes ready after auto-navigation to settings (from
+  // requires_model), return to main so the user sees governance content
+  // instead of being stuck in settings they didn't explicitly open.
+  useEffect(() => {
+    if (llmEngineState.status === "ready" && autoNavigatedToSettings.current) {
+      setPanelView("main");
+      autoNavigatedToSettings.current = false;
+    }
+  }, [llmEngineState.status]);
 
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
@@ -498,6 +527,7 @@ export function GovernanceAssistantPanel({
   const showProgress =
     status === "downloading" || (status === "loading_vram" && !autoLoading);
   const showError = status === "error";
+  const showRequiresModel = status === "requires_model";
 
   // localStorage is only available in the browser. During Next.js prerender
   // (Node.js) typeof window === 'undefined', so isOptedIn defaults to false.
@@ -505,6 +535,7 @@ export function GovernanceAssistantPanel({
   // so showBootSpinner fires via the status === "unavailable" branch — no mismatch.
   const isOptedIn =
     typeof window !== "undefined" &&
+    localStorage.getItem(OPT_OUT_KEY) !== "true" &&
     (localStorage.getItem(HAS_ENABLED_KEY) !== null ||
       localStorage.getItem(AUTO_LOAD_KEY) === "true");
 
@@ -606,13 +637,32 @@ export function GovernanceAssistantPanel({
     }
   };
 
-  // If status changes away from ready, auto-navigate back to main view
-  if (panelView === "model-settings" && status !== "ready") {
-    setPanelView("main");
+  // When the engine explicitly requires a model, force-navigate to the settings
+  // view regardless of what panelView was last set to. This ensures cancel from
+  // a download always surfaces the settings picker rather than falling through
+  // to the governance content with no recovery path.
+  if (showRequiresModel && panelView !== "model-settings") {
+    setPanelView("model-settings");
+    autoNavigatedToSettings.current = true;
   }
 
-  // Show model settings view when requested
-  if (panelView === "model-settings" && status === "ready") {
+  // If status changes away from ready (but NOT to requires_model, which is
+  // handled above), auto-navigate back to main so stale settings aren't shown.
+  if (
+    panelView === "model-settings" &&
+    status !== "ready" &&
+    !showRequiresModel
+  ) {
+    setPanelView("main");
+    autoNavigatedToSettings.current = false;
+  }
+
+  // Show model settings view when: user manually opened it (ready), or the
+  // engine demands a model selection (requires_model).
+  if (
+    panelView === "model-settings" &&
+    (status === "ready" || showRequiresModel)
+  ) {
     return (
       <ModelSettingsView
         currentModelId={llmEngineState.loadedModelId}
@@ -621,11 +671,13 @@ export function GovernanceAssistantPanel({
         onSwitchModel={switchModel}
         onDeleteModel={deleteCachedModel}
         hasModelInCache={hasModelInCache}
-        onBack={() => setPanelView("main")}
+        onBack={handleBackFromSettings}
         isLoading={
           llmEngineState.status === "downloading" ||
           llmEngineState.status === "loading_vram"
         }
+        requiresModelWarning={showRequiresModel}
+        onCancelSetup={handleCancelSetup}
       />
     );
   }
@@ -731,7 +783,7 @@ export function GovernanceAssistantPanel({
 
       <PanelFooter
         modelId={llmEngineState.loadedModelId}
-        onOpenSettings={() => setPanelView("model-settings")}
+        onOpenSettings={handleOpenSettings}
         isLoading={
           llmEngineState.status === "downloading" ||
           llmEngineState.status === "loading_vram"
