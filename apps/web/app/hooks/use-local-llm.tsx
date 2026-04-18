@@ -239,11 +239,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         // On error also clear both flags — prevents an auto-fail loop on next mount.
         localStorage.removeItem(AUTO_LOAD_KEY);
         localStorage.removeItem(LAST_MODEL_KEY);
-        const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
-        const browserSupported = typeof OffscreenCanvas !== "undefined";
         setEngineState((prev: LLMEngineState) => ({
           ...prev,
-          status: deriveStatus(null, webgpuSupported, browserSupported),
+          status: "error",
           autoLoading: false,
           errorMessage:
             initResult.error instanceof Error
