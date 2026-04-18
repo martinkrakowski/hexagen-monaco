@@ -57,6 +57,7 @@ export type WizardStepId =
 export const FOLLOW_UP_INSTRUCTION = `\n\nFollow-up Questions Requirement:
 After your answer, output a JSON array of 3-5 follow-up question objects in this exact format (no other text after it):
 [{"type":"guidance","label":"question text here"},{"type":"guidance","label":"another question"}]
+All follow-up question labels must be in English.
 Output the raw JSON array directly. Do not wrap it in code fences, backticks, or markdown formatting. Do not include any commentary after the JSON array.`;
 
 export const STEP_QUESTIONS: Record<WizardStepId, PrebakedQuestion[]> = {

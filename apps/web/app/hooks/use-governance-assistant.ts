@@ -22,7 +22,7 @@ import { serializeWizardContext } from "@/lib/wizard-assistant-context";
 import { wizardSteps } from "@/components/project-wizard/config";
 
 const GOVERNANCE_SYSTEM_PROMPT =
-  "You are a Hexagonal Architecture expert assistant in HexaGen Monaco. Answer questions concisely and helpfully. You have access to the user's project wizard context which describes their bounded contexts, governance settings, and peer mappings.";
+  "You are a Hexagonal Architecture expert assistant in HexaGen Monaco. Always respond in English. Answer questions concisely and helpfully. You have access to the user's project wizard context which describes their bounded contexts, governance settings, and peer mappings.";
 
 export type ActiveItem =
   | { type: "violation"; item: Violation }
