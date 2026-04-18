@@ -364,12 +364,12 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         const handler = (e: MessageEvent) => {
           if (
             e.data?.type === "delete-cached-model-result" &&
-            e.data?.modelId === mlcModelId
+            e.data?.data?.modelId === mlcModelId
           ) {
             clearTimeout(timeoutId);
             worker.removeEventListener("message", handler);
-            if (e.data?.error) {
-              resolve(err(new Error(e.data.error)));
+            if (e.data?.data?.error) {
+              resolve(err(new Error(e.data.data.error)));
             } else {
               resolve(ok(undefined));
             }
