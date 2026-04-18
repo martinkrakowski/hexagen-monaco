@@ -12,13 +12,13 @@ interface UnavailableCardProps {
     | "error"
     | "opt_in"
     | "unavailable"
+    | "requires_model"
   >;
 }
 
-const MESSAGES: Record<
-  UnavailableCardProps["status"],
-  { title: string; body: string }
-> = {
+type UnavailableStatus = "no_webgpu" | "unsupported_browser";
+
+const MESSAGES: Record<UnavailableStatus, { title: string; body: string }> = {
   no_webgpu: {
     title: "WebGPU Not Available",
     body: "Your browser or device doesn't support WebGPU. Local AI requires WebGPU to run models in the browser.",

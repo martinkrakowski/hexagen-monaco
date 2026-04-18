@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/use-cloud-llm";
 import { getClientProviders } from "@/config/cloud-providers";
@@ -16,6 +17,7 @@ import { CloudChatInterface } from "./CloudChatInterface";
 
 type PanelView = "main" | "model-settings";
 type LLMMode = "local" | "cloud";
+type PanelViewState = "initializing" | "optIn" | "settings" | "chat";
 
 export function LocalAssistantPanel() {
   const [mode, setMode] = useState<LLMMode>("local");
@@ -32,27 +34,112 @@ export function LocalAssistantPanel() {
     isStreaming,
     initializeModel,
     cancelDownload,
+    cancelFromRequiresModel,
     sendMessage,
     loadedModel,
     switchModel,
     deleteCachedModel,
     hasModelInCache,
+    hasAnyCachedModel,
   } = localLLM;
 
   const [panelView, setPanelView] = useState<PanelView>("main");
+  const [viewState, setViewState] = useState<PanelViewState>("initializing");
 
   const { status, progress, errorMessage, autoLoading } = engineState;
 
   const showUnavailable =
     status === "no_webgpu" || status === "unsupported_browser";
-  const showOptIn = status === "opt_in" || status === "unavailable";
   const showWakingUp = status === "loading_vram" && autoLoading;
   const showProgress =
     status === "downloading" || (status === "loading_vram" && !autoLoading);
   const showError = status === "error";
   const showChat = status === "ready";
+  const showRequiresModel = status === "requires_model";
 
-  if (panelView === "model-settings" && status !== "ready") {
+  // Hydration Effect: Determine viewState based on async cache check
+  useEffect(() => {
+    let isMounted = true;
+
+    const determineViewState = async () => {
+      if (mode === "local") {
+        setViewState("initializing");
+      }
+
+      // Boot Guard: Abort if WebLLM adapter hasn't mounted yet
+      if (engineState.status === "unavailable") {
+        return;
+      }
+
+      // Check both keys: HAS_ENABLED_KEY (new) and AUTO_LOAD_KEY (legacy).
+      // Users from before HAS_ENABLED_KEY was introduced only have AUTO_LOAD_KEY.
+      const isOptedIn =
+        localStorage.getItem("hexagen:local-llm:has-enabled") !== null ||
+        localStorage.getItem("hexagen:local-llm:auto-load") === "true";
+
+      // Opted-In Hold: If user is opted in but the engine is still in its
+      // transit state (opt_in before auto-load) or actively loading,
+      // hold the spinner until the engine transitions.
+      if (
+        isOptedIn &&
+        (engineState.status === "opt_in" || engineState.autoLoading)
+      ) {
+        return;
+      }
+
+      try {
+        const cachedModelsExist = await hasAnyCachedModel();
+
+        if (!isMounted) return;
+
+        if (!isOptedIn) {
+          setViewState("optIn");
+          return;
+        }
+
+        if (
+          engineState.status === "requires_model" ||
+          (!engineState.loadedModelId && cachedModelsExist)
+        ) {
+          setViewState("settings");
+        } else if (
+          engineState.loadedModelId ||
+          engineState.status === "downloading" ||
+          engineState.status === "loading_vram"
+        ) {
+          setViewState("chat");
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("Error determining local assistant view:", error);
+        if (isMounted) setViewState("optIn");
+      }
+    };
+
+    determineViewState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    hasAnyCachedModel,
+    engineState.status,
+    engineState.loadedModelId,
+    engineState.autoLoading,
+    mode,
+  ]);
+
+  // When entering requires_model state, switch to model-settings view
+  if (showRequiresModel && panelView !== "model-settings") {
+    setPanelView("model-settings");
+  }
+
+  if (
+    panelView === "model-settings" &&
+    !showChat &&
+    !showRequiresModel &&
+    viewState !== "settings"
+  ) {
     setPanelView("main");
   }
 
@@ -68,6 +155,16 @@ export function LocalAssistantPanel() {
     setCloudConfig(null);
     cloudLLM.clearMessages();
   };
+
+  // ─── Gatekeeper: Prevent hydration race condition ──────────────
+
+  if (viewState === "initializing" && mode === "local") {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   // ─── Cloud Mode ────────────────────────────────────────────────
 
@@ -163,7 +260,7 @@ export function LocalAssistantPanel() {
     );
   }
 
-  if (showOptIn) {
+  if (viewState === "optIn") {
     return (
       <div className="flex flex-col h-full">
         <div className="flex border-b border-border shrink-0">
@@ -272,6 +369,49 @@ export function LocalAssistantPanel() {
           onRetry={() => initializeModel()}
           model={loadedModel}
           modelId={engineState.loadedModelId ?? undefined}
+        />
+      </div>
+    );
+  }
+
+  if (
+    (viewState === "settings" || showRequiresModel) &&
+    panelView === "model-settings"
+  ) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex border-b border-border shrink-0">
+          <button
+            type="button"
+            className="flex-1 py-2 text-sm font-medium border-b-2 border-primary text-foreground"
+          >
+            Local
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("cloud")}
+            className="flex-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Cloud
+          </button>
+        </div>
+        <ModelSettingsView
+          currentModelId={engineState.loadedModelId}
+          loadedModel={loadedModel}
+          messagesLength={messages.length}
+          onSwitchModel={switchModel}
+          onDeleteModel={deleteCachedModel}
+          hasModelInCache={hasModelInCache}
+          onBack={() => {
+            setPanelView("main");
+          }}
+          isLoading={
+            engineState.status === "downloading" ||
+            engineState.status === "loading_vram"
+          }
+          onSwitchToCloud={() => setMode("cloud")}
+          requiresModelWarning={viewState === "settings" || showRequiresModel}
+          onCancelSetup={cancelFromRequiresModel}
         />
       </div>
     );

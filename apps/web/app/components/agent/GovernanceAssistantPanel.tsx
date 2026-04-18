@@ -20,12 +20,16 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { OptInCard } from "./OptInCard";
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
 import { ModelSettingsView } from "./ModelSettingsView";
 import { UnavailableCard } from "./UnavailableCard";
+
+const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
+const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 
 type PanelView = "main" | "model-settings";
 
@@ -490,11 +494,37 @@ export function GovernanceAssistantPanel({
 
   const showUnavailable =
     status === "no_webgpu" || status === "unsupported_browser";
-  const showOptIn = status === "opt_in" || status === "unavailable";
   const showWakingUp = status === "loading_vram" && autoLoading;
   const showProgress =
     status === "downloading" || (status === "loading_vram" && !autoLoading);
   const showError = status === "error";
+
+  // localStorage is only available in the browser. During Next.js prerender
+  // (Node.js) typeof window === 'undefined', so isOptedIn defaults to false.
+  // In that case status is also "unavailable" (from LLM_ENGINE_INITIAL_STATE),
+  // so showBootSpinner fires via the status === "unavailable" branch — no mismatch.
+  const isOptedIn =
+    typeof window !== "undefined" &&
+    (localStorage.getItem(HAS_ENABLED_KEY) !== null ||
+      localStorage.getItem(AUTO_LOAD_KEY) === "true");
+
+  // Boot Guard + Opted-In Hold: show a spinner for opted-in users while the
+  // adapter is still initialising ("unavailable") or waiting for auto-load to
+  // start ("opt_in"). This prevents a 1-frame flash of the Enable Local AI card.
+  const showBootSpinner =
+    status === "unavailable" || (isOptedIn && status === "opt_in");
+
+  // Only show the OptInCard for genuine first-time users once the engine is
+  // in a stable opt_in state — never during the transient "unavailable" phase.
+  const showOptIn = !isOptedIn && status === "opt_in";
+
+  if (showBootSpinner) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (showUnavailable) {
     return (

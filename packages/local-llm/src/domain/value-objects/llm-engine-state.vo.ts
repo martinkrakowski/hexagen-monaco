@@ -8,7 +8,8 @@ export type LLMEngineStatus =
   | "downloading"
   | "loading_vram"
   | "ready"
-  | "error";
+  | "error"
+  | "requires_model";
 
 export interface LLMEngineState {
   status: LLMEngineStatus;

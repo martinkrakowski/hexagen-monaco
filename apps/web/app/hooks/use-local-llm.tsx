@@ -39,6 +39,7 @@ import {
   type EditorState as EditorContextState,
 } from "@/lib/grounded-prompt";
 import { useEditor } from "@/contexts/EditorContext";
+import { LOCAL_MODELS } from "@/config/models";
 
 /**
  * localStorage key for remembering the last-used model ID.
@@ -48,6 +49,9 @@ const LAST_MODEL_KEY = "hexagen:local-llm:last-model";
 
 /** localStorage key for the auto-load flag. */
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
+
+/** localStorage key - set to "true" after user successfully enables Local AI for the first time. Cleared only on explicit opt-out. */
+const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 
 export interface ChatMessage {
   id: string;
@@ -63,6 +67,8 @@ interface LocalLLMContextValue {
   loadedModel: ModelMetadata | null;
   initializeModel: (modelId?: DomainModelId) => Promise<void>;
   cancelDownload: () => void;
+  cancelFromRequiresModel: () => void;
+  enterRequiresModel: () => void;
   sendMessage: (content: string) => Promise<void>;
   sendGovernanceMessage: (
     content: string,
@@ -72,6 +78,7 @@ interface LocalLLMContextValue {
   switchModel: (modelId: DomainModelId) => Promise<void>;
   deleteCachedModel: (modelId: DomainModelId) => Promise<void>;
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
+  hasAnyCachedModel: () => Promise<boolean>;
 }
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
@@ -216,16 +223,22 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           cancelPromise,
         ]);
       } catch {
-        // Cancelled — terminate the worker, reset to opt_in, clear both flags
-        // so a refresh doesn't re-trigger the failed/cancelled auto-init.
-        localStorage.removeItem(AUTO_LOAD_KEY);
+        // Cancelled — terminate the worker.
+        // If user has previously enabled (HAS_ENABLED_KEY set), go to "requires_model"
+        // so they'll see ModelSettingsView instead of OptInCard.
+        // Always clear LAST_MODEL_KEY, but preserve AUTO_LOAD_KEY if previously enabled.
+        const hasPreviouslyEnabled =
+          localStorage.getItem(HAS_ENABLED_KEY) === "true";
         localStorage.removeItem(LAST_MODEL_KEY);
+        if (!hasPreviouslyEnabled) {
+          localStorage.removeItem(AUTO_LOAD_KEY);
+        }
         adapter.dispose();
         cancelInitRef.current = null;
         isInitializingRef.current = false;
         setEngineState((prev: LLMEngineState) => ({
           ...prev,
-          status: "opt_in",
+          status: hasPreviouslyEnabled ? "requires_model" : "opt_in",
           progress: 0,
           errorMessage: null,
           autoLoading: false,
@@ -249,9 +262,13 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
               : String(initResult.error),
         }));
       } else {
-        // Success: store the last-used model ID and the auto-load flag
+        // Success: store the last-used model ID, auto-load flag, and has-enabled flag
         localStorage.setItem(AUTO_LOAD_KEY, "true");
         localStorage.setItem(LAST_MODEL_KEY, targetModelId);
+        // Only set HAS_ENABLED_KEY on first successful enable, never clear it on cancel/switch
+        if (localStorage.getItem(HAS_ENABLED_KEY) !== "true") {
+          localStorage.setItem(HAS_ENABLED_KEY, "true");
+        }
         setEngineState((prev: LLMEngineState) => ({
           ...prev,
           status: "ready",
@@ -491,12 +508,40 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   );
 
   const cancelDownload = useCallback(() => {
-    localStorage.removeItem(AUTO_LOAD_KEY);
+    // Check both keys for backward compatibility with users who only have AUTO_LOAD_KEY
+    const hasPreviouslyEnabled =
+      localStorage.getItem(HAS_ENABLED_KEY) !== null ||
+      localStorage.getItem(AUTO_LOAD_KEY) === "true";
     localStorage.removeItem(LAST_MODEL_KEY);
+    if (!hasPreviouslyEnabled) {
+      localStorage.removeItem(AUTO_LOAD_KEY);
+    }
     if (cancelInitRef.current) {
       cancelInitRef.current();
       cancelInitRef.current = null;
     }
+  }, []);
+
+  const cancelFromRequiresModel = useCallback(() => {
+    // User clicked "Cancel Setup" in the warning banner — opt out completely
+    localStorage.removeItem(HAS_ENABLED_KEY);
+    localStorage.removeItem(AUTO_LOAD_KEY);
+    localStorage.removeItem(LAST_MODEL_KEY);
+    setEngineState((prev: LLMEngineState) => ({
+      ...prev,
+      status: "opt_in",
+      progress: 0,
+      errorMessage: null,
+      autoLoading: false,
+    }));
+  }, []);
+
+  const enterRequiresModel = useCallback(() => {
+    // AIArchitectPanel detected cached models but no selected model — enter requires_model state
+    setEngineState((prev: LLMEngineState) => ({
+      ...prev,
+      status: "requires_model",
+    }));
   }, []);
 
   const clearError = useCallback(() => {
@@ -578,9 +623,39 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     [],
   );
 
+  const hasAnyCachedModel = useCallback(async (): Promise<boolean> => {
+    const adapter = adapterRef.current;
+    if (!adapter) return false;
+
+    try {
+      const results = await Promise.all(
+        LOCAL_MODELS.map(async (model) => {
+          try {
+            return await adapter.hasModelInCache(model.modelId);
+          } catch {
+            return false;
+          }
+        }),
+      );
+      return results.some((isCached) => isCached);
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Effect 1: Wire adapters and run WebGPU detection on mount.
   useEffect(() => {
     setMounted(true);
+
+    // Migration: users from before HAS_ENABLED_KEY was introduced only have AUTO_LOAD_KEY.
+    // Backfill HAS_ENABLED_KEY so the opted-in hold logic works for existing users.
+    if (
+      localStorage.getItem(AUTO_LOAD_KEY) === "true" &&
+      localStorage.getItem(HAS_ENABLED_KEY) === null
+    ) {
+      localStorage.setItem(HAS_ENABLED_KEY, "true");
+    }
+
     adapterRef.current = getLocalLLMProvider();
     webgpuRef.current = getWebGPUDetector();
 
@@ -674,12 +749,15 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         loadedModel,
         initializeModel,
         cancelDownload,
+        cancelFromRequiresModel,
+        enterRequiresModel,
         sendMessage,
         sendGovernanceMessage,
         clearError,
         switchModel,
         deleteCachedModel,
         hasModelInCache,
+        hasAnyCachedModel,
       }}
     >
       {children}
@@ -694,12 +772,15 @@ const DEFAULT_LLM_VALUE: LocalLLMContextValue = {
   loadedModel: null,
   initializeModel: async () => {},
   cancelDownload: () => {},
+  cancelFromRequiresModel: () => {},
+  enterRequiresModel: () => {},
   sendMessage: async () => {},
   sendGovernanceMessage: async () => {},
   clearError: () => {},
   switchModel: async () => {},
   deleteCachedModel: async () => {},
   hasModelInCache: async () => false,
+  hasAnyCachedModel: async () => false,
 };
 
 export function useLocalLLM(): LocalLLMContextValue {

@@ -22,15 +22,33 @@ function useTabsContext(): TabsContextValue {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 interface RootProps {
-  defaultTab: string;
+  defaultTab?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
   children: ReactNode;
   className?: string;
 }
 
-function Root({ defaultTab, children, className }: RootProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab);
+function Root({
+  defaultTab,
+  value,
+  onValueChange,
+  children,
+  className,
+}: RootProps) {
+  const [internalTab, setInternalTab] = useState(defaultTab ?? "");
+  const activeTab = value ?? internalTab;
+  const handleSetActiveTab = (tab: string) => {
+    if (onValueChange) {
+      onValueChange(tab);
+    } else {
+      setInternalTab(tab);
+    }
+  };
   return (
-    <TabsContext.Provider value={{ activeTab, setActiveTab }}>
+    <TabsContext.Provider
+      value={{ activeTab, setActiveTab: handleSetActiveTab }}
+    >
       <div className={cn("flex flex-col h-full", className)}>{children}</div>
     </TabsContext.Provider>
   );

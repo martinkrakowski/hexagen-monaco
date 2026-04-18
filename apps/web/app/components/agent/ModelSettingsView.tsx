@@ -16,6 +16,8 @@ interface ModelSettingsViewProps {
   onBack: () => void;
   isLoading: boolean;
   onSwitchToCloud?: () => void;
+  requiresModelWarning?: boolean;
+  onCancelSetup?: () => void;
 }
 
 interface ModelCacheStatus {
@@ -34,6 +36,8 @@ export function ModelSettingsView({
   onBack,
   isLoading,
   onSwitchToCloud,
+  requiresModelWarning,
+  onCancelSetup,
 }: ModelSettingsViewProps) {
   const [cacheStatus, setCacheStatus] = useState<
     Map<DomainModelId, ModelCacheStatus>
@@ -187,6 +191,28 @@ export function ModelSettingsView({
           Select and manage AI models
         </p>
       </div>
+
+      {/* Warning Banner when no model is loaded */}
+      {requiresModelWarning && (
+        <div className="mb-4 mx-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+          <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-1.5">
+            A model is required
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
+            Please select a model to continue. The previous download was
+            cancelled or interrupted.
+          </p>
+          {onCancelSetup && (
+            <button
+              type="button"
+              onClick={onCancelSetup}
+              className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200 underline"
+            >
+              Cancel Setup
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
