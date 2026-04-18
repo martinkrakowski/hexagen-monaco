@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { WizardData } from "@hexagen/shared";
+import type { DomainModelId } from "@hexagen/local-llm";
 import { useGovernanceAssistant } from "@/hooks/use-governance-assistant";
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import {
@@ -371,14 +372,42 @@ function AnswerArea({ content }: { content: string }) {
   );
 }
 
-function PanelFooter() {
+function PanelFooter({
+  modelId,
+  onOpenSettings,
+  isLoading,
+  onRefresh,
+}: {
+  modelId: DomainModelId | null;
+  onOpenSettings: () => void;
+  isLoading: boolean;
+  onRefresh: () => void;
+}) {
   return (
     <div className="flex-shrink-0 px-5 py-3 border-t border-card-border bg-card">
-      <div className="flex items-center gap-2">
-        <Info size={12} className="text-muted-foreground/60" />
-        <p className="text-[11px] text-muted-foreground/60">
-          Click a question to get an AI-powered answer
-        </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Info size={12} className="text-muted-foreground/60" />
+          <p className="text-[11px] text-muted-foreground/60">
+            Click a question to get an AI-powered answer
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ModelFooterIndicator
+            modelId={modelId}
+            onOpenSettings={onOpenSettings}
+            isLoading={isLoading}
+          />
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
+            title="Refresh checks"
+          >
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -576,44 +605,6 @@ export function GovernanceAssistantPanel({
 
   return (
     <div className="h-full flex flex-col bg-card">
-      <div className="px-5 pt-5 pb-4 flex-shrink-0">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-              <ShieldCheck size={14} className="text-primary" strokeWidth={2} />
-            </div>
-            <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
-              Governance
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <ModelFooterIndicator
-              modelId={llmEngineState.loadedModelId}
-              onOpenSettings={() => setPanelView("model-settings")}
-              isLoading={
-                llmEngineState.status === "downloading" ||
-                llmEngineState.status === "loading_vram"
-              }
-            />
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isLoading}
-              className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
-              title="Refresh checks"
-            >
-              <RefreshCw
-                size={14}
-                className={isLoading ? "animate-spin" : ""}
-              />
-            </button>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground font-normal pl-[38px]">
-          Governance Assistant
-        </p>
-      </div>
-      <GradientDivider />
       <StepPills currentStepIndex={currentStepIndex} />
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5">
@@ -675,7 +666,15 @@ export function GovernanceAssistantPanel({
         )}
       </div>
 
-      <PanelFooter />
+      <PanelFooter
+        modelId={llmEngineState.loadedModelId}
+        onOpenSettings={() => setPanelView("model-settings")}
+        isLoading={
+          llmEngineState.status === "downloading" ||
+          llmEngineState.status === "loading_vram"
+        }
+        onRefresh={onRefresh}
+      />
     </div>
   );
 }
