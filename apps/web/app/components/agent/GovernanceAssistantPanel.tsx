@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { motion } from "framer-motion";
 import type { WizardData } from "@hexagen/shared";
 import type { DomainModelId, GovernanceEntry } from "@hexagen/local-llm";
 import { useGovernanceAssistant } from "@/hooks/use-governance-assistant";
@@ -268,6 +269,34 @@ function SuggestionItem({
   );
 }
 
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-1.5 py-3">
+      <motion.p
+        className="text-xs text-muted-foreground"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        Thinking
+      </motion.p>
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="block w-1 h-1 rounded-full bg-primary/60"
+          animate={{ opacity: [0.3, 1, 0.3] }}
+          transition={{
+            duration: 1.2,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: i * 0.2,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function QuestionAccordion({
   question,
   isExpanded,
@@ -288,10 +317,10 @@ function QuestionAccordion({
         onClick={onToggle}
         disabled={disabled}
         className={[
-          "group w-full text-left rounded-xl border p-3.5 transition-all hover:-translate-y-px",
+          "group w-full text-left border p-3.5 transition-all hover:-translate-y-px",
           isExpanded
-            ? "border-primary/30 bg-primary/[0.08]"
-            : "border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
+            ? "rounded-t-xl rounded-b-none border-primary/30 bg-primary/[0.08]"
+            : "rounded-xl border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
           disabled && "opacity-50 cursor-not-allowed",
         ].join(" ")}
       >
@@ -839,6 +868,12 @@ export function GovernanceAssistantPanel({
                 >
                   {threadLoaded && (
                     <>
+                      {isStreaming &&
+                        conversationThread.length > 0 &&
+                        !conversationThread[conversationThread.length - 1]
+                          .answer &&
+                        !lastAssistantMessage && <ThinkingIndicator />}
+
                       {conversationThread.length > 0 && (
                         <div className="space-y-4 mb-4">
                           {conversationThread.map((entry, i) => {
