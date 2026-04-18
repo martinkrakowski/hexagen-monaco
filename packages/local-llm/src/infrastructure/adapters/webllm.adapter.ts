@@ -353,43 +353,81 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       return err(new Error(`Unknown model ID: ${String(modelId)}`));
     }
 
-    const worker = this.worker;
-    if (worker && !this._disposed) {
-      return new Promise((resolve) => {
-        const timeoutId = setTimeout(() => {
-          worker.removeEventListener("message", handler);
-          resolve(err(new Error("Delete model cache timed out after 60s")));
-        }, 60000);
+    // Prefer the active worker (deleted before dispose, so worker is alive).
+    const activeWorker = !this._disposed ? this.worker : null;
+    if (activeWorker) {
+      return this.deleteViaWorker(activeWorker, mlcModelId);
+    }
 
-        const handler = (e: MessageEvent) => {
-          if (
-            e.data?.type === "delete-cached-model-result" &&
-            e.data?.data?.modelId === mlcModelId
-          ) {
-            clearTimeout(timeoutId);
-            worker.removeEventListener("message", handler);
-            if (e.data?.data?.error) {
-              resolve(err(new Error(e.data.data.error)));
-            } else {
-              resolve(ok(undefined));
-            }
-          }
-        };
-        worker.addEventListener("message", handler);
-        worker.postMessage({
-          type: "delete-cached-model",
-          data: { modelId: mlcModelId },
+    // No active worker (e.g. model was never loaded this session, or adapter
+    // was disposed before this call). Spin up a temporary worker so we always
+    // go through the same reliable worker message path instead of the
+    // direct-import path, which can hang on an upstream network fetch inside
+    // deleteModelAllInfoInCache / deleteTensorCache.
+    const { createWorker } = this.config;
+    if (createWorker) {
+      const tempWorker = createWorker();
+      try {
+        return await this.deleteViaWorker(tempWorker, mlcModelId);
+      } finally {
+        tempWorker.terminate();
+      }
+    }
+
+    // Last-resort fallback when no worker factory is configured (e.g. tests).
+    // Guarded by a 60-second timeout so it can never hang indefinitely.
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        resolve(err(new Error("Delete model cache timed out after 60s")));
+      }, 60000);
+
+      import("@mlc-ai/web-llm")
+        .then(({ deleteModelAllInfoInCache }) =>
+          deleteModelAllInfoInCache(mlcModelId),
+        )
+        .then(() => {
+          clearTimeout(timeoutId);
+          resolve(ok(undefined));
+        })
+        .catch((error: unknown) => {
+          clearTimeout(timeoutId);
+          resolve(
+            err(error instanceof Error ? error : new Error(String(error))),
+          );
         });
-      });
-    }
+    });
+  }
 
-    try {
-      const { deleteModelAllInfoInCache } = await import("@mlc-ai/web-llm");
-      await deleteModelAllInfoInCache(mlcModelId);
-      return ok(undefined);
-    } catch (error) {
-      return err(error instanceof Error ? error : new Error(String(error)));
-    }
+  private deleteViaWorker(
+    worker: Worker,
+    mlcModelId: string,
+  ): Promise<Result<void>> {
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        worker.removeEventListener("message", handler);
+        resolve(err(new Error("Delete model cache timed out after 60s")));
+      }, 60000);
+
+      const handler = (e: MessageEvent) => {
+        if (
+          e.data?.type === "delete-cached-model-result" &&
+          e.data?.data?.modelId === mlcModelId
+        ) {
+          clearTimeout(timeoutId);
+          worker.removeEventListener("message", handler);
+          if (e.data?.data?.error) {
+            resolve(err(new Error(e.data.data.error)));
+          } else {
+            resolve(ok(undefined));
+          }
+        }
+      };
+      worker.addEventListener("message", handler);
+      worker.postMessage({
+        type: "delete-cached-model",
+        data: { modelId: mlcModelId },
+      });
+    });
   }
 
   dispose(): void {
