@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import type { WizardData } from "@hexagen/shared";
-import type { DomainModelId } from "@hexagen/local-llm";
+import type { DomainModelId, GovernanceEntry } from "@hexagen/local-llm";
 import { useGovernanceAssistant } from "@/hooks/use-governance-assistant";
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import {
@@ -10,7 +10,6 @@ import {
   type AISuggestion,
   type PrebakedQuestion,
 } from "@/lib/governance-question-templates";
-import type { ConversationEntry } from "@/hooks/use-governance-assistant";
 import {
   Check,
   ChevronDown,
@@ -394,7 +393,7 @@ function ThreadEntry({
   isCurrentlyStreaming,
   streamingContent,
 }: {
-  entry: ConversationEntry;
+  entry: GovernanceEntry;
   isCurrentlyStreaming: boolean;
   streamingContent: string;
 }) {

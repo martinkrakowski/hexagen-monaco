@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import type { WizardData } from "@hexagen/shared";
-import type { LLMMessage } from "@hexagen/local-llm";
+import type { LLMMessage, GovernanceEntry } from "@hexagen/local-llm";
 import { useLocalLLM } from "./use-local-llm";
+import { getChatPersistence } from "@/lib/wire";
 import {
   type Violation,
   type AISuggestion,
@@ -28,11 +29,8 @@ const GOVERNANCE_SYSTEM_PROMPT =
 /** Cap conversation history to last N messages (user+assistant pairs) to stay within small-model context budgets. */
 const MAX_HISTORY_MESSAGES = 4;
 
-export interface ConversationEntry {
-  id: string;
-  questionLabel: string;
-  answer: string;
-}
+// Re-export for backward compatibility — ConversationEntry is now GovernanceEntry from domain
+export type ConversationEntry = GovernanceEntry;
 
 export type ActiveItem =
   | { type: "violation"; item: Violation }
@@ -72,6 +70,17 @@ export function useGovernanceAssistant(
   const stepQuestions = useMemo<PrebakedQuestion[]>(() => {
     return STEP_QUESTIONS[currentStepId] ?? [];
   }, [currentStepId]);
+
+  /**
+   * Derive storage key for the current governance context.
+   * Keys are scoped to step or violation/suggestion to avoid cross-context pollution.
+   */
+  const contextKey = useMemo<string>(() => {
+    if (activeItem) {
+      return `${activeItem.type}:${activeItem.item.id}`;
+    }
+    return `step:${currentStepId}`;
+  }, [activeItem, currentStepId]);
 
   const selectItem = useCallback((item: ActiveItem) => {
     setActiveItem(item);
@@ -159,12 +168,53 @@ export function useGovernanceAssistant(
     wasStreamingRef.current = isStreaming;
   }, [isStreaming, messages]);
 
-  // Clear conversation thread and history when context changes
+  // Load/refresh conversation thread and history when context changes.
+  // Also rebuilds governanceHistoryRef from loaded thread entries.
   useEffect(() => {
-    setConversationThread([]);
-    governanceHistoryRef.current = [];
-    pendingQuestionLabelRef.current = null;
-  }, [currentStepIndex, activeItem]);
+    const port = getChatPersistence();
+    port
+      .loadGovernanceThread(contextKey)
+      .then((result) => {
+        if (result.success) {
+          setConversationThread(result.value);
+          // Rebuild governanceHistoryRef from loaded thread entries
+          const rebuilt: LLMMessage[] = [];
+          for (const entry of result.value) {
+            rebuilt.push(
+              { role: "user", content: entry.questionLabel },
+              { role: "assistant", content: entry.answer },
+            );
+          }
+          governanceHistoryRef.current = rebuilt;
+        } else {
+          // Load failed — start fresh
+          setConversationThread([]);
+          governanceHistoryRef.current = [];
+        }
+        pendingQuestionLabelRef.current = null;
+      })
+      .catch(() => {
+        // Non-fatal — start fresh if load fails
+        setConversationThread([]);
+        governanceHistoryRef.current = [];
+        pendingQuestionLabelRef.current = null;
+      });
+  }, [contextKey]);
+
+  // Persist governance thread after finalization.
+  // Saves when: streaming completes, thread has been loaded, and there are entries.
+  useEffect(() => {
+    if (isStreaming || conversationThread.length === 0) return;
+
+    const port = getChatPersistence();
+    port.saveGovernanceThread(contextKey, conversationThread).catch(() => {
+      // Non-fatal — allow app to proceed even if save fails
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Failed to persist governance thread for context: ${contextKey}`,
+      );
+    });
+  }, [contextKey, isStreaming, conversationThread]);
 
   const getQuestions = useCallback((): PrebakedQuestion[] => {
     if (!activeItem) return [];
