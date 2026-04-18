@@ -11,9 +11,56 @@ import type {
   LLMProgressCallback,
   ModelMetadata,
 } from "../../domain/value-objects/index.js";
-import { DEFAULT_MODEL_ID } from "../../domain/value-objects/model-id.vo.js";
-import { MODEL_METADATA_MAP } from "../../domain/value-objects/model-metadata.vo.js";
-import { domainIdToMlcId, mlcIdToDomainId } from "./webllm-model-mapper.js";
+
+/**
+ * MLC engine IDs inline — no separate mapper module, no new import chain.
+ * Keeps the adapter self-contained and avoids any module-resolution edge cases
+ * in the browser bundle.
+ */
+const MLC_IDS: Record<string, string> = {
+  "qwen-2.5-3b": "Qwen2.5-3B-Instruct-q4f16_1-MLC",
+  "smollm2-1.7b": "SmolLM2-1.7B-Instruct-q4f32_1-MLC",
+  "phi-3-mini": "Phi-3-mini-4k-instruct-q4f16_1-MLC",
+};
+
+const MODEL_METADATA: Record<
+  string,
+  {
+    vendor: string;
+    parameterSize: string;
+    quantizeLevel: string;
+    contextLength: number;
+    vocabularySize: number;
+    recommendedTemperature: number;
+  }
+> = {
+  "qwen-2.5-3b": {
+    vendor: "Alibaba",
+    parameterSize: "3B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 32768,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.6,
+  },
+  "smollm2-1.7b": {
+    vendor: "HuggingFace",
+    parameterSize: "1.7B",
+    quantizeLevel: "q4f32_1",
+    contextLength: 8192,
+    vocabularySize: 49152,
+    recommendedTemperature: 0.6,
+  },
+  "phi-3-mini": {
+    vendor: "Microsoft",
+    parameterSize: "3.8B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 4096,
+    vocabularySize: 32064,
+    recommendedTemperature: 0.7,
+  },
+};
+
+const DEFAULT_DOMAIN_MODEL_ID = "qwen-2.5-3b";
 
 export interface WebLLMAdapterConfig {
   defaultModelId?: DomainModelId;
@@ -41,7 +88,8 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
   constructor(config: WebLLMAdapterConfig = {}) {
     this.config = {
-      defaultModelId: config.defaultModelId ?? DEFAULT_MODEL_ID,
+      defaultModelId:
+        config.defaultModelId ?? (DEFAULT_DOMAIN_MODEL_ID as DomainModelId),
       createWorker: config.createWorker,
     };
   }
@@ -63,7 +111,10 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
       this.progressCallback = onProgress;
       const domainModelId = config.modelId || this.config.defaultModelId!;
-      const mlcModelId = domainIdToMlcId(domainModelId);
+      const mlcModelId = MLC_IDS[domainModelId as string];
+      if (!mlcModelId) {
+        return err(new Error(`Unknown model ID: ${String(domainModelId)}`));
+      }
 
       this.worker = createWorker();
 
@@ -257,7 +308,9 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
   getLoadedModel(): ModelMetadata | null {
     if (!this.loadedModelId) return null;
-    return MODEL_METADATA_MAP[this.loadedModelId] ?? null;
+    const meta = MODEL_METADATA[this.loadedModelId as string];
+    if (!meta) return null;
+    return { modelId: this.loadedModelId, ...meta };
   }
 
   async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
@@ -267,7 +320,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         return;
       }
 
-      const mlcModelId = domainIdToMlcId(modelId);
+      const mlcModelId = MLC_IDS[modelId as string];
 
       const timeoutId = setTimeout(() => {
         this.worker?.removeEventListener("message", handler);
@@ -299,7 +352,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         return;
       }
 
-      const mlcModelId = domainIdToMlcId(modelId);
+      const mlcModelId = MLC_IDS[modelId as string];
 
       const timeoutId = setTimeout(() => {
         this.worker?.removeEventListener("message", handler);
