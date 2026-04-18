@@ -540,12 +540,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       const adapter = adapterRef.current;
       if (!adapter) return;
 
-      try {
-        await adapter.deleteCachedModel(modelId);
-      } catch {
-        // Non-fatal — model cache may already be gone
-      }
-
       if (modelId === engineState.loadedModelId) {
         adapter.dispose();
         setMessages([]);
@@ -559,6 +553,11 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           errorMessage: null,
           autoLoading: false,
         }));
+      }
+
+      const result = await adapter.deleteCachedModel(modelId);
+      if (!result.success) {
+        throw result.error;
       }
     },
     [engineState.loadedModelId],

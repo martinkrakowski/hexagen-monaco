@@ -17,6 +17,7 @@ export type FakeLocalLLMProviderConfig = {
   loadedModelMetadata?: ModelMetadata | null;
   streamChunks?: string[];
   streamError?: Error;
+  deleteCachedModelResult?: Result<void>;
 };
 
 export class FakeLocalLLMProviderPort implements LocalLLMProviderPort {
@@ -99,9 +100,11 @@ export class FakeLocalLLMProviderPort implements LocalLLMProviderPort {
     return true;
   }
 
-  async deleteCachedModel(modelId: DomainModelId): Promise<void> {
-    // Fake implementation: no-op
-    return;
+  async deleteCachedModel(modelId: DomainModelId): Promise<Result<void>> {
+    if (this.config.deleteCachedModelResult) {
+      return this.config.deleteCachedModelResult;
+    }
+    return ok(undefined);
   }
 
   dispose(): void {

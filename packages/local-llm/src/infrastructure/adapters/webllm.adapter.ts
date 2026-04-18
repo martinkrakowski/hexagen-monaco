@@ -85,6 +85,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   private progressCallback: LLMProgressCallback | null = null;
   private worker: Worker | null = null;
   private config: WebLLMAdapterConfig;
+  private _disposed = false;
 
   constructor(config: WebLLMAdapterConfig = {}) {
     this.config = {
@@ -116,6 +117,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         return err(new Error(`Unknown model ID: ${String(domainModelId)}`));
       }
 
+      this._disposed = false;
       this.worker = createWorker();
 
       return new Promise((resolve) => {
@@ -314,18 +316,18 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (!this.worker) {
-        resolve(false);
-        return;
-      }
+    const worker = this.worker;
+    if (!worker || this._disposed) {
+      return false;
+    }
 
+    return new Promise((resolve, reject) => {
       const mlcModelId = MLC_IDS[modelId as string];
 
       const timeoutId = setTimeout(() => {
-        this.worker?.removeEventListener("message", handler);
-        resolve(false);
-      }, 10000);
+        worker.removeEventListener("message", handler);
+        reject(new Error("hasModelInCache timed out after 60s"));
+      }, 60000);
 
       const handler = (e: MessageEvent) => {
         if (
@@ -333,48 +335,92 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
           e.data?.data?.modelId === mlcModelId
         ) {
           clearTimeout(timeoutId);
-          this.worker!.removeEventListener("message", handler);
+          worker.removeEventListener("message", handler);
           resolve(e.data?.data?.isCached === true);
         }
       };
-      this.worker.addEventListener("message", handler);
-      this.worker.postMessage({
+      worker.addEventListener("message", handler);
+      worker.postMessage({
         type: "has-model-in-cache",
         data: { modelId: mlcModelId },
       });
     });
   }
 
-  async deleteCachedModel(modelId: DomainModelId): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.worker) {
-        resolve();
-        return;
+  async deleteCachedModel(modelId: DomainModelId): Promise<Result<void>> {
+    const mlcModelId = MLC_IDS[modelId as string];
+    if (!mlcModelId) {
+      return err(new Error(`Unknown model ID: ${String(modelId)}`));
+    }
+
+    // Use a dedicated worker for deletion whenever possible. This keeps cache
+    // cleanup isolated from the live inference worker and avoids deleting a
+    // model while its engine is still loaded in the same worker.
+    const { createWorker } = this.config;
+    if (createWorker) {
+      const tempWorker = createWorker();
+      try {
+        return await this.deleteViaWorker(tempWorker, mlcModelId);
+      } finally {
+        tempWorker.terminate();
       }
+    }
 
-      const mlcModelId = MLC_IDS[modelId as string];
+    const activeWorker = !this._disposed ? this.worker : null;
+    if (activeWorker) {
+      return this.deleteViaWorker(activeWorker, mlcModelId);
+    }
 
+    // Last-resort fallback when no worker factory is configured (e.g. tests).
+    // Guarded by a 60-second timeout so it can never hang indefinitely.
+    return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
-        this.worker?.removeEventListener("message", handler);
-        reject(new Error("Delete model cache timed out"));
-      }, 10000);
+        resolve(err(new Error("Delete model cache timed out after 60s")));
+      }, 60000);
+
+      import("@mlc-ai/web-llm")
+        .then(({ deleteModelAllInfoInCache }) =>
+          deleteModelAllInfoInCache(mlcModelId),
+        )
+        .then(() => {
+          clearTimeout(timeoutId);
+          resolve(ok(undefined));
+        })
+        .catch((error: unknown) => {
+          clearTimeout(timeoutId);
+          resolve(
+            err(error instanceof Error ? error : new Error(String(error))),
+          );
+        });
+    });
+  }
+
+  private deleteViaWorker(
+    worker: Worker,
+    mlcModelId: string,
+  ): Promise<Result<void>> {
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        worker.removeEventListener("message", handler);
+        resolve(err(new Error("Delete model cache timed out after 60s")));
+      }, 60000);
 
       const handler = (e: MessageEvent) => {
         if (
           e.data?.type === "delete-cached-model-result" &&
-          e.data?.modelId === mlcModelId
+          e.data?.data?.modelId === mlcModelId
         ) {
           clearTimeout(timeoutId);
-          this.worker!.removeEventListener("message", handler);
-          if (e.data?.error) {
-            reject(new Error(e.data.error));
+          worker.removeEventListener("message", handler);
+          if (e.data?.data?.error) {
+            resolve(err(new Error(e.data.data.error)));
           } else {
-            resolve();
+            resolve(ok(undefined));
           }
         }
       };
-      this.worker.addEventListener("message", handler);
-      this.worker.postMessage({
+      worker.addEventListener("message", handler);
+      worker.postMessage({
         type: "delete-cached-model",
         data: { modelId: mlcModelId },
       });
@@ -382,6 +428,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   dispose(): void {
+    this._disposed = true;
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
