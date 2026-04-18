@@ -20,6 +20,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { OptInCard } from "./OptInCard";
@@ -98,11 +99,6 @@ function StepPills({ currentStepIndex }: { currentStepIndex: number }) {
   return (
     <div className="px-2 py-4 flex-shrink-0">
       <div className="flex items-center gap-1.5 mb-3">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
-          Current Step
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
         {WIZARD_STEP_LABELS.map((label, i) => {
           const isActive = i === currentStepIndex;
           const isCompleted = i < currentStepIndex;
@@ -121,7 +117,7 @@ function StepPills({ currentStepIndex }: { currentStepIndex: number }) {
               {isCompleted ? (
                 <Check size={10} strokeWidth={3} />
               ) : (
-                <span className="text-muted-foreground/60">{i + 1}</span>
+                <span className="text-[10px] font-semibold">{i + 1}</span>
               )}
               <span>{label}</span>
             </div>
@@ -132,8 +128,6 @@ function StepPills({ currentStepIndex }: { currentStepIndex: number }) {
   );
 }
 
-type StatusKind = "clear" | "warning" | "violation";
-
 function StatusSummaryCard({
   violations,
   suggestions,
@@ -141,52 +135,57 @@ function StatusSummaryCard({
   violations: Violation[];
   suggestions: AISuggestion[];
 }) {
-  const hasViolation = violations.length > 0;
-  const hasWarning = suggestions.length > 0;
-
-  let kind: StatusKind = "clear";
-  let title = "All clear";
-  let desc = "No violations or suggestions for this step.";
-
-  if (hasViolation) {
-    kind = "violation";
-    title = `${violations.length} violation${violations.length > 1 ? "s" : ""} found`;
-    desc = violations[0].message;
-  } else if (hasWarning) {
-    kind = "warning";
-    title = `${suggestions.length} suggestion${suggestions.length > 1 ? "s" : ""}`;
-    desc = suggestions[0].message;
-  }
-
-  const cardClasses =
-    kind === "violation"
-      ? "rounded-xl border border-destructive/15 bg-destructive/5 p-4"
-      : kind === "warning"
-        ? "rounded-xl border border-warning/15 bg-warning/5 p-4"
-        : "rounded-xl border border-card-border bg-muted/40 p-4";
-
-  const dotClasses =
-    kind === "violation"
-      ? "w-2 h-2 rounded-full bg-destructive animate-soft-pulse"
-      : kind === "warning"
-        ? "w-2 h-2 rounded-full bg-warning animate-soft-pulse"
-        : "w-2 h-2 rounded-full bg-success animate-soft-pulse";
+  const violationCount = violations.length;
+  const suggestionCount = suggestions.length;
+  const hasIssues = violationCount > 0 || suggestionCount > 0;
 
   return (
-    <div className={cardClasses}>
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex-shrink-0">
-          <div className={dotClasses} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium text-foreground leading-snug">
-            {title}
+    <div className="rounded-xl border border-border bg-muted/30 p-3.5">
+      <div className="flex items-center gap-2.5">
+        <div
+          className={[
+            "w-2 h-2 rounded-full",
+            hasIssues
+              ? "bg-destructive animate-soft-pulse"
+              : "bg-success animate-soft-pulse",
+          ].join(" ")}
+        />
+        <div>
+          <p className="text-xs font-medium text-foreground">
+            {hasIssues ? "Review Required" : "No Issues Found"}
           </p>
-          <p className="text-xs text-muted-foreground leading-relaxed mt-1">
-            {desc}
-          </p>
+          {hasIssues && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {violationCount > 0 && <span>{violationCount} violation(s)</span>}
+              {violationCount > 0 && suggestionCount > 0 && <span>, </span>}
+              {suggestionCount > 0 && (
+                <span>{suggestionCount} suggestion(s)</span>
+              )}
+            </p>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SectionLabel({
+  label,
+  icon: Icon = Plus,
+}: {
+  label: string;
+  icon?: React.ComponentType<{
+    size: number;
+    className: string;
+    strokeWidth?: number;
+  }>;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 mb-3">
+      <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
+        <Icon size={10} className="text-primary" strokeWidth={2.5} />
+      </div>
+      <h2 className="text-[13px] font-semibold text-foreground">{label}</h2>
     </div>
   );
 }
@@ -201,9 +200,9 @@ function ViolationItem({
   onSelect: () => void;
 }) {
   const severityColor = {
-    HIGH: "bg-destructive",
-    MEDIUM: "bg-warning",
-    LOW: "bg-info",
+    HIGH: "text-destructive",
+    MEDIUM: "text-warning",
+    LOW: "text-info",
   }[violation.severity];
 
   return (
@@ -211,24 +210,23 @@ function ViolationItem({
       type="button"
       onClick={onSelect}
       className={[
-        "w-full text-left rounded-xl border p-3 transition-all hover:-translate-y-px",
+        "w-full text-left rounded-lg border p-3 transition-all",
         isSelected
-          ? "border-primary/30 bg-primary/10 hover:bg-primary/15"
-          : "border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
+          ? "border-primary/30 bg-primary/[0.08]"
+          : "border-border bg-muted/20 hover:bg-muted/40",
       ].join(" ")}
     >
-      <div className="flex items-start gap-2.5">
-        <div
-          className={`mt-1 flex-shrink-0 w-2 h-2 rounded-full ${severityColor}`}
+      <div className="flex items-start gap-3">
+        <ShieldCheck
+          size={14}
+          className={`flex-shrink-0 mt-0.5 ${severityColor}`}
         />
         <div className="flex-1 min-w-0">
-          <p
-            className={`text-[13px] leading-snug transition-colors ${isSelected ? "text-primary font-medium" : "text-foreground/80"}`}
-          >
+          <p className="text-xs font-medium text-foreground leading-snug">
             {violation.message}
           </p>
           {violation.context && (
-            <p className="text-xs text-muted-foreground mt-1 truncate">
+            <p className="text-[11px] text-muted-foreground mt-1">
               {violation.context}
             </p>
           )}
@@ -252,129 +250,136 @@ function SuggestionItem({
       type="button"
       onClick={onSelect}
       className={[
-        "w-full text-left rounded-xl border p-3 transition-all hover:-translate-y-px",
+        "w-full text-left rounded-lg border p-3 transition-all",
         isSelected
-          ? "border-primary/30 bg-primary/10 hover:bg-primary/15"
-          : "border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
+          ? "border-primary/30 bg-primary/[0.08]"
+          : "border-border bg-muted/20 hover:bg-muted/40",
       ].join(" ")}
     >
-      <div className="flex items-start gap-2.5">
-        <Lightbulb className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3">
+        <Lightbulb size={14} className="flex-shrink-0 mt-0.5 text-accent" />
         <div className="flex-1 min-w-0">
-          <p
-            className={`text-[13px] leading-snug transition-colors ${isSelected ? "text-primary font-medium" : "text-foreground/80"}`}
-          >
+          <p className="text-xs font-medium text-foreground leading-snug">
             {suggestion.message}
           </p>
-          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-            <span>{suggestion.category}</span>
-            <span>•</span>
-            <span>{Math.round(suggestion.confidence * 100)}% confident</span>
-          </div>
         </div>
       </div>
     </button>
   );
 }
 
-function SectionLabel({
-  label,
-  icon: Icon = Plus,
+function QuestionAccordion({
+  question,
+  isExpanded,
+  onToggle,
+  disabled,
+  children,
 }: {
-  label: string;
-  icon?: React.ComponentType<{
-    size: number;
-    className: string;
-    strokeWidth: number;
-  }>;
+  question: PrebakedQuestion;
+  isExpanded: boolean;
+  onToggle: () => void;
+  disabled: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
-        <Icon size={10} className="text-primary" strokeWidth={2.5} />
-      </div>
-      <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
-        {label}
-      </span>
+    <div className="rounded-xl border border-border overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        className={[
+          "group w-full text-left rounded-xl border p-3.5 transition-all hover:-translate-y-px",
+          isExpanded
+            ? "border-primary/30 bg-primary/[0.08]"
+            : "border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
+          disabled && "opacity-50 cursor-not-allowed",
+        ].join(" ")}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={[
+              "mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
+              isExpanded
+                ? "bg-primary/20"
+                : "bg-muted-foreground/15 group-hover:bg-primary/15",
+            ].join(" ")}
+          >
+            <MessageSquare
+              size={11}
+              className={isExpanded ? "text-primary" : "text-muted-foreground"}
+              strokeWidth={2}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className={[
+                "text-[13px] leading-snug transition-colors mt-1",
+                isExpanded
+                  ? "text-primary font-medium"
+                  : "text-foreground/80 group-hover:text-foreground",
+              ].join(" ")}
+            >
+              {question.label}
+            </p>
+          </div>
+          <ChevronDown
+            size={12}
+            className={[
+              "mt-0.5 flex-shrink-0 transition-transform",
+              isExpanded
+                ? "rotate-180 text-primary"
+                : "text-muted-foreground/60 group-hover:text-muted-foreground",
+            ].join(" ")}
+          />
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="bg-muted/5 border-t border-border p-4">{children}</div>
+      )}
     </div>
   );
 }
 
-function QuestionCard({
-  label,
-  isActive,
-  onClick,
+function AnswerArea({
+  content,
+  isRegenerating,
+  onRegenerate,
+  entryId,
   disabled,
 }: {
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
+  content: string;
+  isRegenerating: boolean;
+  onRegenerate: (id: string) => void;
+  entryId: string;
   disabled: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        "group w-full text-left rounded-xl border p-3.5 transition-all hover:-translate-y-px",
-        isActive
-          ? "border-primary/30 bg-primary/[0.08]"
-          : "border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
-        disabled && "opacity-50 cursor-not-allowed",
-      ].join(" ")}
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className={[
-            "mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
-            isActive
-              ? "bg-primary/20"
-              : "bg-muted-foreground/15 group-hover:bg-primary/15",
-          ].join(" ")}
-        >
-          <MessageSquare
-            size={11}
-            className={isActive ? "text-primary" : "text-muted-foreground"}
-            strokeWidth={2}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p
-            className={[
-              "text-[13px] leading-snug transition-colors mt-1",
-              isActive
-                ? "text-primary font-medium"
-                : "text-foreground/80 group-hover:text-foreground",
-            ].join(" ")}
-          >
-            {label}
+    <div className="rounded-xl border border-primary/20 bg-primary/[0.06] p-4">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full bg-primary" />
+          <p className="text-[13px] font-medium text-foreground leading-snug">
+            AI Answer
           </p>
         </div>
-        <ChevronDown
-          size={12}
-          className={[
-            "mt-0.5 flex-shrink-0 transition-transform",
-            isActive
-              ? "rotate-180 text-primary"
-              : "text-muted-foreground/60 group-hover:text-muted-foreground",
-          ].join(" ")}
-        />
+        <button
+          type="button"
+          onClick={() => onRegenerate(entryId)}
+          disabled={disabled || isRegenerating}
+          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Regenerate this answer"
+        >
+          <RotateCcw size={12} strokeWidth={2} />
+        </button>
       </div>
-    </button>
-  );
-}
 
-function AnswerArea({ content }: { content: string }) {
-  return (
-    <div className="rounded-xl border border-primary/20 bg-primary/[0.06] p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-1 h-4 rounded-full bg-primary" />
-        <p className="text-[13px] font-medium text-foreground leading-snug">
-          AI Answer
-        </p>
-      </div>
-      {content ? (
+      {isRegenerating ? (
+        <div className="flex items-center gap-2">
+          <Loader2 size={12} className="animate-spin text-primary" />
+          <p className="text-xs text-foreground/60">Regenerating...</p>
+        </div>
+      ) : content ? (
         <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
           {content}
         </p>
@@ -392,10 +397,16 @@ function ThreadEntry({
   entry,
   isCurrentlyStreaming,
   streamingContent,
+  isRegenerating,
+  onRegenerate,
+  disabled,
 }: {
   entry: GovernanceEntry;
   isCurrentlyStreaming: boolean;
   streamingContent: string;
+  isRegenerating: boolean;
+  onRegenerate: (id: string) => void;
+  disabled: boolean;
 }) {
   const content = isCurrentlyStreaming ? streamingContent : entry.answer;
   return (
@@ -408,8 +419,41 @@ function ThreadEntry({
           {entry.questionLabel}
         </p>
       </div>
-      <AnswerArea content={content} />
+      <AnswerArea
+        content={content}
+        isRegenerating={isRegenerating}
+        onRegenerate={onRegenerate}
+        entryId={entry.id}
+        disabled={disabled}
+      />
     </div>
+  );
+}
+
+function FollowUpTag({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer",
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : "bg-muted/20 border border-card-border text-foreground/80 hover:bg-primary/5 hover:border-primary/25 hover:text-primary",
+      ].join(" ")}
+    >
+      <Sparkles size={10} />
+      {label}
+    </button>
   );
 }
 
@@ -492,6 +536,11 @@ export function GovernanceAssistantPanel({
     stepQuestions,
     engineState,
     isStreaming,
+    expandedQuestionId,
+    expandAccordion,
+    regeneratingEntryId,
+    regenerateAnswer,
+    threadLoaded,
   } = useGovernanceAssistant(wizardData, currentStepIndex);
   const {
     messages,
@@ -506,7 +555,6 @@ export function GovernanceAssistantPanel({
   } = useLocalLLM();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
-  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
@@ -540,9 +588,7 @@ export function GovernanceAssistantPanel({
     return "";
   }, [messages]);
 
-  // When model becomes ready after auto-navigation to settings (from
-  // requires_model), return to main so the user sees governance content
-  // instead of being stuck in settings they didn't explicitly open.
+  // When model becomes ready after auto-navigation to settings
   useEffect(() => {
     if (llmEngineState.status === "ready" && autoNavigatedToSettings.current) {
       setPanelView("main");
@@ -550,7 +596,7 @@ export function GovernanceAssistantPanel({
     }
   }, [llmEngineState.status]);
 
-  // Populate follow-up state from templates when streaming completes and there's at least one answer
+  // Populate follow-up state from templates when streaming completes
   useEffect(() => {
     if (isStreaming) return;
     const hasCompletedAnswer = conversationThread.some((e) => e.answer !== "");
@@ -559,7 +605,7 @@ export function GovernanceAssistantPanel({
     }
   }, [isStreaming, getFollowUpQuestions, conversationThread]);
 
-  // Clear follow-ups when context changes to prevent leakage
+  // Clear follow-ups when context changes
   useEffect(() => {
     setFollowUpQuestions([]);
   }, [currentStepIndex, activeItem]);
@@ -574,30 +620,21 @@ export function GovernanceAssistantPanel({
   const showError = status === "error";
   const showRequiresModel = status === "requires_model";
 
-  // localStorage is only available in the browser. During Next.js prerender
-  // (Node.js) typeof window === 'undefined', so isOptedIn defaults to false.
-  // In that case status is also "unavailable" (from LLM_ENGINE_INITIAL_STATE),
-  // so showBootSpinner fires via the status === "unavailable" branch — no mismatch.
   const isOptedIn =
     typeof window !== "undefined" &&
     localStorage.getItem(OPT_OUT_KEY) !== "true" &&
     (localStorage.getItem(HAS_ENABLED_KEY) !== null ||
       localStorage.getItem(AUTO_LOAD_KEY) === "true");
 
-  // Boot Guard + Opted-In Hold: show a spinner for opted-in users while the
-  // adapter is still initialising ("unavailable") or waiting for auto-load to
-  // start ("opt_in"). This prevents a 1-frame flash of the Enable Local AI card.
   const showBootSpinner =
     status === "unavailable" || (isOptedIn && status === "opt_in");
 
-  // Only show the OptInCard for genuine first-time users once the engine is
-  // in a stable opt_in state — never during the transient "unavailable" phase.
   const showOptIn = !isOptedIn && status === "opt_in";
 
   if (showBootSpinner) {
     return (
       <div className="flex h-full w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="animate-spin" size={20} />
       </div>
     );
   }
@@ -606,7 +643,9 @@ export function GovernanceAssistantPanel({
     return (
       <div className="h-full">
         <LifecycleCard onRefresh={onRefresh} isLoading={isLoading}>
-          <UnavailableCard status={status} />
+          <UnavailableCard
+            status={status as "no_webgpu" | "unsupported_browser"}
+          />
         </LifecycleCard>
       </div>
     );
@@ -635,28 +674,7 @@ export function GovernanceAssistantPanel({
     );
   }
 
-  if (showProgress) {
-    return (
-      <div className="h-full">
-        <LifecycleCard onRefresh={onRefresh} isLoading={isLoading}>
-          <ModelProgressCard
-            status={status}
-            progress={progress}
-            errorMessage={errorMessage}
-            onCancel={cancelDownload}
-            model={loadedModel}
-            modelId={
-              status === "downloading"
-                ? (llmEngineState.loadedModelId ?? undefined)
-                : undefined
-            }
-          />
-        </LifecycleCard>
-      </div>
-    );
-  }
-
-  if (showError) {
+  if (showProgress || showError) {
     return (
       <div className="h-full">
         <LifecycleCard onRefresh={onRefresh} isLoading={isLoading}>
@@ -674,12 +692,7 @@ export function GovernanceAssistantPanel({
   }
 
   const handleQuestionClick = (q: PrebakedQuestion) => {
-    setActiveQuestionId(q.id);
-    if (activeItem) {
-      askQuestion(q);
-    } else {
-      askStepQuestion(q);
-    }
+    expandAccordion(q.id);
   };
 
   const handleFollowUpClick = (q: PrebakedQuestion) => {
@@ -691,17 +704,11 @@ export function GovernanceAssistantPanel({
     }
   };
 
-  // When the engine explicitly requires a model, force-navigate to the settings
-  // view regardless of what panelView was last set to. This ensures cancel from
-  // a download always surfaces the settings picker rather than falling through
-  // to the governance content with no recovery path.
   if (showRequiresModel && panelView !== "model-settings") {
     setPanelView("model-settings");
     autoNavigatedToSettings.current = true;
   }
 
-  // If status changes away from ready (but NOT to requires_model, which is
-  // handled above), auto-navigate back to main so stale settings aren't shown.
   if (
     panelView === "model-settings" &&
     status !== "ready" &&
@@ -711,8 +718,6 @@ export function GovernanceAssistantPanel({
     autoNavigatedToSettings.current = false;
   }
 
-  // Show model settings view when: user manually opened it (ready), or the
-  // engine demands a model selection (requires_model).
   if (
     panelView === "model-settings" &&
     (status === "ready" || showRequiresModel)
@@ -815,53 +820,72 @@ export function GovernanceAssistantPanel({
           <SectionLabel
             label={activeItem ? "Item Questions" : "Step Questions"}
           />
-          <div className="space-y-2">
-            {displayQuestions.map((q) => (
-              <QuestionCard
-                key={q.id}
-                label={q.label}
-                isActive={activeQuestionId === q.id}
-                onClick={() => handleQuestionClick(q)}
-                disabled={isStreaming}
-              />
-            ))}
-          </div>
-        </div>
-
-        {conversationThread.length > 0 && (
-          <div className="mt-4 space-y-4">
-            {conversationThread.map((entry, i) => {
-              const isLast = i === conversationThread.length - 1;
+          <div className="space-y-3">
+            {displayQuestions.map((q) => {
+              const isExpanded = expandedQuestionId === q.id;
               const isCurrentlyStreaming =
-                isStreaming && isLast && !entry.answer;
+                isStreaming &&
+                isExpanded &&
+                conversationThread.length > 0 &&
+                !conversationThread[conversationThread.length - 1].answer;
+
               return (
-                <ThreadEntry
-                  key={entry.id}
-                  entry={entry}
-                  isCurrentlyStreaming={isCurrentlyStreaming}
-                  streamingContent={lastAssistantMessage}
-                />
+                <QuestionAccordion
+                  key={q.id}
+                  question={q}
+                  isExpanded={isExpanded}
+                  onToggle={() => handleQuestionClick(q)}
+                  disabled={isStreaming}
+                >
+                  {threadLoaded && (
+                    <>
+                      {conversationThread.length > 0 && (
+                        <div className="space-y-4 mb-4">
+                          {conversationThread.map((entry, i) => {
+                            const isRegenerating =
+                              regeneratingEntryId === entry.id;
+                            return (
+                              <ThreadEntry
+                                key={entry.id}
+                                entry={entry}
+                                isCurrentlyStreaming={
+                                  isCurrentlyStreaming &&
+                                  i === conversationThread.length - 1
+                                }
+                                streamingContent={lastAssistantMessage}
+                                isRegenerating={isRegenerating}
+                                onRegenerate={regenerateAnswer}
+                                disabled={isStreaming}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {followUpQuestions.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border/50">
+                          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60 mb-2">
+                            Follow-up Questions
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {followUpQuestions.map((q) => (
+                              <FollowUpTag
+                                key={q.id}
+                                label={q.label}
+                                onClick={() => handleFollowUpClick(q)}
+                                disabled={isStreaming}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </QuestionAccordion>
               );
             })}
           </div>
-        )}
-
-        {followUpQuestions.length > 0 && (
-          <div className="mt-4">
-            <SectionLabel label="Follow-up Questions" icon={Sparkles} />
-            <div className="space-y-2">
-              {followUpQuestions.map((q) => (
-                <QuestionCard
-                  key={q.id}
-                  label={q.label}
-                  isActive={false}
-                  onClick={() => handleFollowUpClick(q)}
-                  disabled={isStreaming}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
       <PanelFooter
