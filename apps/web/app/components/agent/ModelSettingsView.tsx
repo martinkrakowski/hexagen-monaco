@@ -167,7 +167,7 @@ export function ModelSettingsView({
   return (
     <div className="h-full flex flex-col bg-card">
       {/* Header */}
-      <div className="px-5 pt-5 pb-4 flex-shrink-0">
+      <div className="mb-4 px-2 py-3 flex-shrink-0 border-b border-border">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2.5">
             <button
@@ -188,7 +188,7 @@ export function ModelSettingsView({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
         {/* Current Model Section */}
         {currentModelId && (
           <div className="mb-6">
