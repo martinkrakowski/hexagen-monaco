@@ -276,11 +276,11 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       const handler = (e: MessageEvent) => {
         if (
           e.data?.type === "has-model-in-cache-result" &&
-          e.data?.modelId === modelId
+          e.data?.data?.modelId === modelId
         ) {
           clearTimeout(timeoutId);
           this.worker!.removeEventListener("message", handler);
-          resolve(e.data?.isCached === true);
+          resolve(e.data?.data?.isCached === true);
         }
       };
       this.worker.addEventListener("message", handler);
