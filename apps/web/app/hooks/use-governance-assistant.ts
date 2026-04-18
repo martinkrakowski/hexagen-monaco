@@ -174,13 +174,18 @@ export function useGovernanceAssistant(
   }, [activeItem]);
 
   const getFollowUpQuestions = useCallback((): PrebakedQuestion[] => {
+    const askedLabels = new Set(conversationThread.map((e) => e.questionLabel));
+    let candidates: PrebakedQuestion[];
     if (activeItem) {
-      return activeItem.type === "violation"
-        ? VIOLATION_FOLLOW_UPS
-        : SUGGESTION_FOLLOW_UPS;
+      candidates =
+        activeItem.type === "violation"
+          ? VIOLATION_FOLLOW_UPS
+          : SUGGESTION_FOLLOW_UPS;
+    } else {
+      candidates = STEP_FOLLOW_UPS[currentStepId] ?? [];
     }
-    return STEP_FOLLOW_UPS[currentStepId] ?? [];
-  }, [activeItem, currentStepId]);
+    return candidates.filter((q) => !askedLabels.has(q.label));
+  }, [activeItem, currentStepId, conversationThread]);
 
   return {
     activeItem,
