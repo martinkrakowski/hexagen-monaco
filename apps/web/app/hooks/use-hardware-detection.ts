@@ -37,8 +37,10 @@ export function useHardwareDetection() {
         setIsDetecting(false);
         return; // Use cached result
       }
-    } catch {
-      // Silently continue if cache read fails
+    } catch (err) {
+      // SessionStorage unavailable (private browsing, storage quota exceeded, etc.)
+      // Fall through to fresh detection — this is not a fatal error
+      console.warn("[useHardwareDetection] sessionStorage read failed:", err);
     }
 
     // Run detection if not cached
@@ -56,8 +58,13 @@ export function useHardwareDetection() {
               HARDWARE_PROFILE_CACHE_KEY,
               JSON.stringify(result.value),
             );
-          } catch {
-            // Silently continue if cache write fails (private browsing, etc.)
+          } catch (storageErr) {
+            // Cache write failure — detection succeeded, caching failed.
+            // Detection is the primary concern; log and continue.
+            console.warn(
+              "[useHardwareDetection] sessionStorage write failed:",
+              storageErr,
+            );
           }
         } else {
           setError(

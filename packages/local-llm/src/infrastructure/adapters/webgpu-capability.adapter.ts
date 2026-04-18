@@ -4,38 +4,38 @@ import type {
   WebGPUDetectorPort,
 } from "../../domain/ports/index.js";
 
-declare global {
-  interface Navigator {
-    gpu?: GPU;
-  }
+interface GPU {
+  requestAdapter(
+    options?: GPURequestAdapterOptions,
+  ): Promise<GPUAdapter | null>;
+}
 
-  interface GPU {
-    requestAdapter(
-      options?: GPURequestAdapterOptions,
-    ): Promise<GPUAdapter | null>;
-  }
+interface GPUAdapter {
+  requestDevice(): GPUDevice;
+  features: Iterable<string>;
+}
 
-  interface GPUAdapter {
-    requestDevice(): Promise<GPUDevice>;
-    features: Iterable<GPUFeatureName>;
-    limits: { maxBufferSize: number };
-  }
+interface GPUDevice {
+  features: Iterable<string>;
+  limits: {
+    maxTextureDimension2D: number;
+    maxBufferSize: number;
+  };
+}
 
-  interface GPUDevice extends GPUAdapter {
-    limits: { maxTextureDimension2D: number; maxBufferSize: number };
-  }
+interface GPURequestAdapterOptions {
+  powerPreference?: "default" | "high-performance" | "low-power";
+}
 
-  interface GPURequestAdapterOptions {
-    powerPreference?: "default" | "high-performance" | "low-power";
-  }
-
-  type GPUFeatureName = "shader-fp16" | string;
+interface NavigatorWithGPU {
+  gpu?: GPU;
 }
 
 export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
   async detect(): Promise<Result<WebGPUCapability>> {
     try {
-      if (typeof navigator === "undefined" || !navigator.gpu) {
+      const nav = navigator as NavigatorWithGPU;
+      if (typeof nav === "undefined" || !nav.gpu) {
         return {
           success: true,
           value: {
@@ -48,7 +48,7 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
         };
       }
 
-      const adapter = await navigator.gpu.requestAdapter({
+      const adapter = await nav.gpu.requestAdapter({
         powerPreference: "high-performance",
       });
 
@@ -66,8 +66,9 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
       }
 
       const device = await adapter.requestDevice();
-      const features = Array.from(device.features);
-      const supportsFP16 = features.includes("shader-fp16");
+
+      const adapterFeatures = Array.from(adapter.features);
+      const supportsFP16 = adapterFeatures.includes("shader-fp16");
 
       return {
         success: true,
@@ -88,6 +89,7 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
   }
 
   isSupported(): boolean {
-    return typeof navigator !== "undefined" && navigator.gpu !== undefined;
+    const nav = navigator as NavigatorWithGPU;
+    return typeof nav !== "undefined" && nav.gpu !== undefined;
   }
 }

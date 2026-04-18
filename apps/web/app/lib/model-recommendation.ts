@@ -68,8 +68,9 @@ export function recommendModel(
   // If maxBufferMB is unknown, skip VRAM filtering
   let vramConstrainedCandidates = candidates;
   if (profile.gpu.maxBufferMB !== null) {
+    const maxBufferMB = profile.gpu.maxBufferMB;
     const fittingByVram = candidates.filter(
-      (m) => m.vramRequiredMB <= profile.gpu.maxBufferMB!,
+      (m) => m.vramRequiredMB <= maxBufferMB,
     );
 
     // If some models fit, use only those

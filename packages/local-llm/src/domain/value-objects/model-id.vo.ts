@@ -1,3 +1,5 @@
+import { type Result, ok, err } from "@hexagen/shared";
+
 /**
  * DomainModelId: Domain-level model identifier
  *
@@ -5,8 +7,6 @@
  * any infrastructure implementation (e.g., WebLLM, cloud providers).
  *
  * Each variant below represents a unique model that the system can load.
- * The infrastructure adapter (webllm.adapter.ts) maps DomainModelId to
- * infrastructure-specific identifiers (e.g., MLC engine IDs).
  */
 
 export enum DomainModelId {
@@ -25,8 +25,8 @@ export enum DomainModelId {
 export const DEFAULT_MODEL_ID = DomainModelId.QWEN_CODER_3B;
 
 /**
- * Legacy model IDs that were removed and their migration targets
- * Used in use-local-llm.tsx Effect 2 to handle stale localStorage keys
+ * Legacy model IDs that were removed and their migration targets.
+ * Enables backward compatibility for users with persisted model IDs.
  */
 export const LEGACY_MODEL_MIGRATION: Record<string, DomainModelId> = {
   "qwen-2.5-3b": DomainModelId.QWEN_CODER_3B,
@@ -44,14 +44,13 @@ export function isDomainModelId(value: unknown): value is DomainModelId {
 /**
  * Parse a string into DomainModelId with error handling
  */
-export function parseDomainModelId(
-  value: unknown,
-): { success: true; value: DomainModelId } | { success: false; error: Error } {
+export function parseDomainModelId(value: unknown): Result<DomainModelId> {
   if (isDomainModelId(value)) {
-    return { success: true, value };
+    return ok(value);
   }
-  return {
-    success: false,
-    error: new Error(`Invalid DomainModelId: ${value}`),
-  };
+  const displayValue =
+    typeof value === "object" && value !== null
+      ? JSON.stringify(value)
+      : String(value);
+  return err(new Error(`Invalid DomainModelId: ${displayValue}`));
 }

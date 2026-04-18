@@ -31,7 +31,7 @@ export class BrowserHardwareProfilerAdapter implements HardwareProfilerPort {
       // 4. GPU capabilities
       const gpuInfo = await this.detectGpu();
 
-      const profile = createHardwareProfile(
+      const profileResult = createHardwareProfile(
         cpuCores,
         ramMB,
         gpuInfo.supported,
@@ -41,9 +41,16 @@ export class BrowserHardwareProfilerAdapter implements HardwareProfilerPort {
         deviceClass,
       );
 
+      if (!profileResult.success) {
+        return {
+          success: false,
+          error: profileResult.error,
+        };
+      }
+
       return {
         success: true,
-        value: profile,
+        value: profileResult.value,
       };
     } catch (error) {
       return {
@@ -81,18 +88,17 @@ export class BrowserHardwareProfilerAdapter implements HardwareProfilerPort {
       return "unknown";
     }
 
-    // Simple heuristic: if screen width < 768px, likely mobile
-    if (window.innerWidth < 768) {
+    // Use screen width (not viewport) for device classification.
+    // viewport width is affected by browser window size; screen width
+    // reflects the actual display resolution.
+    if (window.screen.width < 768) {
       return "mobile";
     }
 
     // Additional check: if touch is the primary input method
     const maxTouchPoints =
-      typeof navigator !== "undefined"
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (navigator as any).maxTouchPoints
-        : 0;
-    if (maxTouchPoints && maxTouchPoints > 0 && window.innerWidth < 1024) {
+      typeof navigator !== "undefined" ? (navigator.maxTouchPoints ?? 0) : 0;
+    if (maxTouchPoints > 0 && window.screen.width < 1024) {
       return "mobile";
     }
 

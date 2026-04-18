@@ -1,3 +1,5 @@
+import { type Result, ok, err } from "@hexagen/shared";
+
 /**
  * HardwareProfile: Browser hardware capabilities and constraints
  *
@@ -32,7 +34,21 @@ export interface HardwareProfile {
 }
 
 /**
- * Factory for HardwareProfile — defaults all null/unknown fields
+ * Deep-freeze a value recursively for use as a shared constant sentinel.
+ */
+function deepFreeze<T extends object>(value: T): Readonly<T> {
+  for (const key of Object.keys(value)) {
+    const prop = value[key as keyof T];
+    if (prop && typeof prop === "object") {
+      (value as Record<string, unknown>)[key] = deepFreeze(prop as object);
+    }
+  }
+  return Object.freeze(value) as Readonly<T>;
+}
+
+/**
+ * Factory for HardwareProfile with basic invariant validation.
+ * cpuCores must be >= 1. ramMB, if provided, must be > 0.
  */
 export function createHardwareProfile(
   cpuCores: number,
@@ -42,8 +58,17 @@ export function createHardwareProfile(
   gpuArchitecture: string | null = null,
   gpuMaxBufferMB: number | null = null,
   deviceClass: "desktop" | "mobile" | "unknown" = "unknown",
-): HardwareProfile {
-  return {
+): Result<HardwareProfile> {
+  if (!Number.isInteger(cpuCores) || cpuCores < 1) {
+    return err(
+      new Error(`cpuCores must be a positive integer, got ${cpuCores}`),
+    );
+  }
+  if (ramMB !== null && ramMB <= 0) {
+    return err(new Error(`ramMB must be positive, got ${ramMB}`));
+  }
+
+  const profile: HardwareProfile = {
     cpuCores,
     ramMB,
     gpu: {
@@ -54,12 +79,14 @@ export function createHardwareProfile(
     },
     deviceClass,
   };
+
+  return ok(profile);
 }
 
 /**
- * Conservative default for unknown hardware
+ * Conservative default for unknown hardware — frozen to prevent mutation.
  */
-export const UNKNOWN_HARDWARE: HardwareProfile = {
+export const UNKNOWN_HARDWARE: Readonly<HardwareProfile> = deepFreeze({
   cpuCores: 4,
   ramMB: null,
   gpu: {
@@ -69,4 +96,4 @@ export const UNKNOWN_HARDWARE: HardwareProfile = {
     maxBufferMB: null,
   },
   deviceClass: "unknown",
-};
+});

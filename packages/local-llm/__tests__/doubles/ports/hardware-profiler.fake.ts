@@ -1,4 +1,4 @@
-import { ok, type Result } from "@hexagen/shared";
+import { type Result } from "@hexagen/shared";
 import type { HardwareProfilerPort } from "../../../src/domain/ports/index.js";
 import type { HardwareProfile } from "../../../src/domain/value-objects/hardware-profile.vo.js";
 import { createHardwareProfile } from "../../../src/domain/value-objects/hardware-profile.vo.js";
@@ -34,7 +34,7 @@ export class FakeHardwareProfilerPort implements HardwareProfilerPort {
       };
     }
 
-    const profile = createHardwareProfile(
+    const profileResult = createHardwareProfile(
       this.config.cpuCores ?? 8,
       this.config.ramMB ?? 16 * 1024,
       this.config.gpuSupported ?? true,
@@ -44,6 +44,6 @@ export class FakeHardwareProfilerPort implements HardwareProfilerPort {
       this.config.deviceClass ?? "desktop",
     );
 
-    return ok(profile);
+    return profileResult;
   }
 }

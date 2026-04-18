@@ -11,6 +11,10 @@ import type {
   LLMProgressCallback,
   ModelMetadata,
 } from "../../domain/value-objects/index.js";
+import {
+  getModelMetadata,
+  MODEL_METADATA_MAP,
+} from "../../domain/value-objects/model-metadata.vo.js";
 
 /**
  * MLC engine IDs inline — no separate mapper module, no new import chain.
@@ -28,78 +32,6 @@ const MLC_IDS: Record<string, string> = {
   // Ultra-Light
   "llama-3.2-1b": "Llama-3.2-1B-Instruct-q4f16_1-MLC",
   "qwen-coder-0.5b": "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC",
-};
-
-const MODEL_METADATA: Record<
-  string,
-  {
-    vendor: string;
-    parameterSize: string;
-    quantizeLevel: string;
-    contextLength: number;
-    vocabularySize: number;
-    recommendedTemperature: number;
-  }
-> = {
-  // Desktop High-End
-  "qwen-coder-3b": {
-    vendor: "Alibaba",
-    parameterSize: "3B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 32768,
-    vocabularySize: 151936,
-    recommendedTemperature: 0.6,
-  },
-  "llama-3.2-3b": {
-    vendor: "Meta",
-    parameterSize: "3B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 8192,
-    vocabularySize: 128256,
-    recommendedTemperature: 0.6,
-  },
-  "phi-3.5-mini": {
-    vendor: "Microsoft",
-    parameterSize: "3.8B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 4096,
-    vocabularySize: 32064,
-    recommendedTemperature: 0.7,
-  },
-  // Desktop Compact
-  "gemma-2-2b": {
-    vendor: "Google",
-    parameterSize: "2B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 8192,
-    vocabularySize: 256000,
-    recommendedTemperature: 0.6,
-  },
-  "qwen-coder-1.5b": {
-    vendor: "Alibaba",
-    parameterSize: "1.5B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 4096,
-    vocabularySize: 151936,
-    recommendedTemperature: 0.6,
-  },
-  // Ultra-Light
-  "llama-3.2-1b": {
-    vendor: "Meta",
-    parameterSize: "1B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 8192,
-    vocabularySize: 128256,
-    recommendedTemperature: 0.6,
-  },
-  "qwen-coder-0.5b": {
-    vendor: "Alibaba",
-    parameterSize: "0.5B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 2048,
-    vocabularySize: 151936,
-    recommendedTemperature: 0.6,
-  },
 };
 
 const DEFAULT_DOMAIN_MODEL_ID = "qwen-coder-3b";
@@ -153,10 +85,17 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       }
 
       this.progressCallback = onProgress;
-      const domainModelId = config.modelId || this.config.defaultModelId!;
+      const domainModelId = config.modelId ?? this.config.defaultModelId!;
       const mlcModelId = MLC_IDS[domainModelId as string];
       if (!mlcModelId) {
         return err(new Error(`Unknown model ID: ${String(domainModelId)}`));
+      }
+
+      // Terminate any existing worker before creating a new one
+      // to avoid zombie workers and GPU resource leaks
+      if (this.worker) {
+        this.worker.terminate();
+        this.worker = null;
       }
 
       this._disposed = false;
@@ -352,9 +291,9 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
   getLoadedModel(): ModelMetadata | null {
     if (!this.loadedModelId) return null;
-    const meta = MODEL_METADATA[this.loadedModelId as string];
+    const meta = MODEL_METADATA_MAP[this.loadedModelId];
     if (!meta) return null;
-    return { modelId: this.loadedModelId, ...meta };
+    return meta;
   }
 
   async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
@@ -365,7 +304,11 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
     const activeWorker = !this._disposed ? this.worker : null;
     if (activeWorker) {
-      return this.probeCacheViaWorker(activeWorker, mlcModelId);
+      try {
+        return await this.probeCacheViaWorker(activeWorker, mlcModelId);
+      } catch {
+        return false;
+      }
     }
 
     const { createWorker } = this.config;
@@ -373,6 +316,8 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       const tempWorker = createWorker();
       try {
         return await this.probeCacheViaWorker(tempWorker, mlcModelId);
+      } catch {
+        return false;
       } finally {
         tempWorker.terminate();
       }

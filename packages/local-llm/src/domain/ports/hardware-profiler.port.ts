@@ -6,10 +6,6 @@ import type { HardwareProfile } from "../value-objects/hardware-profile.vo.js";
  *
  * This port abstracts hardware detection (CPU, RAM, GPU) so
  * the domain can remain independent of browser APIs.
- *
- * Implementations:
- * - BrowserHardwareProfilerAdapter: Uses navigator APIs
- * - FakeHardwareProfilerAdapter: For testing
  */
 export interface HardwareProfilerPort {
   /**
