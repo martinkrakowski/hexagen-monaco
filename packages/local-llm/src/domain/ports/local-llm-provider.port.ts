@@ -1,7 +1,8 @@
 import type { Result } from "@hexagen/shared";
 import type {
+  DomainModelId,
+  LLMInitializeConfig,
   LLMProgressCallback,
-  ModelConfig,
   ModelMetadata,
 } from "../value-objects/index.js";
 
@@ -11,7 +12,7 @@ export interface LLMMessage {
 }
 
 export interface LLMCompletionRequest {
-  model: string;
+  modelId: DomainModelId;
   messages: LLMMessage[];
   temperature?: number;
   maxTokens?: number;
@@ -25,7 +26,7 @@ export interface LLMCompletionRequest {
 
 export interface LLMCompletionResponse {
   id: string;
-  model: string;
+  modelId: DomainModelId;
   choices: Array<{
     message: LLMMessage;
     finishReason: string;
@@ -39,7 +40,7 @@ export interface LLMCompletionResponse {
 
 export interface LocalLLMProviderPort {
   initialize(
-    config: ModelConfig,
+    config: LLMInitializeConfig,
     onProgress: LLMProgressCallback,
   ): Promise<Result<void>>;
   complete(
@@ -52,13 +53,13 @@ export interface LocalLLMProviderPort {
    * Runs on the main thread — the adapter proxies this to the worker, which
    * has access to WebLLM's cache utility functions.
    */
-  hasModelInCache(modelId: string): Promise<boolean>;
+  hasModelInCache(modelId: DomainModelId): Promise<boolean>;
   /**
    * Delete all cached data for a model (weights + WASM + config).
    * After deletion, the model must be re-downloaded if selected again.
    * If the deleted model is currently loaded, the engine is also disposed.
    */
-  deleteCachedModel(modelId: string): Promise<void>;
+  deleteCachedModel(modelId: DomainModelId): Promise<void>;
   dispose(): void;
 }
 

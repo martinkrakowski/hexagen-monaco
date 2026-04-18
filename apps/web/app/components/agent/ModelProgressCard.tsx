@@ -1,6 +1,10 @@
 "use client";
 
-import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
+import type {
+  DomainModelId,
+  LLMEngineStatus,
+  ModelMetadata,
+} from "@hexagen/local-llm";
 import { getModelDescriptor } from "@/config/models";
 
 interface ModelProgressCardProps {
@@ -10,7 +14,7 @@ interface ModelProgressCardProps {
   onCancel?: () => void;
   onRetry?: () => void;
   model?: ModelMetadata | null;
-  modelId?: string;
+  modelId?: DomainModelId;
 }
 
 export function ModelProgressCard({

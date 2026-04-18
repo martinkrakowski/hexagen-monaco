@@ -13,8 +13,13 @@ import type {
   LocalLLMProviderPort,
   LLMMessage,
   LLMProgress,
+  DomainModelId,
 } from "@hexagen/local-llm";
-import { DEFAULT_MODEL_ID, DEFAULT_TUNING_CONFIG } from "@hexagen/local-llm";
+import {
+  DEFAULT_MODEL_ID,
+  DEFAULT_TUNING_CONFIG,
+  parseDomainModelId,
+} from "@hexagen/local-llm";
 import type { WebGPUDetectorPort } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
 import type {
@@ -35,7 +40,13 @@ import {
 } from "@/lib/grounded-prompt";
 import { useEditor } from "@/contexts/EditorContext";
 
-/** localStorage key persisted after a successful model load. */
+/**
+ * localStorage key for remembering the last-used model ID.
+ * Stores a DomainModelId enum value (e.g., "qwen-2.5-3b")
+ */
+const LAST_MODEL_KEY = "hexagen:local-llm:last-model";
+
+/** localStorage key for the auto-load flag. */
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 
 export interface ChatMessage {
@@ -50,7 +61,7 @@ interface LocalLLMContextValue {
   messages: ChatMessage[];
   isStreaming: boolean;
   loadedModel: ModelMetadata | null;
-  initializeModel: (modelId?: string) => Promise<void>;
+  initializeModel: (modelId?: DomainModelId) => Promise<void>;
   cancelDownload: () => void;
   sendMessage: (content: string) => Promise<void>;
   sendGovernanceMessage: (
@@ -58,9 +69,9 @@ interface LocalLLMContextValue {
     systemPrompt: string,
   ) => Promise<void>;
   clearError: () => void;
-  switchModel: (modelId: string) => Promise<void>;
-  deleteCachedModel: (modelId: string) => Promise<void>;
-  hasModelInCache: (modelId: string) => Promise<boolean>;
+  switchModel: (modelId: DomainModelId) => Promise<void>;
+  deleteCachedModel: (modelId: DomainModelId) => Promise<void>;
+  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
 }
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
@@ -161,7 +172,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   }, [messages]);
 
   const initializeModel = useCallback(
-    async (modelId?: string) => {
+    async (modelId?: DomainModelId) => {
       const adapter = adapterRef.current;
       if (!adapter) return;
       if (isInitializingRef.current) return;
@@ -205,9 +216,10 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           cancelPromise,
         ]);
       } catch {
-        // Cancelled — terminate the worker, reset to opt_in, clear the auto-load
-        // flag so a refresh doesn't re-trigger the failed/cancelled auto-init.
+        // Cancelled — terminate the worker, reset to opt_in, clear both flags
+        // so a refresh doesn't re-trigger the failed/cancelled auto-init.
         localStorage.removeItem(AUTO_LOAD_KEY);
+        localStorage.removeItem(LAST_MODEL_KEY);
         adapter.dispose();
         cancelInitRef.current = null;
         isInitializingRef.current = false;
@@ -224,8 +236,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       cancelInitRef.current = null;
 
       if (!initResult.success) {
-        // On error also clear the flag — prevents an auto-fail loop on next mount.
+        // On error also clear both flags — prevents an auto-fail loop on next mount.
         localStorage.removeItem(AUTO_LOAD_KEY);
+        localStorage.removeItem(LAST_MODEL_KEY);
         const webgpuSupported = webgpuRef.current?.isSupported() ?? false;
         const browserSupported = typeof OffscreenCanvas !== "undefined";
         setEngineState((prev: LLMEngineState) => ({
@@ -238,7 +251,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
               : String(initResult.error),
         }));
       } else {
+        // Success: store the last-used model ID and the auto-load flag
         localStorage.setItem(AUTO_LOAD_KEY, "true");
+        localStorage.setItem(LAST_MODEL_KEY, targetModelId);
         setEngineState((prev: LLMEngineState) => ({
           ...prev,
           status: "ready",
@@ -334,8 +349,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         { role: "user" as const, content },
       ];
 
+      const loadedModel = adapter.getLoadedModel();
       const stream = adapter.streamComplete({
-        model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
+        modelId: loadedModel?.modelId ?? DEFAULT_MODEL_ID,
         messages: historyMessages,
         temperature: DEFAULT_TUNING_CONFIG.temperature,
         maxTokens: DEFAULT_TUNING_CONFIG.maxTokens,
@@ -421,8 +437,9 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           { role: "user" as const, content },
         ];
 
+        const loadedModel = adapter.getLoadedModel();
         const stream = adapter.streamComplete({
-          model: adapter.getLoadedModel()?.modelId ?? DEFAULT_MODEL_ID,
+          modelId: loadedModel?.modelId ?? DEFAULT_MODEL_ID,
           messages: historyMessages,
           temperature: DEFAULT_TUNING_CONFIG.temperature,
           maxTokens: DEFAULT_TUNING_CONFIG.maxTokens,
@@ -477,6 +494,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
   const cancelDownload = useCallback(() => {
     localStorage.removeItem(AUTO_LOAD_KEY);
+    localStorage.removeItem(LAST_MODEL_KEY);
     if (cancelInitRef.current) {
       cancelInitRef.current();
       cancelInitRef.current = null;
@@ -488,7 +506,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   }, []);
 
   const switchModel = useCallback(
-    async (modelId: string) => {
+    async (modelId: DomainModelId) => {
       if (modelId === engineState.loadedModelId) return;
 
       const adapter = adapterRef.current;
@@ -503,6 +521,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       }
 
       localStorage.removeItem(AUTO_LOAD_KEY);
+      localStorage.removeItem(LAST_MODEL_KEY);
       setMessages([]);
       setLoadedModel(null);
       setEngineState((prev: LLMEngineState) => ({
@@ -519,7 +538,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   );
 
   const deleteCachedModel = useCallback(
-    async (modelId: string) => {
+    async (modelId: DomainModelId) => {
       const adapter = adapterRef.current;
       if (!adapter) return;
 
@@ -534,6 +553,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         setMessages([]);
         setLoadedModel(null);
         localStorage.removeItem(AUTO_LOAD_KEY);
+        localStorage.removeItem(LAST_MODEL_KEY);
         setEngineState((prev: LLMEngineState) => ({
           ...prev,
           status: "opt_in",
@@ -547,7 +567,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   );
 
   const hasModelInCache = useCallback(
-    async (modelId: string): Promise<boolean> => {
+    async (modelId: DomainModelId): Promise<boolean> => {
       const adapter = adapterRef.current;
       if (!adapter) return false;
 
@@ -605,8 +625,18 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     if (localStorage.getItem(AUTO_LOAD_KEY) !== "true") return;
 
     hasAttemptedAutoInitRef.current = true;
+
+    // Attempt to restore the last-used model, fall back to DEFAULT_MODEL_ID
+    const lastModelStr = localStorage.getItem(LAST_MODEL_KEY);
+    const lastModelParsed = lastModelStr
+      ? parseDomainModelId(lastModelStr)
+      : null;
+    const modelToLoad = lastModelParsed?.success
+      ? lastModelParsed.value
+      : DEFAULT_MODEL_ID;
+
     setEngineState((prev: LLMEngineState) => ({ ...prev, autoLoading: true }));
-    initializeModel();
+    initializeModel(modelToLoad);
   }, [engineState.status, initializeModel]);
 
   // Effect 3: Fetch governance context on mount (independent of model state).

@@ -2,22 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
-import type { ModelMetadata } from "@hexagen/local-llm";
+import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { ArrowLeft } from "lucide-react";
 
 interface ModelSettingsViewProps {
-  currentModelId: string | null;
+  currentModelId: DomainModelId | null;
   loadedModel: ModelMetadata | null;
   messagesLength: number;
-  onSwitchModel: (modelId: string) => Promise<void>;
-  onDeleteModel: (modelId: string) => Promise<void>;
-  hasModelInCache: (modelId: string) => Promise<boolean>;
+  onSwitchModel: (modelId: DomainModelId) => Promise<void>;
+  onDeleteModel: (modelId: DomainModelId) => Promise<void>;
+  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   onBack: () => void;
   isLoading: boolean;
 }
 
 interface ModelCacheStatus {
-  modelId: string;
+  modelId: DomainModelId;
   isCached: boolean;
   isChecking: boolean;
 }
@@ -32,11 +32,15 @@ export function ModelSettingsView({
   onBack,
   isLoading,
 }: ModelSettingsViewProps) {
-  const [cacheStatus, setCacheStatus] = useState<Map<string, ModelCacheStatus>>(
-    new Map(),
+  const [cacheStatus, setCacheStatus] = useState<
+    Map<DomainModelId, ModelCacheStatus>
+  >(new Map());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<DomainModelId | null>(
+    null,
   );
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
+  const [pendingSwitchId, setPendingSwitchId] = useState<DomainModelId | null>(
+    null,
+  );
   const [isSwitching, setIsSwitching] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -44,10 +48,10 @@ export function ModelSettingsView({
   // Query cache status for all models on mount
   useEffect(() => {
     const queryCacheStatus = async () => {
-      const newStatus = new Map<string, ModelCacheStatus>();
+      const newStatus = new Map<DomainModelId, ModelCacheStatus>();
       for (const model of LOCAL_MODELS) {
-        newStatus.set(model.id, {
-          modelId: model.id,
+        newStatus.set(model.modelId, {
+          modelId: model.modelId,
           isCached: false,
           isChecking: true,
         });
@@ -58,22 +62,22 @@ export function ModelSettingsView({
       const results = await Promise.all(
         LOCAL_MODELS.map(async (model) => {
           try {
-            const isCached = await hasModelInCache(model.id);
+            const isCached = await hasModelInCache(model.modelId);
             return {
-              modelId: model.id,
+              modelId: model.modelId,
               isCached,
             };
           } catch {
             // If query fails, assume not cached
             return {
-              modelId: model.id,
+              modelId: model.modelId,
               isCached: false,
             };
           }
         }),
       );
 
-      const finalStatus = new Map<string, ModelCacheStatus>();
+      const finalStatus = new Map<DomainModelId, ModelCacheStatus>();
       for (const result of results) {
         finalStatus.set(result.modelId, {
           modelId: result.modelId,
@@ -87,7 +91,7 @@ export function ModelSettingsView({
     queryCacheStatus();
   }, [hasModelInCache]);
 
-  const handleSelectModel = async (modelId: string) => {
+  const handleSelectModel = async (modelId: DomainModelId) => {
     if (modelId === currentModelId) {
       return;
     }
@@ -100,7 +104,7 @@ export function ModelSettingsView({
     await doSwitch(modelId);
   };
 
-  const doSwitch = async (modelId: string) => {
+  const doSwitch = async (modelId: DomainModelId) => {
     setIsSwitching(true);
     try {
       await onSwitchModel(modelId);
@@ -116,7 +120,7 @@ export function ModelSettingsView({
     }
   };
 
-  const handleDelete = async (modelId: string) => {
+  const handleDelete = async (modelId: DomainModelId) => {
     setIsDeleting(true);
     setDeleteError(null);
     try {
@@ -152,7 +156,7 @@ export function ModelSettingsView({
     (s) => s.isCached,
   ).length;
   const totalCachedSize = LOCAL_MODELS.reduce((sum, model) => {
-    if (cacheStatus.get(model.id)?.isCached) {
+    if (cacheStatus.get(model.modelId)?.isCached) {
       return sum + model.downloadSizeGB;
     }
     return sum;
@@ -189,9 +193,11 @@ export function ModelSettingsView({
             <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
               Current Model
             </h2>
-            {LOCAL_MODELS.find((m) => m.id === currentModelId) && (
+            {LOCAL_MODELS.find((m) => m.modelId === currentModelId) && (
               <ModelCard
-                descriptor={LOCAL_MODELS.find((m) => m.id === currentModelId)!}
+                descriptor={
+                  LOCAL_MODELS.find((m) => m.modelId === currentModelId)!
+                }
                 isCurrent={true}
                 isPendingSwitch={false}
                 isConfirmDelete={false}
@@ -214,27 +220,28 @@ export function ModelSettingsView({
         )}
 
         {/* Available Models Section */}
-        {LOCAL_MODELS.filter((m) => m.id !== currentModelId).length > 0 && (
+        {LOCAL_MODELS.filter((m) => m.modelId !== currentModelId).length >
+          0 && (
           <div className="mb-6">
             <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
               Available Models
             </h2>
             <div className="space-y-3">
-              {LOCAL_MODELS.filter((m) => m.id !== currentModelId).map(
+              {LOCAL_MODELS.filter((m) => m.modelId !== currentModelId).map(
                 (descriptor) => (
                   <ModelCard
-                    key={descriptor.id}
+                    key={descriptor.modelId}
                     descriptor={descriptor}
                     isCurrent={false}
-                    isPendingSwitch={pendingSwitchId === descriptor.id}
-                    isConfirmDelete={confirmDeleteId === descriptor.id}
-                    cacheStatus={cacheStatus.get(descriptor.id)}
+                    isPendingSwitch={pendingSwitchId === descriptor.modelId}
+                    isConfirmDelete={confirmDeleteId === descriptor.modelId}
+                    cacheStatus={cacheStatus.get(descriptor.modelId)}
                     onSelectModel={handleSelectModel}
                     onDelete={() => {
-                      setConfirmDeleteId(descriptor.id);
+                      setConfirmDeleteId(descriptor.modelId);
                       setDeleteError(null);
                     }}
-                    onConfirmDelete={() => handleDelete(descriptor.id)}
+                    onConfirmDelete={() => handleDelete(descriptor.modelId)}
                     onCancelDelete={() => setConfirmDeleteId(null)}
                     isLoading={isLoading}
                     isSwitching={isSwitching}
@@ -256,11 +263,14 @@ export function ModelSettingsView({
             </p>
             <p className="text-[11px] text-muted-foreground mb-3">
               Switching will clear your current conversation with{" "}
-              {getModelDescriptor(currentModelId ?? "")?.displayName ??
-                "the current model"}
+              {currentModelId
+                ? getModelDescriptor(currentModelId)?.displayName
+                : "the current model"}
               . The new model (
-              {getModelDescriptor(pendingSwitchId)?.displayName}) will start
-              fresh.
+              {pendingSwitchId
+                ? getModelDescriptor(pendingSwitchId)?.displayName
+                : "the new model"}
+              ) will start fresh.
             </p>
             <div className="flex gap-2">
               <button
@@ -304,7 +314,7 @@ interface ModelCardProps {
   isPendingSwitch: boolean;
   isConfirmDelete: boolean;
   cacheStatus: ModelCacheStatus | undefined;
-  onSelectModel: (modelId: string) => Promise<void>;
+  onSelectModel: (modelId: DomainModelId) => Promise<void>;
   onDelete: () => void;
   onConfirmDelete: () => Promise<void>;
   onCancelDelete: () => void;
@@ -386,7 +396,7 @@ function ModelCard({
               </button>
             )}
             <button
-              onClick={() => onSelectModel(descriptor.id)}
+              onClick={() => onSelectModel(descriptor.modelId)}
               disabled={isLoading || isSwitching || isCurrent}
               className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
             >

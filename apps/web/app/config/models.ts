@@ -1,3 +1,5 @@
+import { DomainModelId } from "@hexagen/local-llm";
+
 /**
  * Local model registry for the web app.
  *
@@ -12,7 +14,7 @@
  */
 
 export interface ModelDescriptor {
-  id: string;
+  modelId: DomainModelId;
   displayName: string;
   shortName: string;
   downloadSizeGB: number;
@@ -22,7 +24,7 @@ export interface ModelDescriptor {
 
 export const LOCAL_MODELS: ModelDescriptor[] = [
   {
-    id: "Qwen2.5-3B-Instruct-q4f16_1-MLC",
+    modelId: DomainModelId.QWEN_2_5_3B,
     displayName: "Qwen 2.5 3B",
     shortName: "Qwen 2.5 3B",
     downloadSizeGB: 1.74,
@@ -31,7 +33,7 @@ export const LOCAL_MODELS: ModelDescriptor[] = [
       "Best for architectural guidance. Excellent instruction-following and reasoning across a 32K context. Recommended default.",
   },
   {
-    id: "SmolLM2-1.7B-Instruct-q4f32_1-MLC",
+    modelId: DomainModelId.SMOLLM2_1_7B,
     displayName: "SmolLM2 1.7B",
     shortName: "SmolLM2 1.7B",
     downloadSizeGB: 1.0,
@@ -40,7 +42,7 @@ export const LOCAL_MODELS: ModelDescriptor[] = [
       "Compact and fast. Good for quick guidance on lower-VRAM systems. Slightly more VRAM than Qwen due to q4f32 precision.",
   },
   {
-    id: "Phi-3-mini-4k-instruct-q4f16_1-MLC",
+    modelId: DomainModelId.PHI3_MINI,
     displayName: "Phi 3 Mini",
     shortName: "Phi 3 Mini",
     downloadSizeGB: 1.5,
@@ -51,11 +53,11 @@ export const LOCAL_MODELS: ModelDescriptor[] = [
 ];
 
 export function getModelDescriptor(
-  modelId: string,
+  modelId: DomainModelId,
 ): ModelDescriptor | undefined {
-  return LOCAL_MODELS.find((m) => m.id === modelId);
+  return LOCAL_MODELS.find((m) => m.modelId === modelId);
 }
 
-export function getModelShortName(modelId: string): string {
-  return getModelDescriptor(modelId)?.shortName ?? modelId.split("-")[0];
+export function getModelShortName(modelId: DomainModelId): string {
+  return getModelDescriptor(modelId)?.shortName ?? "Model";
 }

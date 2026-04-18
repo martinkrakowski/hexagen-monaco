@@ -1,18 +1,19 @@
 import type { Result } from "@hexagen/shared";
 import type { LocalLLMProviderPort } from "../../domain/ports/index.js";
 import type {
+  DomainModelId,
+  LLMInitializeConfig,
   LLMProgressCallback,
-  ModelConfig,
 } from "../../domain/value-objects/index.js";
 
 export interface InitializeModelInput {
-  config: ModelConfig;
+  config: LLMInitializeConfig;
   onProgress: LLMProgressCallback;
 }
 
 export interface InitializeModelOutput {
   initialized: boolean;
-  modelId: string;
+  modelId: DomainModelId;
   phase: string;
 }
 

@@ -1,3 +1,5 @@
+import { DomainModelId } from "./model-id.vo.js";
+
 export type LLMEngineStatus =
   | "unavailable"
   | "unsupported_browser"
@@ -11,7 +13,7 @@ export type LLMEngineStatus =
 export interface LLMEngineState {
   status: LLMEngineStatus;
   progress: number;
-  loadedModelId: string | null;
+  loadedModelId: DomainModelId | null;
   errorMessage: string | null;
   /** True while the engine is being auto-initialised on mount from a cached model. */
   autoLoading: boolean;
@@ -20,7 +22,7 @@ export interface LLMEngineState {
 export const createLLMEngineState = (
   status: LLMEngineStatus = "unavailable",
   progress = 0,
-  loadedModelId: string | null = null,
+  loadedModelId: DomainModelId | null = null,
   errorMessage: string | null = null,
   autoLoading = false,
 ): LLMEngineState => ({

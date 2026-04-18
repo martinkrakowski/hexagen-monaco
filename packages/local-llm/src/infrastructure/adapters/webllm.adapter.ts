@@ -5,15 +5,20 @@ import type {
   LLMCompletionResponse,
 } from "../../domain/ports/index.js";
 import type {
+  DomainModelId,
+  LLMInitializeConfig,
   LLMProgress,
   LLMProgressCallback,
-  ModelConfig,
   ModelMetadata,
 } from "../../domain/value-objects/index.js";
-import { DEFAULT_MODEL_ID } from "../../domain/value-objects/index.js";
+import {
+  DEFAULT_MODEL_ID,
+  MODEL_METADATA_MAP,
+} from "../../domain/value-objects/index.js";
+import { domainIdToMlcId, mlcIdToDomainId } from "./webllm-model-mapper.js";
 
 export interface WebLLMAdapterConfig {
-  defaultModelId?: string;
+  defaultModelId?: DomainModelId;
   /**
    * Factory that creates the WebLLM Worker.
    * In Next.js (webpack 5) supply this via new URL() so the worker is bundled:
@@ -31,7 +36,7 @@ type WorkerMessage =
   | { type: "error"; data: string };
 
 export class WebLLMAdapter implements LocalLLMProviderPort {
-  private loadedModelId: string | null = null;
+  private loadedModelId: DomainModelId | null = null;
   private progressCallback: LLMProgressCallback | null = null;
   private worker: Worker | null = null;
   private config: WebLLMAdapterConfig;
@@ -44,7 +49,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   async initialize(
-    config: ModelConfig,
+    config: LLMInitializeConfig,
     onProgress: LLMProgressCallback,
   ): Promise<Result<void>> {
     try {
@@ -59,7 +64,8 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       }
 
       this.progressCallback = onProgress;
-      const modelId = config.modelId || this.config.defaultModelId!;
+      const domainModelId = config.modelId || this.config.defaultModelId!;
+      const mlcModelId = domainIdToMlcId(domainModelId);
 
       this.worker = createWorker();
 
@@ -76,7 +82,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
               this.progressCallback(msg.data);
             }
           } else if (msg.type === "ready") {
-            this.loadedModelId = modelId;
+            this.loadedModelId = domainModelId;
             resolve(ok(undefined));
           } else if (msg.type === "error") {
             resolve(
@@ -86,7 +92,10 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
         };
 
         this.worker.addEventListener("message", messageHandler);
-        this.worker.postMessage({ type: "init", data: { modelId } });
+        this.worker.postMessage({
+          type: "init",
+          data: { modelId: mlcModelId },
+        });
       });
     } catch (error) {
       return err(error instanceof Error ? error : new Error(String(error)));
@@ -117,7 +126,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
           this.worker?.removeEventListener("message", messageHandler);
           const response: LLMCompletionResponse = {
             id: `webllm-${Date.now()}`,
-            model: this.loadedModelId!,
+            modelId: this.loadedModelId!,
             choices: [
               {
                 message: {
@@ -248,25 +257,17 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
 
   getLoadedModel(): ModelMetadata | null {
     if (!this.loadedModelId) return null;
-
-    return {
-      modelId: this.loadedModelId,
-      vendor: "Alibaba",
-      parameterSize: "3B",
-      quantizeLevel: "q4f16_1",
-      contextLength: 32768,
-      vocabularySize: 151936,
-      recommendedTemperature: 0.6,
-      isLoaded: true,
-    };
+    return MODEL_METADATA_MAP[this.loadedModelId] ?? null;
   }
 
-  hasModelInCache(modelId: string): Promise<boolean> {
+  async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
     return new Promise((resolve) => {
       if (!this.worker) {
         resolve(false);
         return;
       }
+
+      const mlcModelId = domainIdToMlcId(modelId);
 
       const timeoutId = setTimeout(() => {
         this.worker?.removeEventListener("message", handler);
@@ -276,7 +277,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       const handler = (e: MessageEvent) => {
         if (
           e.data?.type === "has-model-in-cache-result" &&
-          e.data?.data?.modelId === modelId
+          e.data?.data?.modelId === mlcModelId
         ) {
           clearTimeout(timeoutId);
           this.worker!.removeEventListener("message", handler);
@@ -286,17 +287,19 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       this.worker.addEventListener("message", handler);
       this.worker.postMessage({
         type: "has-model-in-cache",
-        data: { modelId },
+        data: { modelId: mlcModelId },
       });
     });
   }
 
-  deleteCachedModel(modelId: string): Promise<void> {
+  async deleteCachedModel(modelId: DomainModelId): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.worker) {
         resolve();
         return;
       }
+
+      const mlcModelId = domainIdToMlcId(modelId);
 
       const timeoutId = setTimeout(() => {
         this.worker?.removeEventListener("message", handler);
@@ -306,7 +309,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       const handler = (e: MessageEvent) => {
         if (
           e.data?.type === "delete-cached-model-result" &&
-          e.data?.modelId === modelId
+          e.data?.modelId === mlcModelId
         ) {
           clearTimeout(timeoutId);
           this.worker!.removeEventListener("message", handler);
@@ -320,7 +323,7 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       this.worker.addEventListener("message", handler);
       this.worker.postMessage({
         type: "delete-cached-model",
-        data: { modelId },
+        data: { modelId: mlcModelId },
       });
     });
   }
