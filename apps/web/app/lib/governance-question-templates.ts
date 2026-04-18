@@ -54,6 +54,11 @@ export type WizardStepId =
   | "github_export"
   | "summary";
 
+export const FOLLOW_UP_INSTRUCTION = `\n\nFollow-up Questions Requirement:
+After your answer, output a JSON array of 3-5 follow-up question objects in this exact format (no other text after it):
+[{"type":"guidance","label":"question text here"},{"type":"guidance","label":"another question"}]
+Only output the JSON array after your answer. Do not include any markdown code fences or additional commentary.`;
+
 export const STEP_QUESTIONS: Record<WizardStepId, PrebakedQuestion[]> = {
   workspace_governance: [
     { id: "topology", type: "guidance", label: "Strict vs flexible topology?" },
@@ -245,4 +250,21 @@ ${wizardContext}
 Answer the user's question: "${question.label}"
 
 Be concise and beginner-friendly, 2-4 sentences max.`;
+}
+
+export function buildFollowUpPrompt(
+  questionLabel: string,
+  previousAnswer: string,
+  wizardContext: string,
+): string {
+  return `You are a Hexagonal Architecture expert.
+
+PREVIOUS CONVERSATION:
+User: ${questionLabel}
+Assistant: ${previousAnswer}
+
+WIZARD CONTEXT:
+${wizardContext}
+
+Answer the user's follow-up question helpfully.`;
 }

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import type { WizardData } from "@hexagen/shared";
+import type { LLMMessage } from "@hexagen/local-llm";
 import { useLocalLLM } from "./use-local-llm";
 import {
   type Violation,
@@ -14,6 +15,8 @@ import {
   buildViolationPrompt,
   buildSuggestionPrompt,
   buildStepPrompt,
+  FOLLOW_UP_INSTRUCTION,
+  buildFollowUpPrompt,
 } from "@/lib/governance-question-templates";
 import { serializeWizardContext } from "@/lib/wizard-assistant-context";
 import { wizardSteps } from "@/components/project-wizard/config";
@@ -29,7 +32,8 @@ export function useGovernanceAssistant(
   wizardData: WizardData,
   currentStepIndex: number,
 ) {
-  const { sendGovernanceMessage, engineState, isStreaming } = useLocalLLM();
+  const { sendGovernanceMessage, engineState, isStreaming, messages } =
+    useLocalLLM();
   const [activeItem, setActiveItem] = useState<ActiveItem | null>(null);
 
   const wizardContext = serializeWizardContext(wizardData);
@@ -62,7 +66,10 @@ export function useGovernanceAssistant(
         );
       }
 
-      await sendGovernanceMessage(prompt, GOVERNANCE_SYSTEM_PROMPT);
+      await sendGovernanceMessage(
+        prompt + FOLLOW_UP_INSTRUCTION,
+        GOVERNANCE_SYSTEM_PROMPT,
+      );
     },
     [activeItem, wizardContext, sendGovernanceMessage],
   );
@@ -70,7 +77,10 @@ export function useGovernanceAssistant(
   const askStepQuestion = useCallback(
     async (question: PrebakedQuestion) => {
       const prompt = buildStepPrompt(question, currentStepId, wizardContext);
-      await sendGovernanceMessage(prompt, GOVERNANCE_SYSTEM_PROMPT);
+      await sendGovernanceMessage(
+        prompt + FOLLOW_UP_INSTRUCTION,
+        GOVERNANCE_SYSTEM_PROMPT,
+      );
     },
     [currentStepId, wizardContext, sendGovernanceMessage],
   );
@@ -82,11 +92,29 @@ export function useGovernanceAssistant(
       : SUGGESTION_QUESTIONS;
   }, [activeItem]);
 
+  const askFollowUpQuestion = useCallback(
+    async (label: string, previousAnswer: string) => {
+      const prompt =
+        buildFollowUpPrompt(label, previousAnswer, wizardContext) +
+        FOLLOW_UP_INSTRUCTION;
+      const recentMessages = messages.slice(-2);
+      const history: LLMMessage[] = recentMessages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+      await sendGovernanceMessage(prompt, GOVERNANCE_SYSTEM_PROMPT, history);
+    },
+    [wizardContext, messages, sendGovernanceMessage],
+  );
+
   return {
     activeItem,
     selectItem,
     askQuestion,
     askStepQuestion,
+    askFollowUpQuestion,
     getQuestions,
     stepQuestions,
     engineState,

@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { OptInCard } from "./OptInCard";
@@ -460,6 +461,7 @@ export function GovernanceAssistantPanel({
     selectItem,
     askQuestion,
     askStepQuestion,
+    askFollowUpQuestion,
     getQuestions,
     stepQuestions,
     engineState,
@@ -479,6 +481,9 @@ export function GovernanceAssistantPanel({
 
   const [panelView, setPanelView] = useState<PanelView>("main");
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
+  const [followUpQuestions, setFollowUpQuestions] = useState<
+    PrebakedQuestion[]
+  >([]);
   const autoNavigatedToSettings = useRef(false);
 
   const handleOpenSettings = useCallback(() => {
@@ -507,6 +512,42 @@ export function GovernanceAssistantPanel({
     }
   }, [llmEngineState.status]);
 
+  // Parse follow-up questions when streaming completes
+  useEffect(() => {
+    if (isStreaming) return;
+    let raw = "";
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        raw = messages[i].content;
+        break;
+      }
+    }
+    if (!raw) return;
+    const jsonMatch = raw.match(/\[\s*\{[\s\S]*\}\s*\]\s*$/);
+    if (!jsonMatch) return;
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!Array.isArray(parsed)) return;
+      const questions: PrebakedQuestion[] = parsed
+        .map((item: Record<string, unknown>, idx: number) => ({
+          id: `followup-${Date.now()}-${idx}`,
+          type: (item.type as PrebakedQuestion["type"]) || "guidance",
+          label: String(item.label ?? ""),
+        }))
+        .filter((q: PrebakedQuestion) => q.label.length > 0);
+      if (questions.length > 0) {
+        setFollowUpQuestions(questions);
+      }
+    } catch {
+      // Malformed JSON — ignore
+    }
+  }, [isStreaming, messages]);
+
+  // Clear follow-ups when context changes to prevent leakage
+  useEffect(() => {
+    setFollowUpQuestions([]);
+  }, [currentStepIndex, activeItem]);
+
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
 
@@ -518,6 +559,34 @@ export function GovernanceAssistantPanel({
     }
     return "";
   }, [messages]);
+
+  const parsedLastMessage = useMemo<{
+    cleanContent: string;
+    questions: PrebakedQuestion[];
+  }>(() => {
+    if (!lastAssistantMessage) return { cleanContent: "", questions: [] };
+    const jsonMatch = lastAssistantMessage.match(/\[\s*\{[\s\S]*\}\s*\]\s*$/);
+    if (!jsonMatch)
+      return { cleanContent: lastAssistantMessage, questions: [] };
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!Array.isArray(parsed))
+        return { cleanContent: lastAssistantMessage, questions: [] };
+      const questions: PrebakedQuestion[] = parsed
+        .map((item: Record<string, unknown>, idx: number) => ({
+          id: `followup-${Date.now()}-${idx}`,
+          type: (item.type as PrebakedQuestion["type"]) || "guidance",
+          label: String(item.label ?? ""),
+        }))
+        .filter((q: PrebakedQuestion) => q.label.length > 0);
+      const cleanContent = lastAssistantMessage
+        .slice(0, jsonMatch.index)
+        .trim();
+      return { cleanContent, questions };
+    } catch {
+      return { cleanContent: lastAssistantMessage, questions: [] };
+    }
+  }, [lastAssistantMessage]);
 
   const { status, progress, errorMessage, autoLoading } = engineState;
 
@@ -635,6 +704,14 @@ export function GovernanceAssistantPanel({
     } else {
       askStepQuestion(q);
     }
+  };
+
+  const handleFollowUpClick = (q: PrebakedQuestion) => {
+    setFollowUpQuestions([]);
+    askFollowUpQuestion(
+      q.label,
+      parsedLastMessage.cleanContent || lastAssistantMessage,
+    );
   };
 
   // When the engine explicitly requires a model, force-navigate to the settings
@@ -776,7 +853,26 @@ export function GovernanceAssistantPanel({
 
         {lastAssistantMessage && (
           <div className="mt-4">
-            <AnswerArea content={lastAssistantMessage} />
+            <AnswerArea
+              content={parsedLastMessage.cleanContent || lastAssistantMessage}
+            />
+          </div>
+        )}
+
+        {followUpQuestions.length > 0 && (
+          <div className="mt-4">
+            <SectionLabel label="Follow-up Questions" icon={Sparkles} />
+            <div className="space-y-2">
+              {followUpQuestions.map((q) => (
+                <QuestionCard
+                  key={q.id}
+                  label={q.label}
+                  isActive={false}
+                  onClick={() => handleFollowUpClick(q)}
+                  disabled={isStreaming}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
