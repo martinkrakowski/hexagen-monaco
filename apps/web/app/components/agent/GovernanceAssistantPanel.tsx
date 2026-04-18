@@ -35,6 +35,63 @@ const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 type PanelView = "main" | "model-settings";
 
+/**
+ * Extracts follow-up question JSON from LLM output.
+ * Handles both raw JSON and markdown-wrapped JSON formats.
+ * Returns cleaned content (everything before the JSON) and parsed questions array.
+ * On parse failure, returns full content and empty questions array.
+ */
+function extractFollowUpJson(raw: string): {
+  cleanContent: string;
+  questions: PrebakedQuestion[];
+} {
+  if (!raw) return { cleanContent: "", questions: [] };
+
+  // Try matching markdown-wrapped JSON first (```json ... ``` or ``` ... ```)
+  const fenceMatch = raw.match(
+    /```(?:json)?\s*(\[\s*\{[\s\S]*?\}\s*\])\s*```\s*$/,
+  );
+  const jsonStr = fenceMatch?.[1];
+
+  // Fall back to raw JSON at end of string
+  const rawMatch = !jsonStr ? raw.match(/(\[\s*\{[\s\S]*\}\s*\])\s*$/) : null;
+  const finalJsonStr = jsonStr || rawMatch?.[1];
+
+  if (!finalJsonStr) {
+    return { cleanContent: raw, questions: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(finalJsonStr);
+    if (!Array.isArray(parsed)) {
+      return { cleanContent: raw, questions: [] };
+    }
+
+    const questions: PrebakedQuestion[] = parsed
+      .map((item: Record<string, unknown>, idx: number) => ({
+        id: `followup-${Date.now()}-${idx}`,
+        type: (item.type as PrebakedQuestion["type"]) || "guidance",
+        label: String(item.label ?? ""),
+      }))
+      .filter((q: PrebakedQuestion) => q.label.length > 0);
+
+    // Extract clean content: everything before the JSON
+    const matchIndex = fenceMatch
+      ? raw.indexOf(fenceMatch[0])
+      : rawMatch
+        ? raw.indexOf(rawMatch[1])
+        : -1;
+
+    const cleanContent =
+      matchIndex >= 0 ? raw.slice(0, matchIndex).trim() : raw;
+
+    return { cleanContent, questions };
+  } catch {
+    // Malformed JSON — return full content
+    return { cleanContent: raw, questions: [] };
+  }
+}
+
 interface GovernanceAssistantPanelProps {
   wizardData: WizardData;
   currentStepIndex: number;
@@ -502,52 +559,6 @@ export function GovernanceAssistantPanel({
     cancelFromRequiresModel();
   }, [cancelFromRequiresModel]);
 
-  // When model becomes ready after auto-navigation to settings (from
-  // requires_model), return to main so the user sees governance content
-  // instead of being stuck in settings they didn't explicitly open.
-  useEffect(() => {
-    if (llmEngineState.status === "ready" && autoNavigatedToSettings.current) {
-      setPanelView("main");
-      autoNavigatedToSettings.current = false;
-    }
-  }, [llmEngineState.status]);
-
-  // Parse follow-up questions when streaming completes
-  useEffect(() => {
-    if (isStreaming) return;
-    let raw = "";
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") {
-        raw = messages[i].content;
-        break;
-      }
-    }
-    if (!raw) return;
-    const jsonMatch = raw.match(/\[\s*\{[\s\S]*\}\s*\]\s*$/);
-    if (!jsonMatch) return;
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (!Array.isArray(parsed)) return;
-      const questions: PrebakedQuestion[] = parsed
-        .map((item: Record<string, unknown>, idx: number) => ({
-          id: `followup-${Date.now()}-${idx}`,
-          type: (item.type as PrebakedQuestion["type"]) || "guidance",
-          label: String(item.label ?? ""),
-        }))
-        .filter((q: PrebakedQuestion) => q.label.length > 0);
-      if (questions.length > 0) {
-        setFollowUpQuestions(questions);
-      }
-    } catch {
-      // Malformed JSON — ignore
-    }
-  }, [isStreaming, messages]);
-
-  // Clear follow-ups when context changes to prevent leakage
-  useEffect(() => {
-    setFollowUpQuestions([]);
-  }, [currentStepIndex, activeItem]);
-
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
 
@@ -563,30 +574,28 @@ export function GovernanceAssistantPanel({
   const parsedLastMessage = useMemo<{
     cleanContent: string;
     questions: PrebakedQuestion[];
-  }>(() => {
-    if (!lastAssistantMessage) return { cleanContent: "", questions: [] };
-    const jsonMatch = lastAssistantMessage.match(/\[\s*\{[\s\S]*\}\s*\]\s*$/);
-    if (!jsonMatch)
-      return { cleanContent: lastAssistantMessage, questions: [] };
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (!Array.isArray(parsed))
-        return { cleanContent: lastAssistantMessage, questions: [] };
-      const questions: PrebakedQuestion[] = parsed
-        .map((item: Record<string, unknown>, idx: number) => ({
-          id: `followup-${Date.now()}-${idx}`,
-          type: (item.type as PrebakedQuestion["type"]) || "guidance",
-          label: String(item.label ?? ""),
-        }))
-        .filter((q: PrebakedQuestion) => q.label.length > 0);
-      const cleanContent = lastAssistantMessage
-        .slice(0, jsonMatch.index)
-        .trim();
-      return { cleanContent, questions };
-    } catch {
-      return { cleanContent: lastAssistantMessage, questions: [] };
+  }>(() => extractFollowUpJson(lastAssistantMessage), [lastAssistantMessage]);
+
+  // When model becomes ready after auto-navigation to settings (from
+  // requires_model), return to main so the user sees governance content
+  // instead of being stuck in settings they didn't explicitly open.
+  useEffect(() => {
+    if (llmEngineState.status === "ready" && autoNavigatedToSettings.current) {
+      setPanelView("main");
+      autoNavigatedToSettings.current = false;
     }
-  }, [lastAssistantMessage]);
+  }, [llmEngineState.status]);
+
+  // Populate follow-up state from parsed message when streaming completes
+  useEffect(() => {
+    if (isStreaming) return;
+    setFollowUpQuestions(parsedLastMessage.questions);
+  }, [isStreaming, parsedLastMessage]);
+
+  // Clear follow-ups when context changes to prevent leakage
+  useEffect(() => {
+    setFollowUpQuestions([]);
+  }, [currentStepIndex, activeItem]);
 
   const { status, progress, errorMessage, autoLoading } = engineState;
 
@@ -708,10 +717,7 @@ export function GovernanceAssistantPanel({
 
   const handleFollowUpClick = (q: PrebakedQuestion) => {
     setFollowUpQuestions([]);
-    askFollowUpQuestion(
-      q.label,
-      parsedLastMessage.cleanContent || lastAssistantMessage,
-    );
+    askFollowUpQuestion(q.label, parsedLastMessage.cleanContent);
   };
 
   // When the engine explicitly requires a model, force-navigate to the settings
@@ -853,9 +859,7 @@ export function GovernanceAssistantPanel({
 
         {lastAssistantMessage && (
           <div className="mt-4">
-            <AnswerArea
-              content={parsedLastMessage.cleanContent || lastAssistantMessage}
-            />
+            <AnswerArea content={parsedLastMessage.cleanContent} />
           </div>
         )}
 
