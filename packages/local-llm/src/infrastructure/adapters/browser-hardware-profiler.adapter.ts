@@ -42,16 +42,10 @@ export class BrowserHardwareProfilerAdapter implements HardwareProfilerPort {
       );
 
       if (!profileResult.success) {
-        return {
-          success: false,
-          error: profileResult.error,
-        };
+        return profileResult;
       }
 
-      return {
-        success: true,
-        value: profileResult.value,
-      };
+      return profileResult;
     } catch (error) {
       return {
         success: false,

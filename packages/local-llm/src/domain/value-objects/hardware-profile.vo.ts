@@ -64,8 +64,10 @@ export function createHardwareProfile(
       new Error(`cpuCores must be a positive integer, got ${cpuCores}`),
     );
   }
-  if (ramMB !== null && ramMB <= 0) {
-    return err(new Error(`ramMB must be positive, got ${ramMB}`));
+  if (ramMB !== null && (ramMB <= 0 || !Number.isFinite(ramMB))) {
+    return err(
+      new Error(`ramMB must be a positive finite number, got ${ramMB}`),
+    );
   }
 
   const profile: HardwareProfile = {

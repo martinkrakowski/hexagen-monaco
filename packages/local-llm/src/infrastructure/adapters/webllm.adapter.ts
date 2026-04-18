@@ -11,10 +11,7 @@ import type {
   LLMProgressCallback,
   ModelMetadata,
 } from "../../domain/value-objects/index.js";
-import {
-  getModelMetadata,
-  MODEL_METADATA_MAP,
-} from "../../domain/value-objects/model-metadata.vo.js";
+import { MODEL_METADATA_MAP } from "../../domain/value-objects/model-metadata.vo.js";
 
 /**
  * MLC engine IDs inline — no separate mapper module, no new import chain.

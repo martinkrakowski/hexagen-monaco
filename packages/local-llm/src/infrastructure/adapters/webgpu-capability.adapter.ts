@@ -11,7 +11,7 @@ interface GPU {
 }
 
 interface GPUAdapter {
-  requestDevice(): GPUDevice;
+  requestDevice(): Promise<GPUDevice>;
   features: Iterable<string>;
 }
 
@@ -24,7 +24,7 @@ interface GPUDevice {
 }
 
 interface GPURequestAdapterOptions {
-  powerPreference?: "default" | "high-performance" | "low-power";
+  powerPreference?: "high-performance" | "low-power";
 }
 
 interface NavigatorWithGPU {
@@ -34,8 +34,13 @@ interface NavigatorWithGPU {
 export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
   async detect(): Promise<Result<WebGPUCapability>> {
     try {
-      const nav = navigator as NavigatorWithGPU;
-      if (typeof nav === "undefined" || !nav.gpu) {
+      // Check typeof on the raw identifier BEFORE any cast.
+      // typeof returns "undefined" for undeclared vars without throwing.
+      // Casting undeclared navigator to a typed variable would throw first.
+      if (
+        typeof navigator === "undefined" ||
+        !(navigator as NavigatorWithGPU).gpu
+      ) {
         return {
           success: true,
           value: {
@@ -48,9 +53,11 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
         };
       }
 
-      const adapter = await nav.gpu.requestAdapter({
-        powerPreference: "high-performance",
-      });
+      const adapter = await (navigator as NavigatorWithGPU).gpu!.requestAdapter(
+        {
+          powerPreference: "high-performance",
+        },
+      );
 
       if (!adapter) {
         return {
@@ -89,7 +96,9 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
   }
 
   isSupported(): boolean {
-    const nav = navigator as NavigatorWithGPU;
-    return typeof nav !== "undefined" && nav.gpu !== undefined;
+    return (
+      typeof navigator !== "undefined" &&
+      (navigator as NavigatorWithGPU).gpu !== undefined
+    );
   }
 }
