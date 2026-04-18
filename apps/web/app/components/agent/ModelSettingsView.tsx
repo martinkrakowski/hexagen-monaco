@@ -14,6 +14,7 @@ interface ModelSettingsViewProps {
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   onBack: () => void;
   isLoading: boolean;
+  onSwitchToCloud?: () => void;
 }
 
 interface ModelCacheStatus {
@@ -31,6 +32,7 @@ export function ModelSettingsView({
   hasModelInCache,
   onBack,
   isLoading,
+  onSwitchToCloud,
 }: ModelSettingsViewProps) {
   const [cacheStatus, setCacheStatus] = useState<
     Map<DomainModelId, ModelCacheStatus>
@@ -181,7 +183,7 @@ export function ModelSettingsView({
           </div>
         </div>
         <p className="text-xs text-muted-foreground font-normal pl-[38px]">
-          Select and manage local models
+          Select and manage AI models
         </p>
       </div>
 
@@ -251,6 +253,39 @@ export function ModelSettingsView({
                   />
                 ),
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Cloud Models Section */}
+        {onSwitchToCloud && (
+          <div className="mb-6">
+            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
+              Cloud Models
+            </h2>
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[13px] font-medium text-foreground">
+                      Use Cloud LLM
+                    </h3>
+                    <span className="inline-flex items-center rounded-full bg-blue/10 px-1.5 py-0.5 text-[10px] font-medium text-blue shrink-0">
+                      OpenAI
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+                    Connect to GPT-4o, GPT-4o Mini, and other cloud models.
+                    Requires an API key.
+                  </p>
+                </div>
+                <button
+                  onClick={onSwitchToCloud}
+                  className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+                >
+                  Connect
+                </button>
+              </div>
             </div>
           </div>
         )}

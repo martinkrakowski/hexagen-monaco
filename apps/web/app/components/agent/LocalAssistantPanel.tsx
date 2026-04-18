@@ -307,6 +307,7 @@ export function LocalAssistantPanel() {
             engineState.status === "downloading" ||
             engineState.status === "loading_vram"
           }
+          onSwitchToCloud={() => setMode("cloud")}
         />
       </div>
     );
