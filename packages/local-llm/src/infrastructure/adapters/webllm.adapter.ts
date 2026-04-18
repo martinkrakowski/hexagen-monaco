@@ -353,17 +353,9 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       return err(new Error(`Unknown model ID: ${String(modelId)}`));
     }
 
-    // Prefer the active worker (deleted before dispose, so worker is alive).
-    const activeWorker = !this._disposed ? this.worker : null;
-    if (activeWorker) {
-      return this.deleteViaWorker(activeWorker, mlcModelId);
-    }
-
-    // No active worker (e.g. model was never loaded this session, or adapter
-    // was disposed before this call). Spin up a temporary worker so we always
-    // go through the same reliable worker message path instead of the
-    // direct-import path, which can hang on an upstream network fetch inside
-    // deleteModelAllInfoInCache / deleteTensorCache.
+    // Use a dedicated worker for deletion whenever possible. This keeps cache
+    // cleanup isolated from the live inference worker and avoids deleting a
+    // model while its engine is still loaded in the same worker.
     const { createWorker } = this.config;
     if (createWorker) {
       const tempWorker = createWorker();
@@ -372,6 +364,11 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       } finally {
         tempWorker.terminate();
       }
+    }
+
+    const activeWorker = !this._disposed ? this.worker : null;
+    if (activeWorker) {
+      return this.deleteViaWorker(activeWorker, mlcModelId);
     }
 
     // Last-resort fallback when no worker factory is configured (e.g. tests).

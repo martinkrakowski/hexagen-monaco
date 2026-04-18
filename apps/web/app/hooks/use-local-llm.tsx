@@ -540,16 +540,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       const adapter = adapterRef.current;
       if (!adapter) return;
 
-      // Delete from cache BEFORE disposing the engine so the active worker
-      // is still alive to process the "delete-cached-model" message. Disposing
-      // first sets _disposed = true / worker = null, which forces the adapter
-      // into the direct-import fallback path — a path that can hang indefinitely
-      // on `deleteModelAllInfoInCache`'s internal network fetch.
-      const result = await adapter.deleteCachedModel(modelId);
-      if (!result.success) {
-        throw result.error;
-      }
-
       if (modelId === engineState.loadedModelId) {
         adapter.dispose();
         setMessages([]);
@@ -563,6 +553,11 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
           errorMessage: null,
           autoLoading: false,
         }));
+      }
+
+      const result = await adapter.deleteCachedModel(modelId);
+      if (!result.success) {
+        throw result.error;
       }
     },
     [engineState.loadedModelId],
