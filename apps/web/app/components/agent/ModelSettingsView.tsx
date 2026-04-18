@@ -130,7 +130,7 @@ export function ModelSettingsView({
       const timeoutPromise = new Promise<void>((_, reject) =>
         setTimeout(
           () => reject(new Error("Delete operation timed out")),
-          10000,
+          60000,
         ),
       );
       await Promise.race([onDeleteModel(modelId), timeoutPromise]);

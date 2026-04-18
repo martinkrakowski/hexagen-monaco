@@ -57,9 +57,10 @@ export interface LocalLLMProviderPort {
   /**
    * Delete all cached data for a model (weights + WASM + config).
    * After deletion, the model must be re-downloaded if selected again.
-   * If the deleted model is currently loaded, the engine is also disposed.
+   * Returns Result.success if deletion succeeded or cache was already empty.
+   * Returns Result.error if deletion failed (timeout, I/O error, etc).
    */
-  deleteCachedModel(modelId: DomainModelId): Promise<void>;
+  deleteCachedModel(modelId: DomainModelId): Promise<Result<void>>;
   dispose(): void;
 }
 

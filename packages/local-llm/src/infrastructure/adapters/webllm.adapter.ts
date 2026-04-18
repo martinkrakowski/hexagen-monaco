@@ -314,18 +314,18 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
   }
 
   async hasModelInCache(modelId: DomainModelId): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (!this.worker) {
-        resolve(false);
-        return;
-      }
+    const worker = this.worker;
+    if (!worker) {
+      return false;
+    }
 
+    return new Promise((resolve, reject) => {
       const mlcModelId = MLC_IDS[modelId as string];
 
       const timeoutId = setTimeout(() => {
-        this.worker?.removeEventListener("message", handler);
-        resolve(false);
-      }, 10000);
+        worker.removeEventListener("message", handler);
+        reject(new Error("hasModelInCache timed out after 60s"));
+      }, 60000);
 
       const handler = (e: MessageEvent) => {
         if (
@@ -333,52 +333,61 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
           e.data?.data?.modelId === mlcModelId
         ) {
           clearTimeout(timeoutId);
-          this.worker!.removeEventListener("message", handler);
+          worker.removeEventListener("message", handler);
           resolve(e.data?.data?.isCached === true);
         }
       };
-      this.worker.addEventListener("message", handler);
-      this.worker.postMessage({
+      worker.addEventListener("message", handler);
+      worker.postMessage({
         type: "has-model-in-cache",
         data: { modelId: mlcModelId },
       });
     });
   }
 
-  async deleteCachedModel(modelId: DomainModelId): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.worker) {
-        resolve();
-        return;
-      }
+  async deleteCachedModel(modelId: DomainModelId): Promise<Result<void>> {
+    const mlcModelId = MLC_IDS[modelId as string];
+    if (!mlcModelId) {
+      return err(new Error(`Unknown model ID: ${String(modelId)}`));
+    }
 
-      const mlcModelId = MLC_IDS[modelId as string];
+    const worker = this.worker;
+    if (worker) {
+      return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          worker.removeEventListener("message", handler);
+          resolve(err(new Error("Delete model cache timed out after 60s")));
+        }, 60000);
 
-      const timeoutId = setTimeout(() => {
-        this.worker?.removeEventListener("message", handler);
-        reject(new Error("Delete model cache timed out"));
-      }, 10000);
-
-      const handler = (e: MessageEvent) => {
-        if (
-          e.data?.type === "delete-cached-model-result" &&
-          e.data?.modelId === mlcModelId
-        ) {
-          clearTimeout(timeoutId);
-          this.worker!.removeEventListener("message", handler);
-          if (e.data?.error) {
-            reject(new Error(e.data.error));
-          } else {
-            resolve();
+        const handler = (e: MessageEvent) => {
+          if (
+            e.data?.type === "delete-cached-model-result" &&
+            e.data?.modelId === mlcModelId
+          ) {
+            clearTimeout(timeoutId);
+            worker.removeEventListener("message", handler);
+            if (e.data?.error) {
+              resolve(err(new Error(e.data.error)));
+            } else {
+              resolve(ok(undefined));
+            }
           }
-        }
-      };
-      this.worker.addEventListener("message", handler);
-      this.worker.postMessage({
-        type: "delete-cached-model",
-        data: { modelId: mlcModelId },
+        };
+        worker.addEventListener("message", handler);
+        worker.postMessage({
+          type: "delete-cached-model",
+          data: { modelId: mlcModelId },
+        });
       });
-    });
+    }
+
+    try {
+      const { deleteModelAllInfoInCache } = await import("@mlc-ai/web-llm");
+      await deleteModelAllInfoInCache(mlcModelId);
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   dispose(): void {
