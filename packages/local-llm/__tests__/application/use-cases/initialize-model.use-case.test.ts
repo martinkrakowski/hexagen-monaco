@@ -4,7 +4,7 @@ import { InitializeModelUseCase } from "../../../src/application/use-cases/initi
 import { DomainModelId } from "../../../src/domain/value-objects/model-id.vo.js";
 import { MODEL_METADATA_MAP } from "../../../src/domain/value-objects/model-metadata.vo.js";
 
-const MODEL_ID = DomainModelId.PHI3_MINI;
+const MODEL_ID = DomainModelId.PHI_3_5_MINI;
 
 (async () => {
   const fakeProvider = new FakeLocalLLMProviderPort({

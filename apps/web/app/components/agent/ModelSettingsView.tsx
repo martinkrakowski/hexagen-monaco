@@ -5,6 +5,8 @@ import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { ArrowLeft } from "lucide-react";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
+import { useHardwareDetection } from "@/hooks/use-hardware-detection";
+import { recommendModel, checkCompatibility } from "@/lib/model-recommendation";
 
 interface ModelSettingsViewProps {
   currentModelId: DomainModelId | null;
@@ -51,6 +53,27 @@ export function ModelSettingsView({
   const [isSwitching, setIsSwitching] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Hardware detection and recommendation
+  const { profile: hardwareProfile, isDetecting: isDetectingHardware } =
+    useHardwareDetection();
+  const [recommendedModelId, setRecommendedModelId] =
+    useState<DomainModelId | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<DomainModelId | null>(
+    currentModelId,
+  );
+
+  useEffect(() => {
+    setSelectedModelId(currentModelId);
+  }, [currentModelId]);
+
+  // Compute hardware recommendation when profile is available
+  useEffect(() => {
+    if (hardwareProfile && !isDetectingHardware) {
+      const recommendation = recommendModel(hardwareProfile, LOCAL_MODELS);
+      setRecommendedModelId(recommendation?.modelId ?? null);
+    }
+  }, [hardwareProfile, isDetectingHardware]);
 
   // Query cache status for all models on mount
   useEffect(() => {
@@ -224,52 +247,52 @@ export function ModelSettingsView({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
-        {/* Current Model Section */}
-        {currentModelId && (
+        {/* Recommended for You Section */}
+        {recommendedModelId && !isDetectingHardware && (
           <div className="mb-6">
             <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
-              Current Model
+              ✨ Recommended for Your System
             </h2>
-            {LOCAL_MODELS.find((m) => m.modelId === currentModelId) && (
+            {LOCAL_MODELS.find((m) => m.modelId === recommendedModelId) && (
               <ModelCard
                 descriptor={
-                  LOCAL_MODELS.find((m) => m.modelId === currentModelId)!
+                  LOCAL_MODELS.find((m) => m.modelId === recommendedModelId)!
                 }
-                isCurrent={true}
-                isPendingSwitch={false}
-                isConfirmDelete={false}
-                cacheStatus={cacheStatus.get(currentModelId)}
+                isCurrent={currentModelId === recommendedModelId}
+                isPendingSwitch={pendingSwitchId === recommendedModelId}
+                isConfirmDelete={confirmDeleteId === recommendedModelId}
+                cacheStatus={cacheStatus.get(recommendedModelId)}
                 onSelectModel={handleSelectModel}
                 onDelete={() => {
-                  setConfirmDeleteId(currentModelId);
+                  setConfirmDeleteId(recommendedModelId);
                   setDeleteError(null);
                 }}
-                onConfirmDelete={() => handleDelete(currentModelId)}
+                onConfirmDelete={() => handleDelete(recommendedModelId)}
                 onCancelDelete={() => setConfirmDeleteId(null)}
                 isLoading={isLoading}
                 isSwitching={isSwitching}
                 isDeleting={isDeleting}
                 deleteError={deleteError}
                 loadedModel={loadedModel}
+                isRecommended={true}
               />
             )}
           </div>
         )}
 
-        {/* Available Models Section */}
-        {LOCAL_MODELS.filter((m) => m.modelId !== currentModelId).length >
-          0 && (
+        {/* Desktop High-End Section */}
+        {LOCAL_MODELS.some((m) => m.tier === "desktop-high") && (
           <div className="mb-6">
             <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
-              Available Models
+              Desktop
             </h2>
             <div className="space-y-3">
-              {LOCAL_MODELS.filter((m) => m.modelId !== currentModelId).map(
+              {LOCAL_MODELS.filter((m) => m.tier === "desktop-high").map(
                 (descriptor) => (
                   <ModelCard
                     key={descriptor.modelId}
                     descriptor={descriptor}
-                    isCurrent={false}
+                    isCurrent={currentModelId === descriptor.modelId}
                     isPendingSwitch={pendingSwitchId === descriptor.modelId}
                     isConfirmDelete={confirmDeleteId === descriptor.modelId}
                     cacheStatus={cacheStatus.get(descriptor.modelId)}
@@ -285,6 +308,94 @@ export function ModelSettingsView({
                     isDeleting={isDeleting}
                     deleteError={deleteError}
                     loadedModel={loadedModel}
+                    isRecommended={descriptor.modelId === recommendedModelId}
+                    compatibilityIssue={
+                      selectedModelId === descriptor.modelId
+                        ? checkCompatibility(descriptor, hardwareProfile)
+                        : null
+                    }
+                  />
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Desktop Compact Section */}
+        {LOCAL_MODELS.some((m) => m.tier === "desktop-compact") && (
+          <div className="mb-6">
+            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
+              Compact
+            </h2>
+            <div className="space-y-3">
+              {LOCAL_MODELS.filter((m) => m.tier === "desktop-compact").map(
+                (descriptor) => (
+                  <ModelCard
+                    key={descriptor.modelId}
+                    descriptor={descriptor}
+                    isCurrent={currentModelId === descriptor.modelId}
+                    isPendingSwitch={pendingSwitchId === descriptor.modelId}
+                    isConfirmDelete={confirmDeleteId === descriptor.modelId}
+                    cacheStatus={cacheStatus.get(descriptor.modelId)}
+                    onSelectModel={handleSelectModel}
+                    onDelete={() => {
+                      setConfirmDeleteId(descriptor.modelId);
+                      setDeleteError(null);
+                    }}
+                    onConfirmDelete={() => handleDelete(descriptor.modelId)}
+                    onCancelDelete={() => setConfirmDeleteId(null)}
+                    isLoading={isLoading}
+                    isSwitching={isSwitching}
+                    isDeleting={isDeleting}
+                    deleteError={deleteError}
+                    loadedModel={loadedModel}
+                    isRecommended={descriptor.modelId === recommendedModelId}
+                    compatibilityIssue={
+                      selectedModelId === descriptor.modelId
+                        ? checkCompatibility(descriptor, hardwareProfile)
+                        : null
+                    }
+                  />
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Ultra-Light Section */}
+        {LOCAL_MODELS.some((m) => m.tier === "ultra-light") && (
+          <div className="mb-6">
+            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
+              Ultra-Light
+            </h2>
+            <div className="space-y-3">
+              {LOCAL_MODELS.filter((m) => m.tier === "ultra-light").map(
+                (descriptor) => (
+                  <ModelCard
+                    key={descriptor.modelId}
+                    descriptor={descriptor}
+                    isCurrent={currentModelId === descriptor.modelId}
+                    isPendingSwitch={pendingSwitchId === descriptor.modelId}
+                    isConfirmDelete={confirmDeleteId === descriptor.modelId}
+                    cacheStatus={cacheStatus.get(descriptor.modelId)}
+                    onSelectModel={handleSelectModel}
+                    onDelete={() => {
+                      setConfirmDeleteId(descriptor.modelId);
+                      setDeleteError(null);
+                    }}
+                    onConfirmDelete={() => handleDelete(descriptor.modelId)}
+                    onCancelDelete={() => setConfirmDeleteId(null)}
+                    isLoading={isLoading}
+                    isSwitching={isSwitching}
+                    isDeleting={isDeleting}
+                    deleteError={deleteError}
+                    loadedModel={loadedModel}
+                    isRecommended={descriptor.modelId === recommendedModelId}
+                    compatibilityIssue={
+                      selectedModelId === descriptor.modelId
+                        ? checkCompatibility(descriptor, hardwareProfile)
+                        : null
+                    }
                   />
                 ),
               )}
@@ -402,6 +513,8 @@ interface ModelCardProps {
   isDeleting: boolean;
   deleteError: string | null;
   loadedModel: ModelMetadata | null;
+  isRecommended?: boolean;
+  compatibilityIssue?: { reason: string; severity: "warning" | "error" } | null;
 }
 
 function ModelCard({
@@ -419,6 +532,8 @@ function ModelCard({
   isDeleting,
   deleteError,
   loadedModel,
+  isRecommended = false,
+  compatibilityIssue = null,
 }: ModelCardProps) {
   return (
     <div>
@@ -441,6 +556,11 @@ function ModelCard({
                   Active
                 </span>
               )}
+              {isRecommended && (
+                <span className="inline-flex items-center rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent shrink-0">
+                  ✨ Recommended
+                </span>
+              )}
               {cacheStatus?.isCached && (
                 <span className="inline-flex items-center rounded-full bg-blue/10 px-1.5 py-0.5 text-[10px] font-medium text-blue shrink-0">
                   Cached
@@ -454,6 +574,11 @@ function ModelCard({
               <span>~{descriptor.downloadSizeGB} GB</span>
               <span>·</span>
               <span>~{descriptor.vramRequiredMB} MB VRAM</span>
+              <span>·</span>
+              <span>
+                {"★".repeat(descriptor.codingRating)}
+                {"☆".repeat(5 - descriptor.codingRating)}
+              </span>
               {isCurrent && loadedModel && (
                 <>
                   <span>·</span>
@@ -461,6 +586,17 @@ function ModelCard({
                 </>
               )}
             </div>
+            {compatibilityIssue && (
+              <div
+                className={`mt-2 text-[11px] font-medium ${
+                  compatibilityIssue.severity === "error"
+                    ? "text-destructive"
+                    : "text-warning"
+                }`}
+              >
+                ⚠️ {compatibilityIssue.reason}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">

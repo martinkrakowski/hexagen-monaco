@@ -20,35 +20,107 @@ export interface ModelDescriptor {
   downloadSizeGB: number;
   vramRequiredMB: number;
   description: string;
+  // Hardware-aware recommendation fields
+  tier: "desktop-high" | "desktop-compact" | "ultra-light";
+  backend: "webgpu" | "wasm";
+  codingRating: 1 | 2 | 3 | 4 | 5;
+  coreStrength: string;
 }
 
 export const LOCAL_MODELS: ModelDescriptor[] = [
+  // Desktop High-End
   {
-    modelId: DomainModelId.QWEN_2_5_3B,
-    displayName: "Qwen 2.5 3B",
-    shortName: "Qwen 2.5 3B",
-    downloadSizeGB: 1.74,
-    vramRequiredMB: 2505,
+    modelId: DomainModelId.QWEN_CODER_3B,
+    displayName: "Qwen2.5-Coder-3B",
+    shortName: "Qwen-Coder 3B",
+    downloadSizeGB: 2.1,
+    vramRequiredMB: 2600,
     description:
-      "Best for architectural guidance. Excellent instruction-following and reasoning across a 32K context. Recommended default.",
+      "Current champion for 3B coding. Fast, highly accurate syntax generation. Excellent instruction following.",
+    tier: "desktop-high",
+    backend: "webgpu",
+    codingRating: 5,
+    coreStrength: "Best for architectural guidance & instruction-following",
   },
   {
-    modelId: DomainModelId.SMOLLM2_1_7B,
-    displayName: "SmolLM2 1.7B",
-    shortName: "SmolLM2 1.7B",
-    downloadSizeGB: 1.0,
-    vramRequiredMB: 2692,
+    modelId: DomainModelId.LLAMA_3_2_3B,
+    displayName: "Llama-3.2-3B",
+    shortName: "Llama 3.2 3B",
+    downloadSizeGB: 2.2,
+    vramRequiredMB: 2700,
     description:
-      "Compact and fast. Good for quick guidance on lower-VRAM systems. Slightly more VRAM than Qwen due to q4f32 precision.",
+      "Superb generalist with strong coding and logic. Excellent instruction following.",
+    tier: "desktop-high",
+    backend: "webgpu",
+    codingRating: 5,
+    coreStrength: "Strong generalist & coding capabilities",
   },
   {
-    modelId: DomainModelId.PHI3_MINI,
-    displayName: "Phi 3 Mini",
-    shortName: "Phi 3 Mini",
-    downloadSizeGB: 1.5,
-    vramRequiredMB: 3672,
+    modelId: DomainModelId.PHI_3_5_MINI,
+    displayName: "Phi-3.5-Mini",
+    shortName: "Phi-3.5 Mini",
+    downloadSizeGB: 2.4,
+    vramRequiredMB: 2800,
     description:
-      "Lightweight Microsoft model with 4K context. Known to have token repetition issues in WebLLM — use as fallback only.",
+      "Microsoft's logic powerhouse. Punches above its weight in Python and algorithms.",
+    tier: "desktop-high",
+    backend: "webgpu",
+    codingRating: 4,
+    coreStrength: "Logic & algorithm reasoning",
+  },
+  // Desktop Compact
+  {
+    modelId: DomainModelId.GEMMA_2_2B,
+    displayName: "Gemma-2-2B",
+    shortName: "Gemma 2 2B",
+    downloadSizeGB: 1.8,
+    vramRequiredMB: 2200,
+    description:
+      "High-quality Google model. Great for rigid formatting and fill-in-the-middle tasks.",
+    tier: "desktop-compact",
+    backend: "webgpu",
+    codingRating: 4,
+    coreStrength: "Formatting & Fill-in-the-Middle",
+  },
+  {
+    modelId: DomainModelId.QWEN_CODER_1_5B,
+    displayName: "Qwen2.5-Coder-1.5B",
+    shortName: "Qwen-Coder 1.5B",
+    downloadSizeGB: 1.1,
+    vramRequiredMB: 1500,
+    description:
+      "Best balance of extreme speed and reliable code completion under 1.5GB.",
+    tier: "desktop-compact",
+    backend: "webgpu",
+    codingRating: 4,
+    coreStrength: "Speed & code completion",
+  },
+  // Ultra-Light (Mobile-ready)
+  {
+    modelId: DomainModelId.LLAMA_3_2_1B,
+    displayName: "Llama-3.2-1B",
+    shortName: "Llama 3.2 1B",
+    downloadSizeGB: 0.8,
+    vramRequiredMB: 1200,
+    description:
+      "Blazingly fast for edge devices. Good for basic routing and simple script completion.",
+    tier: "ultra-light",
+    backend: "webgpu",
+    codingRating: 3,
+    coreStrength: "Edge device speed",
+  },
+  {
+    modelId: DomainModelId.QWEN_CODER_0_5B,
+    displayName: "Qwen2.5-Coder-0.5B",
+    shortName: "Qwen-Coder 0.5B",
+    downloadSizeGB: 0.4,
+    vramRequiredMB: 800,
+    description:
+      "Extremely tiny. Loads instantly, but limited to basic boilerplate and simple regex.",
+    tier: "ultra-light",
+    backend: "webgpu",
+    codingRating: 2,
+    coreStrength: "Ultra-lightweight inference",
   },
 ];
 

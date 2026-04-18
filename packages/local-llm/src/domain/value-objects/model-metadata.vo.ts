@@ -23,8 +23,9 @@ export interface LLMInitializeConfig {
  * Keyed by DomainModelId to ensure type-safe model references
  */
 export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
-  [DomainModelId.QWEN_2_5_3B]: {
-    modelId: DomainModelId.QWEN_2_5_3B,
+  // Desktop High-End
+  [DomainModelId.QWEN_CODER_3B]: {
+    modelId: DomainModelId.QWEN_CODER_3B,
     vendor: "Alibaba",
     parameterSize: "3B",
     quantizeLevel: "q4f16_1",
@@ -32,23 +33,61 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
     vocabularySize: 151936,
     recommendedTemperature: 0.6,
   },
-  [DomainModelId.SMOLLM2_1_7B]: {
-    modelId: DomainModelId.SMOLLM2_1_7B,
-    vendor: "HuggingFace",
-    parameterSize: "1.7B",
-    quantizeLevel: "q4f32_1",
+  [DomainModelId.LLAMA_3_2_3B]: {
+    modelId: DomainModelId.LLAMA_3_2_3B,
+    vendor: "Meta",
+    parameterSize: "3B",
+    quantizeLevel: "q4f16_1",
     contextLength: 8192,
-    vocabularySize: 49152,
+    vocabularySize: 128256,
     recommendedTemperature: 0.6,
   },
-  [DomainModelId.PHI3_MINI]: {
-    modelId: DomainModelId.PHI3_MINI,
+  [DomainModelId.PHI_3_5_MINI]: {
+    modelId: DomainModelId.PHI_3_5_MINI,
     vendor: "Microsoft",
     parameterSize: "3.8B",
     quantizeLevel: "q4f16_1",
     contextLength: 4096,
     vocabularySize: 32064,
     recommendedTemperature: 0.7,
+  },
+  // Desktop Compact
+  [DomainModelId.GEMMA_2_2B]: {
+    modelId: DomainModelId.GEMMA_2_2B,
+    vendor: "Google",
+    parameterSize: "2B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 8192,
+    vocabularySize: 256000,
+    recommendedTemperature: 0.6,
+  },
+  [DomainModelId.QWEN_CODER_1_5B]: {
+    modelId: DomainModelId.QWEN_CODER_1_5B,
+    vendor: "Alibaba",
+    parameterSize: "1.5B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 4096,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.6,
+  },
+  // Ultra-Light
+  [DomainModelId.LLAMA_3_2_1B]: {
+    modelId: DomainModelId.LLAMA_3_2_1B,
+    vendor: "Meta",
+    parameterSize: "1B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 8192,
+    vocabularySize: 128256,
+    recommendedTemperature: 0.6,
+  },
+  [DomainModelId.QWEN_CODER_0_5B]: {
+    modelId: DomainModelId.QWEN_CODER_0_5B,
+    vendor: "Alibaba",
+    parameterSize: "0.5B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 2048,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.6,
   },
 };
 

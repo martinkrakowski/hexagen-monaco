@@ -27,6 +27,7 @@ import type { LLMProviderPort } from "@hexagen/agentic-interaction";
 import type {
   LocalLLMProviderPort,
   WebGPUDetectorPort,
+  HardwareProfilerPort,
 } from "@hexagen/local-llm";
 import {
   LocalStoragePersistenceAdapter,
@@ -38,7 +39,11 @@ import {
   InMemoryIntentBusAdapter,
 } from "@hexagen/messaging";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
-import { WebLLMAdapter, WebGPUCapabilityAdapter } from "@hexagen/local-llm";
+import {
+  WebLLMAdapter,
+  WebGPUCapabilityAdapter,
+  BrowserHardwareProfilerAdapter,
+} from "@hexagen/local-llm";
 
 const createWebLogger = (): LoggerPort => ({
   info: (msg) => console.log(`[web] ${msg}`),
@@ -162,6 +167,12 @@ export const wireDependencies = () => {
     new WebGPUCapabilityAdapter() satisfies WebGPUDetectorPort,
   );
 
+  // Hardware Profiler → browser hardware detection adapter
+  registry.set(
+    "HardwareProfilerPort",
+    new BrowserHardwareProfilerAdapter() satisfies HardwareProfilerPort,
+  );
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);
@@ -217,3 +228,6 @@ export const getLocalLLMProvider = () =>
 
 export const getWebGPUDetector = () =>
   dependencies.get<WebGPUDetectorPort>("WebGPUDetectorPort");
+
+export const getHardwareProfiler = () =>
+  dependencies.get<HardwareProfilerPort>("HardwareProfilerPort");

@@ -19,6 +19,7 @@ import {
   DEFAULT_MODEL_ID,
   DEFAULT_TUNING_CONFIG,
   parseDomainModelId,
+  LEGACY_MODEL_MIGRATION,
 } from "@hexagen/local-llm";
 import type { WebGPUDetectorPort } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
@@ -717,7 +718,19 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
     if (localStorage.getItem(AUTO_LOAD_KEY) === "true") {
       // Attempt to restore the last-used model, fall back to DEFAULT_MODEL_ID
-      const lastModelStr = localStorage.getItem(LAST_MODEL_KEY);
+      let lastModelStr = localStorage.getItem(LAST_MODEL_KEY);
+
+      // Handle legacy model IDs that were removed and replaced
+      if (lastModelStr && lastModelStr in LEGACY_MODEL_MIGRATION) {
+        const migratedId =
+          LEGACY_MODEL_MIGRATION[
+            lastModelStr as keyof typeof LEGACY_MODEL_MIGRATION
+          ];
+        lastModelStr = migratedId;
+        // Update localStorage with the new model ID
+        localStorage.setItem(LAST_MODEL_KEY, migratedId);
+      }
+
       const lastModelParsed = lastModelStr
         ? parseDomainModelId(lastModelStr)
         : null;

@@ -6,31 +6,31 @@ monorepo:
   linker: node-modules
   buildTool: turbo
   workspaces:
-    - apps/*
-    - packages/*
+  - apps/*
+  - packages/*
   root:
     hoistDevDependencies: true
     noInternalDeps: true
   eslint:
     extends:
-      - turbo
-      - prettier
+    - turbo
+    - prettier
     rules:
       no-console: warn
-      "@typescript-eslint/no-explicit-any": error
+      '@typescript-eslint/no-explicit-any': error
       no-restricted-imports:
         patterns:
-          - group:
-              - "@hexagen/*"
-            message: Cross-package imports must go through barrel files.
+        - group:
+          - '@hexagen/*'
+          message: Cross-package imports must go through barrel files.
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
     compilerOptions:
       target: es2022
       lib:
-        - es2022
-        - dom
-        - dom.iterable
+      - es2022
+      - dom
+      - dom.iterable
       module: esnext
       moduleResolution: bundler
       strict: true
@@ -45,21 +45,21 @@ monorepo:
       declaration: true
       emitDeclarationOnly: true
       paths:
-        "@hexagen/*":
-          - packages/*/src/index.ts
-        "@hexagen/shared":
-          - packages/shared/src/index.ts
-        "@hexagen/shared/*":
-          - packages/shared/src/*
-        "@/*":
-          - apps/web/src/*
-          - apps/web/app/*
+        '@hexagen/*':
+        - packages/*/src/index.ts
+        '@hexagen/shared':
+        - packages/shared/src/index.ts
+        '@hexagen/shared/*':
+        - packages/shared/src/*
+        '@/*':
+        - apps/web/src/*
+        - apps/web/app/*
     include: []
     exclude:
-      - node_modules
-      - dist
-      - .next
-      - .turbo
+    - node_modules
+    - dist
+    - .next
+    - .turbo
   workspaceDefaults:
     tsConfig:
       extends: ../../tsconfig.base.json
@@ -72,31 +72,31 @@ monorepo:
         composite: true
         tsBuildInfoFile: ./dist/.tsbuildinfo
       include:
-        - src/**/*
+      - src/**/*
       exclude:
-        - node_modules
-        - dist
-        - .turbo
+      - node_modules
+      - dist
+      - .turbo
       references: []
   turboConfig:
     globalDependencies:
-      - "**/.env.*"
+    - '**/.env.*'
     pipeline:
       clean:
         cache: false
       build:
         dependsOn:
-          - ^build
+        - ^build
         outputs:
-          - dist/**
-          - .next/**
-          - "!.next/cache/**"
+        - dist/**
+        - .next/**
+        - '!.next/cache/**'
       lint:
         dependsOn:
-          - ^build
+        - ^build
       test:
         dependsOn:
-          - ^build
+        - ^build
       dev:
         cache: false
         persistent: true
@@ -110,34 +110,34 @@ generator:
     createOnlyIfMissing: true
     nonDestructive: true
     protectedRootFiles:
-      - .gitignore
-      - turbo.json
-      - yarn.lock
-      - .architecture/
-      - .architecture/manifest.yaml
-      - .architecture/generator.config.yaml
-      - README.md
-      - .env
-      - .env.local
-      - .env.development
-      - .env.production
-      - .env.test
+    - .gitignore
+    - turbo.json
+    - yarn.lock
+    - .architecture/
+    - .architecture/manifest.yaml
+    - .architecture/generator.config.yaml
+    - README.md
+    - .env
+    - .env.local
+    - .env.development
+    - .env.production
+    - .env.test
     packageJson:
       mergeStrategy: preserveExisting
       protectedKeys:
-        - private
-        - version
-        - license
-        - scripts
-        - dependencies
-        - devDependencies
-        - peerDependencies
-        - optionalDependencies
-        - main
-        - module
-        - types
-        - exports
-        - bin
+      - private
+      - version
+      - license
+      - scripts
+      - dependencies
+      - devDependencies
+      - peerDependencies
+      - optionalDependencies
+      - main
+      - module
+      - types
+      - exports
+      - bin
       injectIfMissing:
         scripts:
           build: tsc
@@ -146,356 +146,344 @@ generator:
         devDependencies:
           typescript: ^5.5.4
           eslint: ^9.0.0
-          "@typescript-eslint/parser": ^8.0.0
-          "@typescript-eslint/eslint-plugin": ^8.0.0
+          '@typescript-eslint/parser': ^8.0.0
+          '@typescript-eslint/eslint-plugin': ^8.0.0
           eslint-config-prettier: ^9.1.0
 bounded_contexts:
-  - name: shared
-    type: shared-kernel
-    description: Shared primitives, custom errors, base classes, utilities
-    layers:
-      domain:
-        value_objects:
-          - CustomError
-          - Identifier
-          - PersistedEditorWorkspace
-          - PersistedCanvasLayout
-  - name: project-configuration
-    type: core
-    description: Governance core — manifest parsing, validation, project topology
-    layers:
-      domain:
-        entities:
-          - ProjectSpec
-          - BoundedContext
-          - Entity
-          - ValueObject
-          - Port
-          - UseCase
-          - Adapter
-          - Driver
-        value_objects: []
-      application:
-        use_cases:
-          - GenerateProjectUseCase
-          - ValidateSpecUseCase
-          - RenderManifestUseCase
-        ports:
-          in:
-            - ValidateSpecPort
-            - RenderManifestPort
-            - TelemetryPort
-            - GenerateProjectPort
-            - LoggerPort
-          out:
-            - ProjectGeneratorPort
-            - DownloadProviderPort
-      infrastructure:
-        adapters: []
-    generator:
-      dependencies:
-        js-yaml: ^4.1.0
-        zod: ^3.23.8
-  - name: sync
-    type: core
-    description: >-
-      SyncEngine — idempotent regeneration, structured reporting, aggregation of
-      generator results
-    layers:
-      domain:
-        entities:
-          - GeneratorResult
-          - SyncReport
-      application:
-        use_cases:
-          - RunSyncUseCase
-          - AggregateGeneratorResultsUseCase
-        ports:
-          in:
-            - GeneratorPort
-      infrastructure:
-        adapters:
-          - FileSystemGeneratorAdapter
-          - ArchLinterAdapter
-  - name: wizard-orchestration
-    type: core
-    description: Deterministic wizard flows, intent processing, state projections
-    layers:
-      domain:
-        entities:
-          - WizardSession
-        value_objects:
-          - WizardStep
-          - IntentPayload
-          - ProjectionViewModel
-      application:
-        use_cases:
-          - ProcessIntentUseCase
-          - ProjectWizardStateUseCase
-          - ValidateStepUseCase
-        ports:
-          in:
-            - ProcessIntentPort
-            - ProjectWizardStatePort
-            - ValidateStepPort
-            - IProjectWizardController
-          out:
-            - WizardPersistencePort
-            - WizardTelemetryPort
-            - MonacoSyncPort
-    depends_on:
-      - messaging
-  - name: monaco-orchestration
-    type: core
-    description: Semantic code editing with patch-based mutations, confidence gating, undo
-    layers:
-      domain:
-        entities:
-          - MonacoSession
-        value_objects:
-          - SemanticPatch
-          - ConfidenceScore
-          - PatchIntentMetadata
-      application:
-        use_cases:
-          - ApplySemanticPatchUseCase
-          - ValidatePatchIntentUseCase
-          - UndoLastPatchUseCase
-          - ProjectCurrentBufferStateUseCase
-        ports:
-          in:
-            - ValidatePatchIntentPort
-            - UndoLastPatchPort
-            - ProjectCurrentBufferStatePort
-            - ApplySemanticPatchPort
-          out:
-            - MonacoPersistencePort
-            - SemanticModelAdapterPort
-            - TsMorphPort
-    generator:
-      dependencies:
-        monaco-editor: ^0.51.0
-        ts-morph: ^22.0.0
-  - name: visualization
-    type: supporting
-    description: Interactive architecture graph, module dependency view, DDD canvas
-    layers:
-      domain:
-        value_objects:
-          - GraphLayoutOptions
-          - NodeVisualStyle
-          - HexagonNode
-          - HexagonEdge
-          - CanvasViewport
-      application:
-        use_cases:
-          - RenderHexagonCanvasUseCase
-          - ExportGraphImageUseCase
-        ports:
-          in:
-            - RenderHexagonCanvasPort
-            - ExportGraphImagePort
-          out:
-            - ArchitectureGraphProviderPort
-    generator:
-      dependencies:
-        "@dagrejs/dagre": ^2.0.4
-  - name: messaging
-    type: supporting
-    description: Domain events, intent bus, pluggable transports
-    layers:
-      domain:
-        value_objects:
-          - DomainEvent
-          - Intent
-      application:
-        ports:
-          out:
-            - EventBusPort
-            - IntentBusPort
-  - name: persistence
-    type: supporting
-    description: >-
-      Architecture snapshots, manifest versioning, change history, evolution
-      ledger
-    layers:
-      domain:
-        entities:
-          - Snapshot
-          - Version
-      infrastructure:
-        adapters: []
-  - name: agentic-interaction
-    type: supporting
-    description: AI assistant integration — ports for LLM providers, suggestion engine, cloud chat
-    layers:
-      domain:
-        value_objects:
-          - Suggestion
-          - ConfidenceScore
-      application:
-        ports:
-          out:
-            - LLMProviderPort
-            - SuggestionEnginePort
-            - CloudLLMProviderPort
-      infrastructure:
-        adapters:
-          - OpenAICompatibleAdapter
-  - name: web-driver
-    type: driver
-    description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI
-    layers:
-      domain:
-        entities:
-          - Project
-          - MonacoSessionState
-        ports:
-          out:
-            - DownloadProjectPort
-            - EditorWorkspacePersistencePort
-            - CanvasLayoutPersistencePort
-      application:
-        use_cases:
-          - ProjectViewProjectionUseCase
-          - PersistSessionIntentHandler
-          - DownloadProjectUseCase
-        factories:
-          - createWebUseCaseFactories
-      infrastructure:
-        adapters:
-          - LocalStoragePersistenceAdapter
-          - LocalStorageCanvasLayoutAdapter
-          - WebContainerPreviewAdapter
-          - ArchitectureGraphProviderAdapter
-    driver_for: apps/web
-    generator:
-      dependencies:
-        "@xyflow/react": ^12.10.1
-    depends_on:
-      - monaco-orchestration
-      - visualization
-      - wizard-orchestration
-    wiring:
-      - Intent Bus dispatches to projections/use-case factories only
-      - >-
-        MonacoPersistencePort is owned by monaco-orchestration and implemented
-        here by LocalStoragePersistenceAdapter
-      - >-
-        ArchitectureGraphProviderPort is owned by visualization and implemented
-        here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
-  - name: project-generation
-    type: core
-    description: >-
-      Project scaffolding engine — generates full project structure from
-      specification
-    layers:
-      domain:
-        value_objects:
-          - ProjectSpecification
-      application:
-        use_cases:
-          - GenerateProjectUseCase
+- name: shared
+  type: shared-kernel
+  description: Shared primitives, custom errors, base classes, utilities
+  layers:
+    domain:
+      value_objects:
+      - CustomError
+      - Identifier
+      - PersistedEditorWorkspace
+      - PersistedCanvasLayout
+- name: project-configuration
+  type: core
+  description: Governance core — manifest parsing, validation, project topology
+  layers:
+    domain:
+      entities:
+      - ProjectSpec
+      - BoundedContext
+      - Entity
+      - ValueObject
+      - Port
+      - UseCase
+      - Adapter
+      - Driver
+      value_objects: []
+    application:
+      use_cases:
+      - GenerateProjectUseCase
+      - ValidateSpecUseCase
+      - RenderManifestUseCase
       ports:
         in:
-          - RunProjectGenerationPort
+        - ValidateSpecPort
+        - RenderManifestPort
+        - TelemetryPort
+        - GenerateProjectPort
+        - LoggerPort
         out:
-          - ExternalProjectGeneratorPort
-          - ZipCreatorPort
-          - ProjectExporterPort
-      infrastructure:
-        adapters:
-          - ExternalSyncEngineAdapter
-          - JsZipCreatorAdapter
-  - name: mcp-server
-    type: core
-    description: >-
-      MCP server — exposes architectural tools and resources over stdio
-      transport for AI agent interaction (audit, scaffold, dependency
-      management)
-    layers:
-      domain: {}
-      application:
-        use_cases:
-          - GetManifestResourceUseCase
-          - GetGraphResourceUseCase
-          - GetLinterReportResourceUseCase
-          - AuditBoundariesToolUseCase
-          - ScaffoldModuleToolUseCase
-          - AddDependencyToolUseCase
-          - CreatePortToolUseCase
-          - CreateAdapterToolUseCase
-          - RemovePortToolUseCase
-          - RemoveContextToolUseCase
-        ports:
-          in:
-            - McpServerPort
-          out:
-            - ProjectConfigurationReadPort
-            - ManifestWritePort
-            - LinterPort
-            - ArchitectureQueryPort
-            - ScaffoldingPort
-      infrastructure:
-        adapters:
-          - MCPServerAdapter
-          - ProjectConfigurationReadAdapter
-          - ManifestWriteAdapter
-          - LinterAdapter
-          - SyncEngineAdapter
-          - InMemoryEventBusAdapter
-    depends_on:
-      - shared
-      - messaging
-      - project-configuration
-      - sync
-  - name: local-llm
-    type: supporting
-    description: >-
-      Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
-      offline-capable local AI inference with worker-based architecture
-      and IndexedDB model caching.
-    layers:
-      domain:
-        value_objects:
-          - LLMProgress
-          - ModelMetadata
-          - LLMEngineState
-      application:
-        use_cases:
-          - InitializeModelUseCase
-          - StreamGenerateUseCase
-        ports:
-          out:
-            - LocalLLMProviderPort
-            - WebGPUDetectorPort
-      infrastructure:
-        adapters:
-          - WebLLMAdapter
-          - WebGPUCapabilityAdapter
-    generator:
-      dependencies:
-        "@mlc-ai/web-llm": ^0.2.0
-    depends_on:
-      - agentic-interaction
-      - shared
+        - ProjectGeneratorPort
+        - DownloadProviderPort
+    infrastructure:
+      adapters: []
+  generator:
+    dependencies:
+      js-yaml: ^4.1.0
+      zod: ^3.23.8
+- name: sync
+  type: core
+  description: SyncEngine — idempotent regeneration, structured reporting, aggregation of generator results
+  layers:
+    domain:
+      entities:
+      - GeneratorResult
+      - SyncReport
+    application:
+      use_cases:
+      - RunSyncUseCase
+      - AggregateGeneratorResultsUseCase
+      ports:
+        in:
+        - GeneratorPort
+    infrastructure:
+      adapters:
+      - FileSystemGeneratorAdapter
+      - ArchLinterAdapter
+- name: wizard-orchestration
+  type: core
+  description: Deterministic wizard flows, intent processing, state projections
+  layers:
+    domain:
+      entities:
+      - WizardSession
+      value_objects:
+      - WizardStep
+      - IntentPayload
+      - ProjectionViewModel
+    application:
+      use_cases:
+      - ProcessIntentUseCase
+      - ProjectWizardStateUseCase
+      - ValidateStepUseCase
+      ports:
+        in:
+        - ProcessIntentPort
+        - ProjectWizardStatePort
+        - ValidateStepPort
+        - IProjectWizardController
+        out:
+        - WizardPersistencePort
+        - WizardTelemetryPort
+        - MonacoSyncPort
+  depends_on:
+  - messaging
+- name: monaco-orchestration
+  type: core
+  description: Semantic code editing with patch-based mutations, confidence gating, undo
+  layers:
+    domain:
+      entities:
+      - MonacoSession
+      value_objects:
+      - SemanticPatch
+      - ConfidenceScore
+      - PatchIntentMetadata
+    application:
+      use_cases:
+      - ApplySemanticPatchUseCase
+      - ValidatePatchIntentUseCase
+      - UndoLastPatchUseCase
+      - ProjectCurrentBufferStateUseCase
+      ports:
+        in:
+        - ValidatePatchIntentPort
+        - UndoLastPatchPort
+        - ProjectCurrentBufferStatePort
+        - ApplySemanticPatchPort
+        out:
+        - MonacoPersistencePort
+        - SemanticModelAdapterPort
+        - TsMorphPort
+  generator:
+    dependencies:
+      monaco-editor: ^0.51.0
+      ts-morph: ^22.0.0
+- name: visualization
+  type: supporting
+  description: Interactive architecture graph, module dependency view, DDD canvas
+  layers:
+    domain:
+      value_objects:
+      - GraphLayoutOptions
+      - NodeVisualStyle
+      - HexagonNode
+      - HexagonEdge
+      - CanvasViewport
+    application:
+      use_cases:
+      - RenderHexagonCanvasUseCase
+      - ExportGraphImageUseCase
+      ports:
+        in:
+        - RenderHexagonCanvasPort
+        - ExportGraphImagePort
+        out:
+        - ArchitectureGraphProviderPort
+  generator:
+    dependencies:
+      '@dagrejs/dagre': ^2.0.4
+- name: messaging
+  type: supporting
+  description: Domain events, intent bus, pluggable transports
+  layers:
+    domain:
+      value_objects:
+      - DomainEvent
+      - Intent
+    application:
+      ports:
+        out:
+        - EventBusPort
+        - IntentBusPort
+- name: persistence
+  type: supporting
+  description: Architecture snapshots, manifest versioning, change history, evolution ledger
+  layers:
+    domain:
+      entities:
+      - Snapshot
+      - Version
+    infrastructure:
+      adapters: []
+- name: agentic-interaction
+  type: supporting
+  description: AI assistant integration — ports for LLM providers, suggestion engine, cloud chat
+  layers:
+    domain:
+      value_objects:
+      - Suggestion
+      - ConfidenceScore
+    application:
+      ports:
+        out:
+        - LLMProviderPort
+        - SuggestionEnginePort
+        - CloudLLMProviderPort
+    infrastructure:
+      adapters:
+      - OpenAICompatibleAdapter
+- name: web-driver
+  type: driver
+  description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI
+  layers:
+    domain:
+      entities:
+      - Project
+      - MonacoSessionState
+      ports:
+        out:
+        - DownloadProjectPort
+        - EditorWorkspacePersistencePort
+        - CanvasLayoutPersistencePort
+    application:
+      use_cases:
+      - ProjectViewProjectionUseCase
+      - PersistSessionIntentHandler
+      - DownloadProjectUseCase
+      factories:
+      - createWebUseCaseFactories
+    infrastructure:
+      adapters:
+      - LocalStoragePersistenceAdapter
+      - LocalStorageCanvasLayoutAdapter
+      - WebContainerPreviewAdapter
+      - ArchitectureGraphProviderAdapter
+  driver_for: apps/web
+  generator:
+    dependencies:
+      '@xyflow/react': ^12.10.1
+  depends_on:
+  - monaco-orchestration
+  - visualization
+  - wizard-orchestration
+  wiring:
+  - Intent Bus dispatches to projections/use-case factories only
+  - MonacoPersistencePort is owned by monaco-orchestration and implemented here by LocalStoragePersistenceAdapter
+  - ArchitectureGraphProviderPort is owned by visualization and implemented here by ArchitectureGraphProviderAdapter
+    (stub — returns empty graph)
+- name: project-generation
+  type: core
+  description: Project scaffolding engine — generates full project structure from specification
+  layers:
+    domain:
+      value_objects:
+      - ProjectSpecification
+    application:
+      use_cases:
+      - GenerateProjectUseCase
+    ports:
+      in:
+      - RunProjectGenerationPort
+      out:
+      - ExternalProjectGeneratorPort
+      - ZipCreatorPort
+      - ProjectExporterPort
+    infrastructure:
+      adapters:
+      - ExternalSyncEngineAdapter
+      - JsZipCreatorAdapter
+- name: mcp-server
+  type: core
+  description: MCP server — exposes architectural tools and resources over stdio transport for AI agent
+    interaction (audit, scaffold, dependency management)
+  layers:
+    domain: {}
+    application:
+      use_cases:
+      - GetManifestResourceUseCase
+      - GetGraphResourceUseCase
+      - GetLinterReportResourceUseCase
+      - AuditBoundariesToolUseCase
+      - ScaffoldModuleToolUseCase
+      - AddDependencyToolUseCase
+      - CreatePortToolUseCase
+      - CreateAdapterToolUseCase
+      - RemovePortToolUseCase
+      - RemoveContextToolUseCase
+      ports:
+        in:
+        - McpServerPort
+        out:
+        - ProjectConfigurationReadPort
+        - ManifestWritePort
+        - LinterPort
+        - ArchitectureQueryPort
+        - ScaffoldingPort
+    infrastructure:
+      adapters:
+      - MCPServerAdapter
+      - ProjectConfigurationReadAdapter
+      - ManifestWriteAdapter
+      - LinterAdapter
+      - SyncEngineAdapter
+      - InMemoryEventBusAdapter
+  depends_on:
+  - shared
+  - messaging
+  - project-configuration
+  - sync
+- name: local-llm
+  type: supporting
+  description: Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides offline-capable local
+    AI inference with worker-based architecture and IndexedDB model caching.
+  layers:
+    domain:
+      value_objects:
+      - LLMProgress
+      - ModelMetadata
+      - LLMEngineState
+      - HardwareProfile
+    application:
+      use_cases:
+      - InitializeModelUseCase
+      - StreamGenerateUseCase
+      ports:
+        out:
+        - LocalLLMProviderPort
+        - WebGPUDetectorPort
+        - HardwareProfilerPort
+    infrastructure:
+      adapters:
+      - WebLLMAdapter
+      - WebGPUCapabilityAdapter
+      - BrowserHardwareProfilerAdapter
+  generator:
+    dependencies:
+      '@mlc-ai/web-llm': ^0.2.0
+  depends_on:
+  - agentic-interaction
+  - shared
 apps:
-  - name: web
-    driver: next.js
-    description: >-
-      Frontend application — wizard, monaco editor, agentic UI, visualization
-      canvas
-    depends_on:
-      - shared
-      - project-configuration
-      - wizard-orchestration
-      - monaco-orchestration
-      - visualization
-      - sync
-  - name: api-gateway
-    driver: fastify
-    description: Public HTTP API + command gateway (future phase)
-    depends_on:
-      - project-configuration
-      - messaging
-      - shared
+- name: web
+  driver: next.js
+  description: Frontend application — wizard, monaco editor, agentic UI, visualization canvas
+  depends_on:
+  - shared
+  - project-configuration
+  - wizard-orchestration
+  - monaco-orchestration
+  - visualization
+  - sync
+- name: api-gateway
+  driver: fastify
+  description: Public HTTP API + command gateway (future phase)
+  depends_on:
+  - project-configuration
+  - messaging
+  - shared

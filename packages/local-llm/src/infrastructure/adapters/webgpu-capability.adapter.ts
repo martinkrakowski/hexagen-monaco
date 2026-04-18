@@ -18,10 +18,11 @@ declare global {
   interface GPUAdapter {
     requestDevice(): Promise<GPUDevice>;
     features: Iterable<GPUFeatureName>;
+    limits: { maxBufferSize: number };
   }
 
   interface GPUDevice extends GPUAdapter {
-    limits: { maxTextureDimension2D: number };
+    limits: { maxTextureDimension2D: number; maxBufferSize: number };
   }
 
   interface GPURequestAdapterOptions {
