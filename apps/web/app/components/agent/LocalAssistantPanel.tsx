@@ -6,7 +6,6 @@ import { useLocalLLM } from "@/hooks/use-local-llm";
 import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/use-cloud-llm";
 import { useSecretVault } from "@/hooks/use-secret-vault";
 import { getClientProviders } from "@/config/cloud-providers";
-import { OptInCard } from "./OptInCard";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
 import { ModelSettingsView } from "./ModelSettingsView";
@@ -18,7 +17,7 @@ import { CloudChatInterface } from "./CloudChatInterface";
 
 type PanelView = "main" | "model-settings";
 type LLMMode = "local" | "cloud";
-type PanelViewState = "initializing" | "optIn" | "settings" | "chat";
+type PanelViewState = "initializing" | "settings" | "chat";
 
 export function LocalAssistantPanel() {
   const [mode, setMode] = useState<LLMMode>("local");
@@ -43,7 +42,6 @@ export function LocalAssistantPanel() {
     isStreaming,
     initializeModel,
     cancelDownload,
-    cancelFromRequiresModel,
     sendMessage,
     loadedModel,
     switchModel,
@@ -83,9 +81,8 @@ export function LocalAssistantPanel() {
       // Check both keys: HAS_ENABLED_KEY (new) and AUTO_LOAD_KEY (legacy).
       // Users from before HAS_ENABLED_KEY was introduced only have AUTO_LOAD_KEY.
       const isOptedIn =
-        localStorage.getItem("hexagen:local-llm:opted-out") !== "true" &&
-        (localStorage.getItem("hexagen:local-llm:has-enabled") !== null ||
-          localStorage.getItem("hexagen:local-llm:auto-load") === "true");
+        localStorage.getItem("hexagen:local-llm:has-enabled") !== null ||
+        localStorage.getItem("hexagen:local-llm:auto-load") === "true";
 
       // Opted-In Hold: If user is opted in but the engine is still in its
       // transit state (opt_in before auto-load) or actively loading,
@@ -102,12 +99,9 @@ export function LocalAssistantPanel() {
 
         if (!isMounted) return;
 
-        // CRITICAL: Check isOptedIn FIRST before any cached-model logic.
-        // After cancelFromRequiresModel(), localStorage has NO keys set
-        // (HAS_ENABLED_KEY cleared), so isOptedIn = false. This path must
-        // take precedence over cachedModelsExist to route to OptInCard.
+        // If not opted in, route to settings to select a model.
         if (!isOptedIn) {
-          setViewState("optIn");
+          setViewState("settings");
           return;
         }
 
@@ -128,7 +122,7 @@ export function LocalAssistantPanel() {
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Error determining local assistant view:", error);
-        if (isMounted) setViewState("optIn");
+        if (isMounted) setViewState("settings");
       }
     };
 
@@ -170,6 +164,11 @@ export function LocalAssistantPanel() {
     setCloudConfig(null);
     cloudLLM.clearMessages();
   }, [cloudLLM]);
+
+  const handleBackFromSettings = useCallback(() => {
+    if (viewState === "settings") return;
+    setPanelView("main");
+  }, [viewState]);
 
   // ─── Gatekeeper: Prevent hydration race condition ──────────────
 
@@ -278,32 +277,6 @@ export function LocalAssistantPanel() {
           </button>
         </div>
         <UnavailableCard status={status} />
-      </div>
-    );
-  }
-
-  if (viewState === "optIn") {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex border-b border-border shrink-0">
-          <button
-            type="button"
-            className="flex-1 py-2 text-sm font-medium border-b-2 border-primary text-foreground"
-          >
-            Local
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("cloud")}
-            className="flex-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Cloud
-          </button>
-        </div>
-        <OptInCard
-          onInitialize={() => initializeModel()}
-          isInitializing={false}
-        />
       </div>
     );
   }
@@ -425,14 +398,13 @@ export function LocalAssistantPanel() {
           onSwitchModel={switchModel}
           onDeleteModel={deleteCachedModel}
           hasModelInCache={hasModelInCache}
-          onBack={() => setPanelView("main")}
+          onBack={viewState === "settings" ? undefined : handleBackFromSettings}
           isLoading={
             engineState.status === "downloading" ||
             engineState.status === "loading_vram"
           }
           onSwitchToCloud={() => setMode("cloud")}
           requiresModelWarning={viewState === "settings" || showRequiresModel}
-          onCancelSetup={cancelFromRequiresModel}
         />
       </div>
     );

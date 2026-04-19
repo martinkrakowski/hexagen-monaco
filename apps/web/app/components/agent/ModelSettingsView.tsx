@@ -15,11 +15,15 @@ interface ModelSettingsViewProps {
   onSwitchModel: (modelId: DomainModelId) => Promise<void>;
   onDeleteModel: (modelId: DomainModelId) => Promise<void>;
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
-  onBack: () => void;
+  /**
+   * Callback to navigate back to the main governance view.
+   * Pass undefined to hide the back button during initial model selection,
+   * when the user has not yet selected a model and cannot navigate back.
+   */
+  onBack?: () => void;
   isLoading: boolean;
   onSwitchToCloud?: () => void;
   requiresModelWarning?: boolean;
-  onCancelSetup?: () => void;
 }
 
 interface ModelCacheStatus {
@@ -39,7 +43,6 @@ export function ModelSettingsView({
   isLoading,
   onSwitchToCloud,
   requiresModelWarning,
-  onCancelSetup,
 }: ModelSettingsViewProps) {
   const [cacheStatus, setCacheStatus] = useState<
     Map<DomainModelId, ModelCacheStatus>
@@ -198,21 +201,17 @@ export function ModelSettingsView({
       <div className="mb-4 px-2 py-3 flex-shrink-0 border-b border-border">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={
-                requiresModelWarning && onCancelSetup ? onCancelSetup : onBack
-              }
-              className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors"
-              title={
-                requiresModelWarning ? "Cancel setup" : "Back to governance"
-              }
-              aria-label={
-                requiresModelWarning ? "Cancel setup" : "Back to governance"
-              }
-            >
-              <ArrowLeft size={14} />
-            </button>
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors"
+                title="Back to governance"
+                aria-label="Back to governance"
+              >
+                <ArrowLeft size={14} />
+              </button>
+            )}
             <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
               AI Model Settings
             </h1>
@@ -229,19 +228,10 @@ export function ModelSettingsView({
           <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-1.5">
             A model is required
           </p>
-          <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
-            Please select a model to continue. The previous download was
-            cancelled or interrupted.
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            Please select and download a model to continue using the AI
+            Governance panel.
           </p>
-          {onCancelSetup && (
-            <button
-              type="button"
-              onClick={onCancelSetup}
-              className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200 underline"
-            >
-              Cancel Setup
-            </button>
-          )}
         </div>
       )}
 
