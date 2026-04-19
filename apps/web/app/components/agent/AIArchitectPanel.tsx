@@ -13,7 +13,6 @@ import { Bot, FileText, Loader2 } from "lucide-react";
 
 const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
-const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 export function AIArchitectPanel() {
   const [isCheckingCache, setIsCheckingCache] = useState(true);
@@ -66,9 +65,8 @@ export function AIArchitectPanel() {
       // Check both keys: HAS_ENABLED_KEY (new) and AUTO_LOAD_KEY (legacy).
       // Users from before HAS_ENABLED_KEY was introduced only have AUTO_LOAD_KEY.
       const isOptedIn =
-        localStorage.getItem(OPT_OUT_KEY) !== "true" &&
-        (localStorage.getItem(HAS_ENABLED_KEY) !== null ||
-          localStorage.getItem(AUTO_LOAD_KEY) === "true");
+        localStorage.getItem(HAS_ENABLED_KEY) !== null ||
+        localStorage.getItem(AUTO_LOAD_KEY) === "true";
 
       // Opted-In Hold: hold the spinner while auto-load is imminent or in
       // progress. The hold is conditional on AUTO_LOAD_KEY still being set —
@@ -88,7 +86,9 @@ export function AIArchitectPanel() {
         if (!isMounted) return;
 
         if (!isOptedIn) {
-          // State A: User has never enabled Local AI
+          // State A: User has never enabled Local AI — route to settings
+          enterRequiresModel();
+          setActiveTab("chat");
           setIsCheckingCache(false);
         } else if (
           engineState.loadedModelId ||

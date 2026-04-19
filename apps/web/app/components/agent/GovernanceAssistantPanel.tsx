@@ -601,10 +601,10 @@ export function GovernanceAssistantPanel({
   }, []);
 
   const handleBackFromSettings = useCallback(() => {
-    if (llmEngineState.status === "requires_model") return;
+    if (status === "requires_model") return;
     autoNavigatedToSettings.current = false;
     setPanelView("main");
-  }, [llmEngineState.status]);
+  }, [status]);
 
   const handleCloudConnect = useCallback(
     async (provider: string, model: string) => {

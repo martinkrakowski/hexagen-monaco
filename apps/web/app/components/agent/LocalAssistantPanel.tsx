@@ -166,9 +166,8 @@ export function LocalAssistantPanel() {
   }, [cloudLLM]);
 
   const handleBackFromSettings = useCallback(() => {
-    if (viewState === "settings") return;
     setPanelView("main");
-  }, [viewState]);
+  }, []);
 
   // ─── Gatekeeper: Prevent hydration race condition ──────────────
 
