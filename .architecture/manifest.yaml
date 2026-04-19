@@ -198,7 +198,9 @@ bounded_contexts:
         zod: ^3.23.8
   - name: sync
     type: core
-    description: SyncEngine — idempotent regeneration, structured reporting, aggregation of generator results
+    description: >-
+      SyncEngine — idempotent regeneration, structured reporting, aggregation of
+      generator results
     layers:
       domain:
         entities:
@@ -313,7 +315,9 @@ bounded_contexts:
             - IntentBusPort
   - name: persistence
     type: supporting
-    description: Architecture snapshots, manifest versioning, change history, evolution ledger
+    description: >-
+      Architecture snapshots, manifest versioning, change history, evolution
+      ledger
     layers:
       domain:
         entities:
@@ -323,7 +327,9 @@ bounded_contexts:
         adapters: []
   - name: agentic-interaction
     type: supporting
-    description: AI assistant integration — ports for LLM providers, suggestion engine, cloud chat
+    description: >-
+      AI assistant integration — ports for LLM providers, suggestion engine,
+      cloud chat
     layers:
       domain:
         value_objects:
@@ -335,6 +341,7 @@ bounded_contexts:
             - LLMProviderPort
             - SuggestionEnginePort
             - CloudLLMProviderPort
+            - SecretVaultPort
       infrastructure:
         adapters:
           - OpenAICompatibleAdapter
@@ -368,18 +375,28 @@ bounded_contexts:
     generator:
       dependencies:
         "@xyflow/react": ^12.10.1
+        react-markdown: ^9.0.0
+        remark-gfm: ^4.0.0
+        react-syntax-highlighter: ^15.6.0
+        "@tailwindcss/typography": ^0.5.0
     depends_on:
+      - agentic-interaction
       - monaco-orchestration
       - visualization
       - wizard-orchestration
     wiring:
       - Intent Bus dispatches to projections/use-case factories only
-      - MonacoPersistencePort is owned by monaco-orchestration and implemented here by LocalStoragePersistenceAdapter
-      - ArchitectureGraphProviderPort is owned by visualization and implemented here by ArchitectureGraphProviderAdapter
-        (stub — returns empty graph)
+      - >-
+        MonacoPersistencePort is owned by monaco-orchestration and implemented
+        here by LocalStoragePersistenceAdapter
+      - >-
+        ArchitectureGraphProviderPort is owned by visualization and implemented
+        here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
   - name: project-generation
     type: core
-    description: Project scaffolding engine — generates full project structure from specification
+    description: >-
+      Project scaffolding engine — generates full project structure from
+      specification
     layers:
       domain:
         value_objects:
@@ -400,9 +417,10 @@ bounded_contexts:
           - JsZipCreatorAdapter
   - name: mcp-server
     type: core
-    description:
-      MCP server — exposes architectural tools and resources over stdio transport for AI agent
-      interaction (audit, scaffold, dependency management)
+    description: >-
+      MCP server — exposes architectural tools and resources over stdio
+      transport for AI agent interaction (audit, scaffold, dependency
+      management)
     layers:
       domain: {}
       application:
@@ -441,9 +459,10 @@ bounded_contexts:
       - sync
   - name: local-llm
     type: supporting
-    description:
-      Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides offline-capable local
-      AI inference with worker-based architecture and IndexedDB model caching.
+    description: >-
+      Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
+      offline-capable local AI inference with worker-based architecture and
+      IndexedDB model caching.
     layers:
       domain:
         value_objects:
@@ -478,7 +497,9 @@ bounded_contexts:
 apps:
   - name: web
     driver: next.js
-    description: Frontend application — wizard, monaco editor, agentic UI, visualization canvas
+    description: >-
+      Frontend application — wizard, monaco editor, agentic UI, visualization
+      canvas
     depends_on:
       - shared
       - project-configuration

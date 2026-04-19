@@ -8,6 +8,7 @@ export interface CloudLLMMessage {
 export interface CloudLLMCompletionRequest {
   model: string;
   messages: CloudLLMMessage[];
+  apiKey: string;
   temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;
@@ -26,11 +27,11 @@ export interface CloudLLMCompletionResponse {
 export interface CloudLLMProviderPort {
   complete(
     request: CloudLLMCompletionRequest,
-  ): Promise<Result<CloudLLMCompletionResponse>>;
+  ): Promise<Result<CloudLLMCompletionResponse, Error>>;
 
   streamComplete(
     request: CloudLLMCompletionRequest,
-  ): AsyncGenerator<Result<string>>;
+  ): AsyncGenerator<Result<string, Error>>;
 }
 
 export function isCloudLLMProviderPort(

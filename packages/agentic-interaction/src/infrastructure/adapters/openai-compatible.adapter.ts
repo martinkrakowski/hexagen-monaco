@@ -14,7 +14,7 @@ export class OpenAICompatibleAdapter implements CloudLLMProviderPort {
 
   async complete(
     request: CloudLLMCompletionRequest,
-  ): Promise<Result<CloudLLMCompletionResponse>> {
+  ): Promise<Result<CloudLLMCompletionResponse, Error>> {
     const model = request.model || this.defaultModel;
 
     try {
@@ -48,7 +48,8 @@ export class OpenAICompatibleAdapter implements CloudLLMProviderPort {
         };
       };
 
-      return ok({
+      // Type casting needed due to Result generic variance issue
+      const result = ok({
         id: data.id,
         model: data.model,
         usage: data.usage
@@ -59,6 +60,8 @@ export class OpenAICompatibleAdapter implements CloudLLMProviderPort {
             }
           : undefined,
       });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return result as any;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return err(new Error("Request aborted"));
@@ -69,7 +72,7 @@ export class OpenAICompatibleAdapter implements CloudLLMProviderPort {
 
   async *streamComplete(
     request: CloudLLMCompletionRequest,
-  ): AsyncGenerator<Result<string>> {
+  ): AsyncGenerator<Result<string, Error>> {
     const model = request.model || this.defaultModel;
 
     try {
@@ -122,7 +125,8 @@ export class OpenAICompatibleAdapter implements CloudLLMProviderPort {
             const parsed = JSON.parse(data);
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
-              yield ok(content);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              yield ok(content) as any;
             }
           } catch {
             // Skip invalid JSON
