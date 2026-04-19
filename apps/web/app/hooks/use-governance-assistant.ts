@@ -68,6 +68,15 @@ export function useGovernanceAssistant(
   /** Tracks whether we were streaming in the previous render (for edge detection). */
   const wasStreamingRef = useRef(false);
 
+  /**
+   * Synchronous guard for the load effect. Prevents the auto-ask effect from
+   * firing in the same effect cycle where the load effect has started an async
+   * IDB read. Unlike threadLoaded state (which is batched by React and only
+   * visible in the next render), this ref is set synchronously and immediately
+   * visible to later effects in the same cycle.
+   */
+  const threadLoadingRef = useRef(false);
+
   const wizardContext = serializeWizardContext(wizardData);
 
   const currentStepId = useMemo<WizardStepId>(() => {
@@ -222,15 +231,16 @@ export function useGovernanceAssistant(
       setConversationThread([]);
       governanceHistoryRef.current = [];
       pendingQuestionLabelRef.current = null;
+      threadLoadingRef.current = false;
       setThreadLoaded(true);
       return;
     }
 
-    // Reset threadLoaded to false before starting async load.
-    // This gates the auto-ask effect (which depends on threadLoaded) until the
-    // IDB load completes, preventing the race condition where auto-ask fires
-    // and adds a thread entry before IDB load clears it.
-    setThreadLoaded(false);
+    // Synchronously gate the auto-ask effect in this same cycle.
+    // React batches state updates, so setThreadLoaded(false) would only take
+    // effect in the next render — too late to prevent auto-ask from firing.
+    // The ref is immediately visible to later effects in this cycle.
+    threadLoadingRef.current = true;
 
     const port = getChatPersistence();
     port
@@ -253,6 +263,7 @@ export function useGovernanceAssistant(
           governanceHistoryRef.current = [];
         }
         pendingQuestionLabelRef.current = null;
+        threadLoadingRef.current = false;
         setThreadLoaded(true);
       })
       .catch(() => {
@@ -260,6 +271,7 @@ export function useGovernanceAssistant(
         setConversationThread([]);
         governanceHistoryRef.current = [];
         pendingQuestionLabelRef.current = null;
+        threadLoadingRef.current = false;
         setThreadLoaded(true);
       });
   }, [contextKey]);
@@ -307,10 +319,13 @@ export function useGovernanceAssistant(
     setActiveItem(null);
   }, [currentStepIndex]);
 
-  // Auto-ask the root question when an accordion is first expanded (empty thread)
+  // Auto-ask the root question when an accordion is first expanded (empty thread).
+  // Uses threadLoadingRef as a synchronous guard to prevent firing during the
+  // same effect cycle where the load effect started an async IDB read.
   useEffect(() => {
     if (
       !threadLoaded ||
+      threadLoadingRef.current ||
       !expandedQuestionId ||
       conversationThread.length > 0 ||
       isStreaming
