@@ -357,3 +357,30 @@ export const SUGGESTION_FOLLOW_UPS: PrebakedQuestion[] = [
     label: "Are there related recommendations I should consider?",
   },
 ];
+
+/**
+ * Find a PrebakedQuestion by its ID (not label).
+ * Used by regeneration logic to locate the original question.
+ */
+export function findQuestionById(
+  questionId: string,
+  activeItem:
+    | { type: "violation"; item: Violation }
+    | { type: "suggestion"; item: AISuggestion }
+    | null,
+  currentStepId: WizardStepId,
+): PrebakedQuestion | undefined {
+  const primaryPool = activeItem
+    ? activeItem.type === "violation"
+      ? VIOLATION_QUESTIONS
+      : SUGGESTION_QUESTIONS
+    : (STEP_QUESTIONS[currentStepId] ?? []);
+
+  const followUpPool = activeItem
+    ? activeItem.type === "violation"
+      ? VIOLATION_FOLLOW_UPS
+      : SUGGESTION_FOLLOW_UPS
+    : (STEP_FOLLOW_UPS[currentStepId] ?? []);
+
+  return [...primaryPool, ...followUpPool].find((q) => q.id === questionId);
+}

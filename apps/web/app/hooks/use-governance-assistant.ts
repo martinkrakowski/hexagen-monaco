@@ -19,6 +19,7 @@ import {
   buildViolationPrompt,
   buildSuggestionPrompt,
   buildStepPrompt,
+  findQuestionById,
 } from "@/lib/governance-question-templates";
 import { serializeWizardContext } from "@/lib/wizard-assistant-context";
 import { wizardSteps } from "@/components/project-wizard/config";
@@ -46,6 +47,14 @@ export function useGovernanceAssistant(
   const [conversationThread, setConversationThread] = useState<
     ConversationEntry[]
   >([]);
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(
+    null,
+  );
+  const [regeneratingEntryId, setRegeneratingEntryId] = useState<string | null>(
+    null,
+  );
+  const [threadLoaded, setThreadLoaded] = useState(false);
+  const [loadCompleteToken, setLoadCompleteToken] = useState(0);
 
   /**
    * Condensed LLM history for conversational context. Stores question labels
@@ -60,6 +69,15 @@ export function useGovernanceAssistant(
   /** Tracks whether we were streaming in the previous render (for edge detection). */
   const wasStreamingRef = useRef(false);
 
+  /**
+   * Synchronous guard for the load effect. Prevents the auto-ask effect from
+   * firing in the same effect cycle where the load effect has started an async
+   * IDB read. Unlike threadLoaded state (which is batched by React and only
+   * visible in the next render), this ref is set synchronously and immediately
+   * visible to later effects in the same cycle.
+   */
+  const threadLoadingRef = useRef(false);
+
   const wizardContext = serializeWizardContext(wizardData);
 
   const currentStepId = useMemo<WizardStepId>(() => {
@@ -73,17 +91,26 @@ export function useGovernanceAssistant(
 
   /**
    * Derive storage key for the current governance context.
-   * Keys are scoped to step or violation/suggestion to avoid cross-context pollution.
+   * Keys are scoped to question level: step/violation/suggestion + question ID.
+   * If no accordion is expanded, contextKey is null (no persistence).
    */
-  const contextKey = useMemo<string>(() => {
-    if (activeItem) {
-      return `${activeItem.type}:${activeItem.item.id}`;
+  const contextKey = useMemo<string | null>(() => {
+    if (!expandedQuestionId) {
+      return null;
     }
-    return `step:${currentStepId}`;
-  }, [activeItem, currentStepId]);
+    if (activeItem) {
+      return `${activeItem.type}:${activeItem.item.id}:q:${expandedQuestionId}`;
+    }
+    return `step:${currentStepId}:q:${expandedQuestionId}`;
+  }, [activeItem, currentStepId, expandedQuestionId]);
 
   const selectItem = useCallback((item: ActiveItem) => {
     setActiveItem(item);
+    setExpandedQuestionId(null);
+  }, []);
+
+  const expandAccordion = useCallback((questionId: string) => {
+    setExpandedQuestionId((prev) => (prev === questionId ? null : questionId));
   }, []);
 
   const askQuestion = useCallback(
@@ -132,8 +159,9 @@ export function useGovernanceAssistant(
     [currentStepId, wizardContext, sendGovernanceMessage],
   );
 
-  // Finalize the last thread entry when streaming completes.
+  // Finalize the thread entry when streaming completes.
   // Uses edge detection (wasStreaming -> !isStreaming) to run exactly once.
+  // Supports two modes: normal (last entry) and regeneration (specific entry by ID).
   useEffect(() => {
     if (wasStreamingRef.current && !isStreaming) {
       // Extract last assistant message content
@@ -146,31 +174,75 @@ export function useGovernanceAssistant(
       }
 
       if (lastAnswer) {
-        // Finalize the thread entry
+        // Determine which entry to finalize: regenerating target or last entry
+        const targetEntryId = regeneratingEntryId;
+
         setConversationThread((prev) => {
           if (prev.length === 0) return prev;
-          const last = prev[prev.length - 1];
-          if (last.answer) return prev; // already finalized
-          return [...prev.slice(0, -1), { ...last, answer: lastAnswer }];
+
+          if (targetEntryId) {
+            // Regeneration mode: find and update the specific entry
+            const targetIndex = prev.findIndex((e) => e.id === targetEntryId);
+            if (targetIndex === -1) return prev; // entry not found, skip
+            const targetEntry = prev[targetIndex];
+            if (targetEntry.answer && targetEntry.answer !== "") {
+              return prev; // already finalized, skip
+            }
+            // Overwrite the specific entry's answer
+            const updated = [...prev];
+            updated[targetIndex] = { ...targetEntry, answer: lastAnswer };
+            return updated;
+          } else {
+            // Normal mode: finalize the last entry
+            const last = prev[prev.length - 1];
+            if (last.answer) return prev; // already finalized
+            return [...prev.slice(0, -1), { ...last, answer: lastAnswer }];
+          }
         });
 
-        // Append to governance history for future context
-        const questionLabel = pendingQuestionLabelRef.current;
-        if (questionLabel) {
-          governanceHistoryRef.current.push(
-            { role: "user", content: questionLabel },
-            { role: "assistant", content: lastAnswer },
-          );
-          pendingQuestionLabelRef.current = null;
+        // Rebuild governanceHistoryRef from the full thread after finalization
+        setConversationThread((prev) => {
+          const rebuilt: LLMMessage[] = [];
+          for (const entry of prev) {
+            rebuilt.push(
+              { role: "user", content: entry.questionLabel },
+              { role: "assistant", content: entry.answer },
+            );
+          }
+          governanceHistoryRef.current = rebuilt;
+          return prev;
+        });
+
+        // Clear regeneration state
+        if (targetEntryId) {
+          setRegeneratingEntryId(null);
         }
+        pendingQuestionLabelRef.current = null;
       }
     }
     wasStreamingRef.current = isStreaming;
-  }, [isStreaming, messages]);
+  }, [isStreaming, messages, regeneratingEntryId]);
 
   // Load/refresh conversation thread and history when context changes.
   // Also rebuilds governanceHistoryRef from loaded thread entries.
+  // When contextKey is null, clear the thread from memory.
   useEffect(() => {
+    if (contextKey === null) {
+      // No accordion expanded, clear thread from memory
+      setConversationThread([]);
+      governanceHistoryRef.current = [];
+      pendingQuestionLabelRef.current = null;
+      threadLoadingRef.current = false;
+      setThreadLoaded(true);
+      return;
+    }
+
+    // Synchronously gate the auto-ask effect in this same cycle.
+    // React batches state updates, so setThreadLoaded(false) would only take
+    // effect in the next render — too late to prevent auto-ask from firing.
+    // The ref is immediately visible to later effects in this cycle.
+    threadLoadingRef.current = true;
+
     const port = getChatPersistence();
     port
       .loadGovernanceThread(contextKey)
@@ -192,19 +264,26 @@ export function useGovernanceAssistant(
           governanceHistoryRef.current = [];
         }
         pendingQuestionLabelRef.current = null;
+        threadLoadingRef.current = false;
+        setThreadLoaded(true);
+        setLoadCompleteToken((prev) => prev + 1);
       })
       .catch(() => {
         // Non-fatal — start fresh if load fails
         setConversationThread([]);
         governanceHistoryRef.current = [];
         pendingQuestionLabelRef.current = null;
+        threadLoadingRef.current = false;
+        setThreadLoaded(true);
+        setLoadCompleteToken((prev) => prev + 1);
       });
   }, [contextKey]);
 
   // Persist governance thread after finalization.
-  // Saves when: streaming completes, thread has been loaded, and there are entries.
+  // Saves when: streaming completes, thread has been loaded, there are entries, and contextKey is not null.
   useEffect(() => {
-    if (isStreaming || conversationThread.length === 0) return;
+    if (isStreaming || conversationThread.length === 0 || contextKey === null)
+      return;
 
     const port = getChatPersistence();
     port.saveGovernanceThread(contextKey, conversationThread).catch(() => {
@@ -237,6 +316,124 @@ export function useGovernanceAssistant(
     return candidates.filter((q) => !askedLabels.has(q.label));
   }, [activeItem, currentStepId, conversationThread]);
 
+  // Reset accordion and activeItem when wizard step changes
+  useEffect(() => {
+    setExpandedQuestionId(null);
+    setActiveItem(null);
+  }, [currentStepIndex]);
+
+  // Auto-ask the root question when an accordion is first expanded (empty thread).
+  // Uses threadLoadingRef as a synchronous guard to prevent firing during the
+  // same effect cycle where the load effect started an async IDB read.
+  useEffect(() => {
+    if (
+      !threadLoaded ||
+      threadLoadingRef.current ||
+      !expandedQuestionId ||
+      conversationThread.length > 0 ||
+      isStreaming
+    ) {
+      return;
+    }
+
+    // Find the matching PrebakedQuestion
+    const question = findQuestionById(
+      expandedQuestionId,
+      activeItem,
+      currentStepId,
+    );
+    if (!question) return;
+
+    // Fire the appropriate question
+    if (activeItem) {
+      askQuestion(question);
+    } else {
+      askStepQuestion(question);
+    }
+  }, [
+    threadLoaded,
+    expandedQuestionId,
+    conversationThread.length,
+    isStreaming,
+    activeItem,
+    currentStepId,
+    askQuestion,
+    askStepQuestion,
+    loadCompleteToken,
+  ]);
+
+  // Regenerate a specific entry's answer
+  const regenerateAnswer = useCallback(
+    async (entryId: string) => {
+      // Find the target entry
+      const targetEntry = conversationThread.find((e) => e.id === entryId);
+      if (!targetEntry) return;
+
+      // Clear the answer to trigger loading state
+      setConversationThread((prev) =>
+        prev.map((e) => (e.id === entryId ? { ...e, answer: "" } : e)),
+      );
+
+      // Mark this entry as regenerating
+      setRegeneratingEntryId(entryId);
+
+      // Find the matching PrebakedQuestion from its ID
+      const question = findQuestionById(
+        expandedQuestionId || "",
+        activeItem,
+        currentStepId,
+      );
+      if (!question) {
+        setRegeneratingEntryId(null);
+        return;
+      }
+
+      // Build history from entries BEFORE this one only
+      const targetIndex = conversationThread.findIndex((e) => e.id === entryId);
+      const historyFromBefore: LLMMessage[] = [];
+      if (targetIndex > 0) {
+        for (let i = 0; i < targetIndex; i++) {
+          const entry = conversationThread[i];
+          historyFromBefore.push(
+            { role: "user", content: entry.questionLabel },
+            { role: "assistant", content: entry.answer },
+          );
+        }
+      }
+
+      const truncatedHistory = historyFromBefore.slice(-MAX_HISTORY_MESSAGES);
+
+      // Build and send the prompt
+      let prompt: string;
+      if (activeItem?.type === "violation") {
+        prompt = buildViolationPrompt(question, activeItem.item, wizardContext);
+      } else if (activeItem?.type === "suggestion") {
+        prompt = buildSuggestionPrompt(
+          question,
+          activeItem.item,
+          wizardContext,
+        );
+      } else {
+        prompt = buildStepPrompt(question, currentStepId, wizardContext);
+      }
+
+      pendingQuestionLabelRef.current = question.label;
+      await sendGovernanceMessage(
+        prompt,
+        GOVERNANCE_SYSTEM_PROMPT,
+        truncatedHistory,
+      );
+    },
+    [
+      conversationThread,
+      expandedQuestionId,
+      activeItem,
+      currentStepId,
+      wizardContext,
+      sendGovernanceMessage,
+    ],
+  );
+
   return {
     activeItem,
     selectItem,
@@ -248,5 +445,10 @@ export function useGovernanceAssistant(
     stepQuestions,
     engineState,
     isStreaming,
+    expandedQuestionId,
+    expandAccordion,
+    regeneratingEntryId,
+    regenerateAnswer,
+    threadLoaded,
   };
 }
