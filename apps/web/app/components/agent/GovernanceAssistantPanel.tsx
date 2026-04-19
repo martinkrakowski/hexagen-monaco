@@ -366,14 +366,12 @@ function QuestionAccordion({
 function AnswerArea({
   content,
   isRegenerating,
-  isStreaming,
   onRegenerate,
   entryId,
   disabled,
 }: {
   content: string;
   isRegenerating: boolean;
-  isStreaming: boolean;
   onRegenerate: (id: string) => void;
   entryId: string;
   disabled: boolean;
@@ -403,17 +401,12 @@ function AnswerArea({
           <Loader2 size={12} className="animate-spin text-primary" />
           <p className="text-xs text-foreground/60">Regenerating...</p>
         </div>
-      ) : isStreaming && !content ? (
-        <ThinkingIndicator />
       ) : content ? (
         <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
           {content}
         </p>
       ) : (
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Select a violation or suggestion, then click a question below to get
-          AI-powered guidance.
-        </p>
+        <ThinkingIndicator />
       )}
     </div>
   );
@@ -448,7 +441,6 @@ function ThreadEntry({
       <AnswerArea
         content={content}
         isRegenerating={isRegenerating}
-        isStreaming={isCurrentlyStreaming}
         onRegenerate={onRegenerate}
         entryId={entry.id}
         disabled={disabled}
