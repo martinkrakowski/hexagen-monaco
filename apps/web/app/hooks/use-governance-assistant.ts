@@ -54,6 +54,7 @@ export function useGovernanceAssistant(
     null,
   );
   const [threadLoaded, setThreadLoaded] = useState(false);
+  const [loadCompleteToken, setLoadCompleteToken] = useState(0);
 
   /**
    * Condensed LLM history for conversational context. Stores question labels
@@ -265,6 +266,7 @@ export function useGovernanceAssistant(
         pendingQuestionLabelRef.current = null;
         threadLoadingRef.current = false;
         setThreadLoaded(true);
+        setLoadCompleteToken((prev) => prev + 1);
       })
       .catch(() => {
         // Non-fatal — start fresh if load fails
@@ -273,6 +275,7 @@ export function useGovernanceAssistant(
         pendingQuestionLabelRef.current = null;
         threadLoadingRef.current = false;
         setThreadLoaded(true);
+        setLoadCompleteToken((prev) => prev + 1);
       });
   }, [contextKey]);
 
@@ -356,6 +359,7 @@ export function useGovernanceAssistant(
     currentStepId,
     askQuestion,
     askStepQuestion,
+    loadCompleteToken,
   ]);
 
   // Regenerate a specific entry's answer

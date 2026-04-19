@@ -858,6 +858,7 @@ export function GovernanceAssistantPanel({
                 >
                   {threadLoaded && (
                     <>
+                      {conversationThread.length === 0 && <ThinkingIndicator />}
                       {conversationThread.length > 0 && (
                         <div className="space-y-4 mb-4">
                           {conversationThread.map((entry, i) => {
