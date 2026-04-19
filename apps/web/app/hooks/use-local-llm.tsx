@@ -57,10 +57,10 @@ import { LOCAL_MODELS } from "@/config/models";
 const LAST_MODEL_KEY = "hexagen:local-llm:last-model";
 
 /** localStorage key for the auto-load flag. */
-const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
+export const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 
 /** localStorage key - set to "true" after user successfully enables Local AI for the first time. Persists indefinitely. */
-const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
+export const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 
 interface LocalLLMContextValue {
   engineState: LLMEngineState;

@@ -554,7 +554,6 @@ export function GovernanceAssistantPanel({
     getFollowUpQuestions,
     conversationThread,
     stepQuestions,
-    engineState,
     isStreaming,
     expandedQuestionId,
     expandAccordion,
@@ -593,7 +592,7 @@ export function GovernanceAssistantPanel({
     }
   }, [vault, cloudLLM]);
 
-  const { status, progress, errorMessage, autoLoading } = engineState;
+  const { status, progress, errorMessage, autoLoading } = llmEngineState;
 
   const handleOpenSettings = useCallback(() => {
     autoNavigatedToSettings.current = false;

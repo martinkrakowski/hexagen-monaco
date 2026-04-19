@@ -8,11 +8,8 @@ import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel"
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
 import { governanceState } from "@/lib/governance-state";
-import { useLocalLLM } from "@/hooks/use-local-llm";
+import { useLocalLLM, HAS_ENABLED_KEY, AUTO_LOAD_KEY } from "@/hooks/use-local-llm";
 import { Bot, FileText, Loader2 } from "lucide-react";
-
-const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
-const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 
 export function AIArchitectPanel() {
   const [isCheckingCache, setIsCheckingCache] = useState(true);
