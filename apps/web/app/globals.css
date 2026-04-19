@@ -261,3 +261,74 @@
 .animate-soft-pulse {
   animation: soft-pulse 2.5s ease-in-out infinite;
 }
+
+/* ── ModelProgressCard cinematic primitives ─────────────────────────────────── */
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes spin-border {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.3);
+  }
+  50% {
+    opacity: 0.4;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+.animate-spin-border {
+  animation: spin-border 6s linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.animate-dot-pulse {
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
+.bg-cinematic-border {
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 0%,
+    transparent 55%,
+    hsl(var(--primary) / 0.06) 65%,
+    hsl(var(--primary) / 0.25) 75%,
+    hsl(var(--primary) / 0.6) 82%,
+    hsl(0 0% 100% / 0.95) 88%,
+    hsl(var(--primary)) 90%,
+    hsl(0 0% 100% / 0.95) 92%,
+    hsl(var(--primary) / 0.6) 95%,
+    hsl(var(--primary) / 0.25) 97%,
+    transparent 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-border,
+  .animate-shimmer,
+  .animate-dot-pulse {
+    animation: none;
+  }
+}
