@@ -5,7 +5,7 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { wireDependencies } from "./lib/wire";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useForm, useWatch, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import yaml from "js-yaml";
@@ -48,7 +48,10 @@ import { SavedProjectsList } from "@/components/project-wizard/SavedProjectsList
 import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
 import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
-import { useSavedProjects, type SavedProject } from "@/hooks/use-saved-projects";
+import {
+  useSavedProjects,
+  type SavedProject,
+} from "@/hooks/use-saved-projects";
 import { useWizardDraft } from "@/hooks/use-wizard-draft";
 import { useEditorWorkspace } from "@/hooks/use-editor-workspace";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
@@ -101,9 +104,6 @@ export default function Home() {
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
-  // Fires resume dialog only once — on initial mount after draft loading completes.
-  // Subsequent draft changes (from autosave) must never re-trigger the dialog.
-  const initialDraftChecked = useRef(false);
 
   const form = useForm<ProjectConfig>({
     resolver: zodResolver(projectConfigSchema),
@@ -148,16 +148,11 @@ export default function Home() {
     [boundedContexts, externalContexts, peerMappings, watchedValues.governance],
   );
 
-  // Show resume dialog once — only when a draft already existed at page load.
-  // Depends only on draftLoading so autosave-triggered draft changes never re-fire it.
   useEffect(() => {
-    if (!draftLoading && !initialDraftChecked.current) {
-      initialDraftChecked.current = true;
-      if (draft && !hasGenerated) {
-        setShowResumeDialog(true);
-      }
+    if (!draftLoading && draft && !hasGenerated) {
+      setShowResumeDialog(true);
     }
-  }, [draftLoading, draft, hasGenerated]);
+  }, [draftLoading]);
 
   // Autosave draft after each step completion
   useEffect(() => {

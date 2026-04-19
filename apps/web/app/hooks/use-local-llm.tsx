@@ -158,18 +158,10 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   const [governancePayload, setGovernancePayload] =
     useState<GovernancePayload | null>(null);
 
-  const [loadedModel, setLoadedModel] = useState<ModelMetadata | null>(null);
-
-  useEffect(() => {
-    if (
-      engineState.status === "ready" ||
-      engineState.status === "loading_vram"
-    ) {
-      setLoadedModel(adapterRef.current?.getLoadedModel() ?? null);
-    } else {
-      setLoadedModel(null);
-    }
-  }, [engineState.status, engineState.loadedModelId]);
+  const loadedModel =
+    engineState.status === "ready" || engineState.status === "loading_vram"
+      ? (adapterRef.current?.getLoadedModel() ?? null)
+      : null;
 
   const { editorState } = useEditor();
   const editorStateRef = useRef<EditorContextState>(editorState);
@@ -575,7 +567,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       localStorage.removeItem(AUTO_LOAD_KEY);
       localStorage.removeItem(LAST_MODEL_KEY);
       setMessages([]);
-      setLoadedModel(null);
       setEngineState((prev: LLMEngineState) => ({
         ...prev,
         status: "opt_in",
@@ -597,7 +588,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       if (modelId === engineState.loadedModelId) {
         adapter.dispose();
         setMessages([]);
-        setLoadedModel(null);
         localStorage.removeItem(AUTO_LOAD_KEY);
         localStorage.removeItem(LAST_MODEL_KEY);
         setEngineState((prev: LLMEngineState) => ({
