@@ -81,6 +81,7 @@ interface LocalLLMContextValue {
   deleteCachedModel: (modelId: DomainModelId) => Promise<void>;
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   hasAnyCachedModel: () => Promise<boolean>;
+  returnToModelSettings: () => void;
 }
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
@@ -541,6 +542,21 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     setEngineState((prev: LLMEngineState) => ({ ...prev, errorMessage: null }));
   }, []);
 
+  const returnToModelSettings = useCallback(() => {
+    const hasPreviouslyEnabled = localStorage.getItem(HAS_ENABLED_KEY) !== null;
+    if (isInitializingRef.current || cancelInitRef.current) {
+      cancelDownload();
+      return;
+    }
+    setEngineState((prev) => ({
+      ...prev,
+      status: hasPreviouslyEnabled ? "requires_model" : "opt_in",
+      errorMessage: null,
+      progress: 0,
+      autoLoading: false,
+    }));
+  }, [cancelDownload]);
+
   const switchModel = useCallback(
     async (modelId: DomainModelId) => {
       if (modelId === engineState.loadedModelId) return;
@@ -835,6 +851,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         deleteCachedModel,
         hasModelInCache,
         hasAnyCachedModel,
+        returnToModelSettings,
       }}
     >
       {children}
@@ -857,6 +874,7 @@ const DEFAULT_LLM_VALUE: LocalLLMContextValue = {
   deleteCachedModel: async () => {},
   hasModelInCache: async () => false,
   hasAnyCachedModel: async () => false,
+  returnToModelSettings: () => {},
 };
 
 export function useLocalLLM(): LocalLLMContextValue {

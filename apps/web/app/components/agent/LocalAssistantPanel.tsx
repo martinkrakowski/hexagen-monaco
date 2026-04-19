@@ -48,6 +48,7 @@ export function LocalAssistantPanel() {
     deleteCachedModel,
     hasModelInCache,
     hasAnyCachedModel,
+    returnToModelSettings,
   } = localLLM;
 
   const [panelView, setPanelView] = useState<PanelView>("main");
@@ -325,7 +326,7 @@ export function LocalAssistantPanel() {
           status={status}
           progress={progress}
           errorMessage={errorMessage}
-          onCancel={cancelDownload}
+          onCancel={returnToModelSettings}
           onRetry={() => initializeModel()}
           model={loadedModel}
           modelId={
@@ -360,6 +361,7 @@ export function LocalAssistantPanel() {
           status={status}
           progress={progress}
           errorMessage={errorMessage}
+          onCancel={returnToModelSettings}
           onRetry={() => initializeModel()}
           model={loadedModel}
           modelId={engineState.loadedModelId ?? undefined}

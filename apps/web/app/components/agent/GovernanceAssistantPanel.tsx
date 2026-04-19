@@ -570,6 +570,7 @@ export function GovernanceAssistantPanel({
     switchModel,
     deleteCachedModel,
     hasModelInCache,
+    returnToModelSettings,
   } = useLocalLLM();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
@@ -661,8 +662,7 @@ export function GovernanceAssistantPanel({
   // Boot spinner shows while WebGPU is detected and Effect 2 resolves.
   // Effect 2 transitions fresh users to requires_model, so this spinner
   // appears briefly before the user lands in ModelSettingsView.
-  const showBootSpinner =
-    status === "unavailable" || status === "opt_in";
+  const showBootSpinner = status === "unavailable" || status === "opt_in";
 
   // Cloud mode takes priority over local LLM lifecycle states.
   // Must be checked BEFORE early returns for boot spinners, opt-in cards, etc.
@@ -778,6 +778,7 @@ export function GovernanceAssistantPanel({
             status={status}
             progress={progress}
             errorMessage={errorMessage}
+            onCancel={returnToModelSettings}
             onRetry={() => initializeModel()}
             model={loadedModel}
             modelId={llmEngineState.loadedModelId ?? undefined}
