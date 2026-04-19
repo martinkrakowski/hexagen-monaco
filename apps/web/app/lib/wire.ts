@@ -255,3 +255,16 @@ export const getChatPersistence = () =>
 
 export const getSecretVault = () =>
   dependencies.get<SecretVaultPort>("SecretVaultPort");
+
+// Expose vault globally for client components to access
+// This is done so client components can initialize the vault reference
+// before they have access to wire dependencies (SSR hydration safety)
+if (typeof window !== "undefined") {
+  try {
+    const vault = getSecretVault();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).__hexagenVault = vault;
+  } catch {
+    // Wire might not be initialized yet
+  }
+}

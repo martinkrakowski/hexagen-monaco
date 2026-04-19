@@ -6,6 +6,9 @@ import type { WizardData } from "@hexagen/shared";
 import type { DomainModelId, GovernanceEntry } from "@hexagen/local-llm";
 import { useGovernanceAssistant } from "@/hooks/use-governance-assistant";
 import { useLocalLLM } from "@/hooks/use-local-llm";
+import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/use-cloud-llm";
+import { useSecretVault } from "@/hooks/use-secret-vault";
+import { getClientProviders } from "@/config/cloud-providers";
 import {
   type Violation,
   type AISuggestion,
@@ -30,12 +33,15 @@ import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
 import { ModelSettingsView } from "./ModelSettingsView";
 import { UnavailableCard } from "./UnavailableCard";
+import { CloudModelSettingsView } from "./CloudModelSettingsView";
+import { CloudChatInterface } from "./CloudChatInterface";
 
 const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
 const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
 const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 type PanelView = "main" | "model-settings";
+type LLMMode = "local" | "cloud";
 
 interface GovernanceAssistantPanelProps {
   wizardData: WizardData;
@@ -577,7 +583,21 @@ export function GovernanceAssistantPanel({
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
+  const [mode, setMode] = useState<LLMMode>("local");
+  const [cloudConfig, setCloudConfig] = useState<UseCloudLLMConfig | null>(
+    null,
+  );
   const autoNavigatedToSettings = useRef(false);
+
+  const cloudLLM = useCloudLLM();
+  const vault = useSecretVault();
+
+  // Wire vault to cloudLLM hook when it becomes available
+  useEffect(() => {
+    if (vault) {
+      cloudLLM.setVault(vault);
+    }
+  }, [vault, cloudLLM]);
 
   const handleOpenSettings = useCallback(() => {
     autoNavigatedToSettings.current = false;
@@ -594,6 +614,18 @@ export function GovernanceAssistantPanel({
     setPanelView("main");
     cancelFromRequiresModel();
   }, [cancelFromRequiresModel]);
+
+  const handleCloudConnect = useCallback(
+    async (provider: string, model: string) => {
+      setCloudConfig({ provider, model });
+    },
+    [],
+  );
+
+  const handleCloudDisconnect = useCallback(() => {
+    setCloudConfig(null);
+    cloudLLM.clearMessages();
+  }, [cloudLLM]);
 
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
@@ -649,6 +681,82 @@ export function GovernanceAssistantPanel({
     status === "unavailable" || (isOptedIn && status === "opt_in");
 
   const showOptIn = !isOptedIn && status === "opt_in";
+
+  // Cloud mode takes priority over local LLM lifecycle states.
+  // Must be checked BEFORE early returns for boot spinners, opt-in cards, etc.
+  if (mode === "cloud") {
+    if (!cloudConfig) {
+      return (
+        <div className="flex flex-col h-full">
+          <div className="flex border-b border-border shrink-0">
+            <button
+              type="button"
+              onClick={() => setMode("local")}
+              className="flex-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Local
+            </button>
+            <button
+              type="button"
+              className="flex-1 py-2 text-sm font-medium border-b-2 border-primary text-foreground"
+            >
+              Cloud
+            </button>
+          </div>
+          {vault ? (
+            <CloudModelSettingsView
+              vault={vault}
+              onConnect={handleCloudConnect}
+              error={cloudLLM.errorMessage}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const providerInfo = getClientProviders().find(
+      (p) => p.id === cloudConfig.provider,
+    );
+    const modelName =
+      providerInfo?.models.find((m) => m.id === cloudConfig.model)
+        ?.displayName ?? cloudConfig.model;
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex border-b border-border shrink-0">
+          <button
+            type="button"
+            onClick={() => setMode("local")}
+            className="flex-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Local
+          </button>
+          <button
+            type="button"
+            className="flex-1 py-2 text-sm font-medium border-b-2 border-primary text-foreground"
+          >
+            Cloud
+          </button>
+        </div>
+        <CloudChatInterface
+          messages={cloudLLM.messages}
+          isStreaming={cloudLLM.status === "streaming"}
+          error={cloudLLM.errorMessage}
+          onSendMessage={(content) =>
+            cloudLLM.sendMessage(content, cloudConfig)
+          }
+          onAbort={cloudLLM.abort}
+          onClear={cloudLLM.clearMessages}
+          onDisconnect={handleCloudDisconnect}
+          modelName={modelName}
+        />
+      </div>
+    );
+  }
 
   if (showBootSpinner) {
     return (
@@ -754,6 +862,10 @@ export function GovernanceAssistantPanel({
           llmEngineState.status === "downloading" ||
           llmEngineState.status === "loading_vram"
         }
+        onSwitchToCloud={() => {
+          setMode("cloud");
+          setPanelView("main");
+        }}
         requiresModelWarning={showRequiresModel}
         onCancelSetup={handleCancelSetup}
       />

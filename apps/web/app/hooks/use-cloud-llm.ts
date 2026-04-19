@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import type { SecretVaultPort } from "@hexagen/agentic-interaction";
 
 export interface CloudChatMessage {
   id: string;
@@ -20,7 +21,6 @@ export interface CloudLLMState {
 export interface UseCloudLLMConfig {
   provider: string;
   model: string;
-  apiKey: string;
 }
 
 const CHAT_ENDPOINT = "/api/llm/chat";
@@ -32,6 +32,17 @@ export function useCloudLLM() {
     errorMessage: null,
   });
 
+  // Vault will be injected by parent component
+  const vaultRef = useRef<SecretVaultPort | null>(null);
+
+  const setVault = useCallback((vault: SecretVaultPort) => {
+    vaultRef.current = vault;
+  }, []);
+
+  const getVault = useCallback(() => {
+    return vaultRef.current;
+  }, []);
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
 
@@ -42,7 +53,31 @@ export function useCloudLLM() {
       systemPrompt?: string,
     ) => {
       if (isStreamingRef.current) return;
-      if (!config.apiKey || !config.provider || !config.model) return;
+      if (!config.provider || !config.model) return;
+
+      // Retrieve API key from vault just-in-time
+      const vault = getVault();
+      if (!vault) {
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          errorMessage: "Vault not initialized",
+        }));
+        return;
+      }
+
+      const keyResult = await vault.retrieve();
+      if (!keyResult.success) {
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          errorMessage:
+            keyResult.error.message || "Failed to retrieve API key from vault",
+        }));
+        return;
+      }
+
+      const apiKey = keyResult.value;
 
       isStreamingRef.current = true;
 
@@ -104,7 +139,7 @@ export function useCloudLLM() {
               messages.length > 1 ? messages : [{ role: "user", content }],
             provider: config.provider,
             model: config.model,
-            apiKey: config.apiKey,
+            apiKey,
             temperature: 0.7,
             maxTokens: 2048,
           }),
@@ -253,5 +288,6 @@ export function useCloudLLM() {
     abort,
     clearMessages,
     clearError,
+    setVault,
   };
 }

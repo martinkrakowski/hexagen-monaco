@@ -37,7 +37,10 @@ export class EphemeralSecretVaultAdapter implements SecretVaultPort {
     return status as any;
   }
 
-  async store(apiKey: string): Promise<Result<void, VaultError>> {
+  async store(
+    apiKey: string,
+    persistOrPassword?: boolean | string,
+  ): Promise<Result<void, VaultError>> {
     // Validate the key is not empty
     if (!apiKey || apiKey.trim().length === 0) {
       const error = err({
@@ -48,7 +51,9 @@ export class EphemeralSecretVaultAdapter implements SecretVaultPort {
       return error as any;
     }
 
-    // Store in memory
+    // For ephemeral adapter, persist flag is ignored; always store in memory only
+    // The persist flag would be respected by EncryptedSessionVaultAdapter
+    // (persistOrPassword is either a boolean persist flag or legacy password string)
     this.inMemoryKey = apiKey;
 
     const success = ok(undefined);

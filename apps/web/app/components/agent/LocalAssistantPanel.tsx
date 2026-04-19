@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useLocalLLM } from "@/hooks/use-local-llm";
 import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/use-cloud-llm";
+import { useSecretVault } from "@/hooks/use-secret-vault";
 import { getClientProviders } from "@/config/cloud-providers";
 import { OptInCard } from "./OptInCard";
 import { ModelProgressCard } from "./ModelProgressCard";
@@ -27,6 +28,14 @@ export function LocalAssistantPanel() {
 
   const localLLM = useLocalLLM();
   const cloudLLM = useCloudLLM();
+  const vault = useSecretVault();
+
+  // Wire vault to cloudLLM hook when it becomes available
+  useEffect(() => {
+    if (vault) {
+      cloudLLM.setVault(vault);
+    }
+  }, [vault, cloudLLM]);
 
   const {
     engineState,
@@ -150,18 +159,17 @@ export function LocalAssistantPanel() {
     setPanelView("main");
   }
 
-  const handleCloudConnect = (
-    provider: string,
-    model: string,
-    apiKey: string,
-  ) => {
-    setCloudConfig({ provider, model, apiKey });
-  };
+  const handleCloudConnect = useCallback(
+    async (provider: string, model: string) => {
+      setCloudConfig({ provider, model });
+    },
+    [],
+  );
 
-  const handleCloudDisconnect = () => {
+  const handleCloudDisconnect = useCallback(() => {
     setCloudConfig(null);
     cloudLLM.clearMessages();
-  };
+  }, [cloudLLM]);
 
   // ─── Gatekeeper: Prevent hydration race condition ──────────────
 
@@ -194,10 +202,17 @@ export function LocalAssistantPanel() {
               Cloud
             </button>
           </div>
-          <CloudModelSettingsView
-            onConnect={handleCloudConnect}
-            error={cloudLLM.errorMessage}
-          />
+          {vault ? (
+            <CloudModelSettingsView
+              vault={vault}
+              onConnect={handleCloudConnect}
+              error={cloudLLM.errorMessage}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
         </div>
       );
     }

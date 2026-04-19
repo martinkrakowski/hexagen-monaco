@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { getClientProviders } from "@/config/cloud-providers";
+import type { SecretVaultPort } from "@hexagen/agentic-interaction";
 
 interface CloudModelSettingsViewProps {
-  onConnect: (provider: string, model: string, apiKey: string) => void;
+  vault: SecretVaultPort;
+  onConnect: (provider: string, model: string) => Promise<void>;
   isConnecting?: boolean;
   error?: string | null;
 }
 
 export function CloudModelSettingsView({
+  vault,
   onConnect,
   isConnecting,
   error,
@@ -17,6 +20,8 @@ export function CloudModelSettingsView({
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [rememberKey, setRememberKey] = useState(false);
+  const [isStoring, setIsStoring] = useState(false);
 
   const clientProviders = getClientProviders();
   const currentProvider = clientProviders.find(
@@ -32,7 +37,42 @@ export function CloudModelSettingsView({
     selectedProvider &&
     selectedModel &&
     apiKey.trim().length > 0 &&
-    !isConnecting;
+    !isConnecting &&
+    !isStoring;
+
+  const handleConnect = useCallback(async () => {
+    if (!canConnect) return;
+
+    setIsStoring(true);
+    try {
+      // Store the API key in the vault with persistence preference
+      const storeResult = await vault.store(apiKey, rememberKey);
+      if (!storeResult.success) {
+        return;
+      }
+
+      // Key successfully stored in vault
+      // Now invoke the orchestrator callback with just provider and model
+      // The API key will be retrieved from vault when needed
+      await onConnect(selectedProvider, selectedModel);
+
+      // Clear the form after successful connection
+      setApiKey("");
+      setSelectedProvider("");
+      setSelectedModel("");
+      setRememberKey(false);
+    } finally {
+      setIsStoring(false);
+    }
+  }, [
+    vault,
+    apiKey,
+    rememberKey,
+    selectedProvider,
+    selectedModel,
+    onConnect,
+    canConnect,
+  ]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-6 gap-4">
@@ -99,8 +139,22 @@ export function CloudModelSettingsView({
             placeholder="API key"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+            disabled={isStoring}
+            className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
           />
+        )}
+
+        {selectedProvider && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rememberKey}
+              onChange={(e) => setRememberKey(e.target.checked)}
+              disabled={isStoring}
+              className="w-4 h-4 rounded border border-input"
+            />
+            <span>Remember this key securely (survives page refresh)</span>
+          </label>
         )}
 
         {error && (
@@ -109,11 +163,15 @@ export function CloudModelSettingsView({
 
         <button
           type="button"
-          onClick={() => onConnect(selectedProvider, selectedModel, apiKey)}
+          onClick={handleConnect}
           disabled={!canConnect}
           className="w-full h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isConnecting ? "Connecting..." : "Connect"}
+          {isStoring
+            ? "Storing key..."
+            : isConnecting
+              ? "Connecting..."
+              : "Connect"}
         </button>
       </div>
     </div>

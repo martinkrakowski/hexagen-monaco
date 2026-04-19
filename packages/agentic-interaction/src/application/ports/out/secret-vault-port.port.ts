@@ -16,15 +16,26 @@ export interface SecretVaultPort {
   getStatus(): Promise<Result<VaultStatus, VaultError>>;
 
   /**
-   * Store a plaintext API key in the vault.
-   * For ephemeral: stores in memory only.
-   * For encrypted: encrypts and stores with provided password.
+   * Store a plaintext API key in the vault with optional persistence strategy.
+   *
+   * Storage behavior is determined by the persist flag:
+   * - persist: false (Ephemeral): Key stored strictly in transient memory only.
+   *   Lost on page refresh, tab close, or logout.
+   * - persist: true (Encrypted Storage): Key encrypted via Web Crypto (AES-GCM)
+   *   and persisted to localStorage. Survives page refresh but is cleared on logout.
+   *
+   * For encrypted implementations, a password may be required for encryption.
    *
    * @param apiKey The plaintext API key to store
-   * @param password Optional password (required for encrypted implementations)
+   * @param persistOrPassword Either a boolean persist flag (preferred) or legacy password string for backward compatibility
+   * @param password Optional password for encryption (required if persist=true for some adapters)
    * @returns Result containing void on success or VaultError on failure
    */
-  store(apiKey: string, password?: string): Promise<Result<void, VaultError>>;
+  store(
+    apiKey: string,
+    persistOrPassword?: boolean | string,
+    password?: string,
+  ): Promise<Result<void, VaultError>>;
 
   /**
    * Retrieve the plaintext API key from the vault.
