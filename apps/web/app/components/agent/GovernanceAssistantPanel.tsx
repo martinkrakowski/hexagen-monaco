@@ -373,12 +373,14 @@ function QuestionAccordion({
 function AnswerArea({
   content,
   isRegenerating,
+  isStreaming,
   onRegenerate,
   entryId,
   disabled,
 }: {
   content: string;
   isRegenerating: boolean;
+  isStreaming: boolean;
   onRegenerate: (id: string) => void;
   entryId: string;
   disabled: boolean;
@@ -408,6 +410,8 @@ function AnswerArea({
           <Loader2 size={12} className="animate-spin text-primary" />
           <p className="text-xs text-foreground/60">Regenerating...</p>
         </div>
+      ) : isStreaming && !content ? (
+        <ThinkingIndicator />
       ) : content ? (
         <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
           {content}
@@ -451,6 +455,7 @@ function ThreadEntry({
       <AnswerArea
         content={content}
         isRegenerating={isRegenerating}
+        isStreaming={isCurrentlyStreaming}
         onRegenerate={onRegenerate}
         entryId={entry.id}
         disabled={disabled}
@@ -868,12 +873,6 @@ export function GovernanceAssistantPanel({
                 >
                   {threadLoaded && (
                     <>
-                      {isStreaming &&
-                        conversationThread.length > 0 &&
-                        !conversationThread[conversationThread.length - 1]
-                          .answer &&
-                        !lastAssistantMessage && <ThinkingIndicator />}
-
                       {conversationThread.length > 0 && (
                         <div className="space-y-4 mb-4">
                           {conversationThread.map((entry, i) => {
