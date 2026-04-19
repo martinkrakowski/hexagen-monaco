@@ -27,7 +27,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
-import { OptInCard } from "./OptInCard";
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
@@ -35,10 +34,6 @@ import { ModelSettingsView } from "./ModelSettingsView";
 import { UnavailableCard } from "./UnavailableCard";
 import { CloudModelSettingsView } from "./CloudModelSettingsView";
 import { CloudChatInterface } from "./CloudChatInterface";
-
-const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
-const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
-const OPT_OUT_KEY = "hexagen:local-llm:opted-out";
 
 type PanelView = "main" | "model-settings";
 type LLMMode = "local" | "cloud";
@@ -559,7 +554,6 @@ export function GovernanceAssistantPanel({
     getFollowUpQuestions,
     conversationThread,
     stepQuestions,
-    engineState,
     isStreaming,
     expandedQuestionId,
     expandAccordion,
@@ -571,7 +565,6 @@ export function GovernanceAssistantPanel({
     messages,
     initializeModel,
     cancelDownload,
-    cancelFromRequiresModel,
     engineState: llmEngineState,
     loadedModel,
     switchModel,
@@ -599,21 +592,18 @@ export function GovernanceAssistantPanel({
     }
   }, [vault, cloudLLM]);
 
+  const { status, progress, errorMessage, autoLoading } = llmEngineState;
+
   const handleOpenSettings = useCallback(() => {
     autoNavigatedToSettings.current = false;
     setPanelView("model-settings");
   }, []);
 
   const handleBackFromSettings = useCallback(() => {
+    if (status === "requires_model") return;
     autoNavigatedToSettings.current = false;
     setPanelView("main");
-  }, []);
-
-  const handleCancelSetup = useCallback(() => {
-    autoNavigatedToSettings.current = false;
-    setPanelView("main");
-    cancelFromRequiresModel();
-  }, [cancelFromRequiresModel]);
+  }, [status]);
 
   const handleCloudConnect = useCallback(
     async (provider: string, model: string) => {
@@ -661,8 +651,6 @@ export function GovernanceAssistantPanel({
     setFollowUpQuestions([]);
   }, [currentStepIndex, activeItem]);
 
-  const { status, progress, errorMessage, autoLoading } = engineState;
-
   const showUnavailable =
     status === "no_webgpu" || status === "unsupported_browser";
   const showWakingUp = status === "loading_vram" && autoLoading;
@@ -670,17 +658,11 @@ export function GovernanceAssistantPanel({
     status === "downloading" || (status === "loading_vram" && !autoLoading);
   const showError = status === "error";
   const showRequiresModel = status === "requires_model";
-
-  const isOptedIn =
-    typeof window !== "undefined" &&
-    localStorage.getItem(OPT_OUT_KEY) !== "true" &&
-    (localStorage.getItem(HAS_ENABLED_KEY) !== null ||
-      localStorage.getItem(AUTO_LOAD_KEY) === "true");
-
+  // Boot spinner shows while WebGPU is detected and Effect 2 resolves.
+  // Effect 2 transitions fresh users to requires_model, so this spinner
+  // appears briefly before the user lands in ModelSettingsView.
   const showBootSpinner =
-    status === "unavailable" || (isOptedIn && status === "opt_in");
-
-  const showOptIn = !isOptedIn && status === "opt_in";
+    status === "unavailable" || status === "opt_in";
 
   // Cloud mode takes priority over local LLM lifecycle states.
   // Must be checked BEFORE early returns for boot spinners, opt-in cards, etc.
@@ -778,19 +760,6 @@ export function GovernanceAssistantPanel({
     );
   }
 
-  if (showOptIn) {
-    return (
-      <div className="h-full">
-        <LifecycleCard onRefresh={onRefresh} isLoading={isLoading}>
-          <OptInCard
-            onInitialize={() => initializeModel()}
-            isInitializing={false}
-          />
-        </LifecycleCard>
-      </div>
-    );
-  }
-
   if (showWakingUp) {
     return (
       <div className="h-full">
@@ -867,7 +836,6 @@ export function GovernanceAssistantPanel({
           setPanelView("main");
         }}
         requiresModelWarning={showRequiresModel}
-        onCancelSetup={handleCancelSetup}
       />
     );
   }
