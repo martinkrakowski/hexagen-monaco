@@ -765,14 +765,15 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         status: "requires_model",
         autoLoading: false,
       }));
+    } else {
+      // If neither branch matches, the user is new — route to settings to select a model.
+      setEngineState((prev: LLMEngineState) => ({
+        ...prev,
+        status: "requires_model",
+        autoLoading: false,
+      }));
+      hasAttemptedAutoInitRef.current = true;
     }
-    // If neither branch matches, the user is new — route to settings to select a model.
-    setEngineState((prev: LLMEngineState) => ({
-      ...prev,
-      status: "requires_model",
-      autoLoading: false,
-    }));
-    hasAttemptedAutoInitRef.current = true;
   }, [engineState.status, initializeModel, hasModelInCache]);
 
   // Effect 3: Fetch governance context on mount (independent of model state).
