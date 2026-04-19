@@ -226,6 +226,12 @@ export function useGovernanceAssistant(
       return;
     }
 
+    // Reset threadLoaded to false before starting async load.
+    // This gates the auto-ask effect (which depends on threadLoaded) until the
+    // IDB load completes, preventing the race condition where auto-ask fires
+    // and adds a thread entry before IDB load clears it.
+    setThreadLoaded(false);
+
     const port = getChatPersistence();
     port
       .loadGovernanceThread(contextKey)

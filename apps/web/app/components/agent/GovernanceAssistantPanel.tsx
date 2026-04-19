@@ -272,14 +272,7 @@ function SuggestionItem({
 function ThinkingIndicator() {
   return (
     <div className="flex items-center gap-1.5 py-3">
-      <motion.p
-        className="text-xs text-muted-foreground"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-      >
-        Thinking
-      </motion.p>
+      <p className="text-xs text-muted-foreground">Thinking</p>
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
