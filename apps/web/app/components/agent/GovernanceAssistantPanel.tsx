@@ -34,6 +34,7 @@ import { ModelSettingsView } from "./ModelSettingsView";
 import { UnavailableCard } from "./UnavailableCard";
 import { CloudModelSettingsView } from "./CloudModelSettingsView";
 import { CloudChatInterface } from "./CloudChatInterface";
+import { SystemInfoButton } from "./SystemInfoButton";
 
 type PanelView = "main" | "model-settings";
 type LLMMode = "local" | "cloud";
@@ -481,25 +482,34 @@ function PanelFooter({
   modelId,
   onOpenSettings,
   isLoading,
+  showHint = true,
 }: {
-  modelId: DomainModelId | null;
-  onOpenSettings: () => void;
-  isLoading: boolean;
+  modelId?: DomainModelId | null;
+  onOpenSettings?: () => void;
+  isLoading?: boolean;
+  showHint?: boolean;
 }) {
   return (
     <div className="flex-shrink-0 p-2 border-t border-border bg-background">
       <div className="flex items-center justify-between gap-4 w-full">
         <div className="flex items-center gap-2">
-          <Info size={12} className="text-muted-foreground/60" />
-          <p className="text-[11px] text-muted-foreground/60">
-            Click a question to get an AI-powered answer
-          </p>
+          <SystemInfoButton />
+          {showHint && (
+            <>
+              <Info size={12} className="text-muted-foreground/60" />
+              <p className="text-[11px] text-muted-foreground/60">
+                Click a question to get an AI-powered answer
+              </p>
+            </>
+          )}
         </div>
-        <ModelFooterIndicator
-          modelId={modelId}
-          onOpenSettings={onOpenSettings}
-          isLoading={isLoading}
-        />
+        {modelId !== undefined && onOpenSettings && (
+          <ModelFooterIndicator
+            modelId={modelId}
+            onOpenSettings={onOpenSettings}
+            isLoading={isLoading ?? false}
+          />
+        )}
       </div>
     </div>
   );
@@ -685,17 +695,20 @@ export function GovernanceAssistantPanel({
               Cloud
             </button>
           </div>
-          {vault ? (
-            <CloudModelSettingsView
-              vault={vault}
-              onConnect={handleCloudConnect}
-              error={cloudLLM.errorMessage}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          )}
+          <div className="flex-1 min-h-0">
+            {vault ? (
+              <CloudModelSettingsView
+                vault={vault}
+                onConnect={handleCloudConnect}
+                error={cloudLLM.errorMessage}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
+          </div>
+          <PanelFooter showHint={false} />
         </div>
       );
     }
@@ -724,18 +737,21 @@ export function GovernanceAssistantPanel({
             Cloud
           </button>
         </div>
-        <CloudChatInterface
-          messages={cloudLLM.messages}
-          isStreaming={cloudLLM.status === "streaming"}
-          error={cloudLLM.errorMessage}
-          onSendMessage={(content) =>
-            cloudLLM.sendMessage(content, cloudConfig)
-          }
-          onAbort={cloudLLM.abort}
-          onClear={cloudLLM.clearMessages}
-          onDisconnect={handleCloudDisconnect}
-          modelName={modelName}
-        />
+        <div className="flex-1 min-h-0">
+          <CloudChatInterface
+            messages={cloudLLM.messages}
+            isStreaming={cloudLLM.status === "streaming"}
+            error={cloudLLM.errorMessage}
+            onSendMessage={(content) =>
+              cloudLLM.sendMessage(content, cloudConfig)
+            }
+            onAbort={cloudLLM.abort}
+            onClear={cloudLLM.clearMessages}
+            onDisconnect={handleCloudDisconnect}
+            modelName={modelName}
+          />
+        </div>
+        <PanelFooter showHint={false} />
       </div>
     );
   }
@@ -820,24 +836,27 @@ export function GovernanceAssistantPanel({
     (status === "ready" || showRequiresModel)
   ) {
     return (
-      <ModelSettingsView
-        currentModelId={llmEngineState.loadedModelId}
-        loadedModel={loadedModel}
-        messagesLength={messages.length}
-        onSwitchModel={switchModel}
-        onDeleteModel={deleteCachedModel}
-        hasModelInCache={hasModelInCache}
-        onBack={handleBackFromSettings}
-        isLoading={
-          llmEngineState.status === "downloading" ||
-          llmEngineState.status === "loading_vram"
-        }
-        onSwitchToCloud={() => {
-          setMode("cloud");
-          setPanelView("main");
-        }}
-        requiresModelWarning={showRequiresModel}
-      />
+      <div className="flex flex-col h-full">
+        <ModelSettingsView
+          currentModelId={llmEngineState.loadedModelId}
+          loadedModel={loadedModel}
+          messagesLength={messages.length}
+          onSwitchModel={switchModel}
+          onDeleteModel={deleteCachedModel}
+          hasModelInCache={hasModelInCache}
+          onBack={handleBackFromSettings}
+          isLoading={
+            llmEngineState.status === "downloading" ||
+            llmEngineState.status === "loading_vram"
+          }
+          onSwitchToCloud={() => {
+            setMode("cloud");
+            setPanelView("main");
+          }}
+          requiresModelWarning={showRequiresModel}
+        />
+        <PanelFooter showHint={false} />
+      </div>
     );
   }
 

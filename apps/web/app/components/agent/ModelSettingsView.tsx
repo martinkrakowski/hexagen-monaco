@@ -56,6 +56,11 @@ export function ModelSettingsView({
   const [isSwitching, setIsSwitching] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
+  const currentModelDisplayName = currentModelId
+    ? (getModelDescriptor(currentModelId)?.displayName ?? null)
+    : null;
 
   // Hardware detection and recommendation
   const { profile: hardwareProfile, isDetecting: isDetectingHardware } =
@@ -131,6 +136,7 @@ export function ModelSettingsView({
 
     if (messagesLength > 0) {
       setPendingSwitchId(modelId);
+      setSwitchError(null);
       return;
     }
 
@@ -139,11 +145,16 @@ export function ModelSettingsView({
 
   const doSwitch = async (modelId: DomainModelId) => {
     setIsSwitching(true);
+    setSwitchError(null);
     try {
       await onSwitchModel(modelId);
+      setPendingSwitchId(null);
+    } catch (err) {
+      setSwitchError(
+        err instanceof Error ? err.message : "Failed to switch model",
+      );
     } finally {
       setIsSwitching(false);
-      setPendingSwitchId(null);
     }
   };
 
@@ -259,10 +270,14 @@ export function ModelSettingsView({
                 }}
                 onConfirmDelete={() => handleDelete(recommendedModelId)}
                 onCancelDelete={() => setConfirmDeleteId(null)}
+                onConfirmSwitch={handleConfirmSwitch}
+                onCancelSwitch={() => setPendingSwitchId(null)}
+                currentModelDisplayName={currentModelDisplayName}
                 isLoading={isLoading}
                 isSwitching={isSwitching}
                 isDeleting={isDeleting}
                 deleteError={deleteError}
+                switchError={switchError}
                 loadedModel={loadedModel}
                 isRecommended={true}
               />
@@ -293,10 +308,14 @@ export function ModelSettingsView({
                     }}
                     onConfirmDelete={() => handleDelete(descriptor.modelId)}
                     onCancelDelete={() => setConfirmDeleteId(null)}
+                    onConfirmSwitch={handleConfirmSwitch}
+                    onCancelSwitch={() => setPendingSwitchId(null)}
+                    currentModelDisplayName={currentModelDisplayName}
                     isLoading={isLoading}
                     isSwitching={isSwitching}
                     isDeleting={isDeleting}
                     deleteError={deleteError}
+                    switchError={switchError}
                     loadedModel={loadedModel}
                     isRecommended={descriptor.modelId === recommendedModelId}
                     compatibilityIssue={
@@ -334,10 +353,14 @@ export function ModelSettingsView({
                     }}
                     onConfirmDelete={() => handleDelete(descriptor.modelId)}
                     onCancelDelete={() => setConfirmDeleteId(null)}
+                    onConfirmSwitch={handleConfirmSwitch}
+                    onCancelSwitch={() => setPendingSwitchId(null)}
+                    currentModelDisplayName={currentModelDisplayName}
                     isLoading={isLoading}
                     isSwitching={isSwitching}
                     isDeleting={isDeleting}
                     deleteError={deleteError}
+                    switchError={switchError}
                     loadedModel={loadedModel}
                     isRecommended={descriptor.modelId === recommendedModelId}
                     compatibilityIssue={
@@ -375,10 +398,14 @@ export function ModelSettingsView({
                     }}
                     onConfirmDelete={() => handleDelete(descriptor.modelId)}
                     onCancelDelete={() => setConfirmDeleteId(null)}
+                    onConfirmSwitch={handleConfirmSwitch}
+                    onCancelSwitch={() => setPendingSwitchId(null)}
+                    currentModelDisplayName={currentModelDisplayName}
                     isLoading={isLoading}
                     isSwitching={isSwitching}
                     isDeleting={isDeleting}
                     deleteError={deleteError}
+                    switchError={switchError}
                     loadedModel={loadedModel}
                     isRecommended={descriptor.modelId === recommendedModelId}
                     compatibilityIssue={
@@ -427,42 +454,6 @@ export function ModelSettingsView({
             </div>
           </div>
         </div>
-
-        {/* Switch Confirmation */}
-        {pendingSwitchId && (
-          <div className="mb-6 rounded-lg border border-warning/20 bg-warning/5 p-3">
-            <p className="text-[12px] text-warning font-medium mb-1">
-              Switch models?
-            </p>
-            <p className="text-[11px] text-muted-foreground mb-3">
-              Switching will clear your current conversation with{" "}
-              {currentModelId
-                ? getModelDescriptor(currentModelId)?.displayName
-                : "the current model"}
-              . The new model (
-              {pendingSwitchId
-                ? getModelDescriptor(pendingSwitchId)?.displayName
-                : "the new model"}
-              ) will start fresh.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={handleConfirmSwitch}
-                disabled={isSwitching}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-warning text-white hover:bg-warning/90 transition-colors disabled:opacity-50"
-              >
-                {isSwitching ? "Switching…" : "Switch & Clear"}
-              </button>
-              <button
-                onClick={() => setPendingSwitchId(null)}
-                disabled={isSwitching}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Footer - Storage Info */}
@@ -498,10 +489,14 @@ interface ModelCardProps {
   onDelete: () => void;
   onConfirmDelete: () => Promise<void>;
   onCancelDelete: () => void;
+  onConfirmSwitch: () => Promise<void>;
+  onCancelSwitch: () => void;
+  currentModelDisplayName: string | null;
   isLoading: boolean;
   isSwitching: boolean;
   isDeleting: boolean;
   deleteError: string | null;
+  switchError: string | null;
   loadedModel: ModelMetadata | null;
   isRecommended?: boolean;
   compatibilityIssue?: { reason: string; severity: "warning" | "error" } | null;
@@ -517,10 +512,14 @@ function ModelCard({
   onDelete,
   onConfirmDelete,
   onCancelDelete,
+  onConfirmSwitch,
+  onCancelSwitch,
+  currentModelDisplayName,
   isLoading,
   isSwitching,
   isDeleting,
   deleteError,
+  switchError,
   loadedModel,
   isRecommended = false,
   compatibilityIssue = null,
@@ -531,9 +530,11 @@ function ModelCard({
         "rounded-xl border p-4 transition-all",
         isConfirmDelete
           ? "border-destructive/40 bg-destructive/5"
-          : isCurrent
-            ? "border-primary/40 bg-primary/5"
-            : "border-border bg-muted/20 hover:bg-muted/30",
+          : isPendingSwitch
+            ? "border-warning/20 bg-warning/5"
+            : isCurrent
+              ? "border-primary/40 bg-primary/5"
+              : "border-border bg-muted/20 hover:bg-muted/30",
       ].join(" ")}
     >
       {isConfirmDelete ? (
@@ -560,6 +561,36 @@ function ModelCard({
             <button
               onClick={onCancelDelete}
               disabled={isDeleting}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : isPendingSwitch ? (
+        <div>
+          <p className="text-[12px] text-warning font-medium mb-1">
+            Switch models?
+          </p>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            Switching will clear your current conversation with{" "}
+            {currentModelDisplayName ?? "the current model"}. The new model (
+            {descriptor.displayName}) will start fresh.
+          </p>
+          {switchError && (
+            <p className="text-[11px] text-destructive mb-2">{switchError}</p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onConfirmSwitch}
+              disabled={isLoading || isSwitching}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-warning text-white hover:bg-warning/90 transition-colors disabled:opacity-50"
+            >
+              {isSwitching ? "Switching…" : "Switch & Clear"}
+            </button>
+            <button
+              onClick={onCancelSwitch}
+              disabled={isSwitching}
               className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
             >
               Cancel
