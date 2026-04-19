@@ -23,7 +23,10 @@ import type { DownloadProjectPort } from "@hexagen/web-driver";
 import type { LoggerPort } from "@hexagen/shared";
 import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
 import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
-import type { LLMProviderPort } from "@hexagen/agentic-interaction";
+import type {
+  LLMProviderPort,
+  SecretVaultPort,
+} from "@hexagen/agentic-interaction";
 import type {
   LocalLLMProviderPort,
   WebGPUDetectorPort,
@@ -34,6 +37,7 @@ import {
   LocalStoragePersistenceAdapter,
   LocalStorageCanvasLayoutAdapter,
   ArchitectureGraphProviderAdapter,
+  EphemeralSecretVaultAdapter,
 } from "@hexagen/web-driver";
 import {
   InMemoryEventBusAdapter,
@@ -181,6 +185,12 @@ export const wireDependencies = () => {
     new IDBChatPersistenceAdapter() satisfies ChatPersistencePort,
   );
 
+  // Secret Vault → ephemeral in-memory adapter
+  registry.set(
+    "SecretVaultPort",
+    new EphemeralSecretVaultAdapter() satisfies SecretVaultPort,
+  );
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);
@@ -242,3 +252,6 @@ export const getHardwareProfiler = () =>
 
 export const getChatPersistence = () =>
   dependencies.get<ChatPersistencePort>("ChatPersistencePort");
+
+export const getSecretVault = () =>
+  dependencies.get<SecretVaultPort>("SecretVaultPort");

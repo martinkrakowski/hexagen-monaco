@@ -16,8 +16,11 @@ package_rules:
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/visualization"
+      - "@hexagen/agentic-interaction"
     # visualization is allowed because ArchitectureGraphProviderAdapter
     # implements IArchitectureGraphProviderPort owned by visualization
+    # agentic-interaction is allowed because web-driver depends on it per manifest
+    # and implements ports like SecretVaultPort from its application layer
   - name: "project-generation"
     allowed_imports:
       - "@hexagen/shared"

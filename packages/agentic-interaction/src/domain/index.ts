@@ -3,17 +3,22 @@ export type {
   LLMMessage,
   LLMCompletionRequest,
   LLMCompletionResponse,
-} from "./ports/llm-provider.port";
+} from "./ports/llm-provider.port.js";
 export type {
   SuggestionEnginePort,
   SuggestionContext,
   AISuggestion,
   SuggestionRequest,
-} from "./ports/suggestion-engine.port";
+} from "./ports/suggestion-engine.port.js";
 export type {
   CloudLLMProviderPort,
   CloudLLMMessage,
   CloudLLMCompletionRequest,
   CloudLLMCompletionResponse,
-} from "./ports/cloud-llm-provider.port";
-export { isCloudLLMProviderPort } from "./ports/cloud-llm-provider.port";
+} from "./ports/cloud-llm-provider.port.js";
+export { isCloudLLMProviderPort } from "./ports/cloud-llm-provider.port.js";
+export type {
+  VaultState,
+  VaultStatus,
+  VaultError,
+} from "./value-objects/index.js";

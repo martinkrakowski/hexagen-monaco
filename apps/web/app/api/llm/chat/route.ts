@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
       role: "system" | "user" | "assistant";
       content: string;
     }>,
+    apiKey,
     temperature,
     maxTokens,
   });
