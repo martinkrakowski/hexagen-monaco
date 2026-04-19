@@ -586,7 +586,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
         localStorage.removeItem(LAST_MODEL_KEY);
         setEngineState((prev: LLMEngineState) => ({
           ...prev,
-          status: "opt_in",
+          status: "requires_model",
           loadedModelId: null,
           errorMessage: null,
           autoLoading: false,
