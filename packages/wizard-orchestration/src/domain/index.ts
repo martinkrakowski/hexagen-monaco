@@ -2,3 +2,4 @@
 
 export * from './model/index.js';
 export * from './reducer/index.js';
+export * from './value-objects/index.js';

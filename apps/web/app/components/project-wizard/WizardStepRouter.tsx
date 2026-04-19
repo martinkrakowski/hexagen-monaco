@@ -4,11 +4,9 @@ import {
   PeerContextMappingStep,
   PortConfigurationStep,
   SummaryStep,
-  GitHubExportStep,
 } from "@/components/project-wizard/steps";
 import { wizardSteps } from "./config";
 
-// We define exactly what the router needs from the parent
 interface WizardStepRouterProps {
   currentStepIndex: number;
   totalSteps: number;
@@ -99,25 +97,13 @@ export function WizardStepRouter({
       );
     case 4:
       return (
-        <GitHubExportStep
-          onNext={onNext}
-          onBack={onBack}
-          canProceed={canProceed}
-          currentStep={5}
-          totalSteps={totalSteps}
-          title={title}
-          description={description}
-        />
-      );
-    case 5:
-      return (
         <SummaryStep
           onBack={onBack}
           onGenerate={onGenerate}
           canProceed={canProceed}
           isGenerating={isGenerating}
           onViewModeChange={onViewModeChange}
-          currentStep={6}
+          currentStep={5}
           totalSteps={totalSteps}
           title={title}
           description={description}

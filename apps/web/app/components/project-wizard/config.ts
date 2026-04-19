@@ -118,12 +118,6 @@ export const wizardSteps = [
     fields: ["boundedContexts"],
   },
   {
-    id: "github_export",
-    title: "GitHub Export",
-    description: "Configure GitHub repository for project export.",
-    fields: ["gitHubExport"],
-  },
-  {
     id: "summary",
     title: "Project Summary",
     description: "Review your project configuration.",
