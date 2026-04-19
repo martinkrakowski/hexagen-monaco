@@ -526,15 +526,47 @@ function ModelCard({
   compatibilityIssue = null,
 }: ModelCardProps) {
   return (
-    <div>
-      <div
-        className={[
-          "rounded-xl border p-4 transition-all",
-          isCurrent
+    <div
+      className={[
+        "rounded-xl border p-4 transition-all",
+        isConfirmDelete
+          ? "border-destructive/40 bg-destructive/5"
+          : isCurrent
             ? "border-primary/40 bg-primary/5"
             : "border-border bg-muted/20 hover:bg-muted/30",
-        ].join(" ")}
-      >
+      ].join(" ")}
+    >
+      {isConfirmDelete ? (
+        <div>
+          <p className="text-[12px] text-destructive font-medium mb-1.5">
+            Delete {descriptor.displayName}?
+          </p>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            This will free ~{descriptor.downloadSizeGB} GB and remove the model
+            from your device. It will need to be re-downloaded if you want to
+            use it again.
+          </p>
+          {deleteError && (
+            <p className="text-[11px] text-destructive mb-2">{deleteError}</p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onConfirmDelete}
+              disabled={isLoading || isDeleting}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50"
+            >
+              {isDeleting ? "Deleting…" : "Confirm Delete"}
+            </button>
+            <button
+              onClick={onCancelDelete}
+              disabled={isDeleting}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -612,38 +644,6 @@ function ModelCard({
                   : cacheStatus?.isCached
                     ? "Switch"
                     : "Download"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {isConfirmDelete && (
-        <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-          <p className="text-[12px] text-destructive font-medium mb-2">
-            Delete {descriptor.displayName}?
-          </p>
-          <p className="text-[11px] text-muted-foreground mb-3">
-            This will free ~{descriptor.downloadSizeGB} GB and remove the model
-            from your device. It will need to be re-downloaded if you want to
-            use it again.
-          </p>
-          {deleteError && (
-            <p className="text-[11px] text-destructive mb-2">{deleteError}</p>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={onConfirmDelete}
-              disabled={isLoading || isDeleting}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50"
-            >
-              {isDeleting ? "Deleting…" : "Delete"}
-            </button>
-            <button
-              onClick={onCancelDelete}
-              disabled={isDeleting}
-              className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-            >
-              Cancel
             </button>
           </div>
         </div>
