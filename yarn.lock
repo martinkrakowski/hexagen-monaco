@@ -897,6 +897,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/external-integration@workspace:packages/external-integration":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/external-integration@workspace:packages/external-integration"
+  dependencies:
+    "@hexagen/shared": "workspace:*"
+    "@types/node": "npm:^20.0.0"
+    typescript: "npm:^5.0.0"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/local-llm@workspace:*, @hexagen/local-llm@workspace:packages/local-llm":
   version: 0.0.0-use.local
   resolution: "@hexagen/local-llm@workspace:packages/local-llm"

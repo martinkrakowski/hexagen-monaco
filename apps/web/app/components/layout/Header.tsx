@@ -1,18 +1,22 @@
 "use client";
 
 import { useTheme } from "@/hooks/use-theme";
-import { Sun, Moon, Import, PlusCircle, Hexagon } from "lucide-react";
+import { Sun, Moon, Hexagon } from "lucide-react";
 import { HeaderMenu } from "./HeaderMenu";
+import { ProjectMenu } from "./ProjectMenu";
+import type { SavedProject } from "@/hooks/use-saved-projects";
 
 interface HeaderProps {
   onLoadManifest: () => void;
   onNewProject?: () => void;
+  onLoadSavedProject?: (project: SavedProject) => void;
   isEditing?: boolean;
 }
 
 export const Header = ({
   onLoadManifest,
   onNewProject,
+  onLoadSavedProject,
   isEditing = false,
 }: HeaderProps) => {
   const { theme, toggleTheme } = useTheme();
@@ -38,22 +42,11 @@ export const Header = ({
           theme={theme}
         />
         <div className="hidden lg:flex items-center gap-2">
-          <button
-            onClick={onNewProject}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            title="Save current project and start a new one"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            New Project
-          </button>
-          <button
-            onClick={onLoadManifest}
-            className="p-2 rounded-md hover:bg-muted transition-colors"
-            aria-label="Load manifest"
-            title="Load manifest.yaml"
-          >
-            <Import className="w-4 h-4" />
-          </button>
+          <ProjectMenu
+            onLoadManifest={onLoadManifest}
+            onNewProject={onNewProject}
+            onLoadSavedProject={onLoadSavedProject}
+          />
           <button
             onClick={toggleTheme}
             className="p-2 rounded-md hover:bg-muted transition-colors"

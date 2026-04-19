@@ -48,9 +48,10 @@ import { SavedProjectsList } from "@/components/project-wizard/SavedProjectsList
 import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
 import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
-import { useSavedProjects } from "@/hooks/use-saved-projects";
+import { useSavedProjects, type SavedProject } from "@/hooks/use-saved-projects";
 import { useWizardDraft } from "@/hooks/use-wizard-draft";
 import { useEditorWorkspace } from "@/hooks/use-editor-workspace";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { getLogger } from "@/lib/wire";
 
 export default function Home() {
@@ -96,6 +97,7 @@ export default function Home() {
     clearDraft,
     loading: draftLoading,
   } = useWizardDraft();
+  const { setActiveWorkspace, clearActiveWorkspace } = useActiveWorkspace();
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
@@ -211,8 +213,23 @@ export default function Home() {
       setShowSavedProjects(false);
       await clearDraft();
       setEditorSessionId(crypto.randomUUID());
+      setActiveWorkspace({
+        projectId: saved.id,
+        name: saved.name,
+        isDirty: false,
+        lastModifiedAt: Date.now(),
+        wizardData: saved.formState as unknown as Record<string, unknown>,
+        manifestYaml: saved.manifestYaml,
+      });
     }
   };
+
+  const handleLoadSavedProjectFromMenu = useCallback(
+    (project: SavedProject) => {
+      void handleLoadProject(project.id);
+    },
+    [loadProject],
+  );
 
   function formatTimestamp(): string {
     const now = new Date();
@@ -268,9 +285,17 @@ export default function Home() {
       const manifestYaml = yaml.dump(
         wizardToManifest(wizardData as Parameters<typeof wizardToManifest>[0]),
       );
-      saveProject(projectName, formData, manifestYaml);
+      const newProjectId = saveProject(projectName, formData, manifestYaml);
       await clearDraft();
       setHasGenerated(true);
+      setActiveWorkspace({
+        projectId: newProjectId,
+        name: projectName,
+        isDirty: false,
+        lastModifiedAt: Date.now(),
+        wizardData: wizardData as unknown as Record<string, unknown>,
+        manifestYaml,
+      });
 
       // Initialize new editor workspace session
       setEditorSessionId(crypto.randomUUID());
@@ -350,6 +375,7 @@ export default function Home() {
     setShowNewProjectDialog(false);
     setShowSavedProjects(false);
     clearEditorSession();
+    clearActiveWorkspace();
   };
 
   const handleDiscardAndNew = () => {
@@ -361,6 +387,7 @@ export default function Home() {
     setShowNewProjectDialog(false);
     setShowSavedProjects(false);
     clearEditorSession();
+    clearActiveWorkspace();
   };
 
   const handleFileSelect = useCallback(
@@ -390,6 +417,7 @@ export default function Home() {
         onLoadManifest={() => setShowLoadDialog(true)}
         isEditing={mode === "edit"}
         onNewProject={handleNewProjectClick}
+        onLoadSavedProject={handleLoadSavedProjectFromMenu}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden">

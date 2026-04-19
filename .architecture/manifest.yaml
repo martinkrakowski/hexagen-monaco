@@ -228,6 +228,7 @@ bounded_contexts:
           - WizardStep
           - IntentPayload
           - ProjectionViewModel
+          - ActiveWorkspace
       application:
         use_cases:
           - ProcessIntentUseCase
@@ -239,10 +240,14 @@ bounded_contexts:
             - ProjectWizardStatePort
             - ValidateStepPort
             - IProjectWizardController
+            - QueryActiveWorkspacePort
+            - SetActiveWorkspacePort
+            - ClearActiveWorkspacePort
           out:
             - WizardPersistencePort
             - WizardTelemetryPort
             - MonacoSyncPort
+            - WizardCompletionSignalPort
     depends_on:
       - messaging
   - name: monaco-orchestration
@@ -300,6 +305,28 @@ bounded_contexts:
     generator:
       dependencies:
         "@dagrejs/dagre": ^2.0.4
+  - name: external-integration
+    type: supporting
+    description: External authentication and identity providers — GitHub OAuth, session management
+    layers:
+      domain:
+        value_objects:
+          - AuthSession
+          - ProviderIdentity
+          - GitHubProvider
+      application:
+        use_cases:
+          - InitiateAuthUseCase
+          - GetAuthSessionUseCase
+          - RevokeAuthUseCase
+        ports:
+          in:
+            - QueryAuthSessionPort
+            - InitiateAuthPort
+            - RevokeAuthPort
+          out:
+            - OAuthProviderPort
+            - SessionReadPort
   - name: messaging
     type: supporting
     description: Domain events, intent bus, pluggable transports
@@ -401,12 +428,15 @@ bounded_contexts:
       domain:
         value_objects:
           - ProjectSpecification
+          - ExportIntent
       application:
         use_cases:
           - GenerateProjectUseCase
+          - InitiateExportUseCase
       ports:
         in:
           - RunProjectGenerationPort
+          - InitiateExportPort
         out:
           - ExternalProjectGeneratorPort
           - ZipCreatorPort

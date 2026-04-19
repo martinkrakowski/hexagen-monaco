@@ -6,6 +6,8 @@ import { AuthProvider } from "./components/providers/AuthProvider";
 import { SharedStateProvider } from "@/hooks/use-shared-state";
 import { LocalLLMProvider } from "@/hooks/use-local-llm";
 import { EditorProvider } from "@/contexts/EditorContext";
+import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationContext";
+import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
 
 /*
  * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
@@ -72,7 +74,11 @@ export default function RootLayout({
           <SharedStateProvider>
             <EditorProvider>
               <LocalLLMProvider>
-                <AuthProvider>{children}</AuthProvider>
+                <AuthProvider>
+                  <ExternalIntegrationProvider>
+                    <ActiveWorkspaceProvider>{children}</ActiveWorkspaceProvider>
+                  </ExternalIntegrationProvider>
+                </AuthProvider>
               </LocalLLMProvider>
             </EditorProvider>
           </SharedStateProvider>

@@ -6,12 +6,23 @@ export { ProjectSpecification } from "./domain/value-objects/project-specificati
 
 // Application exports
 export { GenerateProjectUseCase } from "./application/generate-project-use-case.js";
+export { InitiateExportUseCase } from "./application/use-cases/initiate-export.use-case.js";
+export type { GenerateProjectUseCaseFactory } from "./application/use-cases/initiate-export.use-case.js";
 export type {
   GenerateProjectInput,
   GenerateProjectOutput,
 } from "./application/generate-project-use-case.js";
 
 export type { RunProjectGenerationPort } from "./application/ports/in/generate-project.port.js";
+export type {
+  InitiateExportPort,
+  ExportIntent,
+  ExportTarget,
+  ExportValue,
+  ZipExportValue,
+  GitHubExportValue,
+  WorkspaceRef,
+} from "./application/ports/in/initiate-export.port.js";
 
 // Ports exports (interfaces)
 export type { ExternalProjectGeneratorPort } from "./application/ports/out/external-project-generator.port.js";

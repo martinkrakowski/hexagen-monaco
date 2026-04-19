@@ -5,4 +5,3 @@ export { PeerContextMappingStep } from "./PeerContextMappingStep";
 export { PeerMappingSidebar } from "./PeerMappingSidebar";
 export { PortConfigurationStep } from "./PortConfigurationStep";
 export { SummaryStep } from "./SummaryStep";
-export { GitHubExportStep } from "./GitHubExportStep";
