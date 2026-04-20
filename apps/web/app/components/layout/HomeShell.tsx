@@ -32,7 +32,6 @@ import { ResumeDraftDialog } from "./ResumeDraftDialog";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
 import { useManifestImport } from "@/hooks/useManifestImport";
 import { useProjectGenerationFlow } from "@/hooks/useProjectGenerationFlow";
-import { governanceState } from "@/lib/governance-state";
 
 export function HomeShell() {
   const totalSteps = wizardSteps.length;
@@ -211,11 +210,9 @@ export function HomeShell() {
 
   const handleGenerate = async () => {
     const formData = form.getValues();
-    const outcome = await executeGeneration(formData);
-
-    if (outcome.kind === "success") {
-      governanceState.currentManifestYaml = outcome.manifestYaml;
-    }
+    // executeGeneration writes manifestYaml into ActiveWorkspaceContext
+    // via setActiveWorkspace — governance panel reads it from there.
+    await executeGeneration(formData);
   };
 
   const handleManifestLoaded = useCallback(

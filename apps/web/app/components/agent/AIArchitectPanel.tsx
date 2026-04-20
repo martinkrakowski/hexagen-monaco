@@ -7,7 +7,7 @@ import { LocalAssistantPanel } from "./LocalAssistantPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
 import { useGovernanceData } from "@/hooks/useGovernanceData";
 import { useCodeChangeSubscription } from "@/hooks/useSharedState";
-import { governanceState } from "@/lib/governance-state";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import {
   useLocalLLM,
   HAS_ENABLED_KEY,
@@ -29,18 +29,24 @@ export function AIArchitectPanel() {
   } = useGovernanceData();
 
   const { engineState, hasAnyCachedModel, enterRequiresModel } = useLocalLLM();
+  const { activeWorkspace } = useActiveWorkspace();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useCodeChangeSubscription(() => {
+  // Mirror active workspace in a ref so the debounced callback below
+  // sees the latest manifestYaml without re-subscribing on each change.
+  // Same pattern as useCodeChangeSubscription's internal callbackRef.
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  activeWorkspaceRef.current = activeWorkspace;
+
+  useCodeChangeSubscription((event) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const { currentManifestYaml, currentOpenFileContent } = governanceState;
-      if (currentManifestYaml) {
-        refreshWithData(
-          currentManifestYaml,
-          currentOpenFileContent || undefined,
-        );
+      const manifestYaml = activeWorkspaceRef.current?.manifestYaml;
+      if (manifestYaml) {
+        // event.content carries the latest editor contents (from
+        // EditableMonaco.emitCodeChange) — no need for a separate channel.
+        refreshWithData(manifestYaml, event.content || undefined);
       } else {
         refresh();
       }

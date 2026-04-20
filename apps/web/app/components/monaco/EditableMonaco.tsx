@@ -6,7 +6,6 @@ import type * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import { Save, X, Edit3, Loader2, AlertTriangle } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useSharedState } from "@/hooks/useSharedState";
-import { governanceState } from "@/lib/governance-state";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +49,6 @@ export function EditableMonaco({
     setBaselineContent(initialContent);
     setIsEditing(false);
     setHasChanges(false);
-    governanceState.currentOpenFileContent = initialContent;
   }, [initialContent]);
 
   const handleEditorDidMount: OnMount = (editor) => {
@@ -61,7 +59,6 @@ export function EditableMonaco({
     if (value !== undefined) {
       setContent(value);
       setHasChanges(value !== baselineContent);
-      governanceState.currentOpenFileContent = value;
     }
   };
 
