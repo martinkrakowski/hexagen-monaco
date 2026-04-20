@@ -1,8 +1,26 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import Editor, { type OnMount, type OnChange } from "@monaco-editor/react";
+import dynamic from "next/dynamic";
 import type * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+
+type OnMount = (
+  editor: monaco.editor.IStandaloneCodeEditor,
+  instance: typeof monaco,
+) => void;
+type OnChange = (value: string | undefined) => void;
+
+const Editor = dynamic(
+  () => import("@monaco-editor/react").then((mod) => mod.default),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full bg-muted">
+        <span className="text-sm text-muted-foreground">Loading editor...</span>
+      </div>
+    ),
+  },
+);
 
 import { useTheme } from "@/hooks/useTheme";
 import { useSharedState } from "@/hooks/useSharedState";

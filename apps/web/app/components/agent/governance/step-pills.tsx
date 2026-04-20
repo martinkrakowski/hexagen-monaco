@@ -24,7 +24,7 @@ export function StepPills({ currentStepIndex }: StepPillsProps) {
             <div
               key={label}
               className={[
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-default select-none",
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-default select-none",
                 isActive
                   ? "bg-primary/15 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]"
                   : isCompleted

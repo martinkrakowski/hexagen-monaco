@@ -72,12 +72,12 @@ export function ModelCard({
         <p className="text-[12px] text-destructive font-medium mb-1.5">
           Delete {descriptor.displayName}?
         </p>
-        <p className="text-[11px] text-muted-foreground mb-3">
+        <p className="text-xs text-muted-foreground mb-3">
           This will free ~{descriptor.downloadSizeGB} GB and remove the model
           from your device. It will need to be re-downloaded if you want to use
           it again.
         </p>
-        {error && <p className="text-[11px] text-destructive mb-2">{error}</p>}
+        {error && <p className="text-xs text-destructive mb-2">{error}</p>}
         <div className="flex gap-2">
           <button
             onClick={onConfirmDelete}
@@ -104,12 +104,12 @@ export function ModelCard({
         <p className="text-[12px] text-warning font-medium mb-1">
           Switch models?
         </p>
-        <p className="text-[11px] text-muted-foreground mb-3">
+        <p className="text-xs text-muted-foreground mb-3">
           Switching will clear your current conversation with{" "}
           {currentModelDisplayName ?? "the current model"}. The new model (
           {descriptor.displayName}) will start fresh.
         </p>
-        {error && <p className="text-[11px] text-destructive mb-2">{error}</p>}
+        {error && <p className="text-xs text-destructive mb-2">{error}</p>}
         <div className="flex gap-2">
           <button
             onClick={onConfirmSwitch}
@@ -157,7 +157,7 @@ export function ModelCard({
           <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
             {descriptor.description}
           </p>
-          <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground/80">
+          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground/80">
             <span>~{descriptor.downloadSizeGB} GB</span>
             <span>·</span>
             <span>~{descriptor.vramRequiredMB} MB VRAM</span>
@@ -175,7 +175,7 @@ export function ModelCard({
           </div>
           {compatibilityIssue && (
             <div
-              className={`mt-2 text-[11px] font-medium ${
+              className={`mt-2 text-xs font-medium ${
                 compatibilityIssue.severity === "error"
                   ? "text-destructive"
                   : "text-warning"

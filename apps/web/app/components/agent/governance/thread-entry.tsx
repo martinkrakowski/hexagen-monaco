@@ -26,7 +26,7 @@ export function ThreadEntry({
         <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
           <MessageSquare size={10} className="text-primary" strokeWidth={2.5} />
         </div>
-        <p className="text-[11px] font-medium text-primary">
+        <p className="text-xs font-medium text-primary">
           {entry.questionLabel}
         </p>
       </div>

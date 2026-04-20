@@ -202,7 +202,7 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
       role="presentation"
     >
       <div
-        role="dialog"
+        role="document"
         aria-label={label}
         className="relative w-80 rounded-xl border border-border bg-background shadow-2xl p-5"
         onClick={(e) => e.stopPropagation()}
@@ -224,7 +224,7 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
           <ul className="space-y-1.5">
             {items.map((item, idx) => (
               <li
-                key={`${label}-${item}-${idx}`}
+                key={`${label}-${item}`}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-sm bg-muted/50 text-foreground border border-border/50"
               >
                 <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">

@@ -62,6 +62,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
         className,
       )}
       onClick={(e) => e.stopPropagation()}
+      role="document"
       {...props}
     >
       {children}

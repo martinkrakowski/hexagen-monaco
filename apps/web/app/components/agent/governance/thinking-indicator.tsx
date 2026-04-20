@@ -1,22 +1,24 @@
-import { motion } from "framer-motion";
+import { LazyMotion, m, domAnimation } from "framer-motion";
 
 export function ThinkingIndicator() {
   return (
-    <div className="flex items-center gap-1.5 py-3">
-      <p className="text-xs text-muted-foreground">Thinking</p>
-      {[0, 1, 2].map((dot) => (
-        <motion.span
-          key={`dot-${dot}`}
-          className="block w-1 h-1 rounded-full bg-primary/60"
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{
-            duration: 1.2,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: dot * 0.2,
-          }}
-        />
-      ))}
-    </div>
+    <LazyMotion features={domAnimation}>
+      <div className="flex items-center gap-1.5 py-3">
+        <p className="text-xs text-muted-foreground">Thinking</p>
+        {[0, 1, 2].map((dot) => (
+          <m.span
+            key={`dot-${dot}`}
+            className="block w-1 h-1 rounded-full bg-primary/60"
+            animate={{ opacity: [0.3, 1, 0.3] }}
+            transition={{
+              duration: 1.2,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: dot * 0.2,
+            }}
+          />
+        ))}
+      </div>
+    </LazyMotion>
   );
 }

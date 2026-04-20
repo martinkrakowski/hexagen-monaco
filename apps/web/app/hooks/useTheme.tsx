@@ -3,8 +3,8 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
+  useCallback,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -20,62 +20,67 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "hexagen-theme";
 
+function getSnapshot(): Theme {
+  const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return stored || (prefersDark ? "dark" : "light");
+}
+
+function getServerSnapshot(): Theme {
+  return "dark";
+}
+
+function subscribe(callback: () => void) {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY) callback();
+  };
+  const onMediaChange = () => callback();
+
+  window.addEventListener("storage", onStorage);
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+  mql.addEventListener("change", onMediaChange);
+
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    mql.removeEventListener("change", onMediaChange);
+  };
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  useEffect(() => {
-    setMounted(true);
-
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const prefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)",
-    ).matches;
-
-    const initialTheme: Theme = stored || (prefersDark ? "dark" : "light");
-    setThemeState(initialTheme);
-
-    if (initialTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
+  const applyTheme = useCallback((newTheme: Theme) => {
     localStorage.setItem(STORAGE_KEY, newTheme);
-
     if (newTheme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
-  };
+    window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
+  }, []);
 
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
+  const setTheme = useCallback(
+    (newTheme: Theme) => {
+      applyTheme(newTheme);
+    },
+    [applyTheme],
+  );
 
-  // Prevent hydration mismatch
-  if (!mounted) {
-    return (
-      <div className="contents" suppressHydrationWarning>
-        {children}
-      </div>
-    );
-  }
+  const toggleTheme = useCallback(() => {
+    applyTheme(theme === "dark" ? "light" : "dark");
+  }, [theme, applyTheme]);
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
+      <div className="contents" suppressHydrationWarning>
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }
 
 export function useTheme() {
   const context = useContext(ThemeContext);
-  // Return a no-op theme context if not mounted (allows SSR to work)
   if (!context) {
     return {
       theme: "dark" as Theme,

@@ -24,7 +24,7 @@ export function PanelFooter({
           {showHint && (
             <>
               <Info size={12} className="text-muted-foreground/60" />
-              <p className="text-[11px] text-muted-foreground/60">
+              <p className="text-xs text-muted-foreground/60">
                 Click a question to get an AI-powered answer
               </p>
             </>

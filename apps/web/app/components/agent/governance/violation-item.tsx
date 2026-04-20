@@ -39,7 +39,7 @@ export function ViolationItem({
             {violation.message}
           </p>
           {violation.context && (
-            <p className="text-[11px] text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {violation.context}
             </p>
           )}

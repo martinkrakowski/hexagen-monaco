@@ -89,6 +89,7 @@ export function Header({
       />
 
       <ExportDialog
+        key={activeWorkspace?.name ?? ""}
         open={exportFlow.state.kind === "dialog-open"}
         onClose={exportFlow.closeDialog}
         onSubmit={exportFlow.submitGithubExport}

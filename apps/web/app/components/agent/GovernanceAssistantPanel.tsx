@@ -120,8 +120,8 @@ export function GovernanceAssistantPanel({
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
-  const [prevStepIndex, setPrevStepIndex] = useState(currentStepIndex);
-  const [prevActiveItem, setPrevActiveItem] = useState(activeItem);
+  const prevStepIndexRef = useRef(currentStepIndex);
+  const prevActiveItemRef = useRef(activeItem);
   const [mode, setMode] = useState<LLMMode>("local");
   const [cloudConfig, setCloudConfig] = useState<UseCloudLLMConfig | null>(
     null,
@@ -131,12 +131,9 @@ export function GovernanceAssistantPanel({
   const cloudLLM = useCloudLLM();
   const vault = useSecretVault();
 
-  // Synchronize vault into cloudLLM — legitimate sync effect, not an event handler.
-  useEffect(() => {
-    if (vault) {
-      cloudLLM.setVault(vault);
-    }
-  }, [vault, cloudLLM]);
+  if (vault) {
+    cloudLLM.setVault(vault);
+  }
 
   const { status, progress, errorMessage, autoLoading } = llmEngineState;
 
@@ -190,9 +187,12 @@ export function GovernanceAssistantPanel({
     }
   }, [isStreaming, getFollowUpQuestions, conversationThread]);
 
-  if (prevStepIndex !== currentStepIndex || prevActiveItem !== activeItem) {
-    setPrevStepIndex(currentStepIndex);
-    setPrevActiveItem(activeItem);
+  if (
+    prevStepIndexRef.current !== currentStepIndex ||
+    prevActiveItemRef.current !== activeItem
+  ) {
+    prevStepIndexRef.current = currentStepIndex;
+    prevActiveItemRef.current = activeItem;
     setFollowUpQuestions([]);
   }
 
@@ -367,6 +367,7 @@ export function GovernanceAssistantPanel({
     return (
       <div className="flex flex-col h-full">
         <ModelSettingsView
+          key={llmEngineState.loadedModelId ?? "none"}
           currentModelId={llmEngineState.loadedModelId}
           loadedModel={loadedModel}
           messagesLength={messages.length}
@@ -401,7 +402,7 @@ export function GovernanceAssistantPanel({
               <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
                 <span
                   className="text-primary font-bold"
-                  style={{ fontSize: "11px" }}
+                  style={{ fontSize: "12px" }}
                 >
                   G
                 </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useReducer, useEffect, useMemo } from "react";
 import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { useHardwareDetection } from "@/hooks/useHardwareDetection";
@@ -33,6 +33,58 @@ interface CacheStatusEntry {
   isChecking: boolean;
 }
 
+interface ModelSettingsState {
+  cacheStatus: Map<DomainModelId, CacheStatusEntry>;
+  confirmDeleteId: DomainModelId | null;
+  pendingSwitchId: DomainModelId | null;
+  isSwitching: boolean;
+  isDeleting: boolean;
+  error: string | null;
+  selectedModelId: DomainModelId | null;
+}
+
+type ModelSettingsAction =
+  | { type: "SET_CACHE_STATUS"; payload: Map<DomainModelId, CacheStatusEntry> }
+  | { type: "SET_CONFIRM_DELETE_ID"; payload: DomainModelId | null }
+  | { type: "SET_PENDING_SWITCH_ID"; payload: DomainModelId | null }
+  | { type: "SET_IS_SWITCHING"; payload: boolean }
+  | { type: "SET_IS_DELETING"; payload: boolean }
+  | { type: "SET_ERROR"; payload: string | null }
+  | { type: "SET_SELECTED_MODEL_ID"; payload: DomainModelId | null }
+  | {
+      type: "UPDATE_CACHE_ENTRY";
+      payload: { modelId: DomainModelId; entry: CacheStatusEntry };
+    };
+
+function modelSettingsReducer(
+  state: ModelSettingsState,
+  action: ModelSettingsAction,
+): ModelSettingsState {
+  switch (action.type) {
+    case "SET_CACHE_STATUS":
+      return { ...state, cacheStatus: action.payload };
+    case "SET_CONFIRM_DELETE_ID":
+      return { ...state, confirmDeleteId: action.payload };
+    case "SET_PENDING_SWITCH_ID":
+      return { ...state, pendingSwitchId: action.payload };
+    case "SET_IS_SWITCHING":
+      return { ...state, isSwitching: action.payload };
+    case "SET_IS_DELETING":
+      return { ...state, isDeleting: action.payload };
+    case "SET_ERROR":
+      return { ...state, error: action.payload };
+    case "SET_SELECTED_MODEL_ID":
+      return { ...state, selectedModelId: action.payload };
+    case "UPDATE_CACHE_ENTRY": {
+      const newStatus = new Map(state.cacheStatus);
+      newStatus.set(action.payload.modelId, action.payload.entry);
+      return { ...state, cacheStatus: newStatus };
+    }
+    default:
+      return state;
+  }
+}
+
 export function ModelSettingsView({
   currentModelId,
   loadedModel,
@@ -45,18 +97,25 @@ export function ModelSettingsView({
   onSwitchToCloud,
   requiresModelWarning,
 }: ModelSettingsViewProps) {
-  const [cacheStatus, setCacheStatus] = useState<
-    Map<DomainModelId, CacheStatusEntry>
-  >(new Map());
-  const [confirmDeleteId, setConfirmDeleteId] = useState<DomainModelId | null>(
-    null,
-  );
-  const [pendingSwitchId, setPendingSwitchId] = useState<DomainModelId | null>(
-    null,
-  );
-  const [isSwitching, setIsSwitching] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(modelSettingsReducer, {
+    cacheStatus: new Map<DomainModelId, CacheStatusEntry>(),
+    confirmDeleteId: null as DomainModelId | null,
+    pendingSwitchId: null as DomainModelId | null,
+    isSwitching: false,
+    isDeleting: false,
+    error: null as string | null,
+    selectedModelId: currentModelId,
+  });
+
+  const {
+    cacheStatus,
+    confirmDeleteId,
+    pendingSwitchId,
+    isSwitching,
+    isDeleting,
+    error,
+    selectedModelId,
+  } = state;
 
   const currentModelDisplayName = currentModelId
     ? (getModelDescriptor(currentModelId)?.displayName ?? null)
@@ -64,24 +123,38 @@ export function ModelSettingsView({
 
   const { profile: hardwareProfile, isDetecting: isDetectingHardware } =
     useHardwareDetection();
-  const [recommendedModelId, setRecommendedModelId] =
-    useState<DomainModelId | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<DomainModelId | null>(
-    currentModelId,
-  );
-  const [prevCurrentModelId, setPrevCurrentModelId] =
-    useState<DomainModelId | null>(currentModelId);
 
-  if (prevCurrentModelId !== currentModelId) {
-    setPrevCurrentModelId(currentModelId);
-    setSelectedModelId(currentModelId);
-  }
+  const setters = {
+    setCacheStatus: (status: Map<DomainModelId, CacheStatusEntry>) =>
+      dispatch({ type: "SET_CACHE_STATUS", payload: status }),
+    setConfirmDeleteId: (id: DomainModelId | null) =>
+      dispatch({ type: "SET_CONFIRM_DELETE_ID", payload: id }),
+    setPendingSwitchId: (id: DomainModelId | null) =>
+      dispatch({ type: "SET_PENDING_SWITCH_ID", payload: id }),
+    setIsSwitching: (v: boolean) =>
+      dispatch({ type: "SET_IS_SWITCHING", payload: v }),
+    setIsDeleting: (v: boolean) =>
+      dispatch({ type: "SET_IS_DELETING", payload: v }),
+    setError: (e: string | null) => dispatch({ type: "SET_ERROR", payload: e }),
+    setSelectedModelId: (id: DomainModelId | null) =>
+      dispatch({ type: "SET_SELECTED_MODEL_ID", payload: id }),
+  };
 
-  useEffect(() => {
+  const {
+    setCacheStatus,
+    setConfirmDeleteId,
+    setPendingSwitchId,
+    setIsSwitching,
+    setIsDeleting,
+    setError,
+  } = setters;
+
+  const recommendedModelId = useMemo(() => {
     if (hardwareProfile && !isDetectingHardware) {
       const recommendation = recommendModel(hardwareProfile, LOCAL_MODELS);
-      setRecommendedModelId(recommendation?.modelId ?? null);
+      return recommendation?.modelId ?? null;
     }
+    return null;
   }, [hardwareProfile, isDetectingHardware]);
 
   useEffect(() => {
@@ -165,10 +238,9 @@ export function ModelSettingsView({
       await Promise.race([onDeleteModel(modelId), timeoutPromise]);
       setConfirmDeleteId(null);
       const isCached = await hasModelInCache(modelId);
-      setCacheStatus((prev) => {
-        const newStatus = new Map(prev);
-        newStatus.set(modelId, { modelId, isCached, isChecking: false });
-        return newStatus;
+      dispatch({
+        type: "UPDATE_CACHE_ENTRY",
+        payload: { modelId, entry: { modelId, isCached, isChecking: false } },
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete model");

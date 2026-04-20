@@ -32,7 +32,7 @@ export function StatusSummaryCard({
             {hasIssues ? "Review Required" : "No Issues Found"}
           </p>
           {hasIssues && (
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {violationCount > 0 && <span>{violationCount} violation(s)</span>}
               {violationCount > 0 && suggestionCount > 0 && <span>, </span>}
               {suggestionCount > 0 && (

@@ -34,32 +34,24 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
-        {/*
-         * Flash-of-correct-theme guard — runs inline before React hydrates to
-         * prevent a visible flash when the user's stored preference differs from
-         * the server-rendered default.
-         */}
         <Script
           id="theme-guard"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
-              (function() {
-                try {
-                  var stored = localStorage.getItem('hexagen-theme');
-                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  var theme = stored || (prefersDark ? 'dark' : 'light');
-                  if (theme === 'dark') {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
+              try {
+                var stored = localStorage.getItem('hexagen-theme');
+                var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = stored || (prefersDark ? 'dark' : 'light');
+                if (theme === 'dark') {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              } catch (e) {}
             `,
           }}
         />
-        {/* theme-color keeps the mobile browser chrome in sync with the app */}
         <meta
           name="theme-color"
           media="(prefers-color-scheme: light)"

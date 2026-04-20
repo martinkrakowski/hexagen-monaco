@@ -5,8 +5,7 @@ import {
   useContext,
   useCallback,
   useMemo,
-  useState,
-  useEffect,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -17,9 +16,7 @@ export interface ActiveWorkspace {
   name: string;
   isDirty: boolean;
   lastModifiedAt: number;
-  /** Wizard-form snapshot used to reconstruct a Manifest for export. */
   wizardData?: Record<string, unknown>;
-  /** Manifest YAML snapshot (for display/preview). */
   manifestYaml?: string;
 }
 
@@ -42,28 +39,38 @@ const workspaceStorage = createPersistedStorage<ActiveWorkspace>(
     typeof (candidate as ActiveWorkspace).projectId === "string",
 );
 
-export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
-  const [activeWorkspace, setActiveWorkspaceState] =
-    useState<ActiveWorkspace | null>(null);
+const workspaceListeners = new Set<() => void>();
 
-  useEffect(() => {
-    const stored = workspaceStorage.read();
-    if (stored) setActiveWorkspaceState(stored);
-  }, []);
+function subscribeWorkspace(callback: () => void) {
+  workspaceListeners.add(callback);
+  return () => workspaceListeners.delete(callback);
+}
+
+function getWorkspaceSnapshot(): ActiveWorkspace | null {
+  return workspaceStorage.read();
+}
+
+function getWorkspaceServerSnapshot(): ActiveWorkspace | null {
+  return null;
+}
+
+export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
+  const activeWorkspace = useSyncExternalStore(
+    subscribeWorkspace,
+    getWorkspaceSnapshot,
+    getWorkspaceServerSnapshot,
+  );
 
   const setActiveWorkspace = useCallback((workspace: ActiveWorkspace) => {
-    setActiveWorkspaceState(workspace);
     workspaceStorage.write(workspace);
+    for (const cb of workspaceListeners) cb();
   }, []);
 
   const clearActiveWorkspace = useCallback(() => {
-    setActiveWorkspaceState(null);
     workspaceStorage.write(null);
+    for (const cb of workspaceListeners) cb();
   }, []);
 
-  // Memo prevents consumer re-renders when the provider re-renders
-  // for reasons unrelated to workspace state (rare, but useMemo makes
-  // the contract explicit: consumers only churn on identity change).
   const value = useMemo<ActiveWorkspaceContextValue>(
     () => ({ activeWorkspace, setActiveWorkspace, clearActiveWorkspace }),
     [activeWorkspace, setActiveWorkspace, clearActiveWorkspace],

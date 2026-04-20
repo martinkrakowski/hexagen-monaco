@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useReducer, useCallback } from "react";
 import { getClientProviders } from "@/config/cloud-providers";
 import type { SecretVaultPort } from "@hexagen/agentic-interaction";
 
@@ -11,17 +11,65 @@ interface CloudModelSettingsViewProps {
   error?: string | null;
 }
 
+interface CloudFormState {
+  selectedProvider: string;
+  selectedModel: string;
+  apiKey: string;
+  rememberKey: boolean;
+  isStoring: boolean;
+}
+
+type CloudFormAction =
+  | { type: "SET_PROVIDER"; payload: string }
+  | { type: "SET_MODEL"; payload: string }
+  | { type: "SET_API_KEY"; payload: string }
+  | { type: "SET_REMEMBER_KEY"; payload: boolean }
+  | { type: "SET_STORING"; payload: boolean }
+  | { type: "RESET_FORM" };
+
+const initialState: CloudFormState = {
+  selectedProvider: "",
+  selectedModel: "",
+  apiKey: "",
+  rememberKey: false,
+  isStoring: false,
+};
+
+function cloudFormReducer(
+  state: CloudFormState,
+  action: CloudFormAction,
+): CloudFormState {
+  switch (action.type) {
+    case "SET_PROVIDER":
+      return { ...state, selectedProvider: action.payload, selectedModel: "" };
+    case "SET_MODEL":
+      return { ...state, selectedModel: action.payload };
+    case "SET_API_KEY":
+      return { ...state, apiKey: action.payload };
+    case "SET_REMEMBER_KEY":
+      return { ...state, rememberKey: action.payload };
+    case "SET_STORING":
+      return { ...state, isStoring: action.payload };
+    case "RESET_FORM":
+      return {
+        ...initialState,
+        selectedProvider: state.selectedProvider,
+        selectedModel: state.selectedModel,
+      };
+    default:
+      return state;
+  }
+}
+
 export function CloudModelSettingsView({
   vault,
   onConnect,
   isConnecting,
   error,
 }: CloudModelSettingsViewProps) {
-  const [selectedProvider, setSelectedProvider] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [rememberKey, setRememberKey] = useState(false);
-  const [isStoring, setIsStoring] = useState(false);
+  const [state, dispatch] = useReducer(cloudFormReducer, initialState);
+  const { selectedProvider, selectedModel, apiKey, rememberKey, isStoring } =
+    state;
 
   const clientProviders = getClientProviders();
   const currentProvider = clientProviders.find(
@@ -43,26 +91,21 @@ export function CloudModelSettingsView({
   const handleConnect = useCallback(async () => {
     if (!canConnect) return;
 
-    setIsStoring(true);
+    dispatch({ type: "SET_STORING", payload: true });
     try {
-      // Store the API key in the vault with persistence preference
       const storeResult = await vault.store(apiKey, rememberKey);
       if (!storeResult.success) {
         return;
       }
 
-      // Key successfully stored in vault
-      // Now invoke the orchestrator callback with just provider and model
-      // The API key will be retrieved from vault when needed
       await onConnect(selectedProvider, selectedModel);
 
-      // Clear the form after successful connection
-      setApiKey("");
-      setSelectedProvider("");
-      setSelectedModel("");
-      setRememberKey(false);
+      dispatch({
+        type: "SET_PROVIDER",
+        payload: "",
+      });
     } finally {
-      setIsStoring(false);
+      dispatch({ type: "SET_STORING", payload: false });
     }
   }, [
     vault,
@@ -104,8 +147,7 @@ export function CloudModelSettingsView({
         <select
           value={selectedProvider}
           onChange={(e) => {
-            setSelectedProvider(e.target.value);
-            setSelectedModel("");
+            dispatch({ type: "SET_PROVIDER", payload: e.target.value });
           }}
           className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
         >
@@ -121,7 +163,9 @@ export function CloudModelSettingsView({
         {selectedProvider && (
           <select
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) =>
+              dispatch({ type: "SET_MODEL", payload: e.target.value })
+            }
             className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">Select model</option>
@@ -138,7 +182,9 @@ export function CloudModelSettingsView({
             type="password"
             placeholder="API key"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) =>
+              dispatch({ type: "SET_API_KEY", payload: e.target.value })
+            }
             disabled={isStoring}
             className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
           />
@@ -149,7 +195,12 @@ export function CloudModelSettingsView({
             <input
               type="checkbox"
               checked={rememberKey}
-              onChange={(e) => setRememberKey(e.target.checked)}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_REMEMBER_KEY",
+                  payload: e.target.checked,
+                })
+              }
               disabled={isStoring}
               className="w-4 h-4 rounded border border-input"
             />

@@ -19,7 +19,7 @@ export function StorageFooter({
   return (
     <footer className="flex-shrink-0 p-2 border-t border-border bg-background">
       <div className="flex items-center justify-between gap-4 w-full">
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           <span className="font-medium">
             {totalCached} model{totalCached !== 1 ? "s" : ""} cached
           </span>

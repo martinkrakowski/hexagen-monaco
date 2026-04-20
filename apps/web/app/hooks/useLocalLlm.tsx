@@ -5,7 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type {
@@ -23,7 +23,6 @@ import { useAutoInitLastModel } from "./local-llm/useAutoInitLastModel";
 import { useGovernancePayload } from "./local-llm/useGovernancePayload";
 import { useChatMessages } from "./local-llm/useChatMessages";
 
-// Re-export for backward compatibility with existing consumers.
 export type { ChatMessage };
 export { AUTO_LOAD_KEY, HAS_ENABLED_KEY } from "./local-llm/storage-keys";
 
@@ -57,30 +56,34 @@ interface LocalLLMProviderProps {
   children: ReactNode;
 }
 
-/**
- * Composition root for the local LLM subsystem. Wires together five
- * focused hooks (engine lifecycle, model cache, auto-init effect,
- * governance payload, chat messages) and exposes their combined API
- * via React Context.
- *
- * Each concern lives in its own hook under ./local-llm/:
- *   - useEngineLifecycle: engineState + init/switch/cancel/delete
- *   - useModelCache: stateless adapter-cache queries
- *   - useAutoInitLastModel: opt-in + auto-load effect
- *   - useGovernancePayload: /api/llm/context fetch + editor subscription
- *   - useChatMessages: messages + persistence + send methods
- */
+let mountedState = false;
+const mountedListeners = new Set<() => void>();
+
+function subscribeMounted(callback: () => void) {
+  mountedListeners.add(callback);
+  return () => mountedListeners.delete(callback);
+}
+
+function getMountedSnapshot() {
+  return mountedState;
+}
+
+function getMountedServerSnapshot() {
+  return false;
+}
+
 export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    subscribeMounted,
+    getMountedSnapshot,
+    getMountedServerSnapshot,
+  );
+
   useEffect(() => {
-    setMounted(true);
+    mountedState = true;
+    for (const cb of mountedListeners) cb();
   }, []);
 
-  // Chat messages need to be cleared when the engine performs a
-  // destructive transition (switchModel / deleteCachedModel of the
-  // currently-loaded model). Wire the clear callback into the engine
-  // via a placeholder ref-style function — the real clearMessages
-  // comes from useChatMessages below.
   const clearMessagesRef = { current: () => {} };
 
   const engine = useEngineLifecycle({
@@ -106,8 +109,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
   clearMessagesRef.current = chat.clearMessages;
 
-  // Memoized context value — only changes when a consumed value or
-  // callback identity changes. Prevents consumer re-render storms.
   const value = useMemo<LocalLLMContextValue>(
     () => ({
       engineState: engine.engineState,
@@ -145,8 +146,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     ],
   );
 
-  // SSR / hydration guard — render children without a provider value
-  // during SSR so components don't throw during server render.
   if (!mounted) {
     return (
       <div className="contents" suppressHydrationWarning>
@@ -162,30 +161,16 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   );
 }
 
-/**
- * Consumer hook for the LocalLLMContext.
- *
- * SSR-safe: returns a no-op default during server render and during
- * the brief window between SSR and client mount when the provider
- * may not be hydrated yet. Throws only AFTER mount, when missing
- * context signals a real provider-chain bug rather than a hydration
- * race.
- *
- * This guard was added after a rename-sweep regression that caused
- * consumers to see undefined context during hydration and cascade
- * the whole page into an empty Loader2. Removing it would regress
- * that fix.
- */
 export function useLocalLLM(): LocalLLMContextValue {
   const context = useContext(LocalLLMContext);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeMounted,
+    getMountedSnapshot,
+    getMountedServerSnapshot,
+  );
 
   if (!context) {
-    if (isMounted) {
+    if (mounted) {
       throw new Error("useLocalLLM must be used within a LocalLLMProvider");
     }
     return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { DiffEditor } from "@monaco-editor/react";
+import dynamic from "next/dynamic";
 import { AlertTriangle } from "lucide-react";
 import {
   Dialog,
@@ -11,6 +11,20 @@ import {
   DialogFooter,
 } from "@/components/ui/Dialog";
 import { DIFF_EDITOR_OPTIONS } from "./monaco-options";
+
+const DiffEditor = dynamic(
+  () => import("@monaco-editor/react").then((mod) => mod.DiffEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full bg-muted">
+        <span className="text-sm text-muted-foreground">
+          Loading diff editor...
+        </span>
+      </div>
+    ),
+  },
+);
 
 interface DiscardChangesDialogProps {
   open: boolean;

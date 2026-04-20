@@ -97,6 +97,12 @@ export function MappingCard({
             e.stopPropagation();
             onRequestDelete();
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              onRequestDelete();
+            }
+          }}
           className="absolute top-2 right-2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
         />
       )}

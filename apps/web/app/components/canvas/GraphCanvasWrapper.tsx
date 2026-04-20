@@ -91,6 +91,7 @@ export function GraphCanvasWrapper({
           <CanvasToolbar onAddNode={state.onAddNode} onExport={handleExport} />
         </div>
         <NodeEditorDialog
+          key={selectedNode?.id}
           isOpen={!!selectedNode}
           node={selectedNode}
           onClose={state.onCloseEditor}

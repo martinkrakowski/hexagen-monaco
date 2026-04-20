@@ -35,17 +35,8 @@ export function NodeEditorDialog({
   onClose,
   onUpdateNode,
 }: NodeEditorDialogProps) {
-  const [label, setLabel] = useState("");
-  const [type, setType] = useState<HexagonNodeType>("entity");
-  const [prevNode, setPrevNode] = useState(node);
-
-  if (prevNode !== node) {
-    setPrevNode(node);
-    if (node) {
-      setLabel(node.label);
-      setType(node.type);
-    }
-  }
+  const [label, setLabel] = useState(node?.label ?? "");
+  const [type, setType] = useState<HexagonNodeType>(node?.type ?? "entity");
 
   if (!isOpen || !node) {
     return null;
