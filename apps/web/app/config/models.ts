@@ -3,15 +3,25 @@ import { DomainModelId } from "@hexagen/local-llm";
 /**
  * Local model registry for the web app.
  *
- * Sizes are approximate — sourced from HuggingFace MLC model artifacts and
- * WebLLM's vram_required_MB figures. Will drift as model weights are updated.
- * In Phase 2, consider fetching actual sizes from the WebLLM model config
- * at runtime via the model list API.
+ * Carries UI-specific display data and resource estimates. Does NOT
+ * duplicate ModelMetadata fields (vendor, parameterSize, quantizeLevel,
+ * contextLength) — those come from getLoadedModel() after the model
+ * is loaded by WebLLM.
  *
- * Does NOT duplicate ModelMetadata fields (vendor, parameterSize, quantizeLevel,
- * contextLength). Those come from getLoadedModel() after the model is loaded.
- * This registry only carries UI-specific display data and resource estimates.
+ * Provenance: sizes are approximate, sourced from HuggingFace MLC
+ * model artifacts and WebLLM's vram_required_MB figures. Values
+ * drift as model weights are updated upstream.
  */
+
+/**
+ * Hardware-aware recommendation category. Used by
+ * useHardwareDetection to surface suitable models for the user's
+ * device.
+ */
+export type ModelTier = "desktop-high" | "desktop-compact" | "ultra-light";
+
+/** Subjective quality rating for code-generation tasks (1 = minimal, 5 = strongest). */
+export type CodingRating = 1 | 2 | 3 | 4 | 5;
 
 export interface ModelDescriptor {
   modelId: DomainModelId;
@@ -20,14 +30,18 @@ export interface ModelDescriptor {
   downloadSizeGB: number;
   vramRequiredMB: number;
   description: string;
-  // Hardware-aware recommendation fields
-  tier: "desktop-high" | "desktop-compact" | "ultra-light";
-  backend: "webgpu" | "wasm";
-  codingRating: 1 | 2 | 3 | 4 | 5;
+  tier: ModelTier;
+  /**
+   * All current models use WebGPU. This field is retained as a
+   * literal to document the assumption at every call site; revisit
+   * if/when a WASM-fallback model is added.
+   */
+  backend: "webgpu";
+  codingRating: CodingRating;
   coreStrength: string;
 }
 
-export const LOCAL_MODELS: ModelDescriptor[] = [
+export const LOCAL_MODELS: readonly ModelDescriptor[] = [
   // Desktop High-End
   {
     modelId: DomainModelId.QWEN_CODER_3B,
@@ -124,12 +138,19 @@ export const LOCAL_MODELS: ModelDescriptor[] = [
   },
 ];
 
+/** Lookup a descriptor by model id. */
 export function getModelDescriptor(
   modelId: DomainModelId,
 ): ModelDescriptor | undefined {
   return LOCAL_MODELS.find((m) => m.modelId === modelId);
 }
 
+/** Compact display name for a model, with a "Model" fallback. */
 export function getModelShortName(modelId: DomainModelId): string {
   return getModelDescriptor(modelId)?.shortName ?? "Model";
+}
+
+/** All models in a given tier. */
+export function getModelsByTier(tier: ModelTier): readonly ModelDescriptor[] {
+  return LOCAL_MODELS.filter((m) => m.tier === tier);
 }

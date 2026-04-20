@@ -1,19 +1,56 @@
+/**
+ * Registry of supported cloud LLM providers and their models.
+ *
+ * Provenance: hand-maintained. Values sourced from each vendor's
+ * public API documentation. When a vendor releases a new model or
+ * deprecates one, this file is the single point of update.
+ *
+ * SECURITY BOUNDARY — `baseUrl` is server-side only. The
+ * `/api/llm/chat` route uses it to reach the vendor API directly;
+ * the client never sees it (see `getClientProviders()`).
+ */
+
+export type CloudProviderId = "openai" | "anthropic" | "mistral" | "google";
+
+export type CloudModelId =
+  // OpenAI
+  | "gpt-4o"
+  | "gpt-4o-mini"
+  | "gpt-4-turbo"
+  | "gpt-3.5-turbo"
+  // Anthropic
+  | "claude-sonnet-4-20250514"
+  | "claude-3-5-sonnet-20241022"
+  // Mistral
+  | "mistral-large-latest"
+  // Google
+  | "gemini-2.5-flash";
+
 export interface CloudModelConfig {
-  id: string;
+  id: CloudModelId;
   displayName: string;
   contextLength: number;
+  /**
+   * Whether this specific model is currently exposed. A model can be
+   * marked unavailable even if the parent provider is available
+   * (e.g. during a rollout). If the parent provider is unavailable,
+   * every model beneath it should also be unavailable — this is a
+   * convention, not a compiler-enforced invariant.
+   */
   available: boolean;
 }
 
 export interface CloudProviderConfig {
-  id: string;
+  id: CloudProviderId;
   displayName: string;
+  /** Whether the provider is exposed to users at all. */
   available: boolean;
+  /** SERVER-ONLY. Never ship to the client — see getClientProviders. */
   baseUrl: string;
   models: CloudModelConfig[];
 }
 
-export const CLOUD_PROVIDERS: CloudProviderConfig[] = [
+export const CLOUD_PROVIDERS: readonly CloudProviderConfig[] = [
   {
     id: "openai",
     displayName: "OpenAI",
@@ -96,29 +133,44 @@ export const CLOUD_PROVIDERS: CloudProviderConfig[] = [
   },
 ];
 
+/** Lookup a provider by id. Returns undefined for unknown ids. */
 export function getCloudProvider(
   providerId: string,
 ): CloudProviderConfig | undefined {
   return CLOUD_PROVIDERS.find((p) => p.id === providerId);
 }
 
-export function getAvailableProviders(): CloudProviderConfig[] {
+/** Providers currently exposed to users. */
+export function getAvailableProviders(): readonly CloudProviderConfig[] {
   return CLOUD_PROVIDERS.filter((p) => p.available);
 }
 
+/** Models for a given provider, or undefined if the provider is unknown. */
 export function getProviderModels(
   providerId: string,
-): CloudModelConfig[] | undefined {
-  const provider = getCloudProvider(providerId);
-  return provider?.models;
+): readonly CloudModelConfig[] | undefined {
+  return getCloudProvider(providerId)?.models;
 }
 
+/**
+ * Safe-to-serialize projection of a provider — excludes `baseUrl`
+ * (server-only) but keeps everything the UI needs.
+ */
 export type ClientProviderInfo = Omit<CloudProviderConfig, "baseUrl">;
 
+/**
+ * Returns provider list with the `baseUrl` stripped, safe to send
+ * to the client. Never include this function's output in a server-
+ * rendered component that leaks to the client without going through
+ * a serialization boundary.
+ */
 export function getClientProviders(): ClientProviderInfo[] {
-  return CLOUD_PROVIDERS.map((provider) => {
-    const { baseUrl: _, ...rest } = provider;
-    void _;
-    return rest;
-  });
+  return CLOUD_PROVIDERS.map(
+    ({ id, displayName, available, models }): ClientProviderInfo => ({
+      id,
+      displayName,
+      available,
+      models,
+    }),
+  );
 }
