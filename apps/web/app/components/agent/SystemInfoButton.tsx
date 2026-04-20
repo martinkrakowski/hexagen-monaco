@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/Dialog";
-import { useHardwareDetection } from "@/hooks/use-hardware-detection";
+import { useHardwareDetection } from "@/hooks/useHardwareDetection";
 
 function formatMB(mb: number | null): string {
   if (mb === null) return "Not available";

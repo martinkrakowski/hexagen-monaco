@@ -12,9 +12,9 @@ import {
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
-import { EditableMonaco } from "@/components/monaco/EditableMonaco";
-import { useProjectGeneration } from "@/hooks/use-project-generation";
-import { useArchitectureDownload } from "@/hooks/use-architecture-download";
+import { EditableMonaco } from "@/components/monaco-code-editor/EditableMonaco";
+import { useProjectGeneration } from "@/hooks/useProjectGeneration";
+import { useArchitectureDownload } from "@/hooks/useArchitectureDownload";
 import type { WizardData } from "@hexagen/shared";
 import type { ViewFileNode } from "./types";
 

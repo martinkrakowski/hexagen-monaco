@@ -23,19 +23,19 @@ export interface CompatibilityIssue {
  * recommendModel: Pure function to select best model for hardware
  *
  * Algorithm:
- * 1. Filter models by available backend (currently only "webgpu")
+ * 1. Require WebGPU support (all current models use WebGPU)
  * 2. Filter by hardware fit (VRAM, if known)
  * 3. Sort by: codingRating DESC, then vramRequiredMB ASC
  * 4. Return top match or null if none fit
  *
  * Returns null if:
  * - No models available
- * - All models require unsupported backend
+ * - WebGPU is not supported on the device
  * - All models exceed available VRAM (fallback to smallest)
  */
 export function recommendModel(
   profile: HardwareProfile | null,
-  models: ModelDescriptor[],
+  models: readonly ModelDescriptor[],
 ): RecommendationResult | null {
   if (!models || models.length === 0) return null;
   if (!profile) {
@@ -48,21 +48,9 @@ export function recommendModel(
     };
   }
 
-  // 1. Filter to available backends
-  // Currently: only WebGPU is available
-  const hasWebGPU = profile.gpu.supported;
-
-  const candidates = models.filter((m) => {
-    // Only include models with "webgpu" backend for now
-    // ("wasm" models will be available in future phases)
-    if (m.backend === "wasm") return false;
-    return hasWebGPU;
-  });
-
-  // If no WebGPU models available, return null (no fallback to WASM in MVP)
-  if (candidates.length === 0) {
-    return null;
-  }
+  // 1. All current models require WebGPU; no fallback available.
+  if (!profile.gpu.supported) return null;
+  const candidates = models;
 
   // 2. Try to filter by VRAM fit
   // If maxBufferMB is unknown, skip VRAM filtering
@@ -130,8 +118,8 @@ export function checkCompatibility(
     return null; // Can't validate without profile
   }
 
-  // Check backend availability
-  if (modelDescriptor.backend === "webgpu" && !profile.gpu.supported) {
+  // Check backend availability — all current models require WebGPU.
+  if (!profile.gpu.supported) {
     return {
       reason: "This model requires GPU acceleration. WebGPU is not available.",
       severity: "error",

@@ -13,7 +13,7 @@ import {
   type ColorMode,
 } from "@xyflow/react";
 import { toPng } from "html-to-image";
-import { useTheme } from "@/hooks/use-theme";
+import { useTheme } from "@/hooks/useTheme";
 import "@xyflow/react/dist/style.css";
 
 import { UnifiedBoundedContext, PORT_CATEGORY_COLORS } from "./BoundedContext";
