@@ -3,3 +3,5 @@ export type { ViewToggleProps, ViewMode } from "./ViewToggle";
 
 export { FileDropZone } from "./FileDropZone";
 export type { FileDropZoneProps } from "./FileDropZone";
+
+export { Tabs } from "./Tabs";

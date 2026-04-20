@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ProjectWorkspace } from "./components/layout/ProjectWorkspace";
+import { ProjectWorkspace } from "../features/workspace-shell/ProjectWorkspace";
 
 export const metadata: Metadata = {
   title: "HexaGen Monaco — Project Workspace",
