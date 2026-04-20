@@ -39,22 +39,29 @@ const workspaceStorage = createPersistedStorage<ActiveWorkspace>(
     typeof (candidate as ActiveWorkspace).projectId === "string",
 );
 
-const workspaceListeners = new Set<() => void>();
+let cachedSnapshot: ActiveWorkspace | null = null;
 
 function subscribeWorkspace(callback: () => void) {
-  workspaceListeners.add(callback);
-  return () => workspaceListeners.delete(callback);
+  return workspaceStorage.subscribe(() => {
+    cachedSnapshot = workspaceStorage.read();
+    callback();
+  });
 }
 
 function getWorkspaceSnapshot(): ActiveWorkspace | null {
-  return workspaceStorage.read();
+  return cachedSnapshot;
 }
 
 function getWorkspaceServerSnapshot(): ActiveWorkspace | null {
   return null;
 }
 
+function updateCachedSnapshot() {
+  cachedSnapshot = workspaceStorage.read();
+}
+
 export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
+  cachedSnapshot = workspaceStorage.read();
   const activeWorkspace = useSyncExternalStore(
     subscribeWorkspace,
     getWorkspaceSnapshot,
@@ -63,12 +70,12 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
 
   const setActiveWorkspace = useCallback((workspace: ActiveWorkspace) => {
     workspaceStorage.write(workspace);
-    for (const cb of workspaceListeners) cb();
+    updateCachedSnapshot();
   }, []);
 
   const clearActiveWorkspace = useCallback(() => {
     workspaceStorage.write(null);
-    for (const cb of workspaceListeners) cb();
+    cachedSnapshot = null;
   }, []);
 
   const value = useMemo<ActiveWorkspaceContextValue>(

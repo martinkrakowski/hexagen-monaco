@@ -16,13 +16,17 @@ export interface PersistedStorage<T> {
   read: () => T | null;
   /** Write a value, or clear storage when null. */
   write: (value: T | null) => void;
+  /** Subscribe to storage changes (for useSyncExternalStore). */
+  subscribe: (callback: () => void) => () => void;
 }
+
+const listenersMap = new WeakMap<object, Set<() => void>>();
 
 export function createPersistedStorage<T>(
   storageKey: string,
   isValid: (candidate: unknown) => candidate is T,
 ): PersistedStorage<T> {
-  return {
+  const storage = {
     read(): T | null {
       if (typeof window === "undefined") return null;
       try {
@@ -46,5 +50,15 @@ export function createPersistedStorage<T>(
         // Swallow quota / private-mode errors — persistence is best-effort.
       }
     },
+    subscribe(callback: () => void): () => void {
+      let listeners = listenersMap.get(storage);
+      if (!listeners) {
+        listeners = new Set();
+        listenersMap.set(storage, listeners);
+      }
+      listeners.add(callback);
+      return () => listeners!.delete(callback);
+    },
   };
+  return storage;
 }
