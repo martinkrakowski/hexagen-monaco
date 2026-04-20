@@ -1,0 +1,30 @@
+{
+  "name": "@hexagen/transaction-system",
+  "version": "0.1.0",
+  "description": "Transaction orchestration — speculative state machine, backpressure control, semantic caching",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hexagen/core-domain": "workspace:*",
+    "@hexagen/intent-compiler": "workspace:*",
+    "@hexagen/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "typescript": "^5.5.4"
+  }
+}

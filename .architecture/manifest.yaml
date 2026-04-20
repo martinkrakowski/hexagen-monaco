@@ -602,6 +602,39 @@ bounded_contexts:
     depends_on:
       - core-domain
       - shared
+  - name: transaction-system
+    type: core
+    description: >-
+      Transaction orchestration — speculative state machine, backpressure
+      control, semantic caching for intent processing pipeline
+    layers:
+      domain:
+        entities:
+          - Transaction
+          - SpeculativeState
+        value_objects:
+          - TransactionId
+          - BackpressureSignal
+          - CacheEntry
+      application:
+        use_cases:
+          - ExecuteTransactionUseCase
+          - RollbackTransactionUseCase
+          - CommitTransactionUseCase
+          - QueryCacheUseCase
+        ports:
+          in:
+            - TransactionManagerPort
+            - SpeculativeStateMachinePort
+            - BackpressureControllerPort
+            - SemanticCachePort
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
+      - intent-compiler
+      - shared
 apps:
   - name: web
     driver: next.js
