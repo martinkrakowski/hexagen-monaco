@@ -5,8 +5,6 @@
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
 
-export type Identifier = string;
-
 /**
  * IntentLineage - Tracks the causal chain of intents that led to a DomainCommand
  * Used for version validation, conflict detection, and audit trails
