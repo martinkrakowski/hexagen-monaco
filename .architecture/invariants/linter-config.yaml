@@ -41,3 +41,10 @@ package_rules:
     # mcp-server uses EventBusPort from messaging for domain event publication.
     # All other dependencies (sync, project-configuration) are accessed via
     # their file-system adapters (execSync, YAML reads), not direct imports.
+
+  - name: "intent-compiler"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # intent-compiler intentionally imports core-domain types (DomainAST,
+    # TopologyInvariants, CardinalityInvariants) as it validates MVK contracts.

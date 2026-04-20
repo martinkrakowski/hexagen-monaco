@@ -156,6 +156,33 @@ mvk:
     - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
   package: packages/core-domain
 bounded_contexts:
+  - name: core-domain
+    type: core
+    description: >-
+      Semantic kernel — MVK contracts, domain AST, governance AST,
+      topology and cardinality invariants
+    layers:
+      domain:
+        entities:
+          - DomainAST
+          - DomainNode
+          - DomainEdge
+        value_objects:
+          - NodeKind
+          - EdgeKind
+          - TopologyInvariants
+          - CardinalityInvariants
+          - IntentLineage
+          - RRP
+          - REM
+          - NodeVisualSpec
+          - DomainCommand
+      application:
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
   - name: shared
     type: shared-kernel
     description: Shared primitives, custom errors, base classes, utilities
@@ -543,6 +570,38 @@ bounded_contexts:
           - InteractionStateOnly
       infrastructure:
         adapters: []
+  - name: intent-compiler
+    type: core
+    description: >-
+      Semantic intent compilation pipeline — gesture parsing, topology and
+      cardinality invariant validation, rejection emission
+    layers:
+      domain:
+        entities:
+          - Gesture
+          - Rejection
+        value_objects:
+          - ParsedGesture
+          - TopologyCheckResult
+          - CardinalityCheckResult
+      application:
+        use_cases:
+          - ParseGestureUseCase
+          - ValidateTopologyUseCase
+          - ValidateCardinalityUseCase
+          - EmitRejectionUseCase
+        ports:
+          in:
+            - GestureParserPort
+            - TopologyCheckerPort
+            - CardinalityCheckerPort
+            - RejectEmitterPort
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
+      - shared
 apps:
   - name: web
     driver: next.js
