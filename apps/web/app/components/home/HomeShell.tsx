@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { useForm, useWatch, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -30,11 +30,11 @@ import { useWizardAutosave } from "@/hooks/useWizardAutosave";
 import { useBeforeUnloadWarning } from "@/hooks/useBeforeUnloadWarning";
 
 import { buildWizardData } from "../../lib/compose-wizard-data";
-import { WizardOrSavedProjectsPane } from "./wizard-or-saved-projects-pane";
-import { ArchitecturePreviewPane } from "./architecture-preview-pane";
-import { LoadManifestDialog } from "./load-manifest-dialog";
-import { ResumeDraftDialog } from "./resume-draft-dialog";
-import { NewProjectConfirmDialog } from "./new-project-confirm-dialog";
+import { WizardOrSavedProjectsPane } from "./WizardOrSavedProjectsPane";
+import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
+import { LoadManifestDialog } from "./LoadManifestDialog";
+import { ResumeDraftDialog } from "./ResumeDraftDialog";
+import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
 import { useManifestImport } from "@/hooks/useManifestImport";
 import { useProjectGenerationFlow } from "@/hooks/useProjectGenerationFlow";
 import { governanceState } from "@/lib/governance-state";
@@ -105,6 +105,13 @@ export function HomeShell() {
     hasDraft: draft !== null,
     hasGenerated,
   });
+
+  // Auto-show resume dialog when draft exists on mount
+  useEffect(() => {
+    if (!draftLoading && draft && !hasGenerated) {
+      openDialog({ kind: "resume-draft", projectId: "" });
+    }
+  }, [draftLoading]);
 
   const wizardData = useMemo(() => {
     const bc = (watchedValues.boundedContexts || []) as BoundedContext[];
