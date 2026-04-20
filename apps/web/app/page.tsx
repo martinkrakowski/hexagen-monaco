@@ -1,6 +1,6 @@
 "use client";
 
-import { HomeShell } from "./components/home/HomeShell";
+import { HomeShell } from "./components/layout/HomeShell";
 
 export default function Home() {
   return <HomeShell />;

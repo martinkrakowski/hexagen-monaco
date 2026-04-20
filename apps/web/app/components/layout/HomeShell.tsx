@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import { ResizableLayout } from "@/components/layout/ResizableLayout";
 import { GovernancePanelWrapper } from "@/components/agent/GovernancePanelWrapper";
-import { Header } from "../layout/Header";
+import { Header } from "./Header";
 import {
   wizardSteps,
   emptyFormValues,
