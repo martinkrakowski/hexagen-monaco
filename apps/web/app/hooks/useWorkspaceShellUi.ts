@@ -1,10 +1,12 @@
+"use client";
+
 import { useCallback, useState } from "react";
 
-export type HomeUIState =
+export type WorkspaceShellState =
   | { kind: "genesis" }
   | { kind: "edit"; projectId: string };
 
-export type HomeDialogState =
+export type WorkspaceDialogState =
   | { kind: "none" }
   | { kind: "new-project" }
   | { kind: "load-manifest" }
@@ -14,9 +16,9 @@ export type HomeDialogState =
 
 export type ViewMode = "visual" | "code";
 
-export interface UseHomeUIStateReturn {
-  state: HomeUIState;
-  dialog: HomeDialogState;
+export interface UseWorkspaceShellUiReturn {
+  state: WorkspaceShellState;
+  dialog: WorkspaceDialogState;
   viewMode: ViewMode;
   currentStepIndex: number;
   activeContextId: string | null;
@@ -25,15 +27,20 @@ export interface UseHomeUIStateReturn {
   setContextId: (id: string | null) => void;
   setMappingId: (id: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
-  openDialog: (dialog: HomeDialogState) => void;
+  openDialog: (dialog: WorkspaceDialogState) => void;
   closeDialog: () => void;
   enterEditMode: (projectId: string) => void;
   enterGenesisMode: () => void;
 }
 
-export function useHomeUIState(): UseHomeUIStateReturn {
-  const [state, setState] = useState<HomeUIState>({ kind: "genesis" });
-  const [dialog, setDialog] = useState<HomeDialogState>({ kind: "none" });
+/**
+ * Pure UI state for the project workspace shell — dialogs, view mode,
+ * current wizard step, currently-selected canvas IDs. No persistence,
+ * no form state, no project lifecycle — just local shell UI state.
+ */
+export function useWorkspaceShellUi(): UseWorkspaceShellUiReturn {
+  const [state, setState] = useState<WorkspaceShellState>({ kind: "genesis" });
+  const [dialog, setDialog] = useState<WorkspaceDialogState>({ kind: "none" });
   const [viewMode, setViewMode] = useState<ViewMode>("visual");
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [activeContextId, setActiveContextId] = useState<string | null>(null);
@@ -49,7 +56,7 @@ export function useHomeUIState(): UseHomeUIStateReturn {
     setDialog({ kind: "none" });
   }, []);
 
-  const openDialog = useCallback((newDialog: HomeDialogState) => {
+  const openDialog = useCallback((newDialog: WorkspaceDialogState) => {
     setDialog(newDialog);
   }, []);
 

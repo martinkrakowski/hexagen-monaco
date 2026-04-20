@@ -1,7 +1,7 @@
 "use client";
 
-import { HomeShell } from "./components/layout/HomeShell";
+import { ProjectWorkspace } from "./components/layout/ProjectWorkspace";
 
 export default function Home() {
-  return <HomeShell />;
+  return <ProjectWorkspace />;
 }
