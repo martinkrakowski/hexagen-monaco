@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -141,16 +142,30 @@ export function ExportProvider({ children }: { children: ReactNode }) {
     setState({ kind: "idle" });
   }, []);
 
-  const value: ProjectExportContextValue = {
-    state,
-    canExport,
-    isAuthenticated,
-    exportZip,
-    requestGithubExport,
-    submitGithubExport,
-    closeDialog,
-    dismissStatus,
-  };
+  // Memoized so consumers only re-render when the state machine or
+  // a handler reference actually changes.
+  const value = useMemo<ProjectExportContextValue>(
+    () => ({
+      state,
+      canExport,
+      isAuthenticated,
+      exportZip,
+      requestGithubExport,
+      submitGithubExport,
+      closeDialog,
+      dismissStatus,
+    }),
+    [
+      state,
+      canExport,
+      isAuthenticated,
+      exportZip,
+      requestGithubExport,
+      submitGithubExport,
+      closeDialog,
+      dismissStatus,
+    ],
+  );
 
   return (
     <ProjectExportContext.Provider value={value}>

@@ -47,8 +47,21 @@ import {
   type GovernancePayload,
   type EditorState as EditorContextState,
 } from "@/lib/grounded-prompt";
-import { useEditor } from "@/contexts/EditorContext";
+import { useCodeChangeSubscription } from "@/hooks/useSharedState";
 import { LOCAL_MODELS } from "@/config/models";
+
+/**
+ * Initial editor snapshot used before any code-change event fires.
+ * filename/language defaults reflect the primary artifact (manifest.yaml);
+ * actual lineEnd is recomputed by chunkEditorBuffer at send time.
+ */
+const INITIAL_EDITOR_STATE: EditorContextState = {
+  filename: "manifest.yaml",
+  language: "yaml",
+  content: "",
+  lineStart: 1,
+  lineEnd: 1,
+};
 
 /**
  * localStorage key for remembering the last-used model ID.
@@ -163,12 +176,17 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       ? (adapterRef.current?.getLoadedModel() ?? null)
       : null;
 
-  const { editorState } = useEditor();
-  const editorStateRef = useRef<EditorContextState>(editorState);
-
-  useEffect(() => {
-    editorStateRef.current = editorState;
-  }, [editorState]);
+  // Mirror the latest editor buffer via CodeChangeEvent subscription —
+  // Monaco emits on every save. Stored in a ref so no re-render fires
+  // when content changes; readers access via editorStateRef.current
+  // at send time (see sendGovernanceMessage below).
+  const editorStateRef = useRef<EditorContextState>(INITIAL_EDITOR_STATE);
+  useCodeChangeSubscription((event) => {
+    editorStateRef.current = {
+      ...editorStateRef.current,
+      content: event.content,
+    };
+  });
 
   useEffect(() => {
     messagesRef.current = messages;

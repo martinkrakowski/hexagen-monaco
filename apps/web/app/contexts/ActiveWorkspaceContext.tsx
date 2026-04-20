@@ -4,106 +4,70 @@ import {
   createContext,
   useContext,
   useCallback,
+  useMemo,
   useState,
   useEffect,
   type ReactNode,
 } from "react";
+
+import { createPersistedStorage } from "@/lib/persisted-state";
 
 export interface ActiveWorkspace {
   projectId: string;
   name: string;
   isDirty: boolean;
   lastModifiedAt: number;
-  // Wizard-form snapshot used to reconstruct a Manifest on-demand for export.
+  /** Wizard-form snapshot used to reconstruct a Manifest for export. */
   wizardData?: Record<string, unknown>;
-  // Manifest YAML snapshot (optional — useful for display/preview).
+  /** Manifest YAML snapshot (for display/preview). */
   manifestYaml?: string;
 }
 
-interface ActiveWorkspaceContextValue {
+export interface ActiveWorkspaceContextValue {
   activeWorkspace: ActiveWorkspace | null;
   setActiveWorkspace: (workspace: ActiveWorkspace) => void;
   clearActiveWorkspace: () => void;
-  markDirty: () => void;
-  markClean: () => void;
 }
 
-const ActiveWorkspaceContext = createContext<ActiveWorkspaceContextValue | null>(
-  null,
-);
+const ActiveWorkspaceContext =
+  createContext<ActiveWorkspaceContextValue | null>(null);
 
 const STORAGE_KEY = "hexagen-active-workspace";
 
-function getStoredWorkspace(): ActiveWorkspace | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    if (parsed && typeof parsed.projectId === "string") {
-      return parsed as ActiveWorkspace;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function storeWorkspace(workspace: ActiveWorkspace | null): void {
-  if (typeof window === "undefined") return;
-  if (workspace) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-}
+const workspaceStorage = createPersistedStorage<ActiveWorkspace>(
+  STORAGE_KEY,
+  (candidate): candidate is ActiveWorkspace =>
+    typeof candidate === "object" &&
+    candidate !== null &&
+    typeof (candidate as ActiveWorkspace).projectId === "string",
+);
 
 export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeWorkspace, setActiveWorkspaceState] =
     useState<ActiveWorkspace | null>(null);
 
   useEffect(() => {
-    const stored = getStoredWorkspace();
-    if (stored) {
-      setActiveWorkspaceState(stored);
-    }
+    const stored = workspaceStorage.read();
+    if (stored) setActiveWorkspaceState(stored);
   }, []);
 
   const setActiveWorkspace = useCallback((workspace: ActiveWorkspace) => {
     setActiveWorkspaceState(workspace);
-    storeWorkspace(workspace);
+    workspaceStorage.write(workspace);
   }, []);
 
   const clearActiveWorkspace = useCallback(() => {
     setActiveWorkspaceState(null);
-    storeWorkspace(null);
+    workspaceStorage.write(null);
   }, []);
 
-  const markDirty = useCallback(() => {
-    setActiveWorkspaceState((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, isDirty: true, lastModifiedAt: Date.now() };
-      storeWorkspace(updated);
-      return updated;
-    });
-  }, []);
-
-  const markClean = useCallback(() => {
-    setActiveWorkspaceState((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, isDirty: false, lastModifiedAt: Date.now() };
-      storeWorkspace(updated);
-      return updated;
-    });
-  }, []);
-
-  const value: ActiveWorkspaceContextValue = {
-    activeWorkspace,
-    setActiveWorkspace,
-    clearActiveWorkspace,
-    markDirty,
-    markClean,
-  };
+  // Memo prevents consumer re-renders when the provider re-renders
+  // for reasons unrelated to workspace state (rare, but useMemo makes
+  // the contract explicit: consumers only churn on identity change).
+  const value = useMemo<ActiveWorkspaceContextValue>(
+    () => ({ activeWorkspace, setActiveWorkspace, clearActiveWorkspace }),
+    [activeWorkspace, setActiveWorkspace, clearActiveWorkspace],
+  );
 
   return (
     <ActiveWorkspaceContext.Provider value={value}>

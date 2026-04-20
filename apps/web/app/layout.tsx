@@ -5,7 +5,6 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "./components/providers/AuthProvider";
 import { SharedStateProvider } from "@/hooks/useSharedState";
 import { LocalLLMProvider } from "@/hooks/useLocalLlm";
-import { EditorProvider } from "@/contexts/EditorContext";
 import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationContext";
 import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
 
@@ -72,17 +71,13 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <SharedStateProvider>
-            <EditorProvider>
-              <LocalLLMProvider>
-                <AuthProvider>
-                  <ExternalIntegrationProvider>
-                    <ActiveWorkspaceProvider>
-                      {children}
-                    </ActiveWorkspaceProvider>
-                  </ExternalIntegrationProvider>
-                </AuthProvider>
-              </LocalLLMProvider>
-            </EditorProvider>
+            <LocalLLMProvider>
+              <AuthProvider>
+                <ExternalIntegrationProvider>
+                  <ActiveWorkspaceProvider>{children}</ActiveWorkspaceProvider>
+                </ExternalIntegrationProvider>
+              </AuthProvider>
+            </LocalLLMProvider>
           </SharedStateProvider>
         </ThemeProvider>
       </body>
