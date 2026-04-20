@@ -1,10 +1,10 @@
 "use client";
 
-import { useTheme } from "@/hooks/use-theme";
+import { useTheme } from "@/hooks/useTheme";
 import { Sun, Moon, Hexagon } from "lucide-react";
 import { HeaderMenu } from "./HeaderMenu";
 import { ProjectMenu } from "./ProjectMenu";
-import type { SavedProject } from "@/hooks/use-saved-projects";
+import type { SavedProject } from "@/hooks/useSavedProjects";
 
 interface HeaderProps {
   onLoadManifest: () => void;

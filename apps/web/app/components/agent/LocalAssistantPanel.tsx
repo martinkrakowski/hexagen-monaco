@@ -2,9 +2,9 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { useLocalLLM } from "@/hooks/use-local-llm";
-import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/use-cloud-llm";
-import { useSecretVault } from "@/hooks/use-secret-vault";
+import { useLocalLLM } from "@/hooks/useLocalLlm";
+import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/useCloudLlm";
+import { useSecretVault } from "@/hooks/useSecretVault";
 import { getClientProviders } from "@/config/cloud-providers";
 import { ModelProgressCard } from "./ModelProgressCard";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";

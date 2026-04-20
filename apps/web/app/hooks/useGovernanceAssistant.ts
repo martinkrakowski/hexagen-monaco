@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import type { WizardData } from "@hexagen/shared";
 import type { LLMMessage, GovernanceEntry } from "@hexagen/local-llm";
-import { useLocalLLM } from "./use-local-llm";
+import { useLocalLLM } from "./useLocalLlm";
 import { getChatPersistence } from "@/lib/wire";
 import {
   type Violation,

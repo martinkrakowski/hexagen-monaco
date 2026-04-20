@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
-import { useSavedProjects, type SavedProject } from "@/hooks/use-saved-projects";
+import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";
 import {
   ExportDialog,
   type ExportDialogSubmitPayload,
@@ -299,10 +299,7 @@ export function ProjectMenu({
             </p>
           ) : null}
           {exportError ? (
-            <p
-              className="px-3 py-1 text-xs text-destructive"
-              role="alert"
-            >
+            <p className="px-3 py-1 text-xs text-destructive" role="alert">
               {exportError}
             </p>
           ) : null}

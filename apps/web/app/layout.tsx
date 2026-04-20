@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/hooks/use-theme";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "./components/providers/AuthProvider";
-import { SharedStateProvider } from "@/hooks/use-shared-state";
-import { LocalLLMProvider } from "@/hooks/use-local-llm";
+import { SharedStateProvider } from "@/hooks/useSharedState";
+import { LocalLLMProvider } from "@/hooks/useLocalLlm";
 import { EditorProvider } from "@/contexts/EditorContext";
 import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationContext";
 import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
@@ -76,7 +76,9 @@ export default function RootLayout({
               <LocalLLMProvider>
                 <AuthProvider>
                   <ExternalIntegrationProvider>
-                    <ActiveWorkspaceProvider>{children}</ActiveWorkspaceProvider>
+                    <ActiveWorkspaceProvider>
+                      {children}
+                    </ActiveWorkspaceProvider>
                   </ExternalIntegrationProvider>
                 </AuthProvider>
               </LocalLLMProvider>

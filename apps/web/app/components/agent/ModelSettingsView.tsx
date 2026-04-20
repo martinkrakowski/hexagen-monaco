@@ -5,7 +5,7 @@ import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { ArrowLeft } from "lucide-react";
 import { ModelFooterIndicator } from "./ModelFooterIndicator";
-import { useHardwareDetection } from "@/hooks/use-hardware-detection";
+import { useHardwareDetection } from "@/hooks/useHardwareDetection";
 import { recommendModel, checkCompatibility } from "@/lib/model-recommendation";
 
 interface ModelSettingsViewProps {

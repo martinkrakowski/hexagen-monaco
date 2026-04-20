@@ -9,7 +9,7 @@ import {
   FileEdit,
 } from "lucide-react";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
-import type { SavedProject } from "@/hooks/use-saved-projects";
+import type { SavedProject } from "@/hooks/useSavedProjects";
 import type { WizardDraft } from "@hexagen/shared";
 
 interface SavedProjectsListProps {

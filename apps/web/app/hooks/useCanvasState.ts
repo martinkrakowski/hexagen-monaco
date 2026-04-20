@@ -16,7 +16,7 @@ import {
   generateHexagonalContextMap,
   type HexagonNodeWithLayout,
 } from "../lib/layout-engine";
-import { useCanvasLayout } from "./use-canvas-layout";
+import { useCanvasLayout } from "./useCanvasLayout";
 
 interface GraphState {
   nodes: HexagonNode[];

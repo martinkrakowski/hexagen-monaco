@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import type { WizardData } from "@hexagen/shared";
-import type { DomainModelId, GovernanceEntry } from "@hexagen/local-llm";
 import { useGovernanceAssistant } from "@/hooks/useGovernanceAssistant";
 import { useLocalLLM } from "@/hooks/useLocalLlm";
 import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/useCloudLlm";
@@ -14,27 +13,28 @@ import {
   type AISuggestion,
   type PrebakedQuestion,
 } from "@/lib/governance-question-templates";
-import {
-  Check,
-  ChevronDown,
-  Info,
-  Lightbulb,
-  MessageSquare,
-  Plus,
-  RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  RotateCcw,
-} from "lucide-react";
-import { Loader2 } from "lucide-react";
+
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
-import { ModelFooterIndicator } from "./ModelFooterIndicator";
-import { ModelSettingsView } from "./ModelSettingsView";
+import { ModelSettingsView } from "./model-settings-view";
 import { UnavailableCard } from "./UnavailableCard";
 import { CloudModelSettingsView } from "./CloudModelSettingsView";
 import { CloudChatInterface } from "./CloudChatInterface";
-import { SystemInfoButton } from "./SystemInfoButton";
+
+import {
+  PanelHeader,
+  GradientDivider,
+  StepPills,
+  StatusSummaryCard,
+  SectionLabel,
+  ViolationItem,
+  SuggestionItem,
+  ThinkingIndicator,
+  QuestionAccordion,
+  ThreadEntry,
+  FollowUpTag,
+  PanelFooter,
+} from "./governance";
 
 type PanelView = "main" | "model-settings";
 type LLMMode = "local" | "cloud";
@@ -46,473 +46,6 @@ interface GovernanceAssistantPanelProps {
   suggestions: AISuggestion[];
   onRefresh: () => void;
   isLoading: boolean;
-}
-
-const WIZARD_STEP_LABELS = [
-  "Workspace",
-  "Contexts",
-  "Mappings",
-  "Ports",
-  "Export",
-  "Summary",
-];
-
-function PanelHeader({
-  onRefresh,
-  isLoading,
-}: {
-  onRefresh: () => void;
-  isLoading: boolean;
-}) {
-  return (
-    <div className="px-5 pt-5 pb-4 flex-shrink-0">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-            <ShieldCheck size={14} className="text-primary" strokeWidth={2} />
-          </div>
-          <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
-            Governance
-          </h1>
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
-          title="Refresh checks"
-        >
-          <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-        </button>
-      </div>
-      <p className="text-xs text-muted-foreground font-normal pl-[38px]">
-        Governance Assistant
-      </p>
-    </div>
-  );
-}
-
-function GradientDivider() {
-  return (
-    <div className="h-px mx-5 bg-gradient-to-r from-transparent via-border to-transparent" />
-  );
-}
-
-function StepPills({ currentStepIndex }: { currentStepIndex: number }) {
-  return (
-    <div className="px-2 py-4 flex-shrink-0">
-      <div className="flex items-center gap-1.5 mb-3">
-        {WIZARD_STEP_LABELS.map((label, i) => {
-          const isActive = i === currentStepIndex;
-          const isCompleted = i < currentStepIndex;
-          return (
-            <div
-              key={label}
-              className={[
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-default select-none",
-                isActive
-                  ? "bg-primary/15 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]"
-                  : isCompleted
-                    ? "text-success"
-                    : "text-muted-foreground/60 hover:text-muted-foreground",
-              ].join(" ")}
-            >
-              {isCompleted ? (
-                <Check size={10} strokeWidth={3} />
-              ) : (
-                <span className="text-[10px] font-semibold">{i + 1}</span>
-              )}
-              <span>{label}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function StatusSummaryCard({
-  violations,
-  suggestions,
-}: {
-  violations: Violation[];
-  suggestions: AISuggestion[];
-}) {
-  const violationCount = violations.length;
-  const suggestionCount = suggestions.length;
-  const hasIssues = violationCount > 0 || suggestionCount > 0;
-
-  return (
-    <div className="rounded-xl border border-border bg-muted/30 p-3.5">
-      <div className="flex items-center gap-2.5">
-        <div
-          className={[
-            "w-2 h-2 rounded-full",
-            hasIssues
-              ? "bg-destructive animate-soft-pulse"
-              : "bg-success animate-soft-pulse",
-          ].join(" ")}
-        />
-        <div>
-          <p className="text-xs font-medium text-foreground">
-            {hasIssues ? "Review Required" : "No Issues Found"}
-          </p>
-          {hasIssues && (
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {violationCount > 0 && <span>{violationCount} violation(s)</span>}
-              {violationCount > 0 && suggestionCount > 0 && <span>, </span>}
-              {suggestionCount > 0 && (
-                <span>{suggestionCount} suggestion(s)</span>
-              )}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SectionLabel({
-  label,
-  icon: Icon = Plus,
-}: {
-  label: string;
-  icon?: React.ComponentType<{
-    size: number;
-    className: string;
-    strokeWidth?: number;
-  }>;
-}) {
-  return (
-    <div className="flex items-center gap-2.5 mb-3">
-      <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
-        <Icon size={10} className="text-primary" strokeWidth={2.5} />
-      </div>
-      <h2 className="text-[13px] font-semibold text-foreground">{label}</h2>
-    </div>
-  );
-}
-
-function ViolationItem({
-  violation,
-  isSelected,
-  onSelect,
-}: {
-  violation: Violation;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
-  const severityColor = {
-    HIGH: "text-destructive",
-    MEDIUM: "text-warning",
-    LOW: "text-info",
-  }[violation.severity];
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={[
-        "w-full text-left rounded-lg border p-3 transition-all",
-        isSelected
-          ? "border-primary/30 bg-primary/[0.08]"
-          : "border-border bg-muted/20 hover:bg-muted/40",
-      ].join(" ")}
-    >
-      <div className="flex items-start gap-3">
-        <ShieldCheck
-          size={14}
-          className={`flex-shrink-0 mt-0.5 ${severityColor}`}
-        />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground leading-snug">
-            {violation.message}
-          </p>
-          {violation.context && (
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {violation.context}
-            </p>
-          )}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function SuggestionItem({
-  suggestion,
-  isSelected,
-  onSelect,
-}: {
-  suggestion: AISuggestion;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={[
-        "w-full text-left rounded-lg border p-3 transition-all",
-        isSelected
-          ? "border-primary/30 bg-primary/[0.08]"
-          : "border-border bg-muted/20 hover:bg-muted/40",
-      ].join(" ")}
-    >
-      <div className="flex items-start gap-3">
-        <Lightbulb size={14} className="flex-shrink-0 mt-0.5 text-accent" />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground leading-snug">
-            {suggestion.message}
-          </p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ThinkingIndicator() {
-  return (
-    <div className="flex items-center gap-1.5 py-3">
-      <p className="text-xs text-muted-foreground">Thinking</p>
-      {[0, 1, 2].map((i) => (
-        <motion.span
-          key={i}
-          className="block w-1 h-1 rounded-full bg-primary/60"
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{
-            duration: 1.2,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: i * 0.2,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function QuestionAccordion({
-  question,
-  isExpanded,
-  onToggle,
-  disabled,
-  children,
-}: {
-  question: PrebakedQuestion;
-  isExpanded: boolean;
-  onToggle: () => void;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-border overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={disabled}
-        className={[
-          "group w-full text-left border p-3.5 transition-all hover:-translate-y-px",
-          isExpanded
-            ? "rounded-t-xl rounded-b-none border-primary/30 bg-primary/[0.08]"
-            : "rounded-xl border-card-border bg-muted/20 hover:bg-primary/5 hover:border-primary/25",
-          disabled && "opacity-50 cursor-not-allowed",
-        ].join(" ")}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className={[
-              "mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
-              isExpanded
-                ? "bg-primary/20"
-                : "bg-muted-foreground/15 group-hover:bg-primary/15",
-            ].join(" ")}
-          >
-            <MessageSquare
-              size={11}
-              className={isExpanded ? "text-primary" : "text-muted-foreground"}
-              strokeWidth={2}
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p
-              className={[
-                "text-[13px] leading-snug transition-colors mt-1",
-                isExpanded
-                  ? "text-primary font-medium"
-                  : "text-foreground/80 group-hover:text-foreground",
-              ].join(" ")}
-            >
-              {question.label}
-            </p>
-          </div>
-          <ChevronDown
-            size={12}
-            className={[
-              "mt-0.5 flex-shrink-0 transition-transform",
-              isExpanded
-                ? "rotate-180 text-primary"
-                : "text-muted-foreground/60 group-hover:text-muted-foreground",
-            ].join(" ")}
-          />
-        </div>
-      </button>
-
-      {isExpanded && (
-        <div className="bg-muted/5 border-t border-border p-4">{children}</div>
-      )}
-    </div>
-  );
-}
-
-function AnswerArea({
-  content,
-  isRegenerating,
-  onRegenerate,
-  entryId,
-  disabled,
-}: {
-  content: string;
-  isRegenerating: boolean;
-  onRegenerate: (id: string) => void;
-  entryId: string;
-  disabled: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-primary/20 bg-primary/[0.06] p-4">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-1 h-4 rounded-full bg-primary" />
-          <p className="text-[13px] font-medium text-foreground leading-snug">
-            AI Answer
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onRegenerate(entryId)}
-          disabled={disabled || isRegenerating}
-          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Regenerate this answer"
-        >
-          <RotateCcw size={12} strokeWidth={2} />
-        </button>
-      </div>
-
-      {isRegenerating ? (
-        <div className="flex items-center gap-2">
-          <Loader2 size={12} className="animate-spin text-primary" />
-          <p className="text-xs text-foreground/60">Regenerating...</p>
-        </div>
-      ) : content ? (
-        <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-          {content}
-        </p>
-      ) : (
-        <ThinkingIndicator />
-      )}
-    </div>
-  );
-}
-
-function ThreadEntry({
-  entry,
-  isCurrentlyStreaming,
-  streamingContent,
-  isRegenerating,
-  onRegenerate,
-  disabled,
-}: {
-  entry: GovernanceEntry;
-  isCurrentlyStreaming: boolean;
-  streamingContent: string;
-  isRegenerating: boolean;
-  onRegenerate: (id: string) => void;
-  disabled: boolean;
-}) {
-  const content = isCurrentlyStreaming ? streamingContent : entry.answer;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
-          <MessageSquare size={10} className="text-primary" strokeWidth={2.5} />
-        </div>
-        <p className="text-[11px] font-medium text-primary">
-          {entry.questionLabel}
-        </p>
-      </div>
-      <AnswerArea
-        content={content}
-        isRegenerating={isRegenerating}
-        onRegenerate={onRegenerate}
-        entryId={entry.id}
-        disabled={disabled}
-      />
-    </div>
-  );
-}
-
-function FollowUpTag({
-  label,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer",
-        disabled
-          ? "opacity-50 cursor-not-allowed"
-          : "bg-muted/20 border border-card-border text-foreground/80 hover:bg-primary/5 hover:border-primary/25 hover:text-primary",
-      ].join(" ")}
-    >
-      <Sparkles size={10} />
-      {label}
-    </button>
-  );
-}
-
-function PanelFooter({
-  modelId,
-  onOpenSettings,
-  isLoading,
-  showHint = true,
-}: {
-  modelId?: DomainModelId | null;
-  onOpenSettings?: () => void;
-  isLoading?: boolean;
-  showHint?: boolean;
-}) {
-  return (
-    <div className="flex-shrink-0 p-2 border-t border-border bg-background">
-      <div className="flex items-center justify-between gap-4 w-full">
-        <div className="flex items-center gap-2">
-          <SystemInfoButton />
-          {showHint && (
-            <>
-              <Info size={12} className="text-muted-foreground/60" />
-              <p className="text-[11px] text-muted-foreground/60">
-                Click a question to get an AI-powered answer
-              </p>
-            </>
-          )}
-        </div>
-        {modelId !== undefined && onOpenSettings && (
-          <ModelFooterIndicator
-            modelId={modelId}
-            onOpenSettings={onOpenSettings}
-            isLoading={isLoading ?? false}
-          />
-        )}
-      </div>
-    </div>
-  );
 }
 
 function LifecycleHeader({
@@ -596,7 +129,6 @@ export function GovernanceAssistantPanel({
   const cloudLLM = useCloudLLM();
   const vault = useSecretVault();
 
-  // Wire vault to cloudLLM hook when it becomes available
   useEffect(() => {
     if (vault) {
       cloudLLM.setVault(vault);
@@ -640,7 +172,6 @@ export function GovernanceAssistantPanel({
     return "";
   }, [messages]);
 
-  // When model becomes ready after auto-navigation to settings
   useEffect(() => {
     if (llmEngineState.status === "ready" && autoNavigatedToSettings.current) {
       setPanelView("main");
@@ -648,7 +179,6 @@ export function GovernanceAssistantPanel({
     }
   }, [llmEngineState.status]);
 
-  // Populate follow-up state from templates when streaming completes
   useEffect(() => {
     if (isStreaming) return;
     const hasCompletedAnswer = conversationThread.some((e) => e.answer !== "");
@@ -657,7 +187,6 @@ export function GovernanceAssistantPanel({
     }
   }, [isStreaming, getFollowUpQuestions, conversationThread]);
 
-  // Clear follow-ups when context changes
   useEffect(() => {
     setFollowUpQuestions([]);
   }, [currentStepIndex, activeItem]);
@@ -669,13 +198,8 @@ export function GovernanceAssistantPanel({
     status === "downloading" || (status === "loading_vram" && !autoLoading);
   const showError = status === "error";
   const showRequiresModel = status === "requires_model";
-  // Boot spinner shows while WebGPU is detected and Effect 2 resolves.
-  // Effect 2 transitions fresh users to requires_model, so this spinner
-  // appears briefly before the user lands in ModelSettingsView.
   const showBootSpinner = status === "unavailable" || status === "opt_in";
 
-  // Cloud mode takes priority over local LLM lifecycle states.
-  // Must be checked BEFORE early returns for boot spinners, opt-in cards, etc.
   if (mode === "cloud") {
     if (!cloudConfig) {
       return (
@@ -870,29 +394,17 @@ export function GovernanceAssistantPanel({
           <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
-                <ShieldCheck
-                  size={10}
-                  className="text-primary"
-                  strokeWidth={2.5}
-                />
+                <span
+                  className="text-primary font-bold"
+                  style={{ fontSize: "10px" }}
+                >
+                  G
+                </span>
               </div>
               <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
                 Governance Checks
               </span>
             </div>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isLoading}
-              className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground/80 hover:bg-muted/60 transition-colors disabled:opacity-50"
-              title="Refresh checks"
-              aria-label="Refresh governance checks"
-            >
-              <RefreshCw
-                size={14}
-                className={isLoading ? "animate-spin" : ""}
-              />
-            </button>
           </div>
           <StatusSummaryCard
             violations={violations}
@@ -901,7 +413,7 @@ export function GovernanceAssistantPanel({
         </div>
 
         <div className="mt-5">
-          <SectionLabel label="Violations" icon={ShieldCheck} />
+          <SectionLabel label="Violations" />
           {violations.length > 0 && (
             <div className="space-y-2 mt-4">
               {violations.map((v) => (

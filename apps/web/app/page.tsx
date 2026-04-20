@@ -48,12 +48,9 @@ import { SavedProjectsList } from "@/components/project-wizard/SavedProjectsList
 import { manifestToWizardData } from "@/lib/manifest-to-wizard-data";
 import { wizardDataToFormValues } from "@/lib/wizard-data-to-form-values";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
-import {
-  useSavedProjects,
-  type SavedProject,
-} from "@/hooks/use-saved-projects";
-import { useWizardDraft } from "@/hooks/use-wizard-draft";
-import { useEditorWorkspace } from "@/hooks/use-editor-workspace";
+import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";
+import { useWizardDraft } from "@/hooks/useWizardDraft";
+import { useEditorWorkspace } from "@/hooks/useEditorWorkspace";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { getLogger } from "@/lib/wire";
 

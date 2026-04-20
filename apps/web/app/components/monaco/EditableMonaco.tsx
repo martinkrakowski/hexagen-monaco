@@ -4,8 +4,8 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import Editor, { DiffEditor, OnMount, OnChange } from "@monaco-editor/react";
 import type * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import { Save, X, Edit3, Loader2, AlertTriangle } from "lucide-react";
-import { useTheme } from "@/hooks/use-theme";
-import { useSharedState } from "@/hooks/use-shared-state";
+import { useTheme } from "@/hooks/useTheme";
+import { useSharedState } from "@/hooks/useSharedState";
 import { governanceState } from "@/lib/governance-state";
 import {
   Dialog,

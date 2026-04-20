@@ -17,9 +17,9 @@ import type {
 } from "@hexagen/monaco-orchestration";
 
 import { getMonacoPersistence } from "@/lib/wire";
-import { useTheme } from "@/hooks/use-theme";
-import { useSharedState } from "@/hooks/use-shared-state";
-import { useLocalLLM } from "@/hooks/use-local-llm";
+import { useTheme } from "@/hooks/useTheme";
+import { useSharedState } from "@/hooks/useSharedState";
+import { useLocalLLM } from "@/hooks/useLocalLlm";
 import { useEditor } from "@/contexts/EditorContext";
 import { LLMStatusPill } from "@/components/agent/LLMStatusPill";
 

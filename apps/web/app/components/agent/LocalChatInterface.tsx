@@ -5,7 +5,7 @@ import { CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Textarea";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { LocalAgentMessage } from "./LocalAgentMessage";
-import type { ChatMessage } from "@/hooks/use-local-llm";
+import type { ChatMessage } from "@/hooks/useLocalLlm";
 import { Loader2, Send, Bot } from "lucide-react";
 
 interface LocalChatInterfaceProps {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, type FormEvent } from "react";
-import type { CloudChatMessage } from "@/hooks/use-cloud-llm";
+import type { CloudChatMessage } from "@/hooks/useCloudLlm";
 
 interface CloudChatInterfaceProps {
   messages: CloudChatMessage[];

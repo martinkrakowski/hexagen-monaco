@@ -17,7 +17,14 @@ export interface SavedProject {
   manifestYaml: string;
 }
 
-function migrateLegacyProject(legacy: { id: string; name: string; createdAt: number; updatedAt: number; formState: Record<string, unknown>; manifestYaml: string }): SavedProject {
+function migrateLegacyProject(legacy: {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  formState: Record<string, unknown>;
+  manifestYaml: string;
+}): SavedProject {
   const formState = { ...legacy.formState };
   delete formState.gitHubExport;
   return {
@@ -49,7 +56,18 @@ function readFromStorage(): SavedProject[] {
 
       if (p.schemaVersion === LEGACY_SCHEMA_VERSION) {
         needsMigration = true;
-        migrated.push(migrateLegacyProject(p as { id: string; name: string; createdAt: number; updatedAt: number; formState: Record<string, unknown>; manifestYaml: string }));
+        migrated.push(
+          migrateLegacyProject(
+            p as {
+              id: string;
+              name: string;
+              createdAt: number;
+              updatedAt: number;
+              formState: Record<string, unknown>;
+              manifestYaml: string;
+            },
+          ),
+        );
       } else if (p.schemaVersion === CURRENT_SCHEMA_VERSION) {
         const project = p as SavedProject;
         if (project.formState) {

@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import { Bot, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/hooks/use-local-llm";
+import type { ChatMessage } from "@/hooks/useLocalLlm";
 
 interface LocalAgentMessageProps {
   message: ChatMessage;

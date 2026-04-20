@@ -5,10 +5,14 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { LocalAssistantPanel } from "./LocalAssistantPanel";
 import { AIGovernancePanel } from "@/components/ai-governance/AIGovernancePanel";
-import { useGovernanceData } from "@/hooks/use-governance-data";
-import { useCodeChangeSubscription } from "@/hooks/use-shared-state";
+import { useGovernanceData } from "@/hooks/useGovernanceData";
+import { useCodeChangeSubscription } from "@/hooks/useSharedState";
 import { governanceState } from "@/lib/governance-state";
-import { useLocalLLM, HAS_ENABLED_KEY, AUTO_LOAD_KEY } from "@/hooks/use-local-llm";
+import {
+  useLocalLLM,
+  HAS_ENABLED_KEY,
+  AUTO_LOAD_KEY,
+} from "@/hooks/useLocalLlm";
 import { Bot, FileText, Loader2 } from "lucide-react";
 
 export function AIArchitectPanel() {
