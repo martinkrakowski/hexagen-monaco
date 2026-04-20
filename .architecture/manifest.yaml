@@ -149,6 +149,12 @@ generator:
           "@typescript-eslint/parser": ^8.0.0
           "@typescript-eslint/eslint-plugin": ^8.0.0
           eslint-config-prettier: ^9.1.0
+mvk:
+  spec: .architecture/mvk/spec-v1.md
+  driftReport: .architecture/mvk/drift-report-v1.md
+  decisions:
+    - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
+  package: packages/core-domain
 bounded_contexts:
   - name: shared
     type: shared-kernel
