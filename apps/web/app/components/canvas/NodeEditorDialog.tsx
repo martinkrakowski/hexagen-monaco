@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { HexagonNode, HexagonNodeType } from "@hexagen/visualization";
 import {
   Dialog,
@@ -37,13 +37,15 @@ export function NodeEditorDialog({
 }: NodeEditorDialogProps) {
   const [label, setLabel] = useState("");
   const [type, setType] = useState<HexagonNodeType>("entity");
+  const [prevNode, setPrevNode] = useState(node);
 
-  useEffect(() => {
+  if (prevNode !== node) {
+    setPrevNode(node);
     if (node) {
       setLabel(node.label);
       setType(node.type);
     }
-  }, [node]);
+  }
 
   if (!isOpen || !node) {
     return null;

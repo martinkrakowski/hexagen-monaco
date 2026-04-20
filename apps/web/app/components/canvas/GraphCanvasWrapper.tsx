@@ -3,7 +3,9 @@
 import { useState, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCanvasState } from "../../hooks/useCanvasState";
-import { HexagonCanvas, CanvasToolbar, NodeEditorDialog } from "./index";
+import { HexagonCanvas } from "./HexagonCanvas";
+import { CanvasToolbar } from "./CanvasToolbar";
+import { NodeEditorDialog } from "./NodeEditorDialog";
 import type { Result, WizardData } from "@hexagen/shared";
 
 interface GraphCanvasWrapperProps {

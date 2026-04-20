@@ -196,8 +196,14 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--overlay)/0.4)] backdrop-blur-sm"
       onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+      role="presentation"
     >
       <div
+        role="dialog"
+        aria-label={label}
         className="relative w-80 rounded-xl border border-border bg-background shadow-2xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
@@ -216,13 +222,13 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
           </p>
         ) : (
           <ul className="space-y-1.5">
-            {items.map((item, i) => (
+            {items.map((item, idx) => (
               <li
-                key={`${item}-${i}`}
+                key={`${label}-${item}-${idx}`}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-sm bg-muted/50 text-foreground border border-border/50"
               >
                 <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">
-                  {i + 1}
+                  {idx + 1}
                 </span>
                 {item}
               </li>
@@ -467,11 +473,11 @@ function UnifiedBoundedContextComponent({
         <div className="text-center text-foreground uppercase tracking-widest leading-tight text-base font-black italic">
           {String(data.label || "")
             .split("\n")
-            .map((line, i) => (
+            .map((line, lineIdx) => (
               <span
-                key={i}
+                key={`${line}-${lineIdx}`}
                 className={
-                  i > 0
+                  lineIdx > 0
                     ? "opacity-50 text-[9px] lowercase mt-1 font-normal tracking-normal normal-case"
                     : ""
                 }

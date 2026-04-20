@@ -69,10 +69,13 @@ export function ModelSettingsView({
   const [selectedModelId, setSelectedModelId] = useState<DomainModelId | null>(
     currentModelId,
   );
+  const [prevCurrentModelId, setPrevCurrentModelId] =
+    useState<DomainModelId | null>(currentModelId);
 
-  useEffect(() => {
+  if (prevCurrentModelId !== currentModelId) {
+    setPrevCurrentModelId(currentModelId);
     setSelectedModelId(currentModelId);
-  }, [currentModelId]);
+  }
 
   useEffect(() => {
     if (hardwareProfile && !isDetectingHardware) {

@@ -128,6 +128,7 @@ export function ProjectCard({
           <div className="flex-1 min-w-0">
             {isRenaming ? (
               <input
+                ref={(el) => el?.focus()}
                 type="text"
                 value={renameValue}
                 onChange={(e) => onChangeRenameValue(e.target.value)}
@@ -136,7 +137,6 @@ export function ProjectCard({
                   if (e.key === "Escape") onCancelRename();
                 }}
                 className="w-full px-2 py-1 bg-muted border border-input rounded text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                autoFocus
               />
             ) : (
               <h3 className="font-medium text-foreground truncate">

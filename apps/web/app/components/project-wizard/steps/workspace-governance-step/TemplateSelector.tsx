@@ -59,9 +59,9 @@ export function TemplateSelector({
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Architectural Template
-        </label>
+        </span>
         <p className="text-xs text-muted-foreground mt-1">
           This determines cross-context communication rules and isolation
           boundaries for the generated project.

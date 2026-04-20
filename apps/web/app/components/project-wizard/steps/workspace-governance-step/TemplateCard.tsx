@@ -46,9 +46,10 @@ export function TemplateCard({
     CROSS_CONTEXT_BADGE_LABELS[template.rules.crossContextCalls];
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onSelect}
-      className={`relative flex flex-col p-4 cursor-pointer rounded-xl border-2 transition-all ${
+      className={`relative flex flex-col p-4 cursor-pointer rounded-xl border-2 transition-all text-left ${
         isSelected
           ? "border-primary bg-primary/5 shadow-sm"
           : "border-border hover:border-primary/50 hover:bg-muted/30"
@@ -70,6 +71,6 @@ export function TemplateCard({
         />
         {crossContextLabel && <Badge label={crossContextLabel} tone="muted" />}
       </div>
-    </div>
+    </button>
   );
 }

@@ -36,7 +36,8 @@ export function ContextCard({
     (context.coreDomainEntities?.length ?? 0) + (context.useCases?.length ?? 0);
 
   return (
-    <div
+    <button
+      type="button"
       className={`relative w-full text-left p-4 border rounded-lg cursor-pointer transition-colors ${
         isActive
           ? "border-primary bg-primary/10"
@@ -98,6 +99,6 @@ export function ContextCard({
             className="absolute top-2 right-2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
           />
         ))}
-    </div>
+    </button>
   );
 }

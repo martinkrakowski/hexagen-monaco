@@ -86,7 +86,7 @@ DialogHeader.displayName = "DialogHeader";
 const DialogTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => {
+>(({ className, children, ...props }, ref) => {
   const id = React.useContext(DialogIdContext);
   return (
     <h2
@@ -97,7 +97,9 @@ const DialogTitle = React.forwardRef<
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+    </h2>
   );
 });
 DialogTitle.displayName = "DialogTitle";

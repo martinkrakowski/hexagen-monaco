@@ -46,9 +46,10 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
 
   return (
     <div>
-      <div
+      <button
+        type="button"
         className={cn(
-          "flex items-center py-1.5 px-2 cursor-pointer hover:bg-muted/50 text-sm select-none transition-colors group",
+          "flex w-full items-center py-1.5 px-2 cursor-pointer hover:bg-muted/50 text-sm select-none transition-colors group border-none bg-transparent",
           isSelected
             ? "bg-primary/10 text-primary font-medium"
             : "text-muted-foreground",
@@ -79,7 +80,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
           )}
         </span>
         <span className="truncate">{node.name}</span>
-      </div>
+      </button>
 
       {!isFile && isOpen && node.children && (
         <div>

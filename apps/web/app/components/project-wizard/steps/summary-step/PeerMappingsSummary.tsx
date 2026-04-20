@@ -29,7 +29,7 @@ export function PeerMappingsSummary({
   return (
     <SummarySection title={`Peer Mappings (${peerMappings.length})`}>
       <div className="space-y-2">
-        {peerMappings.map((mapping, i) => {
+        {peerMappings.map((mapping) => {
           const consumer = getContextName(
             mapping.consumerContext,
             boundedContexts,
@@ -39,7 +39,10 @@ export function PeerMappingsSummary({
             boundedContexts,
           );
           return (
-            <div key={i} className="text-sm">
+            <div
+              key={`${mapping.consumerContext}-${mapping.providerContext}`}
+              className="text-sm"
+            >
               <span className="font-medium">{consumer}</span>{" "}
               <span className="text-muted-foreground">→</span>{" "}
               <span className="font-medium">{provider}</span>

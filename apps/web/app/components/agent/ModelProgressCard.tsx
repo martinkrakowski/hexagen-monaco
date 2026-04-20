@@ -225,8 +225,12 @@ export function ModelProgressCard({
                       ? "bg-destructive/10 text-destructive"
                       : "bg-primary/10 text-primary"
                   }`}
-                  initial={{ scale: 0, rotate: shouldReduceMotion ? 0 : -15 }}
-                  animate={{ scale: 1, rotate: 0 }}
+                  initial={{
+                    scale: 0.95,
+                    opacity: 0,
+                    rotate: shouldReduceMotion ? 0 : -15,
+                  }}
+                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
                   transition={enterGentle}
                 >
                   {isError ? <AlertTriangleIcon /> : <LightningIcon />}

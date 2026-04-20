@@ -120,6 +120,8 @@ export function GovernanceAssistantPanel({
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
+  const [prevStepIndex, setPrevStepIndex] = useState(currentStepIndex);
+  const [prevActiveItem, setPrevActiveItem] = useState(activeItem);
   const [mode, setMode] = useState<LLMMode>("local");
   const [cloudConfig, setCloudConfig] = useState<UseCloudLLMConfig | null>(
     null,
@@ -129,6 +131,7 @@ export function GovernanceAssistantPanel({
   const cloudLLM = useCloudLLM();
   const vault = useSecretVault();
 
+  // Synchronize vault into cloudLLM — legitimate sync effect, not an event handler.
   useEffect(() => {
     if (vault) {
       cloudLLM.setVault(vault);
@@ -187,9 +190,11 @@ export function GovernanceAssistantPanel({
     }
   }, [isStreaming, getFollowUpQuestions, conversationThread]);
 
-  useEffect(() => {
+  if (prevStepIndex !== currentStepIndex || prevActiveItem !== activeItem) {
+    setPrevStepIndex(currentStepIndex);
+    setPrevActiveItem(activeItem);
     setFollowUpQuestions([]);
-  }, [currentStepIndex, activeItem]);
+  }
 
   const showUnavailable =
     status === "no_webgpu" || status === "unsupported_browser";
@@ -396,7 +401,7 @@ export function GovernanceAssistantPanel({
               <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
                 <span
                   className="text-primary font-bold"
-                  style={{ fontSize: "10px" }}
+                  style={{ fontSize: "11px" }}
                 >
                   G
                 </span>

@@ -41,10 +41,10 @@ export function ContextForm({
           Back to context list
         </button>
 
-        <div className="w-full">
-          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
+        <label className="block w-full">
+          <span className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
             Context Name
-          </label>
+          </span>
           <input
             type="text"
             value={context.name}
@@ -54,7 +54,7 @@ export function ContextForm({
             className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent outline-none bg-background"
             placeholder="e.g. SalesContext"
           />
-        </div>
+        </label>
 
         <ContextFormInfrastructure context={context} onUpdate={onUpdate} />
       </div>

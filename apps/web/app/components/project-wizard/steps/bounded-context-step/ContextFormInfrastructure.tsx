@@ -35,8 +35,8 @@ export function ContextFormInfrastructure({
 }: ContextFormInfrastructureProps) {
   return (
     <div className="space-y-3">
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>API Backend</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>API Backend</span>
         <select
           value={context.infrastructureTarget || ""}
           onChange={(e) =>
@@ -57,10 +57,10 @@ export function ContextFormInfrastructure({
             </option>
           ))}
         </select>
-      </div>
+      </label>
 
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>UI Frontend</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>UI Frontend</span>
         <select
           value={context.uiFramework || ""}
           onChange={(e) =>
@@ -77,10 +77,10 @@ export function ContextFormInfrastructure({
             </option>
           ))}
         </select>
-      </div>
+      </label>
 
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>Persistence</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>Persistence</span>
         <select
           value={context.persistenceAdapter || ""}
           onChange={(e) =>
@@ -99,10 +99,10 @@ export function ContextFormInfrastructure({
             </option>
           ))}
         </select>
-      </div>
+      </label>
 
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>Messaging</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>Messaging</span>
         <select
           value={context.messagingAdapter || ""}
           onChange={(e) =>
@@ -121,10 +121,10 @@ export function ContextFormInfrastructure({
             </option>
           ))}
         </select>
-      </div>
+      </label>
 
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>Telemetry</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>Telemetry</span>
         <select
           value={context.telemetryProvider || "None"}
           onChange={(e) =>
@@ -142,7 +142,7 @@ export function ContextFormInfrastructure({
             </option>
           ))}
         </select>
-      </div>
+      </label>
     </div>
   );
 }

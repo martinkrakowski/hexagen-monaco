@@ -68,16 +68,16 @@ export function WakingUpCard({ onCancel }: WakingUpCardProps) {
 
           {/* Indeterminate dots */}
           <div className="flex items-center gap-1.5">
-            {[0, 1, 2].map((i) => (
+            {[0, 1, 2].map((dot) => (
               <motion.span
-                key={i}
+                key={`dot-${dot}`}
                 className="block w-1.5 h-1.5 rounded-full bg-primary/60"
                 animate={{ opacity: [0.3, 1, 0.3] }}
                 transition={{
                   duration: 1.2,
                   repeat: Infinity,
                   ease: "easeInOut",
-                  delay: i * 0.2,
+                  delay: dot * 0.2,
                 }}
               />
             ))}

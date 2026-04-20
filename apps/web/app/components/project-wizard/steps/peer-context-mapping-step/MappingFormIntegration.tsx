@@ -46,8 +46,8 @@ export function MappingFormIntegration({
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className={FIELD_LABEL_CLASSES}>Integration Pattern</label>
+          <label className="block">
+            <span className={FIELD_LABEL_CLASSES}>Integration Pattern</span>
             <select
               value={mapping.integrationPattern}
               onChange={(e) =>
@@ -60,7 +60,7 @@ export function MappingFormIntegration({
               <option value="open-host">Open Host Service (OHS)</option>
               <option value="acl">Anticorruption Layer (ACL)</option>
             </select>
-          </div>
+          </label>
         </div>
       </div>
 
@@ -75,10 +75,8 @@ export function MappingFormIntegration({
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className={FIELD_LABEL_CLASSES}>
-              Communication Boundary
-            </label>
+          <label className="block">
+            <span className={FIELD_LABEL_CLASSES}>Communication Boundary</span>
             <select
               value={mapping.communicationBoundary}
               onChange={(e) =>
@@ -101,7 +99,7 @@ export function MappingFormIntegration({
                 cross-context calls must be networked.
               </p>
             )}
-          </div>
+          </label>
         </div>
       </div>
     </div>

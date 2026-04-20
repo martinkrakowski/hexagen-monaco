@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "./components/providers/AuthProvider";
@@ -36,9 +37,11 @@ export default function RootLayout({
         {/*
          * Flash-of-correct-theme guard — runs inline before React hydrates to
          * prevent a visible flash when the user's stored preference differs from
-         * the server-rendered default. Must remain a raw <script> block.
+         * the server-rendered default.
          */}
-        <script
+        <Script
+          id="theme-guard"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               (function() {

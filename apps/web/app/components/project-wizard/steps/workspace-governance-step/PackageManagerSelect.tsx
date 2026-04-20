@@ -17,10 +17,10 @@ export function PackageManagerSelect({
   onChange,
 }: PackageManagerSelectProps) {
   return (
-    <div className="space-y-2">
-      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+    <label className="block space-y-2">
+      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
         Package Manager
-      </label>
+      </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as PackageManager)}
@@ -30,6 +30,6 @@ export function PackageManagerSelect({
         <option value="pnpm">PNPM</option>
         <option value="bun">Bun</option>
       </select>
-    </div>
+    </label>
   );
 }

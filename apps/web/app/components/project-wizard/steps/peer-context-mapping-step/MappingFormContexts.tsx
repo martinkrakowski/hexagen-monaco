@@ -29,8 +29,8 @@ export function MappingFormContexts({
 }: MappingFormContextsProps) {
   return (
     <div className="space-y-4">
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>Consumer Context (Source)</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>Consumer Context (Source)</span>
         <select
           value={mapping.consumerContext || ""}
           onChange={(e) => onUpdate({ consumerContext: e.target.value })}
@@ -45,10 +45,10 @@ export function MappingFormContexts({
             </option>
           ))}
         </select>
-      </div>
+      </label>
 
-      <div>
-        <label className={FIELD_LABEL_CLASSES}>Provider Context (Target)</label>
+      <label className="block">
+        <span className={FIELD_LABEL_CLASSES}>Provider Context (Target)</span>
         <select
           value={mapping.providerContext || ""}
           onChange={(e) => onUpdate({ providerContext: e.target.value })}
@@ -63,7 +63,7 @@ export function MappingFormContexts({
             </option>
           ))}
         </select>
-      </div>
+      </label>
     </div>
   );
 }
