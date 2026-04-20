@@ -525,7 +525,8 @@ bounded_contexts:
     description: >-
       Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
       offline-capable local AI inference with worker-based architecture and
-      IndexedDB model caching.
+      IndexedDB model caching. Integrates with prompt-compiler for
+      contextual prompt generation and response streaming.
     layers:
       domain:
         value_objects:
@@ -635,6 +636,58 @@ bounded_contexts:
       - core-domain
       - intent-compiler
       - shared
+  - name: prompt-compiler
+    type: core
+    description: >-
+      Prompt compilation — builds contextual prompts from DomainAST,
+      governance rules, and user intent for LLM consumption
+    layers:
+      domain:
+        value_objects:
+          - PromptTemplate
+          - PromptVariable
+          - PromptContext
+      application:
+        use_cases:
+          - CompilePromptUseCase
+          - RenderPromptUseCase
+          - CachePromptUseCase
+        ports:
+          in:
+            - PromptCompilerPort
+            - PromptCachePort
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
+      - intent-compiler
+      - shared
+  - name: reconciliation-engine
+    type: core
+    description: >-
+      Reconciliation Engine — parses LLM responses and merges them with
+      deterministic DomainAST while applying governance constraints
+    layers:
+      domain:
+        value_objects:
+          - LLMResponse
+          - ReconciliationResult
+          - Patch
+      application:
+        use_cases:
+          - ReconcileUseCase
+          - ApplyPatchUseCase
+        ports:
+          in:
+            - ReconciliationPort
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
+      - intent-compiler
+      - prompt-compiler
 apps:
   - name: web
     driver: next.js

@@ -6,7 +6,9 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.+)\\.js$': '$1',
     '^@hexagen/core-domain$': '<rootDir>/../core-domain/src/index.ts',
+    '^@hexagen/intent-compiler$': '<rootDir>/../intent-compiler/src/index.ts',
     '^@hexagen/shared$': '<rootDir>/../shared/src/index.ts',
+    '^@hexagen/transaction-system$': '<rootDir>/../transaction-system/src/index.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

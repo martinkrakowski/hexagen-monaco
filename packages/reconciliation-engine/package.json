@@ -1,7 +1,7 @@
 {
-  "name": "@hexagen/core-domain",
+  "name": "@hexagen/reconciliation-engine",
   "version": "0.1.0",
-  "description": "Deterministic semantic kernel - MVK contracts and rule execution manifests",
+  "description": "Reconciliation Engine — parses LLM responses and merges them with deterministic DomainAST",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -16,6 +16,12 @@
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
+  "dependencies": {
+    "@hexagen/core-domain": "workspace:*",
+    "@hexagen/intent-compiler": "workspace:*",
+    "@hexagen/prompt-compiler": "workspace:*",
+    "@hexagen/shared": "workspace:*"
+  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
@@ -26,6 +32,5 @@
     "jest-environment-jsdom": "^30.3.0",
     "ts-jest": "^29.4.9",
     "typescript": "^5.5.4"
-  },
-  "gitHead": "b061ccdb2c4b989a74fcd45130534e89c0926a04"
+  }
 }

@@ -56,3 +56,19 @@ package_rules:
       - "@hexagen/intent-compiler"
     # transaction-system orchestrates intent compilation results and manages
     # speculative state, backpressure, and semantic caching.
+
+  - name: "prompt-compiler"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/intent-compiler"
+      - "@hexagen/transaction-system"
+    # prompt-compiler builds contextual prompts from DomainAST, governance, and user intent.
+
+  - name: "reconciliation-engine"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/intent-compiler"
+      - "@hexagen/prompt-compiler"
+    # reconciliation-engine parses LLM responses and applies governance.

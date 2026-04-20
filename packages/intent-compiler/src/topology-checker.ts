@@ -1,6 +1,5 @@
 import {
   DomainAST,
-  DomainEdge,
   TopologyInvariants,
 } from "@hexagen/core-domain";
 
