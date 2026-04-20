@@ -1,29 +1,49 @@
 "use client";
 
-import { useState, useRef } from "react";
-import {
-  Panel,
-  PanelGroup,
-  PanelResizeHandle,
-  ImperativePanelHandle,
-} from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
+
 import { Card, CardContent } from "@/components/ui/Card";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
+import {
+  usePanelCollapse,
+  type UsePanelCollapseReturn,
+} from "@/hooks/usePanelCollapse";
 import { ResponsiveTabs, type TabPanel } from "./ResponsiveTabs";
+import {
+  LEFT_PANEL_SIZES,
+  MIDDLE_PANEL_SIZES,
+  RIGHT_PANEL_SIZES,
+  LAYOUT_AUTO_SAVE_ID,
+} from "./resizable-layout-constants";
 
 interface ResizableLayoutProps {
   left: React.ReactNode;
   middle: React.ReactNode;
   right: React.ReactNode;
+  /** Title rendered above the left panel. Content owns the vocabulary. */
+  leftTitle: string;
+  /** Title rendered above the right panel. */
+  rightTitle: string;
 }
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 interface PanelHeaderProps {
   title: string;
   side: "left" | "right";
+  isCollapsed: boolean;
   onCollapse: () => void;
 }
 
-function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
+function PanelHeader({
+  title,
+  side,
+  isCollapsed,
+  onCollapse,
+}: PanelHeaderProps) {
   const Icon = side === "left" ? ChevronLeft : ChevronRight;
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 h-12">
@@ -32,6 +52,7 @@ function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
         type="button"
         onClick={onCollapse}
         aria-label={`Collapse ${title}`}
+        aria-expanded={!isCollapsed}
         className="p-1.5 hover:bg-muted rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
       >
         <Icon aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
@@ -42,17 +63,19 @@ function PanelHeader({ title, side, onCollapse }: PanelHeaderProps) {
 
 interface CollapsedStripProps {
   side: "left" | "right";
+  title: string;
   onExpand: () => void;
 }
 
-function CollapsedStrip({ side, onExpand }: CollapsedStripProps) {
+function CollapsedStrip({ side, title, onExpand }: CollapsedStripProps) {
   const Icon = side === "left" ? ChevronRight : ChevronLeft;
   return (
     <div className="flex items-start justify-center w-8 shrink-0 border border-border rounded-md bg-card pt-2">
       <button
         type="button"
         onClick={onExpand}
-        aria-label={`Expand ${side} panel`}
+        aria-label={`Expand ${title}`}
+        aria-expanded={false}
         className="p-1.5 hover:bg-muted rounded transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
       >
         <Icon aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
@@ -61,39 +84,65 @@ function CollapsedStrip({ side, onExpand }: CollapsedStripProps) {
   );
 }
 
-function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
-  const leftPanelRef = useRef<ImperativePanelHandle>(null);
-  const rightPanelRef = useRef<ImperativePanelHandle>(null);
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
-
-  const collapseLeft = () => leftPanelRef.current?.collapse();
-  const expandLeft = () => leftPanelRef.current?.resize(25);
-  const collapseRight = () => rightPanelRef.current?.collapse();
-  const expandRight = () => rightPanelRef.current?.resize(25);
-
+function VerticalResizeHandle() {
   return (
-    <div className="hidden lg:flex h-full gap-2">
-      {leftCollapsed && <CollapsedStrip side="left" onExpand={expandLeft} />}
+    <PanelResizeHandle className="w-3 bg-background hover:bg-accent transition-colors cursor-col-resize flex items-center justify-center">
+      <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+    </PanelResizeHandle>
+  );
+}
 
-      <PanelGroup direction="horizontal" className="flex-1 h-full">
-        {/* Left Sidebar — Wizard */}
+// ---------------------------------------------------------------------------
+// Desktop variant
+// ---------------------------------------------------------------------------
+
+interface DesktopLayoutProps extends ResizableLayoutProps {
+  leftCollapse: UsePanelCollapseReturn;
+  rightCollapse: UsePanelCollapseReturn;
+}
+
+function DesktopLayout({
+  left,
+  middle,
+  right,
+  leftTitle,
+  rightTitle,
+  leftCollapse,
+  rightCollapse,
+}: DesktopLayoutProps) {
+  return (
+    <div className="flex h-full gap-2">
+      {leftCollapse.isCollapsed && (
+        <CollapsedStrip
+          side="left"
+          title={leftTitle}
+          onExpand={leftCollapse.expand}
+        />
+      )}
+
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId={LAYOUT_AUTO_SAVE_ID}
+        className="flex-1 h-full"
+      >
         <Panel
-          ref={leftPanelRef}
+          ref={leftCollapse.ref}
           id="left"
-          defaultSize={25}
-          minSize={15}
-          maxSize={35}
+          order={1}
+          defaultSize={LEFT_PANEL_SIZES.defaultSize}
+          minSize={LEFT_PANEL_SIZES.minSize}
+          maxSize={LEFT_PANEL_SIZES.maxSize}
           collapsible
           collapsedSize={0}
-          onCollapse={() => setLeftCollapsed(true)}
-          onExpand={() => setLeftCollapsed(false)}
+          onCollapse={leftCollapse.onPanelCollapse}
+          onExpand={leftCollapse.onPanelExpand}
         >
           <Card className="h-full border border-border rounded-md flex flex-col">
             <PanelHeader
-              title="HexaGen Project Wizard"
+              title={leftTitle}
               side="left"
-              onCollapse={collapseLeft}
+              isCollapsed={leftCollapse.isCollapsed}
+              onCollapse={leftCollapse.collapse}
             />
             <CardContent className="p-0 flex-1 min-h-0 flex flex-col">
               {left}
@@ -101,40 +150,39 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
           </Card>
         </Panel>
 
-        {/* Resize Handle */}
-        <PanelResizeHandle className="w-3 bg-background hover:bg-accent transition-colors cursor-col-resize flex items-center justify-center">
-          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
-        </PanelResizeHandle>
+        <VerticalResizeHandle />
 
-        {/* Middle Pane — Main Content / Preview */}
-        <Panel defaultSize={50} minSize={30}>
+        <Panel
+          id="middle"
+          order={2}
+          defaultSize={MIDDLE_PANEL_SIZES.defaultSize}
+          minSize={MIDDLE_PANEL_SIZES.minSize}
+        >
           <Card className="h-full overflow-hidden border border-border rounded-md">
             {middle}
           </Card>
         </Panel>
 
-        {/* Resize Handle */}
-        <PanelResizeHandle className="w-3 bg-background hover:bg-accent transition-colors cursor-col-resize flex items-center justify-center">
-          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
-        </PanelResizeHandle>
+        <VerticalResizeHandle />
 
-        {/* Right Sidebar — AI / Monaco */}
         <Panel
-          ref={rightPanelRef}
+          ref={rightCollapse.ref}
           id="right"
-          defaultSize={25}
-          minSize={15}
-          maxSize={40}
+          order={3}
+          defaultSize={RIGHT_PANEL_SIZES.defaultSize}
+          minSize={RIGHT_PANEL_SIZES.minSize}
+          maxSize={RIGHT_PANEL_SIZES.maxSize}
           collapsible
           collapsedSize={0}
-          onCollapse={() => setRightCollapsed(true)}
-          onExpand={() => setRightCollapsed(false)}
+          onCollapse={rightCollapse.onPanelCollapse}
+          onExpand={rightCollapse.onPanelExpand}
         >
           <Card className="h-full overflow-hidden border border-border rounded-md">
             <PanelHeader
-              title="AI Governance"
+              title={rightTitle}
               side="right"
-              onCollapse={collapseRight}
+              isCollapsed={rightCollapse.isCollapsed}
+              onCollapse={rightCollapse.collapse}
             />
             <CardContent className="p-0 h-[calc(100%-3rem)] overflow-hidden">
               {right}
@@ -143,16 +191,32 @@ function DesktopLayout({ left, middle, right }: ResizableLayoutProps) {
         </Panel>
       </PanelGroup>
 
-      {rightCollapsed && <CollapsedStrip side="right" onExpand={expandRight} />}
+      {rightCollapse.isCollapsed && (
+        <CollapsedStrip
+          side="right"
+          title={rightTitle}
+          onExpand={rightCollapse.expand}
+        />
+      )}
     </div>
   );
 }
 
-function MobileLayout({ left, middle, right }: ResizableLayoutProps) {
+// ---------------------------------------------------------------------------
+// Mobile variant
+// ---------------------------------------------------------------------------
+
+function MobileLayout({
+  left,
+  middle,
+  right,
+  leftTitle,
+  rightTitle,
+}: ResizableLayoutProps) {
   const panels: TabPanel[] = [
     {
       id: "wizard",
-      title: "Wizard",
+      title: leftTitle,
       icon: "wizard",
       content: <div className="h-full overflow-auto">{left}</div>,
     },
@@ -164,24 +228,47 @@ function MobileLayout({ left, middle, right }: ResizableLayoutProps) {
     },
     {
       id: "ai",
-      title: "AI Governance",
+      title: rightTitle,
       icon: "ai",
       content: <div className="h-full overflow-hidden">{right}</div>,
     },
   ];
 
   return (
-    <div className="flex lg:hidden h-full">
+    <div className="flex h-full">
       <ResponsiveTabs panels={panels} />
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
 export function ResizableLayout(props: ResizableLayoutProps) {
+  const breakpoint = useBreakpoint();
+  const isDesktop = breakpoint === "lg";
+
+  // Hooks must run unconditionally, so they're always called regardless
+  // of which variant is rendered. Their state only has effect on desktop.
+  const leftCollapse = usePanelCollapse({
+    defaultExpandedSize: LEFT_PANEL_SIZES.defaultSize,
+  });
+  const rightCollapse = usePanelCollapse({
+    defaultExpandedSize: RIGHT_PANEL_SIZES.defaultSize,
+  });
+
   return (
     <div className="h-screen w-full overflow-hidden p-4 bg-background">
-      <DesktopLayout {...props} />
-      <MobileLayout {...props} />
+      {isDesktop ? (
+        <DesktopLayout
+          {...props}
+          leftCollapse={leftCollapse}
+          rightCollapse={rightCollapse}
+        />
+      ) : (
+        <MobileLayout {...props} />
+      )}
     </div>
   );
 }

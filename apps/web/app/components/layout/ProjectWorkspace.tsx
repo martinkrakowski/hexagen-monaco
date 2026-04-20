@@ -60,6 +60,8 @@ export function ProjectWorkspace() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <FormProvider {...form}>
           <ResizableLayout
+            leftTitle="HexaGen Project Wizard"
+            rightTitle="AI Governance"
             left={
               showSavedProjects ? (
                 <SavedProjectsList
