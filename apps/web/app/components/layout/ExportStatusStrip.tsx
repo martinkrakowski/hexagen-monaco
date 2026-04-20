@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Loader2, CheckCircle2, AlertCircle, X } from "lucide-react";
-import type { ExportState } from "@/hooks/useProjectExport";
+import type { ExportState } from "@/contexts/ExportContext";
 
 const SUCCESS_AUTO_DISMISS_MS = 4000;
 

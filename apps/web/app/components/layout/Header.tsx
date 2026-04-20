@@ -6,7 +6,7 @@ import { HeaderMenu } from "./HeaderMenu";
 import { ProjectMenu } from "./ProjectMenu";
 import { ExportStatusStrip } from "./ExportStatusStrip";
 import { ExportDialog } from "@/components/export/ExportDialog";
-import { useProjectExport } from "@/hooks/useProjectExport";
+import { useProjectExport } from "@/contexts/ExportContext";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import type { SavedProject } from "@/hooks/useSavedProjects";
 

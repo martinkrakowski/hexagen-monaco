@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
@@ -11,9 +17,9 @@ import type { ExportDialogSubmitPayload } from "@/components/export/ExportDialog
 /**
  * Discriminated state machine for the project export flow.
  *
- * Replaces four independent useState pieces (dialogOpen, exporting,
- * error, statusMessage) with a single variant at a time. Illegal
- * combinations (e.g. `exporting && error`) are no longer representable.
+ * Replaces per-consumer flat booleans (dialogOpen, exporting, error,
+ * statusMessage) with a single variant at a time. Illegal combinations
+ * (e.g. exporting && error) are not representable.
  */
 export type ExportState =
   | { kind: "idle" }
@@ -26,7 +32,7 @@ interface GithubExportResponse {
   destinationUrl?: string;
 }
 
-export interface UseProjectExportReturn {
+export interface ProjectExportContextValue {
   state: ExportState;
   canExport: boolean;
   isAuthenticated: boolean;
@@ -44,12 +50,19 @@ export interface UseProjectExportReturn {
   dismissStatus: () => void;
 }
 
+const ProjectExportContext = createContext<ProjectExportContextValue | null>(
+  null,
+);
+
 /**
- * Owns the export state machine and HTTP calls. UI components
- * (ProjectMenu, Header, ExportStatusStrip) observe `state` and call
- * the returned actions — no fetch or DOM manipulation at the call site.
+ * Lifts the project export state machine so every consumer in the
+ * workspace (Header menu, SummaryStep, future toolbar shortcuts) sees
+ * the same `state`. Before this context, ProjectMenu and SummaryStep
+ * each owned independent useState instances — triggering a ZIP export
+ * from the summary step didn't reflect in the header status strip and
+ * vice versa.
  */
-export function useProjectExport(): UseProjectExportReturn {
+export function ExportProvider({ children }: { children: ReactNode }) {
   const { activeWorkspace } = useActiveWorkspace();
   const { isAuthenticated, signIn } = useExternalIntegration();
   const [state, setState] = useState<ExportState>({ kind: "idle" });
@@ -128,7 +141,7 @@ export function useProjectExport(): UseProjectExportReturn {
     setState({ kind: "idle" });
   }, []);
 
-  return {
+  const value: ProjectExportContextValue = {
     state,
     canExport,
     isAuthenticated,
@@ -138,4 +151,18 @@ export function useProjectExport(): UseProjectExportReturn {
     closeDialog,
     dismissStatus,
   };
+
+  return (
+    <ProjectExportContext.Provider value={value}>
+      {children}
+    </ProjectExportContext.Provider>
+  );
+}
+
+export function useProjectExport(): ProjectExportContextValue {
+  const ctx = useContext(ProjectExportContext);
+  if (!ctx) {
+    throw new Error("useProjectExport must be used within ExportProvider");
+  }
+  return ctx;
 }

@@ -12,6 +12,7 @@ import { useWizardForm } from "@/hooks/useWizardForm";
 import { useEditorSession } from "@/hooks/useEditorSession";
 import { useWorkspaceShellUi } from "@/hooks/useWorkspaceShellUi";
 import { useProjectLifecycle } from "@/hooks/useProjectLifecycle";
+import { ExportProvider } from "@/contexts/ExportContext";
 
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
@@ -47,99 +48,101 @@ export function ProjectWorkspace() {
   const loadedProjectId = ui.state.kind === "edit" ? ui.state.projectId : null;
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-      <Header
-        onLoadManifest={() => ui.openDialog({ kind: "load-manifest" })}
-        isEditing={isEditing}
-        onNewProject={() => ui.openDialog({ kind: "new-project" })}
-        onLoadSavedProject={(project) =>
-          lifecycle.handleLoadProject(project.id)
-        }
-      />
+    <ExportProvider>
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
+        <Header
+          onLoadManifest={() => ui.openDialog({ kind: "load-manifest" })}
+          isEditing={isEditing}
+          onNewProject={() => ui.openDialog({ kind: "new-project" })}
+          onLoadSavedProject={(project) =>
+            lifecycle.handleLoadProject(project.id)
+          }
+        />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <FormProvider {...form}>
-          <ResizableLayout
-            leftTitle="HexaGen Project Wizard"
-            rightTitle="AI Governance"
-            left={
-              showSavedProjects ? (
-                <SavedProjectsList
-                  projects={lifecycle.projects}
-                  onLoad={lifecycle.handleLoadProject}
-                  onDelete={lifecycle.deleteProject}
-                  onRename={lifecycle.renameProject}
-                  onBackToWizard={ui.closeDialog}
-                  draft={lifecycle.draft}
-                  onResumeDraft={lifecycle.handleResumeDraft}
-                  onDiscardDraft={lifecycle.handleDiscardDraft}
-                  loadedProjectId={loadedProjectId}
-                />
-              ) : (
-                <WizardStepRouter
-                  currentStepIndex={ui.currentStepIndex}
-                  totalSteps={totalSteps}
-                  canProceed={canProceed(ui.currentStepIndex)}
-                  isGenerating={lifecycle.isGenerating}
-                  activeContextId={ui.activeContextId ?? ""}
-                  activeMappingId={ui.activeMappingId ?? ""}
-                  onContextSelect={ui.setContextId}
-                  onMappingSelect={ui.setMappingId}
-                  onNext={lifecycle.handleNext}
-                  onBack={lifecycle.handleBack}
-                  onShowSavedProjects={() =>
-                    ui.openDialog({ kind: "saved-projects" })
-                  }
-                  onGenerate={lifecycle.handleGenerate}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <FormProvider {...form}>
+            <ResizableLayout
+              leftTitle="HexaGen Project Wizard"
+              rightTitle="AI Governance"
+              left={
+                showSavedProjects ? (
+                  <SavedProjectsList
+                    projects={lifecycle.projects}
+                    onLoad={lifecycle.handleLoadProject}
+                    onDelete={lifecycle.deleteProject}
+                    onRename={lifecycle.renameProject}
+                    onBackToWizard={ui.closeDialog}
+                    draft={lifecycle.draft}
+                    onResumeDraft={lifecycle.handleResumeDraft}
+                    onDiscardDraft={lifecycle.handleDiscardDraft}
+                    loadedProjectId={loadedProjectId}
+                  />
+                ) : (
+                  <WizardStepRouter
+                    currentStepIndex={ui.currentStepIndex}
+                    totalSteps={totalSteps}
+                    canProceed={canProceed(ui.currentStepIndex)}
+                    isGenerating={lifecycle.isGenerating}
+                    activeContextId={ui.activeContextId ?? ""}
+                    activeMappingId={ui.activeMappingId ?? ""}
+                    onContextSelect={ui.setContextId}
+                    onMappingSelect={ui.setMappingId}
+                    onNext={lifecycle.handleNext}
+                    onBack={lifecycle.handleBack}
+                    onShowSavedProjects={() =>
+                      ui.openDialog({ kind: "saved-projects" })
+                    }
+                    onGenerate={lifecycle.handleGenerate}
+                    onViewModeChange={ui.setViewMode}
+                  />
+                )
+              }
+              middle={
+                <ArchitecturePreviewPane
+                  wizardData={wizardData}
+                  viewMode={ui.viewMode}
+                  selectedFileId={editor.selectedFileId}
+                  editedFiles={editor.editedFiles}
                   onViewModeChange={ui.setViewMode}
+                  onFileSelect={editor.selectFile}
+                  onFileContentChange={editor.updateFile}
+                  onFileSave={editor.markFileSaved}
                 />
-              )
-            }
-            middle={
-              <ArchitecturePreviewPane
-                wizardData={wizardData}
-                viewMode={ui.viewMode}
-                selectedFileId={editor.selectedFileId}
-                editedFiles={editor.editedFiles}
-                onViewModeChange={ui.setViewMode}
-                onFileSelect={editor.selectFile}
-                onFileContentChange={editor.updateFile}
-                onFileSave={editor.markFileSaved}
-              />
-            }
-            right={
-              <GovernancePanelWrapper
-                wizardData={wizardData}
-                currentStepIndex={ui.currentStepIndex}
-              />
-            }
-          />
-        </FormProvider>
-      </main>
+              }
+              right={
+                <GovernancePanelWrapper
+                  wizardData={wizardData}
+                  currentStepIndex={ui.currentStepIndex}
+                />
+              }
+            />
+          </FormProvider>
+        </main>
 
-      <LoadManifestDialog
-        open={ui.dialog.kind === "load-manifest"}
-        onClose={ui.closeDialog}
-        onFileLoaded={lifecycle.handleManifestLoaded}
-      />
+        <LoadManifestDialog
+          open={ui.dialog.kind === "load-manifest"}
+          onClose={ui.closeDialog}
+          onFileLoaded={lifecycle.handleManifestLoaded}
+        />
 
-      <ResumeDraftDialog
-        open={ui.dialog.kind === "resume-draft"}
-        onClose={ui.closeDialog}
-        draft={lifecycle.draft}
-        totalSteps={totalSteps}
-        onResume={lifecycle.handleResumeDraft}
-        onDiscard={lifecycle.handleDiscardDraft}
-      />
+        <ResumeDraftDialog
+          open={ui.dialog.kind === "resume-draft"}
+          onClose={ui.closeDialog}
+          draft={lifecycle.draft}
+          totalSteps={totalSteps}
+          onResume={lifecycle.handleResumeDraft}
+          onDiscard={lifecycle.handleDiscardDraft}
+        />
 
-      <NewProjectConfirmDialog
-        open={ui.dialog.kind === "new-project"}
-        onClose={ui.closeDialog}
-        loadedProject={lifecycle.loadedProject}
-        onSaveAndNew={lifecycle.handleSaveAndNew}
-        onDiscardAndNew={lifecycle.handleDiscardAndNew}
-        onCancel={ui.closeDialog}
-      />
-    </div>
+        <NewProjectConfirmDialog
+          open={ui.dialog.kind === "new-project"}
+          onClose={ui.closeDialog}
+          loadedProject={lifecycle.loadedProject}
+          onSaveAndNew={lifecycle.handleSaveAndNew}
+          onDiscardAndNew={lifecycle.handleDiscardAndNew}
+          onCancel={ui.closeDialog}
+        />
+      </div>
+    </ExportProvider>
   );
 }
