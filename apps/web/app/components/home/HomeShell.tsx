@@ -30,7 +30,7 @@ import { useWizardAutosave } from "@/hooks/useWizardAutosave";
 import { useBeforeUnloadWarning } from "@/hooks/useBeforeUnloadWarning";
 
 import { buildWizardData } from "../../lib/compose-wizard-data";
-import { WizardOrSavedProjectsPane } from "./WizardOrSavedProjectsPane";
+import { WizardOrSavedProjectsPane } from "./ProjectWizard";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { LoadManifestDialog } from "./LoadManifestDialog";
 import { ResumeDraftDialog } from "./ResumeDraftDialog";
