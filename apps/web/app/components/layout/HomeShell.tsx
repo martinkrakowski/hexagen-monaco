@@ -15,11 +15,6 @@ import {
   projectConfigSchema,
   type ProjectConfig,
 } from "@hexagen/project-configuration";
-import type {
-  BoundedContext,
-  ExternalContext,
-  PeerMapping,
-} from "@hexagen/shared";
 
 import { useHomeUIState } from "@/hooks/useHomeUiState";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
@@ -47,7 +42,20 @@ export function HomeShell() {
     mode: "all",
   });
 
-  const watchedValues = useWatch({ control: form.control });
+  // Named useWatch selectors — typed correctly (no DeepPartial widening)
+  const boundedContexts = useWatch({
+    control: form.control,
+    name: "boundedContexts",
+  });
+  const externalContexts = useWatch({
+    control: form.control,
+    name: "externalContexts",
+  });
+  const peerMappings = useWatch({
+    control: form.control,
+    name: "peerMappings",
+  });
+  const governance = useWatch({ control: form.control, name: "governance" });
 
   const {
     state: uiState,
@@ -113,22 +121,17 @@ export function HomeShell() {
     }
   }, [draftLoading]);
 
-  const wizardData = useMemo(() => {
-    const bc = (watchedValues.boundedContexts || []) as BoundedContext[];
-    const ec = (watchedValues.externalContexts || []) as ExternalContext[];
-    const pm = (watchedValues.peerMappings || []) as PeerMapping[];
-    return buildWizardData(
-      bc,
-      ec,
-      pm,
-      watchedValues.governance as Parameters<typeof buildWizardData>[3],
-    );
-  }, [
-    watchedValues.boundedContexts,
-    watchedValues.externalContexts,
-    watchedValues.peerMappings,
-    watchedValues.governance,
-  ]);
+  // Memo: re-computes only when a watched form slice changes
+  const wizardData = useMemo(
+    () =>
+      buildWizardData(
+        boundedContexts,
+        externalContexts,
+        peerMappings,
+        governance,
+      ),
+    [boundedContexts, externalContexts, peerMappings, governance],
+  );
 
   const editedFilesContentMap = useMemo(() => {
     const record: Record<string, string> = {};
@@ -138,14 +141,14 @@ export function HomeShell() {
     return record;
   }, [editorWorkspace.files]);
 
-  const canProceed =
-    currentStepIndex === 1
-      ? ((watchedValues.boundedContexts || []) as BoundedContext[]).length >
-          0 &&
-        ((watchedValues.boundedContexts || []) as BoundedContext[]).every(
-          (c) => c.name?.trim() !== "",
-        )
-      : true;
+  // Memo: only recomputes when step or bounded contexts change
+  const canProceed = useMemo(() => {
+    if (currentStepIndex !== 1) return true;
+    return (
+      boundedContexts.length > 0 &&
+      boundedContexts.every((c) => c.name?.trim() !== "")
+    );
+  }, [currentStepIndex, boundedContexts]);
 
   const { importManifest } = useManifestImport();
   const { isLoading: isGenerating, execute: executeGeneration } =
@@ -244,10 +247,12 @@ export function HomeShell() {
 
   const buildManifestYaml = useCallback(() => {
     const formData = form.getValues();
-    const bc = (formData.boundedContexts || []) as BoundedContext[];
-    const ec = (formData.externalContexts || []) as ExternalContext[];
-    const pm = (formData.peerMappings || []) as PeerMapping[];
-    return buildWizardData(bc, ec, pm, formData.governance);
+    return buildWizardData(
+      formData.boundedContexts,
+      formData.externalContexts,
+      formData.peerMappings,
+      formData.governance,
+    );
   }, [form]);
 
   const handleNewProjectClick = () => openDialog({ kind: "new-project" });

@@ -1,12 +1,9 @@
 import { useCallback } from "react";
+import yaml from "js-yaml";
 import { buildWizardData } from "@/lib/compose-wizard-data";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import type {
-  WizardData,
-  BoundedContext,
-  ExternalContext,
-  PeerMapping,
-} from "@hexagen/shared";
+import { emptyFormValues } from "@/components/project-wizard/config";
+import type { WizardData } from "@hexagen/shared";
 
 export type ManifestImportOutcome =
   | { kind: "success"; wizardData: WizardData; formValues: ProjectConfig }
@@ -20,25 +17,29 @@ export function useManifestImport(): UseManifestImportReturn {
   const importManifest = useCallback(
     async (yamlContent: string): Promise<ManifestImportOutcome> => {
       try {
-        const manifest = JSON.parse(yamlContent);
-
-        const boundedContexts: BoundedContext[] =
-          (manifest.boundedContexts as BoundedContext[]) || [];
-        const externalContexts: ExternalContext[] =
-          (manifest.externalContexts as ExternalContext[]) || [];
-        const peerMappings: PeerMapping[] =
-          (manifest.peerMappings as PeerMapping[]) || [];
-
-        const wizardData = buildWizardData(
-          boundedContexts,
-          externalContexts,
-          peerMappings,
-        );
+        // Parse as YAML (not JSON) — manifests are .yaml files
+        const manifest = yaml.load(yamlContent) as Record<string, unknown>;
 
         const formValues: ProjectConfig = {
-          ...wizardData,
-          governance: wizardData.governance,
-        } as ProjectConfig;
+          boundedContexts:
+            (manifest.boundedContexts as ProjectConfig["boundedContexts"]) ??
+            [],
+          externalContexts:
+            (manifest.externalContexts as ProjectConfig["externalContexts"]) ??
+            [],
+          peerMappings:
+            (manifest.peerMappings as ProjectConfig["peerMappings"]) ?? [],
+          governance:
+            (manifest.governance as ProjectConfig["governance"]) ??
+            emptyFormValues.governance,
+        };
+
+        const wizardData = buildWizardData(
+          formValues.boundedContexts,
+          formValues.externalContexts,
+          formValues.peerMappings,
+          formValues.governance,
+        );
 
         return {
           kind: "success",

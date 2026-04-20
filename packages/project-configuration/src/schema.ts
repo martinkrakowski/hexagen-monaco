@@ -124,7 +124,17 @@ export const ExternalContextSchema = z.object({
 export const ProjectSpecSchema = z.object({
   boundedContexts: z.array(BoundedContextSchema).default([]),
   externalContexts: z.array(ExternalContextSchema).default([]),
-  governance: WorkspaceGovernanceSchema,
+  governance: WorkspaceGovernanceSchema.default({
+    workspaceName: "@hexagen",
+    workspaceTemplate: "modular-monolith",
+    packageManager: "yarn",
+    topologyStrictness: "flexible",
+    namespacePrefix: "@hexagen",
+    namingConventions: {
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".adapter.ts",
+    },
+  }),
   peerMappings: z.array(PeerContextMappingSchema).default([]),
 });
 
