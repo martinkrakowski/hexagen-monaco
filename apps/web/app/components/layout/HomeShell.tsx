@@ -25,7 +25,8 @@ import { useWizardAutosave } from "@/hooks/useWizardAutosave";
 import { useBeforeUnloadWarning } from "@/hooks/useBeforeUnloadWarning";
 
 import { buildWizardData } from "../../lib/compose-wizard-data";
-import { WizardOrSavedProjectsPane } from "./ProjectWizard";
+import { WizardStepRouter } from "@/components/project-wizard/WizardStepRouter";
+import { SavedProjectsList } from "@/components/project-wizard/SavedProjectsList";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { LoadManifestDialog } from "./LoadManifestDialog";
 import { ResumeDraftDialog } from "./ResumeDraftDialog";
@@ -316,33 +317,37 @@ export function HomeShell() {
         <FormProvider {...form}>
           <ResizableLayout
             left={
-              <WizardOrSavedProjectsPane
-                showSavedProjects={showSavedProjects}
-                currentStepIndex={currentStepIndex}
-                totalSteps={totalSteps}
-                canProceed={canProceed}
-                isGenerating={isGenerating}
-                activeContextId={activeContextId ?? ""}
-                activeMappingId={activeMappingId ?? ""}
-                projects={projects}
-                draft={draft}
-                loadedProjectId={
-                  uiState.kind === "edit" ? uiState.projectId : null
-                }
-                onContextSelect={setContextId}
-                onMappingSelect={setMappingId}
-                onNext={handleNext}
-                onBack={handleBack}
-                onShowSavedProjects={handleShowSavedProjects}
-                onGenerate={handleGenerate}
-                onViewModeChange={setViewMode}
-                onLoadProject={handleLoadProject}
-                onDeleteProject={deleteProject}
-                onRenameProject={renameProject}
-                onResumeDraft={handleResumeDraft}
-                onDiscardDraft={handleDiscardDraft}
-                onBackToWizard={() => closeDialog()}
-              />
+              showSavedProjects ? (
+                <SavedProjectsList
+                  projects={projects}
+                  onLoad={handleLoadProject}
+                  onDelete={deleteProject}
+                  onRename={renameProject}
+                  onBackToWizard={closeDialog}
+                  draft={draft}
+                  onResumeDraft={handleResumeDraft}
+                  onDiscardDraft={handleDiscardDraft}
+                  loadedProjectId={
+                    uiState.kind === "edit" ? uiState.projectId : null
+                  }
+                />
+              ) : (
+                <WizardStepRouter
+                  currentStepIndex={currentStepIndex}
+                  totalSteps={totalSteps}
+                  canProceed={canProceed}
+                  isGenerating={isGenerating}
+                  activeContextId={activeContextId ?? ""}
+                  activeMappingId={activeMappingId ?? ""}
+                  onContextSelect={setContextId}
+                  onMappingSelect={setMappingId}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onShowSavedProjects={handleShowSavedProjects}
+                  onGenerate={handleGenerate}
+                  onViewModeChange={setViewMode}
+                />
+              )
             }
             middle={
               <ArchitecturePreviewPane
