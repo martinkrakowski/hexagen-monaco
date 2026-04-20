@@ -16,7 +16,7 @@ import {
 
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
-import { ModelSettingsView } from "./model-settings-view";
+import { ModelSettingsView } from "./ModelSettingsView";
 import { UnavailableCard } from "./UnavailableCard";
 import { CloudModelSettingsView } from "./CloudModelSettingsView";
 import { CloudChatInterface } from "./CloudChatInterface";

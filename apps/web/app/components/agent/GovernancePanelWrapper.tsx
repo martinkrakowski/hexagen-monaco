@@ -2,7 +2,7 @@
 
 import type { WizardData } from "@hexagen/shared";
 import { useGovernanceData } from "@/hooks/useGovernanceData";
-import { GovernanceAssistantPanel } from "@/components/agent/governance-assistant-panel";
+import { GovernanceAssistantPanel } from "@/components/agent/GovernanceAssistantPanel";
 
 interface GovernancePanelWrapperProps {
   wizardData: WizardData;
