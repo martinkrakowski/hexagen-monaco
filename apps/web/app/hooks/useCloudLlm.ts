@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { SecretVaultPort } from "@hexagen/agentic-interaction";
+
+import { retrieveApiKey } from "./cloud-llm/retrieve-api-key";
+import { buildCloudMessageHistory } from "./cloud-llm/build-cloud-history";
+import { streamCloudChatResponse } from "./cloud-llm/stream-cloud-chat-response";
 
 export interface CloudChatMessage {
   id: string;
@@ -25,6 +29,16 @@ export interface UseCloudLLMConfig {
 
 const CHAT_ENDPOINT = "/api/llm/chat";
 
+/**
+ * Cloud LLM chat hook. Owns the chat state machine and the send/
+ * abort/clear actions. The streaming transport (fetch + SSE parse)
+ * lives in ./cloud-llm/stream-cloud-chat-response, parallel to the
+ * local LLM's ./local-llm/stream-assistant-response helper.
+ *
+ * Vault-provided API key is injected via setVault (called by the
+ * parent when the vault becomes available) and retrieved
+ * just-in-time by each sendMessage.
+ */
 export function useCloudLLM() {
   const [state, setState] = useState<CloudLLMState>({
     status: "idle",
@@ -32,19 +46,13 @@ export function useCloudLLM() {
     errorMessage: null,
   });
 
-  // Vault will be injected by parent component
   const vaultRef = useRef<SecretVaultPort | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isStreamingRef = useRef(false);
 
   const setVault = useCallback((vault: SecretVaultPort) => {
     vaultRef.current = vault;
   }, []);
-
-  const getVault = useCallback(() => {
-    return vaultRef.current;
-  }, []);
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const isStreamingRef = useRef(false);
 
   const sendMessage = useCallback(
     async (
@@ -55,91 +63,57 @@ export function useCloudLLM() {
       if (isStreamingRef.current) return;
       if (!config.provider || !config.model) return;
 
-      // Retrieve API key from vault just-in-time
-      const vault = getVault();
-      if (!vault) {
-        setState((prev) => ({
-          ...prev,
-          status: "error",
-          errorMessage: "Vault not initialized",
-        }));
-        return;
-      }
-
-      const keyResult = await vault.retrieve();
+      // 1. Retrieve API key from vault.
+      const keyResult = await retrieveApiKey(vaultRef.current);
       if (!keyResult.success) {
         setState((prev) => ({
           ...prev,
           status: "error",
-          errorMessage:
-            keyResult.error.message || "Failed to retrieve API key from vault",
+          errorMessage: keyResult.message,
         }));
         return;
       }
 
-      const apiKey = keyResult.value;
-
       isStreamingRef.current = true;
 
-      const userMessage: CloudChatMessage = {
-        id: `user-${Date.now()}`,
-        role: "user",
-        content,
-        timestamp: Date.now(),
-      };
-
-      const assistantMessage: CloudChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: "",
-        timestamp: Date.now(),
-      };
+      // 2. Snapshot prior messages BEFORE the setState below, so
+      // buildCloudMessageHistory sees the pre-send state (avoids the
+      // batching-dependent snapshot trick in the original code).
+      const priorMessages = state.messages;
+      const now = Date.now();
+      const assistantId = `assistant-${now}`;
 
       setState((prev) => ({
         ...prev,
         status: "streaming",
         errorMessage: null,
-        messages: [...prev.messages, userMessage, assistantMessage],
+        messages: [
+          ...prev.messages,
+          { id: `user-${now}`, role: "user", content, timestamp: now },
+          { id: assistantId, role: "assistant", content: "", timestamp: now },
+        ],
       }));
 
-      const messages: Array<{
-        role: "system" | "user" | "assistant";
-        content: string;
-      }> = [];
+      // 3. Build the LLM-facing history.
+      const historyMessages = buildCloudMessageHistory(
+        priorMessages,
+        content,
+        systemPrompt,
+      );
 
-      if (systemPrompt) {
-        messages.push({ role: "system", content: systemPrompt });
-      }
-
-      setState((prev) => {
-        const historyMessages = prev.messages
-          .filter((m) => m.role !== "system")
-          .slice(0, -1)
-          .map((m) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          }));
-        messages.push(...historyMessages, { role: "user", content });
-        return prev;
-      });
-
-      messages.push({ role: "user", content });
-
+      // 4. Fetch + stream.
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
-
-      const assistantId = assistantMessage.id;
 
       try {
         const response = await fetch(CHAT_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages:
-              messages.length > 1 ? messages : [{ role: "user", content }],
+            messages: historyMessages,
             provider: config.provider,
             model: config.model,
-            apiKey,
+            apiKey: keyResult.apiKey,
             temperature: 0.7,
             maxTokens: 2048,
           }),
@@ -152,7 +126,7 @@ export function useCloudLLM() {
             const errorBody = await response.json();
             errorMsg = errorBody.error ?? errorMsg;
           } catch {
-            // ignore JSON parse errors on error responses
+            // Ignore JSON parse errors on error responses.
           }
           setState((prev) => ({
             ...prev,
@@ -167,75 +141,11 @@ export function useCloudLLM() {
           return;
         }
 
-        const reader = response.body?.getReader();
-        if (!reader) {
-          setState((prev) => ({
-            ...prev,
-            status: "error",
-            errorMessage: "No response body",
-          }));
-          return;
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let streamDone = false;
-
-        while (!streamDone) {
-          const { done, value } = await reader.read();
-          if (done) {
-            streamDone = true;
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ")) continue;
-
-            const data = trimmed.slice(6);
-            let parsed: { type: string; content?: string; message?: string };
-            try {
-              parsed = JSON.parse(data);
-            } catch {
-              continue;
-            }
-
-            if (parsed.type === "chunk" && parsed.content) {
-              setState((prev) => ({
-                ...prev,
-                messages: prev.messages.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, content: m.content + parsed.content }
-                    : m,
-                ),
-              }));
-            } else if (parsed.type === "error") {
-              setState((prev) => ({
-                ...prev,
-                status: "error",
-                errorMessage: parsed.message ?? "Unknown error",
-                messages: prev.messages.map((m) =>
-                  m.id === assistantId
-                    ? {
-                        ...m,
-                        content: `Error: ${parsed.message ?? "Unknown error"}`,
-                      }
-                    : m,
-                ),
-              }));
-              return;
-            } else if (parsed.type === "done") {
-              setState((prev) => ({ ...prev, status: "idle" }));
-              return;
-            }
-          }
-        }
-
-        setState((prev) => ({ ...prev, status: "idle" }));
+        await streamCloudChatResponse({
+          response,
+          assistantId,
+          setState,
+        });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           setState((prev) => ({ ...prev, status: "idle" }));
@@ -255,7 +165,7 @@ export function useCloudLLM() {
         abortControllerRef.current = null;
       }
     },
-    [],
+    [state.messages],
   );
 
   const abort = useCallback(() => {
