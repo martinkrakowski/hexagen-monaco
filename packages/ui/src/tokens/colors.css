@@ -1,0 +1,86 @@
+:root {
+  /* Primary Brand Colors - HSL */
+  --color-primary-hue: 220;
+  --color-primary-saturation: 90%;
+  --color-primary-lightness: 50%;
+  --color-primary: hsl(var(--color-primary-hue), var(--color-primary-saturation), var(--color-primary-lightness));
+  --color-primary-hover: hsl(var(--color-primary-hue), var(--color-primary-saturation), 45%);
+  --color-primary-active: hsl(var(--color-primary-hue), var(--color-primary-saturation), 40%);
+
+  /* Secondary Colors */
+  --color-secondary-hue: 180;
+  --color-secondary-saturation: 70%;
+  --color-secondary-lightness: 45%;
+  --color-secondary: hsl(var(--color-secondary-hue), var(--color-secondary-saturation), var(--color-secondary-lightness));
+
+  /* Accent Colors */
+  --color-accent-hue: 150;
+  --color-accent-saturation: 80%;
+  --color-accent-lightness: 55%;
+  --color-accent: hsl(var(--color-accent-hue), var(--color-accent-saturation), var(--color-accent-lightness));
+
+  /* Semantic Colors - Neutral */
+  --color-neutral-50: hsl(0, 0%, 98%);
+  --color-neutral-100: hsl(0, 0%, 96%);
+  --color-neutral-200: hsl(0, 0%, 92%);
+  --color-neutral-300: hsl(0, 0%, 83%);
+  --color-neutral-400: hsl(0, 0%, 64%);
+  --color-neutral-500: hsl(0, 0%, 45%);
+  --color-neutral-600: hsl(0, 0%, 32%);
+  --color-neutral-700: hsl(0, 0%, 25%);
+  --color-neutral-800: hsl(0, 0%, 15%);
+  --color-neutral-900: hsl(0, 0%, 10%);
+  --color-neutral-950: hsl(0, 0%, 5%);
+
+  /* Semantic Colors - Status */
+  --color-success-hue: 145;
+  --color-success: hsl(var(--color-success-hue), 70%, 45%);
+  --color-warning-hue: 45;
+  --color-warning: hsl(var(--color-warning-hue), 80%, 50%);
+  --color-error-hue: 0;
+  --color-error: hsl(var(--color-error-hue), 75%, 55%);
+  --color-info-hue: 210;
+  --color-info: hsl(var(--color-info-hue), 80%, 55%);
+
+  /* Background Colors */
+  --color-bg-primary: var(--color-neutral-50);
+  --color-bg-secondary: var(--color-neutral-100);
+  --color-bg-tertiary: var(--color-neutral-200);
+  --color-bg-elevated: #ffffff;
+  --color-bg-overlay: hsla(0, 0%, 0%, 0.5);
+
+  /* Text Colors */
+  --color-text-primary: var(--color-neutral-900);
+  --color-text-secondary: var(--color-neutral-600);
+  --color-text-tertiary: var(--color-neutral-500);
+  --color-text-disabled: var(--color-neutral-400);
+  --color-text-inverse: #ffffff;
+
+  /* Border Colors */
+  --color-border-subtle: var(--color-neutral-200);
+  --color-border-default: var(--color-neutral-300);
+  --color-border-strong: var(--color-neutral-400);
+  --color-border-focus: var(--color-primary);
+
+  /* Focus Ring */
+  --color-focus-ring: hsla(var(--color-primary-hue), var(--color-primary-saturation), 50%, 0.4);
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg-primary: var(--color-neutral-950);
+    --color-bg-secondary: var(--color-neutral-900);
+    --color-bg-tertiary: var(--color-neutral-800);
+    --color-bg-elevated: var(--color-neutral-800);
+
+    --color-text-primary: var(--color-neutral-50);
+    --color-text-secondary: var(--color-neutral-300);
+    --color-text-tertiary: var(--color-neutral-400);
+    --color-text-disabled: var(--color-neutral-600);
+
+    --color-border-subtle: var(--color-neutral-800);
+    --color-border-default: var(--color-neutral-700);
+    --color-border-strong: var(--color-neutral-600);
+  }
+}

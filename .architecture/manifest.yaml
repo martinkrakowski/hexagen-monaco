@@ -530,6 +530,19 @@ bounded_contexts:
     depends_on:
       - agentic-interaction
       - shared
+  - name: ui
+    type: supporting
+    description: >-
+      Projection layer — UI atoms, tokens, controllers isolated from semantic
+      state via 3-layer information firewall
+    layers:
+      domain:
+        value_objects:
+          - InformationStateBrand
+          - ForbiddenToken
+          - InteractionStateOnly
+      infrastructure:
+        adapters: []
 apps:
   - name: web
     driver: next.js

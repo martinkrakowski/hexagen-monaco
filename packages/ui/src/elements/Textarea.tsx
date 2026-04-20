@@ -1,0 +1,31 @@
+import type { TextareaHTMLAttributes, ForwardRefRenderFunction } from "react";
+import { forwardRef } from "react";
+
+export interface TextareaProps
+  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  rows?: number;
+}
+
+const TextareaComponent: ForwardRefRenderFunction<
+  HTMLTextAreaElement,
+  TextareaProps
+> = ({ className, ...props }, ref) => {
+  return (
+    <textarea
+      className={[
+        "flex min-h-[80px] w-full rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm",
+        "placeholder:text-text-tertiary",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      ref={ref}
+      {...props}
+    />
+  );
+};
+
+export const Textarea = forwardRef(TextareaComponent);
+Textarea.displayName = "Textarea";
