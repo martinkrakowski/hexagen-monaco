@@ -190,18 +190,17 @@ export function useGovernanceThread({
   }, [isStreaming, messages, regeneratingEntryId]);
 
   // Effect: persist thread after finalization.
-  useEffect(() => {
-    if (isStreaming || conversationThread.length === 0 || contextKey === null) {
-      return;
-    }
-    const port = getChatPersistence();
-    port.saveGovernanceThread(contextKey, conversationThread).catch(() => {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `Failed to persist governance thread for context: ${contextKey}`,
-      );
-    });
-  }, [contextKey, isStreaming, conversationThread]);
+   useEffect(() => {
+     if (isStreaming || conversationThread.length === 0 || contextKey === null) {
+       return;
+     }
+     const port = getChatPersistence();
+     port.saveGovernanceThread(contextKey, conversationThread).catch(() => {
+       console.warn(
+         `Failed to persist governance thread for context: ${contextKey}`,
+       );
+     });
+   }, [contextKey, isStreaming, conversationThread]);
 
   return {
     conversationThread,

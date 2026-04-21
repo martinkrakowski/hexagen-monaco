@@ -1,18 +1,9 @@
 import { DomainAST, Identifier } from "@hexagen/core-domain";
+import { GestureParserPort } from "../../../application/ports/in/gesture-parser.port";
+import { Gesture } from "../../../domain/gesture";
+import { ParsedGesture } from "../../../domain/value-objects/parsed-gesture";
 
-export interface Gesture {
-  id: Identifier;
-  type: string;
-  payload: Record<string, unknown>;
-}
-
-export interface ParsedGesture {
-  gesture: Gesture;
-  ast: DomainAST;
-  confidence: number;
-}
-
-export class GestureParser {
+export class DefaultGestureParserAdapter implements GestureParserPort {
   parse(gesture: Gesture): ParsedGesture {
     // TODO: Implement gesture parsing logic
     // For now, return a mock AST
