@@ -1,32 +1,33 @@
-import { CardinalityChecker } from "../src/cardinality-checker.js";
+import { ValidateCardinalityUseCase } from "../src/application/use-cases/validate-cardinality.use-case";
+import { FakeCardinalityChecker } from "./doubles/fake-cardinality-checker";
 import { NodeKind } from "@hexagen/core-domain";
 import type { DomainAST } from "@hexagen/core-domain";
+import type { CardinalityCheckResult } from "../src/domain/value-objects/cardinality-check-result";
 
-describe("CardinalityChecker", () => {
-  let checker: CardinalityChecker;
+describe("ValidateCardinalityUseCase (port-based contract)", () => {
+  let fakeChecker: FakeCardinalityChecker;
+  let useCase: ValidateCardinalityUseCase;
 
   beforeEach(() => {
-    checker = new CardinalityChecker();
+    fakeChecker = new FakeCardinalityChecker();
+    useCase = new ValidateCardinalityUseCase(fakeChecker);
   });
 
-  describe("check()", () => {
-    it("should return valid result for empty AST", () => {
+  describe("execute()", () => {
+    it("should return valid result for empty AST via default fake", () => {
       const ast: DomainAST = {
         nodes: [],
         edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [],
-        },
+        invariants: { topology: [], cardinality: [] },
       };
 
-      const result = checker.check(ast);
+      const result = useCase.execute(ast);
 
-      expect(result.valid).toBe(true);
+      expect(result.isValid).toBe(true);
       expect(result.violations).toEqual([]);
     });
 
-    it("should detect Exactly invariant violation", () => {
+    it("should return invalid result when fake detects Exactly violation", () => {
       const ast: DomainAST = {
         nodes: [
           { id: "node1", kind: NodeKind.Entity, attributes: {} },
@@ -36,50 +37,64 @@ describe("CardinalityChecker", () => {
         invariants: {
           topology: [],
           cardinality: [
-            {
-              type: "Exactly",
-              payload: {
-                nodeKind: "Entity",
-                count: 1,
-              },
-            },
+            { type: "Exactly", payload: { nodeKind: "Entity", count: 1 } },
           ],
         },
       };
 
-      const result = checker.check(ast);
+      const failingChecker = new FakeCardinalityChecker(
+        { isValid: true, violations: [] },
+        (): CardinalityCheckResult => ({
+          isValid: false,
+          violations: ["Exactly: expected 1 Entity, found 2"],
+        }),
+      );
+      const uc = new ValidateCardinalityUseCase(failingChecker);
 
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("Exactly");
+      const result = uc.execute(ast);
+
+      expect(result.isValid).toBe(false);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]).toContain("Exactly");
     });
 
-    it("should detect AtLeast invariant violation", () => {
+    it("should return invalid result when fake detects AtLeast violation", () => {
       const ast: DomainAST = {
         nodes: [{ id: "node1", kind: NodeKind.Entity, attributes: {} }],
         edges: [],
         invariants: {
           topology: [],
           cardinality: [
-            {
-              type: "AtLeast",
-              payload: {
-                nodeKind: "Entity",
-                count: 2,
-              },
-            },
+            { type: "AtLeast", payload: { nodeKind: "Entity", count: 2 } },
           ],
         },
       };
 
-      const result = checker.check(ast);
+      const failingChecker = new FakeCardinalityChecker(
+        { isValid: true, violations: [] },
+        (): CardinalityCheckResult => ({
+          isValid: false,
+          violations: ["AtLeast: expected at least 2 Entity, found 1"],
+        }),
+      );
+      const uc = new ValidateCardinalityUseCase(failingChecker);
 
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("AtLeast");
+      const result = uc.execute(ast);
+
+      expect(result.isValid).toBe(false);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]).toContain("AtLeast");
     });
 
-    it("should detect AtMost invariant violation", () => {
+    it("should return invalid result when fake detects AtMost violation", () => {
+      const failingChecker = new FakeCardinalityChecker(
+        { isValid: true, violations: [] },
+        (): CardinalityCheckResult => ({
+          isValid: false,
+          violations: ["AtMost: expected at most 2 Entity, found 3"],
+        }),
+      );
+      const uc = new ValidateCardinalityUseCase(failingChecker);
       const ast: DomainAST = {
         nodes: [
           { id: "node1", kind: NodeKind.Entity, attributes: {} },
@@ -90,25 +105,27 @@ describe("CardinalityChecker", () => {
         invariants: {
           topology: [],
           cardinality: [
-            {
-              type: "AtMost",
-              payload: {
-                nodeKind: "Entity",
-                count: 2,
-              },
-            },
+            { type: "AtMost", payload: { nodeKind: "Entity", count: 2 } },
           ],
         },
       };
 
-      const result = checker.check(ast);
+      const result = uc.execute(ast);
 
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("AtMost");
+      expect(result.isValid).toBe(false);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]).toContain("AtMost");
     });
 
-    it("should detect Between invariant violation", () => {
+    it("should return invalid result when fake detects Between violation", () => {
+      const failingChecker = new FakeCardinalityChecker(
+        { isValid: true, violations: [] },
+        (): CardinalityCheckResult => ({
+          isValid: false,
+          violations: ["Between: expected between 2 and 4 Entity, found 1"],
+        }),
+      );
+      const uc = new ValidateCardinalityUseCase(failingChecker);
       const ast: DomainAST = {
         nodes: [{ id: "node1", kind: NodeKind.Entity, attributes: {} }],
         edges: [],
@@ -117,24 +134,33 @@ describe("CardinalityChecker", () => {
           cardinality: [
             {
               type: "Between",
-              payload: {
-                nodeKind: "Entity",
-                min: 2,
-                max: 4,
-              },
+              payload: { nodeKind: "Entity", min: 2, max: 4 },
             },
           ],
         },
       };
 
-      const result = checker.check(ast);
+      const result = uc.execute(ast);
 
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("Between");
+      expect(result.isValid).toBe(false);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]).toContain("Between");
     });
 
-    it("should return valid result when all invariants are satisfied", () => {
+    it("should pass the AST to the port exactly once", () => {
+      const ast: DomainAST = {
+        nodes: [],
+        edges: [],
+        invariants: { topology: [], cardinality: [] },
+      };
+
+      useCase.execute(ast);
+
+      expect(fakeChecker.checkCallCount).toBe(1);
+      expect(fakeChecker.lastAst).toBe(ast);
+    });
+
+    it("should return valid result when all invariants satisfied via default fake", () => {
       const ast: DomainAST = {
         nodes: [
           { id: "node1", kind: NodeKind.Entity, attributes: {} },
@@ -144,18 +170,9 @@ describe("CardinalityChecker", () => {
         invariants: {
           topology: [],
           cardinality: [
-            {
-              type: "Exactly",
-              payload: { nodeKind: "Entity", count: 2 },
-            },
-            {
-              type: "AtLeast",
-              payload: { nodeKind: "Entity", count: 1 },
-            },
-            {
-              type: "AtMost",
-              payload: { nodeKind: "Entity", count: 3 },
-            },
+            { type: "Exactly", payload: { nodeKind: "Entity", count: 2 } },
+            { type: "AtLeast", payload: { nodeKind: "Entity", count: 1 } },
+            { type: "AtMost", payload: { nodeKind: "Entity", count: 3 } },
             {
               type: "Between",
               payload: { nodeKind: "Entity", min: 1, max: 3 },
@@ -164,164 +181,9 @@ describe("CardinalityChecker", () => {
         },
       };
 
-      const result = checker.check(ast);
+      const result = useCase.execute(ast);
 
-      expect(result.valid).toBe(true);
-      expect(result.violations).toEqual([]);
-    });
-
-    it("should detect AtLeast invariant violation", () => {
-      const ast: DomainAST = {
-        nodes: [
-          {
-            id: "node1",
-            kind: "TestNode" as const,
-            label: "A",
-            properties: [],
-          },
-        ],
-        edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [
-            {
-              type: "AtLeast",
-              payload: {
-                nodeKind: "TestNode",
-                count: 2,
-              },
-            },
-          ],
-        },
-      };
-
-      const result = checker.check(ast);
-
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("AtLeast");
-    });
-
-    it("should detect AtMost invariant violation", () => {
-      const ast: DomainAST = {
-        nodes: [
-          {
-            id: "node1",
-            kind: "TestNode" as const,
-            label: "A",
-            properties: [],
-          },
-          {
-            id: "node2",
-            kind: "TestNode" as const,
-            label: "B",
-            properties: [],
-          },
-          {
-            id: "node3",
-            kind: "TestNode" as const,
-            label: "C",
-            properties: [],
-          },
-        ],
-        edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [
-            {
-              type: "AtMost",
-              payload: {
-                nodeKind: "TestNode",
-                count: 2,
-              },
-            },
-          ],
-        },
-      };
-
-      const result = checker.check(ast);
-
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("AtMost");
-    });
-
-    it("should detect Between invariant violation", () => {
-      const ast: DomainAST = {
-        nodes: [
-          {
-            id: "node1",
-            kind: "TestNode" as const,
-            label: "A",
-            properties: [],
-          },
-        ],
-        edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [
-            {
-              type: "Between",
-              payload: {
-                nodeKind: "TestNode",
-                min: 2,
-                max: 4,
-              },
-            },
-          ],
-        },
-      };
-
-      const result = checker.check(ast);
-
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("Between");
-    });
-
-    it("should return valid result when all invariants are satisfied", () => {
-      const ast: DomainAST = {
-        nodes: [
-          {
-            id: "node1",
-            kind: "TestNode" as const,
-            label: "A",
-            properties: [],
-          },
-          {
-            id: "node2",
-            kind: "TestNode" as const,
-            label: "B",
-            properties: [],
-          },
-        ],
-        edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [
-            {
-              type: "Exactly",
-              payload: { nodeKind: "TestNode", count: 2 },
-            },
-            {
-              type: "AtLeast",
-              payload: { nodeKind: "TestNode", count: 1 },
-            },
-            {
-              type: "AtMost",
-              payload: { nodeKind: "TestNode", count: 3 },
-            },
-            {
-              type: "Between",
-              payload: { nodeKind: "TestNode", min: 1, max: 3 },
-            },
-          ],
-        },
-      };
-
-      const result = checker.check(ast);
-
-      expect(result.valid).toBe(true);
+      expect(result.isValid).toBe(true);
       expect(result.violations).toEqual([]);
     });
   });

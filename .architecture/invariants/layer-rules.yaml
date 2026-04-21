@@ -1,22 +1,28 @@
 # HexaGen Monaco — Architectural Invariants
 # Governs the dependency flow between layers and packages.
 
-shared_kernel:
-  package: "@hexagen/shared"
-  allowed_in_all_layers: true
+# Shared kernels are accessible from all layers in all packages.
+# @hexagen/core-domain carries the MVK semantic contracts (DomainAST, NodeKind, EdgeKind, RRP, REM, etc.)
+# and is treated as a shared-kernel peer alongside @hexagen/shared.
+shared_kernels:
+  - package: "@hexagen/shared"
+    allowed_in_all_layers: true
+  - package: "@hexagen/core-domain"
+    allowed_in_all_layers: true
 
 layers:
   domain:
     access_rule: "internal-only"
-    allowed_imports: ["@hexagen/shared"]
+    allowed_imports: ["@hexagen/shared", "@hexagen/core-domain"]
 
   application:
     access_rule: "ports-only"
-    allowed_imports: ["domain", "@hexagen/shared"]
+    allowed_imports: ["domain", "@hexagen/shared", "@hexagen/core-domain"]
 
   infrastructure:
     access_rule: "adapters"
-    allowed_imports: ["domain", "application", "@hexagen/shared"]
+    allowed_imports:
+      ["domain", "application", "@hexagen/shared", "@hexagen/core-domain"]
 
 # Cross-Package Boundaries
 cross_package_rules:

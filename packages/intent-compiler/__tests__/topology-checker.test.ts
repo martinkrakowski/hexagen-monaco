@@ -1,32 +1,33 @@
-import { TopologyChecker } from "../src/topology-checker.js";
+import { ValidateTopologyUseCase } from "../src/application/use-cases/validate-topology.use-case";
+import { FakeTopologyChecker } from "./doubles/fake-topology-checker";
 import { NodeKind, EdgeKind } from "@hexagen/core-domain";
 import type { DomainAST } from "@hexagen/core-domain";
+import type { TopologyCheckResult } from "../src/domain/value-objects/topology-check-result";
 
-describe("TopologyChecker", () => {
-  let checker: TopologyChecker;
+describe("ValidateTopologyUseCase (port-based contract)", () => {
+  let fakeChecker: FakeTopologyChecker;
+  let useCase: ValidateTopologyUseCase;
 
   beforeEach(() => {
-    checker = new TopologyChecker();
+    fakeChecker = new FakeTopologyChecker();
+    useCase = new ValidateTopologyUseCase(fakeChecker);
   });
 
-  describe("check()", () => {
-    it("should return valid result for empty AST", () => {
+  describe("execute()", () => {
+    it("should return valid result for empty AST via default fake", () => {
       const ast: DomainAST = {
         nodes: [],
         edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [],
-        },
+        invariants: { topology: [], cardinality: [] },
       };
 
-      const result = checker.check(ast);
+      const result = useCase.execute(ast);
 
-      expect(result.valid).toBe(true);
+      expect(result.isValid).toBe(true);
       expect(result.violations).toEqual([]);
     });
 
-    it("should detect self-loop edge as invalid", () => {
+    it("should return invalid result when fake detects self-loop", () => {
       const ast: DomainAST = {
         nodes: [{ id: "node1", kind: NodeKind.Entity, attributes: {} }],
         edges: [
@@ -38,40 +39,65 @@ describe("TopologyChecker", () => {
             attributes: {},
           },
         ],
-        invariants: {
-          topology: [],
-          cardinality: [],
-        },
+        invariants: { topology: [], cardinality: [] },
       };
 
-      const result = checker.check(ast);
+      const failingChecker = new FakeTopologyChecker(
+        { isValid: true, violations: [] },
+        (): TopologyCheckResult => ({
+          isValid: false,
+          violations: ["Acyclic: cycle detected"],
+        }),
+      );
+      const uc = new ValidateTopologyUseCase(failingChecker);
 
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("Acyclic");
+      const result = uc.execute(ast);
+
+      expect(result.isValid).toBe(false);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]).toContain("Acyclic");
     });
 
-    it("should detect disconnected nodes as invalid", () => {
+    it("should return invalid result when fake detects disconnected nodes", () => {
       const ast: DomainAST = {
         nodes: [
           { id: "node1", kind: NodeKind.Entity, attributes: {} },
           { id: "node2", kind: NodeKind.ValueObject, attributes: {} },
         ],
         edges: [],
-        invariants: {
-          topology: [],
-          cardinality: [],
-        },
+        invariants: { topology: [], cardinality: [] },
       };
 
-      const result = checker.check(ast);
+      const failingChecker = new FakeTopologyChecker(
+        { isValid: true, violations: [] },
+        (): TopologyCheckResult => ({
+          isValid: false,
+          violations: ["Connected: graph is not connected"],
+        }),
+      );
+      const uc = new ValidateTopologyUseCase(failingChecker);
 
-      expect(result.valid).toBe(false);
-      expect(result.violations.length).toBe(1);
-      expect(result.violations[0].type).toBe("Connected");
+      const result = uc.execute(ast);
+
+      expect(result.isValid).toBe(false);
+      expect(result.violations).toHaveLength(1);
+      expect(result.violations[0]).toContain("Connected");
     });
 
-    it("should return valid result for properly connected graph", () => {
+    it("should pass the AST to the port exactly once", () => {
+      const ast: DomainAST = {
+        nodes: [],
+        edges: [],
+        invariants: { topology: [], cardinality: [] },
+      };
+
+      useCase.execute(ast);
+
+      expect(fakeChecker.checkCallCount).toBe(1);
+      expect(fakeChecker.lastAst).toBe(ast);
+    });
+
+    it("should return valid result for properly connected graph via default fake", () => {
       const ast: DomainAST = {
         nodes: [
           { id: "node1", kind: NodeKind.Entity, attributes: {} },
@@ -86,15 +112,12 @@ describe("TopologyChecker", () => {
             attributes: {},
           },
         ],
-        invariants: {
-          topology: [],
-          cardinality: [],
-        },
+        invariants: { topology: [], cardinality: [] },
       };
 
-      const result = checker.check(ast);
+      const result = useCase.execute(ast);
 
-      expect(result.valid).toBe(true);
+      expect(result.isValid).toBe(true);
       expect(result.violations).toEqual([]);
     });
   });

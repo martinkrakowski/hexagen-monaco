@@ -7,10 +7,7 @@
     "declarationMap": true,
     "emitDeclarationOnly": false,
     "composite": true,
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "paths": {}
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

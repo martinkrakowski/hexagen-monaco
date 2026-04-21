@@ -18,5 +18,8 @@
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }

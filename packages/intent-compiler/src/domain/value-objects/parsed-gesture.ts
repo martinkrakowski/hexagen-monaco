@@ -1,5 +1,5 @@
-import { Gesture } from "../gesture";
-import { DomainAST } from "@hexagen/core-domain";
+import type { Gesture } from "../gesture";
+import type { DomainAST } from "@hexagen/core-domain";
 
 export interface ParsedGesture {
   gesture: Gesture;

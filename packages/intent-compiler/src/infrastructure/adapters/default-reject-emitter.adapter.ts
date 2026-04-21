@@ -1,10 +1,13 @@
-import { RejectEmitterPort } from "../../../application/ports/in/reject-emitter.port";
-import { Rejection } from "../../../domain/rejection";
+import type { RejectEmitterPort } from "../../application/ports/in/reject-emitter.port";
+import type { Rejection } from "../../domain/rejection";
 
+/**
+ * Default in-memory rejection emitter. Swallows emissions silently.
+ * A production-grade adapter would inject a LoggerPort or telemetry port.
+ */
 export class DefaultRejectEmitterAdapter implements RejectEmitterPort {
-  emit(rejection: Rejection): void {
-    // TODO: Implement rejection emission logic (e.g., logging, UI notification)
-    // For now, we just log to console (in a real app, we might use a logger port)
-    console.warn(`Rejection emitted: ${rejection.reason}`);
+  emit(_rejection: Rejection): void {
+    // Intentionally no-op — rejection logging is a concern for a LoggerPort adapter.
+    // See Phase 3.A.11 for the full implementation plan.
   }
 }

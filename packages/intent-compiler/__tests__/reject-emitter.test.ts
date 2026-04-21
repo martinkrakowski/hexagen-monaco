@@ -1,82 +1,44 @@
-import { RejectEmitter } from "../src/reject-emitter.js";
+import { EmitRejectionUseCase } from "../src/application/use-cases/emit-rejection.use-case";
+import { Rejection } from "../src/domain/rejection";
+import { FakeRejectEmitter } from "./doubles/fake-reject-emitter";
 
-describe("RejectEmitter", () => {
-  let emitter: RejectEmitter;
+describe("EmitRejectionUseCase (port-based contract)", () => {
+  let fakeEmitter: FakeRejectEmitter;
+  let useCase: EmitRejectionUseCase;
 
   beforeEach(() => {
-    emitter = new RejectEmitter();
+    fakeEmitter = new FakeRejectEmitter();
+    useCase = new EmitRejectionUseCase(fakeEmitter);
   });
 
-  describe("emit()", () => {
-    it("should create a rejection with generated ID", () => {
-      const rejection = emitter.emit("Test reason");
+  describe("execute()", () => {
+    it("should delegate to RejectEmitterPort", () => {
+      const rejection = new Rejection("Test reason");
 
-      expect(rejection.id).toBeDefined();
-      expect(typeof rejection.id).toBe("string");
-      expect(rejection.reason).toBe("Test reason");
-      expect(rejection.severity).toBe("error");
+      useCase.execute(rejection);
+
+      expect(fakeEmitter.emitCount).toBe(1);
+      expect(fakeEmitter.lastRejection).toBe(rejection);
     });
 
-    it("should create a rejection with custom severity", () => {
-      const rejection = emitter.emit("Test reason", "warning");
+    it("should emit multiple rejections in order", () => {
+      const first = new Rejection("First");
+      const second = new Rejection("Second");
 
-      expect(rejection.severity).toBe("warning");
+      useCase.execute(first);
+      useCase.execute(second);
+
+      expect(fakeEmitter.emitCount).toBe(2);
+      expect(fakeEmitter.emitted[0]).toBe(first);
+      expect(fakeEmitter.emitted[1]).toBe(second);
     });
 
-    it("should create a rejection with gestureId", () => {
-      const gestureId = "test-gesture-id";
-      const rejection = emitter.emit("Test reason", "error", gestureId);
+    it("should record the rejection reason", () => {
+      const rejection = new Rejection("Topology violation");
 
-      expect(rejection.gestureId).toBe(gestureId);
-    });
-  });
+      useCase.execute(rejection);
 
-  describe("emitTopologyViolation()", () => {
-    it("should create a rejection from an Acyclic violation", () => {
-      const rejection = emitter.emitTopologyViolation(
-        {
-          type: "Acyclic",
-          payload: { appliesTo: ["Command"] },
-        },
-        "gesture-1",
-      );
-
-      expect(rejection.severity).toBe("error");
-      expect(rejection.invariantType).toBe("Acyclic");
-      expect(rejection.gestureId).toBe("gesture-1");
-      expect(rejection.reason).toContain("Cycle detected");
-    });
-
-    it("should create a rejection from a Connected violation", () => {
-      const rejection = emitter.emitTopologyViolation({
-        type: "Connected",
-        payload: { edgeKinds: ["Command"], rootNodeKinds: ["Aggregate"] },
-      });
-
-      expect(rejection.invariantType).toBe("Connected");
-      expect(rejection.reason).toContain("not connected");
-    });
-  });
-
-  describe("emitCardinalityViolation()", () => {
-    it("should create a rejection from an Exactly violation", () => {
-      const rejection = emitter.emitCardinalityViolation({
-        type: "Exactly",
-        payload: { nodeKind: "Aggregate", count: 1 },
-      });
-
-      expect(rejection.invariantType).toBe("Exactly");
-      expect(rejection.reason).toContain("exactly");
-    });
-
-    it("should create a rejection from an AtLeast violation", () => {
-      const rejection = emitter.emitCardinalityViolation({
-        type: "AtLeast",
-        payload: { nodeKind: "Aggregate", count: 2 },
-      });
-
-      expect(rejection.invariantType).toBe("AtLeast");
-      expect(rejection.reason).toContain("at least");
+      expect(fakeEmitter.lastRejection?.reason).toBe("Topology violation");
     });
   });
 });
