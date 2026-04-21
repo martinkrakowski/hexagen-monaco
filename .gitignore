@@ -35,9 +35,10 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
-# Prevent declaration files in src/ (build artifacts belong in dist/)
+# Prevent build artifacts in src/ (build artifacts belong in dist/)
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
+packages/*/src/**/*.js
 !packages/*/src/**/*.types.d.ts
 
 # ───────────────────────────────────────────────
