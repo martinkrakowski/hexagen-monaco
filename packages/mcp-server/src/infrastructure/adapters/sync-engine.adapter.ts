@@ -76,15 +76,23 @@ export class SyncEngineAdapter
         execSync("yarn lint:arch", {
           cwd: this.workspaceRoot,
           stdio: "pipe",
+          timeout: 30_000,
         });
       } catch (error) {
         valid = false;
-        const err = error as Error & { stderr?: string | Buffer };
-        const message = err.stderr ? String(err.stderr) : err.message;
-        errors = message
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0);
+        const err = error as Error & {
+          stderr?: string | Buffer;
+          code?: string;
+        };
+        if (err.code === "ENOENT") {
+          errors = ["yarn executable not found on PATH"];
+        } else {
+          const message = err.stderr ? String(err.stderr) : err.message;
+          errors = message
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+        }
       }
 
       const violations = errors.map((message) => ({
