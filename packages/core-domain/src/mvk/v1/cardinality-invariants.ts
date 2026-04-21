@@ -1,6 +1,6 @@
 /**
  * CardinalityInvariants - MVK v1
- * 
+ *
  * This file is part of the batched emission of MVK v1 TypeScript scaffold.
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
@@ -17,7 +17,7 @@ export type CardinalityInvariants =
         // Exactly N instances of node kind must exist
         nodeKind: NodeKind;
         count: number;
-      }
+      };
     }
   | {
       type: "AtLeast";
@@ -25,7 +25,7 @@ export type CardinalityInvariants =
         // At least N instances of node kind must exist
         nodeKind: NodeKind;
         count: number;
-      }
+      };
     }
   | {
       type: "AtMost";
@@ -33,7 +33,7 @@ export type CardinalityInvariants =
         // At most N instances of node kind must exist
         nodeKind: NodeKind;
         count: number;
-      }
+      };
     }
   | {
       type: "Between";
@@ -42,41 +42,8 @@ export type CardinalityInvariants =
         nodeKind: NodeKind;
         min: number;
         max: number;
-      }
+      };
     };
 
-/**
- * Type guard for Exactly invariant
- * @param invariant - Invariant to check
- * @returns true if invariant is an Exactly invariant
- */
-export function isExactlyInvariant(invariant: CardinalityInvariants): invariant is Extract<CardinalityInvariants, { type: "Exactly" }> {
-  return invariant.type === "Exactly";
-}
-
-/**
- * Type guard for AtLeast invariant
- * @param invariant - Invariant to check
- * @returns true if invariant is an AtLeast invariant
- */
-export function isAtLeastInvariant(invariant: CardinalityInvariants): invariant is Extract<CardinalityInvariants, { type: "AtLeast" }> {
-  return invariant.type === "AtLeast";
-}
-
-/**
- * Type guard for AtMost invariant
- * @param invariant - Invariant to check
- * @returns true if invariant is an AtMost invariant
- */
-export function isAtMostInvariant(invariant: CardinalityInvariants): invariant is Extract<CardinalityInvariants, { type: "AtMost" }> {
-  return invariant.type === "AtMost";
-}
-
-/**
- * Type guard for Between invariant
- * @param invariant - Invariant to check
- * @returns true if invariant is a Between invariant
- */
-export function isBetweenInvariant(invariant: CardinalityInvariants): invariant is Extract<CardinalityInvariants, { type: "Between" }> {
-  return invariant.type === "Between";
-}
+// Runtime type guards moved to @hexagen/runtime
+// Use isExactlyInvariant(), isAtLeastInvariant(), isAtMostInvariant(), isBetweenInvariant() from @hexagen/runtime instead

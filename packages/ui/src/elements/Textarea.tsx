@@ -1,8 +1,10 @@
 import type { TextareaHTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
-export interface TextareaProps
-  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextareaProps extends NoSemanticState<
+  TextareaHTMLAttributes<HTMLTextAreaElement>
+> {
   rows?: number;
 }
 

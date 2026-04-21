@@ -23,51 +23,96 @@
   --keyframes-fade-in: fade-in var(--duration-normal) var(--ease-out);
   --keyframes-fade-out: fade-out var(--duration-fast) var(--ease-in);
   --keyframes-slide-in-up: slide-in-up var(--duration-normal) var(--ease-out);
-  --keyframes-slide-in-down: slide-in-down var(--duration-normal) var(--ease-out);
-  --keyframes-slide-in-left: slide-in-left var(--duration-normal) var(--ease-out);
-  --keyframes-slide-in-right: slide-in-right var(--duration-normal) var(--ease-out);
+  --keyframes-slide-in-down: slide-in-down var(--duration-normal)
+    var(--ease-out);
+  --keyframes-slide-in-left: slide-in-left var(--duration-normal)
+    var(--ease-out);
+  --keyframes-slide-in-right: slide-in-right var(--duration-normal)
+    var(--ease-out);
   --keyframes-scale-in: scale-in var(--duration-normal) var(--ease-bounce);
   --keyframes-spin: spin 1s linear infinite;
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes slide-in-up {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slide-in-down {
-  from { transform: translateY(-10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slide-in-left {
-  from { transform: translateX(10px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slide-in-right {
-  from { transform: translateX(-10px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes scale-in {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Reduced motion preference */

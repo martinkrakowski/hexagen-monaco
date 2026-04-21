@@ -5,7 +5,7 @@ import {
   type PrebakedQuestion,
   type WizardStepId,
 } from "@/lib/governance-question-templates";
-import { wizardSteps } from "@/components/project-wizard/config";
+import { wizardSteps } from "../../../features/project-wizard/config";
 
 import type { ActiveItem } from "./types";
 

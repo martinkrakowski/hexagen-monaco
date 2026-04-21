@@ -38,7 +38,9 @@ describe("DefaultPromptCompilerAdapter", () => {
         governanceRules: [],
       });
 
-      const domainASTVar = template.variables.find((v) => v.name === "domainAST");
+      const domainASTVar = template.variables.find(
+        (v) => v.name === "domainAST",
+      );
       expect(domainASTVar).toBeDefined();
     });
 
@@ -50,7 +52,9 @@ describe("DefaultPromptCompilerAdapter", () => {
         governanceRules: ["Rule 1", "Rule 2"],
       });
 
-      const rulesVar = template.variables.find((v) => v.name === "governanceRules");
+      const rulesVar = template.variables.find(
+        (v) => v.name === "governanceRules",
+      );
       expect(rulesVar).toBeDefined();
     });
   });

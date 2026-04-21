@@ -1,4 +1,4 @@
-import type { UndoLastPatchPort } from '../ports/in/undo-last-patch.port';
+import type { UndoLastPatchPort } from "../ports/in/undo-last-patch.port";
 
 export class UndoLastPatchUseCase {
   constructor(private readonly port: UndoLastPatchPort) {}
@@ -6,7 +6,7 @@ export class UndoLastPatchUseCase {
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility
     if (data === null || data === undefined) {
-      throw new Error('Undo patch data cannot be null or undefined');
+      throw new Error("Undo patch data cannot be null or undefined");
     }
 
     // Delegate actual undo operation (rollback last patch, restore buffer state)

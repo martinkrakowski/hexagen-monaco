@@ -24,6 +24,8 @@ export function isSessionExpired(session: AuthSession): boolean {
   return Date.now() > session.expiresAt;
 }
 
-export function isSessionValid(session: AuthSession | null): session is AuthSession {
+export function isSessionValid(
+  session: AuthSession | null,
+): session is AuthSession {
   return session !== null && !isSessionExpired(session);
 }

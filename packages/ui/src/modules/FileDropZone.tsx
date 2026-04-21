@@ -1,4 +1,10 @@
-import { useState, useRef, type DragEvent, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  useState,
+  useRef,
+  type DragEvent,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import { Icon } from "../elements/Icon";
 
 export interface FileDropZoneProps {
@@ -61,9 +67,11 @@ export function FileDropZone({
   };
 
   return (
-    <div className={["flex flex-col items-center", className]
-      .filter(Boolean)
-      .join(" ")}>
+    <div
+      className={["flex flex-col items-center", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div
         role="button"
         tabIndex={0}

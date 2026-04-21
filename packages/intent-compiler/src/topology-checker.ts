@@ -1,7 +1,4 @@
-import {
-  DomainAST,
-  TopologyInvariants,
-} from "@hexagen/core-domain";
+import { DomainAST, TopologyInvariants } from "@hexagen/core-domain";
 
 export interface TopologyCheckResult {
   valid: boolean;

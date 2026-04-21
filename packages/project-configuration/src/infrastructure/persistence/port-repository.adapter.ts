@@ -1,5 +1,5 @@
-import type { IPortRepository } from '../../application/ports/out/port-repository.port';
-import type { Port } from '../../domain/model/port/port'; // adjust path if your entity barrel is different
+import type { IPortRepository } from "../../application/ports/out/port-repository.port";
+import type { Port } from "../../domain/model/port/port"; // adjust path if your entity barrel is different
 
 // Adapter implementing the outbound port (IPortRepository)
 // This is the concrete implementation for persistence of Port entities

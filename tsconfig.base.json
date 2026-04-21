@@ -75,7 +75,8 @@
     { "path": "./packages/code-generation" },
     { "path": "./packages/architectural-enforcement" },
     { "path": "./packages/persistence" },
-    { "path": "./packages/agentic-interaction" },
-    { "path": "./packages/deployment" }
+    { "path": "./packages/deployment" },
+    { "path": "./packages/core-domain" },
+    { "path": "./packages/runtime" }
   ]
 }

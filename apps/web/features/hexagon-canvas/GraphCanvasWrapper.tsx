@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useCanvasState } from "../../hooks/useCanvasState";
+import { useCanvasState } from "../../app/hooks/useCanvasState";
 import { HexagonCanvas } from "./HexagonCanvas";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { NodeEditorDialog } from "./NodeEditorDialog";

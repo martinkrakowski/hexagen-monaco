@@ -3,7 +3,7 @@
 // Allows optional custom behavior for the `execute` method.
 // By default, `execute` echoes the input unchanged.
 
-import type { IValidateSpecPort } from '@hexagen/project-configuration';
+import type { IValidateSpecPort } from "@hexagen/project-configuration";
 
 /**
  * Fake implementation of `IValidateSpecPort`.

@@ -1,15 +1,17 @@
 import type { LabelHTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
-export interface LabelProps
-  extends LabelHTMLAttributes<HTMLLabelElement> {
+export interface LabelProps extends NoSemanticState<
+  LabelHTMLAttributes<HTMLLabelElement>
+> {
   required?: boolean;
 }
 
-const LabelComponent: ForwardRefRenderFunction<
-  HTMLLabelElement,
-  LabelProps
-> = ({ className, ...props }, ref) => {
+const LabelComponent: ForwardRefRenderFunction<HTMLLabelElement, LabelProps> = (
+  { className, ...props },
+  ref,
+) => {
   return (
     <label
       ref={ref}

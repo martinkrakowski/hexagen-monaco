@@ -1,4 +1,4 @@
-import type { Entity } from '../../../domain/model/entity/entity';
+import type { Entity } from "../../../domain/model/entity/entity";
 
 export interface IEntityRepository {
   save(entity: Entity): Promise<Entity>;

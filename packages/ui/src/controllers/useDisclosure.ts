@@ -14,7 +14,7 @@ export interface UseDisclosureReturn {
 }
 
 export function useDisclosure(
-  options: UseDisclosureOptions = {}
+  options: UseDisclosureOptions = {},
 ): UseDisclosureReturn {
   const { defaultIsOpen = false, onOpen, onClose } = options;
   const [isOpen, setIsOpen] = useState(defaultIsOpen);

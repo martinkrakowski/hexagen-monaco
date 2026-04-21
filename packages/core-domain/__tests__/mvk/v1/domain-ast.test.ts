@@ -57,7 +57,13 @@ describe("DomainAST structure invariants", () => {
         { id: "n2", kind: NodeKind.Entity, attributes: {} },
       ],
       edges: [
-        { id: "e1", kind: EdgeKind.Composition, source: "n1", target: "n2", attributes: {} },
+        {
+          id: "e1",
+          kind: EdgeKind.Composition,
+          source: "n1",
+          target: "n2",
+          attributes: {},
+        },
       ],
       invariants: { topology: [], cardinality: [] },
     };

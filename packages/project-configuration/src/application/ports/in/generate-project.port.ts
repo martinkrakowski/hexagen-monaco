@@ -1,5 +1,5 @@
-import type { Project } from '../../../domain/entities/project';
-import type { ProjectSpecification } from '../../../domain/value-objects/project-specification';
+import type { Project } from "../../../domain/entities/project";
+import type { ProjectSpecification } from "../../../domain/value-objects/project-specification";
 
 export interface GenerateProjectPort {
   /**

@@ -1,1 +1,1 @@
-export * from './grok.adapter';
+export * from "./grok.adapter";

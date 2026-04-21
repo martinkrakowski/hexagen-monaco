@@ -2,11 +2,11 @@
 
 import { FormProvider } from "react-hook-form";
 
-import { ResizableLayout } from "@/components/layout/ResizableLayout";
-import { GovernancePanelWrapper } from "@/components/agent/GovernancePanelWrapper";
-import { WizardStepRouter } from "@/components/project-wizard/WizardStepRouter";
-import { SavedProjectsList } from "@/components/project-wizard/SavedProjectsList";
-import { wizardSteps } from "@/components/project-wizard/config";
+import { ResizableLayout } from "./ResizableLayout";
+import { GovernancePanelWrapper } from "../governance-assistant/GovernancePanelWrapper";
+import { WizardStepRouter } from "../project-wizard/WizardStepRouter";
+import { SavedProjectsList } from "../project-wizard/SavedProjectsList";
+import { wizardSteps } from "../project-wizard/config";
 
 import { useWizardForm } from "@/hooks/useWizardForm";
 import { useEditorSession } from "@/hooks/useEditorSession";

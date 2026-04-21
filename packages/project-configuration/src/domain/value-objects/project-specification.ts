@@ -14,29 +14,29 @@ export class ProjectSpecification {
     public readonly description: string | undefined,
     public readonly version: string,
     public readonly author: string | undefined,
-    public readonly license: string | undefined
+    public readonly license: string | undefined,
   ) {}
 
   static create(props: ProjectSpecificationProps): ProjectSpecification {
     if (!props.name.trim()) {
-      throw new Error('Project name is required and cannot be empty');
+      throw new Error("Project name is required and cannot be empty");
     }
 
     const sanitizedRootName = props.rootName
       ? props.rootName
           .trim()
           .toLowerCase()
-          .replace(/[^a-z0-9-]/g, '-')
-          .replace(/-+/g, '-')
+          .replace(/[^a-z0-9-]/g, "-")
+          .replace(/-+/g, "-")
       : props.name
           .trim()
           .toLowerCase()
-          .replace(/[^a-z0-9-]/g, '-')
-          .replace(/-+/g, '-');
+          .replace(/[^a-z0-9-]/g, "-")
+          .replace(/-+/g, "-");
 
     if (!sanitizedRootName) {
       throw new Error(
-        'Root name (kebab-case identifier) cannot be empty after sanitization'
+        "Root name (kebab-case identifier) cannot be empty after sanitization",
       );
     }
 
@@ -44,9 +44,9 @@ export class ProjectSpecification {
       props.name.trim(),
       sanitizedRootName,
       props.description?.trim(),
-      props.version?.trim() || '0.1.0',
+      props.version?.trim() || "0.1.0",
       props.author?.trim(),
-      props.license?.trim() || 'MIT'
+      props.license?.trim() || "MIT",
     );
   }
 

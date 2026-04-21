@@ -26,7 +26,7 @@ describe("CardinalityChecker", () => {
       expect(result.violations).toEqual([]);
     });
 
-it("should detect Exactly invariant violation", () => {
+    it("should detect Exactly invariant violation", () => {
       const ast: DomainAST = {
         nodes: [
           { id: "node1", kind: NodeKind.Entity, attributes: {} },
@@ -56,9 +56,7 @@ it("should detect Exactly invariant violation", () => {
 
     it("should detect AtLeast invariant violation", () => {
       const ast: DomainAST = {
-        nodes: [
-          { id: "node1", kind: NodeKind.Entity, attributes: {} },
-        ],
+        nodes: [{ id: "node1", kind: NodeKind.Entity, attributes: {} }],
         edges: [],
         invariants: {
           topology: [],
@@ -112,9 +110,7 @@ it("should detect Exactly invariant violation", () => {
 
     it("should detect Between invariant violation", () => {
       const ast: DomainAST = {
-        nodes: [
-          { id: "node1", kind: NodeKind.Entity, attributes: {} },
-        ],
+        nodes: [{ id: "node1", kind: NodeKind.Entity, attributes: {} }],
         edges: [],
         invariants: {
           topology: [],
@@ -177,7 +173,12 @@ it("should detect Exactly invariant violation", () => {
     it("should detect AtLeast invariant violation", () => {
       const ast: DomainAST = {
         nodes: [
-          { id: "node1", kind: "TestNode" as const, label: "A", properties: [] },
+          {
+            id: "node1",
+            kind: "TestNode" as const,
+            label: "A",
+            properties: [],
+          },
         ],
         edges: [],
         invariants: {
@@ -204,9 +205,24 @@ it("should detect Exactly invariant violation", () => {
     it("should detect AtMost invariant violation", () => {
       const ast: DomainAST = {
         nodes: [
-          { id: "node1", kind: "TestNode" as const, label: "A", properties: [] },
-          { id: "node2", kind: "TestNode" as const, label: "B", properties: [] },
-          { id: "node3", kind: "TestNode" as const, label: "C", properties: [] },
+          {
+            id: "node1",
+            kind: "TestNode" as const,
+            label: "A",
+            properties: [],
+          },
+          {
+            id: "node2",
+            kind: "TestNode" as const,
+            label: "B",
+            properties: [],
+          },
+          {
+            id: "node3",
+            kind: "TestNode" as const,
+            label: "C",
+            properties: [],
+          },
         ],
         edges: [],
         invariants: {
@@ -233,7 +249,12 @@ it("should detect Exactly invariant violation", () => {
     it("should detect Between invariant violation", () => {
       const ast: DomainAST = {
         nodes: [
-          { id: "node1", kind: "TestNode" as const, label: "A", properties: [] },
+          {
+            id: "node1",
+            kind: "TestNode" as const,
+            label: "A",
+            properties: [],
+          },
         ],
         edges: [],
         invariants: {
@@ -261,8 +282,18 @@ it("should detect Exactly invariant violation", () => {
     it("should return valid result when all invariants are satisfied", () => {
       const ast: DomainAST = {
         nodes: [
-          { id: "node1", kind: "TestNode" as const, label: "A", properties: [] },
-          { id: "node2", kind: "TestNode" as const, label: "B", properties: [] },
+          {
+            id: "node1",
+            kind: "TestNode" as const,
+            label: "A",
+            properties: [],
+          },
+          {
+            id: "node2",
+            kind: "TestNode" as const,
+            label: "B",
+            properties: [],
+          },
         ],
         edges: [],
         invariants: {

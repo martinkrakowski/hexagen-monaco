@@ -9,7 +9,7 @@ import { FakeSemanticPatchPort } from "../../doubles/ports/apply-semantic-patch.
   assert.deepStrictEqual(
     resultDefault,
     inputDefault,
-    "Default fake should return the input unchanged"
+    "Default fake should return the input unchanged",
   );
 
   // Test 2: custom behavior via setBehavior
@@ -26,7 +26,7 @@ import { FakeSemanticPatchPort } from "../../doubles/ports/apply-semantic-patch.
       transformed: true,
       original: inputCustom,
     },
-    "Custom behavior should transform the input as defined"
+    "Custom behavior should transform the input as defined",
   );
 
   console.log("All node-assert tests for FakeSemanticPatchPort passed.");

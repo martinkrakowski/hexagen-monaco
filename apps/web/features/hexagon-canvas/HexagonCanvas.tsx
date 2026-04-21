@@ -24,7 +24,7 @@ import type {
   HexagonEdge,
 } from "@hexagen/visualization";
 import type { Result } from "@hexagen/shared";
-import type { HexagonNodeWithLayout } from "../../lib/layout-engine";
+import type { HexagonNodeWithLayout } from "../../app/lib/layout-engine";
 
 type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 

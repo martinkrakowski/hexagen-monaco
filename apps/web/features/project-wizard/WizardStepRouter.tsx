@@ -4,7 +4,7 @@ import {
   PeerContextMappingStep,
   PortConfigurationStep,
   SummaryStep,
-} from "@/components/project-wizard/steps";
+} from "./steps";
 import { wizardSteps } from "./config";
 
 interface WizardStepRouterProps {

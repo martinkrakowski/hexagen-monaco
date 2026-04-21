@@ -1,7 +1,7 @@
-import type { GenerateProjectPort } from '../ports/in/generate-project.port';
+import type { GenerateProjectPort } from "../ports/in/generate-project.port";
 
-import { Project } from '../../domain/entities/project';
-import { ProjectSpecification } from '../../domain/value-objects/project-specification';
+import { Project } from "../../domain/entities/project";
+import { ProjectSpecification } from "../../domain/value-objects/project-specification";
 
 export class GenerateProjectUseCase {
   constructor(private readonly port: GenerateProjectPort) {}
@@ -16,11 +16,11 @@ export class GenerateProjectUseCase {
     // Enforce required fields at application boundary
     const name = rawSpec.name?.trim() || rawSpec.rootName?.trim();
     if (!name) {
-      throw new Error('Project must have either a name or rootName');
+      throw new Error("Project must have either a name or rootName");
     }
 
     const rootName =
-      rawSpec.rootName?.trim() || name.toLowerCase().replace(/\s+/g, '-');
+      rawSpec.rootName?.trim() || name.toLowerCase().replace(/\s+/g, "-");
 
     // Create strict value object (will throw if invariants violated)
     const spec = ProjectSpecification.create({

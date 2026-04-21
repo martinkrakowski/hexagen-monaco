@@ -5,8 +5,8 @@ export interface ProjectSpecification {
   readonly contextName: string;
   readonly entities: string[];
   readonly useCases: string[];
-  readonly persistenceAdapter: 'Prisma' | 'TypeORM' | 'Mongoose' | 'Drizzle';
-  readonly messagingAdapter: 'BullMQ' | 'RabbitMQ' | 'None';
+  readonly persistenceAdapter: "Prisma" | "TypeORM" | "Mongoose" | "Drizzle";
+  readonly messagingAdapter: "BullMQ" | "RabbitMQ" | "None";
   readonly blockchainNetworks?: string[];
   readonly description?: string;
   readonly boundedContexts?: string[];
@@ -16,7 +16,7 @@ export interface ProjectSpecification {
 
 export const createProjectSpecification = (
   props: Partial<ProjectSpecification> &
-    Pick<ProjectSpecification, 'rootName' | 'workspaceScope' | 'contextName'>
+    Pick<ProjectSpecification, "rootName" | "workspaceScope" | "contextName">,
 ): ProjectSpecification => ({
   id: props.id,
   rootName: props.rootName,
@@ -24,11 +24,11 @@ export const createProjectSpecification = (
   contextName: props.contextName,
   entities: props.entities ?? [],
   useCases: props.useCases ?? [],
-  persistenceAdapter: props.persistenceAdapter ?? 'Prisma',
-  messagingAdapter: props.messagingAdapter ?? 'BullMQ',
+  persistenceAdapter: props.persistenceAdapter ?? "Prisma",
+  messagingAdapter: props.messagingAdapter ?? "BullMQ",
   blockchainNetworks: props.blockchainNetworks ?? [],
-  description: props.description ?? '',
+  description: props.description ?? "",
   boundedContexts: props.boundedContexts ?? [],
   techStack: props.techStack ?? {},
-  version: props.version ?? '2.0.0',
+  version: props.version ?? "2.0.0",
 });

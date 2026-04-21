@@ -1,1 +1,1 @@
-export * from './bounded-context';
+export * from "./bounded-context";

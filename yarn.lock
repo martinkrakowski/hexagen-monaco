@@ -1199,6 +1199,7 @@ __metadata:
   resolution: "@hexagen/intent-compiler@workspace:packages/intent-compiler"
   dependencies:
     "@hexagen/core-domain": "workspace:*"
+    "@hexagen/runtime": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@types/jest": "npm:^30.0.0"
     "@typescript-eslint/eslint-plugin": "npm:^8.0.0"
@@ -1361,6 +1362,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/runtime@workspace:*, @hexagen/runtime@workspace:packages/runtime":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/runtime@workspace:packages/runtime"
+  dependencies:
+    "@hexagen/core-domain": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/shared@workspace:*, @hexagen/shared@workspace:packages/shared":
   version: 0.0.0-use.local
   resolution: "@hexagen/shared@workspace:packages/shared"
@@ -1435,8 +1444,11 @@ __metadata:
     "@react-aria/interactions": "npm:^3.22.0"
     "@react-aria/overlays": "npm:^3.24.0"
     "@react-stately/overlays": "npm:^3.5.0"
-    "@types/react": "npm:^18.0.0"
-    "@types/react-dom": "npm:^18.0.0"
+    "@types/react": "npm:^19.2.14"
+    "@types/react-dom": "npm:^19.2.3"
+    "@typescript-eslint/eslint-plugin": "npm:^8.57.0"
+    "@typescript-eslint/parser": "npm:^8.57.0"
+    eslint: "npm:^8.57.0"
     typescript: "npm:^5.5.4"
   peerDependencies:
     react: ^18.0.0 || ^19.0.0
@@ -3161,22 +3173,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/prop-types@npm:*":
-  version: 15.7.15
-  resolution: "@types/prop-types@npm:15.7.15"
-  checksum: 10c0/b59aad1ad19bf1733cf524fd4e618196c6c7690f48ee70a327eb450a42aab8e8a063fbe59ca0a5701aebe2d92d582292c0fb845ea57474f6a15f6994b0e260b2
-  languageName: node
-  linkType: hard
-
-"@types/react-dom@npm:^18.0.0":
-  version: 18.3.7
-  resolution: "@types/react-dom@npm:18.3.7"
-  peerDependencies:
-    "@types/react": ^18.0.0
-  checksum: 10c0/8bd309e2c3d1604a28a736a24f96cbadf6c05d5288cfef8883b74f4054c961b6b3a5e997fd5686e492be903c8f3380dba5ec017eff3906b1256529cd2d39603e
-  languageName: node
-  linkType: hard
-
 "@types/react-dom@npm:^19.2.3":
   version: 19.2.3
   resolution: "@types/react-dom@npm:19.2.3"
@@ -3195,22 +3191,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/react@npm:*, @types/react@npm:^19.2.14":
+"@types/react@npm:^19.2.14":
   version: 19.2.14
   resolution: "@types/react@npm:19.2.14"
   dependencies:
     csstype: "npm:^3.2.2"
   checksum: 10c0/7d25bf41b57719452d86d2ac0570b659210402707313a36ee612666bf11275a1c69824f8c3ee1fdca077ccfe15452f6da8f1224529b917050eb2d861e52b59b7
-  languageName: node
-  linkType: hard
-
-"@types/react@npm:^18.0.0, @types/react@npm:^18.3.3":
-  version: 18.3.28
-  resolution: "@types/react@npm:18.3.28"
-  dependencies:
-    "@types/prop-types": "npm:*"
-    csstype: "npm:^3.2.2"
-  checksum: 10c0/683e19cd12b5c691215529af2e32b5ffbaccae3bf0ba93bfafa0e460e8dfee18423afed568be2b8eadf4b837c3749dd296a4f64e2d79f68fa66962c05f5af661
   languageName: node
   linkType: hard
 

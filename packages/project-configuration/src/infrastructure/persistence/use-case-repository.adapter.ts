@@ -1,5 +1,5 @@
-import type { IUseCaseRepository } from '../../application/ports/out/use-case-repository.port';
-import type { UseCase } from '../../domain/model/use-case/use-case'; // adjust path if your barrel is different
+import type { IUseCaseRepository } from "../../application/ports/out/use-case-repository.port";
+import type { UseCase } from "../../domain/model/use-case/use-case"; // adjust path if your barrel is different
 
 /**
  * Concrete adapter implementing the outbound port IUseCaseRepository.

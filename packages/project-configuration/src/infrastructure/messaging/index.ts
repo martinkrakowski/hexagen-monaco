@@ -1,1 +1,1 @@
-export * from './bull-mq.adapter';
+export * from "./bull-mq.adapter";

@@ -1,4 +1,4 @@
-import type { Driver } from '../../../domain/model/driver/driver';
+import type { Driver } from "../../../domain/model/driver/driver";
 
 export interface IDriverRepository {
   save(entity: Driver): Promise<Driver>;

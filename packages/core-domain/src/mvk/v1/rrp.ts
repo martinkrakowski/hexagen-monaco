@@ -1,6 +1,6 @@
 /**
  * ResolvedRuleProgram (RRP) - MVK v1
- * 
+ *
  * This file is part of the batched emission of MVK v1 TypeScript scaffold.
  * See mvk-compilation-pass: cp-2026-04-20-01
  */

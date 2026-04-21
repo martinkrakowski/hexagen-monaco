@@ -48,12 +48,10 @@ describe("RejectEmitter", () => {
     });
 
     it("should create a rejection from a Connected violation", () => {
-      const rejection = emitter.emitTopologyViolation(
-        {
-          type: "Connected",
-          payload: { edgeKinds: ["Command"], rootNodeKinds: ["Aggregate"] },
-        },
-      );
+      const rejection = emitter.emitTopologyViolation({
+        type: "Connected",
+        payload: { edgeKinds: ["Command"], rootNodeKinds: ["Aggregate"] },
+      });
 
       expect(rejection.invariantType).toBe("Connected");
       expect(rejection.reason).toContain("not connected");
@@ -62,24 +60,20 @@ describe("RejectEmitter", () => {
 
   describe("emitCardinalityViolation()", () => {
     it("should create a rejection from an Exactly violation", () => {
-      const rejection = emitter.emitCardinalityViolation(
-        {
-          type: "Exactly",
-          payload: { nodeKind: "Aggregate", count: 1 },
-        },
-      );
+      const rejection = emitter.emitCardinalityViolation({
+        type: "Exactly",
+        payload: { nodeKind: "Aggregate", count: 1 },
+      });
 
       expect(rejection.invariantType).toBe("Exactly");
       expect(rejection.reason).toContain("exactly");
     });
 
     it("should create a rejection from an AtLeast violation", () => {
-      const rejection = emitter.emitCardinalityViolation(
-        {
-          type: "AtLeast",
-          payload: { nodeKind: "Aggregate", count: 2 },
-        },
-      );
+      const rejection = emitter.emitCardinalityViolation({
+        type: "AtLeast",
+        payload: { nodeKind: "Aggregate", count: 2 },
+      });
 
       expect(rejection.invariantType).toBe("AtLeast");
       expect(rejection.reason).toContain("at least");

@@ -23,7 +23,13 @@ export interface LLMResponse {
 
 export interface Patch {
   id: string;
-  type: "add_node" | "remove_node" | "add_edge" | "remove_edge" | "update_node" | "update_edge";
+  type:
+    | "add_node"
+    | "remove_node"
+    | "add_edge"
+    | "remove_edge"
+    | "update_node"
+    | "update_edge";
   targetId: string;
   payload: Record<string, unknown>;
 }
@@ -58,6 +64,8 @@ export function createReconciliationResult(
     success,
     patches,
     errors,
-    summary: summary || (success ? "Reconciliation completed" : "Reconciliation failed"),
+    summary:
+      summary ||
+      (success ? "Reconciliation completed" : "Reconciliation failed"),
   };
 }

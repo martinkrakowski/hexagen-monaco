@@ -1,5 +1,8 @@
 import { DefaultASTReconciliationAdapter } from "../../../src/infrastructure/adapters/ast-reconciliation.adapter.js";
-import type { LLMResponse, DomainASTLike } from "../../../src/domain/llm-response.js";
+import type {
+  LLMResponse,
+  DomainASTLike,
+} from "../../../src/domain/llm-response.js";
 
 const makeAST = (): DomainASTLike => ({
   nodes: [],

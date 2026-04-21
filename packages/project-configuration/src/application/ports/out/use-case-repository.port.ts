@@ -1,4 +1,4 @@
-import type { UseCase } from '../../../domain/model/use-case/use-case';
+import type { UseCase } from "../../../domain/model/use-case/use-case";
 
 export interface IUseCaseRepository {
   save(entity: UseCase): Promise<UseCase>;

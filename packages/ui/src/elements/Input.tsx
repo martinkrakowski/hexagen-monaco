@@ -1,13 +1,16 @@
 import type { InputHTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends NoSemanticState<
+  InputHTMLAttributes<HTMLInputElement>
+> {
   type?: string;
 }
 
 const InputComponent: ForwardRefRenderFunction<HTMLInputElement, InputProps> = (
   { className, type = "text", ...props },
-  ref
+  ref,
 ) => {
   return (
     <input

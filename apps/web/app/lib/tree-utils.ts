@@ -1,4 +1,4 @@
-import type { ViewFileNode } from "../components/code-view/types";
+import type { ViewFileNode } from "../../features/code-view/types";
 import { getLanguageForFile } from "./language-utils";
 
 export function mapToFolderTree(files: Map<string, string>): ViewFileNode[] {

@@ -34,6 +34,7 @@ This package enforces a strict firewall against information-state pollution:
 ## Forbidden Imports
 
 This package MUST NOT import from:
+
 - `@hexagen/core-domain` (kernel types)
 - `@hexagen/architectural-enforcement`
 - `@hexagen/local-llm`
@@ -41,10 +42,11 @@ This package MUST NOT import from:
 - Feature slices (`apps/web/features/*`)
 
 This package MAY import from:
+
 - `@hexagen/shared`
 - `@hexagen/ui/*`
 - React
-- @react-aria/* (Aria hooks)
+- @react-aria/\* (Aria hooks)
 - Radix primitives
 
 ## Versioning

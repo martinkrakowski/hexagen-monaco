@@ -1,4 +1,4 @@
-import type { RenderManifestPort } from '../../../src/application/ports/in/render-manifest.port';
+import type { RenderManifestPort } from "../../../src/application/ports/in/render-manifest.port";
 
 /**
  * In‑memory fake for `RenderManifestPort`.

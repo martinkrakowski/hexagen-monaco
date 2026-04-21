@@ -1,8 +1,8 @@
-import type { Result } from '@hexagen/shared';
-import type { Project } from '../../../domain/project.entity';
+import type { Result } from "@hexagen/shared";
+import type { Project } from "../../../domain/project.entity";
 
 export interface DownloadError {
-  code: 'DOWNLOAD_FAILED' | 'CLEANUP_FAILED';
+  code: "DOWNLOAD_FAILED" | "CLEANUP_FAILED";
   message: string;
   cause?: unknown;
 }
@@ -23,7 +23,9 @@ export interface DownloadProjectPort {
    * @param project - The full Project entity (spec + generated structure)
    * @returns Result with optional download URL (blob/object URL) on success
    */
-  downloadProject(project: Project): Promise<Result<{ downloadUrl?: string }, DownloadError>>;
+  downloadProject(
+    project: Project,
+  ): Promise<Result<{ downloadUrl?: string }, DownloadError>>;
 
   /**
    * Optional cleanup hook (e.g. revoke temporary blob URLs, unmount FS instances).

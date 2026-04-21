@@ -37,15 +37,27 @@ describe("Topology type guards", () => {
   };
   const connected: TopologyInvariants = {
     type: "Connected",
-    payload: { edgeKinds: [EdgeKind.Composition], rootNodeKinds: [NodeKind.Aggregate] },
+    payload: {
+      edgeKinds: [EdgeKind.Composition],
+      rootNodeKinds: [NodeKind.Aggregate],
+    },
   };
   const containment: TopologyInvariants = {
     type: "Containment",
-    payload: { source: NodeKind.Aggregate, edgeKind: EdgeKind.Composition, target: NodeKind.Entity },
+    payload: {
+      source: NodeKind.Aggregate,
+      edgeKind: EdgeKind.Composition,
+      target: NodeKind.Entity,
+    },
   };
   const degree: TopologyInvariants = {
     type: "DegreeConstraint",
-    payload: { edgeKind: EdgeKind.Dependency, min: 0, max: 5, appliesTo: [NodeKind.Entity] },
+    payload: {
+      edgeKind: EdgeKind.Dependency,
+      min: 0,
+      max: 5,
+      appliesTo: [NodeKind.Entity],
+    },
   };
 
   it("isAcyclicInvariant narrows Acyclic type", () => {
@@ -85,7 +97,12 @@ describe("Topology type guards", () => {
   });
 
   it("all topology type strings are accounted for", () => {
-    const invariantTypes = [acyclic.type, connected.type, containment.type, degree.type];
+    const invariantTypes = [
+      acyclic.type,
+      connected.type,
+      containment.type,
+      degree.type,
+    ];
     expect(invariantTypes.sort()).toEqual(ALL_TOPOLOGY_TYPES.sort());
   });
 });
@@ -143,7 +160,12 @@ describe("Cardinality type guards", () => {
   });
 
   it("all cardinality type strings are accounted for", () => {
-    const invariantTypes = [exactly.type, atLeast.type, atMost.type, between.type];
+    const invariantTypes = [
+      exactly.type,
+      atLeast.type,
+      atMost.type,
+      between.type,
+    ];
     expect(invariantTypes.sort()).toEqual(ALL_CARDINALITY_TYPES.sort());
   });
 });

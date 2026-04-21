@@ -25,13 +25,17 @@ export type GenerateProjectUseCaseFactory = (
  * keeping adapter composition at the factory boundary.
  */
 export class InitiateExportUseCase implements InitiateExportPort {
-  constructor(private readonly generatorFactory: GenerateProjectUseCaseFactory) {}
+  constructor(
+    private readonly generatorFactory: GenerateProjectUseCaseFactory,
+  ) {}
 
   async validateReadiness(intent: ExportIntent): Promise<Result<true, Error>> {
     if (!intent.workspaceRef?.manifest) {
       return {
         success: false,
-        error: new Error("Export intent missing workspace reference or manifest"),
+        error: new Error(
+          "Export intent missing workspace reference or manifest",
+        ),
       };
     }
 
@@ -65,7 +69,9 @@ export class InitiateExportUseCase implements InitiateExportPort {
     return { success: true, value: true };
   }
 
-  async initiateExport(intent: ExportIntent): Promise<Result<ExportValue, Error>> {
+  async initiateExport(
+    intent: ExportIntent,
+  ): Promise<Result<ExportValue, Error>> {
     const readiness = await this.validateReadiness(intent);
     if (!readiness.success) {
       return readiness;

@@ -2,7 +2,10 @@ import {
   createPromptTemplate,
   renderPrompt,
 } from "../src/domain/prompt-template.js";
-import type { DomainASTLike, PromptContext } from "../src/domain/prompt-template.js";
+import type {
+  DomainASTLike,
+  PromptContext,
+} from "../src/domain/prompt-template.js";
 
 const makeContext = (): PromptContext => ({
   domainAST: {
@@ -33,13 +36,9 @@ describe("createPromptTemplate", () => {
 
   it("should include provided variables", () => {
     const ctx = makeContext();
-    const template = createPromptTemplate(
-      "test",
-      "sys",
-      "user {{x}}",
-      ctx,
-      [{ name: "x", description: "test var", defaultValue: "val" }],
-    );
+    const template = createPromptTemplate("test", "sys", "user {{x}}", ctx, [
+      { name: "x", description: "test var", defaultValue: "val" },
+    ]);
 
     expect(template.variables).toHaveLength(1);
     expect(template.variables[0].name).toBe("x");
@@ -56,7 +55,11 @@ describe("renderPrompt", () => {
       ctx,
       [
         { name: "action", description: "What to do", defaultValue: "add" },
-        { name: "target", description: "What to act on", defaultValue: "entity" },
+        {
+          name: "target",
+          description: "What to act on",
+          defaultValue: "entity",
+        },
       ],
     );
 
@@ -74,7 +77,11 @@ describe("renderPrompt", () => {
       ctx,
       [
         { name: "action", description: "What to do", defaultValue: "add" },
-        { name: "target", description: "What to act on", defaultValue: "entity" },
+        {
+          name: "target",
+          description: "What to act on",
+          defaultValue: "entity",
+        },
       ],
     );
 

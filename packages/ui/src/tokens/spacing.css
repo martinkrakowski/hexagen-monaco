@@ -4,13 +4,13 @@
 
   /* Spacing scale */
   --space-0: 0;
-  --space-1: calc(var(--space-unit) * 1);  /* 4px */
-  --space-2: calc(var(--space-unit) * 2);  /* 8px */
-  --space-3: calc(var(--space-unit) * 3);  /* 12px */
-  --space-4: calc(var(--space-unit) * 4);  /* 16px */
-  --space-5: calc(var(--space-unit) * 5);  /* 20px */
-  --space-6: calc(var(--space-unit) * 6);  /* 24px */
-  --space-8: calc(var(--space-unit) * 8);  /* 32px */
+  --space-1: calc(var(--space-unit) * 1); /* 4px */
+  --space-2: calc(var(--space-unit) * 2); /* 8px */
+  --space-3: calc(var(--space-unit) * 3); /* 12px */
+  --space-4: calc(var(--space-unit) * 4); /* 16px */
+  --space-5: calc(var(--space-unit) * 5); /* 20px */
+  --space-6: calc(var(--space-unit) * 6); /* 24px */
+  --space-8: calc(var(--space-unit) * 8); /* 32px */
   --space-10: calc(var(--space-unit) * 10); /* 40px */
   --space-12: calc(var(--space-unit) * 12); /* 48px */
   --space-16: calc(var(--space-unit) * 16); /* 64px */

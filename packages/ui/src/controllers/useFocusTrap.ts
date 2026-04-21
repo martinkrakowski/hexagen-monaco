@@ -27,7 +27,7 @@ export function useFocusTrap({
     }
 
     const focusableElements = containerRef.current?.querySelectorAll(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
 
     if (focusableElements && focusableElements.length > 0) {
@@ -47,13 +47,15 @@ export function useFocusTrap({
 
       if (e.key === "Tab") {
         const focusableElements = containerRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         );
 
         if (focusableElements.length === 0) return;
 
         const firstElement = focusableElements[0] as HTMLElement;
-        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+        const lastElement = focusableElements[
+          focusableElements.length - 1
+        ] as HTMLElement;
 
         if (e.shiftKey && document.activeElement === firstElement) {
           e.preventDefault();
@@ -64,7 +66,7 @@ export function useFocusTrap({
         }
       }
     },
-    [isActive, containerRef]
+    [isActive, containerRef],
   );
 
   return {

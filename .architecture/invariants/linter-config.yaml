@@ -46,8 +46,17 @@ package_rules:
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
+      - "@hexagen/runtime"
     # intent-compiler intentionally imports core-domain types (DomainAST,
     # TopologyInvariants, CardinalityInvariants) as it validates MVK contracts.
+    # Runtime type guards are used for invariant validation at runtime.
+
+  - name: "runtime"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # runtime provides type guards and generators for MVK contracts.
+    # It imports core-domain types to perform runtime validation.
 
   - name: "transaction-system"
     allowed_imports:

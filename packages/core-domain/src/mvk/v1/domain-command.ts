@@ -1,6 +1,6 @@
 /**
  * DomainCommand discriminated union - MVK v1
- * 
+ *
  * This file is part of the batched emission of MVK v1 TypeScript scaffold.
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
@@ -125,7 +125,9 @@ export type DomainCommand =
  * @param command - Command to check
  * @returns true if command is a CreateNodeCommand
  */
-export function isCreateNodeCommand(command: DomainCommand): command is CreateNodeCommand {
+export function isCreateNodeCommand(
+  command: DomainCommand,
+): command is CreateNodeCommand {
   return command.type === "CreateNode";
 }
 
@@ -134,7 +136,9 @@ export function isCreateNodeCommand(command: DomainCommand): command is CreateNo
  * @param command - Command to check
  * @returns true if command is an UpdateNodeCommand
  */
-export function isUpdateNodeCommand(command: DomainCommand): command is UpdateNodeCommand {
+export function isUpdateNodeCommand(
+  command: DomainCommand,
+): command is UpdateNodeCommand {
   return command.type === "UpdateNode";
 }
 
@@ -143,7 +147,9 @@ export function isUpdateNodeCommand(command: DomainCommand): command is UpdateNo
  * @param command - Command to check
  * @returns true if command is a DeleteNodeCommand
  */
-export function isDeleteNodeCommand(command: DomainCommand): command is DeleteNodeCommand {
+export function isDeleteNodeCommand(
+  command: DomainCommand,
+): command is DeleteNodeCommand {
   return command.type === "DeleteNode";
 }
 
@@ -152,7 +158,9 @@ export function isDeleteNodeCommand(command: DomainCommand): command is DeleteNo
  * @param command - Command to check
  * @returns true if command is a CreateEdgeCommand
  */
-export function isCreateEdgeCommand(command: DomainCommand): command is CreateEdgeCommand {
+export function isCreateEdgeCommand(
+  command: DomainCommand,
+): command is CreateEdgeCommand {
   return command.type === "CreateEdge";
 }
 
@@ -161,7 +169,9 @@ export function isCreateEdgeCommand(command: DomainCommand): command is CreateEd
  * @param command - Command to check
  * @returns true if command is an UpdateEdgeCommand
  */
-export function isUpdateEdgeCommand(command: DomainCommand): command is UpdateEdgeCommand {
+export function isUpdateEdgeCommand(
+  command: DomainCommand,
+): command is UpdateEdgeCommand {
   return command.type === "UpdateEdge";
 }
 
@@ -170,7 +180,9 @@ export function isUpdateEdgeCommand(command: DomainCommand): command is UpdateEd
  * @param command - Command to check
  * @returns true if command is a DeleteEdgeCommand
  */
-export function isDeleteEdgeCommand(command: DomainCommand): command is DeleteEdgeCommand {
+export function isDeleteEdgeCommand(
+  command: DomainCommand,
+): command is DeleteEdgeCommand {
   return command.type === "DeleteEdge";
 }
 
@@ -179,6 +191,8 @@ export function isDeleteEdgeCommand(command: DomainCommand): command is DeleteEd
  * @param command - Command to check
  * @returns true if command is a BatchCommand
  */
-export function isBatchCommand(command: DomainCommand): command is BatchCommand {
+export function isBatchCommand(
+  command: DomainCommand,
+): command is BatchCommand {
   return command.type === "Batch";
 }

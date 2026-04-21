@@ -1,5 +1,8 @@
 import type { DomainAST, Identifier } from "@hexagen/core-domain";
-import type { PromptTemplate, RenderedPrompt } from "../../../domain/prompt-template.js";
+import type {
+  PromptTemplate,
+  RenderedPrompt,
+} from "../../../domain/prompt-template.js";
 
 export interface PromptCompileRequest {
   name: string;
@@ -11,14 +14,16 @@ export interface PromptCompileRequest {
 
 export interface PromptCompilerPort {
   compile(request: PromptCompileRequest): Promise<PromptTemplate>;
-  render(template: PromptTemplate, overrides?: Record<string, string>): RenderedPrompt;
+  render(
+    template: PromptTemplate,
+    overrides?: Record<string, string>,
+  ): RenderedPrompt;
 }
 
-export function isPromptCompilerPort(port: unknown): port is PromptCompilerPort {
+export function isPromptCompilerPort(
+  port: unknown,
+): port is PromptCompilerPort {
   if (port === null || typeof port !== "object") return false;
   const p = port as Record<string, unknown>;
-  return (
-    typeof p.compile === "function" &&
-    typeof p.render === "function"
-  );
+  return typeof p.compile === "function" && typeof p.render === "function";
 }

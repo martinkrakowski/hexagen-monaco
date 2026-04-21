@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@hexagen/ui";
 import { ViewToggle } from "@hexagen/ui";
-import { GraphCanvasWrapper } from "@/components/canvas/GraphCanvasWrapper";
-import { CodeView } from "@/components/code-view/CodeView";
+import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
+import { CodeView } from "../code-view/CodeView";
 
 import type { WizardData } from "@hexagen/shared";
 

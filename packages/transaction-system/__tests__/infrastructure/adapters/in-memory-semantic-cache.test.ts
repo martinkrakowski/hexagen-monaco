@@ -37,7 +37,13 @@ describe("InMemorySemanticCache", () => {
     it("should overwrite an existing value", () => {
       const ast1 = makeAst();
       const ast2: DomainAST = {
-        nodes: [{ id: "node-2", kind: NodeKind.Entity, attributes: { label: "Customer" } }],
+        nodes: [
+          {
+            id: "node-2",
+            kind: NodeKind.Entity,
+            attributes: { label: "Customer" },
+          },
+        ],
         edges: [],
         invariants: { topology: [], cardinality: [] },
       };

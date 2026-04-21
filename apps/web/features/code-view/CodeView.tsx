@@ -12,7 +12,7 @@ import {
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
-import { EditableMonaco } from "@/components/monaco-code-editor/EditableMonaco";
+import { EditableMonaco } from "../monaco-editor/EditableMonaco";
 import { useProjectGeneration } from "@/hooks/useProjectGeneration";
 import { useArchitectureDownload } from "@/hooks/useArchitectureDownload";
 import type { WizardData } from "@hexagen/shared";

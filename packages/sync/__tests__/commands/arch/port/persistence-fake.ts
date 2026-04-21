@@ -30,7 +30,9 @@ export class PersistenceFake {
    */
   async readManifest(
     path: string,
-  ): Promise<{ success: true; data: Manifest } | { success: false; error: Error }> {
+  ): Promise<
+    { success: true; data: Manifest } | { success: false; error: Error }
+  > {
     this.readCount++;
 
     if (this.failReadOnNext) {
@@ -56,7 +58,9 @@ export class PersistenceFake {
       // Return typed error per Result pattern - never swallow silently
       return {
         success: false,
-        error: new Error(`Failed to parse manifest at ${path}: ${(parseErr as Error).message}`),
+        error: new Error(
+          `Failed to parse manifest at ${path}: ${(parseErr as Error).message}`,
+        ),
       };
     }
   }
@@ -81,8 +85,13 @@ export class PersistenceFake {
 
     try {
       // Validate manifest structure before "writing"
-      if (!content.bounded_contexts || !Array.isArray(content.bounded_contexts)) {
-        throw new Error("Invalid manifest structure: missing bounded_contexts array");
+      if (
+        !content.bounded_contexts ||
+        !Array.isArray(content.bounded_contexts)
+      ) {
+        throw new Error(
+          "Invalid manifest structure: missing bounded_contexts array",
+        );
       }
 
       this.store.set(path, JSON.stringify(content, null, 2));
@@ -127,7 +136,9 @@ export class PersistenceFake {
     } catch (parseErr) {
       return {
         success: false,
-        error: new Error(`Failed to parse manifest at ${path}: ${(parseErr as Error).message}`),
+        error: new Error(
+          `Failed to parse manifest at ${path}: ${(parseErr as Error).message}`,
+        ),
       };
     }
   }
@@ -136,10 +147,7 @@ export class PersistenceFake {
    * Write manifest synchronously.
    * Matches sync interface in persistence.ts for parity.
    */
-  writeManifestSync(
-    path: string,
-    content: Manifest,
-  ): FakeSaveResult {
+  writeManifestSync(path: string, content: Manifest): FakeSaveResult {
     this.writeCount++;
 
     if (this.failWriteOnNext) {
@@ -152,8 +160,13 @@ export class PersistenceFake {
 
     try {
       // Validate manifest structure before "writing"
-      if (!content.bounded_contexts || !Array.isArray(content.bounded_contexts)) {
-        throw new Error("Invalid manifest structure: missing bounded_contexts array");
+      if (
+        !content.bounded_contexts ||
+        !Array.isArray(content.bounded_contexts)
+      ) {
+        throw new Error(
+          "Invalid manifest structure: missing bounded_contexts array",
+        );
       }
 
       this.store.set(path, JSON.stringify(content, null, 2));

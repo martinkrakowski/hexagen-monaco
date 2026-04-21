@@ -1,7 +1,7 @@
 // In‑memory fake implementation of the IValidateSpecPort for the `messaging` package.
 // Allows optional custom behavior for the `execute` method; defaults to echoing the input unchanged.
 
-import type { IValidateSpecPort } from '@hexagen/project-configuration';
+import type { IValidateSpecPort } from "@hexagen/project-configuration";
 
 /**
  * Fake implementation of `IValidateSpecPort`.

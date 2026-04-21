@@ -1,4 +1,4 @@
-import type { ProjectSpecification } from '../../../domain/value-objects/project-specification';
+import type { ProjectSpecification } from "../../../domain/value-objects/project-specification";
 
 export interface RunProjectGenerationPort {
   /**

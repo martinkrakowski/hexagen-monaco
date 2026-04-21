@@ -3,21 +3,41 @@
   --color-primary-hue: 220;
   --color-primary-saturation: 90%;
   --color-primary-lightness: 50%;
-  --color-primary: hsl(var(--color-primary-hue), var(--color-primary-saturation), var(--color-primary-lightness));
-  --color-primary-hover: hsl(var(--color-primary-hue), var(--color-primary-saturation), 45%);
-  --color-primary-active: hsl(var(--color-primary-hue), var(--color-primary-saturation), 40%);
+  --color-primary: hsl(
+    var(--color-primary-hue),
+    var(--color-primary-saturation),
+    var(--color-primary-lightness)
+  );
+  --color-primary-hover: hsl(
+    var(--color-primary-hue),
+    var(--color-primary-saturation),
+    45%
+  );
+  --color-primary-active: hsl(
+    var(--color-primary-hue),
+    var(--color-primary-saturation),
+    40%
+  );
 
   /* Secondary Colors */
   --color-secondary-hue: 180;
   --color-secondary-saturation: 70%;
   --color-secondary-lightness: 45%;
-  --color-secondary: hsl(var(--color-secondary-hue), var(--color-secondary-saturation), var(--color-secondary-lightness));
+  --color-secondary: hsl(
+    var(--color-secondary-hue),
+    var(--color-secondary-saturation),
+    var(--color-secondary-lightness)
+  );
 
   /* Accent Colors */
   --color-accent-hue: 150;
   --color-accent-saturation: 80%;
   --color-accent-lightness: 55%;
-  --color-accent: hsl(var(--color-accent-hue), var(--color-accent-saturation), var(--color-accent-lightness));
+  --color-accent: hsl(
+    var(--color-accent-hue),
+    var(--color-accent-saturation),
+    var(--color-accent-lightness)
+  );
 
   /* Semantic Colors - Neutral */
   --color-neutral-50: hsl(0, 0%, 98%);
@@ -63,7 +83,12 @@
   --color-border-focus: var(--color-primary);
 
   /* Focus Ring */
-  --color-focus-ring: hsla(var(--color-primary-hue), var(--color-primary-saturation), 50%, 0.4);
+  --color-focus-ring: hsla(
+    var(--color-primary-hue),
+    var(--color-primary-saturation),
+    50%,
+    0.4
+  );
 }
 
 /* Dark Mode */

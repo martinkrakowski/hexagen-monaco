@@ -63,7 +63,8 @@ export function renderPrompt(
   const variableValues: Record<string, string> = {};
 
   for (const variable of template.variables) {
-    variableValues[variable.name] = overrides[variable.name] ?? variable.defaultValue ?? "";
+    variableValues[variable.name] =
+      overrides[variable.name] ?? variable.defaultValue ?? "";
   }
 
   let userPrompt = template.userPromptTemplate;

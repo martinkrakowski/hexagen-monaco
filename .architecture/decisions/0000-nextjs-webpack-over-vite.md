@@ -25,16 +25,16 @@ We chose **Next.js with Webpack** as the build toolchain for the web application
 
 ### Why Next.js
 
-| Capability | Next.js | Vite |
-|------------|---------|------|
-| Server-Side Rendering | ✅ Built-in (App Router) | ⚠️ Manual setup required |
-| React Server Components | ✅ Full support | ❌ Not supported |
-| API Routes | ✅ Built-in (`/api/*`) | ❌ Requires separate server |
-| Static Generation | ✅ Automatic optimization | ⚠️ Plugin-based |
-| Image Optimization | ✅ `next/image` | ❌ Manual or plugin |
-| Edge Middleware | ✅ Built-in | ❌ Not available |
-| Incremental Static Regeneration | ✅ Built-in | ❌ Not available |
-| Deployment | ✅ Vercel-optimized, portable | ✅ Portable |
+| Capability                      | Next.js                       | Vite                        |
+| ------------------------------- | ----------------------------- | --------------------------- |
+| Server-Side Rendering           | ✅ Built-in (App Router)      | ⚠️ Manual setup required    |
+| React Server Components         | ✅ Full support               | ❌ Not supported            |
+| API Routes                      | ✅ Built-in (`/api/*`)        | ❌ Requires separate server |
+| Static Generation               | ✅ Automatic optimization     | ⚠️ Plugin-based             |
+| Image Optimization              | ✅ `next/image`               | ❌ Manual or plugin         |
+| Edge Middleware                 | ✅ Built-in                   | ❌ Not available            |
+| Incremental Static Regeneration | ✅ Built-in                   | ❌ Not available            |
+| Deployment                      | ✅ Vercel-optimized, portable | ✅ Portable                 |
 
 Next.js provides a comprehensive full-stack framework, while Vite is primarily a build tool that requires additional libraries for equivalent functionality.
 
@@ -69,12 +69,14 @@ config.resolve.extensionAlias = {
 ### Vite
 
 **Pros:**
+
 - Faster dev server (native ESM, esbuild)
 - Simpler configuration for SPAs
 - Growing ecosystem
 - Native `.js` → `.ts` resolution without workarounds
 
 **Cons:**
+
 - No React Server Components support
 - No built-in API routes (would need Fastify/Express/Nitro)
 - No built-in SSR streaming
@@ -87,11 +89,13 @@ config.resolve.extensionAlias = {
 ### Turbopack (Future)
 
 **Pros:**
+
 - 10x faster than Webpack in benchmarks
 - Native to Next.js
 - Incremental compilation
 
 **Cons:**
+
 - Missing `extensionAlias` support (blocking issue)
 - Still maturing feature set
 
@@ -103,13 +107,14 @@ We considered removing `.js` extensions from barrels:
 
 ```typescript
 // Instead of:
-export * from './model/index.js';
+export * from "./model/index.js";
 
 // Use:
-export * from './model/index';
+export * from "./model/index";
 ```
 
 **Cons:**
+
 - Breaks `@hexagen/sync` package which requires `NodeNext` resolution
 - Would require splitting sync into a separate repository
 - Inconsistent with ESM specification

@@ -51,17 +51,36 @@ export class DefaultPromptCompilerAdapter implements PromptCompilerPort {
       DEFAULT_USER_PROMPT_TEMPLATE,
       context,
       [
-        { name: "domainAST", description: "Serialized Domain AST", defaultValue: domainASTStr },
-        { name: "userIntent", description: "The user's intent", defaultValue: request.userIntent },
-        { name: "governanceRules", description: "Governance rules to follow", defaultValue: governanceRulesStr },
-        { name: "task", description: "The specific task to perform", defaultValue: request.userIntent },
+        {
+          name: "domainAST",
+          description: "Serialized Domain AST",
+          defaultValue: domainASTStr,
+        },
+        {
+          name: "userIntent",
+          description: "The user's intent",
+          defaultValue: request.userIntent,
+        },
+        {
+          name: "governanceRules",
+          description: "Governance rules to follow",
+          defaultValue: governanceRulesStr,
+        },
+        {
+          name: "task",
+          description: "The specific task to perform",
+          defaultValue: request.userIntent,
+        },
       ],
     );
 
     return template;
   }
 
-  render(template: PromptTemplate, overrides?: Record<string, string>): RenderedPrompt {
+  render(
+    template: PromptTemplate,
+    overrides?: Record<string, string>,
+  ): RenderedPrompt {
     return renderPrompt(template, overrides);
   }
 }

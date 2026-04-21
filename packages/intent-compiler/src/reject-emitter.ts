@@ -1,16 +1,18 @@
 import {
   Identifier,
   TopologyInvariants,
+  CardinalityInvariants,
+} from "@hexagen/core-domain";
+import {
   isAcyclicInvariant,
   isConnectedInvariant,
   isContainmentInvariant,
   isDegreeConstraintInvariant,
-  CardinalityInvariants,
   isExactlyInvariant,
   isAtLeastInvariant,
   isAtMostInvariant,
   isBetweenInvariant,
-} from "@hexagen/core-domain";
+} from "@hexagen/runtime";
 
 export interface Rejection {
   id: Identifier;

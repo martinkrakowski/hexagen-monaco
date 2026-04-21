@@ -1,5 +1,5 @@
-import type { IEntityRepository } from '../../application/ports/out/entity-repository.port';
-import type { Entity } from '../../domain/model/entity/entity'; // adjust path if your barrel is different
+import type { IEntityRepository } from "../../application/ports/out/entity-repository.port";
+import type { Entity } from "../../domain/model/entity/entity"; // adjust path if your barrel is different
 
 /**
  * Concrete adapter implementing the outbound port IEntityRepository.

@@ -1,9 +1,10 @@
 import type { HTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
 const CardComponent: ForwardRefRenderFunction<
   HTMLDivElement,
-  HTMLAttributes<HTMLDivElement>
+  NoSemanticState<HTMLAttributes<HTMLDivElement>>
 > = ({ className, ...props }, ref) => {
   return (
     <div
@@ -24,7 +25,7 @@ Card.displayName = "Card";
 
 const CardHeaderComponent: ForwardRefRenderFunction<
   HTMLDivElement,
-  HTMLAttributes<HTMLDivElement>
+  NoSemanticState<HTMLAttributes<HTMLDivElement>>
 > = ({ className, ...props }, ref) => {
   return (
     <div
@@ -42,7 +43,9 @@ CardHeader.displayName = "CardHeader";
 
 export type CardTitleAs = "h1" | "h2" | "h3" | "h4";
 
-export interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {
+export interface CardTitleProps extends NoSemanticState<
+  HTMLAttributes<HTMLHeadingElement>
+> {
   as?: CardTitleAs;
 }
 
@@ -70,7 +73,7 @@ CardTitle.displayName = "CardTitle";
 
 const CardContentComponent: ForwardRefRenderFunction<
   HTMLDivElement,
-  HTMLAttributes<HTMLDivElement>
+  NoSemanticState<HTMLAttributes<HTMLDivElement>>
 > = ({ className, ...props }, ref) => {
   return (
     <div

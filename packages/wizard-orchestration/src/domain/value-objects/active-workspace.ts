@@ -4,7 +4,10 @@ export interface ActiveWorkspace {
   lastModifiedAt: number;
 }
 
-export function createActiveWorkspace(projectId: string, isDirty: boolean = false): ActiveWorkspace {
+export function createActiveWorkspace(
+  projectId: string,
+  isDirty: boolean = false,
+): ActiveWorkspace {
   return {
     projectId,
     isDirty,
@@ -12,7 +15,9 @@ export function createActiveWorkspace(projectId: string, isDirty: boolean = fals
   };
 }
 
-export function markWorkspaceClean(workspace: ActiveWorkspace): ActiveWorkspace {
+export function markWorkspaceClean(
+  workspace: ActiveWorkspace,
+): ActiveWorkspace {
   return {
     ...workspace,
     isDirty: false,
@@ -20,7 +25,9 @@ export function markWorkspaceClean(workspace: ActiveWorkspace): ActiveWorkspace 
   };
 }
 
-export function markWorkspaceDirty(workspace: ActiveWorkspace): ActiveWorkspace {
+export function markWorkspaceDirty(
+  workspace: ActiveWorkspace,
+): ActiveWorkspace {
   return {
     ...workspace,
     isDirty: true,

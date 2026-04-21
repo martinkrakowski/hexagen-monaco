@@ -5,7 +5,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@hexagen/ui";
-import { wizardSteps } from "@/components/project-wizard/config";
+import { wizardSteps } from "../project-wizard/config";
 import type { WizardDraft } from "@hexagen/shared";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 

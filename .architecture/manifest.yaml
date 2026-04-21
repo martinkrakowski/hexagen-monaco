@@ -159,8 +159,8 @@ bounded_contexts:
   - name: core-domain
     type: core
     description: >-
-      Semantic kernel — MVK contracts, domain AST, governance AST,
-      topology and cardinality invariants
+      Semantic kernel — MVK contracts, domain AST, governance AST, topology and
+      cardinality invariants
     layers:
       domain:
         entities:
@@ -340,7 +340,9 @@ bounded_contexts:
         "@dagrejs/dagre": ^2.0.4
   - name: external-integration
     type: supporting
-    description: External authentication and identity providers — GitHub OAuth, session management
+    description: >-
+      External authentication and identity providers — GitHub OAuth, session
+      management
     layers:
       domain:
         value_objects:
@@ -525,8 +527,8 @@ bounded_contexts:
     description: >-
       Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
       offline-capable local AI inference with worker-based architecture and
-      IndexedDB model caching. Integrates with prompt-compiler for
-      contextual prompt generation and response streaming.
+      IndexedDB model caching. Integrates with prompt-compiler for contextual
+      prompt generation and response streaming.
     layers:
       domain:
         value_objects:
@@ -602,6 +604,7 @@ bounded_contexts:
         adapters: []
     depends_on:
       - core-domain
+      - runtime
       - shared
   - name: transaction-system
     type: core
@@ -639,8 +642,8 @@ bounded_contexts:
   - name: prompt-compiler
     type: core
     description: >-
-      Prompt compilation — builds contextual prompts from DomainAST,
-      governance rules, and user intent for LLM consumption
+      Prompt compilation — builds contextual prompts from DomainAST, governance
+      rules, and user intent for LLM consumption
     layers:
       domain:
         value_objects:
@@ -688,6 +691,21 @@ bounded_contexts:
       - core-domain
       - intent-compiler
       - prompt-compiler
+  - name: runtime
+    type: shared-kernel
+    layers:
+      domain:
+        entities: []
+        value_objects: []
+      application:
+        use_cases: []
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
 apps:
   - name: web
     driver: next.js

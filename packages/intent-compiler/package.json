@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
+    "@hexagen/runtime": "workspace:*",
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {

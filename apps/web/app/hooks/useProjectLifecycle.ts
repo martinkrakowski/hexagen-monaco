@@ -4,7 +4,7 @@ import { useCallback, useEffect } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-import { emptyFormValues } from "@/components/project-wizard/config";
+import { emptyFormValues } from "../../features/project-wizard/config";
 import { buildWizardData } from "@/lib/compose-wizard-data";
 
 import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";

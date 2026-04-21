@@ -12,6 +12,7 @@
   "exclude": ["node_modules", "dist", ".turbo"],
   "references": [
     { "path": "../../packages/core-domain" },
+    { "path": "../../packages/runtime" },
     { "path": "../../packages/shared" }
   ]
 }

@@ -28,11 +28,15 @@ describe("TopologyChecker", () => {
 
     it("should detect self-loop edge as invalid", () => {
       const ast: DomainAST = {
-        nodes: [
-          { id: "node1", kind: NodeKind.Entity, attributes: {} },
-        ],
+        nodes: [{ id: "node1", kind: NodeKind.Entity, attributes: {} }],
         edges: [
-          { id: "edge1", kind: EdgeKind.Dependency, source: "node1", target: "node1", attributes: {} },
+          {
+            id: "edge1",
+            kind: EdgeKind.Dependency,
+            source: "node1",
+            target: "node1",
+            attributes: {},
+          },
         ],
         invariants: {
           topology: [],
@@ -74,7 +78,13 @@ describe("TopologyChecker", () => {
           { id: "node2", kind: NodeKind.ValueObject, attributes: {} },
         ],
         edges: [
-          { id: "edge1", kind: EdgeKind.Dependency, source: "node1", target: "node2", attributes: {} },
+          {
+            id: "edge1",
+            kind: EdgeKind.Dependency,
+            source: "node1",
+            target: "node2",
+            attributes: {},
+          },
         ],
         invariants: {
           topology: [],

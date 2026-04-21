@@ -21,6 +21,7 @@ All types are strictly exported from this package. No runtime logic is included 
 ## Versioning
 
 This package follows semantic versioning aligned with the MVK contract version:
+
 - MVK v1 → @hexagen/core-domain@0.1.x
 - MVK v2 → @hexagen/core-domain@0.2.x (when released)
 

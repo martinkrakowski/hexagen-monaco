@@ -13,7 +13,7 @@ import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
 import { downloadBlob } from "@/lib/download-blob";
 import { postJson, postForBlob } from "@/lib/fetch-json";
-import type { ExportDialogSubmitPayload } from "@/components/export/ExportDialog";
+import type { ExportDialogSubmitPayload } from "../../features/export/ExportDialog";
 
 /**
  * Discriminated state machine for the project export flow.

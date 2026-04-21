@@ -4,8 +4,10 @@ import { Icon } from "../elements/Icon";
 
 export type ViewMode = "visual" | "code";
 
-export interface ViewToggleProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "onChange"> {
+export interface ViewToggleProps extends Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "onChange"
+> {
   view: ViewMode;
   onChange: (view: ViewMode) => void;
 }

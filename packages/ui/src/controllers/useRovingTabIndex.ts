@@ -13,7 +13,7 @@ export interface UseRovingTabIndexReturn {
 }
 
 export function useRovingTabIndex(
-  options: UseRovingTabIndexOptions = {}
+  options: UseRovingTabIndexOptions = {},
 ): UseRovingTabIndexReturn {
   const { initialIndex = 0, circular = false } = options;
   const focusedIndex = useRef(initialIndex);
@@ -22,11 +22,14 @@ export function useRovingTabIndex(
   const clamp = useCallback(
     (index: number) => {
       if (circular) {
-        return ((index % totalItems.current) + totalItems.current) % totalItems.current;
+        return (
+          ((index % totalItems.current) + totalItems.current) %
+          totalItems.current
+        );
       }
       return Math.max(0, Math.min(index, totalItems.current - 1));
     },
-    [circular]
+    [circular],
   );
 
   const focusNext = useCallback(() => {
@@ -41,7 +44,7 @@ export function useRovingTabIndex(
     (index: number) => {
       focusedIndex.current = clamp(index);
     },
-    [clamp]
+    [clamp],
   );
 
   return {
