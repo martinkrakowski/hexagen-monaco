@@ -3,7 +3,7 @@
 import { Panel, PanelGroup } from "react-resizable-panels";
 
 import { Card, CardContent } from "@hexagen/ui";
-import type { UsePanelCollapseReturn } from "@/hooks/usePanelCollapse";
+import type { UsePanelCollapseReturn } from "../hooks/usePanelCollapse";
 
 import { PanelHeader } from "./PanelHeader";
 import { CollapsedStrip } from "./CollapsedStrip";

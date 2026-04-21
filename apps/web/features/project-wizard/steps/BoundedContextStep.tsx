@@ -8,7 +8,7 @@ import type {
 
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
-import { useMenuFormView } from "@/hooks/useMenuFormView";
+import { useMenuFormView } from "../hooks/useMenuFormView";
 import {
   ContextList,
   ContextForm,

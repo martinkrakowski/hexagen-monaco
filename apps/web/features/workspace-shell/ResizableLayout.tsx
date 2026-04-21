@@ -1,7 +1,7 @@
 "use client";
 
-import { useBreakpoint } from "@/hooks/useBreakpoint";
-import { usePanelCollapse } from "@/hooks/usePanelCollapse";
+import { useBreakpoint } from "./hooks/useBreakpoint";
+import { usePanelCollapse } from "./hooks/usePanelCollapse";
 
 import {
   DesktopLayout,

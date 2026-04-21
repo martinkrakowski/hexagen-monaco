@@ -3,7 +3,7 @@
 import { useReducer, useEffect, useMemo } from "react";
 import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
-import { useHardwareDetection } from "@/hooks/useHardwareDetection";
+import { useHardwareDetection } from "./hooks/useHardwareDetection";
 import { recommendModel, checkCompatibility } from "@/lib/model-recommendation";
 
 import {

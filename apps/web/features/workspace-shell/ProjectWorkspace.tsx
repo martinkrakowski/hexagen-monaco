@@ -8,10 +8,10 @@ import { WizardStepRouter } from "../project-wizard/WizardStepRouter";
 import { SavedProjectsList } from "../project-wizard/SavedProjectsList";
 import { wizardSteps } from "../project-wizard/config";
 
-import { useWizardForm } from "@/hooks/useWizardForm";
-import { useEditorSession } from "@/hooks/useEditorSession";
-import { useWorkspaceShellUi } from "@/hooks/useWorkspaceShellUi";
-import { useProjectLifecycle } from "@/hooks/useProjectLifecycle";
+import { useWizardForm } from "./hooks/useWizardForm";
+import { useEditorSession } from "./hooks/useEditorSession";
+import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
+import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import { ExportProvider } from "@/contexts/ExportContext";
 
 import { Header } from "./Header";

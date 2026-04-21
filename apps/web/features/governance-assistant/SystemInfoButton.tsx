@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Cpu } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@hexagen/ui";
-import { useHardwareDetection } from "@/hooks/useHardwareDetection";
+import { useHardwareDetection } from "./hooks/useHardwareDetection";
 
 function formatMB(mb: number | null): string {
   if (mb === null) return "Not available";

@@ -3,10 +3,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import type { WizardData } from "@hexagen/shared";
-import { useGovernanceAssistant } from "@/hooks/useGovernanceAssistant";
+import { useGovernanceAssistant } from "./hooks/useGovernanceAssistant";
 import { useLocalLLM } from "@/hooks/useLocalLlm";
-import { useCloudLLM, type UseCloudLLMConfig } from "@/hooks/useCloudLlm";
-import { useSecretVault } from "@/hooks/useSecretVault";
+import { useCloudLLM, type UseCloudLLMConfig } from "./hooks/useCloudLlm";
+import { useSecretVault } from "./hooks/useSecretVault";
 import { getClientProviders } from "@/config/cloud-providers";
 import {
   type Violation,

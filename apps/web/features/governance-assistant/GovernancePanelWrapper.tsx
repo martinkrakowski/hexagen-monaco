@@ -1,7 +1,7 @@
 "use client";
 
 import type { WizardData } from "@hexagen/shared";
-import { useGovernanceData } from "@/hooks/useGovernanceData";
+import { useGovernanceData } from "./hooks/useGovernanceData";
 import { GovernanceAssistantPanel } from "./GovernanceAssistantPanel";
 
 interface GovernancePanelWrapperProps {

@@ -10,12 +10,12 @@ import {
   RenderHexagonCanvasUseCase,
   createCanvasViewport,
 } from "@hexagen/visualization";
-import { getArchitectureGraphProvider } from "../lib/wire";
+import { getArchitectureGraphProvider } from "@/lib/wire";
 import type { WizardData } from "@hexagen/shared";
 import {
   generateHexagonalContextMap,
   type HexagonNodeWithLayout,
-} from "../lib/layout-engine";
+} from "@/lib/layout-engine";
 import { useCanvasLayout } from "./useCanvasLayout";
 
 interface GraphState {

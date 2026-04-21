@@ -24,7 +24,7 @@ const Editor = dynamic(
 
 import { useTheme } from "@/hooks/useTheme";
 import { useSharedState } from "@/hooks/useSharedState";
-import { useEditableMonacoState } from "@/hooks/useEditableMonacoState";
+import { useEditableMonacoState } from "./hooks/useEditableMonacoState";
 
 import {
   EditorToolbar,

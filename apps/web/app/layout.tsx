@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/useTheme";
-import { AuthProvider } from "./components/providers/AuthProvider";
+import { AuthProvider } from "./providers/AuthProvider";
 import { SharedStateProvider } from "@/hooks/useSharedState";
 import { LocalLLMProvider } from "@/hooks/useLocalLlm";
 import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationContext";

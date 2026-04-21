@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WizardData } from "@hexagen/shared";
 
-import { useLocalLLM } from "./useLocalLlm";
+import { useLocalLLM } from "@/hooks/useLocalLlm";
 import {
   findQuestionById,
   STEP_FOLLOW_UPS,

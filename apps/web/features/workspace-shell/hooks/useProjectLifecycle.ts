@@ -4,15 +4,15 @@ import { useCallback, useEffect } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-import { emptyFormValues } from "../../features/project-wizard/config";
+import { emptyFormValues } from "../../project-wizard/config";
 import { buildWizardData } from "@/lib/compose-wizard-data";
 
 import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";
-import { useWizardDraft } from "@/hooks/useWizardDraft";
-import { useManifestImport } from "@/hooks/useManifestImport";
-import { useProjectGenerationFlow } from "@/hooks/useProjectGenerationFlow";
-import { useWizardAutosave } from "@/hooks/useWizardAutosave";
-import { useBeforeUnloadWarning } from "@/hooks/useBeforeUnloadWarning";
+import { useWizardDraft } from "./useWizardDraft";
+import { useManifestImport } from "./useManifestImport";
+import { useProjectGenerationFlow } from "./useProjectGenerationFlow";
+import { useWizardAutosave } from "./useWizardAutosave";
+import { useBeforeUnloadWarning } from "./useBeforeUnloadWarning";
 import type { WizardDraft } from "@hexagen/shared";
 import type {
   UseWorkspaceShellUiReturn,

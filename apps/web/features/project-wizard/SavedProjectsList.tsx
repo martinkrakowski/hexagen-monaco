@@ -2,7 +2,7 @@
 
 import { Button } from "@hexagen/ui";
 import type { SavedProject } from "@/hooks/useSavedProjects";
-import { useSavedProjectsOverlay } from "@/hooks/useSavedProjectsOverlay";
+import { useSavedProjectsOverlay } from "./hooks/useSavedProjectsOverlay";
 import type { WizardDraft } from "@hexagen/shared";
 
 import { DraftCard, ProjectCard, ProjectsEmptyState } from "./saved-projects";

@@ -1,7 +1,7 @@
 "use client";
 
 import { Save, X, Edit3, Loader2 } from "lucide-react";
-import type { EditorMode } from "@/hooks/useEditableMonacoState";
+import type { EditorMode } from "../hooks/useEditableMonacoState";
 
 interface EditorToolbarProps {
   language: string;

@@ -14,7 +14,7 @@ import {
 } from "@hexagen/project-configuration";
 import type { WizardData } from "@hexagen/shared";
 
-import { emptyFormValues } from "../../features/project-wizard/config";
+import { emptyFormValues } from "../../project-wizard/config";
 import { buildWizardData } from "@/lib/compose-wizard-data";
 
 export interface UseWizardFormReturn {

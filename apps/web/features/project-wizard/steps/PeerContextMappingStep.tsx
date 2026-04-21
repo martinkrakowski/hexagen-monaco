@@ -9,7 +9,7 @@ import { getWorkspaceTemplate } from "@hexagen/shared";
 
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
-import { useMenuFormView } from "@/hooks/useMenuFormView";
+import { useMenuFormView } from "../hooks/useMenuFormView";
 import {
   MappingList,
   MappingForm,

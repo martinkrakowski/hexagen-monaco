@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { useEditorWorkspace } from "@/hooks/useEditorWorkspace";
+import { useEditorWorkspace } from "./useEditorWorkspace";
 import {
   useActiveWorkspace,
   type ActiveWorkspace,
