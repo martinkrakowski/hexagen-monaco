@@ -47,7 +47,10 @@ async function validateWorkspaceRoot(workspaceRoot: string): Promise<void> {
   }
 }
 
-const { workspaceRoot, showHelp } = parseArgs(process.argv.slice(2));
+const { workspaceRoot: rawWorkspaceRoot, showHelp } = parseArgs(
+  process.argv.slice(2),
+);
+const workspaceRoot = path.resolve(rawWorkspaceRoot);
 
 if (showHelp) {
   process.stderr.write(`Usage: hexagen-mcp [options] [workspace-root]
