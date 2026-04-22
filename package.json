@@ -27,6 +27,9 @@
     "lint": "turbo lint && yarn lint:arch",
     "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",
     "typecheck": "turbo run typecheck",
+    "validate:purity": "bash scripts/validate-src-purity.sh",
+    "validate:boundary": "bash scripts/validate-ui-boundary.sh",
+    "validate": "yarn validate:purity && yarn validate:boundary",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky"
   },
@@ -61,6 +64,8 @@
     "js-yaml": "^4.1.0",
     "minimatch": "3.1.2",
     "brace-expansion": "1.1.11",
-    "tinyglobby": "0.2.10"
+    "tinyglobby": "0.2.10",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3"
   }
 }

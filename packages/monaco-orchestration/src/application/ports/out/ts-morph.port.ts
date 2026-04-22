@@ -1,4 +1,4 @@
-import { SemanticPatch } from '../../../domain/model/semantic-patch/semantic-patch';
+import { SemanticPatch } from "../../../domain/model/semantic-patch/semantic-patch";
 
 export interface TsMorphPort {
   parseToAst: (code: string) => unknown;

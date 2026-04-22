@@ -31,7 +31,7 @@ export interface Project {
    */
   boundedContexts: Array<{
     name: string;
-    type: 'core' | 'supporting' | 'driver' | 'shared-kernel';
+    type: "core" | "supporting" | "driver" | "shared-kernel";
     description?: string;
   }>;
   /**

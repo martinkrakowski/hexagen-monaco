@@ -2,7 +2,7 @@
 // In‑memory fake implementation of the IRenderManifestPort for unit tests in the `messaging` package.
 // Allows optional custom behavior for the `execute` method; defaults to echoing the input unchanged.
 
-import type { IRenderManifestPort } from '@hexagen/project-configuration';
+import type { IRenderManifestPort } from "@hexagen/project-configuration";
 
 /**
  * Fake implementation of `IRenderManifestPort`.

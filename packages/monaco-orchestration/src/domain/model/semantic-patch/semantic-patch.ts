@@ -5,6 +5,6 @@ export class SemanticPatch {
     public unifiedDiff: string,
     public astOperations: unknown[],
     public appliedAt: Date,
-    public confidence: number
+    public confidence: number,
   ) {}
 }

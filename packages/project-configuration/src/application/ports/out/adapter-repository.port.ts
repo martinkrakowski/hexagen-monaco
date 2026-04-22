@@ -1,4 +1,4 @@
-import type { Adapter } from '../../../domain/model/adapter/adapter';
+import type { Adapter } from "../../../domain/model/adapter/adapter";
 
 export interface IAdapterRepository {
   save(entity: Adapter): Promise<Adapter>;

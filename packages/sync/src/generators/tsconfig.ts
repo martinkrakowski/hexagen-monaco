@@ -23,9 +23,12 @@ export async function generateTsconfig(
   const filePath = path.join(moduleDir, "tsconfig.json");
 
   // Skip tsconfig generation for packages that need special config.
-  // These packages are imported at runtime by Node.js (CLI tools) and need
-  // emitDeclarationOnly: false to emit JS files, not just declarations.
-  if (moduleName === "sync" || moduleName === "shared") {
+  // - sync, shared: imported at runtime by Node.js (CLI tools) and need
+  //   emitDeclarationOnly: false to emit JS files, not just declarations.
+  // - ui: contains .tsx React components; requires jsx: "react-jsx" and
+  //   emits runtime JS consumed by apps/web. The canonical template below
+  //   omits both of those, which would break the build on every sync.
+  if (moduleName === "sync" || moduleName === "shared" || moduleName === "ui") {
     result.skipped.push(filePath);
     return result;
   }

@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "composite": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", ".turbo"],
+  "references": [
+    { "path": "../../packages/core-domain" },
+    { "path": "../../packages/intent-compiler" },
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/transaction-system" }
+  ]
+}

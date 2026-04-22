@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ArchitectureManifestSchema = z.object({
-  system: z.string().min(1, 'System name is required'),
-  scope: z.string().min(1, 'Scope is required'),
+  system: z.string().min(1, "System name is required"),
+  scope: z.string().min(1, "Scope is required"),
   architecture: z.string().optional(),
   monorepo: z.object({
     workspaces: z.array(z.string()),
@@ -20,7 +20,7 @@ export const ArchitectureManifestSchema = z.object({
             .object({
               autoGenerate: z.boolean().optional(),
               perLayer: z.boolean().optional(),
-              reexportStyle: z.enum(['named', 'star']).optional(),
+              reexportStyle: z.enum(["named", "star"]).optional(),
               includeGlobs: z.array(z.string()).optional(),
             })
             .optional(),
@@ -56,7 +56,7 @@ export const ArchitectureManifestSchema = z.object({
     .optional(),
   modules: z.array(
     z.object({
-      name: z.string().min(1, 'Module name is required'),
+      name: z.string().min(1, "Module name is required"),
       description: z.string().optional(),
       entities: z.array(z.string()).optional(),
       value_objects: z.array(z.string()).optional(),
@@ -73,7 +73,7 @@ export const ArchitectureManifestSchema = z.object({
           devDependencies: z.record(z.string()).optional(),
         })
         .optional(),
-    })
+    }),
   ),
   apps: z
     .array(
@@ -81,7 +81,7 @@ export const ArchitectureManifestSchema = z.object({
         name: z.string(),
         driver: z.string(),
         depends_on: z.array(z.string()).optional(),
-      })
+      }),
     )
     .optional(),
 });

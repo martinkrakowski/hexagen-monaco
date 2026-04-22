@@ -1,4 +1,4 @@
-import type { ProcessIntentPort } from '../ports/in/process-intent.port';
+import type { ProcessIntentPort } from "../ports/in/process-intent.port";
 
 export class ProcessIntentUseCase {
   constructor(private readonly port: ProcessIntentPort) {}
@@ -6,7 +6,7 @@ export class ProcessIntentUseCase {
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation (application layer responsibility)
     if (!data) {
-      throw new Error('Intent data cannot be empty');
+      throw new Error("Intent data cannot be empty");
     }
 
     // Delegate to infrastructure port (AI engine, state machine, etc.)

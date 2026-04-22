@@ -6,11 +6,13 @@ import type {
   ModelMetadata,
 } from "../value-objects/index.js";
 
+/** @internal Raw message shape — use SendStructuredRequestPort instead */
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
 
+/** @internal Raw completion request — use LLMRequest via SendStructuredRequestPort instead */
 export interface LLMCompletionRequest {
   modelId: DomainModelId;
   messages: LLMMessage[];
@@ -38,6 +40,7 @@ export interface LLMCompletionResponse {
   };
 }
 
+/** @internal Legacy monolith port — use ModelLifecyclePort + SendStructuredRequestPort instead */
 export interface LocalLLMProviderPort {
   initialize(
     config: LLMInitializeConfig,

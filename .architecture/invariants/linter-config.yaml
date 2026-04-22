@@ -41,3 +41,71 @@ package_rules:
     # mcp-server uses EventBusPort from messaging for domain event publication.
     # All other dependencies (sync, project-configuration) are accessed via
     # their file-system adapters (execSync, YAML reads), not direct imports.
+
+  - name: "intent-compiler"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/runtime"
+    # intent-compiler intentionally imports core-domain types (DomainAST,
+    # TopologyInvariants, CardinalityInvariants) as it validates MVK contracts.
+    # Runtime type guards are used for invariant validation at runtime.
+
+  - name: "ui-projection-compiler"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/layout-engine"
+    # ui-projection-compiler maps domain node types to visual specs.
+    # It imports core-domain (NodeKind, NodeVisualSpec) and layout-engine (Affordance).
+    # Zero runtime or projection-framework imports (React/xyflow banned).
+
+  - name: "layout-engine"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # layout-engine is a pure geometric constraint solver.
+    # It imports core-domain for NodeKind type references only.
+
+  - name: "runtime"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # runtime provides type guards and generators for MVK contracts.
+    # It imports core-domain types to perform runtime validation.
+
+  - name: "transaction-system"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/intent-compiler"
+    # transaction-system orchestrates intent compilation results and manages
+    # speculative state, backpressure, and semantic caching.
+
+  - name: "prompt-compiler"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # prompt-compiler builds contextual prompts from DomainAST, governance, and user intent.
+    # Removed intent-compiler and transaction-system deps — prompt-compiler operates on
+    # core-domain types directly, not on intent-compiler outputs.
+
+  - name: "local-llm"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/prompt-compiler"
+    # local-llm enforces ACL: all LLM inputs must come through prompt-compiler.
+    # Schema validation at response boundary ensures no schema drift.
+
+  - name: "reconciliation-engine"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/prompt-compiler"
+    # reconciliation-engine parses LLM responses and applies governance.
+    # Removed intent-compiler dep — reconciliation operates on prompt-compiler outputs.
+
+  - name: "agentic-interaction"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/local-llm"

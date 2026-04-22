@@ -1,1 +1,1 @@
-export * from './project-spec';
+export * from "./project-spec";

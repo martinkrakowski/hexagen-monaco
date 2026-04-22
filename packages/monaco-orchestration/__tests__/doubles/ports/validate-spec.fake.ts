@@ -1,4 +1,4 @@
-import type { IValidateSpecPort } from '@hexagen/project-configuration';
+import type { IValidateSpecPort } from "@hexagen/project-configuration";
 
 /**
  * In‑memory fake implementation of `IValidateSpecPort` for unit tests.

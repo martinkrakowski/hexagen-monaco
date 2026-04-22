@@ -1,4 +1,4 @@
-import type { ProcessIntentPort } from '../ports/in/process-intent.port';
+import type { ProcessIntentPort } from "../ports/in/process-intent.port";
 
 // If domain types already exist, import them here
 // import { Intent } from '../../domain/entities/intent';
@@ -13,7 +13,7 @@ export class ProcessIntentUseCase {
     // Later: const intent = Intent.createFromRaw(data);
 
     if (!data) {
-      throw new Error('Intent data cannot be empty');
+      throw new Error("Intent data cannot be empty");
     }
 
     // Step 2: Delegate to infrastructure port (real processing happens there)

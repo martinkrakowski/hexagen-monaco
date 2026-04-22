@@ -19,7 +19,7 @@ The `project-generation` package had `emitDeclarationOnly: true` in its `tsconfi
 ```json
 {
   "compilerOptions": {
-    "emitDeclarationOnly": true  // Only emits .d.ts, no .js files
+    "emitDeclarationOnly": true // Only emits .d.ts, no .js files
   }
 }
 ```
@@ -43,7 +43,7 @@ Changed `emitDeclarationOnly` to `false` in `packages/project-generation/tsconfi
 ```json
 {
   "compilerOptions": {
-    "emitDeclarationOnly": false  // Emits both .js and .d.ts files
+    "emitDeclarationOnly": false // Emits both .js and .d.ts files
   }
 }
 ```

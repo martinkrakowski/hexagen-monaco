@@ -1,4 +1,4 @@
-import type { ValidateSpecPort } from '../../../src/application/ports/in/validate-spec.port';
+import type { ValidateSpecPort } from "../../../src/application/ports/in/validate-spec.port";
 
 /**
  * In‑memory fake for `ValidateSpecPort`.

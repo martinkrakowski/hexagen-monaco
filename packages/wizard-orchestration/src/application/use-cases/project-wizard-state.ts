@@ -1,4 +1,4 @@
-import type { ProjectWizardStatePort } from '../ports/in/project-wizard-state.port';
+import type { ProjectWizardStatePort } from "../ports/in/project-wizard-state.port";
 
 export class ProjectWizardStateUseCase {
   constructor(private readonly port: ProjectWizardStatePort) {}
@@ -6,7 +6,7 @@ export class ProjectWizardStateUseCase {
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility
     if (data === null || data === undefined) {
-      throw new Error('Wizard state data cannot be null or undefined');
+      throw new Error("Wizard state data cannot be null or undefined");
     }
 
     // Delegate actual state management / persistence to infrastructure port

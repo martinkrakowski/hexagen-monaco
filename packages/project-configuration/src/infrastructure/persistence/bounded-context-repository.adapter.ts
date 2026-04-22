@@ -1,5 +1,5 @@
-import type { IBoundedContextRepository } from '../../application/ports/out/bounded-context-repository.port';
-import type { BoundedContext } from '../../domain/model/bounded-context/bounded-context'; // adjust path if barrel differs
+import type { IBoundedContextRepository } from "../../application/ports/out/bounded-context-repository.port";
+import type { BoundedContext } from "../../domain/model/bounded-context/bounded-context"; // adjust path if barrel differs
 
 /**
  * Concrete adapter implementing the outbound port IBoundedContextRepository.

@@ -1,0 +1,33 @@
+{
+  "name": "@hexagen/core-domain",
+  "version": "0.1.0",
+  "description": "Deterministic semantic kernel - MVK contracts and rule execution manifests",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^10.1.8",
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0",
+    "ts-jest": "^29.4.9",
+    "typescript": "^5.5.4"
+  },
+  "gitHead": "b061ccdb2c4b989a74fcd45130534e89c0926a04",
+  "private": true,
+  "type": "module"
+}

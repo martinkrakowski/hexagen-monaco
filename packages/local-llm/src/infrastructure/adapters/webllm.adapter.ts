@@ -1,17 +1,27 @@
 import { ok, err, type Result } from "@hexagen/shared";
-import type {
-  LocalLLMProviderPort,
-  LLMCompletionRequest,
-  LLMCompletionResponse,
-} from "../../domain/ports/index.js";
+import type { SendStructuredRequestPort } from "../../application/ports/in/index";
+import type { ModelLifecyclePort } from "../../domain/ports/model-lifecycle.port";
+import type { LocalLLMProviderPort } from "../../domain/ports/local-llm-provider.port";
 import type {
   DomainModelId,
   LLMInitializeConfig,
   LLMProgress,
   LLMProgressCallback,
   ModelMetadata,
-} from "../../domain/value-objects/index.js";
-import { MODEL_METADATA_MAP } from "../../domain/value-objects/model-metadata.vo.js";
+} from "../../domain/value-objects/index";
+import type {
+  LLMRequest,
+  LLMResponse,
+  SchemaValidationResult,
+} from "../../domain/value-objects/index";
+import type {
+  LLMCompletionRequest,
+  LLMCompletionResponse,
+} from "../../domain/ports/index";
+import type { StructuredOutputSchema } from "@hexagen/prompt-compiler";
+import { MODEL_METADATA_MAP } from "../../domain/value-objects/model-metadata.vo";
+import { z } from "zod";
+import { validateStructuredOutput } from "@hexagen/prompt-compiler";
 
 /**
  * MLC engine IDs inline — no separate mapper module, no new import chain.
@@ -51,7 +61,9 @@ type WorkerMessage =
   | { type: "done" }
   | { type: "error"; data: string };
 
-export class WebLLMAdapter implements LocalLLMProviderPort {
+export class WebLLMAdapter
+  implements ModelLifecyclePort, SendStructuredRequestPort, LocalLLMProviderPort
+{
   private loadedModelId: DomainModelId | null = null;
   private progressCallback: LLMProgressCallback | null = null;
   private worker: Worker | null = null;
@@ -133,6 +145,132 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     }
   }
 
+  async sendRequest(request: LLMRequest): Promise<Result<LLMResponse>> {
+    if (!this.worker || !this.loadedModelId) {
+      return err(new Error("Engine not initialized. Call initialize() first."));
+    }
+
+    // Validate that the request has a schema for structured output
+    if (!request.schema) {
+      return err(
+        new Error("LLMRequest must include a schema for structured output"),
+      );
+    }
+
+    return new Promise((resolve) => {
+      if (!this.worker) {
+        resolve(err(new Error("Worker not available")));
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        resolve(err(new Error("Request timed out")));
+      }, 120000);
+
+      const messageHandler = (e: MessageEvent) => {
+        const msg = e.data as WorkerMessage;
+        if (msg.type === "result") {
+          clearTimeout(timeoutId);
+          this.worker?.removeEventListener("message", messageHandler);
+          const rawResponse = msg.data as string;
+
+          // Parse the raw response as JSON to validate against the schema
+          let parsedData: unknown;
+          try {
+            parsedData = JSON.parse(rawResponse);
+          } catch (parseError) {
+            resolve(
+              err(
+                new Error(
+                  `Failed to parse LLM response as JSON: ${String(parseError)}`,
+                ),
+              ),
+            );
+            return;
+          }
+
+          // Create a StructuredOutputSchema from the Zod schema in the request
+          // We need to create a minimal StructuredOutputSchema for validation purposes
+          const structuredOutputSchema: StructuredOutputSchema = {
+            id: `temp-schema-${Date.now()}`,
+            schema: request.schema as z.ZodTypeAny,
+            version: 1,
+            updatedAt: new Date().toISOString(),
+          };
+
+          // Validate against the provided schema using prompt-compiler's validation function
+          const validationResult = validateStructuredOutput(
+            structuredOutputSchema,
+            parsedData,
+          );
+
+          if (validationResult.success) {
+            // Validation successful - return the validated response
+            const response: LLMResponse = {
+              id: `webllm-${Date.now()}`,
+              modelId: this.loadedModelId!,
+              content: rawResponse,
+              finishReason: "stop",
+              usage: undefined, // WebLLM doesn't provide token usage by default
+              timestamp: Date.now(),
+            };
+            resolve(ok(response));
+          } else {
+            // Validation failed - return error with details
+            resolve(
+              err(
+                new Error(
+                  `LLM response failed schema validation: ${validationResult.error.message}`,
+                ),
+              ),
+            );
+          }
+        } else if (msg.type === "error") {
+          clearTimeout(timeoutId);
+          this.worker?.removeEventListener("message", messageHandler);
+          resolve(err(new Error(`Generation failed: ${msg.data}`)));
+        }
+      };
+
+      this.worker.addEventListener("message", messageHandler);
+      this.worker.postMessage({
+        type: "generate",
+        data: {
+          messages: request.messages,
+          temperature: request.temperature ?? 0.6,
+          maxTokens: request.maxTokens ?? 768,
+          topP: request.topP,
+          stream: request.stream ?? false,
+        },
+      });
+    });
+  }
+
+  async *streamStructuredRequest(
+    request: LLMRequest,
+  ): AsyncGenerator<Result<string>> {
+    if (!this.worker || !this.loadedModelId) {
+      yield err(new Error("Engine not initialized. Call initialize() first."));
+      return;
+    }
+
+    if (!request.schema) {
+      yield err(
+        new Error("LLMRequest must include a schema for structured output"),
+      );
+      return;
+    }
+
+    yield* this.streamComplete({
+      modelId: request.modelId,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxTokens: request.maxTokens,
+      topP: request.topP,
+      stream: true,
+    });
+  }
+
   async complete(
     request: LLMCompletionRequest,
   ): Promise<Result<LLMCompletionResponse>> {
@@ -177,7 +315,6 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
       };
 
       this.worker.addEventListener("message", messageHandler);
-
       this.worker.postMessage({
         type: "generate",
         data: {
@@ -195,9 +332,19 @@ export class WebLLMAdapter implements LocalLLMProviderPort {
     });
   }
 
-  async *streamComplete(
-    request: LLMCompletionRequest,
-  ): AsyncGenerator<Result<string>> {
+  // Keep the streamComplete method for backward compatibility but mark as deprecated
+  async *streamComplete(request: {
+    modelId: DomainModelId;
+    messages: { role: "system" | "user" | "assistant"; content: string }[];
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    topK?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    repetitionPenalty?: number;
+    stream?: boolean;
+  }): AsyncGenerator<Result<string>> {
     if (!this.worker || !this.loadedModelId) {
       yield err(new Error("Engine not initialized. Call initialize() first."));
       return;

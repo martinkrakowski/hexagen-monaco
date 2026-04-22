@@ -14,7 +14,13 @@
     "jsx": "preserve",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./app/*", "./components/*", "./lib/*", "./hooks/*"],
+      "@/*": [
+        "./app/*",
+        "./components/*",
+        "./lib/*",
+        "./hooks/*",
+        "./features/*"
+      ],
       "@hexagen/external-integration": [
         "../../packages/external-integration/dist"
       ],
@@ -29,7 +35,8 @@
     "types/**/*.d.ts",
     "components/**/*",
     "lib/**/*",
-    "hooks/**/*"
+    "hooks/**/*",
+    "features/**/*"
   ],
   "references": [
     {

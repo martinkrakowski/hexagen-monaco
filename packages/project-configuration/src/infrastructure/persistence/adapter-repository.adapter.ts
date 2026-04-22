@@ -1,5 +1,5 @@
-import type { IAdapterRepository } from '../../application/ports/out/adapter-repository.port';
-import type { Adapter } from '../../domain/model/adapter/adapter';
+import type { IAdapterRepository } from "../../application/ports/out/adapter-repository.port";
+import type { Adapter } from "../../domain/model/adapter/adapter";
 
 export class AdapterRepositoryAdapter implements IAdapterRepository {
   async save(entity: Adapter): Promise<Adapter> {

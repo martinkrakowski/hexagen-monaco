@@ -3,7 +3,7 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "emitDeclarationOnly": true,
+    "emitDeclarationOnly": false,
     "outDir": "./dist",
     "rootDir": "./src",
     "moduleResolution": "bundler",
@@ -21,6 +21,8 @@
       "@hexagen/project-configuration/*": [
         "./packages/project-configuration/src/*"
       ],
+      "@hexagen/prompt-compiler": ["./packages/prompt-compiler/src/index.ts"],
+      "@hexagen/prompt-compiler/*": ["./packages/prompt-compiler/src/*"],
       "@hexagen/shared": ["./packages/shared/src/index.ts"],
       "@hexagen/shared/*": ["./packages/shared/src/*"],
       "@hexagen/messaging": ["./packages/messaging/src/index.ts"],
@@ -62,7 +64,7 @@
       "@hexagen/sync": ["./packages/sync/src/index.ts"],
       "@hexagen/sync/*": ["./packages/sync/src/*"],
       "@hexagen/web-driver/*": ["./packages/web-driver/src/*"],
-      "@/*": ["./apps/web/src/*", "./apps/web/app/*"]
+      "@/*": ["./apps/web/src/*", "./apps/web/app/*", "./apps/web/features/*"]
     }
   },
   "references": [
@@ -75,7 +77,8 @@
     { "path": "./packages/code-generation" },
     { "path": "./packages/architectural-enforcement" },
     { "path": "./packages/persistence" },
-    { "path": "./packages/agentic-interaction" },
-    { "path": "./packages/deployment" }
+    { "path": "./packages/deployment" },
+    { "path": "./packages/core-domain" },
+    { "path": "./packages/runtime" }
   ]
 }

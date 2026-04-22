@@ -1,4 +1,4 @@
-import type { IRenderManifestPort } from '@hexagen/project-configuration';
+import type { IRenderManifestPort } from "@hexagen/project-configuration";
 
 /**
  * In‑memory fake implementation of `IRenderManifestPort`.

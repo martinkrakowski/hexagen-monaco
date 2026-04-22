@@ -1,4 +1,4 @@
-import type { Project } from '../../domain';
+import type { Project } from "../../domain";
 
 export class ProjectViewProjectionUseCase {
   projectTree(
@@ -6,7 +6,7 @@ export class ProjectViewProjectionUseCase {
     options: {
       highlightLowConfidence?: boolean;
       expandedPaths?: Set<string>;
-    } = {}
+    } = {},
   ): ProjectTreeViewModel {
     const rootNodes: ProjectTreeNode[] = [];
 
@@ -16,9 +16,9 @@ export class ProjectViewProjectionUseCase {
         rootNodes.push({
           id: `root/${path}`,
           name: path,
-          type: 'file',
+          type: "file",
           contentPreview:
-            content.slice(0, 100) + (content.length > 100 ? '...' : ''),
+            content.slice(0, 100) + (content.length > 100 ? "..." : ""),
           isExpanded: false,
           children: [],
           confidence: 1.0,
@@ -31,7 +31,7 @@ export class ProjectViewProjectionUseCase {
       const ctxNode: ProjectTreeNode = {
         id: `bounded/${ctx.name}`,
         name: ctx.name,
-        type: 'bounded-context',
+        type: "bounded-context",
         description: ctx.description,
         isExpanded: options.expandedPaths?.has(`bounded/${ctx.name}`) ?? false,
         children: [],
@@ -41,8 +41,8 @@ export class ProjectViewProjectionUseCase {
       // Layer placeholders – now with isExpanded
       ctxNode.children.push({
         id: `bounded/${ctx.name}/domain`,
-        name: 'domain',
-        type: 'layer',
+        name: "domain",
+        type: "layer",
         children: [],
         isExpanded: false,
         confidence: 1.0,
@@ -50,8 +50,8 @@ export class ProjectViewProjectionUseCase {
 
       ctxNode.children.push({
         id: `bounded/${ctx.name}/application`,
-        name: 'application',
-        type: 'layer',
+        name: "application",
+        type: "layer",
         children: [],
         isExpanded: false,
         confidence: 1.0,
@@ -79,7 +79,7 @@ export interface ProjectTreeViewModel {
 export interface ProjectTreeNode {
   id: string;
   name: string;
-  type: 'file' | 'bounded-context' | 'layer' | 'entity' | 'port' | 'use-case';
+  type: "file" | "bounded-context" | "layer" | "entity" | "port" | "use-case";
   description?: string;
   contentPreview?: string;
   isExpanded: boolean;

@@ -1,0 +1,102 @@
+"use client";
+
+import { useTheme } from "@/hooks/useTheme";
+import { Sun, Moon, Hexagon } from "lucide-react";
+import { HeaderMenu } from "./HeaderMenu";
+import { ProjectMenu } from "./ProjectMenu";
+import { ExportStatusStrip } from "./ExportStatusStrip";
+import { ExportDialog } from "../export/ExportDialog";
+import { useProjectExport } from "@/contexts/ExportContext";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
+import type { SavedProject } from "@/hooks/useSavedProjects";
+
+interface HeaderProps {
+  onLoadManifest: () => void;
+  onNewProject: () => void;
+  onLoadSavedProject: (project: SavedProject) => void;
+  isEditing?: boolean;
+}
+
+export function Header({
+  onLoadManifest,
+  onNewProject,
+  onLoadSavedProject,
+  isEditing = false,
+}: HeaderProps) {
+  const { theme, toggleTheme } = useTheme();
+  const { activeWorkspace } = useActiveWorkspace();
+  const exportFlow = useProjectExport();
+
+  const isExporting = exportFlow.state.kind === "exporting";
+  const dialogError =
+    exportFlow.state.kind === "error" ? exportFlow.state.message : null;
+
+  return (
+    <div className="shrink-0">
+      <header className="w-full px-6 py-4 bg-card border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 bg-primary text-primary-foreground flex items-center justify-center rounded-sm text-sm font-bold">
+            <Hexagon />
+          </div>
+          <h1 className="text-lg font-semibold tracking-tight">
+            HexaGen-Monaco
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {isEditing && (
+            <span className="text-xs font-medium text-muted-foreground px-2 py-1">
+              Editing
+            </span>
+          )}
+          <HeaderMenu
+            onLoadManifest={onLoadManifest}
+            onNewProject={onNewProject}
+            onToggleTheme={toggleTheme}
+            theme={theme}
+          />
+          <div className="hidden lg:flex items-center gap-2">
+            <ProjectMenu
+              onLoadManifest={onLoadManifest}
+              onNewProject={onNewProject}
+              onLoadSavedProject={onLoadSavedProject}
+              onExportZip={() => void exportFlow.exportZip()}
+              onRequestGithubExport={() =>
+                void exportFlow.requestGithubExport()
+              }
+              canExport={exportFlow.canExport}
+              isExporting={isExporting}
+              isAuthenticated={exportFlow.isAuthenticated}
+            />
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-md hover:bg-muted transition-colors"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? (
+                <Moon className="w-4 h-4" />
+              ) : (
+                <Sun className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <ExportStatusStrip
+        state={exportFlow.state}
+        onDismiss={exportFlow.dismissStatus}
+      />
+
+      <ExportDialog
+        key={activeWorkspace?.name ?? ""}
+        open={exportFlow.state.kind === "dialog-open"}
+        onClose={exportFlow.closeDialog}
+        onSubmit={exportFlow.submitGithubExport}
+        isSubmitting={isExporting}
+        initialRepoName={activeWorkspace?.name ?? ""}
+        error={dialogError}
+      />
+    </div>
+  );
+}

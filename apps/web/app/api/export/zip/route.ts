@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
       body.manifest ??
       (body.wizardData
         ? wizardToManifest(
-            body.wizardData as unknown as Parameters<typeof wizardToManifest>[0],
+            body.wizardData as unknown as Parameters<
+              typeof wizardToManifest
+            >[0],
           )
         : null);
 

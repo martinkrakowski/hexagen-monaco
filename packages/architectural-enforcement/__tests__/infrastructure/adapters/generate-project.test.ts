@@ -1,16 +1,16 @@
 // Minimal test suite for FakeGenerateProjectPort in the architectural-enforcement package.
-import assert from 'node:assert';
-import { FakeGenerateProjectPort } from '../../doubles/ports/generate-project.fake';
+import assert from "node:assert";
+import { FakeGenerateProjectPort } from "../../doubles/ports/generate-project.fake";
 
 (async () => {
   // 1️⃣ Default behavior – echo the input unchanged
   const defaultFake = new FakeGenerateProjectPort();
-  const defaultInput = { foo: 'bar' };
+  const defaultInput = { foo: "bar" };
   const defaultResult = await defaultFake.execute(defaultInput);
   assert.deepStrictEqual(
     defaultResult,
     defaultInput,
-    'Default fake should return the input unchanged'
+    "Default fake should return the input unchanged",
   );
 
   // 2️⃣ Custom behavior – transform the input
@@ -24,8 +24,8 @@ import { FakeGenerateProjectPort } from '../../doubles/ports/generate-project.fa
   assert.deepStrictEqual(
     customResult,
     { transformed: true, original: customInput },
-    'Custom fake should apply transformation'
+    "Custom fake should apply transformation",
   );
 
-  console.log('✅ All FakeGenerateProjectPort tests passed.');
+  console.log("✅ All FakeGenerateProjectPort tests passed.");
 })();

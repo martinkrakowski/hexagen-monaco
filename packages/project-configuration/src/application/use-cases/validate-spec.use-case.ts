@@ -1,4 +1,4 @@
-import type { ValidateSpecPort } from '../ports/in/validate-spec.port';
+import type { ValidateSpecPort } from "../ports/in/validate-spec.port";
 
 export class ValidateSpecUseCase implements ValidateSpecPort {
   async execute(_data: unknown): Promise<unknown> {

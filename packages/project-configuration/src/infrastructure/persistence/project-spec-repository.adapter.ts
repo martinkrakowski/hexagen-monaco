@@ -1,5 +1,5 @@
-import type { IProjectSpecRepository } from '../../application/ports/out/project-spec-repository.port';
-import type { ProjectSpec } from '../../domain/model/project-spec/project-spec'; // adjust path if barrel is different
+import type { IProjectSpecRepository } from "../../application/ports/out/project-spec-repository.port";
+import type { ProjectSpec } from "../../domain/model/project-spec/project-spec"; // adjust path if barrel is different
 
 /**
  * Concrete adapter implementing the outbound port IProjectSpecRepository.

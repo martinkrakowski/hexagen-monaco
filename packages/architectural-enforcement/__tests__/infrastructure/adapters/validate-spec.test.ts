@@ -1,16 +1,16 @@
 // Minimal test suite for FakeValidateSpecPort in the architectural-enforcement package.
-import assert from 'node:assert';
-import { FakeValidateSpecPort } from '../../doubles/ports/validate-spec.fake';
+import assert from "node:assert";
+import { FakeValidateSpecPort } from "../../doubles/ports/validate-spec.fake";
 
 (async () => {
   // 1️⃣ Default behavior – echo the input unchanged
   const defaultFake = new FakeValidateSpecPort();
-  const defaultInput = { foo: 'bar' };
+  const defaultInput = { foo: "bar" };
   const defaultResult = await defaultFake.execute(defaultInput);
   assert.deepStrictEqual(
     defaultResult,
     defaultInput,
-    'Default fake should return the input unchanged'
+    "Default fake should return the input unchanged",
   );
 
   // 2️⃣ Custom behavior – transform the input
@@ -24,8 +24,8 @@ import { FakeValidateSpecPort } from '../../doubles/ports/validate-spec.fake';
   assert.deepStrictEqual(
     customResult,
     { transformed: true, original: customInput },
-    'Custom fake should apply transformation'
+    "Custom fake should apply transformation",
   );
 
-  console.log('✅ All FakeValidateSpecPort tests passed.');
+  console.log("✅ All FakeValidateSpecPort tests passed.");
 })();

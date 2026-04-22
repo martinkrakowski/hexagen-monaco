@@ -1,4 +1,4 @@
-import type { ValidatePatchIntentPort } from '../ports/in/validate-patch-intent.port';
+import type { ValidatePatchIntentPort } from "../ports/in/validate-patch-intent.port";
 
 export class ValidatePatchIntentUseCase {
   constructor(private readonly port: ValidatePatchIntentPort) {}
@@ -7,7 +7,7 @@ export class ValidatePatchIntentUseCase {
     // Boundary validation - application layer responsibility
     if (data === null || data === undefined) {
       throw new Error(
-        'Patch intent validation data cannot be null or undefined'
+        "Patch intent validation data cannot be null or undefined",
       );
     }
 

@@ -45,6 +45,27 @@ export interface HexagonNode {
   boundedContextId?: string;
 }
 
+export interface HexagonNodeWithLayout extends HexagonNode {
+  parentId?: string;
+  extent?: "parent";
+  isRoot?: boolean;
+  isPeer?: boolean;
+  side?: "north" | "south" | "east" | "west";
+  draggable?: boolean;
+  category?: string;
+  style?: { width?: number; height?: number; zIndex?: number };
+  stats?: {
+    aggregates: number;
+    aggregateItems: string[];
+    valueObjects: number;
+    valueObjectItems: string[];
+    events: number;
+    eventItems: string[];
+    services: number;
+    serviceItems: string[];
+  };
+}
+
 export function createHexagonNode(
   id: string,
   label: string,

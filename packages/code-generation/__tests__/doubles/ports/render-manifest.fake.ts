@@ -4,7 +4,7 @@
 // for the `execute` method. If no custom behavior is supplied, the fake simply
 // returns the input unchanged (echo).
 
-import type { IRenderManifestPort } from '@hexagen/project-configuration';
+import type { IRenderManifestPort } from "@hexagen/project-configuration";
 
 /**
  * Fake implementation of `IRenderManifestPort`.

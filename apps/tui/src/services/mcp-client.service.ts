@@ -36,7 +36,7 @@ export class MCPClientService {
 
     const transport = new StdioClientTransport({
       command: "node",
-      args: [serverPath],
+      args: [serverPath, "--workspace-root", workspaceRoot],
       cwd: workspaceRoot,
     });
 

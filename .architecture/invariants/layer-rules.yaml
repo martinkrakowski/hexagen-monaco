@@ -1,24 +1,64 @@
 # HexaGen Monaco — Architectural Invariants
 # Governs the dependency flow between layers and packages.
 
-shared_kernel:
-  package: "@hexagen/shared"
-  allowed_in_all_layers: true
+# Shared kernels are accessible from all layers in all packages.
+# @hexagen/core-domain carries the MVK semantic contracts (DomainAST, NodeKind, EdgeKind, RRP, REM, etc.)
+# and is treated as a shared-kernel peer alongside @hexagen/shared.
+shared_kernels:
+  - package: "@hexagen/shared"
+    allowed_in_all_layers: true
+  - package: "@hexagen/core-domain"
+    allowed_in_all_layers: true
+  - package: "@hexagen/runtime"
+    allowed_in_all_layers: true
 
 layers:
   domain:
     access_rule: "internal-only"
-    allowed_imports: ["@hexagen/shared"]
+    allowed_imports: ["@hexagen/shared", "@hexagen/core-domain"]
 
   application:
     access_rule: "ports-only"
-    allowed_imports: ["domain", "@hexagen/shared"]
+    allowed_imports: ["domain", "@hexagen/shared", "@hexagen/core-domain"]
 
   infrastructure:
     access_rule: "adapters"
-    allowed_imports: ["domain", "application", "@hexagen/shared"]
+    allowed_imports:
+      ["domain", "application", "@hexagen/shared", "@hexagen/core-domain"]
 
 # Cross-Package Boundaries
 cross_package_rules:
   - package: "web-driver"
     cannot_import: ["monaco-orchestration"] # Use @hexagen/shared for DTOs instead
+
+composition_root_exceptions:
+  - file: "apps/web/app/lib/wire.ts"
+    reason: >-
+      wire.ts is the app-layer composition root. It imports port types from
+      kernel/probabilistic packages and instantiates adapters — this is the
+      accepted leak per AR-9 (Medium). No business logic resides here; it
+      only satisfies port contracts with adapter instances.
+    allowed_imports:
+      - "@hexagen/agentic-interaction"
+      - "@hexagen/local-llm"
+      - "@hexagen/messaging"
+      - "@hexagen/visualization"
+      - "@hexagen/web-driver"
+      - "@hexagen/shared"
+
+# Driver feature slices inside apps/web/features/ that legitimately wire
+# probabilistic / kernel ports into React hooks. These are NOT separate
+# workspace packages — they are internal organization of the web-driver app.
+# Treated as accepted exceptions alongside wire.ts (AR-9 Medium).
+driver_slice_exceptions:
+  - slice: "apps/web/features/llm-driver/"
+    reason: >-
+      React hook + provider glue between @hexagen/local-llm /
+      @hexagen/agentic-interaction ports and the UI. The hooks live here
+      rather than in a separate workspace package because they are
+      framework-bound (React) and only consumed by apps/web. Kernel
+      imports are permitted within this directory.
+    allowed_imports:
+      - "@hexagen/local-llm"
+      - "@hexagen/agentic-interaction"
+      - "@hexagen/shared"

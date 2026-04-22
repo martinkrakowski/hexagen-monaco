@@ -5,20 +5,20 @@
  * These are either build artifacts, test infrastructure, or external dependencies.
  */
 export const BARREL_EXCLUSIONS = new Set([
-  'node_modules',
-  'dist',
-  '__tests__',
-  'doubles',
-  'fixtures',
-  'mocks',
-  '.turbo',
-  '.git',
-  'coverage',
+  "node_modules",
+  "dist",
+  "__tests__",
+  "doubles",
+  "fixtures",
+  "mocks",
+  ".turbo",
+  ".git",
+  "coverage",
 ]);
 
 /**
  * Check if a directory name should be excluded from barrel generation.
  */
 export function isExcludedDirectory(name: string): boolean {
-  return BARREL_EXCLUSIONS.has(name) || name.startsWith('.');
+  return BARREL_EXCLUSIONS.has(name) || name.startsWith(".");
 }

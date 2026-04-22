@@ -1,13 +1,16 @@
-import assert from 'node:assert';
-import { FakeProjectCurrentBufferStatePort } from '../../doubles/ports/project-current-buffer-state.fake';
-
+import assert from "node:assert";
+import { FakeProjectCurrentBufferStatePort } from "../../doubles/ports/project-current-buffer-state.fake";
 
 (async () => {
   // Default behavior – echo the input data
   const defaultFake = new FakeProjectCurrentBufferStatePort();
   const defaultInput = { foo: "bar" };
   const defaultResult = await defaultFake.getCurrentState(defaultInput);
-  assert.deepStrictEqual(defaultResult, defaultInput, "Default fake should echo the input");
+  assert.deepStrictEqual(
+    defaultResult,
+    defaultInput,
+    "Default fake should echo the input",
+  );
 
   // Custom behavior – transform the input data
   const customFake = new FakeProjectCurrentBufferStatePort();
@@ -20,7 +23,7 @@ import { FakeProjectCurrentBufferStatePort } from '../../doubles/ports/project-c
   assert.deepStrictEqual(
     customResult,
     { transformed: true, original: customInput },
-    "Custom fake should apply transformation"
+    "Custom fake should apply transformation",
   );
 
   console.log("All FakeProjectCurrentBufferStatePort tests passed.");

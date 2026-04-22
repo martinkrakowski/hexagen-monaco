@@ -1,5 +1,5 @@
-import type { IDriverRepository } from '../../application/ports/out/driver-repository.port';
-import type { Driver } from '../../domain/model/driver/driver'; // adjust path if your barrel is different
+import type { IDriverRepository } from "../../application/ports/out/driver-repository.port";
+import type { Driver } from "../../domain/model/driver/driver"; // adjust path if your barrel is different
 
 /**
  * Concrete adapter implementing the outbound port IDriverRepository.

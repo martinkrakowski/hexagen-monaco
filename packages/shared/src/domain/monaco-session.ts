@@ -21,7 +21,10 @@ export class MonacoSession {
   /**
    * Factory for creating an empty new session.
    */
-  static createEmpty(id: string, language: string = "plaintext"): MonacoSession {
+  static createEmpty(
+    id: string,
+    language: string = "plaintext",
+  ): MonacoSession {
     return new MonacoSession(id, "", language);
   }
 

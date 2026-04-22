@@ -1,0 +1,223 @@
+"use client";
+
+import { CardContent } from "@hexagen/ui";
+import { Tabs } from "@hexagen/ui";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Lightbulb,
+  RefreshCw,
+  Loader2,
+} from "lucide-react";
+
+interface Violation {
+  id: string;
+  type: "error" | "warning" | "info";
+  message: string;
+  context?: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+}
+
+interface AISuggestion {
+  id: string;
+  message: string;
+  confidence: number;
+  category:
+    | "context-split"
+    | "port-definition"
+    | "dependency-cleanup"
+    | "general";
+}
+
+interface PortAdapterStatus {
+  context: string;
+  ports: number;
+  adapters: number;
+  complete: boolean;
+}
+
+interface AIGovernancePanelProps {
+  violations: Violation[];
+  suggestions: AISuggestion[];
+  portAdapterStatus: PortAdapterStatus[];
+  onRefresh?: () => void;
+  isLoading?: boolean;
+}
+
+export function AIGovernancePanel({
+  violations,
+  suggestions,
+  portAdapterStatus,
+  onRefresh,
+  isLoading = false,
+}: AIGovernancePanelProps) {
+  return (
+    <div className="flex flex-col h-full bg-card">
+      <Tabs.Root defaultTab="violations">
+        <Tabs.List>
+          <Tabs.Trigger value="violations">
+            Violations ({violations.length})
+          </Tabs.Trigger>
+          <Tabs.Trigger value="suggestions">
+            AI Suggestions ({suggestions.length})
+          </Tabs.Trigger>
+          <Tabs.Trigger value="status">Port/Adapter Status</Tabs.Trigger>
+        </Tabs.List>
+
+        <div className="flex justify-end px-2 py-1.5 border-b border-border shrink-0 bg-card/50">
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-md disabled:opacity-50 transition-colors"
+          >
+            {isLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            {isLoading ? "Analyzing..." : "Refresh"}
+          </button>
+        </div>
+
+        <CardContent className="flex-1 overflow-auto p-3 custom-scrollbar">
+          <Tabs.Content value="violations">
+            <ViolationList violations={violations} />
+          </Tabs.Content>
+          <Tabs.Content value="suggestions">
+            <SuggestionList suggestions={suggestions} />
+          </Tabs.Content>
+          <Tabs.Content value="status">
+            <PortAdapterStatusList status={portAdapterStatus} />
+          </Tabs.Content>
+        </CardContent>
+      </Tabs.Root>
+    </div>
+  );
+}
+
+function ViolationList({ violations }: { violations: Violation[] }) {
+  if (violations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <CheckCircle className="h-8 w-8 text-success mb-2" />
+        <p className="text-sm">No violations detected</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {violations.map((violation) => (
+        <div
+          key={violation.id}
+          className={`p-3 rounded-md border ${
+            violation.severity === "HIGH"
+              ? "bg-destructive/5 border-destructive/30"
+              : violation.severity === "MEDIUM"
+                ? "bg-warning/5 border-warning/30"
+                : "bg-info/5 border-info/30"
+          }`}
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle
+              className={`h-4 w-4 mt-0.5 shrink-0 ${
+                violation.severity === "HIGH"
+                  ? "text-destructive"
+                  : violation.severity === "MEDIUM"
+                    ? "text-warning"
+                    : "text-info"
+              }`}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {violation.message}
+              </p>
+              {violation.context && (
+                <p className="text-xs text-muted-foreground mt-1.5 font-mono">
+                  {violation.context}
+                </p>
+              )}
+              <span
+                className={`inline-block mt-2 px-2 py-0.5 text-xs rounded font-medium ${
+                  violation.severity === "HIGH"
+                    ? "bg-destructive/10 text-destructive"
+                    : violation.severity === "MEDIUM"
+                      ? "bg-warning/10 text-warning"
+                      : "bg-info/10 text-info"
+                }`}
+              >
+                {violation.severity}
+              </span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SuggestionList({ suggestions }: { suggestions: AISuggestion[] }) {
+  if (suggestions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <Lightbulb className="h-8 w-8 mb-2" />
+        <p className="text-sm">No suggestions available</p>
+        <p className="text-xs mt-1">Run AI analysis to get recommendations</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {suggestions.map((suggestion) => (
+        <div
+          key={suggestion.id}
+          className="p-3 rounded-md border bg-info/5 border-info/30"
+        >
+          <div className="flex items-start gap-2.5">
+            <Lightbulb className="h-4 w-4 mt-0.5 shrink-0 text-info" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-foreground">{suggestion.message}</p>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-muted-foreground capitalize">
+                  {suggestion.category.replace("-", " ")}
+                </span>
+                <span className="text-xs text-info font-medium">
+                  {suggestion.confidence}% confidence
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PortAdapterStatusList({ status }: { status: PortAdapterStatus[] }) {
+  return (
+    <div className="space-y-2">
+      {status.map((item) => (
+        <div
+          key={item.context}
+          className="p-3 rounded-md border border-border bg-card"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-foreground">
+              {item.context}
+            </span>
+            {item.complete ? (
+              <CheckCircle className="h-4 w-4 text-success" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-warning" />
+            )}
+          </div>
+          <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+            <span>Ports: {item.ports}</span>
+            <span>Adapters: {item.adapters}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -1,4 +1,4 @@
-import type { ProjectCurrentBufferStatePort } from '../ports/in/project-current-buffer-state.port';
+import type { ProjectCurrentBufferStatePort } from "../ports/in/project-current-buffer-state.port";
 
 export class ProjectCurrentBufferStateUseCase {
   constructor(private readonly port: ProjectCurrentBufferStatePort) {}
@@ -6,7 +6,7 @@ export class ProjectCurrentBufferStateUseCase {
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility
     if (data === null || data === undefined) {
-      throw new Error('Buffer state query data cannot be null or undefined');
+      throw new Error("Buffer state query data cannot be null or undefined");
     }
 
     // Delegate actual buffer state retrieval (current Monaco model, cursor, selections, etc.)

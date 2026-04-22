@@ -1,6 +1,6 @@
 // In‑memory fake implementation of the IRenderManifestPort for unit tests in the `architectural-enforcement` package.
 
-import type { IRenderManifestPort } from '@hexagen/project-configuration';
+import type { IRenderManifestPort } from "@hexagen/project-configuration";
 
 /**
  * Fake implementation of `IRenderManifestPort`.

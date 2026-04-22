@@ -19,7 +19,7 @@
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test __tests__/**/*.test.ts",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js --workspace-root ../.."
   },
   "dependencies": {
     "@hexagen/messaging": "workspace:*",

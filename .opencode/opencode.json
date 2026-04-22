@@ -3,11 +3,13 @@
   "mcp": {
     "hexagen-monaco": {
       "type": "local",
-      "command": ["node", "./packages/mcp-server/dist/cli.js"],
-      "enabled": true,
-      "environment": {
-        "ENV_VAR_NAME": "value"
-      }
+      "command": [
+        "node",
+        "./packages/mcp-server/dist/cli.js",
+        "--workspace-root",
+        "/Users/martin/Projects/hexagen-monaco"
+      ],
+      "enabled": true
     }
   }
 }

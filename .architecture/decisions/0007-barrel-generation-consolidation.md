@@ -40,6 +40,7 @@ packages/messaging/
 ```
 
 **Impact:**
+
 - Package-root barrels were empty (`export {}` or comment-only)
 - TypeScript encountered them during compilation → **TS2306: File is not a module**
 - CI builds failed post-sync
@@ -111,6 +112,7 @@ This was never intentional — the original bootstrap (commit `0084da0`) created
 ### Files Deleted
 
 Package-root barrels removed:
+
 - `packages/*/domain/index.ts` (10 files)
 - `packages/*/application/index.ts` (10 files)
 - `packages/*/application/ports/in/index.ts` (10 files)
@@ -198,25 +200,31 @@ packages/messaging/
 ## Alternatives Considered
 
 ### Option A: Move Stub Generation to `src/`
+
 Change stub paths from `domain/` to `src/domain/`.
 
 **Rejected because:**
+
 - Still maintains redundant generator
 - Risk of future conflicts between generators
 - More code to maintain
 
 ### Option B: Skip Empty Stubs
+
 Add conditional logic to only create stubs if directory has content.
 
 **Rejected because:**
+
 - Adds complexity
 - Doesn't address fundamental redundancy
 - Two generators still exist
 
 ### Option C: Delete Stub Generator (CHOSEN)
+
 Remove stub generator entirely; use only recursive generator.
 
 **Chosen because:**
+
 - Eliminates root cause
 - Simplifies architecture
 - Single source of truth
@@ -248,6 +256,7 @@ Remove stub generator entirely; use only recursive generator.
 This ADR resolves a three-week-old issue where package-root barrels caused intermittent CI failures. The root cause was traced through git archaeology to an accidental omission of the `src/` prefix during a refactor.
 
 The fix demonstrates the value of:
+
 - Deleting redundant systems rather than patching them
 - Following the compilation boundary (`src/` → `dist/`)
 - Single source of truth for code generation

@@ -18,11 +18,6 @@ monorepo:
     rules:
       no-console: warn
       "@typescript-eslint/no-explicit-any": error
-      no-restricted-imports:
-        patterns:
-          - group:
-              - "@hexagen/*"
-            message: Cross-package imports must go through barrel files.
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
     compilerOptions:
@@ -149,7 +144,70 @@ generator:
           "@typescript-eslint/parser": ^8.0.0
           "@typescript-eslint/eslint-plugin": ^8.0.0
           eslint-config-prettier: ^9.1.0
+mvk:
+  spec: .architecture/mvk/spec-v1.md
+  driftReport: .architecture/mvk/drift-report-v1.md
+  decisions:
+    - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
+  package: packages/core-domain
+planes:
+  kernel:
+    - core-domain
+    - intent-compiler
+    - layout-engine
+    - ui-projection-compiler
+    - transaction-system
+    - prompt-compiler
+    - architectural-enforcement
+    - wizard-orchestration
+    - monaco-orchestration
+  projection:
+    - ui
+    - visualization
+    - web-driver
+  probabilistic:
+    - local-llm
+    - agentic-interaction
+    - reconciliation-engine
+    - mcp-server
+  infrastructure:
+    - persistence
+    - messaging
+    - external-integration
+    - deployment
+    - sync
+    - runtime
+  shared-kernel:
+    - shared
+    - core-domain
 bounded_contexts:
+  - name: core-domain
+    type: core
+    description: >-
+      Semantic kernel — MVK contracts, domain AST, governance AST, topology and
+      cardinality invariants
+    layers:
+      domain:
+        entities:
+          - DomainAST
+          - DomainNode
+          - DomainEdge
+        value_objects:
+          - NodeKind
+          - EdgeKind
+          - TopologyInvariants
+          - CardinalityInvariants
+          - IntentLineage
+          - RRP
+          - REM
+          - NodeVisualSpec
+          - DomainCommand
+      application:
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
   - name: shared
     type: shared-kernel
     description: Shared primitives, custom errors, base classes, utilities
@@ -290,6 +348,7 @@ bounded_contexts:
           - GraphLayoutOptions
           - NodeVisualStyle
           - HexagonNode
+          - HexagonNodeWithLayout
           - HexagonEdge
           - CanvasViewport
       application:
@@ -307,7 +366,9 @@ bounded_contexts:
         "@dagrejs/dagre": ^2.0.4
   - name: external-integration
     type: supporting
-    description: External authentication and identity providers — GitHub OAuth, session management
+    description: >-
+      External authentication and identity providers — GitHub OAuth, session
+      management
     layers:
       domain:
         value_objects:
@@ -372,6 +433,8 @@ bounded_contexts:
       infrastructure:
         adapters:
           - OpenAICompatibleAdapter
+    depends_on:
+      - local-llm
   - name: web-driver
     type: driver
     description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI
@@ -382,21 +445,18 @@ bounded_contexts:
           - MonacoSessionState
         ports:
           out:
-            - DownloadProjectPort
             - EditorWorkspacePersistencePort
             - CanvasLayoutPersistencePort
       application:
         use_cases:
           - ProjectViewProjectionUseCase
           - PersistSessionIntentHandler
-          - DownloadProjectUseCase
         factories:
           - createWebUseCaseFactories
       infrastructure:
         adapters:
           - LocalStoragePersistenceAdapter
           - LocalStorageCanvasLayoutAdapter
-          - WebContainerPreviewAdapter
           - ArchitectureGraphProviderAdapter
     driver_for: apps/web
     generator:
@@ -487,12 +547,43 @@ bounded_contexts:
       - messaging
       - project-configuration
       - sync
+  - name: architectural-enforcement
+    type: supporting
+    status: scaffold
+    description: >-
+      Architectural enforcement tooling — future home of the ESLint plugin
+      and boundary validation rules. Currently scaffold-only.
+    layers:
+      domain: {}
+      application: {}
+      infrastructure: {}
+
+  - name: code-generation
+    type: supporting
+    status: scaffold
+    description: >-
+      Code generation tooling — future home of template-based code
+      generation. Currently scaffold-only.
+    layers:
+      domain: {}
+      application: {}
+      infrastructure: {}
+
+  - name: deployment
+    type: supporting
+    description: Deployment infrastructure — CI/CD pipelines, container definitions
+    layers:
+      domain: {}
+      infrastructure: {}
+
   - name: local-llm
     type: supporting
     description: >-
       Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
       offline-capable local AI inference with worker-based architecture and
-      IndexedDB model caching.
+      IndexedDB model caching. Enforces ACL: all LLM inputs must come through
+      prompt-compiler's structured request port. Schema validation at response
+      boundary rejects schema-drift.
     layers:
       domain:
         value_objects:
@@ -502,11 +593,24 @@ bounded_contexts:
           - HardwareProfile
           - ChatMessage
           - GovernanceEntry
+          - DomainModelId
+          - LLMRequest
+          - LLMResponse
+          - SchemaValidationResult
+          - ModelCatalog
+          - ModelDescriptor
+          - CloudProviderCatalog
+          - CloudProviderConfig
+          - RecommendationResult
+          - CompatibilityIssue
       application:
         use_cases:
           - InitializeModelUseCase
           - StreamGenerateUseCase
+          - RecommendModelUseCase
         ports:
+          in:
+            - SendStructuredRequestPort
           out:
             - LocalLLMProviderPort
             - WebGPUDetectorPort
@@ -518,12 +622,289 @@ bounded_contexts:
           - WebGPUCapabilityAdapter
           - BrowserHardwareProfilerAdapter
           - IDBChatPersistenceAdapter
-    generator:
-      dependencies:
-        "@mlc-ai/web-llm": ^0.2.0
+    generator: { dependencies: { "@mlc-ai/web-llm": "^0.2.0" } }
     depends_on:
-      - agentic-interaction
+      - prompt-compiler
       - shared
+  - name: ui
+    type: supporting
+    description: >-
+      Projection layer — UI atoms, tokens, controllers isolated from semantic
+      state via 3-layer information firewall
+    layers:
+      domain:
+        types:
+          - ForbiddenBrandHelpers
+          - InformationStateBrand
+          - ForbiddenToken
+          - InteractionStateOnly
+          - NoSemanticState
+      infrastructure:
+        adapters: []
+      presentation:
+        elements:
+          - Badge
+          - Button
+          - Card
+          - Icon
+          - Input
+          - Label
+          - Textarea
+        controllers:
+          - useDialog
+          - useDisclosure
+          - useFocusTrap
+          - usePress
+          - useRovingTabIndex
+        modules:
+          - FileDropZone
+          - Tabs
+          - ViewToggle
+        sections:
+          - Dialog
+        tokens:
+          - ProjectionToken
+  - name: intent-compiler
+    type: core
+    description: >-
+      Semantic intent compilation pipeline — gesture parsing, topology and
+      cardinality invariant validation, rejection emission
+    layers:
+      domain:
+        entities:
+          - Gesture
+          - Rejection
+        value_objects:
+          - ParsedGesture
+          - TopologyCheckResult
+          - CardinalityCheckResult
+      application:
+        use_cases:
+          - ParseGestureUseCase
+          - ValidateTopologyUseCase
+          - ValidateCardinalityUseCase
+          - EmitRejectionUseCase
+        ports:
+          in:
+            - GestureParserPort
+            - TopologyCheckerPort
+            - CardinalityCheckerPort
+            - RejectEmitterPort
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
+      - runtime
+      - shared
+  - name: layout-engine
+    type: core
+    description: >-
+      Geometric constraint solver — hexagonal context map layout, affordance
+      resolution, stability scoring, violation detection. Pure geometry only;
+      zero semantic coupling to MVK types.
+    layers:
+      domain:
+        value_objects:
+          - LayoutConstraint
+          - Affordance
+          - StabilityScore
+          - LayoutResult
+      application:
+        use_cases:
+          - SolveLayoutUseCase
+          - ResolveAffordanceUseCase
+          - ScoreStabilityUseCase
+          - DetectViolationsUseCase
+        ports:
+          in:
+            - SolveLayoutPort
+            - ResolveAffordancePort
+            - ScoreStabilityPort
+            - DetectViolationsPort
+          out: []
+      infrastructure:
+        adapters:
+          - DagreLayoutSolverAdapter
+          - DefaultAffordanceResolverAdapter
+          - DefaultStabilityScorerAdapter
+          - DefaultViolationDetectorAdapter
+    depends_on:
+      - core-domain
+      - shared
+  - name: ui-projection-compiler
+    type: core
+    description: >-
+      Projection compiler — maps domain node types to visual variants, icons,
+      and affordance projections. Resolves realizability and compatibility
+      constraints. Zero runtime or projection-framework imports (React/xyflow
+      banned).
+    layers:
+      domain:
+        value_objects:
+          - VisualVariant
+          - IconMapping
+          - ProjectionError
+          - ProjectionValidationResult
+      application:
+        use_cases:
+          - MapNodeVisualUseCase
+          - ResolveVariantUseCase
+          - ResolveIconUseCase
+          - ProjectAffordanceUseCase
+          - CheckRealizabilityUseCase
+          - CheckAffordanceCompatibilityUseCase
+        ports:
+          in:
+            - MapNodeVisualPort
+            - ResolveVariantPort
+            - ResolveIconPort
+            - ProjectAffordancePort
+            - CheckRealizabilityPort
+            - CheckAffordanceCompatibilityPort
+          out: []
+      infrastructure:
+        adapters:
+          - CvaVariantResolverAdapter
+          - DefaultIconResolverAdapter
+          - DefaultNodeVisualMapperAdapter
+          - DefaultAffordanceProjectorAdapter
+          - DefaultRealizabilityCheckerAdapter
+          - DefaultAffordanceCompatibilityAdapter
+    depends_on:
+      - core-domain
+      - intent-compiler
+      - shared
+  - name: transaction-system
+    type: core
+    description: >-
+      Transaction orchestration — speculative state machine, backpressure
+      control, semantic caching for intent processing pipeline
+    layers:
+      domain:
+        entities:
+          - Transaction
+          - SpeculativeState
+        value_objects:
+          - TransactionId
+          - BackpressureSignal
+          - CacheEntry
+      application:
+        use_cases:
+          - ExecuteTransactionUseCase
+          - RollbackTransactionUseCase
+          - CommitTransactionUseCase
+          - QueryCacheUseCase
+        ports:
+          in:
+            - TransactionManagerPort
+            - SpeculativeStateMachinePort
+            - BackpressureControllerPort
+            - SemanticCachePort
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
+      - intent-compiler
+      - shared
+  - name: prompt-compiler
+    type: core
+    description: >-
+      Prompt compilation — builds contextual prompts from DomainAST, governance
+      rules, and user intent for LLM consumption. Enforces ACL by producing
+      schema-validated prompts that are the only legal input to LLM inference.
+    layers:
+      domain:
+        value_objects:
+          - PromptTemplate
+          - PromptVariable
+          - PromptContext
+          - SystemInstruction
+          - StructuredOutputSchema
+          - PromptCacheKey
+          - GovernanceQuestionTemplates
+          - WizardContextSerializer
+      application:
+        use_cases:
+          - CompilePromptUseCase
+          - RenderPromptUseCase
+          - CachePromptUseCase
+        ports:
+          in:
+            - PromptCompilerPort
+            - BuildSystemInstructionPort
+            - GenerateZodSchemaPort
+            - CachePromptPort
+          out:
+            - PromptCachePort
+      infrastructure:
+        adapters:
+          - DefaultPromptCompilerAdapter
+          - GroundedPromptBuilderAdapter
+          - RRPSystemInstructionBuilderAdapter
+          - RRPZodSchemaGeneratorAdapter
+          - InMemoryPromptCacheAdapter
+          - WizardContextSerializerAdapter
+    depends_on:
+      - core-domain
+      - shared
+  - name: reconciliation-engine
+    type: core
+    description: >-
+      Reconciliation Engine — parses LLM responses and merges them with
+      deterministic DomainAST while applying governance constraints.
+      Enforces monotonic state transitions and deterministic-kernel authority.
+    layers:
+      domain:
+        value_objects:
+          - LLMResponse
+          - ReconciliationResult
+          - Patch
+          - Verdict
+          - ReconciliationState
+      application:
+        use_cases:
+          - ReconcileUseCase
+          - ApplyPatchUseCase
+          - CompareVerdictsUseCase
+          - PromoteStateUseCase
+          - ResolveConflictUseCase
+        ports:
+          in:
+            - ReconciliationPort
+            - CompareVerdictsPort
+            - PromoteStatePort
+            - ResolveConflictPort
+          out: []
+      infrastructure:
+        adapters:
+          - DefaultASTReconciliationAdapter
+          - DefaultVerdictComparatorAdapter
+          - MonotonicStatePromoterAdapter
+          - DefaultConflictResolverAdapter
+    depends_on:
+      - core-domain
+      - prompt-compiler
+      - shared
+  - name: runtime
+    type: shared-kernel
+    description: >-
+      Runtime type guards and generators for MVK contracts — provides
+      runtime validation of DomainAST, NodeKind, EdgeKind, TopologyInvariants,
+      CardinalityInvariants, and IntentLineage.
+    layers:
+      domain:
+        value_objects:
+          - NodeKindGuard
+          - EdgeKindGuard
+          - TopologyInvariantGuard
+          - CardinalityInvariantGuard
+          - IntentLineageRuntime
+      infrastructure:
+        adapters: []
+    depends_on:
+      - core-domain
 apps:
   - name: web
     driver: next.js

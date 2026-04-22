@@ -1,4 +1,4 @@
-import type { ApplySemanticPatchPort } from '../ports/in/apply-semantic-patch.port';
+import type { ApplySemanticPatchPort } from "../ports/in/apply-semantic-patch.port";
 
 export class ApplySemanticPatchUseCase {
   constructor(private readonly port: ApplySemanticPatchPort) {}
@@ -6,7 +6,7 @@ export class ApplySemanticPatchUseCase {
   async execute(data: unknown): Promise<unknown> {
     // Boundary validation - application layer responsibility
     if (data === null || data === undefined) {
-      throw new Error('Semantic patch data cannot be null or undefined');
+      throw new Error("Semantic patch data cannot be null or undefined");
     }
 
     // Delegate actual patch application (AST transform, Monaco model update, etc.)

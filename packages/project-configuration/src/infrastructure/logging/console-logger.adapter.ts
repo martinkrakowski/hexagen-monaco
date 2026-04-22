@@ -38,21 +38,25 @@ export class ConsoleLoggerAdapter implements LoggerPort {
 
   error(message: string, context?: LogContext): void {
     if (!this.shouldLog(LogLevel.ERROR)) return;
+    // eslint-disable-next-line no-console
     console.error(this.formatMessage(LogLevel.ERROR, message), context ?? "");
   }
 
   warn(message: string, context?: LogContext): void {
     if (!this.shouldLog(LogLevel.WARN)) return;
+    // eslint-disable-next-line no-console
     console.warn(this.formatMessage(LogLevel.WARN, message), context ?? "");
   }
 
   info(message: string, context?: LogContext): void {
     if (!this.shouldLog(LogLevel.INFO)) return;
+    // eslint-disable-next-line no-console
     console.info(this.formatMessage(LogLevel.INFO, message), context ?? "");
   }
 
   debug(message: string, context?: LogContext): void {
     if (!this.shouldLog(LogLevel.DEBUG)) return;
+    // eslint-disable-next-line no-console
     console.debug(this.formatMessage(LogLevel.DEBUG, message), context ?? "");
   }
 
@@ -70,6 +74,7 @@ export class ConsoleLoggerAdapter implements LoggerPort {
     this.error(errorMessage, errorContext);
 
     if (err instanceof Error && err.stack) {
+      // eslint-disable-next-line no-console
       console.error(err.stack);
     }
   }

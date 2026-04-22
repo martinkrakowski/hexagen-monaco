@@ -1,1 +1,1 @@
-export * from './open-telemetry.adapter';
+export * from "./open-telemetry.adapter";

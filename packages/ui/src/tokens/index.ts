@@ -1,0 +1,42 @@
+export * from "./projection-token.js";
+
+export const TOKENS = {
+  colors: [
+    "primary",
+    "secondary",
+    "accent",
+    "success",
+    "warning",
+    "error",
+    "info",
+  ],
+  spacing: [
+    "unit",
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "8",
+    "10",
+    "12",
+    "16",
+    "20",
+    "24",
+  ],
+  typography: [
+    "sans",
+    "mono",
+    "xs",
+    "sm",
+    "base",
+    "lg",
+    "xl",
+    "2xl",
+    "3xl",
+    "4xl",
+  ],
+  motion: ["fast", "normal", "slow", "slower", "slowest"],
+} as const;

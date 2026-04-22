@@ -3,9 +3,9 @@ import type {
   WizardIntent,
   ProjectConfig,
   // GeneratedProject,
-} from '../model/wizard-session/wizard-session';
-import { WizardStep } from '../model/wizard-session/wizard-session';
-import { WizardDomainError } from '../model/wizard-session/wizard-session'; // temporary local error
+} from "../model/wizard-session/wizard-session";
+import { WizardStep } from "../model/wizard-session/wizard-session";
+import { WizardDomainError } from "../model/wizard-session/wizard-session"; // temporary local error
 
 /**
  * Pure reducer: takes current immutable session + intent → new immutable session
@@ -14,13 +14,13 @@ import { WizardDomainError } from '../model/wizard-session/wizard-session'; // t
  */
 export function reduceWizardSession(
   state: WizardSession,
-  intent: WizardIntent
+  intent: WizardIntent,
 ): WizardSession {
   // Create limited undo stack (max 10 steps)
   const newUndoStack = [...state.undoStack, state].slice(-10);
 
   switch (intent.type) {
-    case 'START_WIZARD': {
+    case "START_WIZARD": {
       const initialConfig = intent.payload.initialConfig ?? {};
       return {
         ...createInitialSession(initialConfig),
@@ -28,14 +28,14 @@ export function reduceWizardSession(
       };
     }
 
-    case 'UPDATE_FIELD': {
+    case "UPDATE_FIELD": {
       const { field, value } = intent.payload;
       // Basic invariant: prevent invalid field updates (expand later)
       if (!(field in state.config)) {
         throw new WizardDomainError(
           `Invalid field update: ${String(field)} does not exist in ProjectConfig`,
-          'INVALID_FIELD',
-          { attemptedField: field }
+          "INVALID_FIELD",
+          { attemptedField: field },
         );
       }
 
@@ -48,14 +48,14 @@ export function reduceWizardSession(
       };
     }
 
-    case 'NEXT_STEP': {
+    case "NEXT_STEP": {
       const steps = Object.values(WizardStep);
       const currentIndex = steps.indexOf(state.step);
 
       if (currentIndex === -1) {
         throw new WizardDomainError(
-          'Current step not found in enum',
-          'INVALID_STATE'
+          "Current step not found in enum",
+          "INVALID_STATE",
         );
       }
 
@@ -68,8 +68,8 @@ export function reduceWizardSession(
       if (!intent.payload?.skipValidation && !canProceedFromStep(state)) {
         throw new WizardDomainError(
           `Cannot proceed from ${state.step}: validation errors present`,
-          'VALIDATION_BLOCKED',
-          { errors: state.validationErrors }
+          "VALIDATION_BLOCKED",
+          { errors: state.validationErrors },
         );
       }
 
@@ -81,7 +81,7 @@ export function reduceWizardSession(
       };
     }
 
-    case 'PREVIOUS_STEP': {
+    case "PREVIOUS_STEP": {
       const steps = Object.values(WizardStep);
       const currentIndex = steps.indexOf(state.step);
 
@@ -97,7 +97,7 @@ export function reduceWizardSession(
       };
     }
 
-    case 'RESET_WIZARD': {
+    case "RESET_WIZARD": {
       const preserveBasics = intent.payload?.preserveBasics ?? false;
       const initial = createInitialSession(
         preserveBasics
@@ -105,7 +105,7 @@ export function reduceWizardSession(
               projectName: state.config.projectName,
               description: state.config.description,
             }
-          : {}
+          : {},
       );
       return {
         ...initial,
@@ -114,7 +114,7 @@ export function reduceWizardSession(
       };
     }
 
-    case 'VALIDATION_FAILED': {
+    case "VALIDATION_FAILED": {
       return {
         ...state,
         validationErrors: intent.payload.errors,
@@ -122,7 +122,7 @@ export function reduceWizardSession(
       };
     }
 
-    case 'GENERATION_STARTED': {
+    case "GENERATION_STARTED": {
       return {
         ...state,
         isGenerating: true,
@@ -130,7 +130,7 @@ export function reduceWizardSession(
       };
     }
 
-    case 'GENERATION_COMPLETED': {
+    case "GENERATION_COMPLETED": {
       return {
         ...state,
         isGenerating: false,
@@ -140,7 +140,7 @@ export function reduceWizardSession(
       };
     }
 
-    case 'GENERATION_FAILED': {
+    case "GENERATION_FAILED": {
       return {
         ...state,
         isGenerating: false,
@@ -161,13 +161,13 @@ export function reduceWizardSession(
 
 // Private helper — extracted from model for reducer purity
 function createInitialSession(
-  initialConfig: Partial<ProjectConfig>
+  initialConfig: Partial<ProjectConfig>,
 ): WizardSession {
   return {
     step: WizardStep.Basics,
     config: {
-      projectName: initialConfig.projectName || 'new-project',
-      description: initialConfig.description || '',
+      projectName: initialConfig.projectName || "new-project",
+      description: initialConfig.description || "",
       boundedContexts: initialConfig.boundedContexts || [],
     },
     validationErrors: {},

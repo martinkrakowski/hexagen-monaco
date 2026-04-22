@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { GraphCanvasWrapper } from "../components/canvas/GraphCanvasWrapper";
+import { GraphCanvasWrapper } from "../../features/hexagon-canvas/GraphCanvasWrapper";
 
 export const metadata: Metadata = {
   title: "HexaGen Monaco — Architecture Viewer",
