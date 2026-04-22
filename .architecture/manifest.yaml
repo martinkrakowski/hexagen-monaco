@@ -528,8 +528,9 @@ bounded_contexts:
     description: >-
       Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
       offline-capable local AI inference with worker-based architecture and
-      IndexedDB model caching. Integrates with prompt-compiler for contextual
-      prompt generation and response streaming.
+      IndexedDB model caching. Enforces ACL: all LLM inputs must come through
+      prompt-compiler's structured request port. Schema validation at response
+      boundary rejects schema-drift.
     layers:
       domain:
         value_objects:
@@ -539,11 +540,20 @@ bounded_contexts:
           - HardwareProfile
           - ChatMessage
           - GovernanceEntry
+          - DomainModelId
+          - LLMRequest
+          - LLMResponse
+          - SchemaValidationResult
+          - ModelCatalog
+          - CloudProviderCatalog
       application:
         use_cases:
           - InitializeModelUseCase
           - StreamGenerateUseCase
+          - RecommendModelUseCase
         ports:
+          in:
+            - SendStructuredRequestPort
           out:
             - LocalLLMProviderPort
             - WebGPUDetectorPort
@@ -555,11 +565,9 @@ bounded_contexts:
           - WebGPUCapabilityAdapter
           - BrowserHardwareProfilerAdapter
           - IDBChatPersistenceAdapter
-    generator:
-      dependencies:
-        "@mlc-ai/web-llm": ^0.2.0
+    generator: { dependencies: { "@mlc-ai/web-llm": "^0.2.0" } }
     depends_on:
-      - agentic-interaction
+      - prompt-compiler
       - shared
   - name: ui
     type: supporting
@@ -722,13 +730,18 @@ bounded_contexts:
     type: core
     description: >-
       Prompt compilation — builds contextual prompts from DomainAST, governance
-      rules, and user intent for LLM consumption
+      rules, and user intent for LLM consumption. Enforces ACL by producing
+      schema-validated prompts that are the only legal input to LLM inference.
     layers:
       domain:
         value_objects:
           - PromptTemplate
           - PromptVariable
           - PromptContext
+          - SystemInstruction
+          - StructuredOutputSchema
+          - PromptCacheKey
+          - GovernanceQuestionTemplates
       application:
         use_cases:
           - CompilePromptUseCase
@@ -737,39 +750,60 @@ bounded_contexts:
         ports:
           in:
             - PromptCompilerPort
+            - BuildSystemInstructionPort
+            - GenerateZodSchemaPort
+            - CachePromptPort
+          out:
             - PromptCachePort
-          out: []
       infrastructure:
-        adapters: []
+        adapters:
+          - DefaultPromptCompilerAdapter
+          - GroundedPromptBuilderAdapter
+          - RRPSystemInstructionBuilderAdapter
+          - RRPZodSchemaGeneratorAdapter
+          - InMemoryPromptCacheAdapter
+          - WizardContextSerializerAdapter
     depends_on:
       - core-domain
-      - intent-compiler
       - shared
   - name: reconciliation-engine
     type: core
     description: >-
       Reconciliation Engine — parses LLM responses and merges them with
-      deterministic DomainAST while applying governance constraints
+      deterministic DomainAST while applying governance constraints.
+      Enforces monotonic state transitions and deterministic-kernel authority.
     layers:
       domain:
         value_objects:
           - LLMResponse
           - ReconciliationResult
           - Patch
+          - Verdict
+          - ReconciliationState
       application:
         use_cases:
           - ReconcileUseCase
           - ApplyPatchUseCase
+          - CompareVerdictsUseCase
+          - PromoteStateUseCase
+          - ResolveConflictUseCase
         ports:
           in:
             - ReconciliationPort
+            - CompareVerdictsPort
+            - PromoteStatePort
+            - ResolveConflictPort
           out: []
       infrastructure:
-        adapters: []
+        adapters:
+          - DefaultASTReconciliationAdapter
+          - DefaultVerdictComparatorAdapter
+          - MonotonicStatePromoterAdapter
+          - DefaultConflictResolverAdapter
     depends_on:
       - core-domain
-      - intent-compiler
       - prompt-compiler
+      - shared
   - name: runtime
     type: shared-kernel
     layers:

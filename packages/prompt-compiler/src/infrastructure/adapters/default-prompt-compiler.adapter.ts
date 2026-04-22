@@ -4,8 +4,8 @@ import {
   type RenderedPrompt,
   createPromptTemplate,
   renderPrompt,
-} from "../../domain/prompt-template.js";
-import type { PromptCompilerPort } from "../../application/ports/in/prompt-compiler.port.js";
+} from "../../domain/prompt-template";
+import type { PromptCompilerPort } from "../../application/ports/in/prompt-compiler.port";
 
 const DEFAULT_SYSTEM_PROMPT = `You are a software architect assistant helping users design and implement hexagonal/monorepo architectures.
 Analyze the user's intent and provide guidance on:

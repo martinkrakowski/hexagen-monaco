@@ -2,7 +2,7 @@ import type { DomainAST, Identifier } from "@hexagen/core-domain";
 import type {
   PromptTemplate,
   RenderedPrompt,
-} from "../../../domain/prompt-template.js";
+} from "../../../domain/prompt-template";
 
 export interface PromptCompileRequest {
   name: string;

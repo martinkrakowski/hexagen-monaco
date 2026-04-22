@@ -1,11 +1,8 @@
 import {
   createPromptTemplate,
   renderPrompt,
-} from "../src/domain/prompt-template.js";
-import type {
-  DomainASTLike,
-  PromptContext,
-} from "../src/domain/prompt-template.js";
+} from "../src/domain/prompt-template";
+import type { PromptContext } from "../src/domain/prompt-template";
 
 const makeContext = (): PromptContext => ({
   domainAST: {

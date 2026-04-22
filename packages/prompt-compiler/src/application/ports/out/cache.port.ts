@@ -1,4 +1,4 @@
-import type { PromptTemplate } from "../../../domain/prompt-template.js";
+import type { PromptTemplate } from "../../../domain/prompt-template";
 
 export interface PromptCachePort {
   get(key: string): Promise<PromptTemplate | null>;

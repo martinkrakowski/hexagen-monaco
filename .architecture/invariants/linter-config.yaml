@@ -86,14 +86,21 @@ package_rules:
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
-      - "@hexagen/intent-compiler"
-      - "@hexagen/transaction-system"
     # prompt-compiler builds contextual prompts from DomainAST, governance, and user intent.
+    # Removed intent-compiler and transaction-system deps — prompt-compiler operates on
+    # core-domain types directly, not on intent-compiler outputs.
+
+  - name: "local-llm"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/prompt-compiler"
+    # local-llm enforces ACL: all LLM inputs must come through prompt-compiler.
+    # Schema validation at response boundary ensures no schema drift.
 
   - name: "reconciliation-engine"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
-      - "@hexagen/intent-compiler"
       - "@hexagen/prompt-compiler"
     # reconciliation-engine parses LLM responses and applies governance.
+    # Removed intent-compiler dep — reconciliation operates on prompt-compiler outputs.

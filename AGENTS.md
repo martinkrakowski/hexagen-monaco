@@ -219,6 +219,50 @@ The `.architecture/` directory is the single source of truth for the shape of ge
 5. In Architect Mode, produce only the changed manifest section
 6. Ensure all generated files correspond to elements declared in the manifest
 
+### 5.1 YAML Editing Discipline (CRITICAL)
+
+**Recurring failure mode:** Agents (including past versions of this one) repeatedly break `.architecture/manifest.yaml` and `.architecture/invariants/linter-config.yaml` by writing list items at the wrong indentation level. This produces the error:
+
+```
+YAML parse error: end of the stream or a document separator is expected
+```
+
+**Root cause:** When `Edit` tool inserts a replacement block, the agent must match the surrounding indentation exactly. YAML is whitespace-sensitive — a single missing space cascades.
+
+**The canonical indentation contract:**
+
+| File                                          | Top-level key               | List item indent    | Nested map key indent          | Nested list indent                  |
+| --------------------------------------------- | --------------------------- | ------------------- | ------------------------------ | ----------------------------------- |
+| `.architecture/manifest.yaml`                 | `bounded_contexts:` (col 0) | `  - name:` (col 2) | `    layers:` (col 4)          | `      - NodeKind` (col 6)          |
+| `.architecture/invariants/linter-config.yaml` | `package_rules:` (col 0)    | `  - name:` (col 2) | `    allowed_imports:` (col 4) | `      - "@hexagen/shared"` (col 6) |
+
+**Before every YAML edit (MANDATORY):**
+
+1. Run `grep -n "^  - name:\|^- name:" <file>` to confirm current indentation pattern
+2. When inserting a new list item, count the leading spaces on the PREVIOUS list item and match exactly
+3. Use `oldString` that includes at least one surrounding list item boundary so the indentation context is unambiguous
+4. NEVER insert a `- name:` entry at column 0 if the existing list uses `  - name:` (column 2)
+
+**After every YAML edit (MANDATORY):**
+
+```bash
+python3 -c "import yaml; yaml.safe_load(open('.architecture/manifest.yaml'))" && echo OK
+yarn lint:arch
+```
+
+If either fails, STOP and fix before any further work.
+
+**Recovery when YAML is broken:**
+
+If `yaml.safe_load` fails with `expected <block end>, but found '-'`, a list item was inserted at column 0 instead of column 2. Re-indent every line of the offending section by adding 2 leading spaces uniformly. A reusable Python recovery script:
+
+```python
+# For every line from `- name: X` (col 0) until the next properly-indented `  - name:`,
+# prepend 2 spaces. Preserve blank lines.
+```
+
+**Never use flow-style (`{ key: value }`) as a workaround for indentation problems** unless the original document already uses flow-style in that location (e.g., `generator: { dependencies: { "@mlc-ai/web-llm": "^0.2.0" } }` is pre-existing and intentional).
+
 ## 6. Generator vs Target System
 
 ```

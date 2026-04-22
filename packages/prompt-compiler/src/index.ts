@@ -1,3 +1,3 @@
-export * from "./domain/index.js";
-export * from "./application/ports/index.js";
-export * from "./infrastructure/index.js";
+export * from "./domain/index";
+export * from "./application/ports/index";
+export * from "./infrastructure/index";

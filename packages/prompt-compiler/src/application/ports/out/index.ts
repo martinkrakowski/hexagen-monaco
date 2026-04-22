@@ -1,1 +1,1 @@
-export * from "./cache.port.js";
+export * from "./cache.port";

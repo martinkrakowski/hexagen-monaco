@@ -21,6 +21,8 @@
       "@hexagen/project-configuration/*": [
         "./packages/project-configuration/src/*"
       ],
+      "@hexagen/prompt-compiler": ["./packages/prompt-compiler/src/index.ts"],
+      "@hexagen/prompt-compiler/*": ["./packages/prompt-compiler/src/*"],
       "@hexagen/shared": ["./packages/shared/src/index.ts"],
       "@hexagen/shared/*": ["./packages/shared/src/*"],
       "@hexagen/messaging": ["./packages/messaging/src/index.ts"],

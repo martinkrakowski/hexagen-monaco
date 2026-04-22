@@ -5,3 +5,7 @@ export * from "./llm-engine-state.vo.js";
 export * from "./hardware-profile.vo.js";
 export * from "./chat-message.vo.js";
 export * from "./governance-entry.vo.js";
+export * from "./llm-request.vo.js";
+export * from "./llm-response.vo.js";
+export * from "./schema-validation-result.vo.js";
+export * from "./model-catalog.vo.js";

@@ -1,5 +1,5 @@
-import { DefaultPromptCompilerAdapter } from "../../../src/infrastructure/adapters/default-prompt-compiler.adapter.js";
-import type { DomainASTLike } from "../../../src/domain/prompt-template.js";
+import { DefaultPromptCompilerAdapter } from "../../../src/infrastructure/adapters/default-prompt-compiler.adapter";
+import type { DomainASTLike } from "../../../src/domain/prompt-template";
 
 const makeAST = (): DomainASTLike => ({
   nodes: [],
