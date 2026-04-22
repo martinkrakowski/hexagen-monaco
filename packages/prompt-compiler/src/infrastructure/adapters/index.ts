@@ -6,3 +6,4 @@ export * from "./in-memory-prompt-cache.adapter";
 export * from "./wizard-context-serializer.adapter";
 export * from "./migrated-grounded-prompt.adapter";
 export * from "./migrated-wizard-context-serializer.adapter";
+export * from "./app-compatibility.adapter";

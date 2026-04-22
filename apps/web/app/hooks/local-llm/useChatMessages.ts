@@ -16,7 +16,7 @@ import {
   prunedHistoryWindow,
   type EditorState as EditorContextState,
   type GovernancePayload,
-} from "@/lib/grounded-prompt";
+} from "@hexagen/prompt-compiler";
 
 import { streamAssistantResponse } from "./stream-assistant-response";
 

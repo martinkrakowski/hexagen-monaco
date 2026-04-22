@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   type EditorState as EditorContextState,
   type GovernancePayload,
-} from "@/lib/grounded-prompt";
+} from "@hexagen/prompt-compiler";
 import { useCodeChangeSubscription } from "@/hooks/useSharedState";
 
 /**
