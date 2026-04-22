@@ -1289,6 +1289,17 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/governance@workspace:packages/governance":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/governance@workspace:packages/governance"
+  dependencies:
+    "@hexagen/shared": "workspace:*"
+    "@types/node": "npm:^20.0.0"
+    eslint: "npm:^8.57.0"
+    typescript: "npm:^5.0.0"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/intent-compiler@workspace:*, @hexagen/intent-compiler@workspace:packages/intent-compiler":
   version: 0.0.0-use.local
   resolution: "@hexagen/intent-compiler@workspace:packages/intent-compiler"
