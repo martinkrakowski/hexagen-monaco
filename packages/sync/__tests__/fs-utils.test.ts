@@ -414,7 +414,49 @@ describe("safeWriteFileAtomic", () => {
       assert.equal(await fs.readFile(target, "utf8"), next);
     });
 
-    it("overwrites non-generated file when force=true", async () => {
+    it("force=true does NOT bypass hand-written protection (use --force-root instead)", async () => {
+      // Regression guard: historically, --force was permissive and would
+      // clobber hand-written tsconfigs, barrels, and package.json files
+      // during self-regen in CI. The semantics are now strict:
+      //   --force       → aggressively regenerate files carrying the
+      //                   @generated marker (this file has no marker)
+      //   --force-root  → overwrite hand-written / protected-root content
+      // A file without the @generated marker MUST be preserved under --force.
+      const target = path.join(workspaceRoot, "packages", "a", "src", "f.ts");
+      const handWritten = "export const v = 1;\n";
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, handWritten, "utf8");
+
+      const logger = createSpyLogger();
+      const next = `${GENERATED_MARKER}\nexport const v = 2;\n`;
+      const status = await safeWriteFileAtomic(
+        target,
+        next,
+        makeConfig(workspaceRoot, { force: true, logger }),
+      );
+
+      assert.equal(
+        status,
+        "skipped",
+        "force=true MUST NOT overwrite hand-written files",
+      );
+      assert.equal(
+        await fs.readFile(target, "utf8"),
+        handWritten,
+        "hand-written content must be preserved byte-for-byte even with --force",
+      );
+      assert.ok(
+        logger.calls.some(
+          (c) =>
+            c.level === "warn" &&
+            c.message.includes("hand-written") &&
+            c.message.includes("--force-root"),
+        ),
+        "warn log must instruct the user to use --force-root",
+      );
+    });
+
+    it("force-root=true DOES bypass hand-written protection (package file)", async () => {
       const target = path.join(workspaceRoot, "packages", "a", "src", "f.ts");
       const handWritten = "export const v = 1;\n";
       await fs.mkdir(path.dirname(target), { recursive: true });
@@ -424,10 +466,15 @@ describe("safeWriteFileAtomic", () => {
       const status = await safeWriteFileAtomic(
         target,
         next,
-        makeConfig(workspaceRoot, { force: true }),
+        makeConfig(workspaceRoot, { forceRoot: true }),
       );
 
-      assert.equal(status, "updated");
+      assert.equal(
+        status,
+        "updated",
+        "forceRoot=true MUST overwrite even hand-written files " +
+          "(reserved escape hatch for deliberate mass-migrations)",
+      );
       assert.equal(await fs.readFile(target, "utf8"), next);
     });
   });
