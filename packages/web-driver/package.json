@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hexagen/agentic-interaction": "workspace:*",
     "@hexagen/local-llm": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/visualization": "workspace:*",

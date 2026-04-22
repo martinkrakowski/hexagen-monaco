@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@hexagen/shared": "workspace:*",
+    "@hexagen/local-llm": "workspace:*",
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {

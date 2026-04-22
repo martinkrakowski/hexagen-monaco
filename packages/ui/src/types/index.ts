@@ -1,1 +1,1 @@
-export * from "./forbidden-brand";
+export * from "./forbidden-brand.js";

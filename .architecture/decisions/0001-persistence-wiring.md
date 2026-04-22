@@ -1,4 +1,4 @@
-# ADR-0002: Sync Engine Reform — Generator Invariants & Bootstrap
+# ADR-0001: Persistence Wiring
 
 **Status:** Accepted  
 **Date:** 2026-03-11  

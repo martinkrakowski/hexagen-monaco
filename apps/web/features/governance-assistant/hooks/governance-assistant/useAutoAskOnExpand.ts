@@ -6,7 +6,7 @@ import {
   findQuestionById,
   type PrebakedQuestion,
   type WizardStepId,
-} from "@/lib/governance-question-templates";
+} from "@hexagen/prompt-compiler";
 
 import type { ActiveItem, ConversationEntry } from "./types";
 

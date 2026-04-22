@@ -1,5 +1,6 @@
 import next from "@next/eslint-plugin-next";
 import tseslint from "typescript-eslint";
+import hexagenUi from "@hexagen/eslint-plugin-ui";
 
 /** @type {import('eslint').Linter.Config} */
 export default [
@@ -28,6 +29,48 @@ export default [
       next: {
         rootDir: ["app", "components", "lib", "hooks"],
       },
+    },
+  },
+  {
+    files: ["features/**/*.{ts,tsx}"],
+    plugins: {
+      "hexagen-ui": hexagenUi,
+    },
+    rules: {
+      "hexagen-ui/no-feature-slice-imports": "error",
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hexagen/local-llm",
+              importNames: ["LLMMessage", "LocalLLMProviderPort"],
+              allowTypeImports: true,
+              message:
+                "LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest[\"messages\"] instead. See ADR 0021.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["app/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hexagen/local-llm",
+              importNames: ["LLMMessage", "LocalLLMProviderPort"],
+              allowTypeImports: true,
+              message:
+                "LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest[\"messages\"] instead. See ADR 0021.",
+            },
+          ],
+        },
+      ],
     },
   },
 ];

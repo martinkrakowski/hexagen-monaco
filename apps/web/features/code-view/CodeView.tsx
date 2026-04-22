@@ -12,7 +12,6 @@ import {
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
-import { EditableMonaco } from "../monaco-editor/EditableMonaco";
 import { useProjectGeneration } from "./hooks/useProjectGeneration";
 import { useArchitectureDownload } from "./hooks/useArchitectureDownload";
 import type { WizardData } from "@hexagen/shared";
@@ -25,6 +24,12 @@ interface CodeViewProps {
   onFileSelect: (fileId: string | null) => void;
   onFileContentChange: (fileId: string, content: string) => void;
   onFileSave?: (fileId: string) => void;
+  editorSlot: (props: {
+    initialContent: string;
+    language: string;
+    sessionId: string;
+    onSave: (content: string) => void;
+  }) => React.ReactNode;
 }
 
 export const CodeView: React.FC<CodeViewProps> = ({
@@ -34,6 +39,7 @@ export const CodeView: React.FC<CodeViewProps> = ({
   onFileSelect,
   onFileContentChange,
   onFileSave,
+  editorSlot,
 }) => {
   const {
     files,
@@ -155,17 +161,17 @@ export const CodeView: React.FC<CodeViewProps> = ({
             </div>
 
             <div className="flex-1 overflow-hidden">
-              <EditableMonaco
-                initialContent={displayContent}
-                language={selectedFile.language}
-                sessionId={`code-view-${selectedFile.id}`}
-                onSave={(content) => {
+              {editorSlot({
+                initialContent: displayContent,
+                language: selectedFile.language ?? "text",
+                sessionId: `code-view-${selectedFile.id}`,
+                onSave: (content) => {
                   if (selectedFileId) {
                     onFileContentChange(selectedFileId, content);
                     onFileSave?.(selectedFileId);
                   }
-                }}
-              />
+                },
+              })}
             </div>
           </div>
         ) : (

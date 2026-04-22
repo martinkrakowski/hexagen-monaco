@@ -8,7 +8,7 @@ import {
   persistenceAdapterOptions,
   messagingAdapterOptions,
   telemetryProviderOptions,
-} from "../../config";
+} from "@/project-wizard/config";
 
 interface ContextFormInfrastructureProps {
   context: BoundedContext;

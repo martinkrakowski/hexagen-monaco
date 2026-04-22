@@ -64,7 +64,7 @@
       "@hexagen/sync": ["./packages/sync/src/index.ts"],
       "@hexagen/sync/*": ["./packages/sync/src/*"],
       "@hexagen/web-driver/*": ["./packages/web-driver/src/*"],
-      "@/*": ["./apps/web/src/*", "./apps/web/app/*"]
+      "@/*": ["./apps/web/src/*", "./apps/web/app/*", "./apps/web/features/*"]
     }
   },
   "references": [

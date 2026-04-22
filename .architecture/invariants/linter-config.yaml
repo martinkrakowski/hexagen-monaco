@@ -104,3 +104,8 @@ package_rules:
       - "@hexagen/prompt-compiler"
     # reconciliation-engine parses LLM responses and applies governance.
     # Removed intent-compiler dep — reconciliation operates on prompt-compiler outputs.
+
+  - name: "agentic-interaction"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/local-llm"

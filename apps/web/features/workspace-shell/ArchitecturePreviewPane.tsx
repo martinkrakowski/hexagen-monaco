@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@hexagen/ui";
 import { ViewToggle } from "@hexagen/ui";
 import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
 import { CodeView } from "../code-view/CodeView";
+import { EditableMonaco } from "../monaco-editor/EditableMonaco";
 
 import type { WizardData } from "@hexagen/shared";
 
@@ -56,6 +57,7 @@ export function ArchitecturePreviewPane({
             onFileSelect={onFileSelect}
             onFileContentChange={onFileContentChange}
             onFileSave={onFileSave}
+            editorSlot={(props) => <EditableMonaco {...props} />}
           />
         )}
       </CardContent>

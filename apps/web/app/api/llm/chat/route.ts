@@ -1,78 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
-import { OpenAICompatibleAdapter } from "@hexagen/agentic-interaction";
-import { getCloudProvider } from "@/config/cloud-providers";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth.js";
+import { getServerLLMRequestPort } from "@/lib/wire.js";
+import type { ServerLLMRequest } from "@hexagen/agentic-interaction";
 
-interface ChatRequestBody {
-  messages: Array<{ role: string; content: string }>;
-  provider: string;
-  model: string;
-  apiKey: string;
-  temperature?: number;
-  maxTokens?: number;
-}
+// --- Rate Limiter (In-Memory) ---
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 10;
+const userRequestTimestamps = new Map<string, number[]>();
 
-function validateRequestBody(body: unknown):
-  | {
-      valid: true;
-      data: ChatRequestBody;
-    }
-  | {
-      valid: false;
-      error: string;
-    } {
-  if (!body || typeof body !== "object") {
-    return { valid: false, error: "Request body must be a JSON object" };
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = userRequestTimestamps.get(userId) || [];
+
+  // Filter out timestamps older than the window
+  const recentTimestamps = timestamps.filter(
+    (ts) => now - ts < RATE_LIMIT_WINDOW_MS,
+  );
+
+  if (recentTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    return true; // Rate limited
   }
 
-  const b = body as Record<string, unknown>;
-
-  if (!Array.isArray(b.messages) || b.messages.length === 0) {
-    return { valid: false, error: "messages must be a non-empty array" };
-  }
-
-  if (typeof b.provider !== "string" || !b.provider) {
-    return { valid: false, error: "provider must be a non-empty string" };
-  }
-
-  if (typeof b.model !== "string" || !b.model) {
-    return { valid: false, error: "model must be a non-empty string" };
-  }
-
-  if (typeof b.apiKey !== "string" || !b.apiKey) {
-    return { valid: false, error: "apiKey must be a non-empty string" };
-  }
-
-  for (const msg of b.messages as Array<unknown>) {
-    const m = msg as Record<string, unknown>;
-    if (
-      typeof m.role !== "string" ||
-      !["system", "user", "assistant"].includes(m.role) ||
-      typeof m.content !== "string"
-    ) {
-      return {
-        valid: false,
-        error:
-          "Each message must have role (system|user|assistant) and content (string)",
-      };
-    }
-  }
-
-  return {
-    valid: true,
-    data: {
-      messages: b.messages as ChatRequestBody["messages"],
-      provider: b.provider,
-      model: b.model,
-      apiKey: b.apiKey,
-      temperature:
-        typeof b.temperature === "number" ? b.temperature : undefined,
-      maxTokens: typeof b.maxTokens === "number" ? b.maxTokens : undefined,
-    },
-  };
+  // Add current request timestamp and update the map
+  recentTimestamps.push(now);
+  userRequestTimestamps.set(userId, recentTimestamps);
+  return false;
 }
 
 export async function POST(request: NextRequest) {
-  let body: unknown;
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (isRateLimited(session.user.email)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again in a minute." },
+      { status: 429 },
+    );
+  }
+
+  let body: Partial<ServerLLMRequest>;
   try {
     body = await request.json();
   } catch {
@@ -82,94 +52,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const validation = validateRequestBody(body);
-  if (!validation.valid) {
-    return NextResponse.json({ error: validation.error }, { status: 400 });
-  }
-
-  const { messages, provider, model, apiKey, temperature, maxTokens } =
-    validation.data;
-
-  const providerConfig = getCloudProvider(provider);
-  if (!providerConfig) {
+  if (
+    !body.messages ||
+    !Array.isArray(body.messages) ||
+    body.messages.length === 0
+  ) {
     return NextResponse.json(
-      { error: `Unknown provider: ${provider}` },
+      { error: "'messages' must be a non-empty array." },
       { status: 400 },
     );
   }
 
-  if (!providerConfig.available) {
-    return NextResponse.json(
-      {
-        error: `Provider "${providerConfig.displayName}" is not yet available`,
+  try {
+    const port = getServerLLMRequestPort();
+    const stream = await port.handleRequest(
+      { messages: body.messages },
+      { id: session.user.email },
+    );
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
       },
-      { status: 400 },
-    );
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "An unexpected error occurred.";
+    // eslint-disable-next-line no-console -- intentional: route-level fallback diagnostic before returning 500
+    console.error("[Server Chat] Error handling request:", error);
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
-
-  const adapter = new OpenAICompatibleAdapter(
-    apiKey,
-    providerConfig.baseUrl,
-    model,
-  );
-
-  const stream = adapter.streamComplete({
-    model,
-    messages: messages as Array<{
-      role: "system" | "user" | "assistant";
-      content: string;
-    }>,
-    apiKey,
-    temperature,
-    maxTokens,
-  });
-
-  const encoder = new TextEncoder();
-
-  const readableStream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const result of stream) {
-          if (result.success) {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: "chunk", content: result.value })}\n\n`,
-              ),
-            );
-          } else {
-            const errorMsg =
-              result.error instanceof Error
-                ? result.error.message
-                : String(result.error);
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: "error", message: errorMsg })}\n\n`,
-              ),
-            );
-            break;
-          }
-        }
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`),
-        );
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "error", message: errorMsg })}\n\n`,
-          ),
-        );
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(readableStream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
 }

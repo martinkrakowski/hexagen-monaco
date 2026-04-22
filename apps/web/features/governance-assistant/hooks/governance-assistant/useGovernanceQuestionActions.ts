@@ -1,12 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import type { LLMMessage } from "@hexagen/local-llm";
+import type { LLMRequest } from "@hexagen/local-llm";
 
-import type {
-  PrebakedQuestion,
-  WizardStepId,
-} from "@/lib/governance-question-templates";
+import type { PrebakedQuestion, WizardStepId } from "@hexagen/prompt-compiler";
 
 import { buildGovernancePrompt } from "./build-governance-prompt";
 import {
@@ -27,14 +24,14 @@ interface UseGovernanceQuestionActionsOptions {
     React.SetStateAction<ConversationEntry[]>
   >;
 
-  governanceHistoryRef: React.MutableRefObject<LLMMessage[]>;
+  governanceHistoryRef: React.MutableRefObject<LLMRequest["messages"]>;
   pendingQuestionLabelRef: React.MutableRefObject<string | null>;
   setRegeneratingEntryId: React.Dispatch<React.SetStateAction<string | null>>;
 
   sendGovernanceMessage: (
     content: string,
     systemPrompt: string,
-    history?: LLMMessage[],
+    history?: LLMRequest["messages"],
   ) => Promise<void>;
 
   findQuestionById: (
@@ -162,7 +159,7 @@ export function useGovernanceQuestionActions(
       // History from entries BEFORE the target (don't feed it its own
       // previous answer when regenerating).
       const targetIndex = conversationThread.findIndex((e) => e.id === entryId);
-      const historyBeforeTarget: LLMMessage[] = [];
+      const historyBeforeTarget: LLMRequest["messages"] = [];
       for (let i = 0; i < targetIndex; i++) {
         const entry = conversationThread[i];
         historyBeforeTarget.push(

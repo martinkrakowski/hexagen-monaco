@@ -1,20 +1,20 @@
-export { Button, buttonVariants } from "./Button";
-export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button";
+export { Button, buttonVariants } from "./Button.js";
+export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button.js";
 
-export { Input } from "./Input";
-export type { InputProps } from "./Input";
+export { Input } from "./Input.js";
+export type { InputProps } from "./Input.js";
 
-export { Textarea } from "./Textarea";
-export type { TextareaProps } from "./Textarea";
+export { Textarea } from "./Textarea.js";
+export type { TextareaProps } from "./Textarea.js";
 
-export { Card, CardHeader, CardTitle, CardContent } from "./Card";
-export type { CardTitleProps } from "./Card";
+export { Card, CardHeader, CardTitle, CardContent } from "./Card.js";
+export type { CardTitleProps } from "./Card.js";
 
-export { Badge, badgeVariants } from "./Badge";
-export type { BadgeProps, BadgeVariant } from "./Badge";
+export { Badge, badgeVariants } from "./Badge.js";
+export type { BadgeProps, BadgeVariant } from "./Badge.js";
 
-export { Label } from "./Label";
-export type { LabelProps } from "./Label";
+export { Label } from "./Label.js";
+export type { LabelProps } from "./Label.js";
 
-export { Icon } from "./Icon";
-export type { IconProps, IconName } from "./Icon";
+export { Icon } from "./Icon.js";
+export type { IconProps, IconName } from "./Icon.js";

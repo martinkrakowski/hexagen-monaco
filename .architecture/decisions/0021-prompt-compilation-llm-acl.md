@@ -109,6 +109,43 @@ Add adapters:
 - Zod schema validation adds latency at response boundary (acceptable for governance use case)
 - Breaking change for any code that directly constructs `LLMMessage[]` — must migrate to `SendStructuredRequestPort`
 
+## Implementation Status
+
+### Stage 3 — ACL Cutover (Completed 2026-04-22)
+
+The ACL has been implemented as follows:
+
+**Port split (S3.Q4):**
+
+- `LocalLLMProviderPort` (legacy monolith, `@internal`) → `ModelLifecyclePort` + `SendStructuredRequestPort`
+- `ModelLifecyclePort`: `initialize`, `getLoadedModel`, `hasModelInCache`, `deleteCachedModel`, `dispose`
+- `SendStructuredRequestPort`: `sendRequest` + `streamStructuredRequest` (S3.Q1)
+
+**ACL gate:**
+
+- `LLMMessage` and `LLMCompletionRequest` marked `@internal` — not for external consumption
+- All `apps/web` call sites migrated to `SendStructuredRequestPort` via `LLMRequest` + schema
+- `FreeFormStringSchema` (S3.Q2) provided for chat/free-form use cases
+- Governance uses strict Zod schemas via `LLMRequest.schema`
+
+**Enforcement layers:**
+
+- Layer 2: ESLint `no-restricted-imports` blocks runtime `LLMMessage`/`LocalLLMProviderPort` imports from `@hexagen/local-llm`; `import type` allowed (S3.Q3)
+- Layer 3: `scripts/validate-ui-boundary.sh` extended to check `apps/web` for runtime ACL violations
+
+**Deferred:**
+
+- Cloud chat route ACL (`/api/llm/chat/route.ts`) deferred to Stage 3.5 (S3.Q5)
+
+**Key files changed:**
+
+- `packages/local-llm/src/application/ports/in/send-structured-request.port.ts` — extended with `streamStructuredRequest` + `FreeFormStringSchema`
+- `packages/local-llm/src/domain/ports/model-lifecycle.port.ts` — new file
+- `packages/local-llm/src/infrastructure/adapters/webllm.adapter.ts` — implements both new ports
+- `apps/web/app/lib/wire.ts` — registers both new ports
+- `apps/web/app/hooks/local-llm/*.ts` — migrated to new ports
+- `apps/web/features/governance-assistant/hooks/**/*.ts` — migrated to `LLMRequest["messages"]`
+
 ## Implementation Plan
 
 See `.architecture/plans/phase-3-7-execution-plan-v1.md` Phase 5 atomic units.

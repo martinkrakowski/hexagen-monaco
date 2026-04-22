@@ -1,7 +1,7 @@
 import {
   isForbiddenToken,
   type ForbiddenToken,
-} from "../types/forbidden-brand";
+} from "../types/forbidden-brand.js";
 
 export type ProjectionTokenBrand = {
   readonly __projectionTokenBrand__: unique symbol;
@@ -40,4 +40,4 @@ export function getAllowedTokens<T extends string>(
 export {
   isForbiddenToken,
   type ForbiddenToken,
-} from "../types/forbidden-brand";
+} from "../types/forbidden-brand.js";

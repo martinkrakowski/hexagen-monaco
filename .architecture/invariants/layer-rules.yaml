@@ -9,6 +9,8 @@ shared_kernels:
     allowed_in_all_layers: true
   - package: "@hexagen/core-domain"
     allowed_in_all_layers: true
+  - package: "@hexagen/runtime"
+    allowed_in_all_layers: true
 
 layers:
   domain:
@@ -28,3 +30,18 @@ layers:
 cross_package_rules:
   - package: "web-driver"
     cannot_import: ["monaco-orchestration"] # Use @hexagen/shared for DTOs instead
+
+composition_root_exceptions:
+  - file: "apps/web/app/lib/wire.ts"
+    reason: >-
+      wire.ts is the app-layer composition root. It imports port types from
+      kernel/probabilistic packages and instantiates adapters — this is the
+      accepted leak per AR-9 (Medium). No business logic resides here; it
+      only satisfies port contracts with adapter instances.
+    allowed_imports:
+      - "@hexagen/agentic-interaction"
+      - "@hexagen/local-llm"
+      - "@hexagen/messaging"
+      - "@hexagen/visualization"
+      - "@hexagen/web-driver"
+      - "@hexagen/shared"

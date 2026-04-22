@@ -4,15 +4,15 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import type { WizardData } from "@hexagen/shared";
 import { useGovernanceAssistant } from "./hooks/useGovernanceAssistant";
-import { useLocalLLM } from "@/hooks/useLocalLlm";
+import { useLocalLLM } from "@/llm-driver/useLocalLlm";
 import { useCloudLLM, type UseCloudLLMConfig } from "./hooks/useCloudLlm";
 import { useSecretVault } from "./hooks/useSecretVault";
-import { getClientProviders } from "@/config/cloud-providers";
+import { getClientProviders } from "@hexagen/local-llm";
 import {
   type Violation,
   type AISuggestion,
   type PrebakedQuestion,
-} from "@/lib/governance-question-templates";
+} from "@hexagen/prompt-compiler";
 
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";

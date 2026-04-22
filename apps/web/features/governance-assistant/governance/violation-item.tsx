@@ -1,5 +1,5 @@
 import { ShieldCheck } from "lucide-react";
-import type { Violation } from "@/lib/governance-question-templates";
+import type { Violation } from "@hexagen/prompt-compiler";
 
 interface ViolationItemProps {
   violation: Violation;

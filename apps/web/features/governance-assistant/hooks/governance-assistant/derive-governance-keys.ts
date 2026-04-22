@@ -2,10 +2,10 @@ import { useMemo } from "react";
 
 import {
   STEP_QUESTIONS,
+  WIZARD_STEP_ORDER,
   type PrebakedQuestion,
   type WizardStepId,
-} from "@/lib/governance-question-templates";
-import { wizardSteps } from "../../../project-wizard/config";
+} from "@hexagen/prompt-compiler";
 
 import type { ActiveItem } from "./types";
 
@@ -16,31 +16,18 @@ interface UseGovernanceKeysOptions {
 }
 
 export interface GovernanceKeys {
-  /** Canonical step id for the currently-active wizard step. */
   currentStepId: WizardStepId;
-  /** Prebaked question catalogue for the current step (step-level questions only). */
   stepQuestions: PrebakedQuestion[];
-  /**
-   * IDB storage key for the current {activeItem, step, expandedQuestion}
-   * triple. Returns null when no accordion is expanded (don't persist
-   * anything in that state).
-   */
   contextKey: string | null;
 }
 
-/**
- * Pure-ish derivation hook. Turns (currentStepIndex, activeItem,
- * expandedQuestionId) into the three keys the governance thread
- * system needs for question lookup and storage scoping.
- */
 export function useGovernanceKeys({
   currentStepIndex,
   activeItem,
   expandedQuestionId,
 }: UseGovernanceKeysOptions): GovernanceKeys {
   const currentStepId = useMemo<WizardStepId>(() => {
-    const step = wizardSteps[currentStepIndex];
-    return (step?.id as WizardStepId) ?? "workspace_governance";
+    return WIZARD_STEP_ORDER[currentStepIndex] ?? "workspace_governance";
   }, [currentStepIndex]);
 
   const stepQuestions = useMemo<PrebakedQuestion[]>(() => {

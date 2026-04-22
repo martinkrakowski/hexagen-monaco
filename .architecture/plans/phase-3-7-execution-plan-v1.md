@@ -1,6 +1,6 @@
 ---
 plan-id: execution-plan-v1
-status: Ready for Execution (pending Phase 3 entry-gate authorization)
+status: In Execution — Phases 3–5 complete; Phases 6–7 in flight
 authority: Compiled declarative execution plan for Phases 3 through 7
 pass-snapshot-sha: TBD-on-commit
 phase-range: 3..7
@@ -58,11 +58,16 @@ for UI + AI + geometric constraint systems, organized as a three-plane topology:
 
 ### I.2 Completed Work (baseline for this plan)
 
-| Phase                                       | Status      | Commit    |
-| ------------------------------------------- | ----------- | --------- |
-| Phase 0 · MVK Compilation Pass              | ✅ Complete | `e338e91` |
-| Phase 1.1–1.6 · Projection Kernel Isolation | ✅ Complete | `e338e91` |
-| Phase 1.7 · Feature Slice Migration         | ✅ Complete | `a1954e7` |
+| Phase                                       | Status       | Commit    |
+| ------------------------------------------- | ------------ | --------- |
+| Phase 0 · MVK Compilation Pass              | ✅ Complete  | `5e3e47f` |
+| Phase 1.1–1.6 · Projection Kernel Isolation | ✅ Complete  | `08b67e6` |
+| Phase 1.7 · Feature Slice Migration         | ✅ Complete  | `a1954e7` |
+| Phase 3.A · Intent Compiler DDD Restructure | ✅ Complete  | `d16886f` |
+| Phase 4 · Transaction System                | ✅ Complete  | `797646b` |
+| Phase 5 · Probabilistic Layer               | ✅ Complete  | `510070d` |
+| Phase 6 · System Verification               | 🟡 In Flight | `4a4da57` |
+| Phase 7 · Composition-Root Purification     | 🟡 In Flight | `457c28f` |
 
 ### I.3 Current State Audit (verified at plan authoring time)
 
@@ -451,24 +456,24 @@ What's missing:
 | 5.A.17 | Migrate `apps/web/app/lib/wizard-assistant-context.ts` → `packages/prompt-compiler/src/infrastructure/adapters/wizard-context-serializer.adapter.ts` |
 | 5.A.18 | Update all consumers (primarily `features/governance-assistant/hooks/`) to import from `@hexagen/prompt-compiler`                                    |
 
-### VII.3 Phase 5.B — LLM Adapters (ACL enforcement)
+### VII.3 Phase 5.B — LLM Adapters (ACL enforcement) ✅ COMPLETED 2026-04-22
 
 #### Atomic Units
 
-| Unit   | Deliverable                                                                                                                             |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 5.B.1  | `packages/local-llm/src/application/ports/in/send-structured-request.port.ts` — accepts ONLY (prompt, schema); never raw UI events      |
-| 5.B.2  | `packages/local-llm/src/domain/value-objects/llm-request.ts`                                                                            |
-| 5.B.3  | `packages/local-llm/src/domain/value-objects/llm-response.ts`                                                                           |
-| 5.B.4  | `packages/local-llm/src/domain/value-objects/schema-validation-result.ts`                                                               |
-| 5.B.5  | Refactor existing `webllm-adapter` to implement the new port; add Zod schema validation at response boundary                            |
-| 5.B.6  | Refactor existing `cloud-llm-adapter` similarly                                                                                         |
-| 5.B.7  | Reject-on-schema-drift: hard failure if response does not validate                                                                      |
-| 5.B.8  | Move `apps/web/app/config/models.ts` → `packages/local-llm/src/domain/model-catalog.ts`                                                 |
-| 5.B.9  | Move `apps/web/app/config/cloud-providers.ts` → `packages/local-llm/src/domain/cloud-provider-catalog.ts`                               |
-| 5.B.10 | Move `apps/web/app/lib/model-recommendation.ts` → `packages/local-llm/src/application/use-cases/recommend-model.use-case.ts`            |
-| 5.B.11 | Keep `apps/web/app/workers/webllm.worker.ts` at app-level (Next.js bundling constraint) but import core logic from `@hexagen/local-llm` |
-| 5.B.12 | Property test: no LLM input path bypasses prompt-compiler's schema generation                                                           |
+| Unit   | Deliverable                                                                                                                             | Status                                                            |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 5.B.1  | `packages/local-llm/src/application/ports/in/send-structured-request.port.ts` — accepts ONLY (prompt, schema); never raw UI events      | ✅ Extended with streamStructuredRequest + FreeFormStringSchema   |
+| 5.B.2  | `packages/local-llm/src/domain/value-objects/llm-request.ts`                                                                            | ✅ Pre-existing                                                   |
+| 5.B.3  | `packages/local-llm/src/domain/value-objects/llm-response.ts`                                                                           | ✅ Pre-existing                                                   |
+| 5.B.4  | `packages/local-llm/src/domain/value-objects/schema-validation-result.ts`                                                               | ✅ Pre-existing                                                   |
+| 5.B.5  | Refactor existing `webllm-adapter` to implement the new port; add Zod schema validation at response boundary                            | ✅ Implements both ModelLifecyclePort + SendStructuredRequestPort |
+| 5.B.6  | Refactor existing `cloud-llm-adapter` similarly                                                                                         | ⏳ Deferred to Stage 3.5 (S3.Q5)                                  |
+| 5.B.7  | Reject-on-schema-drift: hard failure if response does not validate                                                                      | ✅ Via SendStructuredRequestPort                                  |
+| 5.B.8  | Move `apps/web/app/config/models.ts` → `packages/local-llm/src/domain/model-catalog.ts`                                                 | ✅ Completed in Stage 2                                           |
+| 5.B.9  | Move `apps/web/app/config/cloud-providers.ts` → `packages/local-llm/src/domain/cloud-provider-catalog.ts`                               | ✅ Completed in Stage 2                                           |
+| 5.B.10 | Move `apps/web/app/lib/model-recommendation.ts` → `packages/local-llm/src/application/use-cases/recommend-model.use-case.ts`            | ✅ Completed in Stage 2                                           |
+| 5.B.11 | Keep `apps/web/app/workers/webllm.worker.ts` at app-level (Next.js bundling constraint) but import core logic from `@hexagen/local-llm` | ✅                                                                |
+| 5.B.12 | Property test: no LLM input path bypasses prompt-compiler's schema generation                                                           | ✅ ACL barrel-shape test + ESLint + boundary script               |
 
 ### VII.4 Phase 5.C — Reconciliation Engine Completion
 

@@ -10,7 +10,7 @@ const CardComponent: ForwardRefRenderFunction<
     <div
       ref={ref}
       className={[
-        "rounded-md border border-border-default bg-bg-elevated shadow-sm",
+        "rounded-md border border-border bg-card shadow-sm",
         className,
       ]
         .filter(Boolean)

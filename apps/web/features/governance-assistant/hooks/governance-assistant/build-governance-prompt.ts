@@ -1,10 +1,10 @@
-import type { WizardStepId } from "@/lib/governance-question-templates";
+import type { WizardStepId } from "@hexagen/prompt-compiler";
 import {
   buildViolationPrompt,
   buildSuggestionPrompt,
   buildStepPrompt,
   type PrebakedQuestion,
-} from "@/lib/governance-question-templates";
+} from "@hexagen/prompt-compiler";
 
 import type { ActiveItem } from "./types";
 

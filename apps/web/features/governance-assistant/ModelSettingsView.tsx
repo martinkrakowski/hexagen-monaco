@@ -1,10 +1,10 @@
 "use client";
 
 import { useReducer, useEffect, useMemo } from "react";
-import { LOCAL_MODELS, getModelDescriptor } from "@/config/models";
+import { LOCAL_MODELS, getModelDescriptor } from "@hexagen/local-llm";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { useHardwareDetection } from "./hooks/useHardwareDetection";
-import { recommendModel, checkCompatibility } from "@/lib/model-recommendation";
+import { recommendModel, checkCompatibility } from "@hexagen/local-llm";
 
 import {
   ModelSettingsHeader,

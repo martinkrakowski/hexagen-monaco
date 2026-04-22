@@ -12,7 +12,7 @@ import type {
   LLMEngineStatus,
   ModelMetadata,
 } from "@hexagen/local-llm";
-import { getModelDescriptor } from "@/config/models";
+import { getModelDescriptor } from "@hexagen/local-llm";
 
 interface ModelProgressCardProps {
   status: LLMEngineStatus;

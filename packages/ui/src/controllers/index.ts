@@ -1,5 +1,5 @@
-export { useRovingTabIndex } from "./useRovingTabIndex";
-export { useFocusTrap } from "./useFocusTrap";
-export { useDisclosure } from "./useDisclosure";
-export { usePress } from "./usePress";
-export { useDialog } from "./useDialog";
+export { useRovingTabIndex } from "./useRovingTabIndex.js";
+export { useFocusTrap } from "./useFocusTrap.js";
+export { useDisclosure } from "./useDisclosure.js";
+export { usePress } from "./usePress.js";
+export { useDialog } from "./useDialog.js";

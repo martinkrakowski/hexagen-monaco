@@ -1,5 +1,5 @@
 import { ChevronDown, MessageSquare } from "lucide-react";
-import type { PrebakedQuestion } from "@/lib/governance-question-templates";
+import type { PrebakedQuestion } from "@hexagen/prompt-compiler";
 
 interface QuestionAccordionProps {
   question: PrebakedQuestion;

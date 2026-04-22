@@ -107,3 +107,39 @@ rg -l "NodeKind|EdgeKind|DomainCommand|RRP|REM|IntentLineage|NodeVisualSpec" pac
 ```
 
 **Results:** No matches in 10 of 11 locations. Two false-positive matches for `FileTreeNode` in project-configuration and project-generation (not MVK drift).
+
+---
+
+## Resolved Drift — Compilation Pass cp-2026-04-22-01
+
+**Date:** 2026-04-22
+**Trigger:** CV-7 (spec↔TS drift within MVK compilation pass)
+**Decision:** D2 — Remove `lineageId` + `timestamp` from `DomainCommand`; keep them on `IntentLineage`
+
+### Issue
+
+`spec-v1.md` lines 166–215 specify `DomainCommand` variants with only `type` and `payload`:
+
+```
+type DomainCommand =
+  | { type: "CreateNode"; payload: { kind, attributes } }
+  | { type: "UpdateNode"; payload: { nodeId, attributes } }
+  | ...
+```
+
+The TypeScript implementation added a `BaseDomainCommand` interface with `lineageId: Identifier` and `timestamp: number`, inherited by every variant. These fields are **not in the spec** and duplicate the provenance tracking already provided by `IntentLineage` (spec lines 333–365).
+
+Per ADR 0018 Q10/Q11 and the MVK authority model (spec line 37–40: "MVK Spec = Canonical"), the TypeScript must align to the spec, not vice versa.
+
+### Fix Applied
+
+- Removed `BaseDomainCommand` interface
+- Removed `lineageId` and `timestamp` from all 7 command interfaces + `BatchCommand`
+- Updated compilation pass ID to `cp-2026-04-22-01`
+- No consumer code required updating — `lineageId`/`timestamp` were never read outside the type definition
+
+### Verification
+
+- `yarn build && yarn typecheck` — green
+- `domain-command.ts` and `spec-v1.md §DomainCommand` are now shape-equivalent
+- `IntentLineage` remains the sole provenance carrier for command chain-of-custody

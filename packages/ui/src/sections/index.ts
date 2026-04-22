@@ -5,4 +5,4 @@ export {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "./Dialog";
+} from "./Dialog.js";

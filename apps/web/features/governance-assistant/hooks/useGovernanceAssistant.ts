@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WizardData } from "@hexagen/shared";
 
-import { useLocalLLM } from "@/hooks/useLocalLlm";
+import { useLocalLLM } from "@/llm-driver/useLocalLlm";
 import {
   findQuestionById,
   STEP_FOLLOW_UPS,
@@ -12,8 +12,8 @@ import {
   VIOLATION_FOLLOW_UPS,
   VIOLATION_QUESTIONS,
   type PrebakedQuestion,
-} from "@/lib/governance-question-templates";
-import { serializeWizardContext } from "@/lib/wizard-assistant-context";
+} from "@hexagen/prompt-compiler";
+import { serializeWizardContext } from "@hexagen/prompt-compiler";
 
 import { useGovernanceKeys } from "./governance-assistant/derive-governance-keys";
 import { useGovernanceThread } from "./governance-assistant/useGovernanceThread";

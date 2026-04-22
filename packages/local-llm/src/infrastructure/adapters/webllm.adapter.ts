@@ -1,8 +1,7 @@
 import { ok, err, type Result } from "@hexagen/shared";
-import type {
-  SendStructuredRequestPort,
-  LocalLLMProviderPort,
-} from "../../application/ports/in/index";
+import type { SendStructuredRequestPort } from "../../application/ports/in/index";
+import type { ModelLifecyclePort } from "../../domain/ports/model-lifecycle.port";
+import type { LocalLLMProviderPort } from "../../domain/ports/local-llm-provider.port";
 import type {
   DomainModelId,
   LLMInitializeConfig,
@@ -63,7 +62,7 @@ type WorkerMessage =
   | { type: "error"; data: string };
 
 export class WebLLMAdapter
-  implements LocalLLMProviderPort, SendStructuredRequestPort
+  implements ModelLifecyclePort, SendStructuredRequestPort, LocalLLMProviderPort
 {
   private loadedModelId: DomainModelId | null = null;
   private progressCallback: LLMProgressCallback | null = null;
@@ -244,6 +243,31 @@ export class WebLLMAdapter
           stream: request.stream ?? false,
         },
       });
+    });
+  }
+
+  async *streamStructuredRequest(
+    request: LLMRequest,
+  ): AsyncGenerator<Result<string>> {
+    if (!this.worker || !this.loadedModelId) {
+      yield err(new Error("Engine not initialized. Call initialize() first."));
+      return;
+    }
+
+    if (!request.schema) {
+      yield err(
+        new Error("LLMRequest must include a schema for structured output"),
+      );
+      return;
+    }
+
+    yield* this.streamComplete({
+      modelId: request.modelId,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxTokens: request.maxTokens,
+      topP: request.topP,
+      stream: true,
     });
   }
 

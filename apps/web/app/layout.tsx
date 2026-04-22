@@ -5,9 +5,10 @@ import "./globals.css";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "./providers/AuthProvider";
 import { SharedStateProvider } from "@/hooks/useSharedState";
-import { LocalLLMProvider } from "@/hooks/useLocalLlm";
+import { LocalLLMProvider } from "@/llm-driver/useLocalLlm";
 import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationContext";
 import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
+import { SecretVaultProvider } from "@/lib/vault-context";
 
 /*
  * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
@@ -64,17 +65,21 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <ThemeProvider>
-          <SharedStateProvider>
-            <LocalLLMProvider>
-              <AuthProvider>
-                <ExternalIntegrationProvider>
-                  <ActiveWorkspaceProvider>{children}</ActiveWorkspaceProvider>
-                </ExternalIntegrationProvider>
-              </AuthProvider>
-            </LocalLLMProvider>
-          </SharedStateProvider>
-        </ThemeProvider>
+        <SecretVaultProvider>
+          <ThemeProvider>
+            <SharedStateProvider>
+              <LocalLLMProvider>
+                <AuthProvider>
+                  <ExternalIntegrationProvider>
+                    <ActiveWorkspaceProvider>
+                      {children}
+                    </ActiveWorkspaceProvider>
+                  </ExternalIntegrationProvider>
+                </AuthProvider>
+              </LocalLLMProvider>
+            </SharedStateProvider>
+          </ThemeProvider>
+        </SecretVaultProvider>
       </body>
     </html>
   );

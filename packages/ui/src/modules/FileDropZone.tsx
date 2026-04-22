@@ -5,7 +5,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
-import { Icon } from "../elements/Icon";
+import { Icon } from "../elements/Icon.js";
 
 export interface FileDropZoneProps {
   onFileLoaded: (content: string) => void;
@@ -85,7 +85,7 @@ export function FileDropZone({
           "w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
           isDragging
             ? "border-primary bg-primary/5"
-            : "border-border hover:border-primary/50 hover:bg-bg-tertiary/50",
+            : "border-border hover:border-primary/50 hover:bg-muted/50",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -93,16 +93,16 @@ export function FileDropZone({
         <Icon
           name="upload"
           size={32}
-          className="mx-auto text-text-tertiary mb-3"
+          className="mx-auto text-muted-foreground mb-3"
         />
-        <p className="text-sm font-medium text-text-primary">
+        <p className="text-sm font-medium text-foreground">
           Drop a{" "}
-          <code className="text-xs bg-bg-tertiary px-1 py-0.5 rounded">
+          <code className="text-xs bg-muted px-1 py-0.5 rounded">
             manifest.yaml
           </code>{" "}
           file here
         </p>
-        <p className="text-xs text-text-tertiary mt-1">or click to browse</p>
+        <p className="text-xs text-muted-foreground mt-1">or click to browse</p>
         <input
           ref={inputRef}
           type="file"
@@ -113,7 +113,7 @@ export function FileDropZone({
         />
       </div>
       {error && (
-        <p role="alert" className="text-xs text-error mt-2">
+        <p role="alert" className="text-xs text-destructive mt-2">
           {error}
         </p>
       )}

@@ -1,4 +1,4 @@
-# ADR-0002: External Project Generation MVP
+# ADR-0003: External Project Generation MVP
 
 **Status:** Accepted  
 **Date:** 2026-03-12  

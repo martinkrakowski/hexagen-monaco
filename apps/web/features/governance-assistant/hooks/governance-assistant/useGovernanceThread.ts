@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage, LLMMessage } from "@hexagen/local-llm";
+import type { ChatMessage } from "@hexagen/local-llm";
+import type { LLMRequest } from "@hexagen/local-llm";
 
 import { getChatPersistence } from "@/lib/wire";
 
@@ -20,7 +21,7 @@ export interface UseGovernanceThreadReturn {
   >;
 
   /** Ref with current LLM history (question label + answer pairs) — used to seed new asks. */
-  governanceHistoryRef: React.MutableRefObject<LLMMessage[]>;
+  governanceHistoryRef: React.MutableRefObject<LLMRequest["messages"]>;
 
   /** Label of the currently streaming question; null between asks. */
   pendingQuestionLabelRef: React.MutableRefObject<string | null>;
@@ -80,7 +81,7 @@ export function useGovernanceThread({
   const [threadLoaded, setThreadLoaded] = useState(false);
   const [loadCompleteToken, setLoadCompleteToken] = useState(0);
 
-  const governanceHistoryRef = useRef<LLMMessage[]>([]);
+  const governanceHistoryRef = useRef<LLMRequest["messages"]>([]);
   const pendingQuestionLabelRef = useRef<string | null>(null);
   const wasStreamingRef = useRef(false);
   const threadLoadingRef = useRef(false);
@@ -108,7 +109,7 @@ export function useGovernanceThread({
       .then((result) => {
         if (result.success) {
           setConversationThread(result.value);
-          const rebuilt: LLMMessage[] = [];
+          const rebuilt: LLMRequest["messages"] = [];
           for (const entry of result.value) {
             rebuilt.push(
               { role: "user", content: entry.questionLabel },
@@ -169,7 +170,7 @@ export function useGovernanceThread({
 
         // Rebuild governanceHistoryRef from the full (post-mutation) thread.
         setConversationThread((prev) => {
-          const rebuilt: LLMMessage[] = [];
+          const rebuilt: LLMRequest["messages"] = [];
           for (const entry of prev) {
             rebuilt.push(
               { role: "user", content: entry.questionLabel },

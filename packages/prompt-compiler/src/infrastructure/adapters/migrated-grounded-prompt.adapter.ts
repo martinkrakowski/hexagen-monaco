@@ -6,10 +6,9 @@ import type {
 } from "../../application/ports/in/build-system-instruction.port";
 
 /**
- * Migrated from apps/web/app/lib/grounded-prompt.ts
  * Adapter that builds grounded system prompts based on project governance and editor context.
  */
-export class MigratedGroundedPromptAdapter implements BuildSystemInstructionPort {
+export class GroundedPromptAdapter implements BuildSystemInstructionPort {
   /**
    * Build a grounded system prompt from governance payload and editor state
    * @param request Contains domain AST and governance rules (adapted from the original interface)
@@ -108,7 +107,7 @@ Always respond with specific, actionable recommendations grounded in this projec
 
     // Create and return the system instruction
     return {
-      id: `migrated-grounded-prompt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      id: `grounded-prompt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       content: systemInstructionContent,
       version: 1,
       updatedAt: new Date().toISOString(),

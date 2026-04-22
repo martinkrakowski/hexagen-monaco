@@ -6,8 +6,7 @@
  * - Layer 2: ESLint rules (this file)
  * - Layer 3: CI structural check (scripts/validate-ui-boundary.sh)
  *
- * Uses ESLint flat config format. Compatible with ESLint v8.57+ (which
- * auto-detects `eslint.config.js` and enables flat-config mode).
+ * Blocklist source: scripts/firewall-blocklist.yaml
  */
 
 import tsParser from "@typescript-eslint/parser";
@@ -35,7 +34,6 @@ export default [
       ...tsPlugin.configs.recommended.rules,
       "@typescript-eslint/no-unused-vars": "warn",
       "no-console": "warn",
-      // UI projection firewall: block kernel imports from @hexagen/ui/src/**
       "no-restricted-imports": [
         "error",
         {
@@ -58,6 +56,14 @@ export default [
                 "@hexagen/reconciliation-engine/*",
                 "@hexagen/prompt-compiler",
                 "@hexagen/prompt-compiler/*",
+                "@hexagen/ui-projection-compiler",
+                "@hexagen/ui-projection-compiler/*",
+                "@hexagen/layout-engine",
+                "@hexagen/layout-engine/*",
+                "@hexagen/runtime",
+                "@hexagen/runtime/*",
+                "@hexagen/mcp-server",
+                "@hexagen/mcp-server/*",
               ],
               message:
                 "UI projection layer cannot import kernel/probabilistic packages. Use controllers + props instead.",

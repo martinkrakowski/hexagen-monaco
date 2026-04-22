@@ -1,0 +1,39 @@
+# firewall-blocklist.yaml
+# Single source of truth for the 3-layer information-state firewall.
+# Shared between Layer 2 (ESLint) and Layer 3 (CI shell script).
+# Edit here — both layers read from this file.
+
+kernel_packages:
+  - "@hexagen/core-domain"
+  - "@hexagen/architectural-enforcement"
+  - "@hexagen/intent-compiler"
+  - "@hexagen/transaction-system"
+  - "@hexagen/prompt-compiler"
+  - "@hexagen/reconciliation-engine"
+  - "@hexagen/runtime"
+  - "@hexagen/ui-projection-compiler"
+  - "@hexagen/layout-engine"
+  - "@hexagen/mcp-server"
+  - "@hexagen/local-llm"
+  - "@hexagen/agentic-interaction"
+
+forbidden_prop_names:
+  - "data"
+  - "loading"
+  - "error"
+  - "result"
+  - "isFetching"
+  - "isPending"
+  - "isSuccess"
+  - "isError"
+  - "governance"
+  - "llm"
+  - "status"
+
+allowed_hexagen_imports:
+  - "@hexagen/ui"
+  - "@hexagen/shared"
+
+acl_internal_types:
+  - "LLMMessage"
+  - "LocalLLMProviderPort"

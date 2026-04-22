@@ -19,20 +19,24 @@ import type {
   MonacoPersistencePort,
   WizardPersistencePort,
 } from "@hexagen/shared";
-import type { DownloadProjectPort } from "@hexagen/web-driver";
+
 import type { LoggerPort } from "@hexagen/shared";
 import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
 import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
 import type {
   LLMProviderPort,
   SecretVaultPort,
+  ServerLLMRequestPort,
 } from "@hexagen/agentic-interaction";
 import type {
   LocalLLMProviderPort,
+  ModelLifecyclePort,
+  SendStructuredRequestPort,
   WebGPUDetectorPort,
   HardwareProfilerPort,
   ChatPersistencePort,
 } from "@hexagen/local-llm";
+import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
 import {
   LocalStoragePersistenceAdapter,
   LocalStorageCanvasLayoutAdapter,
@@ -123,19 +127,6 @@ export const wireDependencies = () => {
   // Logger port → console logger for web app
   registry.set("LoggerPort", createWebLogger() satisfies LoggerPort);
 
-  // Download project port → not yet implemented; returns structured failure
-  registry.set("DownloadProjectPort", {
-    downloadProject: async () => {
-      return {
-        success: false as const,
-        error: {
-          code: "DOWNLOAD_FAILED" as const,
-          message: "Not implemented",
-        },
-      };
-    },
-  } satisfies DownloadProjectPort);
-
   // Architecture graph provider port → concrete adapter instance
   registry.set(
     "ArchitectureGraphProviderPort",
@@ -166,6 +157,14 @@ export const wireDependencies = () => {
     "LocalLLMProviderPort",
     localLLMAdapter satisfies LocalLLMProviderPort,
   );
+  registry.set(
+    "ModelLifecyclePort",
+    localLLMAdapter satisfies ModelLifecyclePort,
+  );
+  registry.set(
+    "SendStructuredRequestPort",
+    localLLMAdapter satisfies SendStructuredRequestPort,
+  );
 
   // WebGPU Detector → browser capability adapter
   registry.set(
@@ -191,6 +190,16 @@ export const wireDependencies = () => {
     new EphemeralSecretVaultAdapter() satisfies SecretVaultPort,
   );
 
+  // Server LLM Request Port -> dedicated use case
+  const defaultModel = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+  registry.set(
+    "ServerLLMRequestPort",
+    new HandleServerChatUseCase(
+      registry.get("LLMProviderPort") as LLMProviderPort,
+      defaultModel,
+    ) satisfies ServerLLMRequestPort,
+  );
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);
@@ -211,9 +220,6 @@ export const dependencies = wireDependencies();
 // Typed convenience getters
 export const getMonacoPersistence = () =>
   dependencies.get<MonacoPersistencePort>("MonacoPersistencePort");
-
-export const getDownloadProject = () =>
-  dependencies.get<DownloadProjectPort>("DownloadProjectPort");
 
 export const getArchitectureGraphProvider = () =>
   dependencies.get<IArchitectureGraphProviderPort>(
@@ -244,6 +250,12 @@ export const getCanvasLayoutPersistence = () =>
 export const getLocalLLMProvider = () =>
   dependencies.get<LocalLLMProviderPort>("LocalLLMProviderPort");
 
+export const getModelLifecycle = () =>
+  dependencies.get<ModelLifecyclePort>("ModelLifecyclePort");
+
+export const getSendStructuredRequest = () =>
+  dependencies.get<SendStructuredRequestPort>("SendStructuredRequestPort");
+
 export const getWebGPUDetector = () =>
   dependencies.get<WebGPUDetectorPort>("WebGPUDetectorPort");
 
@@ -256,15 +268,5 @@ export const getChatPersistence = () =>
 export const getSecretVault = () =>
   dependencies.get<SecretVaultPort>("SecretVaultPort");
 
-// Expose vault globally for client components to access
-// This is done so client components can initialize the vault reference
-// before they have access to wire dependencies (SSR hydration safety)
-if (typeof window !== "undefined") {
-  try {
-    const vault = getSecretVault();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (globalThis as any).__hexagenVault = vault;
-  } catch {
-    // Wire might not be initialized yet
-  }
-}
+export const getServerLLMRequestPort = () =>
+  dependencies.get<ServerLLMRequestPort>("ServerLLMRequestPort");

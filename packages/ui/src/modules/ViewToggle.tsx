@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
-import { Icon } from "../elements/Icon";
+import { Icon } from "../elements/Icon.js";
 
 export type ViewMode = "visual" | "code";
 
@@ -37,9 +37,9 @@ const ViewToggleComponent: ForwardRefRenderFunction<
           aria-label="Toggle between visual and code view"
         />
 
-        <div className="w-16 h-8 bg-bg-tertiary rounded-full border-2 border-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-border-focus peer-focus-visible:ring-offset-2 transition-colors peer-checked:bg-primary/10" />
+        <div className="w-16 h-8 bg-muted rounded-full border-2 border-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 transition-colors peer-checked:bg-primary/10" />
 
-        <div className="absolute left-1 top-1 w-6 h-6 bg-bg-elevated rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
+        <div className="absolute left-1 top-1 w-6 h-6 bg-card rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
           <Icon
             name={view === "visual" ? "eye" : "chevron-right"}
             size={14}

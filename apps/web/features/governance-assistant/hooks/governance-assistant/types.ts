@@ -1,8 +1,5 @@
 import type { GovernanceEntry } from "@hexagen/local-llm";
-import type {
-  Violation,
-  AISuggestion,
-} from "@/lib/governance-question-templates";
+import type { Violation, AISuggestion } from "@hexagen/prompt-compiler";
 
 /** Alias preserved for backward compatibility with earlier consumers. */
 export type ConversationEntry = GovernanceEntry;

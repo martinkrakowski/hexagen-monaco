@@ -1,4 +1,4 @@
-export * from "./projection-token";
+export * from "./projection-token.js";
 
 export const TOKENS = {
   colors: [

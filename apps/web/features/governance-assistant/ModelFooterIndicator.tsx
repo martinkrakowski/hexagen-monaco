@@ -1,7 +1,7 @@
 "use client";
 
 import type { DomainModelId } from "@hexagen/local-llm";
-import { getModelShortName } from "@/config/models";
+import { getModelShortName } from "@hexagen/local-llm";
 
 interface ModelFooterIndicatorProps {
   modelId: DomainModelId | null;

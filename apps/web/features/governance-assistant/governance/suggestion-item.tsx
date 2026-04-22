@@ -1,5 +1,5 @@
 import { Lightbulb } from "lucide-react";
-import type { AISuggestion } from "@/lib/governance-question-templates";
+import type { AISuggestion } from "@hexagen/prompt-compiler";
 
 interface SuggestionItemProps {
   suggestion: AISuggestion;

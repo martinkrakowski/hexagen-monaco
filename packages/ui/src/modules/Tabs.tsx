@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { cn } from "../lib/utils";
+import { cn } from "../lib/utils.js";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useReducer, useCallback } from "react";
-import { getClientProviders } from "@/config/cloud-providers";
+import { getClientProviders } from "@hexagen/local-llm";
 import type { SecretVaultPort } from "@hexagen/agentic-interaction";
 
 interface CloudModelSettingsViewProps {

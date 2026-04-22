@@ -77,6 +77,14 @@ export type WizardStepId =
   | "github_export"
   | "summary";
 
+export const WIZARD_STEP_ORDER: WizardStepId[] = [
+  "workspace_governance",
+  "bounded_contexts",
+  "peer_mappings",
+  "ports_configuration",
+  "summary",
+];
+
 /**
  * Predefined questions for explaining violations
  */

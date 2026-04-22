@@ -1,4 +1,4 @@
-# ADR-0001: Sync Engine Structural Fixes
+# ADR-0002: Sync Engine Structural Fixes
 
 **Status:** Accepted  
 **Date:** 2026-03-11  

@@ -1,7 +1,4 @@
-import type {
-  Violation,
-  AISuggestion,
-} from "@/lib/governance-question-templates";
+import type { Violation, AISuggestion } from "@hexagen/prompt-compiler";
 
 interface StatusSummaryCardProps {
   violations: Violation[];
