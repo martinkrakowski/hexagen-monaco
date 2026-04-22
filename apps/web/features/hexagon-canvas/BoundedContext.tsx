@@ -5,6 +5,11 @@ import { createPortal } from "react-dom";
 import { Handle, Position } from "@xyflow/react";
 import { Package, Gem, Zap, Settings2, X } from "lucide-react";
 import type { DomainEventRef } from "@hexagen/shared";
+import type {
+  VisualVariant,
+  VisualVariantCategory,
+} from "@hexagen/ui-projection-compiler";
+import { CvaVariantResolverAdapter } from "@hexagen/ui-projection-compiler";
 
 interface BoundedContextData extends Record<string, unknown> {
   label: string;
@@ -33,99 +38,56 @@ interface BoundedContextData extends Record<string, unknown> {
   parentId?: string;
 }
 
-const PORT_CATEGORY_COLORS: Record<
-  "driving" | "driven" | "presentation" | "infrastructure",
-  {
-    headerBg: string;
-    bodyBg: string;
-    border: string;
-    handleColor: string;
-    headerText: string;
-    hexColor: string;
-  }
-> = {
-  driving: {
-    headerBg: "bg-blue-600",
-    bodyBg: "bg-card",
-    border: "border-blue-500/30",
-    handleColor: "!bg-blue-500",
-    headerText: "text-white",
-    hexColor: "#3b82f6",
-  },
-  driven: {
-    headerBg: "bg-orange-600",
-    bodyBg: "bg-card",
-    border: "border-orange-500/30",
-    handleColor: "!bg-orange-500",
-    headerText: "text-white",
-    hexColor: "#f97316",
-  },
-  presentation: {
-    headerBg: "bg-rose-600",
-    bodyBg: "bg-card",
-    border: "border-rose-500/30",
-    handleColor: "!bg-rose-500",
-    headerText: "text-white",
-    hexColor: "#f43f5e",
-  },
-  infrastructure: {
-    headerBg: "bg-teal-600",
-    bodyBg: "bg-card",
-    border: "border-teal-500/30",
-    handleColor: "!bg-teal-500",
-    headerText: "text-white",
-    hexColor: "#14b8a6",
-  },
-};
+// Composition root: the CvaVariantResolverAdapter is injected here by the
+// ui-projection-compiler. No more hard-coded palette maps in feature code —
+// every visual variant flows through the compiler.
+const variantResolver = new CvaVariantResolverAdapter();
 
-const SATELLITE_NODE_STYLES: Record<
-  "entity" | "port" | "use-case" | "adapter",
-  {
-    headerBg: string;
-    bodyBg: string;
-    border: string;
-    handleColor: string;
-    headerText: string;
-  }
-> = {
-  entity: {
-    headerBg: "bg-emerald-600",
-    bodyBg: "bg-card",
-    border: "border-emerald-500/30",
-    handleColor: "!bg-emerald-500",
-    headerText: "text-white",
-  },
-  port: {
-    headerBg: "bg-violet-600",
-    bodyBg: "bg-card",
-    border: "border-violet-500/30",
-    handleColor: "!bg-violet-500",
-    headerText: "text-white",
-  },
-  "use-case": {
-    headerBg: "bg-amber-600",
-    bodyBg: "bg-card",
-    border: "border-amber-500/30",
-    handleColor: "!bg-amber-500",
-    headerText: "text-white",
-  },
-  adapter: {
-    headerBg: "bg-sky-600",
-    bodyBg: "bg-card",
-    border: "border-sky-500/30",
-    handleColor: "!bg-sky-500",
-    headerText: "text-white",
-  },
-};
+const KNOWN_CATEGORIES: readonly VisualVariantCategory[] = [
+  "driving",
+  "driven",
+  "presentation",
+  "infrastructure",
+  "entity",
+  "value-object",
+  "port",
+  "use-case",
+  "adapter",
+  "domain-event",
+  "policy",
+  "aggregate",
+  "service",
+  "default",
+] as const;
 
-type PortCategoryKey = keyof typeof PORT_CATEGORY_COLORS;
+function isKnownCategory(key: string): key is VisualVariantCategory {
+  return (KNOWN_CATEGORIES as readonly string[]).includes(key);
+}
+
+function resolveVariantForNodeType(
+  nodeType: Exclude<
+    BoundedContextData["type"],
+    undefined | "bounded-context" | "inner"
+  >,
+): VisualVariant {
+  const category: VisualVariantCategory =
+    nodeType === "entity"
+      ? "entity"
+      : nodeType === "port"
+        ? "port"
+        : nodeType === "use-case"
+          ? "use-case"
+          : "adapter";
+  return variantResolver.resolve(category);
+}
 
 function getPortCategoryStyle(
   category: string | undefined,
-): (typeof PORT_CATEGORY_COLORS)[PortCategoryKey] | null {
+): VisualVariant | null {
   if (!category) return null;
-  const key = category.toLowerCase() as PortCategoryKey;
-  return PORT_CATEGORY_COLORS[key] ?? null;
+  const key = category.toLowerCase();
+  if (!isKnownCategory(key)) return null;
+  return variantResolver.resolve(key);
 }
 
 const DOMAIN_COMPASS = [
@@ -285,15 +247,12 @@ function UnifiedBoundedContextComponent({
   // Two-zone satellite card nodes (entity, port, use-case, adapter — NOT inner)
   if (!isHexagon) {
     const styles =
-      nodeType === "entity"
-        ? SATELLITE_NODE_STYLES.entity
-        : nodeType === "port"
-          ? SATELLITE_NODE_STYLES.port
-          : nodeType === "use-case"
-            ? SATELLITE_NODE_STYLES["use-case"]
-            : nodeType === "adapter"
-              ? SATELLITE_NODE_STYLES.adapter
-              : SATELLITE_NODE_STYLES.entity;
+      nodeType === "entity" ||
+      nodeType === "port" ||
+      nodeType === "use-case" ||
+      nodeType === "adapter"
+        ? resolveVariantForNodeType(nodeType)
+        : variantResolver.resolve("entity");
 
     // Port nodes with north/south handles
     if (nodeType === "port") {
@@ -601,5 +560,5 @@ const UnifiedBoundedContext = memo(UnifiedBoundedContextComponent);
 
 UnifiedBoundedContext.displayName = "UnifiedBoundedContext";
 
-export { UnifiedBoundedContext, PORT_CATEGORY_COLORS };
+export { UnifiedBoundedContext };
 export type { UnifiedBoundedContextProps };

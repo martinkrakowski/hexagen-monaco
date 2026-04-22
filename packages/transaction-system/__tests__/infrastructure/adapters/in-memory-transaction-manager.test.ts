@@ -1,4 +1,6 @@
 import { InMemoryTransactionManager } from "../../../src/infrastructure/adapters/in-memory-transaction-manager.adapter.js";
+import { InMemoryBackpressureController } from "../../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
+import { InMemorySpeculativeStateMachine } from "../../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
 
 describe("InMemoryTransactionManager", () => {
   let manager: InMemoryTransactionManager;
@@ -126,6 +128,79 @@ describe("InMemoryTransactionManager", () => {
       const committed = manager.list("committed");
 
       expect(committed).toHaveLength(0);
+    });
+  });
+
+  describe("with backpressure controller", () => {
+    let backpressureController: InMemoryBackpressureController;
+
+    beforeEach(() => {
+      backpressureController = new InMemoryBackpressureController(2);
+      manager = new InMemoryTransactionManager({ backpressureController });
+    });
+
+    it("should succeed begin() when under capacity", () => {
+      const tx = manager.begin("intent-1");
+
+      expect(tx.intentId).toBe("intent-1");
+      expect(tx.status).toBe("pending");
+    });
+
+    it("should throw on begin() when at capacity", () => {
+      manager.begin("intent-1");
+      manager.begin("intent-2");
+
+      expect(() => manager.begin("intent-3")).toThrow(
+        "Transaction rejected: Intent queued due to backpressure",
+      );
+    });
+
+    it("should free capacity on commit() via backpressureController.complete()", () => {
+      const tx1 = manager.begin("intent-1");
+      manager.begin("intent-2");
+
+      manager.commit(tx1.id);
+
+      expect(() => manager.begin("intent-3")).not.toThrow();
+    });
+  });
+
+  describe("with speculative state machine", () => {
+    let speculativeStateMachine: InMemorySpeculativeStateMachine;
+
+    beforeEach(() => {
+      speculativeStateMachine = new InMemorySpeculativeStateMachine();
+      manager = new InMemoryTransactionManager({ speculativeStateMachine });
+    });
+
+    it("should call commitSpeculative on commit() when snapshotId is in metadata", () => {
+      const snapshotId = speculativeStateMachine.applySpeculative(
+        { type: "root" } as any,
+        { op: "test" },
+      );
+      const tx = manager.begin("intent-1", { snapshotId });
+
+      const committed = manager.commit(tx.id);
+
+      expect(committed!.status).toBe("committed");
+      expect(
+        speculativeStateMachine.getSpeculativeState(snapshotId),
+      ).not.toBeNull();
+    });
+
+    it("should call rollbackSpeculative on rollback() when snapshotId is in metadata", () => {
+      const snapshotId = speculativeStateMachine.applySpeculative(
+        { type: "root" } as any,
+        { op: "test" },
+      );
+      const tx = manager.begin("intent-1", { snapshotId });
+
+      const rolledBack = manager.rollback(tx.id);
+
+      expect(rolledBack!.status).toBe("rolled_back");
+      expect(
+        speculativeStateMachine.getSpeculativeState(snapshotId),
+      ).toBeNull();
     });
   });
 });

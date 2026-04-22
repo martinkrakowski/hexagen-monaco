@@ -1,5 +1,5 @@
-import type { RejectEmitterPort } from "../../application/ports/in/reject-emitter.port";
-import type { Rejection } from "../../domain/rejection";
+import type { RejectEmitterPort } from "../../application/ports/in/reject-emitter.port.js";
+import type { Rejection } from "../../domain/rejection.js";
 
 /**
  * Default in-memory rejection emitter. Swallows emissions silently.

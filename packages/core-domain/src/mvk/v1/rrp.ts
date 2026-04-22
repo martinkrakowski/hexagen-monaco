@@ -5,9 +5,9 @@
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
 
-import { Identifier } from "./domain-ast";
-import { NodeKind } from "./node-kind";
-import { EdgeKind } from "./edge-kind";
+import { Identifier } from "./domain-ast.js";
+import { NodeKind } from "./node-kind.js";
+import { EdgeKind } from "./edge-kind.js";
 
 /**
  * ResolvedRuleProgram - The output of contextual resolution of governance rules

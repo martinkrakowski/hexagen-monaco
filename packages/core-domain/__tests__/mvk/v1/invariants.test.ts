@@ -3,15 +3,47 @@ import {
   EdgeKind,
   TopologyInvariants,
   CardinalityInvariants,
-  isAcyclicInvariant,
-  isConnectedInvariant,
-  isContainmentInvariant,
-  isDegreeConstraintInvariant,
-  isExactlyInvariant,
-  isAtLeastInvariant,
-  isAtMostInvariant,
-  isBetweenInvariant,
 } from "../../../src/mvk/v1/index.js";
+function isAcyclicInvariant(
+  inv: TopologyInvariants,
+): inv is Extract<TopologyInvariants, { type: "Acyclic" }> {
+  return inv.type === "Acyclic";
+}
+function isConnectedInvariant(
+  inv: TopologyInvariants,
+): inv is Extract<TopologyInvariants, { type: "Connected" }> {
+  return inv.type === "Connected";
+}
+function isContainmentInvariant(
+  inv: TopologyInvariants,
+): inv is Extract<TopologyInvariants, { type: "Containment" }> {
+  return inv.type === "Containment";
+}
+function isDegreeConstraintInvariant(
+  inv: TopologyInvariants,
+): inv is Extract<TopologyInvariants, { type: "DegreeConstraint" }> {
+  return inv.type === "DegreeConstraint";
+}
+function isExactlyInvariant(
+  inv: CardinalityInvariants,
+): inv is Extract<CardinalityInvariants, { type: "Exactly" }> {
+  return inv.type === "Exactly";
+}
+function isAtLeastInvariant(
+  inv: CardinalityInvariants,
+): inv is Extract<CardinalityInvariants, { type: "AtLeast" }> {
+  return inv.type === "AtLeast";
+}
+function isAtMostInvariant(
+  inv: CardinalityInvariants,
+): inv is Extract<CardinalityInvariants, { type: "AtMost" }> {
+  return inv.type === "AtMost";
+}
+function isBetweenInvariant(
+  inv: CardinalityInvariants,
+): inv is Extract<CardinalityInvariants, { type: "Between" }> {
+  return inv.type === "Between";
+}
 
 const ALL_TOPOLOGY_TYPES: TopologyInvariants["type"][] = [
   "Acyclic",

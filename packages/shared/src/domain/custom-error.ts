@@ -1,4 +1,4 @@
-import { BaseError } from "../errors/base.error";
+import { BaseError } from "../errors/base.error.js";
 
 export class CustomError extends BaseError {
   constructor(message: string) {

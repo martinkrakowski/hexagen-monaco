@@ -21,6 +21,7 @@
     "@hexagen/project-generation": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
+    "@hexagen/ui-projection-compiler": "workspace:*",
     "@hexagen/visualization": "workspace:*",
     "@hexagen/web-driver": "workspace:*",
     "@hexagen/wizard-orchestration": "workspace:*",

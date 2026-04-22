@@ -5,7 +5,7 @@
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
 
-import { NodeKind } from "./node-kind";
+import { NodeKind } from "./node-kind.js";
 
 /**
  * CardinalityInvariants - Type-level invariants that enforce quantity constraints on the DomainAST

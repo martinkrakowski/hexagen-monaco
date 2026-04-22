@@ -133,9 +133,23 @@ try {
     bounded_contexts: [],
   };
 } catch (e) {
+  const yamlError = e as Error & {
+    mark?: { line?: number; column?: number; snippet?: string };
+  };
   logger.error(
     `FATAL ERROR: Could not parse architecture manifest from ${MANIFEST_PATH}`,
   );
+  if (yamlError.message) {
+    logger.error(`  YAML parse error: ${yamlError.message}`);
+  }
+  if (yamlError.mark) {
+    logger.error(
+      `  at line ${yamlError.mark.line ?? "?"}, column ${yamlError.mark.column ?? "?"}`,
+    );
+    if (yamlError.mark.snippet) {
+      logger.error(`  ${yamlError.mark.snippet}`);
+    }
+  }
   process.exit(1);
 }
 
@@ -301,9 +315,12 @@ function checkArchitecturalIntegrity() {
       return;
     }
 
-    const moduleSourceFiles = project
-      .getSourceFiles()
-      .filter((f) => f.getFilePath().startsWith(modulePath));
+    const moduleSourceFiles = project.getSourceFiles().filter((f) => {
+      const fp = f.getFilePath();
+      // Use path separator boundary to avoid matching sibling packages
+      // whose names share a prefix (e.g. 'ui' matching 'ui-projection-compiler').
+      return fp === modulePath || fp.startsWith(modulePath + path.sep);
+    });
 
     moduleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();

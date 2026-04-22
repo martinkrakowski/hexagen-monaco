@@ -8,7 +8,7 @@
  * The actual visual properties are computed by the projection system based on kernel semantics.
  */
 
-import { Identifier } from "./domain-ast";
+import { Identifier } from "./domain-ast.js";
 
 /**
  * NodeVisualSpec - Visual specification for a node (projection boundary only)

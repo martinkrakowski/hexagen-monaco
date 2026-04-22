@@ -1,6 +1,6 @@
 import type { DomainAST } from "@hexagen/core-domain";
-import type { CardinalityCheckerPort } from "../ports/in/cardinality-checker.port";
-import type { CardinalityCheckResult } from "../../domain/value-objects/cardinality-check-result";
+import type { CardinalityCheckerPort } from "../ports/in/cardinality-checker.port.js";
+import type { CardinalityCheckResult } from "../../domain/value-objects/cardinality-check-result.js";
 
 export class ValidateCardinalityUseCase {
   constructor(private readonly cardinalityChecker: CardinalityCheckerPort) {}

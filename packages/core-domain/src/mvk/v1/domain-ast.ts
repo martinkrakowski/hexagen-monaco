@@ -5,10 +5,10 @@
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
 
-import { NodeKind } from "./node-kind";
-import { EdgeKind } from "./edge-kind";
-import { TopologyInvariants } from "./topology-invariants";
-import { CardinalityInvariants } from "./cardinality-invariants";
+import { NodeKind } from "./node-kind.js";
+import { EdgeKind } from "./edge-kind.js";
+import { TopologyInvariants } from "./topology-invariants.js";
+import { CardinalityInvariants } from "./cardinality-invariants.js";
 
 export interface DomainAST {
   nodes: DomainNode[];

@@ -1,7 +1,7 @@
 import { InMemorySpeculativeStateMachine } from "../../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";
 
-import { NodeKind, EdgeKind } from "@hexagen/core-domain";
+import { NodeKind } from "@hexagen/core-domain";
 
 const makeAst = (): DomainAST => ({
   nodes: [

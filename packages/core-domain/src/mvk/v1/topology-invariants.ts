@@ -5,8 +5,8 @@
  * See mvk-compilation-pass: cp-2026-04-20-01
  */
 
-import { NodeKind } from "./node-kind";
-import { EdgeKind } from "./edge-kind";
+import { NodeKind } from "./node-kind.js";
+import { EdgeKind } from "./edge-kind.js";
 
 /**
  * TopologyInvariants - Type-level invariants that enforce structural constraints on the DomainAST

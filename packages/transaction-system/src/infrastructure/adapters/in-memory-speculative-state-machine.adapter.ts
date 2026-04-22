@@ -4,6 +4,9 @@ import type { SpeculativeStateMachinePort } from "../../application/ports/out/sp
 /**
  * In-memory Speculative State Machine — maintains a stack of AST snapshots
  * for speculative execution with commit/rollback semantics.
+ *
+ * Enforces monotonicity invariant: once a snapshot is committed,
+ * it cannot be rolled back or modified further.
  */
 export class InMemorySpeculativeStateMachine implements SpeculativeStateMachinePort {
   private snapshots: Map<string, { ast: DomainAST; committed: boolean }> =
@@ -24,11 +27,16 @@ export class InMemorySpeculativeStateMachine implements SpeculativeStateMachineP
   commitSpeculative(snapshotId: string): boolean {
     const entry = this.snapshots.get(snapshotId);
     if (!entry) return false;
+    // Monotonicity invariant: cannot commit an already committed snapshot
+    if (entry.committed) return false;
     entry.committed = true;
     return true;
   }
 
   rollbackSpeculative(snapshotId: string): boolean {
+    const entry = this.snapshots.get(snapshotId);
+    // Monotonicity invariant: cannot rollback a committed snapshot
+    if (!entry || entry.committed) return false;
     return this.snapshots.delete(snapshotId);
   }
 

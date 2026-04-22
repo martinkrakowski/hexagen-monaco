@@ -16,15 +16,19 @@ import { toPng } from "html-to-image";
 import { useTheme } from "@/hooks/useTheme";
 import "@xyflow/react/dist/style.css";
 
-import { UnifiedBoundedContext, PORT_CATEGORY_COLORS } from "./BoundedContext";
+import { UnifiedBoundedContext } from "./BoundedContext";
 import { GroupBoundaryNode } from "./GroupBoundaryNode";
 import { PeerContextNode } from "./PeerContextNode";
+import {
+  CvaVariantResolverAdapter,
+  type VisualVariantCategory,
+} from "@hexagen/ui-projection-compiler";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
 } from "@hexagen/visualization";
 import type { Result } from "@hexagen/shared";
-import type { HexagonNodeWithLayout } from "../../app/lib/layout-engine";
+import type { HexagonNodeWithLayout } from "@hexagen/visualization";
 
 type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 
@@ -93,6 +97,19 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   });
 }
 
+const edgeVariantResolver = new CvaVariantResolverAdapter();
+
+const EDGE_COLOR_CATEGORIES: readonly VisualVariantCategory[] = [
+  "driving",
+  "driven",
+  "presentation",
+  "infrastructure",
+] as const;
+
+function isEdgeColorCategory(key: string): key is VisualVariantCategory {
+  return (EDGE_COLOR_CATEGORIES as readonly string[]).includes(key);
+}
+
 function getEdgeColor(
   sourceNode: HexagonNodeData | undefined,
   isSK: boolean,
@@ -104,11 +121,9 @@ function getEdgeColor(
       category?: string;
     };
     if (nodeWithCategory.category) {
-      const categoryKey =
-        nodeWithCategory.category.toLowerCase() as keyof typeof PORT_CATEGORY_COLORS;
-      const categoryStyle = PORT_CATEGORY_COLORS[categoryKey];
-      if (categoryStyle) {
-        return categoryStyle.hexColor;
+      const categoryKey = nodeWithCategory.category.toLowerCase();
+      if (isEdgeColorCategory(categoryKey)) {
+        return edgeVariantResolver.resolve(categoryKey).hexColor;
       }
     }
   }

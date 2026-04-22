@@ -51,6 +51,22 @@ package_rules:
     # TopologyInvariants, CardinalityInvariants) as it validates MVK contracts.
     # Runtime type guards are used for invariant validation at runtime.
 
+  - name: "ui-projection-compiler"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/layout-engine"
+    # ui-projection-compiler maps domain node types to visual specs.
+    # It imports core-domain (NodeKind, NodeVisualSpec) and layout-engine (Affordance).
+    # Zero runtime or projection-framework imports (React/xyflow banned).
+
+  - name: "layout-engine"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # layout-engine is a pure geometric constraint solver.
+    # It imports core-domain for NodeKind type references only.
+
   - name: "runtime"
     allowed_imports:
       - "@hexagen/shared"

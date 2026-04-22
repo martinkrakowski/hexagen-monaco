@@ -1,14 +1,14 @@
-import type { DomainAST } from "@hexagen/core-domain";
+import type { CacheEntry } from "../../../domain/value-objects/cache-entry.js";
 
 /**
  * SemanticCachePort — outbound port for caching intent compilation results.
  */
 export interface SemanticCachePort {
-  /** Get a cached result for the given key */
-  get(key: string): DomainAST | null;
+  /** Get a cached entry for the given key, including metadata */
+  get(key: string): CacheEntry | null;
 
   /** Store a result in the cache with optional TTL */
-  set(key: string, value: DomainAST, ttlMs?: number): void;
+  set(key: string, value: unknown, ttlMs?: number): void;
 
   /** Check if a key exists in the cache */
   has(key: string): boolean;
