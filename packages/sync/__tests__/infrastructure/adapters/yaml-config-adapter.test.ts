@@ -91,7 +91,7 @@ failure-behavior:
   medium: warn-and-continue
 ownership-registry:
   ports:
-    apply-semantic-patch-port: @hexagen/monaco-orchestration
+    apply-semantic-patch-port: "@hexagen/monaco-orchestration"
 `;
   await withTempConfig(yamlContent, async (configPath) => {
     const adapter = new YamlConfigAdapter(configPath, fs, console);
@@ -99,7 +99,12 @@ ownership-registry:
     // ---- bootstrap sequence ------------------------------------------------
     const bootstrap = await adapter.getBootstrapSequence();
     const expectedBootstrap: BootstrapStep[] = [
-      { name: "load-ownership-map", priority: "high", failure: "abort" },
+      {
+        name: "load-ownership-map",
+        priority: "high",
+        failure: "abort",
+        note: undefined,
+      },
     ];
     assert.deepStrictEqual(
       bootstrap,
