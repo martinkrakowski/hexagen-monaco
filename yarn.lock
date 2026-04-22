@@ -1166,6 +1166,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/agentic-interaction@workspace:packages/agentic-interaction"
   dependencies:
+    "@hexagen/local-llm": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
@@ -1329,7 +1330,6 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/local-llm@workspace:packages/local-llm"
   dependencies:
-    "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/prompt-compiler": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@types/node": "npm:^20.0.0"
@@ -1578,15 +1578,11 @@ __metadata:
     "@react-aria/interactions": "npm:^3.22.0"
     "@react-aria/overlays": "npm:^3.24.0"
     "@react-stately/overlays": "npm:^3.5.0"
-    "@types/jest": "npm:^30.0.0"
     "@types/react": "npm:^19.2.14"
     "@types/react-dom": "npm:^19.2.3"
     "@typescript-eslint/eslint-plugin": "npm:^8.57.0"
     "@typescript-eslint/parser": "npm:^8.57.0"
     eslint: "npm:^8.57.0"
-    jest: "npm:^30.3.0"
-    jest-environment-jsdom: "npm:^30.3.0"
-    ts-jest: "npm:^29.4.9"
     typescript: "npm:^5.5.4"
   peerDependencies:
     react: ^18.0.0 || ^19.0.0
@@ -1610,6 +1606,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/web-driver@workspace:packages/web-driver"
   dependencies:
+    "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/local-llm": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/visualization": "workspace:*"
