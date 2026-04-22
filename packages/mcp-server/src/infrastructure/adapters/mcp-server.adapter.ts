@@ -165,98 +165,105 @@ export class MCPServerAdapter implements MCPServerPort {
         const uri = req.params.uri;
 
         if (uri === "architecture://manifest") {
-          const resource =
+          const result =
             await this.dependencies.getManifestResourceUseCase.execute();
+          if (!result.success) throw result.error;
           return {
             contents: [
               {
                 uri,
                 mimeType: "application/json",
-                text: JSON.stringify(resource, null, 2),
+                text: JSON.stringify(result.value, null, 2),
               },
             ],
           };
         }
 
         if (uri === "architecture://graph") {
-          const resource =
+          const result =
             await this.dependencies.getGraphResourceUseCase.execute();
+          if (!result.success) throw result.error;
           return {
             contents: [
               {
                 uri,
                 mimeType: "application/json",
-                text: JSON.stringify(resource, null, 2),
+                text: JSON.stringify(result.value, null, 2),
               },
             ],
           };
         }
 
       if (uri === "architecture://linter-report") {
-        const resource =
+        const result =
           await this.dependencies.getLinterReportResourceUseCase.execute();
+        if (!result.success) throw result.error;
         return {
           contents: [
             {
               uri,
               mimeType: "application/json",
-              text: JSON.stringify(resource, null, 2),
+              text: JSON.stringify(result.value, null, 2),
             },
           ],
         };
       }
 
       if (uri === "architecture://decisions") {
-        const resource =
+        const result =
           await this.dependencies.getDecisionsResourceUseCase.execute();
+        if (!result.success) throw result.error;
         return {
           contents: [
             {
               uri,
               mimeType: "application/json",
-              text: JSON.stringify(resource, null, 2),
+              text: JSON.stringify(result.value, null, 2),
             },
           ],
         };
       }
 
       if (uri === "architecture://invariants") {
-        const resource =
+        const result =
           await this.dependencies.getInvariantsResourceUseCase.execute();
+        if (!result.success) throw result.error;
         return {
           contents: [
             {
               uri,
               mimeType: "application/json",
-              text: JSON.stringify(resource, null, 2),
+              text: JSON.stringify(result.value, null, 2),
             },
           ],
         };
       }
 
       if (uri === "architecture://linter-config") {
-        const resource =
+        const result =
           await this.dependencies.getLinterConfigResourceUseCase.execute();
+        if (!result.success) throw result.error;
         return {
           contents: [
             {
               uri,
               mimeType: "application/json",
-              text: JSON.stringify(resource, null, 2),
+              text: JSON.stringify(result.value, null, 2),
             },
           ],
         };
       }
 
       if (uri === "architecture://workspace-context") {
-        const resource =
+        const result =
           await this.dependencies.getWorkspaceContextResourceUseCase.execute();
+        if (!result.success) throw result.error;
         return {
           contents: [
             {
               uri,
               mimeType: "application/json",
-              text: JSON.stringify(resource, null, 2),
+              text: JSON.stringify(result.value, null, 2),
             },
           ],
         };

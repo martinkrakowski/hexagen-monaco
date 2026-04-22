@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
 import type { Manifest, ManifestDiff, Result } from "@hexagen/shared";
@@ -15,7 +15,7 @@ export class ManifestDiffAdapter implements ManifestDiffPort {
         this.workspaceRoot,
         ".architecture/manifest.yaml",
       );
-      const currentContent = readFileSync(manifestPath, "utf-8");
+      const currentContent = await readFile(manifestPath, "utf-8");
       const current = yaml.load(currentContent) as Manifest;
 
       const previousContent = execSync(
@@ -37,10 +37,10 @@ export class ManifestDiffAdapter implements ManifestDiffPort {
         this.workspaceRoot,
         ".architecture/manifest.yaml",
       );
-      const currentContent = readFileSync(manifestPath, "utf-8");
+      const currentContent = await readFile(manifestPath, "utf-8");
       const current = yaml.load(currentContent) as Manifest;
 
-      const comparisonContent = readFileSync(filePath, "utf-8");
+      const comparisonContent = await readFile(filePath, "utf-8");
       const previous = yaml.load(comparisonContent) as Manifest;
 
       const diff = computeDiff(current, previous);

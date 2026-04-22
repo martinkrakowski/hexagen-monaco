@@ -164,20 +164,23 @@ class EventBusFake implements EventBusPort {
   const manifestWrite = new ManifestWriteFake();
   const eventBus = new EventBusFake();
 
-  const manifestResource = await new GetManifestResourceUseCase(
+  const manifestResult = await new GetManifestResourceUseCase(
     projectRead,
   ).execute();
-  assert.ok(manifestResource);
+  assert.ok(manifestResult.success, "getManifest should succeed");
+  assert.ok(manifestResult.value);
 
-  const graphResource = await new GetGraphResourceUseCase(
+  const graphResult = await new GetGraphResourceUseCase(
     sync as ArchitectureQueryPort,
   ).execute();
-  assert.strictEqual(graphResource.nodes.length, 1);
+  assert.ok(graphResult.success, "getGraph should succeed");
+  assert.strictEqual(graphResult.value.nodes.length, 1);
 
-  const linterResource = await new GetLinterReportResourceUseCase(
+  const linterResult = await new GetLinterReportResourceUseCase(
     sync as ArchitectureQueryPort,
   ).execute();
-  assert.strictEqual(linterResource.isCompliant, true);
+  assert.ok(linterResult.success, "getLinterReport should succeed");
+  assert.strictEqual(linterResult.value.isCompliant, true);
 
   const auditResult = await new AuditBoundariesToolUseCase(linter).execute();
   assert.strictEqual(auditResult.report.scannedFilesCount, 8);
