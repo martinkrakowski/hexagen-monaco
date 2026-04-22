@@ -60,6 +60,17 @@ export interface BoundedContextLayers {
 export interface BoundedContextGenerator {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  /**
+   * Per-context override merged on top of workspaceDefaults.tsConfig.
+   * Use for packages with non-standard build settings (e.g. CLI tools
+   * needing emitDeclarationOnly: false, React packages needing jsx).
+   *
+   * See ADR-0024 §"Phase 2" — three-level merge cascade:
+   *   per-context override > workspaceDefaults > generator built-in fallback.
+   */
+  tsConfig?: TsConfigTemplate;
+  /** Per-context override merged on top of workspaceDefaults.packageJson. */
+  packageJson?: Record<string, unknown>;
 }
 
 export interface BoundedContextWiring {
@@ -130,8 +141,30 @@ export interface TSConfigRoot {
   references?: Array<{ path: string }>;
 }
 
+/**
+ * Schema for tsconfig.json templates and per-context overrides.
+ * Mirrors the structure of tsconfig.json itself.
+ *
+ * More permissive than {@link TSConfigRoot} — `compilerOptions` is a bag of
+ * unknown values so manifest authors may add arbitrary TS compiler options
+ * without having to extend the typed schema first.
+ *
+ * Introduced by ADR-0024 Phase 2 as the canonical override shape.
+ */
+export interface TsConfigTemplate {
+  extends?: string;
+  compilerOptions?: Record<string, unknown>;
+  include?: string[];
+  exclude?: string[];
+  references?: Array<{ path: string }>;
+}
+
 export interface WorkspaceDefaults {
-  tsConfig?: TSConfigRoot;
+  /**
+   * Default tsconfig template applied to all packages. Per-context overrides
+   * in `bounded_contexts[].generator.tsConfig` are merged on top.
+   */
+  tsConfig?: TsConfigTemplate;
   packageJson?: Record<string, unknown>;
 }
 
