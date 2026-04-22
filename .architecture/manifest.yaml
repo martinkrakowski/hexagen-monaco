@@ -505,12 +505,35 @@ bounded_contexts:
         adapters:
           - ExternalSyncEngineAdapter
           - JsZipCreatorAdapter
+  - name: governance
+    type: supporting
+    description: >-
+      Governance read surface — exposes architectural decisions, invariants,
+      linter config, and workspace context as typed resources for AI agent
+      consumption
+    layers:
+      domain: {}
+      application:
+        use_cases:
+          - GetDecisionsResourceUseCase
+          - GetInvariantsResourceUseCase
+          - GetLinterConfigResourceUseCase
+          - GetWorkspaceContextResourceUseCase
+        ports:
+          in: []
+          out:
+            - GovernanceReadPort
+      infrastructure:
+        adapters:
+          - GovernanceReadAdapter
+    depends_on:
+      - shared
   - name: mcp-server
     type: core
     description: >-
       MCP server — exposes architectural tools and resources over stdio
       transport for AI agent interaction (audit, scaffold, dependency
-      management)
+      management, governance reads, manifest diff)
     layers:
       domain: {}
       application:
@@ -518,6 +541,11 @@ bounded_contexts:
           - GetManifestResourceUseCase
           - GetGraphResourceUseCase
           - GetLinterReportResourceUseCase
+          - GetDecisionsResourceUseCase
+          - GetInvariantsResourceUseCase
+          - GetLinterConfigResourceUseCase
+          - GetWorkspaceContextResourceUseCase
+          - DiffManifestToolUseCase
           - AuditBoundariesToolUseCase
           - ScaffoldModuleToolUseCase
           - AddDependencyToolUseCase
@@ -534,6 +562,8 @@ bounded_contexts:
             - LinterPort
             - ArchitectureQueryPort
             - ScaffoldingPort
+            - GovernanceReadPort
+            - ManifestDiffPort
       infrastructure:
         adapters:
           - MCPServerAdapter
@@ -542,6 +572,8 @@ bounded_contexts:
           - LinterAdapter
           - SyncEngineAdapter
           - InMemoryEventBusAdapter
+          - GovernanceReadAdapter
+          - ManifestDiffAdapter
     depends_on:
       - shared
       - messaging
