@@ -203,7 +203,20 @@ async function walkDirectory(
     );
 
     // Only add subdirectory to exports if it has exportable content
-    if (subExports.length > 0 || (await hasBarrel(subDirPath))) {
+    // AND its barrel is not queued for deletion. `hasBarrel` probes the
+    // filesystem, which still shows a stub index.ts we've already scheduled
+    // for removal further down in `pendingWrites` (empty-content entries).
+    // Without this guard the parent barrel would emit a dangling
+    // `export * from "./<dir>/index.js";` that fails module resolution in
+    // consumers after the write phase runs.
+    const subBarrelPath = path.join(subDirPath, "index.ts");
+    const isQueuedForDeletion = pendingWrites.some(
+      (p) => p.filePath === subBarrelPath && p.content === "",
+    );
+    if (
+      (subExports.length > 0 || (await hasBarrel(subDirPath))) &&
+      !isQueuedForDeletion
+    ) {
       exportEntries.push({ name: dir, isDirectory: true });
     }
   }

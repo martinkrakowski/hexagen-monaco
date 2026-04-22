@@ -25,14 +25,18 @@ export async function ensureDependenciesBuilt(
   logger.info("Pre‑flight: ensuring package dependencies are up‑to‑date...");
   try {
     // Turbo will only rebuild packages that need it based on timestamps.
+    // Scope cwd to workspaceRoot so we don't shell out against an arbitrary
+    // process.cwd() — same fix as sync-engine.ts git execAsync calls.
     const { stdout, stderr } = await execAsync("npx turbo run build", {
+      cwd: config.workspaceRoot,
       maxBuffer: MAX_BUFFER,
     });
     if (stdout) logger.debug(stdout);
     if (stderr) logger.warn(stderr);
     logger.info("Pre‑flight build completed.");
-  } catch (err: any) {
-    const errorDetails = err.stderr || err.stdout || err.message || err;
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; stdout?: string; message?: string };
+    const errorDetails = e.stderr || e.stdout || e.message || String(err);
     logger.error(`Pre-flight build failed. Aborting sync.`);
     logger.error(`Build error: ${errorDetails}`);
     throw new Error("Preflight build failed — sync aborted");

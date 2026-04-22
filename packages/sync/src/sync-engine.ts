@@ -281,7 +281,12 @@ export class SyncEngine {
     // Ensure a clean git tree before mutating anything (unless --allow-dirty or external mode)
     if (mode === "self-regen" && !allowDirty) {
       try {
-        const { stdout: gitStatus } = await execAsync("git status --porcelain");
+        const { stdout: gitStatus } = await execAsync(
+          "git status --porcelain",
+          {
+            cwd: this.options?.targetRoot ?? process.cwd(),
+          },
+        );
         if (gitStatus && gitStatus.trim().length > 0) {
           logger.error(
             "Git working tree is dirty. Commit or stash changes, or use --allow-dirty to proceed.",
@@ -379,7 +384,9 @@ export class SyncEngine {
       // Attempt total rollback on error (unless dry‑run)
       if (!dryRun) {
         try {
-          await execAsync("git reset --hard HEAD && git clean -fd");
+          await execAsync("git reset --hard HEAD && git clean -fd", {
+            cwd: this.workspaceRoot,
+          });
           logger.info("Rollback completed after failure.");
         } catch (rollbackErr) {
           logger.warn(
