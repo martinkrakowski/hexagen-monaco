@@ -312,3 +312,22 @@ export function isSharedKernel(context: BoundedContext): boolean {
 export function isDriver(context: BoundedContext): boolean {
   return context.type === "driver";
 }
+
+/**
+ * Expand a bounded context's `depends_on` list into workspace dependency entries.
+ * Used by package-json and tsconfig generators to derive cross-package linkage
+ * from the manifest's depends_on declarations.
+ *
+ * @param context - The bounded context whose depends_on should be expanded
+ * @returns Map of @hexagen/<name> → "workspace:*" entries
+ */
+export function expandDependsOn(
+  context: BoundedContext,
+): Record<string, string> {
+  return Object.fromEntries(
+    (context.depends_on ?? []).map((name) => [
+      `@hexagen/${name}`,
+      "workspace:*",
+    ]),
+  );
+}

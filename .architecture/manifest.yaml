@@ -117,6 +117,19 @@ generator:
       - .env.development
       - .env.production
       - .env.test
+    layers:
+      domain:
+        folder: src/domain
+      application:
+        folder: src/application
+        subfolders:
+          - ports/in
+          - ports/out
+          - use-cases
+      infrastructure:
+        folder: src/infrastructure
+        subfolders:
+          - adapters
     packageJson:
       mergeStrategy: preserveExisting
       protectedKeys:

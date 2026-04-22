@@ -112,7 +112,7 @@ export function generateBarrelContent(entries: ExportEntry[]): string | null {
       const path = entry.isDirectory
         ? `./${entry.name}/index.js`
         : `./${entry.name}.js`;
-      return `export * from '${path}';`;
+      return `export * from "${path}";`;
     });
 
   return `${GENERATED_MARKER}\n\n${exportLines.join("\n")}\n`;
