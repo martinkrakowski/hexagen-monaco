@@ -479,23 +479,6 @@ bounded_contexts:
       - >-
         ArchitectureGraphProviderPort is owned by visualization and implemented
         here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
-  - name: llm-driver
-    type: driver
-    description: >-
-      React hooks and providers for the local-llm and agentic-interaction
-      bounded contexts. Acts as the application-layer glue code for AI features.
-    layers:
-      application:
-        hooks:
-          - useLocalLLM
-          - useEngineLifecycle
-          - useChatMessages
-          - useGovernancePayload
-    driver_for: apps/web
-    depends_on:
-      - local-llm
-      - agentic-interaction
-      - shared
   - name: project-generation
     type: core
     description: >-
