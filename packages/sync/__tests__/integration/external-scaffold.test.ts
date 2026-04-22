@@ -244,6 +244,7 @@ describe("SyncEngine end-to-end external scaffold", () => {
           // `plain-ts` entry is exercised via the generator's fallback
           // table even though no app uses it in this fixture.
           apps: {
+            enabled: true,
             frameworks: {
               "next.js": {},
               fastify: {},

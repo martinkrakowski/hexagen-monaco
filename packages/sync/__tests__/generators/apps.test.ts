@@ -78,11 +78,33 @@ function makeReport(): RecordedReport {
   };
 }
 
+/**
+ * Construct a SyncConfig. By default injects `generator.sync.apps.enabled: true`
+ * so existing generation tests don't each need per-fixture opt-in. Pass
+ * `enableApps: false` to exercise the opt-in gate's default-no-op behavior.
+ */
 function makeConfig(
   workspaceRoot: string,
   manifest: Manifest,
   logger: LoggerPort,
+  options: { enableApps?: boolean } = {},
 ): SyncConfig {
+  const { enableApps = true } = options;
+  const mergedManifest: Manifest = enableApps
+    ? {
+        ...manifest,
+        generator: {
+          ...manifest.generator,
+          sync: {
+            ...manifest.generator?.sync,
+            apps: {
+              ...manifest.generator?.sync?.apps,
+              enabled: true,
+            },
+          },
+        },
+      }
+    : manifest;
   return {
     dryRun: false,
     force: false,
@@ -91,7 +113,7 @@ function makeConfig(
     strict: false,
     mode: "external",
     logger,
-    manifest,
+    manifest: mergedManifest,
     workspaceRoot,
   };
 }
@@ -857,6 +879,45 @@ async function pathExists(filePath: string): Promise<boolean> {
 
     console.log(
       "✅ App tsConfig written as JSON (structured JSON.stringify, not template interpolation)",
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // 12) Opt-in gate: No-op when generator.sync.apps.enabled !== true
+  // ---------------------------------------------------------------------------
+  // Locks in the destructive-generator safety contract: even with apps[]
+  // declared and a valid framework, the generator MUST do nothing unless
+  // the manifest explicitly opts in. Prevents accidental clobbering of
+  // hand-written apps in self-regen (e.g. hexagen-monaco's real apps/web).
+  await withTempWorkspace(async ({ workspaceRoot }) => {
+    const logger = makeCapturingLogger();
+    const manifest: Manifest = {
+      system: "myorg",
+      apps: [{ name: "web", framework: "next.js" }],
+      // No generator.sync.apps.enabled — should no-op regardless of apps[]
+    };
+    const config = makeConfig(workspaceRoot, manifest, logger, {
+      enableApps: false,
+    });
+
+    const result = await generateApps(config);
+
+    assert.strictEqual(result.error, undefined, "no error when disabled");
+    assert.strictEqual(
+      result.created.length,
+      0,
+      "no files created when disabled",
+    );
+    assert.strictEqual(result.updated.length, 0);
+    assert.strictEqual(result.skipped.length, 0);
+    assert.strictEqual(
+      await pathExists(path.join(workspaceRoot, "apps")),
+      false,
+      "no apps/ directory created when opt-in flag absent",
+    );
+
+    console.log(
+      "✅ Opt-in gate: no-op when generator.sync.apps.enabled is not set",
     );
   });
 

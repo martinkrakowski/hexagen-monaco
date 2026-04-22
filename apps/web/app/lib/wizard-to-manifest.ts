@@ -194,6 +194,12 @@ export function wizardToManifest(
         // defaults (`generateStubs`); the UI does not customise those.
         // See `docs/sync-engine-unified-scaffolding-plan.md` §Sub-agent 4b.
         stubs: { enabled: true },
+        // Apps generation is also required for UI-generated projects. The
+        // generator is opt-in by design (self-regen of monorepos with
+        // hand-written apps like hexagen-monaco must leave it disabled) —
+        // the UI explicitly opts in because it always generates app
+        // scaffolding from scratch into a fresh target directory.
+        apps: { enabled: true },
       },
     },
     apps: deriveApps(boundedContexts),

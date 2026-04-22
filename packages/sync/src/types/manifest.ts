@@ -428,8 +428,23 @@ export interface AppFrameworkConfig {
  * Top-level apps-generator configuration under `generator.sync.apps`.
  * Keyed by {@link AppFramework} so the generator can look up templates
  * for each entry in the top-level `apps[]` array.
+ *
+ * **Opt-in by design** (`enabled` defaults to `false`): the apps generator
+ * writes `apps/<name>/package.json`, `tsconfig.json`, and entry-point files.
+ * This is potentially destructive if the target monorepo already has
+ * hand-written apps with different naming conventions (e.g. hexagen-monaco's
+ * `apps/web` uses bare `"name": "web"` rather than `"@hexagen/web"`).
+ *
+ * Set `enabled: true` only when the caller knows the apps are auto-generated
+ * (e.g. UI-driven external mode on a fresh target directory). Self-regen of
+ * an existing monorepo with hand-written apps should leave this unset.
  */
 export interface AppsGeneratorConfig {
+  /**
+   * When `true`, `generateApps` iterates `manifest.apps[]` and writes each
+   * app's scaffolding. When absent or `false`, the generator is a no-op.
+   */
+  enabled?: boolean;
   frameworks?: Partial<Record<AppFramework, AppFrameworkConfig>>;
 }
 

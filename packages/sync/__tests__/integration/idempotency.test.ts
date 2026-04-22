@@ -647,6 +647,7 @@ describe("SyncEngine idempotency (ADR-0024 Phase 1.5)", () => {
           layers: LAYERS_TEMPLATE,
           packageJson: { protectedKeys: PROTECTED_KEYS },
           apps: {
+            enabled: true,
             frameworks: {
               // Partial manifest overrides — fields not declared fall
               // through to the built-in fallback (verifies the cascade

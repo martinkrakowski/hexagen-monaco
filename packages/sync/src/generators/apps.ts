@@ -347,6 +347,17 @@ export async function generateApps(
   const result = createEmptyResult();
 
   try {
+    const appsGenConfig = config.manifest.generator?.sync?.apps;
+
+    // Opt-in gate: apps generation is destructive for monorepos with
+    // hand-written apps (e.g. hexagen-monaco's apps/web uses bare name
+    // "web" rather than the generator's "@{system}/{appName}" pattern).
+    // Self-regen callers with non-generator-owned apps should leave
+    // `generator.sync.apps.enabled` unset.
+    if (appsGenConfig?.enabled !== true) {
+      return result;
+    }
+
     const apps = config.manifest.apps;
     if (!apps || apps.length === 0) {
       // Nothing declared → no writes, no error. Matches plan §Phase 3
@@ -354,7 +365,6 @@ export async function generateApps(
       return result;
     }
 
-    const appsGenConfig = config.manifest.generator?.sync?.apps;
     const system = (config.manifest.system as string | undefined) ?? "";
 
     const seen = new Set<string>();
