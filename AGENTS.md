@@ -291,6 +291,15 @@ Contains agent-interaction logic                      No generator awareness
 | 7   | no-empty-stubs            | medium   | warn + continue |
 | 8   | exports-field-mandatory   | medium   | warn + continue |
 | 9   | test-double-parity        | medium   | warn + continue |
+| 10  | generated-file-provenance | medium   | warn + continue |
+
+**Invariant #10 — `generated-file-provenance` (added by ADR-0025):** Every
+file produced by sync engine generators must correspond to a
+manifest-declared template or a built-in fallback inside
+`packages/sync/src/generators/`. No hardcoded template strings may live
+outside the engine. The adapter layer (notably
+`ExternalSyncEngineAdapter`) is forbidden from embedding scaffolding
+templates.
 
 ### Bootstrap Sequence
 
@@ -343,6 +352,23 @@ type Result<T, E = Error> =
 **Test Double Parity Rule:** Test doubles must implement _exactly_ the same interface as the real adapter.
 
 **Silent Error Swallowing (Hard Rejection):** Every catch block must return `Result<T, E>` — never null/false/default.
+
+### Stub Generation Contract (added by ADR-0025)
+
+When the sync engine generates stub TypeScript files for manifest-declared
+domain entities, value objects, ports, adapters, and use-cases:
+
+- Stubs NEVER overwrite existing files (any content, `@generated` marker
+  or not). Tests must assert that running sync against a fixture with
+  hand-edited stubs produces zero changes to those files.
+- Stub content is manifest-driven via `generator.sync.stubs.templates`
+  with `{name}` as the sole interpolation variable.
+- Layer barrels MUST re-export generated stubs. This is guaranteed by
+  the two-pass barrel ordering in `sync-engine.ts` — stubs write first,
+  barrels regenerate second. Tests should include an E2E fixture that
+  confirms the full chain works.
+- When `generator.sync.stubs.enabled !== true`, the stub generator is
+  a no-op regardless of manifest layer declarations.
 
 ## 9. Subsystem-Specific Rules
 

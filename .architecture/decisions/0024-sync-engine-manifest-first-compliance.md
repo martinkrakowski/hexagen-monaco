@@ -92,4 +92,17 @@ Restore the sync engine's contract with `.architecture/manifest.yaml` via two ph
 - **Reconciles:** ADR-0001 (composite-safety invariant), ADR-0004 (paths-override strategy)
 - **Supersedes (in part):** ADR-0002 §"Fix tsconfig.json References Path", ADR-0003 §8 "Fix tsconfig References"
 - **Builds on:** ADR-0007 (barrel generation consolidation)
+- **Succeeded by:** ADR-0025 (unified sync engine — completes the manifest-first vision)
 - **Related work:** Commit `4838e33` (governance package CI fix), commit `b2b8c6c` (the references-removal that triggered this decay)
+
+---
+
+## Update 2026-04-22: Unified Engine Landed (ADR-0025)
+
+The unified sync engine (ADR-0025) has landed. The Phase 2 mass regen described in §Migration above is now safer for two reasons:
+
+1. **Root files are manifest-driven.** `package.json`, `tsconfig.base.json`, and `turbo.json` now come from `monorepo.rootFiles` templates in the manifest (with built-in fallbacks in the engine). `safeWriteFileAtomic` protection ensures mass regen cannot inadvertently clobber these without `--force-root`. Root-file template drift between the adapter and the engine is no longer possible because there is only one template source.
+
+2. **The stale-barrel bug that made generated projects require post-extract `yarn sync` is fixed.** The sync engine now runs a two-pass barrel generation: stubs are emitted in pass 1 of the Content phase, then the barrel walker runs a second time in the Barrels phase to pick up newly-created stub files. Generated projects are buildable immediately after extraction.
+
+See ADR-0025 for the full unified contract, the new manifest sections (`generator.sync.stubs`, `monorepo.rootFiles`, `monorepo.archInvariants`, `apps[]`, `generator.sync.apps.frameworks`, `monorepo.workspaceDefaults.eslint`), and the three-phase pipeline ordering.
