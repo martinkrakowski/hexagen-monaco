@@ -54,6 +54,38 @@ function makeFlags(): SyncFlags {
 }
 
 /**
+ * Sync-engine flag preset for tests that need the engine to emit
+ * root-level files (`package.json`, `tsconfig.base.json`, `turbo.json`)
+ * via `generateRootFiles`. Those paths are in the `protectedFiles` set in
+ * `fs-utils.ts`, so `safeWriteFileAtomic` refuses to write them unless
+ * `forceRoot` is true. External mode + `force: true` + `forceRoot: true`
+ * mirrors the settings the production external-mode adapter uses when
+ * scaffolding fresh monorepos.
+ */
+function makeForceRootFlags(): SyncFlags {
+  return {
+    dryRun: false,
+    force: true,
+    forceRoot: true,
+    allowDirty: true,
+    strict: false,
+    mode: "external",
+    logger: silentLogger,
+  };
+}
+
+/**
+ * Create a fresh, empty temp directory with no pre-populated root files.
+ * Used by the rootFiles and apps idempotency tests so the engine writes
+ * its root scaffolding into a truly blank slate (rather than having the
+ * fixture's own minimal `package.json` / `tsconfig.base.json` collide
+ * with the root-files generator's output).
+ */
+async function createEmptyFixture(): Promise<string> {
+  return fs.mkdtemp(path.join(os.tmpdir(), "hexagen-sync-idempotency-empty-"));
+}
+
+/**
  * Canonical workspace-level tsconfig template — mirrors the real manifest's
  * `workspaceDefaults.tsConfig` at .architecture/manifest.yaml:58-76.
  */
@@ -418,6 +450,282 @@ describe("SyncEngine idempotency (ADR-0024 Phase 1.5)", () => {
       parsed.references,
       [{ path: "../shared" }],
       "alpha tsconfig must contain a reference to ../shared derived from depends_on",
+    );
+  });
+
+  it("sync engine idempotent on fixture with generator.sync.stubs.enabled and bounded context having port/adapter declarations", async () => {
+    // Rationale: exercises the full stub-emission → second-barrel-pass
+    // pipeline. The second sync must be byte-identical, which is the
+    // strongest available signal that:
+    //   (a) the stubs generator preserves existing stubs on rerun
+    //       (see stubs.ts `writeStubFile` hard no-overwrite guard), AND
+    //   (b) the second-pass barrels, having re-scanned src/ after stub
+    //       emission, produce identical content both runs.
+    fixtureRoot = await createFixture(["orders"]);
+
+    const manifest: Manifest = {
+      workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
+      generator: {
+        sync: {
+          layers: LAYERS_TEMPLATE,
+          packageJson: { protectedKeys: PROTECTED_KEYS },
+          stubs: {
+            enabled: true,
+            // Templates + naming left undefined — exercises the built-in
+            // fallback cascade inside stubs.ts.
+          },
+        },
+      },
+      bounded_contexts: [
+        {
+          name: "orders",
+          type: "core",
+          layers: {
+            domain: {
+              entities: ["Order"],
+              value_objects: ["OrderId"],
+              ports: { out: ["OrderRepository"] },
+            },
+            application: {
+              use_cases: ["PlaceOrder"],
+              ports: { in: ["PlaceOrderCommand"] },
+            },
+            infrastructure: {
+              adapters: ["OrderRepositoryPostgres"],
+            },
+          },
+        },
+      ],
+    };
+
+    const engine = new SyncEngine(makeFlags(), {
+      targetRoot: fixtureRoot,
+      manifest,
+    });
+    await engine.run();
+    const first = await snapshotTree(fixtureRoot);
+
+    const engine2 = new SyncEngine(makeFlags(), {
+      targetRoot: fixtureRoot,
+      manifest,
+    });
+    await engine2.run();
+    const second = await snapshotTree(fixtureRoot);
+
+    assert.deepStrictEqual(
+      second,
+      first,
+      "second run must be byte-identical with stubs + port/adapter declarations",
+    );
+
+    // Sanity: at least one stub file and its barrel ancestor were emitted.
+    const stubPath = path.join(
+      fixtureRoot,
+      "packages/orders/src/domain/entities/Order.ts",
+    );
+    const stubStat = await fs.stat(stubPath).catch(() => null);
+    assert.ok(stubStat?.isFile(), "Order entity stub must exist on disk");
+
+    const entitiesBarrel = await fs.readFile(
+      path.join(fixtureRoot, "packages/orders/src/domain/entities/index.ts"),
+      "utf8",
+    );
+    assert.ok(
+      entitiesBarrel.includes('export * from "./Order.js";'),
+      "entities barrel must re-export the Order stub (second-pass barrel regen)",
+    );
+  });
+
+  it("sync engine idempotent on fixture with monorepo.rootFiles templates", async () => {
+    // Rationale: root files are gated by `isProtectedRoot`. We use a
+    // brand-new empty directory (no pre-created package.json /
+    // tsconfig.base.json) and `forceRoot: true` so the first run
+    // actually writes them, then we verify the second run is identical.
+    fixtureRoot = await createEmptyFixture();
+
+    const manifest: Manifest = {
+      system: "idempotent-fixture",
+      scope: "idempotent-fixture",
+      monorepo: {
+        packageManager: "yarn@4.12.0",
+        workspaces: ["apps/*", "packages/*"],
+        rootFiles: {
+          // Explicit templates — these exercise the manifest-driven path
+          // (not the built-in fallback). Layout intentionally differs
+          // slightly from built-ins so we know the manifest is used.
+          packageJson: {
+            template:
+              '{\n  "name": "{system}",\n  "private": true,\n  "packageManager": "{packageManager}",\n  "workspaces": {workspaces}\n}\n',
+          },
+          tsConfig: {
+            template:
+              '{\n  "compilerOptions": {\n    "target": "ES2022",\n    "module": "ESNext"\n  }\n}\n',
+          },
+          turbo: {
+            template:
+              '{\n  "$schema": "https://turbo.build/schema.json",\n  "tasks": {\n    "build": {}\n  }\n}\n',
+          },
+        },
+      },
+      workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
+      generator: {
+        sync: {
+          layers: LAYERS_TEMPLATE,
+          packageJson: { protectedKeys: PROTECTED_KEYS },
+        },
+      },
+      // Empty bounded_contexts — isolates rootFiles path from per-module
+      // generators. We only want to assert on package.json / tsconfig.base.json
+      // / turbo.json determinism here.
+      bounded_contexts: [],
+    };
+
+    const engine = new SyncEngine(makeForceRootFlags(), {
+      targetRoot: fixtureRoot,
+      manifest,
+    });
+    await engine.run();
+    const first = await snapshotTree(fixtureRoot);
+
+    const engine2 = new SyncEngine(makeForceRootFlags(), {
+      targetRoot: fixtureRoot,
+      manifest,
+    });
+    await engine2.run();
+    const second = await snapshotTree(fixtureRoot);
+
+    assert.deepStrictEqual(
+      second,
+      first,
+      "second run must be byte-identical with monorepo.rootFiles templates",
+    );
+
+    // Sanity: the three root files exist with the manifest-declared
+    // content (not the built-in fallback).
+    const pkgJson = await fs.readFile(
+      path.join(fixtureRoot, "package.json"),
+      "utf8",
+    );
+    assert.ok(
+      pkgJson.includes('"name": "idempotent-fixture"'),
+      "root package.json must contain interpolated system name",
+    );
+    const tsconfigBase = await fs.readFile(
+      path.join(fixtureRoot, "tsconfig.base.json"),
+      "utf8",
+    );
+    assert.ok(
+      tsconfigBase.includes('"target": "ES2022"'),
+      "root tsconfig.base.json must reflect manifest template",
+    );
+    const turboJson = await fs.readFile(
+      path.join(fixtureRoot, "turbo.json"),
+      "utf8",
+    );
+    assert.ok(
+      turboJson.includes('"$schema": "https://turbo.build/schema.json"'),
+      "root turbo.json must reflect manifest template",
+    );
+  });
+
+  it("sync engine idempotent on fixture with apps[] + generator.sync.apps.frameworks", async () => {
+    // Rationale: covers the apps generator. The engine writes app
+    // scaffolding under `${fixtureRoot}/apps/<name>/`; a rerun with the
+    // same manifest must produce a byte-identical tree.
+    fixtureRoot = await createEmptyFixture();
+
+    const manifest: Manifest = {
+      system: "apps-fixture",
+      scope: "apps-fixture",
+      monorepo: {
+        packageManager: "yarn@4.12.0",
+        workspaces: ["apps/*", "packages/*"],
+      },
+      workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
+      generator: {
+        sync: {
+          layers: LAYERS_TEMPLATE,
+          packageJson: { protectedKeys: PROTECTED_KEYS },
+          apps: {
+            frameworks: {
+              // Partial manifest overrides — fields not declared fall
+              // through to the built-in fallback (verifies the cascade
+              // is order-stable across reruns).
+              "next.js": {
+                packageJson: {
+                  template:
+                    '{\n  "name": "@{system}/{appName}",\n  "private": true,\n  "type": "module"\n}\n',
+                },
+              },
+              fastify: {
+                entryPoint: {
+                  path: "src/server.ts",
+                  template: "// custom fastify entry for {appName}\n",
+                },
+              },
+              "plain-ts": {},
+            },
+          },
+        },
+      },
+      bounded_contexts: [],
+      apps: [
+        { name: "web", framework: "next.js" },
+        { name: "api", framework: "fastify" },
+      ],
+    };
+
+    const engine = new SyncEngine(makeForceRootFlags(), {
+      targetRoot: fixtureRoot,
+      manifest,
+    });
+    await engine.run();
+    const first = await snapshotTree(fixtureRoot);
+
+    const engine2 = new SyncEngine(makeForceRootFlags(), {
+      targetRoot: fixtureRoot,
+      manifest,
+    });
+    await engine2.run();
+    const second = await snapshotTree(fixtureRoot);
+
+    assert.deepStrictEqual(
+      second,
+      first,
+      "second run must be byte-identical with apps[] + frameworks config",
+    );
+
+    // Sanity: all three expected app artifacts exist for both apps.
+    const webPkg = await fs.readFile(
+      path.join(fixtureRoot, "apps/web/package.json"),
+      "utf8",
+    );
+    assert.ok(
+      webPkg.includes('"@apps-fixture/web"'),
+      "web app package.json must come from the manifest override",
+    );
+
+    const webTsconfig = await fs.stat(
+      path.join(fixtureRoot, "apps/web/tsconfig.json"),
+    );
+    assert.ok(webTsconfig.isFile(), "web app tsconfig.json must exist");
+
+    const webEntry = await fs.stat(
+      path.join(fixtureRoot, "apps/web/src/app/page.tsx"),
+    );
+    assert.ok(
+      webEntry.isFile(),
+      "web app Next.js entry point (src/app/page.tsx) must exist (built-in fallback)",
+    );
+
+    // Fastify: manifest overrode the entryPoint path to src/server.ts.
+    const apiEntry = await fs.readFile(
+      path.join(fixtureRoot, "apps/api/src/server.ts"),
+      "utf8",
+    );
+    assert.ok(
+      apiEntry.includes("custom fastify entry for api"),
+      "api app entry must reflect the manifest-overridden entryPoint",
     );
   });
 });
