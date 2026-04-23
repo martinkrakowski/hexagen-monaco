@@ -2,12 +2,12 @@
 
 <div align="center">
 
-# HexaGen Monaco — Architecture Governance Engine
+# Hexagen-Monaco <br> Architecture Governance Engine
 
 [![Architectural Integrity Check](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml/badge.svg)](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-**Architecture should compile.**
+**Architecture should compile**
 
 </div>
 
