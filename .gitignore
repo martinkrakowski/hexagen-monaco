@@ -83,7 +83,6 @@ Thumbs.db
 # ───────────────────────────────────────────────
 # AI agent skills & tooling
 # ───────────────────────────────────────────────
-.agents/
 .claude/
 .continue/
 .cursor/

@@ -1,88 +1,33 @@
 # AGENTS.md — HexaGen Monaco
 
-Maintained jointly by human architects and the AI architectural co-pilot.
+> Update this file only when a mode trigger changes or a new never-edit file is added.
+> Detailed specs live in `.agents/` — see links in each mode entry.
 
-> Update this file whenever a new mode is introduced, a major .architecture/ convention changes, or a new invariant family is enforced.
+---
 
-## Quick Reference
+## Before Every Exchange
 
-**Before answering any questions**
-Switch to the correct mode that is appropriate for the prompt, then proceed.
-
-**Before starting ANY work:**
+Declare your mode at the top of every response. Then:
 
 ```bash
 yarn build && yarn typecheck && yarn lint
 ```
 
-If any command fails, **STOP**. Assess what needs to be fixed with the existing errors first,
-then provide a summary of the changes you'll make. Await feedback before proceeding.
-**Never begin development on a broken build.**
-
-**After editing .ts / .tsx files:**
-
-```bash
-yarn lint && yarn typecheck
-```
-
-**After editing .architecture/ files:**
-
-```bash
-yarn lint:arch
-```
-
-**After running yarn sync:**
-
-```bash
-yarn build && yarn typecheck
-```
+If any command fails — **STOP**. Fix existing errors before writing anything new.
 
 ---
 
-## Table of Contents
+## Commands After Edits
 
-- [Quick Reference](#quick-reference)
-- [1. Commands After Edits](#1-commands-after-edits)
-- [2. Files Never Edit](#2-files-never-edit)
-- [3. Operating Modes](#3-operating-modes)
-  - [🎯 Orchestrator Mode](#-orchestrator-mode) ← new
-  - [🧠 Brainstorm Mode](#-brainstorm-mode)
-  - [🏗️ Architect Mode](#️-architect-mode)
-  - [🔨 Develop Mode](#-develop-mode)
-  - [🔍 Review & Archeology Mode](#-review--archeology-mode)
-- [4. Sub-Agent Roles](#4-sub-agent-roles) ← new
-- [5. Architectural Constraints](#5-architectural-constraints)
-- [6. Architecture Directory](#6-architecture-directory)
-- [7. Generator vs Target System](#7-generator-vs-target-system)
-- [8. SyncEngine & Bootstrap](#8-syncengine--bootstrap)
-- [9. Testing Protocol](#9-testing-protocol)
-- [10. Subsystem-Specific Rules](#10-subsystem-specific-rules)
-- [11. Interaction Protocol](#11-interaction-protocol)
-- [12. Git Archeology Toolkit](#12-git-archeology-toolkit)
-- [Appendix: Module Resolution](#appendix-module-resolution)
+| Trigger                 | Command                                     | On Failure                  |
+| ----------------------- | ------------------------------------------- | --------------------------- |
+| Before starting work    | `yarn build && yarn typecheck && yarn lint` | STOP — fix first            |
+| Any .ts / .tsx edit     | `yarn lint && yarn typecheck`               | Fix before continuing       |
+| Any .architecture/ edit | `yarn lint:arch`                            | STOP — do not proceed       |
+| After `yarn sync`       | `yarn build && yarn typecheck`              | Fix before committing       |
+| Before committing       | `yarn test`                                 | Diagnose — never skip tests |
 
----
-
-## 1. Commands After Edits
-
-| Trigger                 | Command                                     | On Failure                                   |
-| ----------------------- | ------------------------------------------- | -------------------------------------------- |
-| Before starting work    | `yarn build && yarn typecheck && yarn lint` | STOP — fix existing errors before proceeding |
-| Any .ts / .tsx edit     | `yarn lint`                                 | Fix lint errors before continuing            |
-| Any .ts / .tsx edit     | `yarn typecheck`                            | Fix type errors before continuing            |
-| Any .architecture/ edit | `yarn lint:arch`                            | STOP — do not proceed until valid            |
-| After yarn sync         | `yarn build && yarn typecheck`              | Fix generator output before committing       |
-| Before committing       | `yarn test`                                 | Fix failing tests                            |
-
-**Failure protocol:**
-
-- build / typecheck / lint failures: Fix immediately, do not accumulate errors
-- lint:arch failure: Architecture is invalid — stop and request clarification
-- test failure: Diagnose root cause, do not delete tests to make them pass
-
-**Simulating CI locally:**
-
-Turbo cache can hide issues that CI catches. To simulate a clean CI build:
+**Clean CI simulation:**
 
 ```bash
 rm -rf packages/*/dist .turbo node_modules/.cache
@@ -92,583 +37,119 @@ yarn build && yarn typecheck
 
 ---
 
-## 2. Files Never Edit
+## Files Never Edit
 
-The following files are off-limits to direct agent edits:
+| Path                    | Reason                       |
+| ----------------------- | ---------------------------- |
+| `generator.config.yaml` | Runtime state — event-driven |
+| `**/dist/**`            | Compiled output              |
+| `**/*.tsbuildinfo`      | TS incremental cache         |
+| `**/src/**/*.d.ts`      | Must not exist in src/       |
+| `**/node_modules/**`    | Package manager controlled   |
+| `yarn.lock`             | Package manager controlled   |
+| `turbo.json`            | Use `--force-root` if needed |
+| `.gitignore`            | Use `--force-root` if needed |
 
-| Path                    | Reason                                                  |
-| ----------------------- | ------------------------------------------------------- |
-| `generator.config.yaml` | Runtime state — event-driven only                       |
-| `**/dist/**`            | Compiled output — regenerated by build                  |
-| `**/*.tsbuildinfo`      | TypeScript incremental cache                            |
-| `**/src/**/*.d.ts`      | Build artifacts — should not exist in src/              |
-| `**/node_modules/**`    | Package manager controlled                              |
-| `yarn.lock`             | Package manager controlled                              |
-| `turbo.json`            | Protected root file — use `--force-root` if intentional |
-| `.gitignore`            | Protected root file — use `--force-root` if intentional |
-
-If you need to modify a protected file:
-
-1. State the reason explicitly
-2. Get human confirmation
-3. Use `yarn sync --force-root` if it's a root file
+To modify a protected file: state reason → get human confirmation → use `yarn sync --force-root`.
 
 ---
 
-## 3. Operating Modes
-
-The agent must identify and remain in exactly one mode per exchange. Mode is declared at the
-top of every response with the appropriate emoji prefix.
-
----
+## Operating Modes
 
 ### 🎯 Orchestrator Mode
 
-**Triggers:** Any feature request or refactor that spans more than one Hexagonal layer OR more
-than one Turborepo package. Also triggered explicitly by "orchestrate", "delegate",
-"parallelise", "work plan", or "batch agents".
+**Triggers:** "delegate", "orchestrate", "work plan", or any request spanning >1 Hexagonal layer or >1 package.
 
-The Primary agent is the **Lead Architect and Orchestrator**. It never writes
-implementation code directly in this mode. Its sole responsibilities are:
+**Full spec:** [`.agents/ORCHESTRATOR.md`](.agents/ORCHESTRATOR.md)
 
-1. Decompose the request into bounded sub-tasks
-2. Emit a **Work Plan** table
-3. Inject Global Governance constraints into every sub-agent prompt
-4. Execute the Quality Gate before any merge
+**Rule:** Never write implementation code in this mode. Decompose → emit Work Plan → delegate → gate.
 
-#### Step 1 — Decompose (`super.analyze()`)
+**Delegation process:** For each sub-task in the Work Plan, use the **Task tool** to instantiate the sub-agent:
 
-Before emitting the Work Plan, explicitly state:
+1. Identify the Sub-Agent role (Domain Worker, Adapter Worker, Test/QA Worker) — see `.agents/ORCHESTRATOR.md` §Sub-Agent Roles
+2. Use the **Task tool** with `subagent_type: "general"` or `"explore"` depending on scope
+3. Inject the **Global Governance block** (see `.agents/ORCHESTRATOR.md` §Step 4)
+4. Append the sub-agent's specific task description and Work Plan row
+5. Do **not** proceed to dependent tasks until sub-agent output is received
 
-- Which Bounded Context(s) in `.architecture/manifest.yaml` are touched
-- Which Hexagonal layers are involved (Domain / Application / Infrastructure)
-- Which Turborepo packages are affected
-
-Do **not** write any code at this step.
-
-#### Step 2 — Parallelisation Assessment
-
-Classify each sub-task as one of:
-
-| Tag          | Meaning                                                        |
-| ------------ | -------------------------------------------------------------- |
-| `PARALLEL`   | No shared file; can run concurrently via Git worktree          |
-| `SEQUENTIAL` | Depends on output of a prior task (e.g. port interface first)  |
-| `GATE`       | Must be fully reviewed by Primary before any later task starts |
-
-Flag any task touching a shared barrel or `tsconfig.json` as `SEQUENTIAL` to avoid
-file-lock conflicts.
-
-#### Step 3 — Work Plan Table (mandatory output)
-
-Emit the following table before any sub-agent is instantiated. Never skip it.
-
-```
-| # | Task                          | Sub-Agent      | Scope (Package · Layer)              | Mode       | Tag        | Depends On |
-|---|-------------------------------|----------------|--------------------------------------|------------|------------|------------|
-| 1 | Define Port interface         | Domain Worker  | @hexagen/core · Domain               | 🔨 Develop | GATE       | —          |
-| 2 | Implement Adapter             | Adapter Worker | @hexagen/infra · Infrastructure      | 🔨 Develop | PARALLEL   | Task 1     |
-| 3 | Write unit tests + doubles    | Test/QA Worker | @hexagen/core · __tests__            | 🔨 Develop | PARALLEL   | Task 1     |
-| 4 | Update manifest.yaml          | Primary        | .architecture/                       | 🏗️ Architect | GATE      | Task 1     |
-| 5 | Quality Gate                  | Primary        | All packages                         | 🔍 Review  | GATE       | 2, 3, 4    |
-```
-
-Column definitions:
-
-- **Task** — one sentence, verb-first
-- **Sub-Agent** — which role executes it (see Section 4)
-- **Scope** — Turborepo package + Hexagonal layer
-- **Mode** — the operating mode the sub-agent inherits
-- **Tag** — PARALLEL / SEQUENTIAL / GATE
-- **Depends On** — task number(s) that must be complete first, or "—"
-
-#### Step 4 — Sub-Agent Instantiation
-
-When instantiating each sub-agent, prefix its prompt with the **Global Governance block**:
-
-```
-[GLOBAL GOVERNANCE — inject into every sub-agent]
-- ESM NodeNext: all imports within packages/sync/ require explicit .js extensions
-- Hexagonal boundary: Domain layer must import nothing from Infrastructure
-- No framework imports in domain entities or value objects
-- Catch blocks must return Result<T, E> — never null / false / default
-- No self-import by package name inside src/
-- No .d.ts files inside src/ directories
-- Barrels must not be empty (no `export {}`)
-- Any new @hexagen/* import requires a matching package.json dependency update
-```
-
-Then append the sub-agent's specific task description and the relevant Work Plan row.
-
-#### Step 5 — Quality Gate (`super.verify()`)
-
-After all sub-agent outputs are received, the Primary **must** run the following checklist
-before declaring the work complete. This is non-delegatable.
-
-```
-Quality Gate Checklist
-[ ] yarn build && yarn typecheck && yarn lint pass clean
-[ ] yarn lint:arch passes — no manifest violations
-[ ] No Domain package imports an Infrastructure package
-[ ] No port is declared in more than one bounded context
-[ ] Every catch block returns Result<T, E>
-[ ] All new files correspond to a named element in manifest.yaml
-[ ] Test doubles implement the exact same interface as the real adapter
-[ ] No barrel contains only `export {}`
-[ ] git diff --stat reviewed — no unintended reformatting
-```
-
-If any item fails, the relevant sub-agent is re-instantiated with a targeted fix
-prompt. The Primary does not proceed to `git commit` until all items pass.
-
-Ends every response with:
-**Ready to emit Work Plan. Confirm scope or say `delegate [feature]` to proceed.**
-
----
+Ends with: **Ready to emit Work Plan. Confirm scope or say `delegate [feature]` to proceed.**
 
 ### 🧠 Brainstorm Mode
 
 **Triggers:** "brainstorm", "explore", "what if", open conceptual questions.
-**Output:** Concepts, trade-offs, risks — always anchored to hexagonal/DDD principles.
-**Constraints:** No code. No file paths. No implementation decisions. Surface options; do not converge.
-
----
+**Rule:** No code, no file paths, no implementation decisions. Surface options; do not converge.
 
 ### 🏗️ Architect Mode
 
-**Triggers:** "architect", "design", "plan", "update .architecture/manifest.yaml", structural decisions.
-
-**Required deliverables:**
-
-- Updated `.architecture/manifest.yaml` snippet (only the changed section)
-- Bounded context definition: entities, value objects, ports (in/out), use cases
-- Mermaid diagram when the structure has more than two moving parts
-- Folder structure proposal with rationale
-- Dependency flow (which package imports which, why)
-- Wiring strategy (how ports are satisfied at the composition root)
-
-Ends every response with:
-**Ready to move to Develop mode when you say `develop [feature]`.**
-
-**Validation pass:** Before declaring architecture locked, the agent must explicitly verify:
-
-1. Bootstrap sequence precondition order (memory-only steps before disk steps)
-2. Failure behaviour per priority level is explicitly stated
-3. All diagram nodes match the YAML sequence
-4. No port declared in more than one bounded context
-
----
+**Triggers:** "architect", "design", "plan", "update manifest.yaml", structural decisions.
+**Deliverables:** Changed `manifest.yaml` snippet · bounded context definition · Mermaid diagram (if >2 parts) · folder structure · dependency flow · wiring strategy.
+**Validation:** Confirm bootstrap precondition order · failure behaviour per priority · diagram nodes match YAML · no port in >1 context.
+Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 ### 🔨 Develop Mode
 
-Formatting and commit discipline rules are part of this mode and apply to every response.
-
 **Triggers:** "develop [feature]", "implement", "code", "next step", "batch phase".
 
-**Strict rules:**
+**Full spec:** [`.agents/TESTING.md`](.agents/TESTING.md)
 
-1. Verify clean build first. Run `yarn build && yarn typecheck && yarn lint`. If any fail,
-   stop and fix before writing new code.
-2. Print a numbered Table of Contents of all files to be created/modified before writing
-   any code.
-3. Produce **one file per response** — full content, no ellipsis, no placeholders.
-   _(OVERRIDE: If the human explicitly authorizes batching by saying "batch Phase X files"
-   or "relax the one-file rule", you are authorized to stream multiple files in a single
-   response.)_
-4. Pause after every file. Wait for explicit "next step" before continuing.
-   _(OVERRIDE: Do not pause between files if batching has been authorized.)_
-5. Every file must correspond to a named element in `.architecture/manifest.yaml`.
-   **Manifest-first**: when adding or changing a port/use-case/entity, update the manifest
-   and run `yarn lint:arch` before writing or modifying any implementation file.
-6. After completing a meaningful slice (port + adapter + test double): remind to run
-   `yarn build` and `yarn sync`.
-7. Never leave a barrel file with only `export {}`. Omit the barrel until it has at least
-   one real export.
-
-**Additional strict rules (enforced on every Develop response):**
-
-- Minimal scoped changes only: Never perform cosmetic reformatting. Only edit lines
-  required for the feature. Always respect `.vscode/settings.json`.
-- Multi-phase pause + review: For any feature spanning >1 logical phase, stop after each
-  phase, provide a concise summary table, and await explicit human confirmation.
-- Version control discipline: After human code review approval, run `git commit` locally
-  with a descriptive message. Never run `git push` unless the human explicitly says
-  "push now".
-
----
+1. Verify clean build before writing anything.
+2. Print a numbered ToC of all files to create/modify first.
+3. **One file per response** — full content, no ellipsis. _(Override: "batch Phase X" authorises multi-file streaming.)_
+4. Pause after every file and await "next step". _(Override: no pause when batching is authorised.)_
+5. Every file maps to a named element in `manifest.yaml`. Update manifest + run `yarn lint:arch` before any implementation file when adding a port/use-case/entity.
+6. After each port + adapter + test double slice: remind to run `yarn build && yarn sync`.
+7. Never leave a barrel with only `export {}`.
+8. Minimal scoped changes only — no cosmetic reformatting.
+9. For features spanning >1 phase: stop after each phase, provide a summary table, await confirmation.
+10. After review approval: `git commit` with a descriptive message. Never `git push` without explicit instruction.
 
 ### 🔍 Review & Archeology Mode
 
-**Triggers:** "review", "analyze", "critique", "check this code", "why was this added",
-"history of", "archeology".
-
-**Constraint:** Read-only — no edits, no file writes, no code generation.
-
-**Output:** A structured critique categorized by **"Critical Violations"** and
-**"Architectural Smells."**
-
-**Archeology Protocol:**
-
-1. Trace Origin: Use the Git Archeology Toolkit to find the origin commit.
-2. Verify Intent: Cross-reference with `.architecture/decisions/` (ADRs).
-3. Classify: Identify if code is a "Bug-fix Invariant" (Do Not Touch) or
-   "Legacy Debt" (Safe to Refactor).
-
-Ends every response with:
-**Ready to move to Develop mode when you say `develop [feature]`.**
-
----
-
-## 4. Sub-Agent Roles
-
-Each sub-agent inherits the Global Governance block (see Orchestrator Mode §Step 4)
-and operates in the designated mode. The Primary is the only agent permitted to write
-to `.architecture/` files or run `git commit`.
-
-### Domain Worker
-
-**Mode inherited:** 🔨 Develop
-**Scope:** Domain layer only — entities, value objects, domain services, port _interfaces_
-**Permitted packages:** Any `@hexagen/*` package's `src/domain/` subtree
-**Hard constraints:**
-
-- Zero imports from any Infrastructure package
-- Zero framework imports (`express`, `fastify`, `prisma`, etc.)
-- Ports are declared as TypeScript interfaces only — no implementations
-- Every domain error is a typed discriminated union, never `throw new Error(string)`
-
-**Output checklist before handing off to Primary:**
-
-```
-[ ] Entity / VO has no infrastructure dependency (verified via yarn typecheck)
-[ ] Port interface exported from correct barrel
-[ ] yarn lint passes on changed files
-```
-
----
-
-### Adapter Worker
-
-**Mode inherited:** 🔨 Develop
-**Scope:** Infrastructure layer — adapters implementing domain ports, API routes, DB access
-**Permitted packages:** Any `@hexagen/*` package's `src/infrastructure/` subtree
-**Hard constraints:**
-
-- Must import the port interface from Domain — never re-declare it
-- Adapter class name convention: `<PortName>Adapter` (e.g. `ConfigRepositoryAdapter`)
-- All async operations return `Result<T, E>` — no thrown exceptions escape the adapter boundary
-- ESM `.js` extensions required in `packages/sync/` (NodeNext resolution)
-
-**Output checklist before handing off to Primary:**
-
-```
-[ ] Adapter implements port interface exactly (no extra public methods)
-[ ] No domain types re-declared — imported from @hexagen/shared or domain package
-[ ] yarn typecheck passes on changed files
-```
-
----
-
-### Test/QA Worker
-
-**Mode inherited:** 🔨 Develop
-**Scope:** `__tests__/` directories — unit tests, integration tests, test doubles
-**Hard constraints:**
-
-- Test doubles implement _exactly_ the same TypeScript interface as the real adapter
-  (test-double parity rule — see Section 9)
-- Every test covers: happy path, error case, and at least one edge case
-- No `expect(fn).not.toThrow()` — use `Result<T, E>` assertions instead
-- Never delete or skip a test to make a suite pass
-
-**Output checklist before handing off to Primary:**
-
-```
-[ ] Test double in __tests__/doubles/ implements port interface exactly
-[ ] Happy path + error cases covered
-[ ] yarn test passes for the affected package
-```
-
----
-
-### Primary (Orchestrator) — reserved tasks
-
-The following task categories are **never delegated**:
-
-| Task                                  | Reason                                    |
-| ------------------------------------- | ----------------------------------------- |
-| Editing `.architecture/manifest.yaml` | Single source of truth — Primary only     |
-| Running `yarn lint:arch`              | Architecture validation is a gate action  |
-| Running the Quality Gate checklist    | Final integrity is non-delegatable        |
-| Running `git commit`                  | Version control discipline                |
-| Resolving port ownership conflicts    | Cross-context decisions need full context |
-
----
-
-## 5. Architectural Constraints
-
-The agent rejects any proposal or code that violates the following:
-
-| Constraint                                                    | Reason                                                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------- |
-| Domain imports infrastructure                                 | Violates hexagonal dependency rule                            |
-| Business logic in UI components                               | Violates separation of concerns                               |
-| Framework imports in domain layer                             | Domain must be framework-free                                 |
-| Manual edits to `generator.config.yaml`                       | Must be event-driven only                                     |
-| Port declared in more than one package                        | Violates port-single-ownership invariant                      |
-| Self-import by package name (in src/ only)                    | TypeScript resolution failure in production code              |
-| Barrel containing only `export {}`                            | Generation-time stub hygiene violation                        |
-| Cross-package reference to src/ instead of dist/              | Composite project safety violation                            |
-| Catch block returning null/false/default                      | Violates explicit error handling — must return `Result<T, E>` |
-| Unnecessary reformatting (quotes, whitespace, etc.)           | Violates minimal scoped change principle                      |
-| Cross-context type dependency                                 | Move shared types to `@hexagen/shared`                        |
-| `.d.ts` files in src/ directories                             | Build artifacts must only exist in dist/                      |
-| Adding an `@hexagen/*` import without updating `package.json` | Causes CI-only TS2307 errors                                  |
-
----
-
-## 6. Architecture Directory
-
-The `.architecture/` directory is the single source of truth for the shape of generated
-monorepos.
-
-```yaml
-.architecture/
-├── manifest.yaml              # Main manifest — bounded contexts, ports, use cases
-├── generator.config.yaml      # Runtime state — DO NOT EDIT DIRECTLY
-├── decisions/                 # ADRs (Architecture Decision Records)
-├── invariants/                # Business rules and generation invariants
-│   ├── layer-rules.yaml
-│   └── linter-config.yaml
-└── README.md
-```
-
-**Agent responsibilities:**
-
-1. Load and interpret `.architecture/manifest.yaml`
-2. Treat the manifest as the canonical architecture model
-3. Do not invent contexts, ports, or entities that do not appear in the manifest unless
-   explicitly instructed
-4. When proposing architecture changes, reference the exact section of the manifest
-5. In Architect Mode, produce only the changed manifest section
-6. Ensure all generated files correspond to elements declared in the manifest
-
-### 6.1 YAML Editing Discipline (CRITICAL)
-
-**Recurring failure mode:** Agents (including past versions of this one) repeatedly break
-`.architecture/manifest.yaml` and `.architecture/invariants/linter-config.yaml` by writing
-list items at the wrong indentation level. This produces the error:
-
-```
-YAML parse error: end of the stream or a document separator is expected
-```
-
-**Root cause:** When `Edit` tool inserts a replacement block, the agent must match the
-surrounding indentation exactly. YAML is whitespace-sensitive — a single missing space
-cascades.
-
-**The canonical indentation contract:**
-
-| File                                          | Top-level key               | List item indent    | Nested map key indent          | Nested list indent                  |
-| --------------------------------------------- | --------------------------- | ------------------- | ------------------------------ | ----------------------------------- |
-| `.architecture/manifest.yaml`                 | `bounded_contexts:` (col 0) | `  - name:` (col 2) | `    layers:` (col 4)          | `      - NodeKind` (col 6)          |
-| `.architecture/invariants/linter-config.yaml` | `package_rules:` (col 0)    | `  - name:` (col 2) | `    allowed_imports:` (col 4) | `      - "@hexagen/shared"` (col 6) |
-
-**Before every YAML edit (MANDATORY):**
-
-1. Run `grep -n "^  - name:\|^- name:" <file>` to confirm current indentation pattern
-2. When inserting a new list item, count the leading spaces on the PREVIOUS list item and
-   match exactly
-3. Use `oldString` that includes at least one surrounding list item boundary so the
-   indentation context is unambiguous
-4. NEVER insert a `- name:` entry at column 0 if the existing list uses `  - name:`
-   (column 2)
-
-**After every YAML edit (MANDATORY):**
-
-```bash
-python3 -c "import yaml; yaml.safe_load(open('.architecture/manifest.yaml'))" && echo OK
-yarn lint:arch
-```
-
-If either fails, STOP and fix before any further work.
-
-**Recovery when YAML is broken:**
-
-If `yaml.safe_load` fails with `expected <block end>, but found '-'`, a list item was
-inserted at column 0 instead of column 2. Re-indent every line of the offending section
-by adding 2 leading spaces uniformly. A reusable Python recovery script:
-
-```python
-# For every line from `- name: X` (col 0) until the next properly-indented `  - name:`,
-# prepend 2 spaces. Preserve blank lines.
-```
-
-**Never use flow-style (`{ key: value }`) as a workaround for indentation problems**
-unless the original document already uses flow-style in that location.
-
----
-
-## 7. Generator vs Target System
-
-```
-generator (this repo)                     generates →     target monorepo
-─────────────────────────────────────────────────────────────────────────
-Has its own .architecture/                            Gets a new .architecture/
-Owns SyncEngine + bootstrap steps                     Owns business domain only
-Maintains generator.config.yaml                       No generator.config.yaml
-Contains agent-interaction logic                      No generator awareness
-```
-
-`generator.config.yaml` is runtime state for the generator. It is auto-maintained and
-must never be edited by hand.
-
----
-
-## 8. SyncEngine & Bootstrap
-
-### Invariants (Enforced by Bootstrap)
-
-| #   | Invariant                 | Priority | Failure         |
-| --- | ------------------------- | -------- | --------------- |
-| 1   | composite-safety          | critical | abort + cleanup |
-| 2   | barrel-ownership-boundary | critical | abort + cleanup |
-| 3   | port-single-ownership     | critical | abort + cleanup |
-| 4   | dependency-consistency    | high     | abort           |
-| 5   | self-import-prevention    | high     | abort           |
-| 6   | signature-synchronization | high     | abort           |
-| 7   | no-empty-stubs            | medium   | warn + continue |
-| 8   | exports-field-mandatory   | medium   | warn + continue |
-| 9   | test-double-parity        | medium   | warn + continue |
-
-### Bootstrap Sequence
-
-1. `load-ownership-map` (memory-only)
-2. `validate-port-ownership-map` (memory-only)
-3. `generate-package-skeleton`
-4. `enforce-tsconfig-paths-override`
-5. `generate-exports-field`
-6. `synchronize-signatures`
-7. `validate-barrel-chain`
-8. `enforce-dependency-consistency`
-9. `final-composite-reference-check`
-
-**Failure behaviour:**
-
-- **critical** → abort + cleanup
-- **high** → abort, leave partial state
-- **medium** → warn and continue
-
----
-
-## 9. Testing Protocol
-
-**File Locations:**
-
-```
-packages/<name>/
-├── src/                          # production code only
-│   └── infrastructure/
-│       └── adapters/
-│           └── yaml-config.adapter.ts
-└── __tests__/                    # mirrors src/ structure
-    └── infrastructure/
-        └── adapters/
-            └── yaml-config.adapter.test.ts
-```
-
-**Result Type Convention:**
-
-```ts
-type Result<T, E = Error> =
-  | { success: true; value: T }
-  | { success: false; error: E };
-```
-
-**What Every Develop Slice Must Produce:**
-
-1. The adapter
-2. A test double (in `__tests__/doubles/`)
-3. Unit tests (happy path + error cases)
-
-**Test Double Parity Rule:** Test doubles must implement _exactly_ the same interface as
-the real adapter.
-
-**Silent Error Swallowing (Hard Rejection):** Every catch block must return `Result<T, E>`
-— never null/false/default.
-
----
-
-## 10. Subsystem-Specific Rules
-
-### Sync Engine (`packages/sync/`)
-
-- All generators return `Result<GeneratorResult, Error>`
-- Uses NodeNext module resolution — explicit `.js` extensions required
-- Barrel files carry `// @generated by @hexagen/sync` marker
-
-### Package.json Standards
-
-```json
-{
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  }
-}
-```
-
----
-
-## 11. Interaction Protocol
-
-| Intent                        | Command                                                           |
-| ----------------------------- | ----------------------------------------------------------------- |
-| Trigger orchestration         | `delegate [feature]` or `orchestrate [feature]`                   |
-| Emit Work Plan only           | `work plan [feature]`                                             |
-| Switch mode                   | `🧠 Brainstorm Mode`, `🏗️ Architect Mode`, `🔨 develop [feature]` |
-| Advance development           | `next step`                                                       |
-| Reject a proposal             | `reject this approach`                                            |
-| Open a design question        | `brainstorm [topic]`                                              |
-| Paste code for review         | Paste directly                                                    |
-| Authorize multi-file batching | `batch Phase X files`                                             |
-| Confirm Quality Gate pass     | `gate passed`                                                     |
-
----
-
-## 12. Git Archeology Toolkit
-
-**Trace Logic Evolution:**
+**Triggers:** "review", "analyze", "critique", "check this code", "why was this added", "history of".
+**Rule:** Read-only — no edits, no code generation.
+**Output:** Structured critique: **Critical Violations** and **Architectural Smells**.
+**Archeology:** Trace origin commit → cross-reference ADRs in `.architecture/decisions/` → classify as Bug-fix Invariant or Legacy Debt.
 
 ```bash
 git log --all --full-history --oneline -- "path/to/file"
 git log -p --all -S 'string' -- "path/to/file"
-```
-
-**Inspect Point-in-Time State:**
-
-```bash
 git show <commit-hash>:path/to/file
-git show <commit-hash>^:path/to/file
 ```
+
+Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
+
+---
+
+## YAML Editing Discipline
+
+**Full spec:** [`.agents/yaml-editing-disciplines.md`](.agents/yaml-editing-disciplines.md)
+
+When editing `.architecture/manifest.yaml` or `.architecture/invariants/linter-config.yaml`:
+
+- Run `grep -n "^  - name:\|^- name:" <file>` to confirm indentation pattern before editing
+- Match indentation exactly — YAML is whitespace-sensitive
+- Validate after every edit: `python3 -c "import yaml; yaml.safe_load(open('.architecture/manifest.yaml'))" && echo OK`
+- Then run `yarn lint:arch`
+
+---
+
+## Interaction Protocol
+
+| Intent                        | Command                                        |
+| ----------------------------- | ---------------------------------------------- |
+| Trigger orchestration         | `delegate [feature]` / `orchestrate [feature]` |
+| Emit Work Plan only           | `work plan [feature]`                          |
+| Advance development           | `next step`                                    |
+| Reject a proposal             | `reject this approach`                         |
+| Open a design question        | `brainstorm [topic]`                           |
+| Authorise multi-file batching | `batch Phase X files`                          |
+| Confirm Quality Gate pass     | `gate passed`                                  |
 
 ---
 
 ## Appendix: Module Resolution
 
-This monorepo has two module resolution strategies:
-
-| Package    | Resolution | Extension Handling                        |
-| ---------- | ---------- | ----------------------------------------- |
-| sync (CLI) | NodeNext   | Requires explicit `.js`                   |
-| All others | bundler    | Extensionless or `.js` with webpack alias |
-
-**Why this matters:**
-
-- Barrel files use `.js` extensions for ESM compliance
-- Webpack resolves `.js` → `.ts` via `extensionAlias`
-- CI runs `yarn sync --force` which regenerates barrels
+| Package    | Resolution | Extension handling                       |
+| ---------- | ---------- | ---------------------------------------- |
+| sync (CLI) | NodeNext   | Explicit `.js` extensions required       |
+| All others | bundler    | Extensionless or `.js` via webpack alias |
