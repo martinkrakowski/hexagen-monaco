@@ -1,0 +1,631 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach, afterEach } from "node:test";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  generateRecursiveBarrels,
+  CircularExportError,
+} from "../../src/generators/barrels/recursive.js";
+import type { SyncConfig, LoggerPort } from "../../src/config.js";
+import type { Manifest } from "../../src/types/manifest.js";
+
+/**
+ * Unit tests for `generateRecursiveBarrels` — the recursive barrel walker in
+ * packages/sync/src/generators/barrels/recursive.ts.
+ *
+ * Strategy:
+ *   - Each test constructs a minimal on-disk fixture representing a single
+ *     package's `src/` tree, invokes `generateRecursiveBarrels(moduleDir, config)`,
+ *     and asserts filesystem state plus the returned GeneratorResult.
+ *   - Fixtures are created under an isolated temp directory per test and cleaned
+ *     up in `afterEach` (no files leak to /tmp).
+ *   - The logger is a silent no-op so test output stays clean.
+ */
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** No-op logger satisfying LoggerPort — suppresses `logger.debug(...)` noise. */
+const silentLogger: LoggerPort = {
+  error: () => {},
+  warn: () => {},
+  info: () => {},
+  debug: () => {},
+  errorWithException: () => {},
+};
+
+/**
+ * Recursively describe a tree as a plain object:
+ *   - string value → file with that exact content
+ *   - object value → subdirectory containing nested tree
+ *   - null value   → empty directory
+ */
+type FileTree = {
+  [name: string]: string | FileTree | null;
+};
+
+/** Create a directory/file tree rooted at `root` from a plain-object spec. */
+async function createFixture(root: string, tree: FileTree): Promise<void> {
+  await fs.mkdir(root, { recursive: true });
+  for (const [name, value] of Object.entries(tree)) {
+    const full = path.join(root, name);
+    if (value === null) {
+      await fs.mkdir(full, { recursive: true });
+    } else if (typeof value === "string") {
+      await fs.mkdir(path.dirname(full), { recursive: true });
+      await fs.writeFile(full, value, "utf8");
+    } else {
+      await fs.mkdir(full, { recursive: true });
+      await createFixture(full, value);
+    }
+  }
+}
+
+/** Read a file relative to the fixture root — returns utf-8 string. */
+async function readFile(root: string, relpath: string): Promise<string> {
+  return fs.readFile(path.join(root, relpath), "utf8");
+}
+
+/** Check whether a path (file or directory) exists under the fixture root. */
+async function exists(root: string, relpath: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(root, relpath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build a minimal SyncConfig. `recursive.ts` reads only
+ *   - `config.logger` (in `shouldGenerateBarrel` for debug logs)
+ *   - `config.dryRun`, `config.force`, `config.forceRoot`, `config.workspaceRoot`
+ *     (via safeWriteFileAtomic transitively)
+ *
+ * `manifest` is a required field on SyncConfig but unused by the walker itself,
+ * so an empty stub suffices.
+ */
+function makeConfig(workspaceRoot: string): SyncConfig {
+  const manifest: Manifest = { bounded_contexts: [] };
+  return {
+    dryRun: false,
+    force: false,
+    forceRoot: false,
+    allowDirty: true,
+    strict: false,
+    mode: "external",
+    logger: silentLogger,
+    manifest,
+    workspaceRoot,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("generateRecursiveBarrels", () => {
+  let tmpDir: string;
+  let moduleDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "hexagen-barrels-recursive-"),
+    );
+    // The module's package directory (workspaceRoot = tmpDir, moduleDir inside).
+    moduleDir = path.join(tmpDir, "packages", "example");
+    await fs.mkdir(moduleDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  // -------------------------------------------------------------------------
+  // Basic walking
+  // -------------------------------------------------------------------------
+
+  it("1. generates a barrel for a layer dir with .ts source files", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "foo.ts": "export const foo = 1;\n",
+          "bar.ts": "export const bar = 2;\n",
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    const result = await generateRecursiveBarrels(moduleDir, config);
+
+    assert.ok(
+      await exists(moduleDir, "src/domain/index.ts"),
+      "expected barrel src/domain/index.ts to be generated",
+    );
+
+    const barrel = await readFile(moduleDir, "src/domain/index.ts");
+    assert.match(barrel, /^\/\/ @generated by @hexagen\/sync/);
+    assert.match(barrel, /export \* from "\.\/bar\.js";/);
+    assert.match(barrel, /export \* from "\.\/foo\.js";/);
+    // Alphabetical ordering (bar before foo).
+    assert.ok(
+      barrel.indexOf("bar") < barrel.indexOf("foo"),
+      "exports should be alphabetically sorted",
+    );
+    assert.strictEqual(result.totalOps, 1);
+    assert.strictEqual(result.created.length, 1);
+  });
+
+  it("2. recurses into subdirectories; parent re-exports child", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        application: {
+          "use-cases": {
+            "foo.ts": "export const foo = 1;\n",
+          },
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    assert.ok(
+      await exists(moduleDir, "src/application/use-cases/index.ts"),
+      "use-cases/index.ts should be generated",
+    );
+    assert.ok(
+      await exists(moduleDir, "src/application/index.ts"),
+      "application/index.ts should be generated",
+    );
+
+    const childBarrel = await readFile(
+      moduleDir,
+      "src/application/use-cases/index.ts",
+    );
+    assert.match(childBarrel, /export \* from "\.\/foo\.js";/);
+
+    const parentBarrel = await readFile(moduleDir, "src/application/index.ts");
+    assert.match(
+      parentBarrel,
+      /export \* from "\.\/use-cases\/index\.js";/,
+      "parent should re-export child directory via index.js",
+    );
+  });
+
+  it("3. does nothing when module has no src/ directory", async () => {
+    // Note: moduleDir already exists (beforeEach) but has no src/.
+    const config = makeConfig(tmpDir);
+    const result = await generateRecursiveBarrels(moduleDir, config);
+
+    assert.strictEqual(result.totalOps, 0);
+    assert.strictEqual(result.created.length, 0);
+    assert.strictEqual(result.updated.length, 0);
+    assert.strictEqual(result.skipped.length, 0);
+
+    // No src/ was created.
+    assert.strictEqual(await exists(moduleDir, "src"), false);
+  });
+
+  it("4. processes all three layer dirs (domain, application, infrastructure)", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: { "entity.ts": "export const e = 1;\n" },
+        application: { "use-case.ts": "export const u = 1;\n" },
+        infrastructure: { "adapter.ts": "export const a = 1;\n" },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    for (const layer of ["domain", "application", "infrastructure"]) {
+      assert.ok(
+        await exists(moduleDir, `src/${layer}/index.ts`),
+        `${layer}/index.ts should be generated`,
+      );
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Empty directory handling
+  // -------------------------------------------------------------------------
+
+  it("5. empty layer dir gets `export {}` stub barrel", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: null, // empty layer directory
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    assert.ok(await exists(moduleDir, "src/domain/index.ts"));
+    const barrel = await readFile(moduleDir, "src/domain/index.ts");
+    assert.match(barrel, /^\/\/ @generated by @hexagen\/sync/);
+    assert.match(barrel, /export \{\};/);
+  });
+
+  it("6. empty non-layer subdirectory has its generated barrel removed and is not re-exported by parent", async () => {
+    // recursive.ts lines 232-238: empty non-layer dirs with an existing
+    // generated OR empty-stub barrel get their barrel deleted. We seed a
+    // pre-existing generated barrel so the deletion branch fires.
+    //
+    // Regression guard: the parent barrel must NOT re-export `unused/`
+    // because its index.ts is queued for deletion. Previously the walker
+    // consulted `hasBarrel(subDirPath)` (a filesystem probe) after queueing
+    // the deletion, yielding `true` and causing the parent to emit a
+    // dangling `export * from "./unused/index.js";` that broke module
+    // resolution in consumers after the write phase ran. The fix
+    // (recursive.ts:205-217) excludes subdirectories whose barrel is
+    // queued for deletion in `pendingWrites`.
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "keep.ts": "export const keep = 1;\n",
+          unused: {
+            "index.ts": "// @generated by @hexagen/sync\n\nexport {};\n",
+          },
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    // The child barrel IS deleted as the primary contract requires.
+    assert.strictEqual(
+      await exists(moduleDir, "src/domain/unused/index.ts"),
+      false,
+      "empty non-layer subdir's barrel should be deleted",
+    );
+    const parent = await readFile(moduleDir, "src/domain/index.ts");
+    assert.match(parent, /export \* from "\.\/keep\.js";/);
+    // Parent must NOT reference the deleted child — would be a dangling
+    // import that fails module resolution.
+    assert.doesNotMatch(
+      parent,
+      /export \* from "\.\/unused\/index\.js";/,
+      "parent must not re-export a subdirectory whose barrel is queued for deletion",
+    );
+  });
+
+  it("6b. regression: stub-only subdir is deleted AND parent re-exports remaining sibling file", async () => {
+    // Regression fixture for the dangling-reference bug fixed in
+    // recursive.ts:205-217. The parent has:
+    //   - a sibling source file `sibling.ts` (must be re-exported)
+    //   - a non-layer subdir `empty/` whose only content is a generated
+    //     stub barrel `export {};` (must be deleted, must NOT be
+    //     re-exported by the parent).
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "sibling.ts": "export const sibling = 42;\n",
+          empty: {
+            "index.ts": "// @generated by @hexagen/sync\n\nexport {};\n",
+          },
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    // 1. The stub barrel is deleted.
+    assert.strictEqual(
+      await exists(moduleDir, "src/domain/empty/index.ts"),
+      false,
+      "stub-only subdir barrel should be deleted",
+    );
+
+    const parent = await readFile(moduleDir, "src/domain/index.ts");
+
+    // 2. Parent must NOT reference the deleted subdirectory.
+    assert.doesNotMatch(
+      parent,
+      /export \* from "\.\/empty\/index\.js";/,
+      "parent must not re-export the deleted stub subdirectory",
+    );
+
+    // 3. Parent MUST reference the remaining sibling source file.
+    assert.match(
+      parent,
+      /export \* from "\.\/sibling\.js";/,
+      "parent must re-export the surviving sibling file",
+    );
+  });
+
+  it("7. converts comment-only layer barrel to `export {};`", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          // Comment-only generated barrel (has marker, no `export {}`, no files).
+          "index.ts": "// @generated by @hexagen/sync\n\n// No exports yet\n",
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    const barrel = await readFile(moduleDir, "src/domain/index.ts");
+    assert.match(barrel, /^\/\/ @generated by @hexagen\/sync/);
+    assert.match(barrel, /export \{\};/);
+    assert.doesNotMatch(
+      barrel,
+      /No exports yet/,
+      "comment-only placeholder text should be replaced",
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Hand-written preservation
+  // -------------------------------------------------------------------------
+
+  it("8. preserves hand-written barrel (no marker) unchanged", async () => {
+    const handWritten =
+      "// Hand-authored barrel — must NOT be overwritten.\n" +
+      'export * from "./foo.js";\n';
+
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "foo.ts": "export const foo = 1;\n",
+          "bar.ts": "export const bar = 2;\n",
+          "index.ts": handWritten,
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    const result = await generateRecursiveBarrels(moduleDir, config);
+
+    const barrelAfter = await readFile(moduleDir, "src/domain/index.ts");
+    assert.strictEqual(
+      barrelAfter,
+      handWritten,
+      "hand-written barrel must be preserved byte-for-byte",
+    );
+
+    const barrelPath = path.join(moduleDir, "src/domain/index.ts");
+    assert.ok(
+      result.skipped.includes(barrelPath),
+      `preserved barrel should appear in result.skipped — got ${JSON.stringify(
+        result.skipped,
+      )}`,
+    );
+  });
+
+  it("9. regenerates an @generated barrel that is out of date", async () => {
+    // Seed a stale generated barrel (missing the new `bar.ts` export).
+    const stale =
+      '// @generated by @hexagen/sync\n\nexport * from "./foo.js";\n';
+
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "foo.ts": "export const foo = 1;\n",
+          "bar.ts": "export const bar = 2;\n",
+          "index.ts": stale,
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    const result = await generateRecursiveBarrels(moduleDir, config);
+
+    const barrel = await readFile(moduleDir, "src/domain/index.ts");
+    assert.match(barrel, /export \* from "\.\/bar\.js";/);
+    assert.match(barrel, /export \* from "\.\/foo\.js";/);
+    assert.strictEqual(result.updated.length, 1);
+    assert.strictEqual(result.created.length, 0);
+    assert.strictEqual(result.totalOps, 1);
+  });
+
+  // -------------------------------------------------------------------------
+  // Circular export detection
+  // -------------------------------------------------------------------------
+
+  it("10. circular export detection (fixture-driven case is not reachable — documented)", async () => {
+    // The walker's exportGraph only links a barrel to its own CHILD
+    // directories (recursive.ts:301-306). Because directory containment is
+    // strictly a tree, a cycle via pure directory structure is impossible
+    // without symlinks. Exercising CircularExportError with a real fixture
+    // would require either (a) a symlink loop (platform-dependent, fragile
+    // on CI) or (b) mocking the graph construction.
+    //
+    // We therefore assert the two observable contracts that do not need a
+    // cycle fixture:
+    //   1. `CircularExportError` is exported and carries a `cycle` property.
+    //   2. A normal DAG walk does not throw it.
+    const err = new CircularExportError(["a", "b", "a"]);
+    assert.ok(err instanceof Error);
+    assert.strictEqual(err.name, "CircularExportError");
+    assert.deepStrictEqual(err.cycle, ["a", "b", "a"]);
+    assert.match(err.message, /Circular export detected/);
+
+    await createFixture(moduleDir, {
+      src: {
+        domain: { "foo.ts": "export const foo = 1;\n" },
+      },
+    });
+    const config = makeConfig(tmpDir);
+    // Must not throw for a normal tree.
+    await generateRecursiveBarrels(moduleDir, config);
+  });
+
+  // -------------------------------------------------------------------------
+  // Content hash idempotency
+  // -------------------------------------------------------------------------
+
+  it("11. does not rewrite barrel when content hash matches existing", async () => {
+    // Seed a barrel that already matches what the generator would emit.
+    const upToDate =
+      "// @generated by @hexagen/sync\n\n" +
+      'export * from "./bar.js";\n' +
+      'export * from "./foo.js";\n';
+
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "foo.ts": "export const foo = 1;\n",
+          "bar.ts": "export const bar = 2;\n",
+          "index.ts": upToDate,
+        },
+      },
+    });
+
+    const before = await readFile(moduleDir, "src/domain/index.ts");
+
+    const config = makeConfig(tmpDir);
+    const result = await generateRecursiveBarrels(moduleDir, config);
+
+    const after = await readFile(moduleDir, "src/domain/index.ts");
+    assert.strictEqual(after, before, "content must be unchanged");
+
+    // recursive.ts returns early (line 292) BEFORE pushing to pendingWrites
+    // when the hash already matches, so no created/updated/skipped entry is
+    // recorded for this barrel.
+    assert.strictEqual(result.totalOps, 0);
+    assert.strictEqual(result.created.length, 0);
+    assert.strictEqual(result.updated.length, 0);
+    assert.strictEqual(result.skipped.length, 0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Report shape
+  // -------------------------------------------------------------------------
+
+  it("12. returns created/updated/skipped lists correctly populated", async () => {
+    // Mixed fixture:
+    //   - domain: hand-written barrel (→ skipped via preserved)
+    //   - application: no barrel, one .ts file (→ created)
+    //   - infrastructure: stale @generated barrel (→ updated)
+    const handWritten = '// manual\nexport * from "./thing.js";\n';
+    const staleGenerated =
+      '// @generated by @hexagen/sync\n\nexport * from "./old.js";\n';
+
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "thing.ts": "export const t = 1;\n",
+          "index.ts": handWritten,
+        },
+        application: {
+          "use-case.ts": "export const u = 1;\n",
+        },
+        infrastructure: {
+          "adapter.ts": "export const a = 1;\n",
+          "index.ts": staleGenerated,
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    const result = await generateRecursiveBarrels(moduleDir, config);
+
+    // domain/index.ts is preserved (counted in skipped via the final push).
+    const domainBarrel = path.join(moduleDir, "src/domain/index.ts");
+    assert.ok(result.skipped.includes(domainBarrel));
+
+    // application/index.ts is newly created.
+    const appBarrel = path.join(moduleDir, "src/application/index.ts");
+    assert.ok(
+      result.created.includes(appBarrel),
+      `application barrel should be in created — got ${JSON.stringify(
+        result.created,
+      )}`,
+    );
+
+    // infrastructure/index.ts is updated.
+    const infraBarrel = path.join(moduleDir, "src/infrastructure/index.ts");
+    assert.ok(
+      result.updated.includes(infraBarrel),
+      `infrastructure barrel should be in updated — got ${JSON.stringify(
+        result.updated,
+      )}`,
+    );
+
+    // totalOps counts created + updated writes (not preserved/skipped).
+    assert.strictEqual(result.totalOps, 2);
+
+    // Sum of all lists must cover every barrel we touched.
+    const allListed =
+      result.created.length + result.updated.length + result.skipped.length;
+    assert.strictEqual(
+      allListed,
+      3,
+      `created(${result.created.length}) + updated(${result.updated.length}) + skipped(${result.skipped.length}) should total 3`,
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Filesystem edge cases
+  // -------------------------------------------------------------------------
+
+  it("13. skips excluded directories (node_modules etc.)", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "foo.ts": "export const foo = 1;\n",
+          node_modules: {
+            "junk.ts": "export const junk = 1;\n",
+          },
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    // No barrel inside node_modules.
+    assert.strictEqual(
+      await exists(moduleDir, "src/domain/node_modules/index.ts"),
+      false,
+      "excluded directories must not receive a barrel",
+    );
+
+    // Parent barrel must not re-export node_modules.
+    const parent = await readFile(moduleDir, "src/domain/index.ts");
+    assert.doesNotMatch(parent, /node_modules/);
+    assert.match(parent, /export \* from "\.\/foo\.js";/);
+  });
+
+  it("14. excludes .test.ts, .spec.ts and .d.ts files from the barrel", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: {
+          "foo.ts": "export const foo = 1;\n",
+          "foo.test.ts": "describe('foo', () => {});\n",
+          "bar.spec.ts": "describe('bar', () => {});\n",
+          "baz.d.ts": "export declare const baz: number;\n",
+        },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    const barrel = await readFile(moduleDir, "src/domain/index.ts");
+    assert.match(barrel, /export \* from "\.\/foo\.js";/);
+    // Non-source files must NOT appear as exports.
+    assert.doesNotMatch(barrel, /foo\.test/);
+    assert.doesNotMatch(barrel, /bar\.spec/);
+    assert.doesNotMatch(barrel, /baz\.d/);
+    // Only one real export (foo) — ensure we didn't accidentally include bar/baz
+    // as if they were source files.
+    const exportLines = barrel
+      .split("\n")
+      .filter((l) => l.startsWith("export * from"));
+    assert.strictEqual(
+      exportLines.length,
+      1,
+      `expected exactly one export line, got ${exportLines.length}: ${JSON.stringify(
+        exportLines,
+      )}`,
+    );
+  });
+});

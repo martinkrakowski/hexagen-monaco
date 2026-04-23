@@ -1,4 +1,4 @@
-import type { Manifest } from "@hexagen/shared";
+import type { Manifest, Result } from "@hexagen/shared";
 import type { ProjectConfigurationReadPort } from "../ports/out/project-configuration-read.port.js";
 
 export class GetManifestResourceUseCase {
@@ -6,12 +6,7 @@ export class GetManifestResourceUseCase {
     private readonly projectConfigurationReadPort: ProjectConfigurationReadPort,
   ) {}
 
-  async execute(): Promise<Manifest> {
-    const result = await this.projectConfigurationReadPort.getManifest();
-    if (!result.success) {
-      throw result.error;
-    }
-
-    return result.value;
+  async execute(): Promise<Result<Manifest>> {
+    return this.projectConfigurationReadPort.getManifest();
   }
 }

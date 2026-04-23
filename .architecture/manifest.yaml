@@ -65,7 +65,8 @@ monorepo:
         emitDeclarationOnly: true
         declarationMap: true
         composite: true
-        tsBuildInfoFile: ./dist/.tsbuildinfo
+        tsBuildInfoFile: ./dist/tsconfig.tsbuildinfo
+        paths: {}
       include:
         - src/**/*
       exclude:
@@ -73,6 +74,229 @@ monorepo:
         - dist
         - .turbo
       references: []
+    eslint:
+      # Default eslint.config.js template consumed by `generateEslintConfig`
+      # (packages/sync/src/generators/eslint.ts). Mirror of
+      # BUILTIN_FALLBACK_TEMPLATE. Per-context overrides may be declared at
+      # `bounded_contexts[<name>].generator.eslint.template`.
+      # The `{packageName}` and `{scope}` vars are available during
+      # interpolation but are unused by this default template.
+      template: |
+        import eslint from '@eslint/js';
+        import tseslint from 'typescript-eslint';
+
+        export default tseslint.config(
+          eslint.configs.recommended,
+          ...tseslint.configs.recommended,
+          {
+            rules: {
+              '@typescript-eslint/no-explicit-any': 'warn',
+              '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+            },
+          },
+          {
+            ignores: ['dist/**', 'node_modules/**'],
+          },
+        );
+  rootFiles:
+    # Templates for monorepo-root files consumed by `generateRootFiles`.
+    # Supports `{system}`, `{scope}`, `{packageManager}`, `{workspaces}`
+    # interpolation (see packages/sync/src/generators/root-files.ts).
+    # The `|-` block scalar strips the final newline to preserve
+    # byte-identity with `JSON.stringify(obj, null, 2)` output.
+    packageJson:
+      template: |-
+        {
+          "name": "{system}",
+          "private": true,
+          "type": "module",
+          "packageManager": "{packageManager}",
+          "workspaces": {workspaces},
+          "scripts": {
+            "build": "turbo build",
+            "dev": "turbo dev",
+            "lint": "turbo lint",
+            "typecheck": "turbo typecheck",
+            "test": "turbo test",
+            "clean": "turbo clean",
+            "sync": "hexagen sync",
+            "sync:dry": "hexagen sync --dry-run",
+            "sync:force": "hexagen sync --force",
+            "lint:arch": "hexagen arch validate",
+            "format": "prettier --write \"**/*.{ts,tsx,md}\""
+          },
+          "devDependencies": {
+            "turbo": "^2.0.0",
+            "typescript": "^5.5.4",
+            "eslint": "^9.0.0",
+            "prettier": "^3.0.0",
+            "@hexagen/sync": "^0.1.0",
+            "@hexagen/arch-linter": "^0.1.0"
+          }
+        }
+    tsConfig:
+      template: |-
+        {
+          "compilerOptions": {
+            "target": "ES2022",
+            "module": "ESNext",
+            "moduleResolution": "bundler",
+            "strict": true,
+            "composite": true,
+            "declaration": true,
+            "emitDeclarationOnly": true,
+            "paths": {
+              "@hexagen/*": [
+                "./packages/*/src/index.ts"
+              ]
+            }
+          }
+        }
+    turbo:
+      template: |-
+        {
+          "$schema": "https://turbo.build/schema.json",
+          "tasks": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "outputs": [
+                "dist/**"
+              ]
+            },
+            "dev": {
+              "cache": false,
+              "persistent": true
+            },
+            "lint": {
+              "dependsOn": [
+                "^build"
+              ]
+            },
+            "typecheck": {
+              "outputs": [],
+              "cache": true
+            },
+            "test": {
+              "dependsOn": [
+                "^build"
+              ]
+            }
+          }
+        }
+  archInvariants:
+    # Templates for `.architecture/**` content emitted by
+    # `generateArchitectureFiles` (packages/sync/src/generators/architecture-files.ts).
+    # Supports `{scope}`, `{template}`, `{workspaceTemplate}`, `{system}`,
+    # and `{ownershipBlock}` interpolation. `{{` / `}}` are literal-brace
+    # escape sequences preserved through the template engine.
+    # Mirrors the built-in fallbacks for workspaceTemplate=modular-monolith
+    # (LAYER_RULES_DEFAULT, LINTER_CONFIG_DEFAULT, GENERATOR_CONFIG_TEMPLATE).
+    layerRules:
+      template: |
+        # HexaGen — Architectural Invariants
+        # Template: {template} (flexible mode)
+
+        shared_kernel:
+          package: "@{scope}/shared"
+          allowed_in_all_layers: true
+
+        layers:
+          domain:
+            access_rule: "internal-only"
+            allowed_imports: ["@{scope}/shared"]
+
+          application:
+            access_rule: "ports-only"
+            allowed_imports: ["domain", "@{scope}/shared"]
+
+          infrastructure:
+            access_rule: "adapters"
+            allowed_imports: ["domain", "application", "@{scope}/shared"]
+    linterConfig:
+      template: |
+        # Rules for @hexagen/arch-linter
+        # Template: {template} (flexible mode)
+
+        global_whitelist:
+          - "@{scope}/shared"
+          - "@{scope}/shared/**"
+
+        test_double_rules:
+          allowed_cross_package_imports: true
+    generatorConfig:
+      template: |
+        generator:
+          version: "1.0"
+          description: "Global invariants and safety rules"
+          workspace_template: "{workspaceTemplate}"
+
+          invariants:
+            - name: composite-safety
+              description: "Every tsconfig.json must contain paths: {{}} to override inherited source mappings."
+              priority: critical
+              failure: abort-and-cleanup
+
+            - name: barrel-ownership-boundary
+              description: "Barrels may only re-export types owned by the current bounded context."
+              priority: critical
+              failure: abort-and-cleanup
+
+            - name: port-single-ownership
+              description: "Each port interface belongs to exactly one bounded context."
+              priority: critical
+              failure: abort-and-cleanup
+
+            - name: dependency-consistency
+              description: "Every @hexagen/* import must have a matching entry in package.json."
+              priority: high
+              failure: abort
+
+            - name: self-import-prevention
+              description: "No package imports itself by name."
+              priority: high
+              failure: abort
+
+            - name: signature-synchronization
+              description: "Generated consumers must derive exact signatures from the canonical port."
+              priority: high
+              failure: abort
+
+            - name: no-empty-stubs
+              description: "No empty barrels (export {{}}) in src/."
+              priority: medium
+              failure: warn-and-continue
+
+            - name: exports-field-mandatory
+              description: "Every package.json must include a complete exports map."
+              priority: medium
+              failure: warn-and-continue
+
+            - name: test-double-parity
+              description: "Test doubles must implement the same interface as the canonical port."
+              priority: medium
+              failure: warn-and-continue
+
+          bootstrap-sequence:
+            - load-ownership-map
+            - validate-port-ownership-map
+            - generate-package-skeleton
+            - enforce-tsconfig-paths-override
+            - generate-exports-field
+            - synchronize-signatures
+            - validate-barrel-chain
+            - enforce-dependency-consistency
+            - final-composite-reference-check
+
+          failure-behavior:
+            critical: abort-and-cleanup
+            high: abort
+            medium: warn-and-continue
+
+          ownership-registry:
+            ports:
+        {ownershipBlock}
   turboConfig:
     globalDependencies:
       - "**/.env.*"
@@ -117,6 +341,19 @@ generator:
       - .env.development
       - .env.production
       - .env.test
+    layers:
+      domain:
+        folder: src/domain
+      application:
+        folder: src/application
+        subfolders:
+          - ports/in
+          - ports/out
+          - use-cases
+      infrastructure:
+        folder: src/infrastructure
+        subfolders:
+          - adapters
     packageJson:
       mergeStrategy: preserveExisting
       protectedKeys:
@@ -144,6 +381,173 @@ generator:
           "@typescript-eslint/parser": ^8.0.0
           "@typescript-eslint/eslint-plugin": ^8.0.0
           eslint-config-prettier: ^9.1.0
+    stubs:
+      enabled: false
+      # Set to true to enable stub generation for new/empty bounded contexts.
+      # Leave false on hexagen-monaco self-regen (all code is hand-written).
+      # Generated child projects (external mode) set to true via UI toManifest.
+      templates:
+        inPort: "// @generated in-port stub — edit freely\nexport interface {name}Port {}\n"
+        outPort: "// @generated out-port stub — edit freely\nexport interface {name}Port {}\n"
+        adapter: "// @generated adapter stub — edit freely\nexport class {name}Adapter {}\n"
+        useCase: "// @generated use-case stub — edit freely\nexport class {name}UseCase {}\n"
+        entity: "// @generated entity stub — edit freely\nexport class {name} {}\n"
+        valueObject: "// @generated value-object stub — edit freely\nexport type {name} = unknown;\n"
+        domainService: "// @generated domain-service stub — edit freely\nexport class {name}Service {}\n"
+      naming:
+        inPort: "{name}.in-port.ts"
+        outPort: "{name}.out-port.ts"
+        adapter: "{name}.adapter.ts"
+        useCase: "{name}.use-case.ts"
+        entity: "{name}.ts"
+        valueObject: "{name}.vo.ts"
+        domainService: "{name}.service.ts"
+    apps:
+      # Framework-specific templates consumed by `generateApps`
+      # (packages/sync/src/generators/apps.ts). Mirror of
+      # BUILTIN_FRAMEWORK_TEMPLATES. Template interpolation vars:
+      # {appName}, {system}, {version}, {depends_on}.
+      frameworks:
+        next.js:
+          packageJson:
+            template: |
+              {
+                "name": "@{system}/{appName}",
+                "version": "0.0.0",
+                "private": true,
+                "type": "module",
+                "scripts": {
+                  "build": "next build",
+                  "dev": "next dev",
+                  "lint": "eslint src --ext .ts,.tsx",
+                  "typecheck": "tsc --noEmit"
+                },
+                "dependencies": {
+                  "next": "^15.0.0",
+                  "react": "^19.0.0",
+                  "react-dom": "^19.0.0"
+                },
+                "devDependencies": {
+                  "typescript": "^5.5.4",
+                  "eslint": "^9.0.0",
+                  "@typescript-eslint/parser": "^8.0.0",
+                  "@typescript-eslint/eslint-plugin": "^8.0.0"
+                }
+              }
+          tsConfig:
+            extends: ../../tsconfig.base.json
+            compilerOptions:
+              rootDir: src
+              outDir: dist
+              composite: true
+              declaration: true
+              emitDeclarationOnly: true
+              jsx: react-jsx
+            include:
+              - src/**/*
+            exclude:
+              - node_modules
+              - dist
+          entryPoint:
+            path: src/app/page.tsx
+            template: |
+              // Auto-generated Next.js application
+              export default function HomePage() {
+                return <div>Welcome to {system}</div>;
+              }
+        fastify:
+          packageJson:
+            template: |
+              {
+                "name": "@{system}/{appName}",
+                "version": "0.0.0",
+                "private": true,
+                "type": "module",
+                "scripts": {
+                  "build": "tsc",
+                  "dev": "tsc --watch",
+                  "lint": "eslint src --ext .ts,.tsx",
+                  "typecheck": "tsc --noEmit"
+                },
+                "dependencies": {
+                  "fastify": "^5.0.0"
+                },
+                "devDependencies": {
+                  "typescript": "^5.5.4",
+                  "eslint": "^9.0.0",
+                  "@typescript-eslint/parser": "^8.0.0",
+                  "@typescript-eslint/eslint-plugin": "^8.0.0"
+                }
+              }
+          tsConfig:
+            extends: ../../tsconfig.base.json
+            compilerOptions:
+              rootDir: src
+              outDir: dist
+              composite: true
+              declaration: true
+              emitDeclarationOnly: true
+              jsx: preserve
+            include:
+              - src/**/*
+            exclude:
+              - node_modules
+              - dist
+          entryPoint:
+            path: src/index.ts
+            template: |
+              // Auto-generated Fastify application
+              import fastify from 'fastify';
+
+              const server = fastify();
+
+              server.get('/', async () => {
+                return { status: 'ok' };
+              });
+
+              export default server;
+        plain-ts:
+          packageJson:
+            template: |
+              {
+                "name": "@{system}/{appName}",
+                "version": "0.0.0",
+                "private": true,
+                "type": "module",
+                "scripts": {
+                  "build": "tsc",
+                  "dev": "tsc --watch",
+                  "lint": "eslint src --ext .ts,.tsx",
+                  "typecheck": "tsc --noEmit"
+                },
+                "dependencies": {},
+                "devDependencies": {
+                  "typescript": "^5.5.4",
+                  "eslint": "^9.0.0",
+                  "@typescript-eslint/parser": "^8.0.0",
+                  "@typescript-eslint/eslint-plugin": "^8.0.0"
+                }
+              }
+          tsConfig:
+            extends: ../../tsconfig.base.json
+            compilerOptions:
+              rootDir: src
+              outDir: dist
+              composite: true
+              declaration: true
+              emitDeclarationOnly: true
+            include:
+              - src/**/*
+            exclude:
+              - node_modules
+              - dist
+          entryPoint:
+            path: src/index.ts
+            template: |
+              // Auto-generated plain-TypeScript application entry point
+              export function main(): void {
+                // Application bootstrap for {appName}
+              }
 mvk:
   spec: .architecture/mvk/spec-v1.md
   driftReport: .architecture/mvk/drift-report-v1.md
@@ -218,6 +622,10 @@ bounded_contexts:
           - Identifier
           - PersistedEditorWorkspace
           - PersistedCanvasLayout
+    generator:
+      tsConfig:
+        compilerOptions:
+          emitDeclarationOnly: false
   - name: project-configuration
     type: core
     description: Governance core — manifest parsing, validation, project topology
@@ -275,6 +683,20 @@ bounded_contexts:
         adapters:
           - FileSystemGeneratorAdapter
           - ArchLinterAdapter
+    depends_on:
+      - shared
+    generator:
+      tsConfig:
+        compilerOptions:
+          emitDeclarationOnly: false
+          moduleResolution: NodeNext
+          module: NodeNext
+          target: es2022
+          allowJs: false
+          esModuleInterop: true
+          skipLibCheck: true
+          forceConsistentCasingInFileNames: true
+          baseUrl: "."
   - name: wizard-orchestration
     type: core
     description: Deterministic wizard flows, intent processing, state projections
@@ -505,12 +927,35 @@ bounded_contexts:
         adapters:
           - ExternalSyncEngineAdapter
           - JsZipCreatorAdapter
+  - name: governance
+    type: supporting
+    description: >-
+      Governance read surface — exposes architectural decisions, invariants,
+      linter config, and workspace context as typed resources for AI agent
+      consumption
+    layers:
+      domain: {}
+      application:
+        use_cases:
+          - GetDecisionsResourceUseCase
+          - GetInvariantsResourceUseCase
+          - GetLinterConfigResourceUseCase
+          - GetWorkspaceContextResourceUseCase
+        ports:
+          in: []
+          out:
+            - GovernanceReadPort
+      infrastructure:
+        adapters:
+          - GovernanceReadAdapter
+    depends_on:
+      - shared
   - name: mcp-server
     type: core
     description: >-
       MCP server — exposes architectural tools and resources over stdio
       transport for AI agent interaction (audit, scaffold, dependency
-      management)
+      management, governance reads, manifest diff)
     layers:
       domain: {}
       application:
@@ -518,6 +963,11 @@ bounded_contexts:
           - GetManifestResourceUseCase
           - GetGraphResourceUseCase
           - GetLinterReportResourceUseCase
+          - GetDecisionsResourceUseCase
+          - GetInvariantsResourceUseCase
+          - GetLinterConfigResourceUseCase
+          - GetWorkspaceContextResourceUseCase
+          - DiffManifestToolUseCase
           - AuditBoundariesToolUseCase
           - ScaffoldModuleToolUseCase
           - AddDependencyToolUseCase
@@ -534,6 +984,8 @@ bounded_contexts:
             - LinterPort
             - ArchitectureQueryPort
             - ScaffoldingPort
+            - GovernanceReadPort
+            - ManifestDiffPort
       infrastructure:
         adapters:
           - MCPServerAdapter
@@ -542,6 +994,8 @@ bounded_contexts:
           - LinterAdapter
           - SyncEngineAdapter
           - InMemoryEventBusAdapter
+          - GovernanceReadAdapter
+          - ManifestDiffAdapter
     depends_on:
       - shared
       - messaging
@@ -664,6 +1118,10 @@ bounded_contexts:
           - Dialog
         tokens:
           - ProjectionToken
+    generator:
+      tsConfig:
+        compilerOptions:
+          jsx: react-jsx
   - name: intent-compiler
     type: core
     description: >-
@@ -908,6 +1366,8 @@ bounded_contexts:
 apps:
   - name: web
     driver: next.js
+    framework: next.js
+    version: "16.x"
     description: >-
       Frontend application — wizard, monaco editor, agentic UI, visualization
       canvas
@@ -918,10 +1378,29 @@ apps:
       - monaco-orchestration
       - visualization
       - sync
+      - agentic-interaction
+      - local-llm
+      - messaging
+      - project-generation
+      - prompt-compiler
+      - ui-projection-compiler
+      - web-driver
   - name: api-gateway
     driver: fastify
+    framework: fastify
+    version: "5.x"
     description: Public HTTP API + command gateway (future phase)
     depends_on:
       - project-configuration
       - messaging
       - shared
+  - name: tui
+    driver: cli
+    framework: plain-ts
+    description: >-
+      Terminal UI — MCP server integration for AI agent interaction via ink
+      and React
+    depends_on:
+      - shared
+      - agentic-interaction
+      - mcp-server

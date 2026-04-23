@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
-import type { Manifest } from "../types/manifest.js";
+import { expandDependsOn, type Manifest } from "../types/manifest.js";
 
 /**
  * Generates or updates package.json with merge strategy.
@@ -19,11 +19,12 @@ export async function generatePackageJson(
   const result = createEmptyResult();
 
   const defaults = config.manifest?.workspaceDefaults?.packageJson ?? {};
-  const moduleOverrides =
-    config.manifest?.bounded_contexts?.find(
-      (m): m is NonNullable<Manifest["bounded_contexts"]>[number] =>
-        m.name === moduleName,
-    )?.packageJson ?? {};
+  const context = config.manifest?.bounded_contexts?.find(
+    (m): m is NonNullable<Manifest["bounded_contexts"]>[number] =>
+      m.name === moduleName,
+  );
+  const moduleOverrides = context?.packageJson ?? {};
+  const dependsOnDeps = context ? expandDependsOn(context) : {};
 
   const pkgPath = path.join(modulePath, "package.json");
 
@@ -34,6 +35,12 @@ export async function generatePackageJson(
     type: "module",
     main: "dist/index.js",
     types: "dist/index.d.ts",
+    exports: {
+      ".": {
+        types: "./dist/index.d.ts",
+        default: "./dist/index.js",
+      },
+    },
     scripts: {
       build: "tsc",
       lint: "eslint . --ext .ts,.tsx",
@@ -42,6 +49,7 @@ export async function generatePackageJson(
       ...((moduleOverrides.scripts as Record<string, string>) ?? {}),
     },
     dependencies: {
+      ...dependsOnDeps,
       ...((defaults.dependencies as Record<string, string>) ?? {}),
       ...((moduleOverrides.dependencies as Record<string, string>) ?? {}),
     },

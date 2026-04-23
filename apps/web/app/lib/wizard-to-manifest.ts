@@ -1,8 +1,54 @@
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData, BoundedContext } from "@hexagen/shared";
+import type { Manifest } from "@hexagen/sync";
 
 const getInboundPortName = (type: string) => `${type}.in-port.ts`;
 const getOutboundPortName = (type: string) => `${type}.out-port.ts`;
 const getAdapterName = (type: string) => `${type}.adapter.ts`;
+
+// Framework derivation for the manifest `apps[]` section.
+// Reused by `wizardToManifest` to satisfy Wave 4 of the unified-scaffolding
+// plan (`docs/sync-engine-unified-scaffolding-plan.md` §Sub-agent 4b).
+//
+// Only `"next.js"`, `"fastify"`, and `"plain-ts"` have built-in generator
+// fallbacks (`packages/sync/src/generators/apps.ts`
+// `BUILTIN_FRAMEWORK_TEMPLATES`); `"express"` entries with no manifest
+// template are skipped by the generator. Wizard choices not covered by those
+// three are therefore mapped to `"plain-ts"` so the generator always emits a
+// buildable scaffold for every app it sees.
+type AppEntryFramework = NonNullable<
+  NonNullable<Manifest["apps"]>[number]["framework"]
+>;
+
+function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
+  return ui === "Next.js" ? "next.js" : "plain-ts";
+}
+
+function mapApiFramework(
+  api: BoundedContext["apiFramework"],
+): AppEntryFramework {
+  if (api === "Fastify") return "fastify";
+  // Express and NestJS have no built-in template in the generator; fall
+  // through to plain-ts so the app is scaffolded rather than skipped.
+  return "plain-ts";
+}
+
+/**
+ * Pick a single framework to represent all of `apps[].web` (or `.api`) across
+ * multiple bounded contexts. Preference order mirrors the generator's
+ * built-in fallbacks, preferring the most specific framework that any context
+ * requested. Ties are broken deterministically by the order below.
+ */
+function pickPreferredFramework(
+  frameworks: readonly AppEntryFramework[],
+  preferenceOrder: readonly AppEntryFramework[],
+): AppEntryFramework {
+  for (const candidate of preferenceOrder) {
+    if (frameworks.includes(candidate)) return candidate;
+  }
+  // `frameworks` is always non-empty at call sites, so this is unreachable;
+  // fall back to plain-ts for total safety rather than throwing.
+  return "plain-ts";
+}
 
 export function wizardToManifest(
   wizardData: WizardData,
@@ -141,18 +187,22 @@ export function wizardToManifest(
             },
           },
         },
+        // Stub generation is required for UI-generated projects — they start
+        // from zero and need `@generated` entity/VO/port/adapter/use-case
+        // stubs so every barrel has something to re-export. Templates and
+        // naming conventions fall through to the generator's built-in
+        // defaults (`generateStubs`); the UI does not customise those.
+        // See `docs/sync-engine-unified-scaffolding-plan.md` §Sub-agent 4b.
+        stubs: { enabled: true },
+        // Apps generation is also required for UI-generated projects. The
+        // generator is opt-in by design (self-regen of monorepos with
+        // hand-written apps like hexagen-monaco must leave it disabled) —
+        // the UI explicitly opts in because it always generates app
+        // scaffolding from scratch into a fresh target directory.
+        apps: { enabled: true },
       },
     },
-    apps:
-      wizardData.externalContexts?.map((ext) => ({
-        name: ext.name,
-        type: "web",
-        depends_on: isStrictTemplate
-          ? []
-          : wizardData.peerMappings
-              ?.filter((m) => m.consumerContext === ext.id)
-              ?.map((m) => m.providerContext) || [],
-      })) || [],
+    apps: deriveApps(boundedContexts),
     bounded_contexts: boundedContexts.map((bc) => {
       const isShared = bc.name.toLowerCase().includes("shared");
 
@@ -210,4 +260,49 @@ export function wizardToManifest(
       };
     }),
   };
+}
+
+/**
+ * Derive the manifest `apps[]` array from the wizard's per-BC framework
+ * choices. Produces at most two apps — a `web` and an `api` — aggregating
+ * every non-shared bounded context as a dependency, so the generator knows
+ * which packages each app may import.
+ *
+ * Returns `[]` when there are no non-shared bounded contexts; callers should
+ * keep the key present (not absent) so downstream schema validation sees an
+ * explicit empty list.
+ *
+ * Output is deterministic: `depends_on` is sorted, and apps appear in a
+ * fixed `web`-then-`api` order.
+ */
+function deriveApps(
+  boundedContexts: readonly BoundedContext[],
+): NonNullable<Manifest["apps"]> {
+  const nonShared = boundedContexts.filter(
+    (bc) => !bc.name.toLowerCase().includes("shared"),
+  );
+  if (nonShared.length === 0) return [];
+
+  const dependsOn = [...new Set(nonShared.map((bc) => bc.name))].sort();
+
+  const uiFrameworks = nonShared.map((bc) => mapUiFramework(bc.uiFramework));
+  const apiFrameworks = nonShared.map((bc) => mapApiFramework(bc.apiFramework));
+
+  // Preference order places frameworks with built-in generator templates
+  // ahead of `plain-ts`, so a project mixing Next.js and Remix contexts
+  // still emits a Next.js web app (template available) rather than
+  // degrading to plain-ts.
+  const webFramework = pickPreferredFramework(uiFrameworks, [
+    "next.js",
+    "plain-ts",
+  ]);
+  const apiFramework = pickPreferredFramework(apiFrameworks, [
+    "fastify",
+    "plain-ts",
+  ]);
+
+  return [
+    { name: "web", framework: webFramework, depends_on: dependsOn },
+    { name: "api", framework: apiFramework, depends_on: dependsOn },
+  ];
 }

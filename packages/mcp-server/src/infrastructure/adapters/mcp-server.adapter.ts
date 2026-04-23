@@ -3,10 +3,15 @@ import type { AddDependencyToolUseCase } from "../../application/use-cases/add-d
 import type { AuditBoundariesToolUseCase } from "../../application/use-cases/audit-boundaries-tool.use-case.js";
 import type { CreateAdapterToolUseCase } from "../../application/use-cases/create-adapter-tool.use-case.js";
 import type { CreateContextToolUseCase } from "../../application/use-cases/create-context-tool.use-case.js";
+import type { DiffManifestToolUseCase } from "../../application/use-cases/diff-manifest-tool.use-case.js";
 import type { CreatePortToolUseCase } from "../../application/use-cases/create-port-tool.use-case.js";
 import type { GetGraphResourceUseCase } from "../../application/use-cases/get-graph-resource.use-case.js";
+import type { GetDecisionsResourceUseCase } from "../../application/use-cases/get-decisions-resource.use-case.js";
+import type { GetInvariantsResourceUseCase } from "../../application/use-cases/get-invariants-resource.use-case.js";
+import type { GetLinterConfigResourceUseCase } from "../../application/use-cases/get-linter-config-resource.use-case.js";
 import type { GetLinterReportResourceUseCase } from "../../application/use-cases/get-linter-report-resource.use-case.js";
 import type { GetManifestResourceUseCase } from "../../application/use-cases/get-manifest-resource.use-case.js";
+import type { GetWorkspaceContextResourceUseCase } from "../../application/use-cases/get-workspace-context-resource.use-case.js";
 import type { RemoveContextToolUseCase } from "../../application/use-cases/remove-context-tool.use-case.js";
 import type { RemovePortToolUseCase } from "../../application/use-cases/remove-port-tool.use-case.js";
 import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
@@ -15,6 +20,10 @@ interface MCPServerAdapterDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
   getGraphResourceUseCase: GetGraphResourceUseCase;
   getLinterReportResourceUseCase: GetLinterReportResourceUseCase;
+  getDecisionsResourceUseCase: GetDecisionsResourceUseCase;
+  getInvariantsResourceUseCase: GetInvariantsResourceUseCase;
+  getLinterConfigResourceUseCase: GetLinterConfigResourceUseCase;
+  getWorkspaceContextResourceUseCase: GetWorkspaceContextResourceUseCase;
   auditBoundariesToolUseCase: AuditBoundariesToolUseCase;
   scaffoldModuleToolUseCase: ScaffoldModuleToolUseCase;
   addDependencyToolUseCase: AddDependencyToolUseCase;
@@ -23,6 +32,7 @@ interface MCPServerAdapterDependencies {
   removePortToolUseCase: RemovePortToolUseCase;
   removeContextToolUseCase: RemoveContextToolUseCase;
   createContextToolUseCase: CreateContextToolUseCase;
+  diffManifestToolUseCase: DiffManifestToolUseCase;
 }
 
 interface MCPServerRuntime {
@@ -114,12 +124,36 @@ export class MCPServerAdapter implements MCPServerPort {
             description: "Bounded context dependency graph",
             mimeType: "application/json",
           },
-          {
-            uri: "architecture://linter-report",
-            name: "Architecture Linter Report",
-            description: "Latest architecture lint report",
-            mimeType: "application/json",
-          },
+        {
+          uri: "architecture://linter-report",
+          name: "Architecture Linter Report",
+          description: "Latest architecture lint report",
+          mimeType: "application/json",
+        },
+        {
+          uri: "architecture://decisions",
+          name: "Architecture Decisions",
+          description: "ADR documents from .architecture/decisions/",
+          mimeType: "application/json",
+        },
+        {
+          uri: "architecture://invariants",
+          name: "Architecture Invariants",
+          description: "Layer rules and cross-package boundaries",
+          mimeType: "application/json",
+        },
+        {
+          uri: "architecture://linter-config",
+          name: "Linter Configuration",
+          description: "Package-level linter rules",
+          mimeType: "application/json",
+        },
+        {
+          uri: "architecture://workspace-context",
+          name: "Workspace Context",
+          description: "High-level workspace metadata",
+          mimeType: "application/json",
+        },
         ],
       };
     });
@@ -131,48 +165,111 @@ export class MCPServerAdapter implements MCPServerPort {
         const uri = req.params.uri;
 
         if (uri === "architecture://manifest") {
-          const resource =
+          const result =
             await this.dependencies.getManifestResourceUseCase.execute();
+          if (!result.success) throw result.error;
           return {
             contents: [
               {
                 uri,
                 mimeType: "application/json",
-                text: JSON.stringify(resource, null, 2),
+                text: JSON.stringify(result.value, null, 2),
               },
             ],
           };
         }
 
         if (uri === "architecture://graph") {
-          const resource =
+          const result =
             await this.dependencies.getGraphResourceUseCase.execute();
+          if (!result.success) throw result.error;
           return {
             contents: [
               {
                 uri,
                 mimeType: "application/json",
-                text: JSON.stringify(resource, null, 2),
+                text: JSON.stringify(result.value, null, 2),
               },
             ],
           };
         }
 
-        if (uri === "architecture://linter-report") {
-          const resource =
-            await this.dependencies.getLinterReportResourceUseCase.execute();
-          return {
-            contents: [
-              {
-                uri,
-                mimeType: "application/json",
-                text: JSON.stringify(resource, null, 2),
-              },
-            ],
-          };
-        }
+      if (uri === "architecture://linter-report") {
+        const result =
+          await this.dependencies.getLinterReportResourceUseCase.execute();
+        if (!result.success) throw result.error;
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "application/json",
+              text: JSON.stringify(result.value, null, 2),
+            },
+          ],
+        };
+      }
 
-        throw new Error(`Unknown resource: ${uri}`);
+      if (uri === "architecture://decisions") {
+        const result =
+          await this.dependencies.getDecisionsResourceUseCase.execute();
+        if (!result.success) throw result.error;
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "application/json",
+              text: JSON.stringify(result.value, null, 2),
+            },
+          ],
+        };
+      }
+
+      if (uri === "architecture://invariants") {
+        const result =
+          await this.dependencies.getInvariantsResourceUseCase.execute();
+        if (!result.success) throw result.error;
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "application/json",
+              text: JSON.stringify(result.value, null, 2),
+            },
+          ],
+        };
+      }
+
+      if (uri === "architecture://linter-config") {
+        const result =
+          await this.dependencies.getLinterConfigResourceUseCase.execute();
+        if (!result.success) throw result.error;
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "application/json",
+              text: JSON.stringify(result.value, null, 2),
+            },
+          ],
+        };
+      }
+
+      if (uri === "architecture://workspace-context") {
+        const result =
+          await this.dependencies.getWorkspaceContextResourceUseCase.execute();
+        if (!result.success) throw result.error;
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "application/json",
+              text: JSON.stringify(result.value, null, 2),
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unknown resource: ${uri}`);
       },
     );
   }
@@ -296,6 +393,27 @@ export class MCPServerAdapter implements MCPServerPort {
                 dry_run: { type: "boolean" },
               },
               required: ["name", "type"],
+            },
+          },
+          {
+            name: "hexagen_diff_manifest",
+            description:
+              "Compare current manifest against git HEAD or a file and return structural diff",
+            inputSchema: {
+              type: "object",
+              properties: {
+                compare_source: {
+                  type: "string",
+                  enum: ["git_head", "file"],
+                  description:
+                    "Source to compare against (default: git_head)",
+                },
+                file_path: {
+                  type: "string",
+                  description:
+                    "Path to manifest file for comparison (required when compare_source is 'file')",
+                },
+              },
             },
           },
         ],
@@ -423,24 +541,57 @@ export class MCPServerAdapter implements MCPServerPort {
             };
           }
 
-          if (name === "hexagen_create_context") {
-            const result =
-              await this.dependencies.createContextToolUseCase.execute({
-                name: String(args.name ?? ""),
-                type: String(args.type ?? "core") as
-                  | "core"
-                  | "supporting"
-                  | "driver"
-                  | "shared-kernel",
-                description: args.description as string | undefined,
-                dry_run: (args.dry_run as boolean | undefined) ?? false,
-              });
+        if (name === "hexagen_create_context") {
+          const result =
+            await this.dependencies.createContextToolUseCase.execute({
+              name: String(args.name ?? ""),
+              type: String(args.type ?? "core") as
+                | "core"
+                | "supporting"
+                | "driver"
+                | "shared-kernel",
+              description: args.description as string | undefined,
+              dry_run: (args.dry_run as boolean | undefined) ?? false,
+            });
+          return {
+            content: [
+              { type: "text", text: JSON.stringify(result, null, 2) },
+            ],
+          };
+        }
+
+        if (name === "hexagen_diff_manifest") {
+          const result =
+            await this.dependencies.diffManifestToolUseCase.execute({
+              compare_source: args.compare_source as
+                | "git_head"
+                | "file"
+                | undefined,
+              file_path: args.file_path as string | undefined,
+            });
+          if (result.success) {
             return {
               content: [
-                { type: "text", text: JSON.stringify(result, null, 2) },
+                {
+                  type: "text",
+                  text: JSON.stringify(result.value, null, 2),
+                },
               ],
             };
           }
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                  text:
+                    result.error instanceof Error
+                      ? result.error.message
+                      : String(result.error),
+              },
+            ],
+          };
+        }
 
           throw new Error(`Unknown tool: ${name}`);
         } catch (error) {
