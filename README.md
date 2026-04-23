@@ -1,4 +1,6 @@
-This project is currently under development progressing towards the first working release.
+<p align="center"><img src="docs/assets/hexagen-monaco-logo.svg" width="350" alt="HexaGen Monaco Logo"></p>
+
+<div align="center">
 
 # HexaGen Monaco — Architecture Governance Engine
 
@@ -6,6 +8,8 @@ This project is currently under development progressing towards the first workin
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 **Architecture should compile.**
+
+</div>
 
 ## The Problem
 
