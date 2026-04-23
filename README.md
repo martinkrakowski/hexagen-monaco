@@ -9,6 +9,8 @@
 
 **Architecture should compile**
 
+<a href="https://hexagen-monaco.cloud/">View application demo</a>
+
 </div>
 
 ## The Problem
