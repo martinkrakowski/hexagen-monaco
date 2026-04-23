@@ -5,6 +5,16 @@
 
 ---
 
+## The Immutable Anchor (Highest Priority)
+
+Before writing, modifying, or proposing any UI code, you MUST silently read the `DESIGN.md` file located in the project root.
+
+- Do not ask for permission to read it.
+- Treat `DESIGN.md` as the absolute truth for all design tokens, component constraints, and architectural boundaries.
+- If a user request conflicts with `DESIGN.md`, you must reject the request, cite the specific rule being violated, and propose a compliant alternative.
+
+---
+
 ## Before Every Exchange
 
 Declare your mode at the top of every response. Then:
@@ -58,19 +68,19 @@ To modify a protected file: state reason → get human confirmation → use `yar
 
 ### 🎯 Orchestrator Mode
 
-**Triggers:** "delegate", "orchestrate", "work plan", or any request spanning >1 Hexagonal layer or >1 package.
+**Triggers:** "delegate", "orchestrate", "work plan", or any request spanning \>1 Hexagonal layer or \>1 package.
 
-**Full spec:** [`.agents/ORCHESTRATOR.md`](.agents/ORCHESTRATOR.md)
+**Full spec:** [`.agents/ORCHESTRATOR.md`](https://www.google.com/search?q=.agents/ORCHESTRATOR.md)
 
 **Rule:** Never write implementation code in this mode. Decompose → emit Work Plan → delegate → gate.
 
 **Delegation process:** For each sub-task in the Work Plan, use the **Task tool** to instantiate the sub-agent:
 
-1. Identify the Sub-Agent role (Domain Worker, Adapter Worker, Test/QA Worker) — see `.agents/ORCHESTRATOR.md` §Sub-Agent Roles
-2. Use the **Task tool** with `subagent_type: "general"` or `"explore"` depending on scope
-3. Inject the **Global Governance block** (see `.agents/ORCHESTRATOR.md` §Step 4)
-4. Append the sub-agent's specific task description and Work Plan row
-5. Do **not** proceed to dependent tasks until sub-agent output is received
+1.  Identify the Sub-Agent role (Domain Worker, Adapter Worker, Test/QA Worker) — see `.agents/ORCHESTRATOR.md` §Sub-Agent Roles
+2.  Use the **Task tool** with `subagent_type: "general"` or `"explore"` depending on scope
+3.  Inject the **Global Governance block** (see `.agents/ORCHESTRATOR.md` §Step 4)
+4.  Append the sub-agent's specific task description and Work Plan row
+5.  Do **not** proceed to dependent tasks until sub-agent output is received
 
 Ends with: **Ready to emit Work Plan. Confirm scope or say `delegate [feature]` to proceed.**
 
@@ -82,25 +92,25 @@ Ends with: **Ready to emit Work Plan. Confirm scope or say `delegate [feature]` 
 ### 🏗️ Architect Mode
 
 **Triggers:** "architect", "design", "plan", "update manifest.yaml", structural decisions.
-**Deliverables:** Changed `manifest.yaml` snippet · bounded context definition · Mermaid diagram (if >2 parts) · folder structure · dependency flow · wiring strategy.
-**Validation:** Confirm bootstrap precondition order · failure behaviour per priority · diagram nodes match YAML · no port in >1 context.
+**Deliverables:** Changed `manifest.yaml` snippet · bounded context definition · Mermaid diagram (if \>2 parts) · folder structure · dependency flow · wiring strategy.
+**Validation:** Confirm bootstrap precondition order · failure behaviour per priority · diagram nodes match YAML · no port in \>1 context.
 Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 ### 🔨 Develop Mode
 
 **Triggers:** "develop [feature]", "implement", "code", "next step", "batch phase".
 
-**Full spec:** [`.agents/TESTING.md`](.agents/TESTING.md)
+**Full spec:** [`.agents/TESTING.md`](https://www.google.com/search?q=.agents/TESTING.md)
 
-1. Verify clean build before writing anything.
-2. Print a numbered ToC of all files to create/modify first.
-3. **One file per response** — full content, no ellipsis. _(Override: "batch Phase X" authorises multi-file streaming.)_
-4. Pause after every file and await "next step". _(Override: no pause when batching is authorised.)_
-5. Every file maps to a named element in `manifest.yaml`. Update manifest + run `yarn lint:arch` before any implementation file when adding a port/use-case/entity.
-6. After each port + adapter + test double slice: remind to run `yarn build && yarn sync`.
-7. Never leave a barrel with only `export {}`.
-8. Minimal scoped changes only — no cosmetic reformatting.
-9. For features spanning >1 phase: stop after each phase, provide a summary table, await confirmation.
+1.  Verify clean build before writing anything.
+2.  Print a numbered ToC of all files to create/modify first.
+3.  **One file per response** — full content, no ellipsis. _(Override: "batch Phase X" authorises multi-file streaming.)_
+4.  Pause after every file and await "next step". _(Override: no pause when batching is authorised.)_
+5.  Every file maps to a named element in `manifest.yaml`. Update manifest + run `yarn lint:arch` before any implementation file when adding a port/use-case/entity.
+6.  After each port + adapter + test double slice: remind to run `yarn build && yarn sync`.
+7.  Never leave a barrel with only `export {}`.
+8.  Minimal scoped changes only — no cosmetic reformatting.
+9.  For features spanning \>1 phase: stop after each phase, provide a summary table, await confirmation.
 10. After review approval: `git commit` with a descriptive message. Never `git push` without explicit instruction.
 
 ### 🔍 Review & Archeology Mode
@@ -122,7 +132,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 ## YAML Editing Discipline
 
-**Full spec:** [`.agents/yaml-editing-disciplines.md`](.agents/yaml-editing-disciplines.md)
+**Full spec:** [`.agents/yaml-editing-disciplines.md`](https://www.google.com/search?q=.agents/yaml-editing-disciplines.md)
 
 When editing `.architecture/manifest.yaml` or `.architecture/invariants/linter-config.yaml`:
 
