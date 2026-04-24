@@ -64,14 +64,8 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# VS Code - Ignore all internal state, but version the shared config
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-
-# Zed - Ignore all internal state, but version the shared config
-.zed/*
-!.zed/settings.json
+.vscode/
+.zed/
 
 .idea/
 *.suo
