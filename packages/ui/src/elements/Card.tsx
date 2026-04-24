@@ -78,7 +78,7 @@ const CardContentComponent: ForwardRefRenderFunction<
   return (
     <div
       ref={ref}
-      className={["p-4 pt-0", className].filter(Boolean).join(" ")}
+      className={["pt-0", className].filter(Boolean).join(" ")}
       {...props}
     />
   );
