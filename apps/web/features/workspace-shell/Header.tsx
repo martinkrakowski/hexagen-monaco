@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "@/hooks/useTheme";
-import { Sun, Moon, Hexagon } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { HeaderMenu } from "./HeaderMenu";
 import { ProjectMenu } from "./ProjectMenu";
 import { ExportStatusStrip } from "./ExportStatusStrip";
@@ -33,14 +33,13 @@ export function Header({
 
   return (
     <div className="shrink-0">
-      <header className="w-full px-6 py-4 bg-card border-b border-border flex items-center justify-between">
+      <header className="w-full px-6 py-1 bg-card border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 bg-primary text-primary-foreground flex items-center justify-center rounded-sm text-sm font-bold">
-            <Hexagon />
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            HexaGen-Monaco
-          </h1>
+          <img
+            src="/brand/hexagen-monaco-logotype-2.svg"
+            alt="HexaGen Monaco"
+            className="h-12 w-auto"
+          />
         </div>
         <div className="flex items-center gap-2">
           {isEditing && (
