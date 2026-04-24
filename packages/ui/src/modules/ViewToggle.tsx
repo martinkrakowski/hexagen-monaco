@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
-import { Icon } from "../elements/Icon.js";
+import { Eye, Code } from "lucide-react";
+import { cn } from "../lib/utils.js";
 
 export type ViewMode = "visual" | "code";
 
@@ -23,9 +24,7 @@ const ViewToggleComponent: ForwardRefRenderFunction<
   return (
     <div
       ref={ref}
-      className={["flex items-center gap-2", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={cn("flex items-center gap-2", className)}
       {...props}
     >
       <label className="relative inline-flex items-center cursor-pointer select-none">
@@ -39,34 +38,26 @@ const ViewToggleComponent: ForwardRefRenderFunction<
 
         <div className="w-16 h-8 bg-muted rounded-full border-2 border-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 transition-colors peer-checked:bg-primary/10" />
 
-        <div className="absolute left-1 top-1 w-6 h-6 bg-card rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
-          <Icon
-            name={view === "visual" ? "eye" : "chevron-right"}
-            size={14}
-            className="text-primary"
-          />
+        <div className="absolute left-1 top-1 w-6 h-6 bg-background rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
+          {view === "visual" ? (
+            <Eye className="h-3.5 w-3.5 text-primary" />
+          ) : (
+            <Code className="h-3.5 w-3.5 text-primary" />
+          )}
         </div>
 
         <div className="absolute inset-0 flex items-center justify-between px-2.5 pointer-events-none">
-          <Icon
-            name="eye"
-            size={14}
-            className={[
-              "transition-opacity",
+          <Eye
+            className={cn(
+              "h-3.5 w-3.5 transition-opacity",
               view === "visual" ? "opacity-0" : "opacity-20",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            )}
           />
-          <Icon
-            name="chevron-right"
-            size={14}
-            className={[
-              "transition-opacity",
+          <Code
+            className={cn(
+              "h-3.5 w-3.5 transition-opacity",
               view === "code" ? "opacity-0" : "opacity-20",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            )}
           />
         </div>
       </label>

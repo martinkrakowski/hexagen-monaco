@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@hexagen/ui";
+import { Card, CardContent } from "@hexagen/ui";
 import { ViewToggle } from "@hexagen/ui";
 import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
 import { CodeView } from "../code-view/CodeView";
@@ -40,12 +40,12 @@ export function ArchitecturePreviewPane({
 
   return (
     <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border bg-card/30 shrink-0 h-12 px-4 py-3">
-        <CardTitle className="text-sm font-semibold">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 h-12">
+        <span className="font-semibold text-sm truncate">
           Architecture Preview
-        </CardTitle>
+        </span>
         <ViewToggle view={viewMode} onChange={onViewModeChange} />
-      </CardHeader>
+      </div>
       <CardContent className="flex-1 p-0 overflow-hidden relative">
         {viewMode === "visual" ? (
           <GraphCanvasWrapper projectId="demo" wizardData={wizardData} />

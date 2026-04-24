@@ -29,7 +29,7 @@ const CardHeaderComponent: ForwardRefRenderFunction<
   return (
     <div
       ref={ref}
-      className={cn("flex flex-col space-y-1.5 p-4", className)}
+      className={cn("flex flex-col space-y-1.5 px-4 py-4", className)}
       {...props}
     />
   );

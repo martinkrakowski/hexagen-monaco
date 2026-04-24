@@ -1594,6 +1594,7 @@ __metadata:
     "@typescript-eslint/eslint-plugin": "npm:^8.57.0"
     "@typescript-eslint/parser": "npm:^8.57.0"
     eslint: "npm:^8.57.0"
+    lucide-react: "npm:^1.11.0"
     typescript: "npm:^5.5.4"
   peerDependencies:
     react: ^18.0.0 || ^19.0.0
@@ -9645,6 +9646,15 @@ __metadata:
   peerDependencies:
     react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
   checksum: 10c0/eec257049609eff958329943da6e129c8db1969aa789c6e922f59418d7b6f6913c22e971ac7885efc80eeb3e41e180c48afdee92738a63a31ef5a39836037b7e
+  languageName: node
+  linkType: hard
+
+"lucide-react@npm:^1.11.0":
+  version: 1.11.0
+  resolution: "lucide-react@npm:1.11.0"
+  peerDependencies:
+    react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+  checksum: 10c0/2a2b6416eb89aea2bd59fa0a513d59a46090cd37c55633414ffadb86e4c7bba9dbd7991c9681fc1e879f565c885aaf5938921ab093d7f7c5d9d8c6bbe655ef30
   languageName: node
   linkType: hard
 
