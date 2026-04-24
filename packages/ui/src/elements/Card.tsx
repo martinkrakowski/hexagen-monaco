@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ForwardRefRenderFunction } from "react";
 import { forwardRef } from "react";
 import type { NoSemanticState } from "../types/forbidden-brand.js";
+import { cn } from "../lib/utils.js";
 
 const CardComponent: ForwardRefRenderFunction<
   HTMLDivElement,
@@ -9,12 +10,10 @@ const CardComponent: ForwardRefRenderFunction<
   return (
     <div
       ref={ref}
-      className={[
+      className={cn(
         "rounded-md border border-border bg-card shadow-sm",
         className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      )}
       {...props}
     />
   );
@@ -30,9 +29,7 @@ const CardHeaderComponent: ForwardRefRenderFunction<
   return (
     <div
       ref={ref}
-      className={["flex flex-col space-y-1.5 p-4", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={cn("flex flex-col space-y-1.5 p-4", className)}
       {...props}
     />
   );
@@ -57,12 +54,10 @@ const CardTitleComponent: ForwardRefRenderFunction<
   return (
     <TagName
       ref={ref}
-      className={[
+      className={cn(
         "text-base font-semibold leading-none tracking-tight",
         className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      )}
       {...props}
     />
   );
@@ -75,13 +70,7 @@ const CardContentComponent: ForwardRefRenderFunction<
   HTMLDivElement,
   NoSemanticState<HTMLAttributes<HTMLDivElement>>
 > = ({ className, ...props }, ref) => {
-  return (
-    <div
-      ref={ref}
-      className={["pt-0", className].filter(Boolean).join(" ")}
-      {...props}
-    />
-  );
+  return <div ref={ref} className={cn("pt-0", className)} {...props} />;
 };
 
 export const CardContent = forwardRef(CardContentComponent);

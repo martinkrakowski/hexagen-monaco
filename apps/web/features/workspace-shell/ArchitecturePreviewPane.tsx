@@ -40,8 +40,8 @@ export function ArchitecturePreviewPane({
 
   return (
     <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-      <CardHeader className="border-b border-border shrink-0 flex flex-row items-center justify-between space-y-0 py-3 px-4 h-12">
-        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border bg-card/30 shrink-0 h-12 px-4 py-3">
+        <CardTitle className="text-sm font-semibold">
           Architecture Preview
         </CardTitle>
         <ViewToggle view={viewMode} onChange={onViewModeChange} />
