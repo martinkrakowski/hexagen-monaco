@@ -86,6 +86,7 @@ Thumbs.db
 .claude/
 .continue/
 .cursor/
+.opencode/
 skills-lock.json
 skills/
 
