@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <g id="hexagen-blue" transform="matrix(0.780802, 0, 0, 0.780802, -49.504166, -1.797205)" style="">
+    <polygon points="200,35 96,95 122,110 200,65" fill="#89cbe2"/>
+    <polygon points="96,95 96,215 122,200 122,110" fill="#61a8c9"/>
+    <polygon points="96,215 200,275 200,245 122,200" fill="#75bbd8"/>
+    <polygon points="148,125 148,215 174,230 174,140" fill="#5294b5"/>
+    <polygon points="200,95 148,125 174,140 200,125" fill="#60a6c6"/>
+  </g>
+  <g id="hexagen-green" transform="matrix(0.780802, 0, 0, 0.780802, -49.504166, -1.797205)" style="">
+    <polygon points="304,95 200,35 200,65 278,110" fill="#69c2a5"/>
+    <polygon points="304,215 304,95 278,110 278,200" fill="#50ac8f"/>
+    <polygon points="200,275 304,215 278,200 200,245" fill="#49a083"/>
+    <polygon points="252,185 252,95 226,80 226,170" fill="#3d8c70"/>
+    <polygon points="200,215 252,185 226,170 200,185" fill="#4da88a"/>
+  </g>
+  <g id="hexagen-text" transform="matrix(1, 0, 0, 1, 153.058136, -201.882156)">
+    <text x="200" y="335" font-family="Montserrat, system-ui, -apple-system, sans-serif" font-size="52" font-weight="800" fill="#41769E" text-anchor="middle" letter-spacing="2" style="white-space: pre;">HEXAGEN</text>
+    <text x="200" y="375" font-family="Montserrat, system-ui, -apple-system, sans-serif" font-size="24" font-weight="500" fill="#56A389" text-anchor="middle" letter-spacing="10" style="white-space: pre;">MONACO</text>
+  </g>
+</svg>
