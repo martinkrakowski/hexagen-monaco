@@ -1,4 +1,4 @@
-import type { LinterReport } from "@hexagen/shared";
+import type { LinterReport } from "@hexagen/governance";
 import type { LinterPort } from "../ports/out/linter.port.js";
 
 export interface AuditBoundariesInput {

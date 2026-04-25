@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import type { ArchitectureGraph, LinterReport, Result } from "@hexagen/shared";
+import type { ArchitectureGraph } from "@hexagen/visualization";
+import type { LinterReport } from "@hexagen/governance";
+import type { Result } from "@hexagen/shared";
 import type { ArchitectureQueryPort } from "../../application/ports/out/sync-engine.port.js";
 import type {
   CreateAdapterCommand,

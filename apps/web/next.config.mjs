@@ -42,6 +42,7 @@ const nextConfig = {
   transpilePackages: [
     "@hexagen/agentic-interaction",
     "@hexagen/eslint-plugin-ui",
+    "@hexagen/governance",
     "@hexagen/local-llm",
     "@hexagen/messaging",
     "@hexagen/monaco-orchestration",

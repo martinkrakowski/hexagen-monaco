@@ -4,10 +4,13 @@ import type {
   WorkspaceTemplateId,
   WorkspaceTemplate,
   WorkspaceTemplateRule,
-} from "@hexagen/shared";
+} from "./domain/model/workspace-templates/workspace-templates.js";
 
 export type { WorkspaceTemplateId, WorkspaceTemplate, WorkspaceTemplateRule };
-export { workspaceTemplates, getWorkspaceTemplate } from "@hexagen/shared";
+export {
+  workspaceTemplates,
+  getWorkspaceTemplate,
+} from "./domain/model/workspace-templates/workspace-templates.js";
 
 // --- 1. Workspace Governance (Updated with workspaceTemplate) ---
 export const WorkspaceGovernanceSchema = z.object({

@@ -1,4 +1,4 @@
-import type { ArchitectureGraph } from "@hexagen/shared";
+import type { ArchitectureGraph } from "@hexagen/visualization";
 import { GetGraphResourceUseCase } from "../../application/use-cases/get-graph-resource.use-case.js";
 
 export class GraphResourceAdapter {

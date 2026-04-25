@@ -22,6 +22,7 @@
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
+    "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "js-yaml": "^4.1.1"
   },

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { execSync } from "child_process";
-import { LinterReportSchema } from "@hexagen/shared";
+import { LinterReportSchema } from "@hexagen/governance";
 
 interface Violation {
   id: string;

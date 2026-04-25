@@ -1,4 +1,4 @@
-import type { Manifest } from "@hexagen/shared";
+import type { Manifest } from "@hexagen/project-configuration";
 import { GetManifestResourceUseCase } from "../../application/use-cases/get-manifest-resource.use-case.js";
 
 export class ManifestResourceAdapter {

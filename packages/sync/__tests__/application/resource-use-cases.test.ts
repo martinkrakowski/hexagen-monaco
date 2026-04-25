@@ -1,9 +1,7 @@
 import assert from "node:assert";
-import {
-  type ArchitectureGraph,
-  type LinterReport,
-  type Manifest,
-} from "@hexagen/shared";
+import type { ArchitectureGraph } from "@hexagen/visualization";
+import type { LinterReport } from "@hexagen/governance";
+import type { Manifest } from "@hexagen/project-configuration";
 import { GetArchitectureGraphUseCase } from "../../src/application/use-cases/get-architecture-graph.use-case.js";
 import { GetLinterReportUseCase } from "../../src/application/use-cases/get-linter-report.use-case.js";
 import { GetManifestResourceUseCase } from "../../src/application/use-cases/get-manifest-resource.use-case.js";

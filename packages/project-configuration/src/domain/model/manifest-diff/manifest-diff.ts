@@ -1,4 +1,4 @@
-import type { Manifest } from "./architectural-schemas.js";
+import type { Manifest } from "../manifest-schema/manifest-schema";
 
 export interface DiffEntry {
   type: "port" | "context";
@@ -132,7 +132,10 @@ function diffContexts(
   return { added, removed, modified };
 }
 
-export function computeDiff(current: Manifest, previous: Manifest): ManifestDiff {
+export function computeDiff(
+  current: Manifest,
+  previous: Manifest,
+): ManifestDiff {
   const portDiff = diffPorts(current, previous);
   const contextDiff = diffContexts(current, previous);
 
@@ -161,35 +164,35 @@ export function formatDiff(diff: ManifestDiff): string {
   if (diff.contextsAdded.length > 0) {
     lines.push("Contexts added:");
     for (const c of diff.contextsAdded) {
-      lines.push(`  [+] ${c.contextName}`);
+      lines.push(` [+] ${c.contextName}`);
     }
   }
 
   if (diff.contextsRemoved.length > 0) {
     lines.push("Contexts removed:");
     for (const c of diff.contextsRemoved) {
-      lines.push(`  [-] ${c.contextName}`);
+      lines.push(` [-] ${c.contextName}`);
     }
   }
 
   if (diff.contextsModified.length > 0) {
     lines.push("Contexts modified:");
     for (const c of diff.contextsModified) {
-      lines.push(`  [*] ${c.contextName}: ${c.details}`);
+      lines.push(` [*] ${c.contextName}: ${c.details}`);
     }
   }
 
   if (diff.portsAdded.length > 0) {
     lines.push("Ports added:");
     for (const p of diff.portsAdded) {
-      lines.push(`  [+] ${p.contextName}/${p.direction}:${p.name}`);
+      lines.push(` [+] ${p.contextName}/${p.direction}:${p.name}`);
     }
   }
 
   if (diff.portsRemoved.length > 0) {
     lines.push("Ports removed:");
     for (const p of diff.portsRemoved) {
-      lines.push(`  [-] ${p.contextName}/${p.direction}:${p.name}`);
+      lines.push(` [-] ${p.contextName}/${p.direction}:${p.name}`);
     }
   }
 

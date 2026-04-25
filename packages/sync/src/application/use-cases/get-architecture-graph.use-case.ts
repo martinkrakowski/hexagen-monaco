@@ -1,7 +1,7 @@
 import {
   ArchitectureGraphSchema,
   type ArchitectureGraph,
-} from "@hexagen/shared";
+} from "@hexagen/visualization";
 import type { ArchitectureGraphProviderPort } from "../ports/out/architecture-graph-provider.port.js";
 
 export class GetArchitectureGraphUseCase {

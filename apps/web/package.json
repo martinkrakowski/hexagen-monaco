@@ -16,6 +16,7 @@
     "@hexagen/agentic-interaction": "workspace:*",
     "@hexagen/core-domain": "workspace:*",
     "@hexagen/eslint-plugin-ui": "workspace:*",
+    "@hexagen/governance": "workspace:*",
     "@hexagen/layout-engine": "workspace:*",
     "@hexagen/local-llm": "workspace:*",
     "@hexagen/messaging": "workspace:*",

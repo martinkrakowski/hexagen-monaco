@@ -8,6 +8,7 @@ import type {
 } from "@hexagen/project-configuration";
 
 import { useProjectExport } from "@/contexts/ExportContext";
+import type { ViewMode } from "@/types/view-mode";
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
 import {
@@ -24,7 +25,7 @@ interface SummaryStepProps {
   onGenerate: () => void;
   canProceed: boolean;
   isGenerating: boolean;
-  onViewModeChange: (mode: "visual" | "code") => void;
+  onViewModeChange: (mode: ViewMode) => void;
   currentStep?: number;
   totalSteps?: number;
   title?: string;

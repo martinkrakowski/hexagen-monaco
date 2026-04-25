@@ -685,6 +685,9 @@ bounded_contexts:
           - ArchLinterAdapter
     depends_on:
       - shared
+      - project-configuration
+      - visualization
+      - governance
     generator:
       tsConfig:
         compilerOptions:
@@ -766,10 +769,10 @@ bounded_contexts:
     description: Interactive architecture graph, module dependency view, DDD canvas
     layers:
       domain:
-      value_objects:
-        - GraphLayoutOptions
-        - HexagonNode
-        - HexagonNodeWithLayout
+        value_objects:
+          - GraphLayoutOptions
+          - HexagonNode
+          - HexagonNodeWithLayout
           - HexagonEdge
           - CanvasViewport
       application:
@@ -782,6 +785,8 @@ bounded_contexts:
             - ExportGraphImagePort
           out:
             - ArchitectureGraphProviderPort
+    depends_on:
+      - project-configuration
     generator:
       dependencies:
         "@dagrejs/dagre": ^2.0.4
@@ -999,6 +1004,8 @@ bounded_contexts:
       - shared
       - messaging
       - project-configuration
+      - governance
+      - visualization
       - sync
   - name: architectural-enforcement
     type: supporting

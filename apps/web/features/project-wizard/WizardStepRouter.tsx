@@ -6,6 +6,7 @@ import {
   SummaryStep,
 } from "./steps";
 import { wizardSteps } from "./config";
+import type { ViewMode } from "@/types/view-mode";
 
 interface WizardStepRouterProps {
   currentStepIndex: number;
@@ -20,7 +21,7 @@ interface WizardStepRouterProps {
   onBack: () => void;
   onShowSavedProjects: () => void;
   onGenerate: () => void;
-  onViewModeChange: (mode: "visual" | "code") => void;
+  onViewModeChange: (mode: ViewMode) => void;
 }
 
 export function WizardStepRouter({

@@ -1,5 +1,5 @@
 import type { Result } from "@hexagen/shared";
-import type { Manifest } from "@hexagen/shared";
+import type { Manifest } from "@hexagen/project-configuration";
 
 export interface ProjectConfigurationReadPort {
   /**

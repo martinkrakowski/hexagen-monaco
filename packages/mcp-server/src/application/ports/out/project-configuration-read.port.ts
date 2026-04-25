@@ -1,4 +1,5 @@
-import type { Manifest, Result } from "@hexagen/shared";
+import type { Manifest } from "@hexagen/project-configuration";
+import type { Result } from "@hexagen/shared";
 
 export interface ProjectConfigurationReadPort {
   getManifest(): Promise<Result<Manifest>>;

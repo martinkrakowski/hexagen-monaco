@@ -7,3 +7,6 @@ export * from "./port/port";
 export * from "./use-case/use-case";
 export * from "./adapter/adapter";
 export * from "./driver/driver";
+export * from "./manifest-schema";
+export * from "./workspace-templates";
+export * from "./manifest-diff";

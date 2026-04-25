@@ -1,4 +1,5 @@
-import type { ArchitectureGraph, Result } from "@hexagen/shared";
+import type { ArchitectureGraph } from "@hexagen/visualization";
+import type { Result } from "@hexagen/shared";
 import type { ArchitectureQueryPort } from "../ports/out/sync-engine.port.js";
 
 export class GetGraphResourceUseCase {

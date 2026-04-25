@@ -1,5 +1,6 @@
-import type { ManifestDiff, Result } from "@hexagen/shared";
-import { formatDiff } from "@hexagen/shared";
+import type { ManifestDiff } from "@hexagen/project-configuration";
+import { formatDiff } from "@hexagen/project-configuration";
+import type { Result } from "@hexagen/shared";
 import type { ManifestDiffPort } from "../ports/out/manifest-diff.port.js";
 
 export interface DiffManifestToolInput {

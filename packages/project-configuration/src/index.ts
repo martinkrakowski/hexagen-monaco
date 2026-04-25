@@ -18,3 +18,31 @@ export type {
   ExternalContext,
   ProjectSpec,
 } from "./schema";
+// Re-export manifest schema types for consumers
+export {
+  BoundedContextTypeSchema,
+  LayerTypeSchema,
+  ManifestSchema,
+} from "./domain/model/manifest-schema/manifest-schema";
+export type { Manifest } from "./domain/model/manifest-schema/manifest-schema";
+// Re-export manifest-diff utilities
+export type {
+  ManifestDiff,
+  DiffEntry,
+} from "./domain/model/manifest-diff/manifest-diff";
+export {
+  computeDiff,
+  formatDiff,
+} from "./domain/model/manifest-diff/manifest-diff";
+// Re-export workspace templates
+export type {
+  WorkspaceTemplateId,
+  WorkspaceTemplate,
+  WorkspaceTemplateRule,
+  CrossContextCallType,
+  StrictnessLevel,
+} from "./domain/model/workspace-templates/workspace-templates";
+export {
+  workspaceTemplates,
+  getWorkspaceTemplate,
+} from "./domain/model/workspace-templates/workspace-templates";

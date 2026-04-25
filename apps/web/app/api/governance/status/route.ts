@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readdir, readFile } from "fs/promises";
 import path from "path";
-import type { Manifest } from "@hexagen/shared";
+import type { Manifest } from "@hexagen/project-configuration";
 
 interface PortAdapterStatus {
   context: string;

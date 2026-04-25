@@ -1,4 +1,4 @@
-import type { WorkspaceTemplateId } from "../types/governance.js";
+import type { WorkspaceTemplateId } from "../types/workspace-template-id.js";
 
 /** DDD relationship types used to classify cross-context dependencies. */
 export type ContextRelationshipType = "U" | "D" | "ACL" | "SK" | "P" | "OHS";

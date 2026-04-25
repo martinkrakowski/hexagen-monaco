@@ -4,8 +4,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  FileDropZone,
 } from "@hexagen/ui";
+import { ManifestFileDropZone } from "./ManifestFileDropZone";
 
 interface LoadManifestDialogProps {
   open: boolean;
@@ -31,7 +31,7 @@ export function LoadManifestDialog({
             to populate the wizard.
           </DialogDescription>
         </DialogHeader>
-        <FileDropZone onFileLoaded={onFileLoaded} />
+        <ManifestFileDropZone onFileLoaded={onFileLoaded} />
       </DialogContent>
     </Dialog>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { getWorkspaceTemplate } from "@hexagen/shared";
+import { getWorkspaceTemplate } from "@hexagen/project-configuration";
 
 import { SummarySection } from "./SummarySection";
 

@@ -1,4 +1,4 @@
-import { LinterReportSchema, type LinterReport } from "@hexagen/shared";
+import { LinterReportSchema, type LinterReport } from "@hexagen/governance";
 import type { LinterReportProviderPort } from "../ports/out/linter-report-provider.port.js";
 
 export class GetLinterReportUseCase {

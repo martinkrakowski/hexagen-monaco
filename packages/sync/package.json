@@ -29,7 +29,10 @@
     "code-generation"
   ],
   "dependencies": {
+    "@hexagen/governance": "workspace:*",
+    "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
+    "@hexagen/visualization": "workspace:*",
     "commander": "^14.0.3",
     "js-yaml": "^4.1.0"
   },

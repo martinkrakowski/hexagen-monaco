@@ -1,47 +1,12 @@
 import assert from "node:assert";
 import {
-  ArchitecturalEventSchema,
-  ArchitectureGraphSchema,
   BoundaryViolationSchema,
   DependencyEventSchema,
   LinterReportSchema,
-  ManifestSchema,
-} from "../../src/types/architectural-schemas";
+  ArchitecturalEventSchema,
+} from "../../src/domain/model/linter-report/linter-report";
 
 (() => {
-  const manifestResult = ManifestSchema.safeParse({
-    system: "hexagen-monaco",
-    bounded_contexts: [
-      {
-        name: "sync",
-        type: "core",
-        description: "Sync engine",
-        layers: {},
-      },
-    ],
-  });
-  assert.strictEqual(
-    manifestResult.success,
-    true,
-    "ManifestSchema should validate a manifest document",
-  );
-
-  const graphResult = ArchitectureGraphSchema.safeParse({
-    nodes: [
-      {
-        id: "@hexagen/sync",
-        label: "sync",
-        type: "core",
-      },
-    ],
-    edges: [],
-  });
-  assert.strictEqual(
-    graphResult.success,
-    true,
-    "ArchitectureGraphSchema should validate graph data",
-  );
-
   const violationResult = BoundaryViolationSchema.safeParse({
     ruleId: "no-infrastructure-in-domain",
     severity: "error",
@@ -89,5 +54,5 @@ import {
     "ArchitecturalEventSchema should validate architectural events",
   );
 
-  console.log("✅ architectural-schemas tests passed");
+  console.log("✅ linter-report tests passed");
 })();
