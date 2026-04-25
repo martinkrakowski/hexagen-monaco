@@ -13,11 +13,10 @@
     "build": "tsc",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
-    "@hexagen/runtime": "workspace:*",
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {

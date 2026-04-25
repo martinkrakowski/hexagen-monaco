@@ -1,12 +1,27 @@
 export type Identifier = string;
 
-export interface DomainASTLike {
-  nodes: unknown[];
-  edges: unknown[];
-  invariants: {
-    topology: unknown[];
-    cardinality: unknown[];
-  };
+export interface ArchitectureGraphLike {
+  nodes: Array<{ id: string; label: string; type: string; status?: string }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    relationship: string;
+    isValid: boolean;
+    violationReason?: string;
+  }>;
+}
+
+export interface ProjectSpecLike {
+  boundedContexts?: Array<{ id: string; name: string }>;
+  externalContexts?: unknown[];
+  governance?: unknown;
+  peerMappings?: unknown[];
+}
+
+export interface StructuredLLMOutput {
+  manifest: ProjectSpecLike;
+  architectureGraph: ArchitectureGraphLike;
+  reasoning: string;
 }
 
 export interface LLMResponse {

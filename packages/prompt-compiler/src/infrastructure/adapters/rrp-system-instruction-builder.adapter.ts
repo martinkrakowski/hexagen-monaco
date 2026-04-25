@@ -1,24 +1,20 @@
-import type { DomainAST, Identifier } from "@hexagen/core-domain";
 import type { SystemInstruction } from "../../domain/system-instruction";
-import type { BuildSystemInstructionPort } from "../../application/ports/in/build-system-instruction.port";
+import type {
+  BuildSystemInstructionPort,
+  BuildSystemInstructionRequest,
+} from "../../application/ports/in/build-system-instruction.port";
 
-/**
- * Adapter that builds system instructions using the Responsible Response Pattern (RRP).
- * This adapter creates system instructions that guide the LLM to follow architectural
- * governance rules and produce structured outputs.
- */
 export class RRPSystemInstructionBuilderAdapter implements BuildSystemInstructionPort {
-  async build(request: {
-    name: string;
-    domainAST: DomainAST;
-    governanceRules: string[];
-    templateOverrides?: Record<string, string>;
-  }): Promise<SystemInstruction> {
-    // Build the system instruction content based on the domain AST and governance rules
-    const domainASTStr = JSON.stringify(request.domainAST, null, 2);
-    const governanceRulesStr = request.governanceRules
-      .map((rule) => `- ${rule}`)
-      .join("\n");
+  async build(
+    request: BuildSystemInstructionRequest,
+  ): Promise<SystemInstruction> {
+    const manifestStr = JSON.stringify(request.manifest, null, 2);
+    const architectureGraphStr = JSON.stringify(
+      request.architectureGraph,
+      null,
+      2,
+    );
+    const linterReportStr = JSON.stringify(request.linterReport, null, 2);
 
     const systemInstructionContent = `You are the HexaGen Monaco AI Architect, a strict and precise assistant for a Hexagonal Architecture design tool.
 Your role is to assist the user with the currently loaded software project.
@@ -30,11 +26,14 @@ System: HexaGen
 Scope: hexagen
 Architecture: modular-monolith
 
-GOVERNANCE RULES:
-${governanceRulesStr}
+PROJECT MANIFEST:
+${manifestStr}
 
-DOMAIN AST CONTEXT:
-${domainASTStr}
+ARCHITECTURE GRAPH:
+${architectureGraphStr}
+
+LINTER REPORT:
+${linterReportStr}
 
 INSTRUCTIONS
 1. Only suggest changes that respect the port ownership model and invariants.
@@ -44,7 +43,6 @@ INSTRUCTIONS
 
 Always respond with specific, actionable recommendations grounded in this project's architecture.`;
 
-    // Create and return the system instruction
     return {
       id: `rrp-system-instruction-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       content: systemInstructionContent,

@@ -1,35 +1,23 @@
-import type { DomainAST, Identifier } from "@hexagen/core-domain";
+import type { Identifier } from "@hexagen/core-domain";
+import type {
+  ProjectSpecLike,
+  ArchitectureGraphLike,
+  LinterReportLike,
+} from "../../../domain/prompt-template";
 import type { SystemInstruction } from "../../../domain/index.js";
 
-/**
- * Request to build a system instruction from domain AST and governance rules
- */
 export interface BuildSystemInstructionRequest {
-  /** Name for the system instruction */
   name: string;
-  /** The domain AST to build context from */
-  domainAST: DomainAST;
-  /** Governance rules to include */
-  governanceRules: string[];
-  /** Optional template overrides */
+  manifest: ProjectSpecLike;
+  architectureGraph: ArchitectureGraphLike;
+  linterReport: LinterReportLike;
   templateOverrides?: Record<string, string>;
 }
 
-/**
- * Port for building system instructions that guide LLM behavior
- */
 export interface BuildSystemInstructionPort {
-  /**
-   * Build a system instruction from domain context
-   * @param request Contains domain AST and governance rules
-   * @returns Promise resolving to the built system instruction
-   */
   build(request: BuildSystemInstructionRequest): Promise<SystemInstruction>;
 }
 
-/**
- * Type guard for BuildSystemInstructionPort
- */
 export function isBuildSystemInstructionPort(
   port: unknown,
 ): port is BuildSystemInstructionPort {

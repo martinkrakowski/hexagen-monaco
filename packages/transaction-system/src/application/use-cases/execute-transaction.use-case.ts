@@ -11,6 +11,8 @@ export class ExecuteTransactionUseCase {
 
   async execute(
     intentId: string,
+    rem: string, // JSON stringified manifest
+    lineage: string[], // Array of previous intent IDs
     metadata: Record<string, unknown> = {},
   ): Promise<Result<Transaction, Error>> {
     try {

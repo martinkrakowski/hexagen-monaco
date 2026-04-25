@@ -1071,6 +1071,7 @@ bounded_contexts:
         ports:
           in:
             - SendStructuredRequestPort
+            - CompiledPromptAdapterPort
           out:
             - LocalLLMProviderPort
             - WebGPUDetectorPort
@@ -1082,10 +1083,14 @@ bounded_contexts:
           - WebGPUCapabilityAdapter
           - BrowserHardwareProfilerAdapter
           - IDBChatPersistenceAdapter
+          - CompiledPromptAdapter
     generator: { dependencies: { "@mlc-ai/web-llm": "^0.2.0" } }
     depends_on:
       - prompt-compiler
       - shared
+      - project-configuration
+      - visualization
+      - governance
   - name: ui
     type: supporting
     description: >-
@@ -1130,9 +1135,11 @@ bounded_contexts:
           jsx: react-jsx
   - name: intent-compiler
     type: core
+    status: frozen
     description: >-
       Semantic intent compilation pipeline — gesture parsing, topology and
-      cardinality invariant validation, rejection emission
+      cardinality invariant validation, rejection emission. FROZEN: no runtime
+      consumers; domain types and ports preserved for future use.
     layers:
       domain:
         entities:
@@ -1159,88 +1166,51 @@ bounded_contexts:
         adapters: []
     depends_on:
       - core-domain
-      - runtime
       - shared
   - name: layout-engine
     type: core
     description: >-
-      Geometric constraint solver — hexagonal context map layout, affordance
-      resolution, stability scoring, violation detection. Pure geometry only;
-      zero semantic coupling to MVK types.
+      Graph layout solver — dagre-based automatic layout for hexagonal context
+      maps. Narrowed: constraint/affordance/stability/violation paths removed
+      (aspirational, no consumers).
     layers:
-      domain:
-        value_objects:
-        - LayoutConstraint
-        - Affordance
-        - StabilityScore
-        - LayoutResult
+      domain: {}
       application:
         use_cases:
-        - SolveLayoutUseCase
-        - ResolveAffordanceUseCase
-        - ScoreStabilityUseCase
-        - DetectViolationsUseCase
         - SolveGraphLayoutUseCase
         ports:
           in:
-          - SolveLayoutPort
-          - ResolveAffordancePort
-          - ScoreStabilityPort
-          - DetectViolationsPort
           - GraphLayoutPort
           out: []
       infrastructure:
         adapters:
-        - DagreLayoutSolverAdapter
-        - DefaultAffordanceResolverAdapter
-        - DefaultStabilityScorerAdapter
-        - DefaultViolationDetectorAdapter
         - DagreGraphLayoutAdapter
-    depends_on:
-      - core-domain
-      - shared
+    depends_on: []
   - name: ui-projection-compiler
     type: core
     description: >-
-      Projection compiler — maps domain node types to visual variants, icons,
-      and affordance projections. Resolves realizability and compatibility
-      constraints. Zero runtime or projection-framework imports (React/xyflow
-      banned).
+      Projection compiler — maps domain node types to visual variants for canvas
+      rendering. Narrowed: icon/affordance/realizability/compatibility paths
+      removed (aspirational, no consumers). Zero runtime or projection-framework
+      imports (React/xyflow banned).
     layers:
       domain:
         value_objects:
           - VisualVariant
-          - IconMapping
-          - ProjectionError
-          - ProjectionValidationResult
       application:
         use_cases:
           - MapNodeVisualUseCase
-          - ResolveVariantUseCase
-          - ResolveIconUseCase
-          - ProjectAffordanceUseCase
-          - CheckRealizabilityUseCase
-          - CheckAffordanceCompatibilityUseCase
         ports:
           in:
             - MapNodeVisualPort
             - ResolveVariantPort
-            - ResolveIconPort
-            - ProjectAffordancePort
-            - CheckRealizabilityPort
-            - CheckAffordanceCompatibilityPort
           out: []
       infrastructure:
         adapters:
           - CvaVariantResolverAdapter
-          - DefaultIconResolverAdapter
           - DefaultNodeVisualMapperAdapter
-          - DefaultAffordanceProjectorAdapter
-          - DefaultRealizabilityCheckerAdapter
-          - DefaultAffordanceCompatibilityAdapter
     depends_on:
       - core-domain
-      - intent-compiler
       - shared
   - name: transaction-system
     type: core
@@ -1278,9 +1248,10 @@ bounded_contexts:
   - name: prompt-compiler
     type: core
     description: >-
-      Prompt compilation — builds contextual prompts from DomainAST, governance
-      rules, and user intent for LLM consumption. Enforces ACL by producing
-      schema-validated prompts that are the only legal input to LLM inference.
+      Prompt compilation — builds contextual prompts from ProjectSpec,
+      ArchitectureGraph, LinterReport, and user intent for LLM consumption.
+      Enforces ACL by producing schema-validated prompts that are the only legal
+      input to LLM inference.
     layers:
       domain:
         value_objects:
@@ -1316,24 +1287,28 @@ bounded_contexts:
     depends_on:
       - core-domain
       - shared
+      - project-configuration
+      - visualization
+      - governance
   - name: reconciliation-engine
     type: core
+    status: frozen
     description: >-
-      Reconciliation Engine — parses LLM responses and merges them with
-      deterministic DomainAST while applying governance constraints.
-      Enforces monotonic state transitions and deterministic-kernel authority.
+      Reconciliation Engine — compares StructuredLLMOutput with ProjectSpec to
+      produce patches for bounded context and architecture graph changes.
+      FROZEN: no runtime consumers; domain types and ports preserved for future
+      use.
     layers:
       domain:
         value_objects:
           - LLMResponse
+          - StructuredLLMOutput
           - ReconciliationResult
           - Patch
           - Verdict
           - ReconciliationState
       application:
         use_cases:
-          - ReconcileUseCase
-          - ApplyPatchUseCase
           - CompareVerdictsUseCase
           - PromoteStateUseCase
           - ResolveConflictUseCase
@@ -1345,14 +1320,9 @@ bounded_contexts:
             - ResolveConflictPort
           out: []
       infrastructure:
-        adapters:
-          - DefaultASTReconciliationAdapter
-          - DefaultVerdictComparatorAdapter
-          - MonotonicStatePromoterAdapter
-          - DefaultConflictResolverAdapter
+        adapters: []
     depends_on:
       - core-domain
-      - prompt-compiler
       - shared
   - name: runtime
     type: shared-kernel

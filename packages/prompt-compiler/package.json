@@ -18,9 +18,11 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
-    "@hexagen/intent-compiler": "workspace:*",
     "@hexagen/shared": "workspace:*",
-    "@hexagen/transaction-system": "workspace:*"
+    "@hexagen/transaction-system": "workspace:*",
+    "@hexagen/project-configuration": "workspace:*",
+    "@hexagen/visualization": "workspace:*",
+    "@hexagen/governance": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

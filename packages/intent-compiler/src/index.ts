@@ -1,3 +1,8 @@
+// ⚠️ FROZEN — this package has no runtime consumers on the main path.
+// Domain types and ports are preserved for future use.
+// Infrastructure adapters and tests have been removed.
+// See FROZEN.md for details.
+
 // Application ports
 export type { GestureParserPort } from "./application/ports/in/gesture-parser.port.js";
 export type { TopologyCheckerPort } from "./application/ports/in/topology-checker.port.js";

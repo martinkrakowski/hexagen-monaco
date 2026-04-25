@@ -12,9 +12,9 @@ import type {
   ChatMessage,
   DomainModelId,
   LLMEngineState,
+  LLMRequest,
   ModelMetadata,
 } from "@hexagen/local-llm";
-import type { LLMRequest } from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
 
 import { useEngineLifecycle } from "./local-llm/useEngineLifecycle";

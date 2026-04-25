@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ChatMessage,
   DomainModelId,
+  LLMRequest,
   ModelLifecyclePort,
   SendStructuredRequestPort,
 } from "@hexagen/local-llm";
-import type { LLMRequest } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
 
 import { getChatPersistence } from "@/lib/wire";

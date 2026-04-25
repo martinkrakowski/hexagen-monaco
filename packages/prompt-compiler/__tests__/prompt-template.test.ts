@@ -3,15 +3,52 @@ import {
   renderPrompt,
 } from "../src/domain/prompt-template";
 import type { PromptContext } from "../src/domain/prompt-template";
+import type { ProjectSpec } from "@hexagen/project-configuration";
+import type { ArchitectureGraph } from "@hexagen/visualization";
+import type { LinterReport } from "@hexagen/governance";
+
+const makeManifest = (): ProjectSpec => ({
+  boundedContexts: [
+    {
+      id: "ctx-0",
+      name: "OrderContext",
+      coreDomainEntities: [],
+      valueObjects: [],
+      domainEvents: [],
+      uiFramework: "",
+      persistenceAdapter: "",
+      messagingAdapter: "",
+      telemetryProvider: "",
+    },
+  ],
+  externalContexts: [],
+  governance: {
+    workspaceName: "@hexagen",
+    workspaceTemplate: "modular-monolith",
+    packageManager: "yarn",
+    topologyStrictness: "flexible",
+    namespacePrefix: "@hexagen",
+    namingConventions: {
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".adapter.ts",
+    },
+  },
+  peerMappings: [],
+});
 
 const makeContext = (): PromptContext => ({
-  domainAST: {
+  manifest: makeManifest(),
+  architectureGraph: {
     nodes: [],
     edges: [],
-    invariants: { topology: [], cardinality: [] },
-  },
+  } as ArchitectureGraph,
+  linterReport: {
+    timestamp: new Date().toISOString(),
+    isCompliant: true,
+    violations: [],
+    scannedFilesCount: 0,
+  } as LinterReport,
   userIntent: "Add an Order aggregate",
-  governanceRules: ["Aggregate must have at least one entity"],
   lineage: [],
 });
 
