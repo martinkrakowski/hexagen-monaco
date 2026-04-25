@@ -45,6 +45,18 @@ export interface HexagonNode {
   boundedContextId?: string;
 }
 
+export interface NodeVisualProps {
+  readonly headerBg: string;
+  readonly bodyBg: string;
+  readonly border: string;
+  readonly handleColor: string;
+  readonly headerText: string;
+  readonly hexColor: string;
+  readonly structuralHandleColor?: string;
+  readonly publishedEventHandleColor?: string;
+  readonly subscribedEventHandleColor?: string;
+}
+
 export interface HexagonNodeWithLayout extends HexagonNode {
   parentId?: string;
   extent?: "parent";
@@ -53,6 +65,8 @@ export interface HexagonNodeWithLayout extends HexagonNode {
   side?: "north" | "south" | "east" | "west";
   draggable?: boolean;
   category?: string;
+  variant?: NodeVisualProps;
+  compilerCategory?: string;
   style?: { width?: number; height?: number; zIndex?: number };
   stats?: {
     aggregates: number;
@@ -99,5 +113,20 @@ export function updateHexagonNodeLabel(
   return {
     ...node,
     label,
+  };
+}
+
+export function createDefaultHexagonNode(
+  type: HexagonNodeType = "entity",
+  label: string = "New Node",
+  position: { x: number; y: number } = { x: 100, y: 100 },
+): HexagonNodeWithLayout {
+  return {
+    id:
+      crypto.randomUUID?.() ??
+      `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+    label,
+    type,
+    position,
   };
 }

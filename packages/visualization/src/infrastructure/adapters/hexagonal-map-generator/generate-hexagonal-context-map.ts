@@ -2,12 +2,12 @@ import type { WizardData } from "@hexagen/shared";
 import type {
   HexagonEdge,
   HexagonNodeWithLayout,
-} from "@hexagen/visualization";
+} from "../../../domain/index.js";
 
-import { LAYOUT_CONFIG } from "./config";
-import { generateBoundedContextNodes } from "./generate-bounded-context-nodes";
-import { generateExternalPeers } from "./generate-external-peers";
-import { generatePeerMappingEdges } from "./generate-peer-mapping-edges";
+import { LAYOUT_CONFIG } from "./config.js";
+import { generateBoundedContextNodes } from "./generate-bounded-context-nodes.js";
+import { generateExternalPeers } from "./generate-external-peers.js";
+import { generatePeerMappingEdges } from "./generate-peer-mapping-edges.js";
 
 export function generateHexagonalContextMap(wizardData: WizardData): {
   nodes: HexagonNodeWithLayout[];

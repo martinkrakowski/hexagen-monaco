@@ -48,7 +48,7 @@ export function ArchitecturePreviewPane({
       </div>
       <CardContent className="flex-1 p-0 overflow-hidden relative">
         {viewMode === "visual" ? (
-          <GraphCanvasWrapper projectId="demo" wizardData={wizardData} />
+          <GraphCanvasWrapper wizardData={wizardData} />
         ) : (
           <CodeView
             wizardData={wizardData}

@@ -14,71 +14,36 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "types": ["node"],
-    "paths": {
-      "@hexagen/project-configuration": [
-        "./packages/project-configuration/src/index.ts"
-      ],
-      "@hexagen/project-configuration/*": [
-        "./packages/project-configuration/src/*"
-      ],
-      "@hexagen/prompt-compiler": ["./packages/prompt-compiler/src/index.ts"],
-      "@hexagen/prompt-compiler/*": ["./packages/prompt-compiler/src/*"],
-      "@hexagen/shared": ["./packages/shared/src/index.ts"],
-      "@hexagen/shared/*": ["./packages/shared/src/*"],
-      "@hexagen/messaging": ["./packages/messaging/src/index.ts"],
-      "@hexagen/messaging/*": ["./packages/messaging/src/*"],
-      "@hexagen/wizard-orchestration": [
-        "./packages/wizard-orchestration/src/index.ts"
-      ],
-      "@hexagen/wizard-orchestration/*": [
-        "./packages/wizard-orchestration/src/*"
-      ],
-      "@hexagen/monaco-orchestration": [
-        "./packages/monaco-orchestration/src/index.ts"
-      ],
-      "@hexagen/monaco-orchestration/*": [
-        "./packages/monaco-orchestration/src/*"
-      ],
-      "@hexagen/visualization": ["./packages/visualization/src/index.ts"],
-      "@hexagen/visualization/*": ["./packages/visualization/src/*"],
-      "@hexagen/code-generation": ["./packages/code-generation/src/index.ts"],
-      "@hexagen/code-generation/*": ["./packages/code-generation/src/*"],
-      "@hexagen/architectural-enforcement": [
-        "./packages/architectural-enforcement/src/index.ts"
-      ],
-      "@hexagen/architectural-enforcement/*": [
-        "./packages/architectural-enforcement/src/*"
-      ],
-      "@hexagen/persistence": ["./packages/persistence/src/index.ts"],
-      "@hexagen/persistence/*": ["./packages/persistence/src/*"],
-      "@hexagen/agentic-interaction": [
-        "./packages/agentic-interaction/src/index.ts"
-      ],
-      "@hexagen/agentic-interaction/*": [
-        "./packages/agentic-interaction/src/*"
-      ],
-      "@hexagen/deployment": ["./packages/deployment/src/index.ts"],
-      "@hexagen/deployment/*": ["./packages/deployment/src/*"],
-      "@hexagen/*": ["./packages/*/src/index.ts"],
-      "@hexagen/web-driver": ["./packages/web-driver/src/index.ts"],
-      "@hexagen/sync": ["./packages/sync/src/index.ts"],
-      "@hexagen/sync/*": ["./packages/sync/src/*"],
-      "@hexagen/web-driver/*": ["./packages/web-driver/src/*"],
-      "@/*": ["./apps/web/src/*", "./apps/web/app/*", "./apps/web/features/*"]
-    }
+    "paths": {}
   },
   "references": [
-    { "path": "./packages/project-configuration" },
-    { "path": "./packages/shared" },
-    { "path": "./packages/messaging" },
-    { "path": "./packages/wizard-orchestration" },
-    { "path": "./packages/monaco-orchestration" },
-    { "path": "./packages/visualization" },
-    { "path": "./packages/code-generation" },
+    { "path": "./packages/agentic-interaction" },
     { "path": "./packages/architectural-enforcement" },
-    { "path": "./packages/persistence" },
-    { "path": "./packages/deployment" },
+    { "path": "./packages/code-generation" },
     { "path": "./packages/core-domain" },
-    { "path": "./packages/runtime" }
+    { "path": "./packages/deployment" },
+    { "path": "./packages/eslint-plugin-ui" },
+    { "path": "./packages/external-integration" },
+    { "path": "./packages/governance" },
+    { "path": "./packages/intent-compiler" },
+    { "path": "./packages/layout-engine" },
+    { "path": "./packages/local-llm" },
+    { "path": "./packages/mcp-server" },
+    { "path": "./packages/messaging" },
+    { "path": "./packages/monaco-orchestration" },
+    { "path": "./packages/persistence" },
+    { "path": "./packages/project-configuration" },
+    { "path": "./packages/project-generation" },
+    { "path": "./packages/prompt-compiler" },
+    { "path": "./packages/reconciliation-engine" },
+    { "path": "./packages/runtime" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/sync" },
+    { "path": "./packages/transaction-system" },
+    { "path": "./packages/ui" },
+    { "path": "./packages/ui-projection-compiler" },
+    { "path": "./packages/visualization" },
+    { "path": "./packages/web-driver" },
+    { "path": "./packages/wizard-orchestration" }
   ]
 }

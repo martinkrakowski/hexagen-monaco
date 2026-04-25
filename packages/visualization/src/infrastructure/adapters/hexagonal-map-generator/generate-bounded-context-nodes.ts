@@ -3,10 +3,9 @@ import type {
   HexagonEdge,
   HexagonNodeType,
   HexagonNodeWithLayout,
-} from "@hexagen/visualization";
+} from "../../../domain/index.js";
 
-import { LAYOUT_CONFIG, staggerYFor } from "./config";
-import { classifyAdapterLabel } from "./classify-adapter-label";
+import { LAYOUT_CONFIG, staggerYFor } from "./config.js";
 
 interface GenerateBoundedContextNodesOptions {
   ctx: BoundedContext;
@@ -82,7 +81,6 @@ export function generateBoundedContextNodes({
     id: domainNodeId,
     label: "Domain",
     type: "inner" as HexagonNodeType,
-    category: "Domain",
     parentId: contextId,
     extent: "parent",
     draggable: false,
@@ -101,7 +99,6 @@ export function generateBoundedContextNodes({
     id: useCasesNodeId,
     label: "Use Cases",
     type: "inner" as HexagonNodeType,
-    category: "Use Cases",
     parentId: contextId,
     extent: "parent",
     draggable: false,
@@ -129,7 +126,6 @@ export function generateBoundedContextNodes({
       id: entityId,
       label: name,
       type: "entity" as HexagonNodeType,
-      category: "Entity",
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -157,7 +153,6 @@ export function generateBoundedContextNodes({
       id: useCaseId,
       label: name,
       type: "use-case" as HexagonNodeType,
-      category: "Use Case",
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -235,7 +230,6 @@ export function generateBoundedContextNodes({
       id: adapter.id,
       type: "port" as HexagonNodeType,
       label: adapter.label,
-      category: classifyAdapterLabel(adapter.label, adapter.side),
       position: { x: hexX + xOffset, y: yOffset },
       side: adapter.side,
     });

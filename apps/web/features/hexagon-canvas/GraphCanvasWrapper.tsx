@@ -9,7 +9,7 @@ import { NodeEditorDialog } from "./NodeEditorDialog";
 import type { Result, WizardData } from "@hexagen/shared";
 
 interface GraphCanvasWrapperProps {
-  projectId: string;
+  projectId?: string;
   wizardData?: WizardData;
 }
 

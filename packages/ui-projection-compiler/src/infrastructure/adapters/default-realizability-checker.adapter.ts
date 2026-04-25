@@ -27,6 +27,17 @@ export class DefaultRealizabilityCheckerAdapter implements CheckRealizabilityPor
       );
     }
 
+    if (!spec.kind) {
+      errors.push(
+        createProjectionError(
+          "unrealizable-projection",
+          "NodeVisualSpec.kind must be provided",
+          spec.nodeId,
+          { actual: spec.kind },
+        ),
+      );
+    }
+
     return createValidationResult(errors.length === 0, errors, []);
   }
 }

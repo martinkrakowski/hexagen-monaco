@@ -766,11 +766,10 @@ bounded_contexts:
     description: Interactive architecture graph, module dependency view, DDD canvas
     layers:
       domain:
-        value_objects:
-          - GraphLayoutOptions
-          - NodeVisualStyle
-          - HexagonNode
-          - HexagonNodeWithLayout
+      value_objects:
+        - GraphLayoutOptions
+        - HexagonNode
+        - HexagonNodeWithLayout
           - HexagonEdge
           - CanvasViewport
       application:
@@ -1164,29 +1163,32 @@ bounded_contexts:
     layers:
       domain:
         value_objects:
-          - LayoutConstraint
-          - Affordance
-          - StabilityScore
-          - LayoutResult
+        - LayoutConstraint
+        - Affordance
+        - StabilityScore
+        - LayoutResult
       application:
         use_cases:
-          - SolveLayoutUseCase
-          - ResolveAffordanceUseCase
-          - ScoreStabilityUseCase
-          - DetectViolationsUseCase
+        - SolveLayoutUseCase
+        - ResolveAffordanceUseCase
+        - ScoreStabilityUseCase
+        - DetectViolationsUseCase
+        - SolveGraphLayoutUseCase
         ports:
           in:
-            - SolveLayoutPort
-            - ResolveAffordancePort
-            - ScoreStabilityPort
-            - DetectViolationsPort
+          - SolveLayoutPort
+          - ResolveAffordancePort
+          - ScoreStabilityPort
+          - DetectViolationsPort
+          - GraphLayoutPort
           out: []
       infrastructure:
         adapters:
-          - DagreLayoutSolverAdapter
-          - DefaultAffordanceResolverAdapter
-          - DefaultStabilityScorerAdapter
-          - DefaultViolationDetectorAdapter
+        - DagreLayoutSolverAdapter
+        - DefaultAffordanceResolverAdapter
+        - DefaultStabilityScorerAdapter
+        - DefaultViolationDetectorAdapter
+        - DagreGraphLayoutAdapter
     depends_on:
       - core-domain
       - shared

@@ -3,9 +3,9 @@ import type {
   HexagonEdge,
   HexagonNodeType,
   HexagonNodeWithLayout,
-} from "@hexagen/visualization";
+} from "../../../domain/index.js";
 
-import { LAYOUT_CONFIG } from "./config";
+import { LAYOUT_CONFIG } from "./config.js";
 
 interface GenerateExternalPeersOptions {
   externalContexts: ExternalContext[];
@@ -58,6 +58,7 @@ export function generateExternalPeers({
     });
 
     const rootContextId = boundedContexts[0]?.id || "context-0";
+    const isSK = bc.relationshipType === "SK";
     edges.push({
       id: `edge-peer-${bc.id}`,
       source: isUpstream ? bc.id : rootContextId,
@@ -65,6 +66,7 @@ export function generateExternalPeers({
       label: `${bc.relationshipType} ${bc.name}`,
       type: "smoothstep",
       animated: true,
+      isSharedKernel: isSK || undefined,
     });
   });
 

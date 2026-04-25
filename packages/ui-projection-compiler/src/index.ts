@@ -7,6 +7,11 @@ export {
   categoryFromNodeKind,
   categoryFromSideAndLabel,
 } from "./domain/value-objects/visual-variant.js";
+export type {
+  HexagonNodeType,
+  HexagonSide,
+} from "./domain/value-objects/node-kind-resolver.js";
+export { nodeKindFromHexagonType } from "./domain/value-objects/node-kind-resolver.js";
 export type { IconMapping } from "./domain/value-objects/icon-mapping.js";
 export {
   DEFAULT_ICON_MAPPINGS,

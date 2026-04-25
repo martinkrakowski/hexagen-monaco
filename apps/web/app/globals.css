@@ -86,8 +86,10 @@
   --success: 140 30% 40%;
   --success-foreground: 0 0% 100%;
 
-  --info: 210 40% 45%;
-  --info-foreground: 0 0% 100%;
+--info: 210 40% 45%;
+--info-foreground: 0 0% 100%;
+
+--shared-kernel-edge: 263 70% 72%;
 
   /* Popover */
   --popover: 0 0% 100%;
@@ -147,8 +149,10 @@
   --success: 140 30% 45%;
   --success-foreground: 0 0% 100%;
 
-  --info: 210 40% 50%;
-  --info-foreground: 0 0% 100%;
+--info: 210 40% 50%;
+--info-foreground: 0 0% 100%;
+
+--shared-kernel-edge: 263 60% 65%;
 
   --popover: 35 12% 12%;
   --popover-foreground: 35 10% 92%;

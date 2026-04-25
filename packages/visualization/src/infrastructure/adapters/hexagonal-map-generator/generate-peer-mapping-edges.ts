@@ -2,7 +2,7 @@ import type { BoundedContext, PeerMapping } from "@hexagen/shared";
 import type {
   HexagonEdge,
   HexagonNodeWithLayout,
-} from "@hexagen/visualization";
+} from "../../../domain/index.js";
 
 interface GeneratePeerMappingEdgesOptions {
   peerMappings: PeerMapping[];

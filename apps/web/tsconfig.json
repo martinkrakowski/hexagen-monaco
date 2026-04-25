@@ -21,9 +21,6 @@
         "./hooks/*",
         "./features/*"
       ],
-      "@hexagen/external-integration": [
-        "../../packages/external-integration/dist"
-      ],
       "monaco-editor": ["./node_modules/monaco-editor"]
     }
   },
@@ -62,9 +59,6 @@
     },
     {
       "path": "../../packages/shared"
-    },
-    {
-      "path": "../../packages/external-integration"
     }
   ],
   "exclude": [

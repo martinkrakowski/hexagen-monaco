@@ -617,12 +617,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@dagrejs/dagre@npm:^1.1.4":
+  version: 1.1.8
+  resolution: "@dagrejs/dagre@npm:1.1.8"
+  dependencies:
+    "@dagrejs/graphlib": "npm:2.2.4"
+  checksum: 10c0/3f4f99beb1c791c4c35fcab7a6891731a712931f076ae27b380afa4077e81a1f46341cd0ac8f21df29bf7b458e631b780e819846140a9e4f89e36faf907cdc66
+  languageName: node
+  linkType: hard
+
 "@dagrejs/dagre@npm:^2.0.4":
   version: 2.0.4
   resolution: "@dagrejs/dagre@npm:2.0.4"
   dependencies:
     "@dagrejs/graphlib": "npm:3.0.4"
   checksum: 10c0/c9e0cd2bc1ed449cc2b936acd795ab58623b8136c82b0f53bd107774273c8bd03d4371be777ec3c7e5fa5875bc69b7592146274b968004bbf1e18a0900db8121
+  languageName: node
+  linkType: hard
+
+"@dagrejs/graphlib@npm:2.2.4":
+  version: 2.2.4
+  resolution: "@dagrejs/graphlib@npm:2.2.4"
+  checksum: 10c0/14597ea9294c46b2571aee78bcaad3a24e3e5e0ebcdf198b6eae5b3805f99af727ac54a477dd9152e8b0a576efea0528fb7d4919c74801e9f669c90e5e6f5bd9
   languageName: node
   linkType: hard
 
@@ -1323,6 +1339,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/layout-engine@workspace:packages/layout-engine"
   dependencies:
+    "@dagrejs/dagre": "npm:^1.1.4"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@types/jest": "npm:^30.0.0"
@@ -1581,7 +1598,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/ui@workspace:packages/ui":
+"@hexagen/ui@workspace:*, @hexagen/ui@workspace:packages/ui":
   version: 0.0.0-use.local
   resolution: "@hexagen/ui@workspace:packages/ui"
   dependencies:
@@ -1619,7 +1636,6 @@ __metadata:
   resolution: "@hexagen/web-driver@workspace:packages/web-driver"
   dependencies:
     "@hexagen/agentic-interaction": "workspace:*"
-    "@hexagen/local-llm": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
@@ -14108,7 +14124,9 @@ __metadata:
     "@auth/core": "npm:^0.34.3"
     "@dagrejs/dagre": "npm:^2.0.4"
     "@hexagen/agentic-interaction": "workspace:*"
+    "@hexagen/core-domain": "workspace:*"
     "@hexagen/eslint-plugin-ui": "workspace:*"
+    "@hexagen/layout-engine": "workspace:*"
     "@hexagen/local-llm": "workspace:*"
     "@hexagen/messaging": "workspace:*"
     "@hexagen/monaco-orchestration": "workspace:*"
@@ -14117,6 +14135,7 @@ __metadata:
     "@hexagen/prompt-compiler": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
+    "@hexagen/ui": "workspace:*"
     "@hexagen/ui-projection-compiler": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@hexagen/web-driver": "workspace:*"

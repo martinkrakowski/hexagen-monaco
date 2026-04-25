@@ -4,4 +4,3 @@ export * from "./canvas-viewport/index.js";
 export * from "./graph-layout-options/index.js";
 export * from "./hexagon-edge/index.js";
 export * from "./hexagon-node/index.js";
-export * from "./node-visual-style/index.js";

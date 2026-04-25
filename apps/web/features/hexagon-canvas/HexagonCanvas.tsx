@@ -19,10 +19,6 @@ import "@xyflow/react/dist/style.css";
 import { UnifiedBoundedContext } from "./BoundedContext";
 import { GroupBoundaryNode } from "./GroupBoundaryNode";
 import { PeerContextNode } from "./PeerContextNode";
-import {
-  CvaVariantResolverAdapter,
-  type VisualVariantCategory,
-} from "@hexagen/ui-projection-compiler";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
@@ -97,37 +93,17 @@ function mapToFlowNodes(nodes: HexagonNodeData[]): HexagonFlowNode[] {
   });
 }
 
-const edgeVariantResolver = new CvaVariantResolverAdapter();
+type NodeWithVariant = HexagonNodeData & {
+  variant?: { hexColor?: string };
+};
 
-const EDGE_COLOR_CATEGORIES: readonly VisualVariantCategory[] = [
-  "driving",
-  "driven",
-  "presentation",
-  "infrastructure",
-] as const;
-
-function isEdgeColorCategory(key: string): key is VisualVariantCategory {
-  return (EDGE_COLOR_CATEGORIES as readonly string[]).includes(key);
-}
-
-function getEdgeColor(
-  sourceNode: HexagonNodeData | undefined,
-  isSK: boolean,
-): string {
-  if (isSK) return "#a78bfa";
-
-  if (sourceNode?.type === "port") {
-    const nodeWithCategory = sourceNode as HexagonNodeData & {
-      category?: string;
-    };
-    if (nodeWithCategory.category) {
-      const categoryKey = nodeWithCategory.category.toLowerCase();
-      if (isEdgeColorCategory(categoryKey)) {
-        return edgeVariantResolver.resolve(categoryKey).hexColor;
-      }
-    }
+function getEdgeColor(sourceNode: HexagonNodeData | undefined): string {
+  if (
+    sourceNode?.type === "port" &&
+    (sourceNode as NodeWithVariant).variant?.hexColor
+  ) {
+    return (sourceNode as NodeWithVariant).variant!.hexColor!;
   }
-
   return "hsl(var(--foreground) / 0.35)";
 }
 
@@ -138,9 +114,11 @@ function mapToFlowEdges(
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
   return edges.map((edge) => {
-    const isSK = edge.label === "SK";
+    const isSK = edge.isSharedKernel === true;
     const sourceNode = nodeMap.get(edge.source);
-    const edgeColor = getEdgeColor(sourceNode, isSK);
+    const edgeColor = isSK
+      ? "hsl(var(--shared-kernel-edge))"
+      : getEdgeColor(sourceNode);
 
     return {
       id: edge.id,
