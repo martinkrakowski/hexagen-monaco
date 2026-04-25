@@ -18,11 +18,11 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
+    "@hexagen/governance": "workspace:*",
+    "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/transaction-system": "workspace:*",
-    "@hexagen/project-configuration": "workspace:*",
-    "@hexagen/visualization": "workspace:*",
-    "@hexagen/governance": "workspace:*"
+    "@hexagen/visualization": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
