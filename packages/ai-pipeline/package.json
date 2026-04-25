@@ -1,0 +1,25 @@
+{
+  "name": "@hexagen/ai-pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hexagen/core-domain": "workspace:*",
+    "@hexagen/prompt-compiler": "workspace:*",
+    "@hexagen/transaction-system": "workspace:*",
+    "@hexagen/reconciliation-engine": "workspace:*",
+    "@hexagen/local-llm": "workspace:*",
+    "@hexagen/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0"
+  }
+}
