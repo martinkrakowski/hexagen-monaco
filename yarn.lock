@@ -1838,6 +1838,7 @@ __metadata:
   dependencies:
     "@hexagen/project-configuration": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/sync": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
     js-yaml: "npm:^4.1.1"
