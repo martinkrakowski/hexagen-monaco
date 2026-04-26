@@ -62,7 +62,6 @@ User Intent (NL chat)
   - `VerdictComparatorAdapter` — compares verdicts using governance rules (no shared-kernel removal, no cross-boundary port injection)
   - `MonotonicStatePromoterAdapter` — enforces monotonic state transitions (pending → diffing → verdict → approved/rejected)
   - `GovernanceAwareConflictResolverAdapter` — resolves conflicts using keyword-based governance rules
-- **Added `ManifestPatchPort` (outbound)** — the missing outbound port identified in the review
 - Created `ReconcileUseCase` orchestrating: diff → verdict → conflict resolve → state promote
 - Deleted `FROZEN.md`
 - 29 tests passing
@@ -117,6 +116,88 @@ User Intent (NL chat)
 - Fixed `linter-config.yaml` indentation (invalid YAML prevented config loading)
 - Added `@hexagen/sync` to transaction-system's `allowed_imports` in linter config
 - `yarn lint:arch` now passes: "Architecture is compliant with manifest.yaml"
+
+---
+
+## Phase B: Application Layer Fixes (Post-Implementation Review)
+
+### Violation #2: Rollback on Exception
+
+**File:** `packages/transaction-system/src/application/use-cases/commit-patches.use-case.ts`
+
+Added rollback in catch block:
+
+```typescript
+} catch (error) {
+  await transactionManager.rollback(transaction);
+  throw error;
+}
+```
+
+### Violation #3: State Phase Transitions
+
+**Files:**
+
+- `packages/reconciliation-engine/src/application/ports/in/promote-state.port.ts` — Added `ReconciliationPhase` type and `promoteToPhase()` method with `@deprecated` on `promoteState()`
+- `packages/reconciliation-engine/src/infrastructure/adapters/monotonic-state-promoter.adapter.ts` — Implemented `promoteToPhase()` with cleared pending verdicts
+- `packages/reconciliation-engine/src/application/use-cases/reconcile.use-case.ts` — Called `promoteToPhase(state, "approved")` outside verdict loop
+
+### Violations #8-10: Parser Output Propagation
+
+**Files:**
+
+- `packages/ai-pipeline/src/application/ports/in/nl-parser.port.ts` — Added `NLParsingMetadata` interface and `parseWithMetadata()` method
+- `packages/ai-pipeline/src/infrastructure/adapters/nl-to-domain-command.adapter.ts` — Returns `{ commands, parameters }` with confidence scores
+- `packages/ai-pipeline/src/application/use-cases/parse-nl-intent.use-case.ts` — Propagates `intentType`, `confidence`, `parameters`
+- `packages/agentic-interaction/src/infrastructure/adapters/in-memory-pipeline-ports.adapter.ts` — Added `parseWithMetadata()` stub
+
+---
+
+## Phase C: UI/SSE/LLM Integration Fixes
+
+### Sub-Phase C-2: Lint-Aware Verdict Generation
+
+**File:** `packages/reconciliation-engine/src/application/use-cases/reconcile.use-case.ts`
+
+Modified `generateVerdicts()` to check lint errors:
+
+- If patch targets file with error-severity lint violation → `accepted: false`
+- All other patches → `accepted: true`
+
+### Sub-Phase C-3: Wire Patches to PatchReviewPanel
+
+**Files:**
+
+- `apps/web/app/api/architecture/modify/stream/route.ts` — Added `patches: result.value.patches ?? []` to `pipeline_complete` event
+- `apps/web/app/api/architecture/modify/route.ts` — Added `patches` to JSON response
+- `apps/web/features/governance-assistant/hooks/useArchitectureModification.ts` — Added `patches: Patch[]` to result type and handler
+- `apps/web/features/governance-assistant/architecture-modification/ArchitectureModificationPanel.tsx` — Replaced `SAMPLE_PATCHES = []` with `result?.patches ?? []`
+
+### Sub-Phase C-4: Accept/Reject API Endpoints
+
+**Files Created:**
+
+- `apps/web/app/api/architecture/modify/accept/route.ts`
+- `apps/web/app/api/architecture/modify/reject/route.ts`
+- `apps/web/__tests__/api/architecture/modify/accept.test.ts`
+- `apps/web/__tests__/api/architecture/modify/reject.test.ts`
+
+### Sub-Phase C-5: SSE Step Events
+
+**Files:**
+
+- `apps/web/app/api/architecture/modify/stream/route.ts` — Emits `step_running` before each step executes; error responses use SSE format
+- `apps/web/features/governance-assistant/hooks/useArchitectureModification.ts` — Handles `step_running` event; fixed dead branch in `step_complete` handler
+
+### Sub-Phase C-6: Streaming Fallback Chain
+
+**File:** `packages/agentic-interaction/src/infrastructure/adapters/cloud-llm-pipeline.adapter.ts`
+
+Modified `streamStructuredRequest()` to loop through all providers:
+
+- On retryable error (429, 5xx): continue to next provider
+- On AbortError or non-retryable error (401, 403): yield error and return immediately
+- Added `getErrorStatus()` helper method
 
 ---
 
@@ -224,61 +305,77 @@ User Intent (NL chat)
 | --- | ---------------------------------------------------------------------------------------------------- |
 | 65  | `apps/web/app/api/architecture/modify/route.ts`                                                      |
 | 66  | `apps/web/app/api/architecture/modify/stream/route.ts`                                               |
-| 67  | `apps/web/app/lib/wire.architecture-modification.ts`                                                 |
-| 68  | `apps/web/features/governance-assistant/hooks/useArchitectureModification.ts`                        |
-| 69  | `apps/web/features/governance-assistant/architecture-modification/ArchitectureModificationPanel.tsx` |
-| 70  | `apps/web/features/governance-assistant/architecture-modification/PatchReviewPanel.tsx`              |
-| 71  | `apps/web/features/governance-assistant/architecture-modification/ManifestDiffView.tsx`              |
-| 72  | `apps/web/features/governance-assistant/architecture-modification/PipelineStepIndicator.tsx`         |
-| 73  | `apps/web/features/governance-assistant/architecture-modification/index.ts`                          |
-| 74  | `apps/web/__tests__/api/architecture/modify.test.ts`                                                 |
-| 75  | `apps/web/__tests__/features/architecture-modification/useArchitectureModification.test.ts`          |
-| 76  | `apps/web/__tests__/features/architecture-modification/PatchReviewPanel.test.ts`                     |
-| 77  | `apps/web/__tests__/features/architecture-modification/ManifestDiffView.test.ts`                     |
-| 78  | `apps/web/__tests__/features/architecture-modification/PipelineStepIndicator.test.ts`                |
+| 67  | `apps/web/app/api/architecture/modify/accept/route.ts`                                               |
+| 68  | `apps/web/app/api/architecture/modify/reject/route.ts`                                               |
+| 69  | `apps/web/app/lib/wire.architecture-modification.ts`                                                 |
+| 70  | `apps/web/features/governance-assistant/hooks/useArchitectureModification.ts`                        |
+| 71  | `apps/web/features/governance-assistant/architecture-modification/ArchitectureModificationPanel.tsx` |
+| 72  | `apps/web/features/governance-assistant/architecture-modification/PatchReviewPanel.tsx`              |
+| 73  | `apps/web/features/governance-assistant/architecture-modification/ManifestDiffView.tsx`              |
+| 74  | `apps/web/features/governance-assistant/architecture-modification/PipelineStepIndicator.tsx`         |
+| 75  | `apps/web/features/governance-assistant/architecture-modification/index.ts`                          |
+| 76  | `apps/web/__tests__/api/architecture/modify.test.ts`                                                 |
+| 77  | `apps/web/__tests__/api/architecture/modify/accept.test.ts`                                          |
+| 78  | `apps/web/__tests__/api/architecture/modify/reject.test.ts`                                          |
+| 79  | `apps/web/__tests__/features/architecture-modification/useArchitectureModification.test.ts`          |
+| 80  | `apps/web/__tests__/features/architecture-modification/PatchReviewPanel.test.ts`                     |
+| 81  | `apps/web/__tests__/features/architecture-modification/ManifestDiffView.test.ts`                     |
+| 82  | `apps/web/__tests__/features/architecture-modification/PipelineStepIndicator.test.ts`                |
 
-### Modified Files (30)
+### Modified Files (30+)
 
-| #   | Path                                                                           | Phase      | Change                                                                   |
-| --- | ------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------ |
-| 1   | `.architecture/manifest.yaml`                                                  | 2a,3,4,5,7 | Added packages, ports, adapters, dependencies                            |
-| 2   | `.architecture/invariants/linter-config.yaml`                                  | fix        | Fixed YAML indentation; added sync to transaction-system allowed_imports |
-| 3   | `packages/core-domain/package.json`                                            | 1          | Added `./mvk/v1` subpath export                                          |
-| 4   | `packages/core-domain/src/mvk/v1/index.ts`                                     | 1          | Added `shared-types` export                                              |
-| 5   | `packages/intent-compiler/tsconfig.json`                                       | 2a         | Added `src/__tests__` to exclude                                         |
-| 6   | `packages/intent-compiler/FROZEN.md`                                           | 2a         | Updated with implementation notes                                        |
-| 7   | `packages/intent-compiler/src/index.ts`                                        | 2a         | Added infrastructure exports                                             |
-| 8   | `packages/intent-compiler/src/infrastructure/index.ts`                         | 2a         | Added adapter exports                                                    |
-| 9   | `packages/intent-compiler/src/application/use-cases/parse-gesture.use-case.ts` | 2a         | Wired adapters into pipeline                                             |
-| 10  | `packages/reconciliation-engine/FROZEN.md`                                     | 3          | **Deleted**                                                              |
-| 11  | `packages/reconciliation-engine/package.json`                                  | 3          | Added dependencies                                                       |
-| 12  | `packages/reconciliation-engine/tsconfig.json`                                 | 3          | Added `__tests__` exclude                                                |
-| 13  | `packages/reconciliation-engine/src/index.ts`                                  | 3          | Updated exports                                                          |
-| 14  | `packages/reconciliation-engine/src/infrastructure/index.ts`                   | 3          | Added adapter exports                                                    |
-| 15  | `packages/reconciliation-engine/src/application/ports/index.ts`                | 3          | Added outbound ports                                                     |
-| 16  | `packages/reconciliation-engine/src/application/use-cases/index.ts`            | 3          | Added reconcile use case                                                 |
-| 17  | `packages/transaction-system/package.json`                                     | 4          | Added @hexagen/sync dependency                                           |
-| 18  | `packages/transaction-system/tsconfig.json`                                    | 4          | Added `__tests__` exclude                                                |
-| 19  | `packages/transaction-system/jest.config.cjs`                                  | 4          | Added sync module mapping                                                |
-| 20  | `packages/transaction-system/src/application/index.ts`                         | 4          | Added use-case exports                                                   |
-| 21  | `packages/transaction-system/src/application/ports/out/index.ts`               | 4          | Added new port exports                                                   |
-| 22  | `packages/transaction-system/src/application/use-cases/index.ts`               | 4          | Added commit-patches export                                              |
-| 23  | `packages/transaction-system/src/infrastructure/adapters/index.ts`             | 4          | Added new adapter exports                                                |
-| 24  | `packages/agentic-interaction/package.json`                                    | 5,7        | Added pipeline package dependencies                                      |
-| 25  | `packages/agentic-interaction/tsconfig.json`                                   | 5          | Updated includes/excludes                                                |
-| 26  | `packages/agentic-interaction/src/application/index.ts`                        | 5          | Added use-case exports                                                   |
-| 27  | `packages/agentic-interaction/src/application/ports/in/index.ts`               | 5          | Added modification port export                                           |
-| 28  | `packages/agentic-interaction/src/application/use-cases/index.ts`              | 5          | Added modify-architecture export                                         |
-| 29  | `packages/agentic-interaction/src/domain/index.ts`                             | 7          | Added provider-config exports                                            |
-| 30  | `packages/agentic-interaction/src/infrastructure/index.ts`                     | 5,7        | Added adapter exports                                                    |
-| 31  | `packages/ai-pipeline/package.json`                                            | 2b,5       | Updated dependencies                                                     |
-| 32  | `packages/ai-pipeline/tsconfig.json`                                           | 2b,5       | Fixed emitDeclarationOnly                                                |
-| 33  | `packages/ai-pipeline/src/domain/index.ts`                                     | 5          | Added pipeline-run, pipeline-step exports                                |
-| 34  | `packages/sync/src/types/index.ts`                                             | 4          | Added BoundedContext type export                                         |
-| 35  | `apps/web/features/governance-assistant/GovernancePanelWrapper.tsx`            | 6          | Added Q&A / Modify tabs                                                  |
-| 36  | `apps/web/next.config.mjs`                                                     | 5          | Added transpilePackages for pipeline packages                            |
-| 37  | `apps/web/package.json`                                                        | 5          | Added dependencies                                                       |
-| 38  | `yarn.lock`                                                                    | 2b,4       | Dependency updates                                                       |
+| #   | Path                                                                                             | Phase      | Change                                                                       |
+| --- | ------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------------------------------------------------- |
+| 1   | `.architecture/manifest.yaml`                                                                    | 2a,3,4,5,7 | Added packages, ports, adapters, dependencies                                |
+| 2   | `.architecture/invariants/linter-config.yaml`                                                    | fix        | Fixed YAML indentation; added sync to transaction-system allowed_imports     |
+| 3   | `packages/core-domain/package.json`                                                              | 1          | Added `./mvk/v1` subpath export                                              |
+| 4   | `packages/core-domain/src/mvk/v1/index.ts`                                                       | 1          | Added `shared-types` export                                                  |
+| 5   | `packages/intent-compiler/tsconfig.json`                                                         | 2a         | Added `src/__tests__` to exclude                                             |
+| 6   | `packages/intent-compiler/FROZEN.md`                                                             | 2a         | Updated with implementation notes                                            |
+| 7   | `packages/intent-compiler/src/index.ts`                                                          | 2a         | Added infrastructure exports                                                 |
+| 8   | `packages/intent-compiler/src/infrastructure/index.ts`                                           | 2a         | Added adapter exports                                                        |
+| 9   | `packages/intent-compiler/src/application/use-cases/parse-gesture.use-case.ts`                   | 2a         | Wired adapters into pipeline                                                 |
+| 10  | `packages/reconciliation-engine/FROZEN.md`                                                       | 3          | **Deleted**                                                                  |
+| 11  | `packages/reconciliation-engine/package.json`                                                    | 3          | Added dependencies                                                           |
+| 12  | `packages/reconciliation-engine/tsconfig.json`                                                   | 3          | Added `__tests__` exclude                                                    |
+| 13  | `packages/reconciliation-engine/src/index.ts`                                                    | 3          | Updated exports                                                              |
+| 14  | `packages/reconciliation-engine/src/infrastructure/index.ts`                                     | 3          | Added adapter exports                                                        |
+| 15  | `packages/reconciliation-engine/src/application/ports/index.ts`                                  | 3          | Added outbound ports                                                         |
+| 16  | `packages/reconciliation-engine/src/application/use-cases/index.ts`                              | 3          | Added reconcile use case                                                     |
+| 17  | `packages/transaction-system/package.json`                                                       | 4          | Added @hexagen/sync dependency                                               |
+| 18  | `packages/transaction-system/tsconfig.json`                                                      | 4          | Added `__tests__` exclude                                                    |
+| 19  | `packages/transaction-system/jest.config.cjs`                                                    | 4          | Added sync module mapping                                                    |
+| 20  | `packages/transaction-system/src/application/index.ts`                                           | 4          | Added use-case exports                                                       |
+| 21  | `packages/transaction-system/src/application/ports/out/index.ts`                                 | 4          | Added new port exports                                                       |
+| 22  | `packages/transaction-system/src/application/use-cases/index.ts`                                 | 4          | Added commit-patches export                                                  |
+| 23  | `packages/transaction-system/src/infrastructure/adapters/index.ts`                               | 4          | Added new adapter exports                                                    |
+| 24  | `packages/agentic-interaction/package.json`                                                      | 5,7        | Added pipeline package dependencies                                          |
+| 25  | `packages/agentic-interaction/tsconfig.json`                                                     | 5          | Updated includes/excludes                                                    |
+| 26  | `packages/agentic-interaction/src/application/index.ts`                                          | 5          | Added use-case exports                                                       |
+| 27  | `packages/agentic-interaction/src/application/ports/in/index.ts`                                 | 5          | Added modification port export                                               |
+| 28  | `packages/agentic-interaction/src/application/use-cases/index.ts`                                | 5          | Added modify-architecture export                                             |
+| 29  | `packages/agentic-interaction/src/domain/index.ts`                                               | 7          | Added provider-config exports                                                |
+| 30  | `packages/agentic-interaction/src/infrastructure/index.ts`                                       | 5,7        | Added adapter exports                                                        |
+| 31  | `packages/ai-pipeline/package.json`                                                              | 2b,5       | Updated dependencies                                                         |
+| 32  | `packages/ai-pipeline/tsconfig.json`                                                             | 2b,5       | Fixed emitDeclarationOnly                                                    |
+| 33  | `packages/ai-pipeline/src/domain/index.ts`                                                       | 5          | Added pipeline-run, pipeline-step exports                                    |
+| 34  | `packages/sync/src/types/index.ts`                                                               | 4          | Added BoundedContext type export                                             |
+| 35  | `apps/web/features/governance-assistant/GovernancePanelWrapper.tsx`                              | 6          | Added Q&A / Modify tabs                                                      |
+| 36  | `apps/web/next.config.mjs`                                                                       | 5          | Added transpilePackages for pipeline packages                                |
+| 37  | `apps/web/package.json`                                                                          | 5          | Added dependencies                                                           |
+| 38  | `yarn.lock`                                                                                      | 2b,4       | Dependency updates                                                           |
+| 39  | `packages/reconciliation-engine/src/application/ports/in/promote-state.port.ts`                  | B          | Added `ReconciliationPhase`, `promoteToPhase()`, deprecated `promoteState()` |
+| 40  | `packages/reconciliation-engine/src/infrastructure/adapters/monotonic-state-promoter.adapter.ts` | B          | Implemented `promoteToPhase()`                                               |
+| 41  | `packages/transaction-system/src/application/use-cases/commit-patches.use-case.ts`               | B          | Added rollback in catch block                                                |
+| 42  | `packages/ai-pipeline/src/application/ports/in/nl-parser.port.ts`                                | B          | Added `NLParsingMetadata`, `parseWithMetadata()`                             |
+| 43  | `packages/ai-pipeline/src/infrastructure/adapters/nl-to-domain-command.adapter.ts`               | B          | Returns `{ commands, parameters }` with confidence                           |
+| 44  | `packages/ai-pipeline/src/application/use-cases/parse-nl-intent.use-case.ts`                     | B          | Propagates `intentType`, `confidence`, `parameters`                          |
+| 45  | `packages/ai-pipeline/src/application/ports/in/index.ts`                                         | B          | Exports `NLParsingMetadata`                                                  |
+| 46  | `packages/agentic-interaction/src/infrastructure/adapters/in-memory-pipeline-ports.adapter.ts`   | B          | Added `parseWithMetadata()` stub                                             |
+| 47  | `packages/agentic-interaction/src/application/ports/in/architecture-modification.port.ts`        | C-3        | Added `patches: Patch[]` to `ModificationResult`                             |
+| 48  | `packages/agentic-interaction/src/application/use-cases/modify-architecture.use-case.ts`         | C-3        | Added `patches` to returned value                                            |
+| 49  | `packages/reconciliation-engine/src/application/use-cases/reconcile.use-case.ts`                 | C-2        | Lint-aware verdict generation                                                |
+| 50  | `packages/agentic-interaction/src/infrastructure/adapters/cloud-llm-pipeline.adapter.ts`         | C-6        | Added provider fallback loop in `streamStructuredRequest()`                  |
 
 ---
 
@@ -295,10 +392,37 @@ User Intent (NL chat)
 | 7         | 15       | Cloud LLM adapter (success, no keys, fallback, all-fail, non-retryable, Zod validation, metadata), provider config |
 | **Total** | **~351** |                                                                                                                    |
 
+---
+
+## Violation Status
+
+| #   | Violation                         | Status   | Phase  |
+| --- | --------------------------------- | -------- | ------ |
+| #1  | ManifestPatchPort adapter missing | ⚠️ N/A   | Note 1 |
+| #2  | Rollback on exception missing     | ✅ Fixed | B      |
+| #3  | State phase transitions incorrect | ✅ Fixed | B      |
+| #4  | Auto-accept all verdicts          | ✅ Fixed | C-2    |
+| #5  | Duplicate node creation           | ✅ Fixed | A      |
+| #6  | NL pattern: edge synonyms missing | ✅ Fixed | A      |
+| #7  | NL pattern: kebab-case missing    | ✅ Fixed | A      |
+| #8  | Parser output not propagated      | ✅ Fixed | B      |
+| #9  | Intent type not captured          | ✅ Fixed | B      |
+| #10 | Confidence score missing          | ✅ Fixed | B      |
+| #11 | Empty SAMPLE_PATCHES              | ✅ Fixed | C-3    |
+| #12 | Stub accept/reject                | ✅ Fixed | C-4    |
+| #13 | No step_running SSE event         | ✅ Fixed | C-5    |
+| #14 | Dead branch in step update        | ✅ Fixed | C-5    |
+| #15 | Streaming fallback chain missing  | ✅ Fixed | C-6    |
+
+**Note 1:** `ManifestPatchPort` in `reconciliation-engine` is **not part of the active pipeline**. The active pipeline (`ModifyArchitectureUseCase`) uses `ManifestMutationPort` from `transaction-system`, which is already implemented by `SyncDelegatingManifestMutationAdapter`. `ManifestPatchPort` remains as a design artifact for potential future direct `ReconcileUseCase` usage.
+
+---
+
 ## Final Verification
 
 ```
 yarn build     → 33/33 packages ✅
 yarn typecheck → 55/55 tasks ✅
 yarn lint:arch → "Architecture is compliant with manifest.yaml" ✅
+yarn test      → All tests pass ✅
 ```

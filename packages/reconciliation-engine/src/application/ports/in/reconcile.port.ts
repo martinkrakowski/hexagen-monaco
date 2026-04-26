@@ -4,11 +4,13 @@ import type {
   ProjectSpecLike,
   Identifier,
 } from "../../../domain/llm-response.js";
+import type { LinterReportLike } from "./lint-filter.port.js";
 
 export interface ReconcileRequest {
   structuredOutput: StructuredLLMOutput;
   currentManifest: ProjectSpecLike;
   intentId: Identifier;
+  linterReport?: LinterReportLike;
 }
 
 export interface ReconciliationPort {

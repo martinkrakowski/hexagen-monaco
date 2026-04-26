@@ -1700,7 +1700,9 @@ __metadata:
   dependencies:
     "@eslint/js": "npm:^9.0.0"
     "@hexagen/core-domain": "workspace:*"
+    "@hexagen/governance": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/sync": "workspace:*"
     "@types/jest": "npm:^30.0.0"
     eslint: "npm:^9.0.0"
     jest: "npm:^30.3.0"
