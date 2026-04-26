@@ -13,7 +13,7 @@ export function PanelHeader({ onRefresh, isLoading }: PanelHeaderProps) {
           <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
             <ShieldCheck size={14} className="text-primary" strokeWidth={2} />
           </div>
-          <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
+          <h1 className="text-base font-semibold text-foreground tracking-tight">
             Governance
           </h1>
         </div>
@@ -27,7 +27,7 @@ export function PanelHeader({ onRefresh, isLoading }: PanelHeaderProps) {
           <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
         </button>
       </div>
-      <p className="text-xs text-muted-foreground font-normal pl-[38px]">
+      <p className="text-xs text-muted-foreground font-normal pl-10">
         Governance Assistant
       </p>
     </div>

@@ -27,7 +27,7 @@ export function SavedProjectsSubmenu({
   return (
     <div
       role="menu"
-      className="absolute left-full top-0 ml-[-1px] w-56 bg-card border border-border rounded-md shadow-lg py-1 z-50"
+      className="absolute left-full top-0 ml-0 w-56 bg-card border border-border rounded-md shadow-lg py-1 z-50"
     >
       {projects.length === 0 ? (
         <p className="px-3 py-2 text-sm text-muted-foreground">
