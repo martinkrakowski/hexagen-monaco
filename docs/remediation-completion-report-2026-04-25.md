@@ -301,6 +301,39 @@ yarn test            → 268 tests: 268 passed, 0 failed
 
 ---
 
+## Known Limitations & Follow-Up Work
+
+### ESM Module Resolution (Phase 6 — Future)
+
+**Status:** Deferred to follow-up infrastructure ticket
+
+**Context:** During Phase 1 dependency changes and barrel restructuring, a pre-existing ESM incompatibility surfaced:
+
+- Current config uses `moduleResolution: "bundler"` and `module: "ESNext"`
+- Root cause: TypeScript outputs ESNext imports without `.js` extensions needed by Node.js ESM at runtime
+- Affected: ~560 TypeScript files across `packages/` and `apps/`
+
+**Solution Identified (Phase 6):** Migrate to `moduleResolution: "nodeNext"` + add `.js` extensions to all relative imports
+
+- Requires systematic refactoring (~560 files + regex validation)
+- Estimated effort: 4–6 hours with full testing
+- Risk: Can break import resolution if incompletely applied
+
+**Recommendation:**
+
+- ✅ Ship remediation PR #27 as-is (design system work complete, no ESM changes)
+- 📋 Create Phase 6 ticket for ESM/nodeNext infrastructure work
+- 📋 Run ESM migration as dedicated infrastructure initiative post-merge
+
+**Why Deferred:**
+
+- All P0/P1 architectural issues are resolved
+- Design system remediation is shipping as specified
+- ESM is pre-existing infrastructure debt, not a product of this work
+- Attempting combined PR would create review/testing risk
+
+---
+
 ## Conclusion
 
 **The architectural remediation is COMPLETE and FULLY VALIDATED.** All critical blockers and high-severity issues have been resolved. The system now:
