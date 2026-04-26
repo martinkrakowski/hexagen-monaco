@@ -16,7 +16,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

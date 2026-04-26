@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests"
   },

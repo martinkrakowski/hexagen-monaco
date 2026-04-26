@@ -4,7 +4,7 @@ import type {
   ProjectSpecLike,
   Identifier,
 } from "../../../domain/llm-response.js";
-import type { LinterReportLike } from "./lint-filter.port.js";
+import type { LinterReportLike } from "@hexagen/core-domain";
 
 export interface ReconcileRequest {
   structuredOutput: StructuredLLMOutput;

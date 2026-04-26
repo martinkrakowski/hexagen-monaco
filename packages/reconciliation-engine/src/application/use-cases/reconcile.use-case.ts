@@ -1,10 +1,7 @@
 import type { ReconciliationPort } from "../ports/in/reconcile.port.js";
 import type { CompareVerdictsPort } from "../ports/in/compare-verdicts.port.js";
 import type { ResolveConflictPort } from "../ports/in/resolve-conflict.port.js";
-import type {
-  LinterReportLike,
-  LintViolationLike,
-} from "../ports/in/lint-filter.port.js";
+import type { LinterReportLike, LintViolationLike } from "@hexagen/core-domain";
 import type { ManifestPatchPort } from "../ports/out/manifest-patch.port.js";
 import type { ReconcileRequest } from "../ports/in/reconcile.port.js";
 import type { Patch, ReconciliationResult } from "../../domain/llm-response.js";
@@ -85,7 +82,7 @@ export class ReconcileUseCase {
   private hasErrorViolation(patch: Patch, report?: LinterReportLike): boolean {
     if (!report) return false;
     return report.violations.some(
-      (v) =>
+      (v: LintViolationLike) =>
         v.severity === "error" &&
         (v.file === patch.targetId ||
           v.file === patch.payload.file ||
@@ -98,7 +95,7 @@ export class ReconcileUseCase {
     report: LinterReportLike,
   ): LintViolationLike | undefined {
     return report.violations.find(
-      (v) =>
+      (v: LintViolationLike) =>
         v.severity === "error" &&
         (v.file === patch.targetId ||
           v.file === patch.payload.file ||
