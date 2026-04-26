@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { InitiateExportUseCase } from "@hexagen/project-generation";
 import { getGenerateProject } from "@/lib/wire.project-generation";
-import { wizardToManifest } from "@/lib/wizard-to-manifest";
+import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import type { Manifest } from "@hexagen/sync";
 
 export const runtime = "nodejs";

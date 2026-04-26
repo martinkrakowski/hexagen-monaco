@@ -11,18 +11,18 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/fix-esm-barrels.js dist",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
+    "@hexagen/governance": "workspace:*",
+    "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/transaction-system": "workspace:*",
-    "@hexagen/project-configuration": "workspace:*",
-    "@hexagen/visualization": "workspace:*",
-    "@hexagen/governance": "workspace:*"
+    "@hexagen/visualization": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

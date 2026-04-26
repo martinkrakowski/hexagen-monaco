@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import JSZip from "jszip";
 import yaml from "js-yaml";
 import type { WizardData } from "@hexagen/project-configuration";
-import { wizardToManifest } from "@/lib/wizard-to-manifest";
+import { wizardToManifest } from "@hexagen/wizard-orchestration";
 
 export function useArchitectureDownload(wizardData: WizardData) {
   const [isDownloading, setIsDownloading] = useState(false);

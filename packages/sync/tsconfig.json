@@ -5,8 +5,6 @@
     "outDir": "dist",
     "declaration": true,
     "emitDeclarationOnly": false,
-    "composite": true,
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "moduleResolution": "NodeNext",
     "module": "NodeNext",
     "target": "es2022",

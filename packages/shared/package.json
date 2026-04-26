@@ -19,7 +19,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ../../scripts/fix-esm-barrels.js dist",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
   },

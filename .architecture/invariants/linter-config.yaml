@@ -138,5 +138,7 @@ package_rules:
       - "@hexagen/shared"
       - "@hexagen/messaging"
       - "@hexagen/project-configuration"
+      - "@hexagen/sync"
     # Imports WizardData, BoundedContext, ExternalContext, PeerMapping from project-configuration
-    # for deterministic wizard flow coordination
+    # for deterministic wizard flow coordination. Imports Manifest from sync because
+    # wizard-orchestration is the UI-facing bridge that transforms WizardData → Manifest.

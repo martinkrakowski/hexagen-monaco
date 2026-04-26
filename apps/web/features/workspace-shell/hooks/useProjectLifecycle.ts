@@ -5,7 +5,7 @@ import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 import { emptyFormValues } from "../../project-wizard/config";
-import { buildWizardData } from "@/lib/compose-wizard-data";
+import { buildWizardData } from "@hexagen/wizard-orchestration";
 
 import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";
 import { useWizardDraft } from "./useWizardDraft";
