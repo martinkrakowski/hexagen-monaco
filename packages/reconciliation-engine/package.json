@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
+    "@hexagen/governance": "workspace:*",
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {

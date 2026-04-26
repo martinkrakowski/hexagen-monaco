@@ -2,6 +2,10 @@ import type { ReconciliationPort } from "../ports/in/reconcile.port.js";
 import type { CompareVerdictsPort } from "../ports/in/compare-verdicts.port.js";
 import type { ResolveConflictPort } from "../ports/in/resolve-conflict.port.js";
 import type { PromoteStatePort } from "../ports/in/promote-state.port.js";
+import type {
+  LintFilterPort,
+  LinterReportLike,
+} from "../ports/in/lint-filter.port.js";
 import type { ManifestPatchPort } from "../ports/out/manifest-patch.port.js";
 import type { ReconcileRequest } from "../ports/in/reconcile.port.js";
 import type { Patch, ReconciliationResult } from "../../domain/llm-response.js";
@@ -17,11 +21,13 @@ export class ReconcileUseCase {
     private readonly resolveConflictPort: ResolveConflictPort,
     private readonly promoteStatePort: PromoteStatePort,
     private readonly manifestPatchPort?: ManifestPatchPort,
+    private readonly lintFilterPort?: LintFilterPort,
   ) {}
 
   async execute(
     request: ReconcileRequest,
     manifestPath?: string,
+    linterReport?: LinterReportLike,
   ): Promise<ReconciliationResult> {
     let state: ReconciliationState = createInitialState();
 
@@ -35,7 +41,13 @@ export class ReconcileUseCase {
 
     state = { ...state, version: state.version + 1, lastUpdated: Date.now() };
 
-    const verdicts = this.generateVerdicts(diffResult.patches);
+    let patches = diffResult.patches;
+
+    if (this.lintFilterPort && linterReport) {
+      patches = this.lintFilterPort.filterPatches(patches, linterReport);
+    }
+
+    const verdicts = this.generateVerdicts(patches);
 
     const sortedVerdicts = this.sortVerdicts(verdicts);
 
@@ -47,10 +59,7 @@ export class ReconcileUseCase {
       state = this.promoteStatePort.promoteState(state, verdict.id);
     }
 
-    const finalPatches = this.extractAcceptedPatches(
-      diffResult.patches,
-      acceptedVerdicts,
-    );
+    const finalPatches = this.extractAcceptedPatches(patches, acceptedVerdicts);
 
     if (this.manifestPatchPort && manifestPath) {
       const validation = await this.manifestPatchPort.validatePatches(
@@ -66,11 +75,12 @@ export class ReconcileUseCase {
       }
     }
 
+    const rejectedCount = diffResult.patches.length - finalPatches.length;
     return {
       success: true,
       patches: finalPatches,
       errors: diffResult.errors,
-      summary: `Reconciliation complete: ${finalPatches.length} patches applied, ${diffResult.patches.length - finalPatches.length} rejected`,
+      summary: `Reconciliation complete: ${finalPatches.length} patches applied, ${rejectedCount} rejected`,
     };
   }
 

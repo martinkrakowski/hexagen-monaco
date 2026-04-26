@@ -3,7 +3,9 @@ import { StructuredDiffReconciliationAdapter } from "../infrastructure/adapters/
 import { VerdictComparatorAdapter } from "../infrastructure/adapters/verdict-comparator.adapter.js";
 import { MonotonicStatePromoterAdapter } from "../infrastructure/adapters/monotonic-state-promoter.adapter.js";
 import { GovernanceAwareConflictResolverAdapter } from "../infrastructure/adapters/governance-aware-conflict-resolver.adapter.js";
+import { LinterReportFilterAdapter } from "../infrastructure/adapters/linter-report-filter.adapter.js";
 import type { ReconcileRequest } from "../application/ports/in/reconcile.port.js";
+import type { LinterReportLike } from "../application/ports/in/lint-filter.port.js";
 import type {
   ProjectSpecLike,
   ArchitectureGraphLike,
@@ -127,5 +129,137 @@ describe("ReconcileUseCase", () => {
 
     expect(result.success).toBe(true);
     expect(result.patches.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("ReconcileUseCase with LintFilterPort", () => {
+  const makeRequest = (
+    manifest: ProjectSpecLike,
+    graph: ArchitectureGraphLike,
+    currentManifest: ProjectSpecLike,
+  ): ReconcileRequest => ({
+    structuredOutput: {
+      manifest,
+      architectureGraph: graph,
+      reasoning: "test",
+    },
+    currentManifest,
+    intentId: "test-intent",
+  });
+
+  const makeReport = (
+    violations: LinterReportLike["violations"],
+  ): LinterReportLike => ({
+    timestamp: new Date().toISOString(),
+    isCompliant: violations.length === 0,
+    violations,
+    scannedFilesCount: 10,
+  });
+
+  it("should filter patches when lint report has errors", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+      undefined,
+      new LinterReportFilterAdapter(),
+    );
+
+    const report = makeReport([
+      {
+        ruleId: "R001",
+        severity: "error",
+        file: "bc-1",
+        message: "Boundary violation",
+      },
+    ]);
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request, undefined, report);
+
+    expect(result.success).toBe(true);
+    expect(result.patches).toHaveLength(0);
+    expect(result.summary).toContain("1 rejected");
+  });
+
+  it("should not filter patches when lint report is compliant", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+      undefined,
+      new LinterReportFilterAdapter(),
+    );
+
+    const report = makeReport([]);
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request, undefined, report);
+
+    expect(result.success).toBe(true);
+    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should pass through patches when no lint report is provided", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+      undefined,
+      new LinterReportFilterAdapter(),
+    );
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request);
+
+    expect(result.success).toBe(true);
+    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should not filter when LintFilterPort is not provided", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+    );
+
+    const report = makeReport([
+      {
+        ruleId: "R001",
+        severity: "error",
+        file: "bc-1",
+        message: "Should not matter",
+      },
+    ]);
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request, undefined, report);
+
+    expect(result.success).toBe(true);
+    expect(result.patches.length).toBeGreaterThanOrEqual(1);
   });
 });

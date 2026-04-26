@@ -12,12 +12,6 @@ import type { TransactionManagerPort } from "../../application/ports/in/transact
 import type { BackpressureControllerPort } from "../../application/ports/out/backpressure-controller.port.js";
 import type { SpeculativeStateMachinePort } from "../../application/ports/out/speculative-state-machine.port.js";
 import type { SemanticCachePort } from "../../application/ports/out/semantic-cache.port.js";
-import type { BackpressureSignal } from "../../domain/value-objects/backpressure-signal.js";
-import {
-  isNone,
-  isCoalesce,
-  isDrop,
-} from "../../domain/value-objects/backpressure-signal.js";
 
 /**
  * In-memory Transaction Manager — stores transactions in a Map and

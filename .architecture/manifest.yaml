@@ -1173,6 +1173,7 @@ bounded_contexts:
         - CompareVerdictsPort
         - PromoteStatePort
         - ResolveConflictPort
+        - LintFilterPort
         out:
         - ManifestPatchPort
       infrastructure:
@@ -1181,9 +1182,11 @@ bounded_contexts:
         - VerdictComparatorAdapter
         - MonotonicStatePromoterAdapter
         - GovernanceAwareConflictResolverAdapter
-    depends_on:
-    - core-domain
-    - shared
+        - LinterReportFilterAdapter
+  depends_on:
+  - core-domain
+  - governance
+  - shared
 - name: runtime
   type: shared-kernel
   description: Runtime type guards and generators for MVK contracts — provides runtime
