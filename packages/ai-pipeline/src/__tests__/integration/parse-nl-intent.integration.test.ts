@@ -75,7 +75,7 @@ describe("NL Intent Parsing - Integration Tests", () => {
       const cmd = result.value.commands[0];
       expect(cmd.type).toBe("CreateEdge");
       if (cmd.type === "CreateEdge") {
-        expect(cmd.payload.kind).toBe(EdgeKind.Link);
+        expect(cmd.payload.kind).toBe(EdgeKind.Dependency);
         expect(cmd.payload.source).toBe("PaymentProcessing");
         expect(cmd.payload.target).toBe("NotificationService");
       }

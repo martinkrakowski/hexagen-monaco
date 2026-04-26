@@ -157,7 +157,7 @@ describe("NLToDomainCommandParserAdapter", () => {
         const cmd = result.value[0];
         expect(cmd.type).toBe("CreateEdge");
         if (cmd.type === "CreateEdge") {
-          expect(cmd.payload.kind).toBe(EdgeKind.Link);
+          expect(cmd.payload.kind).toBe(EdgeKind.Dependency);
           expect(cmd.payload.source).toBe("Billing");
           expect(cmd.payload.target).toBe("Payment");
         }

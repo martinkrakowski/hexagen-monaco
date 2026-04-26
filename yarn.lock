@@ -1374,6 +1374,23 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/ai-pipeline@workspace:packages/ai-pipeline":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/ai-pipeline@workspace:packages/ai-pipeline"
+  dependencies:
+    "@hexagen/core-domain": "workspace:*"
+    "@hexagen/shared": "workspace:*"
+    "@types/jest": "npm:^30.0.0"
+    "@typescript-eslint/eslint-plugin": "npm:^8.0.0"
+    "@typescript-eslint/parser": "npm:^8.0.0"
+    eslint: "npm:^8.57.0"
+    eslint-config-prettier: "npm:^10.1.8"
+    jest: "npm:^30.3.0"
+    ts-jest: "npm:^29.4.9"
+    typescript: "npm:^5.5.4"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/api-gateway@workspace:apps/api-gateway":
   version: 0.0.0-use.local
   resolution: "@hexagen/api-gateway@workspace:apps/api-gateway"

@@ -1,7 +1,7 @@
 module.exports = {
   displayName: "@hexagen/ai-pipeline",
   preset: "ts-jest",
-  testEnvironment: "node",
+  testEnvironment: "jsdom",
   rootDir: "./",
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.test.ts", "**/*.test.ts"],
@@ -15,6 +15,7 @@ module.exports = {
   },
   collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
   moduleNameMapper: {
+    "^(\\.{1,2}/.+)\\.js$": "$1",
     "@hexagen/(.*)": "<rootDir>/../$1/src",
   },
 };

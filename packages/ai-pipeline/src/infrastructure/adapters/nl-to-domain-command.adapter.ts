@@ -171,7 +171,7 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
             {
               type: "CreateEdge",
               payload: {
-                kind: EdgeKind.Link,
+                kind: EdgeKind.Dependency,
                 source: source as Identifier,
                 target: target as Identifier,
                 attributes: {
