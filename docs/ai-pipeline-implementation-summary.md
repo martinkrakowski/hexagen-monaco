@@ -1,5 +1,7 @@
 # AI-Driven Architecture Modification Pipeline — Implementation Summary
 
+> **ADR:** [ADR-0010](../.architecture/decisions/ADR-0010-ai-pipeline-phased-implementation.md) — documents why the phased approach superseded the original PR #26 scaffolding
+
 ## Feature Description
 
 The AI-Driven Architecture Modification Pipeline enables users to modify their project's architecture through natural language intent. The pipeline compiles user intent into domain commands, generates structured prompts for an LLM, reconciles the LLM's proposed changes against the current manifest, and atomically commits or rolls back patches — all governed by the existing MVK contracts (DomainAST, RRP, REM) and enforced by `lint:arch`.
