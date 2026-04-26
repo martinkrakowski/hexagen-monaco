@@ -7,12 +7,19 @@ import {
   InMemoryNLParserAdapter,
   InMemoryPromptCompilerAdapter,
   InMemoryLLMSenderAdapter,
-  InMemoryReconciliationAdapter,
   InMemoryManifestMutationAdapter,
   InMemoryLintValidationAdapter,
   CloudLLMPipelineAdapter,
   createDefaultFallbackChain,
 } from "@hexagen/agentic-interaction";
+import {
+  ReconcileUseCase,
+  StructuredDiffReconciliationAdapter,
+  VerdictComparatorAdapter,
+  GovernanceAwareConflictResolverAdapter,
+  MonotonicStatePromoterAdapter,
+  LinterReportFilterAdapter,
+} from "@hexagen/reconciliation-engine";
 import type {
   ModifyArchitectureDeps,
   CloudLLMPipelineAdapterConfig,
@@ -72,11 +79,20 @@ export const getModifyArchitectureUseCase = (
 
   const llmSender = createLLMSender(mode, cloudConfig);
 
+  const reconcileUseCase = new ReconcileUseCase(
+    new StructuredDiffReconciliationAdapter(),
+    new VerdictComparatorAdapter(),
+    new GovernanceAwareConflictResolverAdapter(),
+    new MonotonicStatePromoterAdapter(),
+    undefined,
+    new LinterReportFilterAdapter(),
+  );
+
   const deps: ModifyArchitectureDeps = {
     nlParser: new InMemoryNLParserAdapter(),
     promptCompiler: new InMemoryPromptCompilerAdapter(),
     llmSender,
-    reconciliationPort: new InMemoryReconciliationAdapter(),
+    reconcileUseCase,
     transactionManager: new InMemoryTransactionManager(),
     manifestMutation: new InMemoryManifestMutationAdapter(),
     lintValidation: new InMemoryLintValidationAdapter(),

@@ -400,7 +400,7 @@ Modified `streamStructuredRequest()` to loop through all providers:
 | --- | --------------------------------- | -------- | ------ |
 | #1  | ManifestPatchPort adapter missing | ⚠️ N/A   | Note 1 |
 | #2  | Rollback on exception missing     | ✅ Fixed | B      |
-| #3  | State phase transitions incorrect | ✅ Fixed | B      |
+| #3  | State phase transitions incorrect | ✅ Fixed | B, D-2 |
 | #4  | Auto-accept all verdicts          | ✅ Fixed | C-2    |
 | #5  | Duplicate node creation           | ✅ Fixed | A      |
 | #6  | NL pattern: edge synonyms missing | ✅ Fixed | A      |
@@ -418,11 +418,63 @@ Modified `streamStructuredRequest()` to loop through all providers:
 
 ---
 
+## Phase D: Correctness Wiring + Cleanup
+
+### Sub-Phase D-1: Wire ReconcileUseCase into Active Pipeline
+
+**Files:**
+
+- `packages/agentic-interaction/src/application/use-cases/modify-architecture.use-case.ts` — Replaced `reconciliationPort` with `reconcileUseCase: ReconcileUseCase`; added `lintFilterPort` dependency
+- `packages/agentic-interaction/__tests__/use-cases/modify-architecture.test.ts` — Factory pattern with `lintFilterPort` override; added lint-rejection test; removed unused helpers
+- `apps/web/app/lib/wire.architecture-modification.ts` — Constructed fully-wired `ReconcileUseCase` with all 6 adapters
+
+### Sub-Phase D-2: Remove Deprecated promoteState()
+
+**Files:**
+
+- `packages/reconciliation-engine/src/application/ports/in/promote-state.port.ts` — Removed `promoteState()` method; updated `isPromoteStatePort` guard
+- `packages/reconciliation-engine/src/infrastructure/adapters/monotonic-state-promoter.adapter.ts` — Removed `promoteState()` implementation
+- `packages/reconciliation-engine/src/application/use-cases/reconcile.use-case.ts` — Removed `promoteState` loop
+- `packages/reconciliation-engine/src/application/use-cases/promote-state.use-case.ts` — **Deleted** (orphaned)
+- `packages/reconciliation-engine/src/__tests__/monotonic-state-promoter.adapter.test.ts` — Removed deprecated method tests
+- `.architecture/decisions/ADR-0011-ai-pipeline-architecture.md` — **Created** — documents ManifestPatchPort design decision
+
+### Sub-Phase D-3: Browser E2E Tests
+
+**Files Created:**
+
+- `apps/web/playwright.config.ts` — Playwright configuration with Chromium
+- `apps/web/__tests__/e2e/global-setup.ts` — Global setup
+- `apps/web/__tests__/e2e/architecture-modification.spec.ts` — 7 E2E tests covering SSE endpoint, error formatting, step events, and accept/reject endpoints
+
+---
+
+## Non-Blocking Review Concerns (Phase D)
+
+| #   | Concern                                                           | Severity | Status                                                     |
+| --- | ----------------------------------------------------------------- | -------- | ---------------------------------------------------------- |
+| 1   | `linterReportProvider()` called twice (compile + reconcile steps) | LOW      | Acceptable — separate pipeline steps need separate reports |
+| 2   | Test coverage gap: no test for lint filter port failure           | LOW      | Tracked — can be added in Phase E                          |
+| 3   | `addPendingVerdict()` method not part of port interface           | LOW      | Acceptable — adapter-internal method                       |
+| 4   | `LinterReportLike` defined in multiple packages                   | LOW      | Acceptable — structural typing; no runtime coupling        |
+
+---
+
 ## Final Verification
 
 ```
-yarn build     → 33/33 packages ✅
+yarn build → 33/33 packages ✅
 yarn typecheck → 55/55 tasks ✅
 yarn lint:arch → "Architecture is compliant with manifest.yaml" ✅
-yarn test      → All tests pass ✅
+yarn test → All tests pass ✅
+Playwright E2E → 7/7 pass ✅
+```
+
+yarn build → 33/33 packages ✅
+yarn typecheck → 55/55 tasks ✅
+yarn lint:arch → "Architecture is compliant with manifest.yaml" ✅
+yarn test → All tests pass ✅
+
+```
+
 ```

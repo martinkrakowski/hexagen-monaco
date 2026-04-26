@@ -3,6 +3,7 @@
   "globalDependencies": ["**/.env.*", "NODE_ENV"],
   "globalEnv": [
     "APP_VERSION",
+    "CI",
     "COMMIT_HASH",
     "DEBUG",
     "GITHUB_ID",

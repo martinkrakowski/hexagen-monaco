@@ -12,11 +12,16 @@ import type {
   LinterReportLike,
 } from "@hexagen/prompt-compiler";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import type {
-  ReconciliationPort,
-  ProjectSpecLike,
-  Patch,
+import type { LintFilterPort } from "@hexagen/reconciliation-engine";
+import {
+  ReconcileUseCase,
+  StructuredDiffReconciliationAdapter,
+  VerdictComparatorAdapter,
+  GovernanceAwareConflictResolverAdapter,
+  MonotonicStatePromoterAdapter,
+  LinterReportFilterAdapter,
 } from "@hexagen/reconciliation-engine";
+import type { ProjectSpecLike, Patch } from "@hexagen/reconciliation-engine";
 import type {
   Transaction,
   TransactionManagerPort,
@@ -76,17 +81,6 @@ function createFailingLLMSender(): SendStructuredRequestPort {
   };
 }
 
-function createFailingReconciliation(): ReconciliationPort {
-  return {
-    reconcile: async () => ({
-      success: false,
-      patches: [] as Patch[],
-      errors: ["Incompatible topology"],
-      summary: "Reconciliation failed",
-    }),
-  };
-}
-
 function createFailingLintValidation(): LintValidationPort {
   return {
     validateManifest: async () => ({
@@ -127,16 +121,10 @@ function createThrowingPromptCompiler(): PromptCompilerPort {
   };
 }
 
-function createThrowingReconciliation(): ReconciliationPort {
-  return {
-    reconcile: async () => {
-      throw new Error("reconciler crashed");
-    },
-  };
-}
-
 function createMockDeps(
-  overrides: Partial<ModifyArchitectureDeps> = {},
+  overrides: Partial<ModifyArchitectureDeps> & {
+    lintFilterPort?: LintFilterPort;
+  } = {},
 ): ModifyArchitectureDeps {
   const nlParser: NLToDomainCommandParserPort = {
     parse: async () => ({
@@ -179,14 +167,14 @@ function createMockDeps(
     streamStructuredRequest: async function* () {},
   };
 
-  const reconciliationPort: ReconciliationPort = {
-    reconcile: async () => ({
-      success: true,
-      patches: [] as Patch[],
-      errors: [],
-      summary: "no differences",
-    }),
-  };
+  const reconcileUseCase = new ReconcileUseCase(
+    new StructuredDiffReconciliationAdapter(),
+    new VerdictComparatorAdapter(),
+    new GovernanceAwareConflictResolverAdapter(),
+    new MonotonicStatePromoterAdapter(),
+    undefined,
+    overrides.lintFilterPort ?? new LinterReportFilterAdapter(),
+  );
 
   const transactionManager: TransactionManagerPort = {
     begin: () => makeTransaction(),
@@ -213,7 +201,7 @@ function createMockDeps(
     nlParser,
     promptCompiler,
     llmSender,
-    reconciliationPort,
+    reconcileUseCase,
     transactionManager,
     manifestMutation,
     lintValidation,
@@ -260,6 +248,54 @@ function createMockDeps(
     console.log("✅ Test 1: full pipeline success - passed");
   }
 
+  // --- Lint violation rejects patch ---
+  {
+    const reportWithViolations: LinterReportLike = {
+      timestamp: new Date().toISOString(),
+      isCompliant: false,
+      violations: [
+        {
+          ruleId: "no-shared-kernel",
+          severity: "error",
+          file: "billing",
+          message: "Cannot add shared-kernel bounded context",
+        },
+      ],
+      scannedFilesCount: 1,
+    };
+
+    const lintFilterPort: LintFilterPort = {
+      filterPatches: (patches) =>
+        patches.filter(
+          (p) =>
+            !reportWithViolations.violations.some(
+              (v) => v.file === p.targetId && v.severity === "error",
+            ),
+        ),
+    };
+
+    const deps = createMockDeps({ lintFilterPort });
+    const useCase = new ModifyArchitectureUseCase(deps);
+    const result = await useCase.execute(
+      "Add a bounded context named billing",
+      ".architecture/manifest.yaml",
+      makeLineage(),
+    );
+
+    assert.ok(result.success, "Pipeline should complete");
+    if (result.success) {
+      const billingPatchExists = result.value.patches.some(
+        (p: Patch) => p.targetId === "billing",
+      );
+      assert.strictEqual(
+        billingPatchExists,
+        false,
+        "Patch targeting lint-errored file should be rejected",
+      );
+    }
+    console.log("✅ Test: lint violation rejects patch - passed");
+  }
+
   // --- All ports called ---
   {
     let nlParsed = false;
@@ -268,6 +304,25 @@ function createMockDeps(
     let llmCalled = false;
     let reconciled = false;
     let committed = false;
+
+    const mockReconcileUseCase = new ReconcileUseCase(
+      {
+        reconcile: async () => {
+          reconciled = true;
+          return {
+            success: true,
+            patches: [] as Patch[],
+            errors: [],
+            summary: "",
+          };
+        },
+      } as any,
+      { compareVerdicts: () => 0 } as any,
+      { resolveConflicts: () => [] } as any,
+      { promoteToPhase: (s) => s } as any,
+      undefined,
+      { filterPatches: (p) => p } as any,
+    );
 
     const deps = createMockDeps({
       nlParser: {
@@ -297,17 +352,7 @@ function createMockDeps(
         },
         streamStructuredRequest: async function* () {},
       },
-      reconciliationPort: {
-        reconcile: async () => {
-          reconciled = true;
-          return {
-            success: true,
-            patches: [] as Patch[],
-            errors: [],
-            summary: "",
-          };
-        },
-      },
+      reconcileUseCase: mockReconcileUseCase,
       transactionManager: {
         begin: () => makeTransaction(),
         transition: () => makeTransaction({ status: "speculative" }),
@@ -319,7 +364,7 @@ function createMockDeps(
         },
         rollback: () => makeTransaction({ status: "rolled_back" }),
       },
-    } as unknown as ModifyArchitectureDeps);
+    });
     const useCase = new ModifyArchitectureUseCase(deps);
     await useCase.execute(
       "Add a context",
@@ -402,8 +447,25 @@ function createMockDeps(
 
   // --- Reconciliation failure ---
   {
+    const failingReconciliationPort = {
+      reconcile: async () => ({
+        success: false,
+        patches: [] as Patch[],
+        errors: ["Incompatible topology"],
+        summary: "Reconciliation failed",
+      }),
+    };
+    const failingReconcileUseCase = new ReconcileUseCase(
+      failingReconciliationPort as any,
+      { compareVerdicts: () => 0 } as any,
+      { resolveConflicts: () => [] } as any,
+      { promoteToPhase: (s) => s } as any,
+      undefined,
+      { filterPatches: (p) => p } as any,
+    );
+
     const deps = createMockDeps({
-      reconciliationPort: createFailingReconciliation(),
+      reconcileUseCase: failingReconcileUseCase,
     });
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -652,8 +714,22 @@ function createMockDeps(
 
   // --- Reconciler throws ---
   {
+    const throwingReconciliationPort = {
+      reconcile: async () => {
+        throw new Error("reconciler crashed");
+      },
+    };
+    const throwingReconcileUseCase = new ReconcileUseCase(
+      throwingReconciliationPort as any,
+      { compareVerdicts: () => 0 } as any,
+      { resolveConflicts: () => [] } as any,
+      { promoteToPhase: (s) => s } as any,
+      undefined,
+      { filterPatches: (p) => p } as any,
+    );
+
     const deps = createMockDeps({
-      reconciliationPort: createThrowingReconciliation(),
+      reconcileUseCase: throwingReconcileUseCase,
     });
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(

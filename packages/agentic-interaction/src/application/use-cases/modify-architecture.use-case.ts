@@ -23,7 +23,7 @@ import type {
 import type { SendStructuredRequestPort, LLMRequest } from "@hexagen/local-llm";
 import { DomainModelId } from "@hexagen/local-llm";
 import type {
-  ReconciliationPort,
+  ReconcileUseCase,
   ReconcileRequest,
   Patch,
   StructuredLLMOutput,
@@ -48,7 +48,7 @@ export interface ModifyArchitectureDeps {
   readonly nlParser: NLToDomainCommandParserPort;
   readonly promptCompiler: PromptCompilerPort;
   readonly llmSender: SendStructuredRequestPort;
-  readonly reconciliationPort: ReconciliationPort;
+  readonly reconcileUseCase: ReconcileUseCase;
   readonly transactionManager: TransactionManagerPort;
   readonly manifestMutation: ManifestMutationPort;
   readonly lintValidation: LintValidationPort;
@@ -238,12 +238,17 @@ export class ModifyArchitectureUseCase {
     intentId: string,
   ): Promise<Patch[]> {
     const currentManifest = await this.deps.manifestProvider();
+    const linterReport = await this.deps.linterReportProvider();
     const request: ReconcileRequest = {
       structuredOutput: llmOutput,
       currentManifest,
       intentId,
     };
-    const result = await this.deps.reconciliationPort.reconcile(request);
+    const result = await this.deps.reconcileUseCase.execute(
+      request,
+      undefined,
+      linterReport,
+    );
     if (!result.success) {
       throw new Error(`Reconciliation failed: ${result.errors.join("; ")}`);
     }

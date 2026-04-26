@@ -56,10 +56,6 @@ export class ReconcileUseCase {
 
     const acceptedVerdicts = resolvedVerdicts.filter((v) => v.accepted);
 
-    for (const verdict of acceptedVerdicts) {
-      state = this.promoteStatePort.promoteState(state, verdict.id);
-    }
-
     if (acceptedVerdicts.length > 0) {
       state = this.promoteStatePort.promoteToPhase(state, "approved");
     }

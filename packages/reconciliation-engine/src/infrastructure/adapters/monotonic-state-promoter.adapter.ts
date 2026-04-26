@@ -3,7 +3,7 @@ import type {
   ReconciliationPhase,
 } from "../../application/ports/in/promote-state.port.js";
 import type { ReconciliationState } from "../../domain/reconciliation-state.js";
-import { addVerdict, promoteState } from "../../domain/reconciliation-state.js";
+import { addVerdict } from "../../domain/reconciliation-state.js";
 
 const PHASE_ORDER: ReconciliationPhase[] = [
   "pending",
@@ -18,19 +18,6 @@ const PHASE_RANK = new Map<ReconciliationPhase, number>(
 );
 
 export class MonotonicStatePromoterAdapter implements PromoteStatePort {
-  promoteState(
-    state: ReconciliationState,
-    verdictId: string,
-  ): ReconciliationState {
-    const currentPhase = this.inferPhase(state);
-
-    if (currentPhase === "approved" || currentPhase === "rejected") {
-      return state;
-    }
-
-    return promoteState(state, verdictId);
-  }
-
   promoteToPhase(
     state: ReconciliationState,
     targetPhase: ReconciliationPhase,
