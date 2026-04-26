@@ -1135,11 +1135,11 @@ bounded_contexts:
           jsx: react-jsx
   - name: intent-compiler
     type: core
-    status: frozen
     description: >-
       Semantic intent compilation pipeline — gesture parsing, topology and
-      cardinality invariant validation, rejection emission. FROZEN: no runtime
-      consumers; domain types and ports preserved for future use.
+      cardinality invariant validation, rejection emission. Phase 2a:
+      Unfrozen with concrete adapters for manifest-aware gesture parsing,
+      topology/cardinality validation, and console rejection emission.
     layers:
       domain:
         entities:
@@ -1163,7 +1163,11 @@ bounded_contexts:
             - RejectEmitterPort
           out: []
       infrastructure:
-        adapters: []
+        adapters:
+          - ManifestAwareGestureParserAdapter
+          - TopologyValidatorAdapter
+          - CardinalityValidatorAdapter
+          - ConsoleRejectEmitterAdapter
     depends_on:
       - core-domain
       - shared
