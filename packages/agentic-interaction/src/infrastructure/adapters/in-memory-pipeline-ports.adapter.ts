@@ -3,6 +3,7 @@ import type { DomainCommand } from "@hexagen/core-domain";
 import type {
   NLToDomainCommandParserPort,
   NLParsingError,
+  NLParsingMetadata,
 } from "@hexagen/ai-pipeline";
 import type {
   PromptCompilerPort,
@@ -44,6 +45,31 @@ export class InMemoryNLParserAdapter implements NLToDomainCommandParserPort {
         code: "UNSUPPORTED_INTENT",
         message: `No handler for intent: ${intent}`,
         originalText: intent,
+      },
+    };
+  }
+
+  async parseWithMetadata(
+    intent: string,
+  ): Promise<
+    Result<
+      { commands: DomainCommand[]; metadata: NLParsingMetadata },
+      NLParsingError
+    >
+  > {
+    const parseResult = await this.parse(intent);
+    if (!parseResult.success) {
+      return { success: false, error: parseResult.error };
+    }
+    return {
+      success: true,
+      value: {
+        commands: parseResult.value,
+        metadata: {
+          intentType: "in_memory_parse",
+          parameters: {},
+          confidence: 0.9,
+        },
       },
     };
   }

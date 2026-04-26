@@ -324,5 +324,146 @@ const testChain: ProviderFallbackChain = {
     }
   }
 
+  // --- Test 8: streamStructuredRequest fallback on 429 ---
+  {
+    const originalPrimary = process.env.TEST_OPENAI_API_KEY;
+    const originalFallback = process.env.TEST_OPENAI_FALLBACK_API_KEY;
+    process.env.TEST_OPENAI_API_KEY = "sk-primary";
+    process.env.TEST_OPENAI_FALLBACK_API_KEY = "sk-fallback";
+
+    try {
+      let callCount = 0;
+      const fetchMock = async (_url: string, _opts: RequestInit) => {
+        void _url;
+        void _opts;
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ok: false,
+            status: 429,
+            statusText: "Too Many Requests",
+            text: async () => '{"error":{"message":"Rate limited"}}',
+          } as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(controller) {
+              const encoder = new TextEncoder();
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"choices":[{"delta":{"content":"hello"}}]}\n',
+                ),
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n"));
+              controller.close();
+            },
+          }),
+        } as Response;
+      };
+      const config: CloudLLMPipelineAdapterConfig = {
+        fallbackChain: testChain,
+        fetchFn: fetchMock as typeof fetch,
+      };
+      const adapter = new CloudLLMPipelineAdapter(config);
+      const results: Array<Result<string>> = [];
+      for await (const result of adapter.streamStructuredRequest(
+        makeRequest(),
+      )) {
+        results.push(result);
+      }
+
+      assert.ok(
+        results.some((r) => r.success && r.value === "hello"),
+        "Should succeed via fallback provider",
+      );
+      console.log(
+        "✅ Test 8: streamStructuredRequest fallback on 429 - passed",
+      );
+    } finally {
+      if (originalPrimary !== undefined)
+        process.env.TEST_OPENAI_API_KEY = originalPrimary;
+      else delete process.env.TEST_OPENAI_API_KEY;
+      if (originalFallback !== undefined)
+        process.env.TEST_OPENAI_FALLBACK_API_KEY = originalFallback;
+      else delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
+    }
+  }
+
+  // --- Test 9: streamStructuredRequest no fallback on 403 ---
+  {
+    const originalPrimary = process.env.TEST_OPENAI_API_KEY;
+    const originalFallback = process.env.TEST_OPENAI_FALLBACK_API_KEY;
+    process.env.TEST_OPENAI_API_KEY = "sk-primary";
+    process.env.TEST_OPENAI_FALLBACK_API_KEY = "sk-fallback";
+
+    try {
+      let callCount = 0;
+      const fetchMock = async (_url: string, _opts: RequestInit) => {
+        void _url;
+        void _opts;
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ok: false,
+            status: 403,
+            statusText: "Forbidden",
+            text: async () => '{"error":{"message":"Invalid API key"}}',
+          } as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(controller) {
+              const encoder = new TextEncoder();
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"choices":[{"delta":{"content":"should not reach"}}]}\n',
+                ),
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n"));
+              controller.close();
+            },
+          }),
+        } as Response;
+      };
+      const config: CloudLLMPipelineAdapterConfig = {
+        fallbackChain: testChain,
+        fetchFn: fetchMock as typeof fetch,
+      };
+      const adapter = new CloudLLMPipelineAdapter(config);
+      const results: Array<Result<string>> = [];
+      for await (const result of adapter.streamStructuredRequest(
+        makeRequest(),
+      )) {
+        results.push(result);
+      }
+
+      assert.strictEqual(callCount, 1, "Should not call fallback provider");
+      assert.ok(
+        results.length === 1 && !results[0].success,
+        "Should return error immediately without fallback",
+      );
+      if (results[0] && !results[0].success) {
+        assert.ok(
+          results[0].error.message.includes("403"),
+          "Error should include 403 status",
+        );
+      }
+      console.log(
+        "✅ Test 9: streamStructuredRequest no fallback on 403 - passed",
+      );
+    } finally {
+      if (originalPrimary !== undefined)
+        process.env.TEST_OPENAI_API_KEY = originalPrimary;
+      else delete process.env.TEST_OPENAI_API_KEY;
+      if (originalFallback !== undefined)
+        process.env.TEST_OPENAI_FALLBACK_API_KEY = originalFallback;
+      else delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
+    }
+  }
+
   console.log("✅ All CloudLLMPipelineAdapter tests passed.");
 })();

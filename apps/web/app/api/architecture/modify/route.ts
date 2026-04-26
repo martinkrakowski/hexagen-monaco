@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       patchesApplied: result.value.patchesApplied,
       lintPassed: result.value.lintPassed,
       transactionId: result.value.transactionId,
+      patches: result.value.patches ?? [],
       steps: result.value.steps.map((s) => ({
         name: s.name,
         status: s.status,

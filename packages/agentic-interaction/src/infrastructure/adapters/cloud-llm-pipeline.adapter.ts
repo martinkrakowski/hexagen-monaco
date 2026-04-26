@@ -87,7 +87,57 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       return;
     }
 
-    const provider = providers[0];
+    let lastError: Error | null = null;
+
+    for (const provider of providers) {
+      try {
+        for await (const result of this.streamProvider(provider, request)) {
+          yield result;
+          if (!result.success) {
+            const err: Error =
+              result.error instanceof Error
+                ? result.error
+                : new Error(String(result.error ?? "Unknown error"));
+            lastError = err;
+            const status = this.getErrorStatus(err);
+            if (!isRetryable(status ?? 0)) {
+              return;
+            }
+            break;
+          }
+          return;
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          yield {
+            success: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
+          return;
+        }
+        lastError = error instanceof Error ? error : new Error(String(error));
+        continue;
+      }
+    }
+
+    if (lastError) {
+      yield { success: false, error: lastError };
+    }
+  }
+
+  private getErrorStatus(error: Error): number | null {
+    const match = error.message.match(/(\d{3})/);
+    if (match) {
+      const status = parseInt(match[1], 10);
+      if (status >= 100 && status < 600) return status;
+    }
+    return null;
+  }
+
+  private async *streamProvider(
+    provider: ResolvedProvider,
+    request: LLMRequest,
+  ): AsyncGenerator<Result<string>> {
     const messages = request.messages.map((m) => ({
       role: m.role,
       content: m.content,
@@ -141,12 +191,10 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
 
       if (!httpResponse.ok) {
         const errorText = await httpResponse.text();
-        yield {
-          success: false,
-          error: new Error(
-            `LLM API error: ${httpResponse.status} ${errorText}`,
-          ),
-        };
+        const error = new Error(
+          `LLM API error: ${httpResponse.status} ${errorText}`,
+        );
+        yield { success: false, error };
         return;
       }
 

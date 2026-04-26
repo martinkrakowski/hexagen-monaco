@@ -131,6 +131,7 @@ export class ModifyArchitectureUseCase {
           lintPassed,
           transactionId: commitResult.value.id,
           steps: run.steps,
+          patches,
         },
       };
     } catch (err) {

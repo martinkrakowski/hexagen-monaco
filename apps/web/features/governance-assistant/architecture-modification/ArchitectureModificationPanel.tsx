@@ -13,9 +13,6 @@ import { useArchitectureModification } from "../hooks/useArchitectureModificatio
 import { PipelineStepIndicator } from "./PipelineStepIndicator";
 import { PatchReviewPanel } from "./PatchReviewPanel";
 import { ManifestDiffView } from "./ManifestDiffView";
-import type { Patch } from "@hexagen/reconciliation-engine";
-
-const SAMPLE_PATCHES: Patch[] = [];
 
 export function ArchitectureModificationPanel() {
   const {
@@ -29,6 +26,8 @@ export function ArchitectureModificationPanel() {
     acceptPatch,
     rejectPatch,
   } = useArchitectureModification();
+
+  const patches = result?.patches ?? [];
 
   const [intent, setIntent] = useState("");
 
@@ -125,9 +124,9 @@ export function ArchitectureModificationPanel() {
           </div>
         )}
 
-        {isCompleted && SAMPLE_PATCHES.length > 0 && (
+        {isCompleted && patches.length > 0 && (
           <PatchReviewPanel
-            patches={SAMPLE_PATCHES}
+            patches={patches}
             onAccept={acceptPatch}
             onReject={rejectPatch}
           />

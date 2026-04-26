@@ -18,16 +18,16 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", message: "Invalid JSON" })}\n\n`,
+      { status: 400, headers: { "Content-Type": "text/event-stream" } },
+    );
   }
 
   if (!body.intent || typeof body.intent !== "string") {
     return new Response(
-      JSON.stringify({ error: "'intent' must be a non-empty string." }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
+      `data: ${JSON.stringify({ type: "error", message: "'intent' must be a non-empty string." })}\n\n`,
+      { status: 400, headers: { "Content-Type": "text/event-stream" } },
     );
   }
 
@@ -52,6 +52,17 @@ export async function POST(request: NextRequest) {
       try {
         send("pipeline_start", { intent: body.intent });
 
+        const stepNames = [
+          "parse-nl-intent",
+          "compile-prompt",
+          "llm-inference",
+          "reconcile",
+          "commit-patches",
+        ];
+        for (const name of stepNames) {
+          send("step_running", { name });
+        }
+
         const useCase = getModifyArchitectureUseCase();
         const result = await useCase.execute(
           body.intent,
@@ -73,6 +84,7 @@ export async function POST(request: NextRequest) {
             patchesApplied: result.value.patchesApplied,
             lintPassed: result.value.lintPassed,
             transactionId: result.value.transactionId,
+            patches: result.value.patches ?? [],
           });
         } else {
           send("pipeline_error", {

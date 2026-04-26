@@ -1,6 +1,7 @@
 import type { PipelineStep } from "@hexagen/ai-pipeline";
 import type { IntentLineage } from "@hexagen/core-domain";
 import type { Result } from "@hexagen/shared";
+import type { Patch } from "@hexagen/reconciliation-engine";
 
 export interface ModificationResult {
   pipelineRunId: string;
@@ -8,6 +9,7 @@ export interface ModificationResult {
   lintPassed: boolean;
   transactionId: string;
   steps: PipelineStep[];
+  patches: Patch[];
 }
 
 export interface ArchitectureModificationPort {

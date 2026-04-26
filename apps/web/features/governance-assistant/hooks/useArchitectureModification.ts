@@ -21,6 +21,7 @@ export interface PipelineCompleteData {
   patchesApplied: number;
   lintPassed: boolean;
   transactionId: string;
+  patches: Patch[];
 }
 
 export interface ArchitectureModificationResult {
@@ -29,6 +30,7 @@ export interface ArchitectureModificationResult {
   lintPassed: boolean;
   transactionId: string;
   steps: StepProgress[];
+  patches: Patch[];
 }
 
 interface ArchitectureModificationState {
@@ -143,7 +145,17 @@ export function useArchitectureModification() {
               continue;
             }
 
-            if (currentEvent === "step_complete") {
+            if (currentEvent === "step_running") {
+              const stepName = parsed.name as string;
+              setState((prev) => ({
+                ...prev,
+                steps: prev.steps.map((s) =>
+                  s.name === stepName
+                    ? { ...s, status: "running" as PipelineStepStatus }
+                    : s,
+                ),
+              }));
+            } else if (currentEvent === "step_complete") {
               const stepName = parsed.name as string;
               const stepStatus = parsed.status as PipelineStepStatus;
               const durationMs = parsed.durationMs as number | null;
@@ -152,9 +164,13 @@ export function useArchitectureModification() {
                 steps: prev.steps.map((s) =>
                   s.name === stepName
                     ? { ...s, status: stepStatus, durationMs }
-                    : s.name === stepName.replace("complete", "running")
-                      ? { ...s, status: stepStatus, durationMs }
-                      : s,
+                    : {
+                        ...s,
+                        status:
+                          s.status === "running"
+                            ? ("completed" as PipelineStepStatus)
+                            : s.status,
+                      },
                 ),
               }));
             } else if (currentEvent === "pipeline_complete") {
@@ -163,10 +179,7 @@ export function useArchitectureModification() {
                 ...prev,
                 status: "completed",
                 result: {
-                  pipelineRunId: completeData.pipelineRunId,
-                  patchesApplied: completeData.patchesApplied,
-                  lintPassed: completeData.lintPassed,
-                  transactionId: completeData.transactionId,
+                  ...completeData,
                   steps: [...prev.steps],
                 },
               }));
@@ -213,13 +226,44 @@ export function useArchitectureModification() {
     });
   }, []);
 
-  const acceptPatch = useCallback((_patch: Patch) => {
-    void _patch;
-  }, []);
+  const acceptPatch = useCallback(
+    async (patch: Patch) => {
+      const response = await fetch("/api/architecture/modify/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: state.result?.transactionId,
+          patches: [patch],
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+      return data;
+    },
+    [state.result?.transactionId],
+  );
 
-  const rejectPatch = useCallback((_patch: Patch) => {
-    void _patch;
-  }, []);
+  const rejectPatch = useCallback(
+    async (patch: Patch) => {
+      const response = await fetch("/api/architecture/modify/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: state.result?.transactionId,
+          patches: [patch],
+          reason: "User rejected",
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+      return data;
+    },
+    [state.result?.transactionId],
+  );
 
   return {
     ...state,
