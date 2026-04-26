@@ -1,4 +1,5 @@
-import type { Manifest, Result } from "@hexagen/shared";
+import type { Manifest } from "@hexagen/project-configuration";
+import type { Result } from "@hexagen/shared";
 import type { ProjectConfigurationReadPort } from "../ports/out/project-configuration-read.port.js";
 
 export class GetManifestResourceUseCase {

@@ -24,6 +24,9 @@ export interface VisualVariant {
   readonly handleColor: string;
   readonly headerText: string;
   readonly hexColor: string;
+  readonly structuralHandleColor?: string;
+  readonly publishedEventHandleColor?: string;
+  readonly subscribedEventHandleColor?: string;
 }
 
 export function categoryFromNodeKind(kind: NodeKind): VisualVariantCategory {

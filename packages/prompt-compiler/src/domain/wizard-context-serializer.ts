@@ -1,4 +1,4 @@
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 
 export function serializeWizardContext(wizardData: WizardData): string {
   const parts: string[] = [];

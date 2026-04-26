@@ -1,13 +1,13 @@
 import type {
-  LLMResponse,
   ReconciliationResult,
-  DomainASTLike,
+  StructuredLLMOutput,
+  ProjectSpecLike,
   Identifier,
 } from "../../../domain/llm-response.js";
 
 export interface ReconcileRequest {
-  response: LLMResponse;
-  currentAST: DomainASTLike;
+  structuredOutput: StructuredLLMOutput;
+  currentManifest: ProjectSpecLike;
   intentId: Identifier;
 }
 

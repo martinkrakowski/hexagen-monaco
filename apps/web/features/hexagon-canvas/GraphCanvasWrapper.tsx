@@ -6,10 +6,11 @@ import { useCanvasState } from "./hooks/useCanvasState";
 import { HexagonCanvas } from "./HexagonCanvas";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { NodeEditorDialog } from "./NodeEditorDialog";
-import type { Result, WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
+import type { Result } from "@hexagen/shared";
 
 interface GraphCanvasWrapperProps {
-  projectId: string;
+  projectId?: string;
   wizardData?: WizardData;
 }
 
@@ -52,7 +53,7 @@ export function GraphCanvasWrapper({
 
   if ("error" in state) {
     return (
-      <div className="flex items-center justify-center w-full h-full min-h-[400px]">
+      <div className="flex items-center justify-center w-full h-full min-h-96">
         <div className="text-destructive">
           Failed to load graph: {state.error.message}
         </div>
@@ -62,7 +63,7 @@ export function GraphCanvasWrapper({
 
   if (state.nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center w-full h-full min-h-[400px] bg-muted/20">
+      <div className="flex items-center justify-center w-full h-full min-h-96 bg-muted/20">
         <div className="text-center text-muted-foreground">
           <p className="text-lg font-medium mb-2">No Architecture Data</p>
           <p className="text-sm">
@@ -79,7 +80,7 @@ export function GraphCanvasWrapper({
 
   return (
     <ReactFlowProvider>
-      <div className="w-full h-full min-h-[400px] relative">
+      <div className="w-full h-full min-h-96 relative">
         <HexagonCanvas
           nodes={state.nodes}
           edges={state.edges}

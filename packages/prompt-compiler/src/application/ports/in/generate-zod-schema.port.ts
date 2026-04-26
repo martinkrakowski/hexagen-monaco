@@ -2,6 +2,27 @@ import type { Identifier } from "@hexagen/shared";
 import type { StructuredOutputSchema } from "../../../domain/index.js";
 
 /**
+ * Compiled schema contract — deterministic schema definition derived from
+ * governance rules and intent manifests.
+ */
+export interface CompiledSchemaContract {
+  name: string;
+  description: string;
+  fields: Record<string, { type: string; required: boolean }>;
+  constraints: Record<string, unknown>;
+  authorizedBy: string;
+}
+
+/**
+ * Governance rules applied during schema generation
+ */
+export interface GovernanceRules {
+  required: string[];
+  cardinality?: Record<string, { min: number; max: number }>;
+  priority?: number;
+}
+
+/**
  * Request to generate a Zod schema for structured output validation
  */
 export interface GenerateZodSchemaRequest {
@@ -13,6 +34,10 @@ export interface GenerateZodSchemaRequest {
   exampleData: unknown;
   /** Optional template overrides */
   templateOverrides?: Record<string, string>;
+  /** Optional compiled contract for deterministic schema generation */
+  compiledContract?: CompiledSchemaContract;
+  /** Optional governance rules */
+  governance?: GovernanceRules;
 }
 
 /**

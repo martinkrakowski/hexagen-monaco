@@ -14,11 +14,10 @@
     "build": "tsc",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@hexagen/core-domain": "workspace:*",
-    "@hexagen/shared": "workspace:*"
+    "@dagrejs/dagre": "^1.1.4"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

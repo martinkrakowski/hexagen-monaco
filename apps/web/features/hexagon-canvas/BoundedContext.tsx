@@ -4,12 +4,8 @@ import { memo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position } from "@xyflow/react";
 import { Package, Gem, Zap, Settings2, X } from "lucide-react";
-import type { DomainEventRef } from "@hexagen/shared";
-import type {
-  VisualVariant,
-  VisualVariantCategory,
-} from "@hexagen/ui-projection-compiler";
-import { CvaVariantResolverAdapter } from "@hexagen/ui-projection-compiler";
+import type { DomainEventRef } from "@hexagen/project-configuration";
+import type { VisualVariantCategory } from "@hexagen/ui-projection-compiler";
 
 interface BoundedContextData extends Record<string, unknown> {
   label: string;
@@ -22,7 +18,18 @@ interface BoundedContextData extends Record<string, unknown> {
     | "inner";
   isPeer?: boolean;
   side?: "north" | "south" | "east" | "west";
-  category?: string;
+  compilerCategory?: VisualVariantCategory;
+  variant?: {
+    headerBg: string;
+    bodyBg: string;
+    border: string;
+    handleColor: string;
+    headerText: string;
+    hexColor: string;
+    structuralHandleColor?: string;
+    publishedEventHandleColor?: string;
+    subscribedEventHandleColor?: string;
+  };
   stats?: {
     aggregates?: number;
     aggregateItems?: string[];
@@ -38,58 +45,6 @@ interface BoundedContextData extends Record<string, unknown> {
   parentId?: string;
 }
 
-// Composition root: the CvaVariantResolverAdapter is injected here by the
-// ui-projection-compiler. No more hard-coded palette maps in feature code —
-// every visual variant flows through the compiler.
-const variantResolver = new CvaVariantResolverAdapter();
-
-const KNOWN_CATEGORIES: readonly VisualVariantCategory[] = [
-  "driving",
-  "driven",
-  "presentation",
-  "infrastructure",
-  "entity",
-  "value-object",
-  "port",
-  "use-case",
-  "adapter",
-  "domain-event",
-  "policy",
-  "aggregate",
-  "service",
-  "default",
-] as const;
-
-function isKnownCategory(key: string): key is VisualVariantCategory {
-  return (KNOWN_CATEGORIES as readonly string[]).includes(key);
-}
-
-function resolveVariantForNodeType(
-  nodeType: Exclude<
-    BoundedContextData["type"],
-    undefined | "bounded-context" | "inner"
-  >,
-): VisualVariant {
-  const category: VisualVariantCategory =
-    nodeType === "entity"
-      ? "entity"
-      : nodeType === "port"
-        ? "port"
-        : nodeType === "use-case"
-          ? "use-case"
-          : "adapter";
-  return variantResolver.resolve(category);
-}
-
-function getPortCategoryStyle(
-  category: string | undefined,
-): VisualVariant | null {
-  if (!category) return null;
-  const key = category.toLowerCase();
-  if (!isKnownCategory(key)) return null;
-  return variantResolver.resolve(key);
-}
-
 const DOMAIN_COMPASS = [
   {
     key: "aggregates",
@@ -99,26 +54,26 @@ const DOMAIN_COMPASS = [
     color: "text-amber-500",
   },
   {
-    key: "valueObjects",
-    itemsKey: "valueObjectItems",
-    label: "Value Objects",
-    Icon: Gem,
-    color: "text-emerald-500",
-  },
-  {
-    key: "events",
-    itemsKey: "eventItems",
-    label: "Events",
-    Icon: Zap,
-    color: "text-violet-500",
-  },
-  {
-    key: "services",
-    itemsKey: "serviceItems",
-    label: "Services",
-    Icon: Settings2,
-    color: "text-sky-500",
-  },
+     key: "valueObjects",
+     itemsKey: "valueObjectItems",
+     label: "Value Objects",
+     Icon: Gem,
+     color: "text-success",
+   },
+   {
+     key: "events",
+     itemsKey: "eventItems",
+     label: "Events",
+     Icon: Zap,
+     color: "text-info",
+   },
+   {
+     key: "services",
+     itemsKey: "serviceItems",
+     label: "Services",
+     Icon: Settings2,
+     color: "text-info",
+   },
 ] as const;
 
 type CompassKey = (typeof DOMAIN_COMPASS)[number]["label"];
@@ -189,9 +144,9 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
                 key={`${label}-${item}`}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-sm bg-muted/50 text-foreground border border-border/50"
               >
-                <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">
-                  {idx + 1}
-                </span>
+                 <span className="text-xs font-mono text-muted-foreground w-4 shrink-0">
+                   {idx + 1}
+                 </span>
                 {item}
               </li>
             ))}
@@ -229,9 +184,9 @@ function UnifiedBoundedContextComponent({
         style={{ width: 140, height: 28 }}
         className="relative flex flex-col items-center justify-center select-none"
       >
-        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
-          {String(data.label || "")}
-        </span>
+         <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+           {String(data.label || "")}
+         </span>
         <div className="w-full h-px bg-muted-foreground/20 mt-1" />
         {/* South handle for entity/use-case connections */}
         <Handle
@@ -246,47 +201,43 @@ function UnifiedBoundedContextComponent({
 
   // Two-zone satellite card nodes (entity, port, use-case, adapter — NOT inner)
   if (!isHexagon) {
-    const styles =
-      nodeType === "entity" ||
-      nodeType === "port" ||
-      nodeType === "use-case" ||
-      nodeType === "adapter"
-        ? resolveVariantForNodeType(nodeType)
-        : variantResolver.resolve("entity");
+    const variant = data.variant ?? {
+      headerBg: "",
+      bodyBg: "",
+      border: "",
+      handleColor: "",
+      headerText: "",
+      hexColor: "",
+    };
 
-    // Port nodes with north/south handles
     if (nodeType === "port") {
       const side = data.side as "north" | "south" | undefined;
       const showNorth = side === "north";
       const showSouth = side === "south";
 
-      const categoryStyle = getPortCategoryStyle(data.category);
-      const stylesToUse = categoryStyle ?? styles;
-
       return (
         <div
           style={{ width: 140, height: 72 }}
-          className={`relative rounded-lg border overflow-hidden transition-colors select-none ${stylesToUse.bodyBg} ${stylesToUse.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
+          className={`relative rounded-lg border overflow-hidden transition-colors select-none ${variant.bodyBg} ${variant.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
         >
-          {/* Header zone — category as label */}
           <div
-            className={`h-7 ${stylesToUse.headerBg} flex items-center justify-center ${stylesToUse.headerText} text-xs font-semibold truncate px-2`}
+            className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
           >
-            {data.category ? String(data.category).toUpperCase() : "PORT"}
+            {data.compilerCategory
+              ? String(data.compilerCategory).toUpperCase()
+              : null}
           </div>
-          {/* Body zone — service name as plain text */}
           <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
             <span className="text-xs font-medium text-foreground text-center truncate">
               {String(data.label || "")}
             </span>
           </div>
-          {/* Handles */}
           {showNorth && (
             <Handle
               type="source"
               position={Position.Top}
               id="north"
-              className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
+              className={`${variant.handleColor} !w-3 !h-3 border-2 border-background`}
             />
           )}
           {showSouth && (
@@ -294,7 +245,7 @@ function UnifiedBoundedContextComponent({
               type="target"
               position={Position.Bottom}
               id="south"
-              className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
+              className={`${variant.handleColor} !w-3 !h-3 border-2 border-background`}
             />
           )}
           {!showNorth && !showSouth && (
@@ -303,13 +254,13 @@ function UnifiedBoundedContextComponent({
                 type="target"
                 position={Position.Left}
                 id="west"
-                className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
+                className={`${variant.handleColor} !w-3 !h-3 border-2 border-background`}
               />
               <Handle
                 type="source"
                 position={Position.Right}
                 id="east"
-                className={`${stylesToUse.handleColor} !w-3 !h-3 border-2 border-background`}
+                className={`${variant.handleColor} !w-3 !h-3 border-2 border-background`}
               />
             </>
           )}
@@ -317,41 +268,37 @@ function UnifiedBoundedContextComponent({
       );
     }
 
-    // Entity / use-case / adapter nodes with north/south handles
     const nodeWidth = 140;
     const nodeHeight = 72;
 
     return (
       <div
         style={{ width: nodeWidth, height: nodeHeight }}
-        className={`relative rounded-lg border overflow-hidden transition-colors select-none ${styles.bodyBg} ${styles.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
+        className={`relative rounded-lg border overflow-hidden transition-colors select-none ${variant.bodyBg} ${variant.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
       >
-        {/* Header zone — category as label */}
         <div
-          className={`h-7 ${styles.headerBg} flex items-center justify-center ${styles.headerText} text-xs font-semibold truncate px-2`}
+          className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
         >
-          {data.category
-            ? String(data.category).toUpperCase()
-            : nodeType.toUpperCase()}
+          {data.compilerCategory
+            ? String(data.compilerCategory).toUpperCase()
+            : null}
         </div>
-        {/* Body zone — label as plain text */}
         <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
           <span className="text-xs font-medium text-foreground text-center truncate">
             {String(data.label || "")}
           </span>
         </div>
-        {/* Handles */}
         <Handle
           type="target"
           position={Position.Top}
           id="north"
-          className={`${styles.handleColor} !w-2.5 !h-2.5`}
+          className={`${variant.handleColor} !w-2.5 !h-2.5`}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="south"
-          className={`${styles.handleColor} !w-2.5 !h-2.5`}
+          className={`${variant.handleColor} !w-2.5 !h-2.5`}
         />
       </div>
     );
@@ -359,6 +306,13 @@ function UnifiedBoundedContextComponent({
 
   // Hexagonal bounded context — minimal visual tweaks to existing design
   const dimension = 500;
+
+  const structuralHandle =
+    data.variant?.structuralHandleColor ?? data.variant?.handleColor ?? "";
+  const publishedHandle =
+    data.variant?.publishedEventHandleColor ?? data.variant?.handleColor ?? "";
+  const subscribedHandle =
+    data.variant?.subscribedEventHandleColor ?? data.variant?.handleColor ?? "";
 
   return (
     <div
@@ -435,12 +389,12 @@ function UnifiedBoundedContextComponent({
             .map((line, lineIdx) => (
               <span
                 key={`${line}-${lineIdx}`}
-                className={
-                  lineIdx > 0
-                    ? "opacity-50 text-[9px] lowercase mt-1 font-normal tracking-normal normal-case"
-                    : ""
-                }
-              >
+                 className={
+                   lineIdx > 0
+                     ? "opacity-50 text-xs lowercase mt-1 font-normal tracking-normal normal-case"
+                     : ""
+                 }
+               >
                 {line}
               </span>
             ))}
@@ -461,9 +415,9 @@ function UnifiedBoundedContextComponent({
               aria-label={`View ${label}`}
             >
               <Icon size={16} className={color} />
-              <span className="text-[7px] uppercase tracking-tighter font-bold text-muted-foreground mt-1">
-                {label}
-              </span>
+               <span className="text-xs uppercase tracking-tighter font-bold text-muted-foreground mt-1">
+                 {label}
+               </span>
               <span className="text-xs font-mono text-foreground">
                 {getStatCount(data.stats, key)}
               </span>
@@ -484,46 +438,46 @@ function UnifiedBoundedContextComponent({
           type="target"
           position={Position.Top}
           id="north-0"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
         />
         <Handle
           type="target"
           position={Position.Top}
           id="north-1"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
           style={{ left: "60%" }}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="south-0"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="south-1"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
           style={{ left: "35%" }}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           id="south-2"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
           style={{ left: "70%" }}
         />
         <Handle
           type="target"
           position={Position.Left}
           id="west"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
         />
         <Handle
           type="source"
           position={Position.Right}
           id="east"
-          className="!bg-sky-500 !w-3 !h-3 border-2 border-background"
+          className={`${structuralHandle} !w-3 !h-3 border-2 border-background`}
         />
         {(data.publishedEvents ?? []).slice(0, 5).map((evt, i) => (
           <Handle
@@ -534,7 +488,7 @@ function UnifiedBoundedContextComponent({
             style={{
               top: getSlottedOffsets((data.publishedEvents ?? []).length)[i],
             }}
-            className="!bg-amber-500 !w-2.5 !h-2.5 !border !border-background !rounded-sm"
+            className={`${publishedHandle} !w-2.5 !h-2.5 !border !border-background !rounded-sm`}
             title={`Publishes: ${evt.label}`}
           />
         ))}
@@ -547,7 +501,7 @@ function UnifiedBoundedContextComponent({
             style={{
               top: getSlottedOffsets((data.subscribedEvents ?? []).length)[i],
             }}
-            className="!bg-violet-500 !w-2.5 !h-2.5 !border !border-background !rounded-sm"
+            className={`${subscribedHandle} !w-2.5 !h-2.5 !border !border-background !rounded-sm`}
             title={`Subscribes to: ${evt.label}`}
           />
         ))}

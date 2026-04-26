@@ -21,7 +21,11 @@ import type {
 } from "@hexagen/shared";
 
 import type { LoggerPort } from "@hexagen/shared";
-import type { IArchitectureGraphProviderPort } from "@hexagen/visualization";
+import type {
+  IArchitectureGraphProviderPort,
+  GenerateHexagonalMapPort,
+} from "@hexagen/visualization";
+import { HexagonalMapGeneratorAdapter } from "@hexagen/visualization";
 import type { EventBusPort, IntentBusPort } from "@hexagen/messaging";
 import type {
   LLMProviderPort,
@@ -37,6 +41,16 @@ import type {
   ChatPersistencePort,
 } from "@hexagen/local-llm";
 import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
+import {
+  CvaVariantResolverAdapter,
+  DefaultNodeVisualMapperAdapter,
+  MapNodeVisualUseCase,
+} from "@hexagen/ui-projection-compiler";
+import type { MapNodeVisualPort } from "@hexagen/ui-projection-compiler";
+import {
+  DagreGraphLayoutAdapter,
+  SolveGraphLayoutUseCase,
+} from "@hexagen/layout-engine";
 import {
   LocalStoragePersistenceAdapter,
   LocalStorageCanvasLayoutAdapter,
@@ -133,6 +147,12 @@ export const wireDependencies = () => {
     new ArchitectureGraphProviderAdapter() satisfies IArchitectureGraphProviderPort,
   );
 
+  // Hexagonal map generator port → concrete adapter instance
+  registry.set(
+    "GenerateHexagonalMapPort",
+    new HexagonalMapGeneratorAdapter() satisfies GenerateHexagonalMapPort,
+  );
+
   // Event Bus → in-memory implementation
   registry.set("EventBusPort", createEventBus() satisfies EventBusPort);
 
@@ -190,6 +210,20 @@ export const wireDependencies = () => {
     new EphemeralSecretVaultAdapter() satisfies SecretVaultPort,
   );
 
+  // Projection compiler → canvas rendering pipeline
+  const variantResolver = new CvaVariantResolverAdapter();
+  const mapNodeVisualPort: MapNodeVisualPort =
+    new DefaultNodeVisualMapperAdapter(variantResolver);
+  const mapNodeVisualUseCase = new MapNodeVisualUseCase(mapNodeVisualPort);
+  registry.set("MapNodeVisualUseCase", mapNodeVisualUseCase);
+
+  // Graph layout → dagre-based auto-layout
+  const dagreGraphLayoutAdapter = new DagreGraphLayoutAdapter();
+  const solveGraphLayoutUseCase = new SolveGraphLayoutUseCase(
+    dagreGraphLayoutAdapter,
+  );
+  registry.set("SolveGraphLayoutUseCase", solveGraphLayoutUseCase);
+
   // Server LLM Request Port -> dedicated use case
   const defaultModel = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
   registry.set(
@@ -199,6 +233,14 @@ export const wireDependencies = () => {
       defaultModel,
     ) satisfies ServerLLMRequestPort,
   );
+
+  // TODO: Wire REM context when app-level intent tracking available (Phase 3)
+  // REM (RuleExecutionManifest) will be integrated when UI layer event streams are available
+  // const rem = buildRuntimeExecutionManifest(manifest);
+  // const lineage = getCurrentIntentLineage();
+  // const transactionManager = new InMemoryTransactionManagerAdapter();
+  // const executeTransactionUseCase = new ExecuteTransactionUseCase(transactionManager);
+  // registry.set("ExecuteTransactionUseCase", executeTransactionUseCase);
 
   return {
     get: <T>(portName: string): T => {
@@ -270,3 +312,12 @@ export const getSecretVault = () =>
 
 export const getServerLLMRequestPort = () =>
   dependencies.get<ServerLLMRequestPort>("ServerLLMRequestPort");
+
+export const getMapNodeVisualUseCase = () =>
+  dependencies.get<MapNodeVisualUseCase>("MapNodeVisualUseCase");
+
+export const getGenerateHexagonalMapUseCase = () =>
+  dependencies.get<GenerateHexagonalMapPort>("GenerateHexagonalMapPort");
+
+export const getSolveGraphLayoutUseCase = () =>
+  dependencies.get<SolveGraphLayoutUseCase>("SolveGraphLayoutUseCase");

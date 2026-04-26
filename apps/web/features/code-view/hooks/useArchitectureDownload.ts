@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import JSZip from "jszip";
 import yaml from "js-yaml";
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 import { wizardToManifest } from "@/lib/wizard-to-manifest";
 
 export function useArchitectureDownload(wizardData: WizardData) {

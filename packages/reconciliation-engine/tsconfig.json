@@ -6,7 +6,8 @@
     "declaration": true,
     "emitDeclarationOnly": false,
     "composite": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "paths": {}
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", ".turbo"],

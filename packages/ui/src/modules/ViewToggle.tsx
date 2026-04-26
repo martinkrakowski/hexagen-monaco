@@ -1,24 +1,30 @@
-import type { HTMLAttributes, ForwardRefRenderFunction } from "react";
-import { forwardRef } from "react";
+import type { HTMLAttributes, Ref } from "react";
 import { Eye, Code } from "lucide-react";
 import { cn } from "../lib/utils.js";
 
-export type ViewMode = "visual" | "code";
-
-export interface ViewToggleProps extends Omit<
+export interface ViewToggleProps<T extends string = string> extends Omit<
   HTMLAttributes<HTMLDivElement>,
   "onChange"
 > {
-  view: ViewMode;
-  onChange: (view: ViewMode) => void;
+  view: T;
+  options: readonly [T, T];
+  onChange: (view: T) => void;
+  ariaLabel?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
-const ViewToggleComponent: ForwardRefRenderFunction<
-  HTMLDivElement,
-  ViewToggleProps
-> = ({ className, view, onChange, ...props }, ref) => {
+export function ViewToggle<T extends string = string>({
+  className,
+  view,
+  options,
+  onChange,
+  ariaLabel = "Toggle view",
+  ref,
+  ...props
+}: ViewToggleProps<T>) {
+  const [optionA, optionB] = options;
   const handleChange = () => {
-    onChange(view === "visual" ? "code" : "visual");
+    onChange(view === optionA ? optionB : optionA);
   };
 
   return (
@@ -31,15 +37,15 @@ const ViewToggleComponent: ForwardRefRenderFunction<
         <input
           type="checkbox"
           className="sr-only peer"
-          checked={view === "code"}
+          checked={view === optionB}
           onChange={handleChange}
-          aria-label="Toggle between visual and code view"
+          aria-label={ariaLabel}
         />
 
         <div className="w-16 h-8 bg-muted rounded-full border-2 border-transparent peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 transition-colors peer-checked:bg-primary/10" />
 
         <div className="absolute left-1 top-1 w-6 h-6 bg-background rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
-          {view === "visual" ? (
+          {view === optionA ? (
             <Eye className="h-3.5 w-3.5 text-primary" />
           ) : (
             <Code className="h-3.5 w-3.5 text-primary" />
@@ -50,20 +56,17 @@ const ViewToggleComponent: ForwardRefRenderFunction<
           <Eye
             className={cn(
               "h-3.5 w-3.5 transition-opacity",
-              view === "visual" ? "opacity-0" : "opacity-20",
+              view === optionA ? "opacity-0" : "opacity-20",
             )}
           />
           <Code
             className={cn(
               "h-3.5 w-3.5 transition-opacity",
-              view === "code" ? "opacity-0" : "opacity-20",
+              view === optionB ? "opacity-0" : "opacity-20",
             )}
           />
         </div>
       </label>
     </div>
   );
-};
-
-export const ViewToggle = forwardRef(ViewToggleComponent);
-ViewToggle.displayName = "ViewToggle";
+}

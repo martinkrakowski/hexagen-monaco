@@ -4,7 +4,7 @@ import yaml from "js-yaml";
 import { execSync } from "node:child_process";
 import type { Manifest } from "./types/manifest.js";
 import { ok, err, type Result } from "./domain/result.js";
-import { ManifestSchema } from "@hexagen/shared";
+import { ManifestSchema } from "@hexagen/project-configuration";
 
 export type { Result };
 

@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
 import { ok, err, type Result } from "@hexagen/shared";
-import type { Manifest } from "@hexagen/shared";
-import { ManifestSchema } from "@hexagen/shared";
+import type { Manifest } from "../../domain/model/manifest-schema/manifest-schema";
+import { ManifestSchema } from "../../domain/model/manifest-schema/manifest-schema";
 import type { ProjectConfigurationReadPort } from "../ports/out/project-configuration-read.port";
 
 export class ReadManifestUseCase implements ProjectConfigurationReadPort {

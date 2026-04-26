@@ -5,14 +5,15 @@ import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
 import { CodeView } from "../code-view/CodeView";
 import { EditableMonaco } from "../monaco-editor/EditableMonaco";
 
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
+import type { ViewMode } from "@/types/view-mode";
 
 interface ArchitecturePreviewPaneProps {
   wizardData: WizardData;
-  viewMode: "visual" | "code";
+  viewMode: ViewMode;
   selectedFileId: string | null;
   editedFiles: Record<string, string>;
-  onViewModeChange: (mode: "visual" | "code") => void;
+  onViewModeChange: (mode: ViewMode) => void;
   onFileSelect: (fileId: string | null) => void;
   onFileContentChange: (fileId: string, content: string) => void;
   onFileSave: (fileId: string) => void;
@@ -44,11 +45,16 @@ export function ArchitecturePreviewPane({
         <span className="font-semibold text-sm truncate">
           Architecture Preview
         </span>
-        <ViewToggle view={viewMode} onChange={onViewModeChange} />
+        <ViewToggle
+          view={viewMode}
+          options={["visual", "code"] as const}
+          onChange={onViewModeChange}
+          ariaLabel="Toggle between visual and code view"
+        />
       </div>
       <CardContent className="flex-1 p-0 overflow-hidden relative">
         {viewMode === "visual" ? (
-          <GraphCanvasWrapper projectId="demo" wizardData={wizardData} />
+          <GraphCanvasWrapper wizardData={wizardData} />
         ) : (
           <CodeView
             wizardData={wizardData}

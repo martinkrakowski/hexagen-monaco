@@ -1,4 +1,4 @@
-import type { LinterReport } from "@hexagen/shared";
+import type { LinterReport } from "@hexagen/governance";
 import { GetLinterReportResourceUseCase } from "../../application/use-cases/get-linter-report-resource.use-case.js";
 
 export class LinterReportResourceAdapter {

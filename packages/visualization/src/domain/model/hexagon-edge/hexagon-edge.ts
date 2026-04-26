@@ -18,6 +18,7 @@ export interface HexagonEdge {
   markerEnd?: string;
   style?: Record<string, string>;
   className?: string;
+  isSharedKernel?: boolean;
 }
 
 export function createHexagonEdge(

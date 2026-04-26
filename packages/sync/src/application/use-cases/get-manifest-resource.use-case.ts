@@ -1,5 +1,5 @@
 import type { ProjectConfigurationReadPort } from "../ports/out/project-configuration-read.port.js";
-import { ManifestSchema, type Manifest } from "@hexagen/shared";
+import { ManifestSchema, type Manifest } from "@hexagen/project-configuration";
 
 export class GetManifestResourceUseCase {
   constructor(private readonly projectConfig: ProjectConfigurationReadPort) {}

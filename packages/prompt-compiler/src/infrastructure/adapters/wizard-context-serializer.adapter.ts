@@ -1,4 +1,4 @@
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 
 /**
  * Adapter that serializes WizardData into a string format suitable for use as context in prompts.

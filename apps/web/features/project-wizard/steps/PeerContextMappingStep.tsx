@@ -5,7 +5,7 @@ import type {
   ProjectConfig,
   PeerContextMapping,
 } from "@hexagen/project-configuration";
-import { getWorkspaceTemplate } from "@hexagen/shared";
+import { getWorkspaceTemplate } from "@hexagen/project-configuration";
 
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";

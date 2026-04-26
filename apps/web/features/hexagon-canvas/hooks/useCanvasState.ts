@@ -1,19 +1,23 @@
 import { useState, useCallback, useEffect } from "react";
-import dagre from "@dagrejs/dagre";
 import type {
   HexagonNode,
-  HexagonNodeType,
   HexagonEdge,
   CanvasViewport,
 } from "@hexagen/visualization";
 import {
   RenderHexagonCanvasUseCase,
   createCanvasViewport,
+  createDefaultHexagonNode,
 } from "@hexagen/visualization";
-import { getArchitectureGraphProvider } from "@/lib/wire";
-import type { WizardData } from "@hexagen/shared";
-import type { HexagonNodeWithLayout } from "@hexagen/visualization";
-import { generateHexagonalContextMap } from "../lib/generate-hexagonal-context-map";
+import { nodeKindFromHexagonType } from "@hexagen/ui-projection-compiler";
+import type { SolveGraphLayoutUseCase } from "@hexagen/layout-engine";
+import {
+   getArchitectureGraphProvider,
+   getGenerateHexagonalMapUseCase,
+   getMapNodeVisualUseCase,
+   getSolveGraphLayoutUseCase,
+ } from "@/lib/wire";
+import type { WizardData } from "@hexagen/project-configuration";
 import { useCanvasLayout } from "./useCanvasLayout";
 
 interface GraphState {
@@ -41,56 +45,33 @@ interface UseCanvasStateError {
   error: Error;
 }
 
-function applyDagreLayout(
+function applyGraphLayout(
   nodes: HexagonNode[],
   edges: HexagonEdge[],
+  useCase: SolveGraphLayoutUseCase,
 ): HexagonNode[] {
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "TB", nodesep: 80, ranksep: 100 });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  const nodeWidth = 180;
-  const nodeHeight = 100;
-
-  nodes.forEach((node) => {
-    g.setNode(node.id, { width: nodeWidth, height: nodeHeight });
-  });
-
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
-
-  dagre.layout(g);
-
+  const layoutNodes = nodes.map((n) => ({
+    id: n.id,
+    width: 180,
+    height: 100,
+  }));
+  const layoutEdges = edges.map((e) => ({
+    source: e.source,
+    target: e.target,
+  }));
+  const { positions } = useCase.execute(layoutNodes, layoutEdges, "TB");
+  const positionMap = new Map(positions.map((p) => [p.nodeId, p]));
   return nodes.map((node) => {
-    const layoutNode = g.node(node.id);
-    return {
-      ...node,
-      position: {
-        x: layoutNode.x - nodeWidth / 2,
-        y: layoutNode.y - nodeHeight / 2,
-      },
-    };
+    const pos = positionMap.get(node.id);
+    if (pos) {
+      return { ...node, position: { x: pos.x, y: pos.y } };
+    }
+    return node;
   });
-}
-
-function createDefaultHexagonNode(
-  type: HexagonNodeType = "entity",
-  label: string = "New Node",
-  position = { x: 100, y: 100 },
-): HexagonNodeWithLayout {
-  return {
-    id:
-      crypto.randomUUID?.() ??
-      `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-    label,
-    type,
-    position,
-  };
 }
 
 export function useCanvasState(
-  projectId: string,
+  projectId?: string,
   wizardData?: WizardData,
 ): UseCanvasStateResult | UseCanvasStateError {
   const [state, setState] = useState<GraphState>({
@@ -131,13 +112,48 @@ export function useCanvasState(
     }
 
     if (wizardData?.boundedContexts?.length) {
-      const { nodes, edges } = generateHexagonalContextMap(wizardData);
-      const nodesWithPositions = applySavedPositions(nodes);
+      const generateMap = getGenerateHexagonalMapUseCase();
+      const { nodes, edges } = generateMap.execute({ wizardData });
+      const mapNodeVisualUseCase = getMapNodeVisualUseCase();
+      const compiledNodes = nodes.map((node) => {
+        const needsCompilation = [
+          "entity",
+          "use-case",
+          "port",
+          "adapter",
+        ].includes(node.type ?? "");
+        if (needsCompilation && mapNodeVisualUseCase) {
+          const kind = nodeKindFromHexagonType(node.type, node.side);
+          const projection = mapNodeVisualUseCase.execute({
+            nodeId: node.id,
+            kind,
+            label: node.label,
+            category: node.category,
+          });
+          return {
+            ...node,
+            category: projection.category,
+            compilerCategory: projection.category,
+            variant: projection.variant,
+          };
+        }
+        return node;
+      });
+      const nodesWithPositions = applySavedPositions(compiledNodes);
       setState({
         nodes: nodesWithPositions,
         edges,
         viewport: createCanvasViewport(),
       });
+      return;
+    }
+
+    if (!projectId) {
+      setError(
+        new Error(
+          "No project ID provided. The graph must be derived from WizardData.",
+        ),
+      );
       return;
     }
 
@@ -150,7 +166,12 @@ export function useCanvasState(
     }
 
     const { nodes, edges } = result.data;
-    const laidOutNodes = applyDagreLayout(nodes, edges);
+    const solveGraphLayoutUseCase = getSolveGraphLayoutUseCase();
+    const laidOutNodes = applyGraphLayout(
+      nodes,
+      edges,
+      solveGraphLayoutUseCase,
+    );
     const nodesWithPositions = applySavedPositions(laidOutNodes);
 
     const useCase = new RenderHexagonCanvasUseCase();

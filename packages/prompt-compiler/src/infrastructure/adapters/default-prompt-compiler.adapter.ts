@@ -1,11 +1,13 @@
-import type { DomainAST, Identifier } from "@hexagen/core-domain";
 import {
   type PromptTemplate,
   type RenderedPrompt,
   createPromptTemplate,
   renderPrompt,
 } from "../../domain/prompt-template";
-import type { PromptCompilerPort } from "../../application/ports/in/prompt-compiler.port";
+import type {
+  PromptCompilerPort,
+  PromptCompileRequest,
+} from "../../application/ports/in/prompt-compiler.port";
 
 const DEFAULT_SYSTEM_PROMPT = `You are a software architect assistant helping users design and implement hexagonal/monorepo architectures.
 Analyze the user's intent and provide guidance on:
@@ -15,33 +17,36 @@ Analyze the user's intent and provide guidance on:
 - Domain-driven design patterns`;
 
 const DEFAULT_USER_PROMPT_TEMPLATE = `## Context
-Domain AST:
-{{domainAST}}
+Project Manifest:
+{{manifest}}
+
+Architecture Graph:
+{{architectureGraph}}
+
+Linter Report:
+{{linterReport}}
 
 ## User Intent
 {{userIntent}}
-
-## Governance Rules
-{{governanceRules}}
 
 ## Task
 {{task}}`;
 
 export class DefaultPromptCompilerAdapter implements PromptCompilerPort {
-  async compile(request: {
-    name: string;
-    domainAST: DomainAST;
-    userIntent: string;
-    governanceRules: string[];
-    templateOverrides?: Record<string, string>;
-  }): Promise<PromptTemplate> {
-    const domainASTStr = JSON.stringify(request.domainAST, null, 2);
-    const governanceRulesStr = request.governanceRules.join("\n- ");
+  async compile(request: PromptCompileRequest): Promise<PromptTemplate> {
+    const manifestStr = JSON.stringify(request.manifest, null, 2);
+    const architectureGraphStr = JSON.stringify(
+      request.architectureGraph,
+      null,
+      2,
+    );
+    const linterReportStr = JSON.stringify(request.linterReport, null, 2);
 
     const context = {
-      domainAST: request.domainAST,
+      manifest: request.manifest,
+      architectureGraph: request.architectureGraph,
+      linterReport: request.linterReport,
       userIntent: request.userIntent,
-      governanceRules: request.governanceRules,
       lineage: [],
     };
 
@@ -52,19 +57,24 @@ export class DefaultPromptCompilerAdapter implements PromptCompilerPort {
       context,
       [
         {
-          name: "domainAST",
-          description: "Serialized Domain AST",
-          defaultValue: domainASTStr,
+          name: "manifest",
+          description: "Serialized project manifest",
+          defaultValue: manifestStr,
+        },
+        {
+          name: "architectureGraph",
+          description: "Serialized architecture graph",
+          defaultValue: architectureGraphStr,
+        },
+        {
+          name: "linterReport",
+          description: "Linter compliance report",
+          defaultValue: linterReportStr,
         },
         {
           name: "userIntent",
           description: "The user's intent",
           defaultValue: request.userIntent,
-        },
-        {
-          name: "governanceRules",
-          description: "Governance rules to follow",
-          defaultValue: governanceRulesStr,
         },
         {
           name: "task",

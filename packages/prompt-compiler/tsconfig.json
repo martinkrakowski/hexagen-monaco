@@ -6,13 +6,13 @@
     "declaration": true,
     "emitDeclarationOnly": false,
     "composite": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "paths": {}
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", ".turbo"],
   "references": [
     { "path": "../../packages/core-domain" },
-    { "path": "../../packages/intent-compiler" },
     { "path": "../../packages/shared" },
     { "path": "../../packages/transaction-system" }
   ]

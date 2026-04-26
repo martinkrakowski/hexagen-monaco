@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function ArchitectureViewerPage() {
   return (
     <div className="h-screen w-full">
-      <GraphCanvasWrapper projectId="demo" />
+      <GraphCanvasWrapper />
     </div>
   );
 }

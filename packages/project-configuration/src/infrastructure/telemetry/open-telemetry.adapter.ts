@@ -1,4 +1,4 @@
-import type { TelemetryPort } from "../../application/ports/out/telemetry.port.js";
+import type { TelemetryPort } from "../../application/ports/out/telemetry.port";
 
 export class OpenTelemetryAdapter implements TelemetryPort {
   async trace(_name: string, fn: () => Promise<void>): Promise<void> {

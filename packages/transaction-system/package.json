@@ -18,7 +18,6 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
-    "@hexagen/intent-compiler": "workspace:*",
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {

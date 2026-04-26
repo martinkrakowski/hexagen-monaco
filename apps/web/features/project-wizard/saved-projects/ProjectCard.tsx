@@ -93,7 +93,7 @@ export function ProjectCard({
           <div className="flex items-center gap-2">
             <AlertTriangle
               aria-hidden="true"
-              className="h-4 w-4 text-yellow-500 shrink-0"
+              className="h-4 w-4 text-warning shrink-0"
             />
             <span className="text-xs font-medium text-foreground">
               Load this project?
@@ -149,7 +149,7 @@ export function ProjectCard({
           </div>
         </div>
 
-        <div className="text-[10px] text-muted-foreground mb-3">
+        <div className="text-xs text-muted-foreground mb-3">
           Created: {formatDate(project.createdAt)}
           {project.updatedAt !== project.createdAt &&
             ` • Updated: ${formatDate(project.updatedAt)}`}

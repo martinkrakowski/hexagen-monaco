@@ -2,8 +2,10 @@ import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
-import type { Manifest, ManifestDiff, Result } from "@hexagen/shared";
-import { computeDiff, ok, err } from "@hexagen/shared";
+import type { Manifest, ManifestDiff } from "@hexagen/project-configuration";
+import { computeDiff } from "@hexagen/project-configuration";
+import type { Result } from "@hexagen/shared";
+import { ok, err } from "@hexagen/shared";
 import type { ManifestDiffPort } from "../../application/ports/out/manifest-diff.port.js";
 
 export class ManifestDiffAdapter implements ManifestDiffPort {

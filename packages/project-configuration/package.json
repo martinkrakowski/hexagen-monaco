@@ -4,14 +4,17 @@
   "private": true,
   "type": "module",
   "main": "dist/index.js",
+  "source": "./src/index.ts",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./server": {
       "types": "./dist/index.server.d.ts",
+      "source": "./src/index.server.ts",
       "default": "./dist/index.server.js"
     }
   },
@@ -25,7 +28,6 @@
   },
   "dependencies": {
     "@hexagen/shared": "workspace:*",
-    "@hexagen/sync": "workspace:*",
     "js-yaml": "^4.1.1",
     "jszip": "^3.10.1",
     "zod": "^3.23.8"

@@ -1,5 +1,4 @@
-import type { WizardData } from "@hexagen/shared";
-import type { ProjectConfig } from "@hexagen/project-configuration";
+import type { WizardData, ProjectConfig } from "@hexagen/project-configuration";
 
 /**
  * Boundary transformer: converts the form-shape `ProjectConfig` (from

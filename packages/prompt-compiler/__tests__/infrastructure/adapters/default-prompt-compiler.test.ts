@@ -1,10 +1,59 @@
 import { DefaultPromptCompilerAdapter } from "../../../src/infrastructure/adapters/default-prompt-compiler.adapter";
-import type { DomainASTLike } from "../../../src/domain/prompt-template";
+import type { ProjectSpec } from "@hexagen/project-configuration";
+import type { ArchitectureGraph } from "@hexagen/visualization";
+import type { LinterReport } from "@hexagen/governance";
+import type { PromptCompileRequest } from "../../../src/application/ports/in/prompt-compiler.port";
 
-const makeAST = (): DomainASTLike => ({
+const makeManifest = (): ProjectSpec => ({
+  boundedContexts: [
+    {
+      id: "ctx-0",
+      name: "OrderContext",
+      coreDomainEntities: [],
+      valueObjects: [],
+      domainEvents: [],
+      uiFramework: "",
+      persistenceAdapter: "",
+      messagingAdapter: "",
+      telemetryProvider: "",
+    },
+  ],
+  externalContexts: [],
+  governance: {
+    workspaceName: "@hexagen",
+    workspaceTemplate: "modular-monolith",
+    packageManager: "yarn",
+    topologyStrictness: "flexible",
+    namespacePrefix: "@hexagen",
+    namingConventions: {
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".adapter.ts",
+    },
+  },
+  peerMappings: [],
+});
+
+const makeArchitectureGraph = (): ArchitectureGraph => ({
   nodes: [],
   edges: [],
-  invariants: { topology: [], cardinality: [] },
+});
+
+const makeLinterReport = (): LinterReport => ({
+  timestamp: new Date().toISOString(),
+  isCompliant: true,
+  violations: [],
+  scannedFilesCount: 0,
+});
+
+const makeRequest = (
+  overrides: Partial<PromptCompileRequest> = {},
+): PromptCompileRequest => ({
+  name: "test",
+  manifest: makeManifest(),
+  architectureGraph: makeArchitectureGraph(),
+  linterReport: makeLinterReport(),
+  userIntent: "Add an Order entity",
+  ...overrides,
 });
 
 describe("DefaultPromptCompilerAdapter", () => {
@@ -16,12 +65,9 @@ describe("DefaultPromptCompilerAdapter", () => {
 
   describe("compile()", () => {
     it("should create a prompt template from a request", async () => {
-      const template = await adapter.compile({
-        name: "add-entity",
-        domainAST: makeAST(),
-        userIntent: "Add an Order entity",
-        governanceRules: ["Entities must have an ID"],
-      });
+      const template = await adapter.compile(
+        makeRequest({ name: "add-entity" }),
+      );
 
       expect(template.name).toBe("add-entity");
       expect(template.systemPrompt).toBeDefined();
@@ -30,43 +76,35 @@ describe("DefaultPromptCompilerAdapter", () => {
       expect(template.variables.length).toBeGreaterThan(0);
     });
 
-    it("should include domain AST as a variable", async () => {
-      const template = await adapter.compile({
-        name: "test",
-        domainAST: makeAST(),
-        userIntent: "Test",
-        governanceRules: [],
-      });
+    it("should include manifest as a variable", async () => {
+      const template = await adapter.compile(makeRequest());
 
-      const domainASTVar = template.variables.find(
-        (v) => v.name === "domainAST",
-      );
-      expect(domainASTVar).toBeDefined();
+      const manifestVar = template.variables.find((v) => v.name === "manifest");
+      expect(manifestVar).toBeDefined();
     });
 
-    it("should include governance rules as a variable", async () => {
-      const template = await adapter.compile({
-        name: "test",
-        domainAST: makeAST(),
-        userIntent: "Test",
-        governanceRules: ["Rule 1", "Rule 2"],
-      });
+    it("should include architectureGraph as a variable", async () => {
+      const template = await adapter.compile(makeRequest());
 
-      const rulesVar = template.variables.find(
-        (v) => v.name === "governanceRules",
+      const graphVar = template.variables.find(
+        (v) => v.name === "architectureGraph",
       );
-      expect(rulesVar).toBeDefined();
+      expect(graphVar).toBeDefined();
+    });
+
+    it("should include linterReport as a variable", async () => {
+      const template = await adapter.compile(makeRequest());
+
+      const reportVar = template.variables.find(
+        (v) => v.name === "linterReport",
+      );
+      expect(reportVar).toBeDefined();
     });
   });
 
   describe("render()", () => {
     it("should render a template with variable substitution", async () => {
-      const template = await adapter.compile({
-        name: "test",
-        domainAST: makeAST(),
-        userIntent: "Add entity",
-        governanceRules: [],
-      });
+      const template = await adapter.compile(makeRequest());
 
       const rendered = adapter.render(template);
 

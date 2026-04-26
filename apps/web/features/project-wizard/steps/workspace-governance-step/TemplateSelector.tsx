@@ -4,7 +4,7 @@ import {
   workspaceTemplates,
   getWorkspaceTemplate,
   type WorkspaceTemplate,
-} from "@hexagen/shared";
+} from "@hexagen/project-configuration";
 
 import { TemplateCard } from "./TemplateCard";
 

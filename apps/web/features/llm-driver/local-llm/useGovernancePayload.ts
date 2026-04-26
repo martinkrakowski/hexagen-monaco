@@ -63,7 +63,6 @@ export function useGovernancePayload(): UseGovernancePayloadReturn {
           setGovernancePayload(payload);
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn("Failed to fetch governance context:", err);
       }
     };

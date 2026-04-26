@@ -1,12 +1,33 @@
 export type Identifier = string;
 
-export interface DomainASTLike {
-  nodes: unknown[];
-  edges: unknown[];
-  invariants: {
-    topology: unknown[];
-    cardinality: unknown[];
-  };
+export interface ProjectSpecLike {
+  boundedContexts?: Array<{ id: string; name: string }>;
+  externalContexts?: unknown[];
+  governance?: unknown;
+  peerMappings?: unknown[];
+}
+
+export interface ArchitectureGraphLike {
+  nodes: Array<{ id: string; label: string; type: string; status?: string }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    relationship: string;
+    isValid: boolean;
+    violationReason?: string;
+  }>;
+}
+
+export interface LinterReportLike {
+  timestamp: string;
+  isCompliant: boolean;
+  violations: Array<{
+    ruleId: string;
+    severity: string;
+    file: string;
+    message: string;
+  }>;
+  scannedFilesCount: number;
 }
 
 export interface PromptVariable {
@@ -16,9 +37,10 @@ export interface PromptVariable {
 }
 
 export interface PromptContext {
-  domainAST: DomainASTLike;
+  manifest: ProjectSpecLike;
+  architectureGraph: ArchitectureGraphLike;
+  linterReport: LinterReportLike;
   userIntent: string;
-  governanceRules: string[];
   lineage: Identifier[];
 }
 

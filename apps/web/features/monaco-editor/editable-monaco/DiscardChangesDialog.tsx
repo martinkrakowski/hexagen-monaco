@@ -58,7 +58,7 @@ export function DiscardChangesDialog({
 }: DiscardChangesDialogProps) {
   return (
     <Dialog open={open} onClose={onCancel}>
-      <DialogContent className="max-w-3xl max-h-[80vh]">
+      <DialogContent className="max-w-3xl max-h-screen">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -71,7 +71,7 @@ export function DiscardChangesDialog({
 
         {/* Avoid mounting the heavyweight DiffEditor when the dialog is closed */}
         {open && (
-          <div className="mt-4 rounded-lg overflow-hidden border border-border h-[40vh]">
+          <div className="mt-4 rounded-lg overflow-hidden border border-border max-h-96">
             <DiffEditor
               original={originalContent}
               modified={modifiedContent}

@@ -68,7 +68,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
             {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </span>
         )}
-        {isFile && <span className="mr-1 w-[14px]" />}
+        {isFile && <span className="mr-1 w-3" />}
 
         <span className="mr-2 opacity-80">
           {isFile ? (

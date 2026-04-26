@@ -14,7 +14,9 @@ export type WorkspaceDialogState =
   | { kind: "delete-confirm"; projectId: string }
   | { kind: "saved-projects" };
 
-export type ViewMode = "visual" | "code";
+import type { ViewMode } from "@/types/view-mode";
+
+export type { ViewMode };
 
 export interface UseWorkspaceShellUiReturn {
   state: WorkspaceShellState;

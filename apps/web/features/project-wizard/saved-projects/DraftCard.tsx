@@ -29,7 +29,7 @@ export function DraftCard({
   onCancelDiscard,
 }: DraftCardProps) {
   return (
-    <div className="relative p-4 border border-yellow-500/50 rounded-lg bg-yellow-500/5">
+     <div className="relative p-4 border border-warning/50 rounded-lg bg-warning/5">
       {isConfirmingDiscard && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2">
           <AlertTriangle
@@ -59,9 +59,9 @@ export function DraftCard({
       )}
       <div className={isConfirmingDiscard ? "invisible" : ""}>
         <div className="flex items-center gap-2 mb-2">
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/20 text-yellow-700 dark:text-yellow-300">
-            Draft
-          </span>
+           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warning/20 text-warning dark:text-warning/80">
+             Draft
+           </span>
           <span className="text-xs text-muted-foreground">
             Step {(draft.savedAtStep ?? 0) + 1} of 6
           </span>

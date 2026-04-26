@@ -1,5 +1,5 @@
 export { ViewToggle } from "./ViewToggle.js";
-export type { ViewToggleProps, ViewMode } from "./ViewToggle.js";
+export type { ViewToggleProps } from "./ViewToggle.js";
 
 export { FileDropZone } from "./FileDropZone.js";
 export type { FileDropZoneProps } from "./FileDropZone.js";

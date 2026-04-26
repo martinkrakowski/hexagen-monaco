@@ -141,6 +141,9 @@ export class CvaVariantResolverAdapter implements ResolveVariantPort {
       handleColor: "!bg-muted-foreground",
       headerText: "text-foreground",
       hexColor: "#71717a",
+      structuralHandleColor: "!bg-sky-500",
+      publishedEventHandleColor: "!bg-amber-500",
+      subscribedEventHandleColor: "!bg-violet-500",
     },
   };
 

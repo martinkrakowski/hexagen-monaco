@@ -1,6 +1,6 @@
 "use client";
 
-import type { WorkspaceTemplate } from "@hexagen/shared";
+import type { WorkspaceTemplate } from "@hexagen/project-configuration";
 
 interface TemplateCardProps {
   template: WorkspaceTemplate;

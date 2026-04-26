@@ -1,4 +1,9 @@
-import type { DomainAST, Identifier } from "@hexagen/core-domain";
+import type { Identifier } from "@hexagen/core-domain";
+import type {
+  ProjectSpecLike,
+  ArchitectureGraphLike,
+  LinterReportLike,
+} from "../../../domain/prompt-template";
 import type {
   PromptTemplate,
   RenderedPrompt,
@@ -6,9 +11,10 @@ import type {
 
 export interface PromptCompileRequest {
   name: string;
-  domainAST: DomainAST;
+  manifest: ProjectSpecLike;
+  architectureGraph: ArchitectureGraphLike;
+  linterReport: LinterReportLike;
   userIntent: string;
-  governanceRules: string[];
   templateOverrides?: Record<string, string>;
 }
 

@@ -1,6 +1,7 @@
 import type {
   Transaction,
   TransactionStatus,
+  RuleExecutionManifest,
 } from "../../../domain/transaction.js";
 
 /**
@@ -9,7 +10,12 @@ import type {
  */
 export interface TransactionManagerPort {
   /** Begin a new transaction for the given intent */
-  begin(intentId: string, metadata?: Record<string, unknown>): Transaction;
+  begin(
+    intentId: string,
+    metadata?: Record<string, unknown>,
+    rem?: RuleExecutionManifest,
+    lineage?: string[],
+  ): Transaction;
 
   /** Transition a transaction to a new status */
   transition(

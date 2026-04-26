@@ -4,10 +4,13 @@ import type {
   WorkspaceTemplateId,
   WorkspaceTemplate,
   WorkspaceTemplateRule,
-} from "@hexagen/shared";
+} from "./domain/model/workspace-templates/workspace-templates.js";
 
 export type { WorkspaceTemplateId, WorkspaceTemplate, WorkspaceTemplateRule };
-export { workspaceTemplates, getWorkspaceTemplate } from "@hexagen/shared";
+export {
+  workspaceTemplates,
+  getWorkspaceTemplate,
+} from "./domain/model/workspace-templates/workspace-templates.js";
 
 // --- 1. Workspace Governance (Updated with workspaceTemplate) ---
 export const WorkspaceGovernanceSchema = z.object({
@@ -76,10 +79,10 @@ export const BoundedContextSchema = z.object({
     .enum(["nestjs", "express", "serverless", "plain-ts"])
     .optional(),
   coreDomainEntities: z.array(z.string()).default([]),
-  valueObjects: z.array(z.string()).default([]),
-  domainEvents: z.array(z.string()).default([]),
-  portConfiguration: PortConfigurationSchema.optional(),
-  // Backward compatibility: support legacy fields
+   valueObjects: z.array(z.string()).default([]),
+   domainEvents: z.array(z.string()).default([]),
+   portConfiguration: PortConfigurationSchema,
+   // Backward compatibility: support legacy fields
   apiFramework: z.enum(["Fastify", "Express", "NestJS"]).optional(),
   uiFramework: z
     .enum(["", "Next.js", "React Router", "Remix", "Angular", "Vue.js"])
@@ -153,3 +156,18 @@ export const projectConfigSchema = ProjectSpecSchema;
 export type ProjectConfig = ProjectSpec;
 export type BoundedContextInput = BoundedContext;
 export type ExternalContextInput = ExternalContext;
+
+// --- Wizard domain aliases (for migration from @hexagen/shared) ---
+// These are semantic aliases to support consolidated schema management
+export type WizardData = ProjectSpec;
+export type WizardGovernance = WorkspaceGovernance;
+export type ContextRelationshipType = ExternalContext["relationshipType"];
+
+// Domain event reference type
+export interface DomainEventRef {
+  id: string;
+  label: string;
+}
+
+// Peer mapping alias
+export type PeerMapping = PeerContextMapping;

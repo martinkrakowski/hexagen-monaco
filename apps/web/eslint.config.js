@@ -38,6 +38,7 @@ export default [
     },
     rules: {
       "hexagen-ui/no-feature-slice-imports": "error",
+      "hexagen-ui/no-arbitrary-tailwind-values": "error",
       "no-restricted-imports": [
         "error",
         {

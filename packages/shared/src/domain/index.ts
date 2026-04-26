@@ -11,7 +11,4 @@ export * from "./monaco-session.js";
 export * from "./persisted-canvas-layout.js";
 export * from "./persisted-editor-workspace.js";
 export * from "./persistence-error.js";
-export * from "./project-specification.js";
 export * from "./session-metadata.js";
-export * from "./wizard-data.js";
-export * from "./wizard-multi-context.js";

@@ -41,12 +41,18 @@ const nextConfig = {
   // Workspace packages to transpile
   transpilePackages: [
     "@hexagen/agentic-interaction",
+    "@hexagen/eslint-plugin-ui",
+    "@hexagen/governance",
     "@hexagen/local-llm",
     "@hexagen/messaging",
     "@hexagen/monaco-orchestration",
     "@hexagen/project-configuration",
     "@hexagen/project-generation",
+    "@hexagen/prompt-compiler",
     "@hexagen/shared",
+    "@hexagen/sync",
+    "@hexagen/ui",
+    "@hexagen/ui-projection-compiler",
     "@hexagen/visualization",
     "@hexagen/web-driver",
     "@hexagen/wizard-orchestration",
@@ -71,107 +77,27 @@ const nextConfig = {
 
   // Webpack configuration for monorepo package resolution
   webpack: (config) => {
-    // Resolve workspace packages from the monorepo root node_modules
     config.resolve.modules = [
       path.resolve(monorepoRoot, "node_modules"),
       "node_modules",
       ...(config.resolve.modules || []),
     ];
 
-    // Resolve .js imports to .ts files (needed for ESM-style imports in TypeScript source)
-    // This allows barrels to use .js extensions (correct for ESM) while webpack resolves to .ts
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js"],
       ".mjs": [".mts", ".mjs"],
     };
 
-    // Ensure proper resolution of @hexagen/* packages
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "@hexagen/agentic-interaction": path.resolve(
-        monorepoRoot,
-        "packages/agentic-interaction/src",
-      ),
-      "@hexagen/messaging": path.resolve(
-        monorepoRoot,
-        "packages/messaging/src",
-      ),
-      "@hexagen/monaco-orchestration": path.resolve(
-        monorepoRoot,
-        "packages/monaco-orchestration/src",
-      ),
-      "@hexagen/project-configuration": path.resolve(
-        monorepoRoot,
-        "packages/project-configuration/src",
-      ),
-      "@hexagen/project-generation": path.resolve(
-        monorepoRoot,
-        "packages/project-generation/src",
-      ),
-      "@hexagen/shared": path.resolve(monorepoRoot, "packages/shared/src"),
-      "@hexagen/visualization": path.resolve(
-        monorepoRoot,
-        "packages/visualization/src",
-      ),
-      "@hexagen/web-driver": path.resolve(
-        monorepoRoot,
-        "packages/web-driver/src",
-      ),
-      "@hexagen/local-llm": path.resolve(
-        monorepoRoot,
-        "packages/local-llm/src",
-      ),
-      "@hexagen/wizard-orchestration": path.resolve(
-        monorepoRoot,
-        "packages/wizard-orchestration/src",
-      ),
-    };
+    config.resolve.conditionNames = [
+      "source",
+      ...(config.resolve.conditionNames || []),
+    ];
 
     return config;
   },
 
-  // Turbopack config (for dev mode)
   turbopack: {
     root: monorepoRoot,
-    resolveAlias: {
-      "@hexagen/agentic-interaction": path.resolve(
-        monorepoRoot,
-        "packages/agentic-interaction/src",
-      ),
-      "@hexagen/messaging": path.resolve(
-        monorepoRoot,
-        "packages/messaging/src",
-      ),
-      "@hexagen/monaco-orchestration": path.resolve(
-        monorepoRoot,
-        "packages/monaco-orchestration/src",
-      ),
-      "@hexagen/project-configuration": path.resolve(
-        monorepoRoot,
-        "packages/project-configuration/src",
-      ),
-      "@hexagen/project-generation": path.resolve(
-        monorepoRoot,
-        "packages/project-generation/src",
-      ),
-      "@hexagen/shared": path.resolve(monorepoRoot, "packages/shared/src"),
-      "@hexagen/visualization": path.resolve(
-        monorepoRoot,
-        "packages/visualization/src",
-      ),
-      "@hexagen/web-driver": path.resolve(
-        monorepoRoot,
-        "packages/web-driver/src",
-      ),
-      "@hexagen/local-llm": path.resolve(
-        monorepoRoot,
-        "packages/local-llm/src",
-      ),
-      "@hexagen/wizard-orchestration": path.resolve(
-        monorepoRoot,
-        "packages/wizard-orchestration/src",
-      ),
-    },
     resolveExtensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
   },
 

@@ -2,9 +2,14 @@
   "name": "@hexagen/project-generation",
   "version": "0.1.0",
   "main": "dist/index.js",
+  "source": "./src/index.ts",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc --build",

@@ -10,7 +10,8 @@ export type { LoggerPort } from "./domain/logger-port.js";
 export { MonacoSession } from "./domain/monaco-session.js";
 export type { SessionMetadata } from "./domain/session-metadata.js";
 export type { PersistenceError } from "./domain/persistence-error.js";
-export type { ProjectSpecification } from "./domain/project-specification.js";
+// NOTE: ProjectSpecification moved to @hexagen/project-configuration (canonical: ProjectSpec)
+// See: Architectural Remediation Report Phase 1, Item 1.4
 export type {
   PersistedEditorWorkspace,
   PersistedEditorWorkspaceFile,
@@ -34,17 +35,10 @@ export type {
 } from "./application/ports/wizard-persistence.port.js";
 
 // Canvas / wizard exports
-export type {
-  WizardData,
-  WizardGovernance,
-  ExternalContext,
-  BoundedContext,
-  ContextRelationshipType,
-  DomainEventRef,
-  PeerMapping,
-} from "./domain/wizard-data.js";
-export { deriveActiveContext } from "./domain/wizard-multi-context.js";
-export type { ContextUpdateCallback } from "./domain/wizard-multi-context.js";
+// NOTE: Wizard domain types are now owned by @hexagen/project-configuration
+// See: Architectural Remediation Report (2026-04-25), Phase 1
+// These types should be imported from @hexagen/project-configuration instead
+// NOTE: deriveActiveContext and ContextUpdateCallback were dead code (never used) and have been removed
 
 // Error/Result exports
 export type { Result } from "./errors/result.js";

@@ -21,6 +21,16 @@ package_rules:
     # implements IArchitectureGraphProviderPort owned by visualization
     # agentic-interaction is allowed because web-driver depends on it per manifest
     # and implements ports like SecretVaultPort from its application layer
+  - name: "sync"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/project-configuration"
+      - "@hexagen/visualization"
+      - "@hexagen/governance"
+    # sync imports manifest schemas from project-configuration for parsing,
+    # visualization for ArchitectureGraphSchema, and governance for LinterReportSchema.
+    # These were consolidated from @hexagen/shared during Phase 4 schema migration.
+
   - name: "project-generation"
     allowed_imports:
       - "@hexagen/shared"
@@ -34,38 +44,43 @@ package_rules:
     # project-configuration should only import from shared kernel.
     # Sync types should come from shared kernel after consolidation.
 
+  - name: "visualization"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/project-configuration"
+    # visualization imports BoundedContextTypeSchema from project-configuration
+    # for architecture graph node type classification.
+    # Moved from @hexagen/shared during Phase 4 schema migration.
+
   - name: "mcp-server"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/messaging"
+      - "@hexagen/project-configuration"
+      - "@hexagen/governance"
+      - "@hexagen/visualization"
     # mcp-server uses EventBusPort from messaging for domain event publication.
-    # All other dependencies (sync, project-configuration) are accessed via
-    # their file-system adapters (execSync, YAML reads), not direct imports.
+    # It imports manifest/governance/visualization types for MCP resource adapters.
+    # Moved from @hexagen/shared during Phase 4 schema migration.
 
   - name: "intent-compiler"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
-      - "@hexagen/runtime"
-    # intent-compiler intentionally imports core-domain types (DomainAST,
-    # TopologyInvariants, CardinalityInvariants) as it validates MVK contracts.
-    # Runtime type guards are used for invariant validation at runtime.
+    # FROZEN: no runtime consumers. @hexagen/runtime dep removed.
+    # Domain types and ports preserved for future use.
 
   - name: "ui-projection-compiler"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
-      - "@hexagen/layout-engine"
-    # ui-projection-compiler maps domain node types to visual specs.
-    # It imports core-domain (NodeKind, NodeVisualSpec) and layout-engine (Affordance).
-    # Zero runtime or projection-framework imports (React/xyflow banned).
+    # NARROWED: only MapNodeVisual path retained (real consumers in wire.ts).
+    # @hexagen/layout-engine dep removed (Affordance type no longer needed).
 
   - name: "layout-engine"
-    allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-    # layout-engine is a pure geometric constraint solver.
-    # It imports core-domain for NodeKind type references only.
+    allowed_imports: []
+    # NARROWED: only GraphLayout path retained (real consumers in wire.ts).
+    # No @hexagen/* imports remain — pure dagre-based geometry.
 
   - name: "runtime"
     allowed_imports:
@@ -86,26 +101,42 @@ package_rules:
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
-    # prompt-compiler builds contextual prompts from DomainAST, governance, and user intent.
-    # Removed intent-compiler and transaction-system deps — prompt-compiler operates on
-    # core-domain types directly, not on intent-compiler outputs.
+      - "@hexagen/project-configuration"
+      - "@hexagen/visualization"
+      - "@hexagen/governance"
+    # Phase 5: prompt-compiler now uses ProjectSpec, ArchitectureGraph, LinterReport
+    # instead of DomainAST and governanceRules: string[]. These kernel contracts
+    # provide richer context for prompt compilation.
 
   - name: "local-llm"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/prompt-compiler"
+      - "@hexagen/project-configuration"
+      - "@hexagen/visualization"
+      - "@hexagen/governance"
     # local-llm enforces ACL: all LLM inputs must come through prompt-compiler.
-    # Schema validation at response boundary ensures no schema drift.
+    # Phase 5: CompiledPromptAdapterPort uses ProjectSpec, ArchitectureGraph,
+    # LinterReport for structured prompt compilation.
 
   - name: "reconciliation-engine"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
-      - "@hexagen/prompt-compiler"
-    # reconciliation-engine parses LLM responses and applies governance.
-    # Removed intent-compiler dep — reconciliation operates on prompt-compiler outputs.
+    # FROZEN: no runtime consumers. Unused deps removed.
+    # Domain types and ports preserved for future use.
 
   - name: "agentic-interaction"
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/local-llm"
+      - "@hexagen/project-configuration"
+    # Imports WizardData aliases from project-configuration for context serialization
+
+  - name: "wizard-orchestration"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/messaging"
+      - "@hexagen/project-configuration"
+    # Imports WizardData, BoundedContext, ExternalContext, PeerMapping from project-configuration
+    # for deterministic wizard flow coordination

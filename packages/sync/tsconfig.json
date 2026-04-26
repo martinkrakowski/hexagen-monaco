@@ -19,5 +19,10 @@
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../shared" }]
+  "references": [
+    { "path": "../shared" },
+    { "path": "../project-configuration" },
+    { "path": "../visualization" },
+    { "path": "../governance" }
+  ]
 }

@@ -5,18 +5,12 @@ import type {
 } from "../../src/application/ports/in/map-node-visual.port.js";
 
 export class FakeNodeVisualMapper implements MapNodeVisualPort {
-  readonly calls: Array<{
-    spec: NodeVisualSpec;
-    kind: string;
-    category?: string;
-  }> = [];
+  readonly calls: NodeVisualSpec[] = [];
 
   constructor(
-    private readonly factory: (
-      spec: NodeVisualSpec,
-      kind: string,
-      category?: string,
-    ) => NodeVisualProjection = (spec) => ({
+    private readonly factory: (spec: NodeVisualSpec) => NodeVisualProjection = (
+      spec,
+    ) => ({
       nodeId: spec.nodeId,
       variant: {
         category: "default",
@@ -27,17 +21,13 @@ export class FakeNodeVisualMapper implements MapNodeVisualPort {
         headerText: "",
         hexColor: "#000000",
       },
-      label: "",
+      label: spec.label,
       category: "default",
     }),
   ) {}
 
-  map(
-    spec: NodeVisualSpec,
-    kind: string,
-    category?: string,
-  ): NodeVisualProjection {
-    this.calls.push({ spec, kind, category });
-    return this.factory(spec, kind, category);
+  map(spec: NodeVisualSpec): NodeVisualProjection {
+    this.calls.push(spec);
+    return this.factory(spec);
   }
 }

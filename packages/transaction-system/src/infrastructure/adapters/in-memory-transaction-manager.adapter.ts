@@ -1,10 +1,12 @@
 import type {
   Transaction,
   TransactionStatus,
+  RuleExecutionManifest,
 } from "../../domain/transaction.js";
 import {
   createTransaction,
   transitionTransaction,
+  detectConflicts,
 } from "../../domain/transaction.js";
 import type { TransactionManagerPort } from "../../application/ports/in/transaction-manager.port.js";
 import type { BackpressureControllerPort } from "../../application/ports/out/backpressure-controller.port.js";
@@ -37,7 +39,12 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
     this.semanticCache = deps?.semanticCache;
   }
 
-  begin(intentId: string, metadata: Record<string, unknown> = {}): Transaction {
+  begin(
+    intentId: string,
+    metadata: Record<string, unknown> = {},
+    rem?: RuleExecutionManifest,
+    lineage?: string[],
+  ): Transaction {
     if (this.backpressureController) {
       const signal = this.backpressureController.accept(intentId);
       if (signal.tag === "drop") {
@@ -45,7 +52,40 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
       }
     }
 
-    const tx = createTransaction(intentId, metadata);
+    // Enhance metadata with REM and lineage if provided
+    const enhancedMetadata = {
+      ...metadata,
+      ...(rem && { rem }),
+      ...(lineage && { lineage }),
+    };
+
+    const tx = createTransaction(intentId, enhancedMetadata);
+
+    // NEW: Validate lineage
+    if (lineage && lineage.length > 0) {
+      const priorIntent = lineage[lineage.length - 1];
+      const priorTx = Array.from(this.transactions.values()).find(
+        (t) => t.intentId === priorIntent,
+      );
+      if (!priorTx) {
+        console.warn(`[Lineage] Prior intent ${priorIntent} not found in transaction store`);
+      }
+    }
+
+    // NEW: Detect conflicts if REM provided
+    if (rem) {
+      const conflictSet = detectConflicts(tx, rem);
+      if (conflictSet.hasConflicts) {
+        conflictSet.conflicts.forEach((conflict) => {
+          console.log(
+            `[ConflictDetection] ${conflict.severity}: ${conflict.message}`,
+          );
+        });
+        // Store conflicts in transaction metadata for later inspection
+        tx.metadata.conflicts = conflictSet;
+      }
+    }
+
     this.transactions.set(tx.id, tx);
     return tx;
   }

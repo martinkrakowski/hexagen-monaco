@@ -1,4 +1,4 @@
-import { ManifestSchema } from "@hexagen/shared";
+import { ManifestSchema } from "../../domain/model/manifest-schema/manifest-schema";
 
 export interface ValidateManifestChangeResult {
   valid: boolean;

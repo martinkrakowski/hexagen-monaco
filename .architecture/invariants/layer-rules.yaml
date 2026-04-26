@@ -15,7 +15,7 @@ shared_kernels:
 layers:
   domain:
     access_rule: "internal-only"
-    allowed_imports: ["@hexagen/shared", "@hexagen/core-domain"]
+    allowed_imports: ["@hexagen/shared", "@hexagen/core-domain", "@hexagen/project-configuration"]
 
   application:
     access_rule: "ports-only"
@@ -32,6 +32,16 @@ cross_package_rules:
     cannot_import: ["monaco-orchestration"] # Use @hexagen/shared for DTOs instead
 
 composition_root_exceptions:
+  - file: "packages/visualization/src/domain/model/architecture-graph/architecture-graph.ts"
+    reason: >-
+      Imports BoundedContextTypeSchema from @hexagen/project-configuration for
+      graph node type classification. This schema was previously in
+      @hexagen/shared (allowed in all layers). Moved during Phase 4 schema
+      migration to its owning package. The import is a shared-kernel-level
+      type dependency, not a business logic coupling.
+    allowed_imports:
+      - "@hexagen/project-configuration"
+
   - file: "apps/web/app/lib/wire.ts"
     reason: >-
       wire.ts is the app-layer composition root. It imports port types from

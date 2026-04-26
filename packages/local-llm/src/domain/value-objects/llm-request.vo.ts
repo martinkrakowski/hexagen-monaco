@@ -1,11 +1,7 @@
 import type { Identifier } from "@hexagen/shared";
 import type { DomainModelId } from "./model-id.vo.js";
+import type { ZodSchema } from "zod";
 
-/**
- * LLMRequest value object — represents a structured request to an LLM.
- * Enforces ACL by ensuring all LLM inputs come through prompt-compiler's
- * structured request port with schema validation.
- */
 export interface LLMRequest {
   id: Identifier;
   modelId: DomainModelId;
@@ -13,7 +9,7 @@ export interface LLMRequest {
     role: "system" | "user" | "assistant";
     content: string;
   }[];
-  schema: unknown; // Zod schema or similar for structured output validation
+  schema: ZodSchema;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
@@ -21,16 +17,13 @@ export interface LLMRequest {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Creates a new LLMRequest with validation
- */
 export function createLLMRequest(
   modelId: DomainModelId,
   messages: {
     role: "system" | "user" | "assistant";
     content: string;
   }[],
-  schema: unknown,
+  schema: ZodSchema,
   options: {
     temperature?: number;
     maxTokens?: number;

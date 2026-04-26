@@ -69,7 +69,7 @@ export function ModelTierSection({
 
   return (
     <div className="mb-6">
-      <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase mb-3">
         {title}
       </h2>
       <div className="space-y-3">

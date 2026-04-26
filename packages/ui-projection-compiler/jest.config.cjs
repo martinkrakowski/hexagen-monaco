@@ -7,8 +7,6 @@ module.exports = {
     "^(\\.{1,2}/.+)\\.js$": "$1",
     "^@hexagen/core-domain$":
       "<rootDir>/../../packages/core-domain/src/index.ts",
-    "^@hexagen/layout-engine$":
-      "<rootDir>/../../packages/layout-engine/src/index.ts",
     "^@hexagen/shared$": "<rootDir>/../../packages/shared/src/index.ts",
   },
   transform: {

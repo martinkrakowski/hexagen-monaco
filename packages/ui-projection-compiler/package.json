@@ -18,7 +18,6 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
-    "@hexagen/layout-engine": "workspace:*",
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {

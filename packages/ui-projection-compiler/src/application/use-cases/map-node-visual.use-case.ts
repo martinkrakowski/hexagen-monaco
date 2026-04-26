@@ -7,11 +7,7 @@ import type {
 export class MapNodeVisualUseCase {
   constructor(private readonly mapper: MapNodeVisualPort) {}
 
-  execute(
-    spec: NodeVisualSpec,
-    kind: string,
-    category?: string,
-  ): NodeVisualProjection {
-    return this.mapper.map(spec, kind, category);
+  execute(spec: NodeVisualSpec): NodeVisualProjection {
+    return this.mapper.map(spec);
   }
 }

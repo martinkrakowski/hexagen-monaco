@@ -4,18 +4,25 @@ import {
   type DragEvent,
   type ChangeEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { Icon } from "../elements/Icon.js";
 
 export interface FileDropZoneProps {
   onFileLoaded: (content: string) => void;
   accept?: string;
+  validateFile?: (file: File) => string | null;
+  label?: string;
+  hint?: ReactNode;
   className?: string;
 }
 
 export function FileDropZone({
   onFileLoaded,
-  accept = ".yaml,.yml",
+  accept,
+  validateFile,
+  label = "Upload file — click or drop to browse",
+  hint,
   className,
 }: FileDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -23,9 +30,12 @@ export function FileDropZone({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const readFile = (file: File) => {
-    if (!file.name.match(/\.(ya?ml)$/i)) {
-      setError("Please select a .yaml or .yml file");
-      return;
+    if (validateFile) {
+      const validationError = validateFile(file);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
     }
 
     const reader = new FileReader();
@@ -80,7 +90,7 @@ export function FileDropZone({
         onDragLeave={handleDragLeave}
         onClick={() => inputRef.current?.click()}
         onKeyDown={handleKeyDown}
-        aria-label="Upload manifest YAML file — click or drop to browse"
+        aria-label={label}
         className={[
           "w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
           isDragging
@@ -96,11 +106,7 @@ export function FileDropZone({
           className="mx-auto text-muted-foreground mb-3"
         />
         <p className="text-sm font-medium text-foreground">
-          Drop a{" "}
-          <code className="text-xs bg-muted px-1 py-0.5 rounded">
-            manifest.yaml
-          </code>{" "}
-          file here
+          {hint ?? <>Drop a file here</>}
         </p>
         <p className="text-xs text-muted-foreground mt-1">or click to browse</p>
         <input
@@ -108,7 +114,7 @@ export function FileDropZone({
           type="file"
           accept={accept}
           onChange={handleChange}
-          aria-label="Upload manifest file"
+          aria-label={label}
           className="hidden"
         />
       </div>

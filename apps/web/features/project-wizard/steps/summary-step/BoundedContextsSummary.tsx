@@ -15,7 +15,7 @@ interface PortBadgeProps {
 
 function PortBadge({ count, direction }: PortBadgeProps) {
   return (
-    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+    <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
       {count} {direction}
     </span>
   );
