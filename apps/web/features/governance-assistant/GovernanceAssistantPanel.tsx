@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 import { useGovernanceAssistant } from "./hooks/useGovernanceAssistant";
 import { useLocalLLM } from "@/llm-driver/useLocalLlm";
 import { useCloudLLM, type UseCloudLLMConfig } from "./hooks/useCloudLlm";

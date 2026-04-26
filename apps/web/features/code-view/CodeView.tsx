@@ -14,7 +14,7 @@ import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
 import { useProjectGeneration } from "./hooks/useProjectGeneration";
 import { useArchitectureDownload } from "./hooks/useArchitectureDownload";
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 import type { ViewFileNode } from "./types";
 
 interface CodeViewProps {

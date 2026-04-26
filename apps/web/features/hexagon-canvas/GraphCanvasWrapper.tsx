@@ -6,7 +6,8 @@ import { useCanvasState } from "./hooks/useCanvasState";
 import { HexagonCanvas } from "./HexagonCanvas";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { NodeEditorDialog } from "./NodeEditorDialog";
-import type { Result, WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
+import type { Result } from "@hexagen/shared";
 
 interface GraphCanvasWrapperProps {
   projectId?: string;

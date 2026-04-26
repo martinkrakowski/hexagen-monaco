@@ -1,4 +1,4 @@
-import type { WizardData, BoundedContext } from "@hexagen/shared";
+import type { WizardData, BoundedContext } from "@hexagen/project-configuration";
 import type { Manifest } from "@hexagen/sync";
 
 const getInboundPortName = (type: string) => `${type}.in-port.ts`;

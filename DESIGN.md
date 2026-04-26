@@ -418,7 +418,33 @@ fontFamily: {
 | Medium    | `font-medium`                        | Labels, nav items      |
 | Bold      | `font-bold`                          | Headings, emphasis     |
 
-### 4.6 Spacing & Layout
+### 4.6 Component Token Definitions
+
+Components use derived tokens for consistent sizing and spacing. These tokens are defined in `globals.css` and inherit CSS variable delegation in dark mode:
+
+| Token                    | Value  | Usage                              |
+| ------------------------ | ------ | ---------------------------------- |
+| `--button-height`        | 40px   | Button height (h-10)               |
+| `--button-padding-x`     | 12px   | Horizontal button padding          |
+| `--button-padding-y`     | 8px    | Vertical button padding            |
+| `--button-border-radius` | 4px    | Button corner radius (rounded-md)  |
+| `--input-height`         | 40px   | Input field height                 |
+| `--input-padding-x`      | 12px   | Input horizontal padding           |
+| `--input-padding-y`      | 8px    | Input vertical padding             |
+| `--input-border-radius`  | 4px    | Input corner radius                |
+| `--card-padding`         | 16px   | Default card padding (p-4)         |
+| `--card-padding-lg`      | 24px   | Large card padding (p-6)           |
+| `--card-gap`             | 16px   | Internal card spacing (gap-4)      |
+| `--card-border-radius`   | 6px    | Card corner radius (rounded-lg)    |
+| `--badge-height`         | 20px   | Badge element height               |
+| `--badge-padding-x`      | 8px    | Badge horizontal padding           |
+| `--badge-border-radius`  | 9999px | Pill-shaped badge (rounded-full)   |
+| `--page-section-gap`     | 24px   | Vertical gap between page sections |
+| `--form-field-gap`       | 8px    | Vertical gap between form fields   |
+
+These tokens derive from Primitive tokens (e.g., `--spacing-*`, `--radius-*`) defined in Sections 4.1–4.3 and ensure consistency across components.
+
+### 4.7 Spacing & Layout
 
 The 4px baseline grid is absolute. All spacing must resolve to a multiple of 4px.
 
@@ -440,7 +466,7 @@ The 4px baseline grid is absolute. All spacing must resolve to a multiple of 4px
 | Cards, panels, modals | `rounded-lg` |
 | Full circular avatars | `rounded-full` |
 
-### 4.7 Interaction States
+### 4.8 Interaction States
 
 #### Focus (Accessibility — Required on All Interactive Elements)
 
@@ -511,6 +537,28 @@ The following custom CSS utility classes are defined in `globals.css` and are ap
 - `.react-flow__node-group` — transparent background/border
 - `.react-flow__pane` — transparent background
 - `.react-flow__background` — uses `--card` token
+
+### 4.9 Exception: Canvas Component Styling
+
+The canvas components (e.g., `BoundedContext.tsx`, `PeerContextNode.tsx` in `/apps/web/features/hexagon-canvas/`) use inline styles for React Flow integration. This is a **documented exception** because React Flow requires dynamic node positioning that cannot be expressed via CSS classes.
+
+**Permitted inline styles for canvas components:**
+
+- `width`, `height` — for node dimensions
+- `transform` — for node positioning (x, y coordinates)
+- `opacity` — for visual states
+
+**Why this exception exists:**
+
+- React Flow calculates positions at runtime; CSS classes cannot express arbitrary pixel coordinates
+- CSS-in-JS solutions are not available due to build constraints
+- This is a presentation-only concern (interaction state, not information state)
+
+**Implementation:**
+All inline styles for positioning are isolated in `/apps/web/features/hexagon-canvas/adapters/CanvasNodeStyleAdapter.tsx`. This adapter component is the **only** permitted location for inline styles in the codebase.
+
+**Future migration:**
+If React Flow adds CSS variable support for positioning (e.g., `--node-x`, `--node-y`), these inline styles can be migrated to CSS variables, eliminating this exception.
 
 ---
 

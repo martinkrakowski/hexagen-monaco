@@ -234,6 +234,14 @@ export const wireDependencies = () => {
     ) satisfies ServerLLMRequestPort,
   );
 
+  // TODO: Wire REM context when app-level intent tracking available (Phase 3)
+  // REM (RuleExecutionManifest) will be integrated when UI layer event streams are available
+  // const rem = buildRuntimeExecutionManifest(manifest);
+  // const lineage = getCurrentIntentLineage();
+  // const transactionManager = new InMemoryTransactionManagerAdapter();
+  // const executeTransactionUseCase = new ExecuteTransactionUseCase(transactionManager);
+  // registry.set("ExecuteTransactionUseCase", executeTransactionUseCase);
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);

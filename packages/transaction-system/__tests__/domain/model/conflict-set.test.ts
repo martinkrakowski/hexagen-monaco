@@ -1,0 +1,104 @@
+import { detectConflicts, type RuleExecutionManifest } from "../../../src/domain/transaction.js";
+import { createTransaction } from "../../../src/domain/transaction.js";
+
+describe("Conflict Detection", () => {
+  describe("detectConflicts()", () => {
+    it("should detect REM state mismatch when fewer rules applied than required", () => {
+      const tx = createTransaction("intent-1", { rulesApplied: 1 });
+      const rem: RuleExecutionManifest = {
+        rules: { rule1: {}, rule2: {}, rule3: {} },
+        constraints: {},
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+
+      const conflictSet = detectConflicts(tx, rem);
+
+      expect(conflictSet.hasConflicts).toBe(true);
+      expect(conflictSet.conflicts).toHaveLength(1);
+      expect(conflictSet.conflicts[0].type).toBe("state-mismatch");
+      expect(conflictSet.conflicts[0].severity).toBe("warning");
+      expect(conflictSet.conflicts[0].remExpected).toBe(3);
+      expect(conflictSet.conflicts[0].actualState).toBe(1);
+    });
+
+    it("should have no conflicts when state matches REM", () => {
+      const tx = createTransaction("intent-1", { rulesApplied: 3 });
+      const rem: RuleExecutionManifest = {
+        rules: { rule1: {}, rule2: {}, rule3: {} },
+        constraints: {},
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+
+      const conflictSet = detectConflicts(tx, rem);
+
+      expect(conflictSet.hasConflicts).toBe(false);
+      expect(conflictSet.conflicts).toHaveLength(0);
+    });
+
+    it("should handle missing rulesApplied in metadata", () => {
+      const tx = createTransaction("intent-1", {});
+      const rem: RuleExecutionManifest = {
+        rules: { rule1: {}, rule2: {} },
+        constraints: {},
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+
+      const conflictSet = detectConflicts(tx, rem);
+
+      expect(conflictSet.hasConflicts).toBe(true);
+      expect(conflictSet.conflicts[0].remExpected).toBe(2);
+      expect(conflictSet.conflicts[0].actualState).toBe(0);
+    });
+
+    it("should detect lineage integrity issues", () => {
+      const tx = createTransaction("intent-1", { lineage: [] });
+      const rem: RuleExecutionManifest = {
+        rules: {},
+        constraints: {},
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+
+      const conflictSet = detectConflicts(tx, rem);
+
+      expect(conflictSet.hasConflicts).toBe(true);
+      expect(conflictSet.conflicts.some((c) => c.type === "lineage-broken")).toBe(
+        true,
+      );
+    });
+
+    it("should not detect lineage conflicts when lineage is valid", () => {
+      const tx = createTransaction("intent-1", { lineage: ["intent-0"] });
+      const rem: RuleExecutionManifest = {
+        rules: {},
+        constraints: {},
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+
+      const conflictSet = detectConflicts(tx, rem);
+
+      expect(conflictSet.conflicts.some((c) => c.type === "lineage-broken")).toBe(
+        false,
+      );
+    });
+
+    it("should set detectedAt timestamp", () => {
+      const tx = createTransaction("intent-1", {});
+      const rem: RuleExecutionManifest = {
+        rules: {},
+        constraints: {},
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+      const before = new Date();
+
+      const conflictSet = detectConflicts(tx, rem);
+
+      const after = new Date();
+      expect(conflictSet.detectedAt.getTime()).toBeGreaterThanOrEqual(
+        before.getTime(),
+      );
+      expect(conflictSet.detectedAt.getTime()).toBeLessThanOrEqual(
+        after.getTime(),
+      );
+    });
+  });
+});

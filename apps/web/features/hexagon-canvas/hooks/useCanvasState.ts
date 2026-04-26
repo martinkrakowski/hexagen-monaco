@@ -12,12 +12,12 @@ import {
 import { nodeKindFromHexagonType } from "@hexagen/ui-projection-compiler";
 import type { SolveGraphLayoutUseCase } from "@hexagen/layout-engine";
 import {
-  getArchitectureGraphProvider,
-  getGenerateHexagonalMapUseCase,
-  getMapNodeVisualUseCase,
-  getSolveGraphLayoutUseCase,
-} from "@/lib/wire";
-import type { WizardData } from "@hexagen/shared";
+   getArchitectureGraphProvider,
+   getGenerateHexagonalMapUseCase,
+   getMapNodeVisualUseCase,
+   getSolveGraphLayoutUseCase,
+ } from "@/lib/wire";
+import type { WizardData } from "@hexagen/project-configuration";
 import { useCanvasLayout } from "./useCanvasLayout";
 
 interface GraphState {

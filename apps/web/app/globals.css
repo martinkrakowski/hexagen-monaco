@@ -98,13 +98,38 @@
   /* Overlay */
   --overlay: 35 10% 15%;
 
-  /* Radius */
-  --radius: 0.375rem;
+   /* Radius */
+   --radius: 0.375rem;
+
+   /* Component-level tokens (derived from primitives) */
+   --button-height: 40px;
+   --button-padding-x: 12px;
+   --button-padding-y: 8px;
+   --button-border-radius: 4px;
+
+   --input-height: 40px;
+   --input-padding-x: 12px;
+   --input-padding-y: 8px;
+   --input-border-radius: 4px;
+
+   --card-padding: 16px;
+   --card-padding-lg: 24px;
+   --card-gap: 16px;
+   --card-border-radius: 6px;
+
+   --badge-height: 20px;
+   --badge-padding-x: 8px;
+   --badge-border-radius: 9999px;
+
+   --page-section-gap: 24px;
+   --form-field-gap: 8px;
 }
 
 /* ── Dark Mode — Warm Neutral ─────────────────────────────────────────────── */
 .dark {
   color-scheme: dark;
+
+  /* Component tokens inherit from :root and work in dark mode via CSS variable delegation */
 
   --background: 35 10% 8%;
   --foreground: 35 10% 92%;

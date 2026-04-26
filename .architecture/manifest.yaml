@@ -1009,10 +1009,10 @@ bounded_contexts:
       - sync
   - name: architectural-enforcement
     type: supporting
-    status: scaffold
+    status: frozen
     description: >-
-      Architectural enforcement tooling — future home of the ESLint plugin
-      and boundary validation rules. Currently scaffold-only.
+      Architectural enforcement tooling — frozen as of 2026-04-25. ESLint plugin
+      lives in @hexagen/eslint-plugin-ui. Boundary validation in tools/arch-linter.
     layers:
       domain: {}
       application: {}
@@ -1020,10 +1020,10 @@ bounded_contexts:
 
   - name: code-generation
     type: supporting
-    status: scaffold
+    status: frozen
     description: >-
-      Code generation tooling — future home of template-based code
-      generation. Currently scaffold-only.
+      Code generation tooling — frozen as of 2026-04-25. Code generation
+      integrated into @hexagen/sync and @hexagen/project-generation.
     layers:
       domain: {}
       application: {}
@@ -1214,9 +1214,11 @@ bounded_contexts:
       - shared
   - name: transaction-system
     type: core
+    status: frozen
     description: >-
       Transaction orchestration — speculative state machine, backpressure
-      control, semantic caching for intent processing pipeline
+      control, semantic caching for intent processing pipeline. FROZEN: Zero
+      runtime consumers; REM + prompt-compiler determinism pending Phase 5.
     layers:
       domain:
         entities:

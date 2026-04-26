@@ -11,13 +11,19 @@ export * from "./domain";
 export * from "./application";
 // Export types from schema
 export type {
-  WorkspaceGovernance,
-  PortConfiguration,
-  PeerContextMapping,
-  BoundedContext,
-  ExternalContext,
-  ProjectSpec,
-} from "./schema";
+   WorkspaceGovernance,
+   PortConfiguration,
+   PeerContextMapping,
+   BoundedContext,
+   ExternalContext,
+   ProjectSpec,
+   // Wizard domain aliases (for consolidated schema management)
+   WizardData,
+   WizardGovernance,
+   ContextRelationshipType,
+   DomainEventRef,
+   PeerMapping,
+ } from "./schema";
 // Re-export manifest schema types for consumers
 export {
   BoundedContextTypeSchema,

@@ -1,8 +1,8 @@
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 import type {
-  HexagonEdge,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+   HexagonEdge,
+   HexagonNodeWithLayout,
+ } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 import { generateBoundedContextNodes } from "./generate-bounded-context-nodes.js";
