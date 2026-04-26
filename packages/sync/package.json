@@ -19,6 +19,7 @@
     "build": "tsup && tsc -p tsconfig.build.json --emitDeclarationOnly && node ../../scripts/fix-esm-barrels.js dist",
     "typecheck": "tsc --noEmit",
     "cli": "node dist/cli.js",
+    "pack:prepare": "node ../../scripts/prepare-publish-package.js .",
     "test": "tsx --test \"__tests__/**/*.test.ts\" \"__tests__/**/*.spec.ts\"",
     "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\" \"__tests__/**/*.spec.ts\"",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"

@@ -199,6 +199,11 @@ Final commit. Phase 6 complete.
    engineering phase.
 3. **Generated project integration tests** — end-to-end test that generates a fresh
    project and runs `npx hexagen` against it. Separate QA phase.
+4. **Add a repo-root `LICENSE` file** — the `license: "MIT"` field in manifests
+   satisfies npm registry requirements, but a physical `LICENSE` file is expected by
+   security audits, OSS compliance tooling, and due-diligence reviews. Flagged by
+   `scripts/prepare-publish-package.js` during Phase 6c staging (no
+   package-local and no repo-root LICENSE found). Low-effort, non-blocking.
 
 ---
 
