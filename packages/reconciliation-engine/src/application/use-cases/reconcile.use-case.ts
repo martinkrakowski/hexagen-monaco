@@ -1,9 +1,7 @@
 import type { ReconciliationPort } from "../ports/in/reconcile.port.js";
 import type { CompareVerdictsPort } from "../ports/in/compare-verdicts.port.js";
 import type { ResolveConflictPort } from "../ports/in/resolve-conflict.port.js";
-import type { PromoteStatePort } from "../ports/in/promote-state.port.js";
 import type {
-  LintFilterPort,
   LinterReportLike,
   LintViolationLike,
 } from "../ports/in/lint-filter.port.js";
@@ -11,18 +9,14 @@ import type { ManifestPatchPort } from "../ports/out/manifest-patch.port.js";
 import type { ReconcileRequest } from "../ports/in/reconcile.port.js";
 import type { Patch, ReconciliationResult } from "../../domain/llm-response.js";
 import type { Verdict } from "../../domain/verdict.js";
-import type { ReconciliationState } from "../../domain/reconciliation-state.js";
 import { createVerdict } from "../../domain/verdict.js";
-import { createInitialState } from "../../domain/reconciliation-state.js";
 
 export class ReconcileUseCase {
   constructor(
     private readonly reconciliationPort: ReconciliationPort,
     private readonly compareVerdictsPort: CompareVerdictsPort,
     private readonly resolveConflictPort: ResolveConflictPort,
-    private readonly promoteStatePort: PromoteStatePort,
     private readonly manifestPatchPort?: ManifestPatchPort,
-    private readonly lintFilterPort?: LintFilterPort,
   ) {}
 
   async execute(
@@ -30,23 +24,13 @@ export class ReconcileUseCase {
     manifestPath?: string,
     linterReport?: LinterReportLike,
   ): Promise<ReconciliationResult> {
-    let state: ReconciliationState = createInitialState();
-
-    state = { ...state, version: state.version + 1, lastUpdated: Date.now() };
-
     const diffResult = await this.reconciliationPort.reconcile(request);
 
     if (!diffResult.success) {
       return diffResult;
     }
 
-    state = { ...state, version: state.version + 1, lastUpdated: Date.now() };
-
-    let patches = diffResult.patches;
-
-    if (this.lintFilterPort && linterReport) {
-      patches = this.lintFilterPort.filterPatches(patches, linterReport);
-    }
+    const patches = diffResult.patches;
 
     const verdicts = this.generateVerdicts(patches, linterReport);
 
@@ -55,10 +39,6 @@ export class ReconcileUseCase {
     const resolvedVerdicts = this.resolvePatchConflicts(sortedVerdicts);
 
     const acceptedVerdicts = resolvedVerdicts.filter((v) => v.accepted);
-
-    if (acceptedVerdicts.length > 0) {
-      state = this.promoteStatePort.promoteToPhase(state, "approved");
-    }
 
     const finalPatches = this.extractAcceptedPatches(patches, acceptedVerdicts);
 

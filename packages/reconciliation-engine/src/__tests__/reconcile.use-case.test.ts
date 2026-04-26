@@ -1,9 +1,7 @@
 import { ReconcileUseCase } from "../application/use-cases/reconcile.use-case.js";
 import { StructuredDiffReconciliationAdapter } from "../infrastructure/adapters/structured-diff-reconciliation.adapter.js";
 import { VerdictComparatorAdapter } from "../infrastructure/adapters/verdict-comparator.adapter.js";
-import { MonotonicStatePromoterAdapter } from "../infrastructure/adapters/monotonic-state-promoter.adapter.js";
 import { GovernanceAwareConflictResolverAdapter } from "../infrastructure/adapters/governance-aware-conflict-resolver.adapter.js";
-import { LinterReportFilterAdapter } from "../infrastructure/adapters/linter-report-filter.adapter.js";
 import type { ReconcileRequest } from "../application/ports/in/reconcile.port.js";
 import type { LinterReportLike } from "../application/ports/in/lint-filter.port.js";
 import type {
@@ -32,7 +30,6 @@ describe("ReconcileUseCase", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
     );
   });
 
@@ -95,7 +92,6 @@ describe("ReconcileUseCase", () => {
       new FailingReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
     );
 
     const request = makeRequest(
@@ -161,9 +157,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
-      undefined,
-      new LinterReportFilterAdapter(),
     );
 
     const report = makeReport([
@@ -193,9 +186,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
-      undefined,
-      new LinterReportFilterAdapter(),
     );
 
     const report = makeReport([]);
@@ -217,9 +207,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
-      undefined,
-      new LinterReportFilterAdapter(),
     );
 
     const request = makeRequest(
@@ -239,9 +226,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
-      undefined,
-      new LinterReportFilterAdapter(),
     );
 
     const report = makeReport([
@@ -271,9 +255,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
-      undefined,
-      new LinterReportFilterAdapter(),
     );
 
     const report = makeReport([]);
@@ -295,9 +276,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
-      undefined,
-      new LinterReportFilterAdapter(),
     );
 
     const request = makeRequest(
@@ -317,7 +295,6 @@ describe("ReconcileUseCase with LintFilterPort", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      new MonotonicStatePromoterAdapter(),
     );
 
     const report = makeReport([
