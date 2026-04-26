@@ -17,6 +17,13 @@ import type {
 } from "../../application/ports/in/nl-parser.port.js";
 
 /**
+ * Regex for validating context names: lowercase letters, numbers, hyphens, underscores
+ * Used as reference for pattern matching in NL intent parsing.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const CONTEXT_NAME_REGEX = /^[a-z0-9_-]+$/;
+
+/**
  * Pattern matching rule for NL intent
  */
 interface PatternRule {
@@ -158,11 +165,11 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
         },
       },
 
-      // Pattern 6: "Create a link from [SOURCE] to [TARGET]"
+      // Pattern 6: "Create a/an link/edge from [SOURCE] to [TARGET]"
       {
         pattern:
-          /create\s+a\s+link\s+from\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+to\s+([a-zA-Z_][a-zA-Z0-9_]*)/i,
-        intentType: "create_link",
+          /create\s+an?\s+(?:link|edge)\s+from\s+([a-zA-Z0-9_-]+)\s+to\s+([a-zA-Z0-9_-]+)/i,
+        intentType: "create_edge",
         handler: (match) => {
           const source = match[1];
           const target = match[2];
@@ -176,6 +183,30 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
                 target: target as Identifier,
                 attributes: {
                   description: `Link from ${source} to ${target}`,
+                },
+              },
+            } as DomainCommand,
+          ];
+        },
+      },
+
+      // Pattern 7: "Update/Modify/Change context [NAME] to [PROPERTY]"
+      {
+        pattern:
+          /(?:update|modify|change)\s+(?:the\s+)?(?:bounded\s+)?(?:context\s+)?([a-zA-Z0-9_-]+)\s+(?:(?:context|infrastructure)\s+)?to\s+(.+)/i,
+        intentType: "update_context",
+        handler: (match) => {
+          const contextId = match[1];
+          const property = match[2].trim();
+
+          return [
+            {
+              type: "UpdateNode",
+              payload: {
+                nodeId: contextId as Identifier,
+                attributes: {
+                  configuration: property,
+                  description: `Updated to: ${property}`,
                 },
               },
             } as DomainCommand,
@@ -226,6 +257,7 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           'Try: "Rename <old> to <new>"',
           'Try: "Add an entity named <name> to <context>"',
           'Try: "Create a link from <source> to <target>"',
+          'Try: "Update <context> to <property>"',
         ],
       },
     };

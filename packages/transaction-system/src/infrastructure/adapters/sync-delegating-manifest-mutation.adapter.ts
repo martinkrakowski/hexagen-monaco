@@ -80,8 +80,15 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
 
   private applyAddNode(manifest: Manifest, patch: Patch): void {
     const contexts = manifest.bounded_contexts ?? [];
+    const ctxId = patch.targetId;
+    
+    // Check for duplicate context
+    if (contexts.some((c) => c.name === ctxId)) {
+      throw new Error(`Bounded context '${ctxId}' already exists`);
+    }
+    
     const context: BoundedContext = {
-      name: patch.targetId,
+      name: ctxId,
       type: (patch.payload.kind as BoundedContext["type"]) ?? "core",
       ...patch.payload,
     };
