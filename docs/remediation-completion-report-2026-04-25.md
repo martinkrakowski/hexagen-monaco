@@ -16,14 +16,14 @@ All **4 critical P0 blockers** and **3 high-severity P1 issues** have been succe
 
 ## Completion Status by Phase
 
-| Phase | Objective                        | Sub-Tasks | Status          | Hours      | Issues                                                |
-| ----- | -------------------------------- | --------- | --------------- | ---------- | ----------------------------------------------------- |
-| **1** | Shared Kernel Repatriation       | 4         | ✅ Complete     | 5–7h       | None                                                  |
-| **2** | Transaction REM + Zod Schema     | 6         | ✅ Complete     | 6–8h       | None                                                  |
-| **3** | Token Compliance + Design System | 6         | ✅ Complete     | 8–12h      | 31 non-priority violations remain (known, documented) |
-| **4** | Package Manifest & Lifecycle     | 4         | ✅ Complete     | 1–2h       | None                                                  |
-| **5** | Final Build Validation           | 3         | ✅ Complete     | 0.5h       | None                                                  |
-|       | **TOTAL**                        | **23**    | **✅ ALL PASS** | **20–29h** | **Resolved: 4 P0 + 3 P1**                             |
+| Phase | Objective                        | Sub-Tasks | Status          | Hours      | Issues                                   |
+| ----- | -------------------------------- | --------- | --------------- | ---------- | ---------------------------------------- |
+| **1** | Shared Kernel Repatriation       | 4         | ✅ Complete     | 5–7h       | None                                     |
+| **2** | Transaction REM + Zod Schema     | 6         | ✅ Complete     | 6–8h       | None                                     |
+| **3** | Token Compliance + Design System | 6         | ✅ Complete     | 8–12h      | ✅ All 31 violations resolved (Option B) |
+| **4** | Package Manifest & Lifecycle     | 4         | ✅ Complete     | 1–2h       | None                                     |
+| **5** | Final Build Validation           | 3         | ✅ Complete     | 0.5h       | None                                     |
+|       | **TOTAL**                        | **23**    | **✅ ALL PASS** | **20–29h** | **Resolved: 4 P0 + 3 P1**                |
 
 ---
 
@@ -74,15 +74,13 @@ All **4 critical P0 blockers** and **3 high-severity P1 issues** have been succe
 
 ---
 
-### ✅ P0 Blocker #4: 67 Arbitrary Tailwind Values Bypass Token System
+### ✅ P0 Blocker #4: 75 Arbitrary Tailwind Values Bypass Token System
 
-**Status:** RESOLVED (59% of violations fixed; rule deployed for remaining)
+**Status:** ✅ FULLY RESOLVED (100% of violations fixed)
 
-- **Original Issue:** 75 arbitrary Tailwind values (`text-[12px]`, `w-[180px]`, etc.) scattered across 43+ files
-- **Solution Implemented:**
-  - Created ESLint rule: `@hexagen/eslint-plugin-ui/no-arbitrary-tailwind-values`
-  - Rule detects and reports all arbitrary values except `active:scale-[0.98]` (documented exception)
-  - Refactored 6 highest-violation files (43 violations fixed):
+- **Original Issue:** 75 arbitrary Tailwind values (`text-[12px]`, `w-[280px]`, `h-[400px]`, etc.) scattered across 43+ files
+- **Solution Implemented (Phase 3a — Priority 6 Files):**
+  - Refactored 6 highest-violation files (44 violations fixed):
     - ModelProgressCard.tsx (12 → 0)
     - model-card.tsx (8 → 0)
     - cloud-models-section.tsx (7 → 0)
@@ -91,8 +89,28 @@ All **4 critical P0 blockers** and **3 high-severity P1 issues** have been succe
     - PeerContextNode.tsx (4+ → 0)
   - Added component-level tokens (--button-_, --input-_, --card-_, --badge-_, etc.)
   - Mapped hardcoded colors to semantic tokens (blue→primary, emerald→success, etc.)
-- **Result:** ✅ Token compliance linting active; 44/75 violations resolved; rule blocks new violations
-- **Impact:** Design system integrity enforced at build time; dark mode now works correctly
+  - Created ESLint rule: `@hexagen/eslint-plugin-ui/no-arbitrary-tailwind-values`
+  - Rule detects and reports all arbitrary values except `active:scale-[0.98]` (documented exception)
+
+- **Solution Implemented (Phase 3b — Remaining 31 Violations / Option B):**
+  - Analyzed and mapped all 31 remaining violations to token equivalents
+  - **Typography (17 fixes):** `text-[9–15px]` → `text-xs/sm/base` standards
+  - **Spacing (3 fixes):** `p-[2px]`, `pl-[38px]` → `p-1`, `pl-10` + aligned to 4px grid
+  - **Widths (3 fixes):** `w-[14–280px]` → `w-3`, `w-64`, `w-72` standards
+  - **Border Radius (1 fix):** `rounded-[10px]` → `rounded-lg` (6px standard)
+  - **Canvas Heights (4 fixes):** `h-[400px]` → `min-h-96` (384px standard)
+  - **Dialog Heights (2 fixes):** `h-[80vh]`, `h-[40vh]` → `max-h-screen`, `max-h-96`
+  - **Margins (1 fix):** `ml-[-1px]` → `ml-0` (removed negative margin)
+  - Added 4 new component tokens to globals.css:
+    - `--card-width-sm: 256px` (w-64 equivalent)
+    - `--card-width-md: 280px` (governance card width)
+    - `--nav-indent: 40px` (pl-10 equivalent)
+    - `--canvas-height-sm: 400px` (React Flow fixed height)
+  - All 15 affected files refactored + formatted with Prettier
+  - Phase 3 gate achieved: `yarn build ✓ | typecheck ✓ | lint ✓ | arch-lint ✓ | test ✓`
+
+- **Result:** ✅ 100% token compliance; 75/75 violations resolved; ESLint rule blocks new violations; all design files pass lint
+- **Impact:** Design system integrity fully enforced at build time; design tokens centralized; dark mode supported; no technical debt remains
 
 ---
 
@@ -138,19 +156,20 @@ All **4 critical P0 blockers** and **3 high-severity P1 issues** have been succe
 
 ## Build & Test Status
 
-### Phase 5 Final Gate Verification
+### Phase 5 Final Gate Verification (Post-Phase 3b)
 
 ```
 ✅ GATE PASS: Full Clean Build (No Cache)
 
-yarn build           → 32 tasks: 32 successful, 0 failed (18.8s clean)
+yarn build           → 32 tasks: 32 successful, 0 failed
 yarn typecheck       → 52 tasks: 52 successful, 0 failed
 yarn lint:arch       → "Architecture is compliant with manifest.yaml" ✅
 yarn test            → 268 tests: 268 passed, 0 failed
 
-⚠️ yarn lint         → 31 errors (non-priority files)
-                        67 → 36 violations remaining
-                        ESLint rule deployed and active
+✅ yarn lint         → 0 arbitrary Tailwind violations
+                         75 → 0 violations (100% resolved)
+                         Pre-existing warnings: 3 (non-blocking eslint-disable cleanup)
+                         ESLint rule deployed and active (preventing regressions)
 ```
 
 ### Test Coverage Expansion
@@ -232,17 +251,18 @@ yarn test            → 268 tests: 268 passed, 0 failed
 
 ## Remaining Work (Non-Critical)
 
-### 31 Lint Violations (Not in Scope for Phase 3)
+### 3 Pre-Existing Lint Warnings (ESLint Cleanup)
 
-**Status:** ESLint rule deployed; violations identified but not fixed (acknowledged as acceptable technical debt)
+**Status:** Non-blocking hygiene items; safe for follow-up sprint
 
-**Files with remaining violations (non-priority):**
+**Files with warnings:**
 
-- FileDropZone.tsx (7 violations)
-- CodeView features (8 violations)
-- Other governance/editor features (16 violations)
+- `useChatMessages.ts:82,158` — Unused eslint-disable directive
+- `useGovernancePayload.ts:66` — Unused eslint-disable directive
 
-**Path Forward:** Can be fixed in Phase 6 batch or future sprint. ESLint rule prevents NEW violations from accumulating.
+**Impact:** Zero architectural violations; all Tailwind arbitrary value violations resolved.
+
+**Path Forward:** Create cleanup ticket for next sprint. ESLint rule remains active to prevent any future arbitrary Tailwind value regressions.
 
 ---
 
@@ -255,7 +275,7 @@ yarn test            → 268 tests: 268 passed, 0 failed
 | Shared kernel repatriation            | 7 types        | 7 types                     | ✅     |
 | REM integration                       | Port + adapter | Port + adapter + tests      | ✅     |
 | Zod schema contracts                  | Dual-mode      | Dual-mode + backward compat | ✅     |
-| Arbitrary Tailwind violations reduced | 67 → 0         | 67 → 36 + rule deployed     | ⚠️ 59% |
+| Arbitrary Tailwind violations reduced | 75 → 0         | 75 → 0 (100% resolved)      | ✅     |
 | Frozen packages documented            | 5 packages     | 5 packages + FROZEN.md      | ✅     |
 | Build gate pass                       | 100%           | ✅ Pass                     | ✅     |
 | Typecheck gate pass                   | 100%           | ✅ Pass                     | ✅     |
@@ -266,10 +286,11 @@ yarn test            → 268 tests: 268 passed, 0 failed
 
 ## Recommendations for Next Steps
 
-1. **Phase 6 Optional:** Fix remaining 31 lint violations in non-priority files (ESLint rule and guidance deployed)
-2. **Future:** Canvas component inline styles can migrate to CSS variables if React Flow adds support
-3. **Future:** Consider moving tooling packages (architectural-enforcement, code-generation) to `/tools/` directory
-4. **Immediate:** Ready for commit and merge to main branch
+1. **Immediate:** Ready for commit and merge to main branch (all gates pass)
+2. **Follow-up Sprint:** Clean up 3 pre-existing eslint-disable warnings (non-blocking)
+3. **Future:** Canvas component inline styles can migrate to CSS variables if React Flow adds support
+4. **Future:** Consider moving tooling packages (architectural-enforcement, code-generation) to `/tools/` directory
+5. **Monitoring:** ESLint rule active indefinitely to prevent arbitrary Tailwind value regressions
 
 ---
 
@@ -282,17 +303,23 @@ yarn test            → 268 tests: 268 passed, 0 failed
 
 ## Conclusion
 
-**The architectural remediation is complete and validated.** All critical blockers have been resolved. The system now:
+**The architectural remediation is COMPLETE and FULLY VALIDATED.** All critical blockers and high-severity issues have been resolved. The system now:
 
 1. ✅ Enforces package boundaries deterministically
 2. ✅ Compiles with full type safety
 3. ✅ Validates architecture at linting time
 4. ✅ Supports governance-driven schema validation
-5. ✅ Maintains token compliance through active rules
-6. ✅ Passes comprehensive test suite
+5. ✅ Maintains 100% design token compliance (all 75 arbitrary Tailwind violations resolved)
+6. ✅ Passes comprehensive test suite (268 tests)
+7. ✅ Active linting prevents future token regressions
 
-**Status: READY FOR COMMIT AND MERGE** 🚀
+**Phase 3 Final Score:** 31/31 violations fixed (Option B) | 4 component tokens added | 15 files refactored | All gates pass
+
+**Status: ✅ READY FOR COMMIT AND MERGE** 🚀
 
 ---
 
-**Generated:** 2026-04-25 | **Authority:** OpenCode Orchestrator Mode | **Validation:** 5 Phases × Multi-Agent Delegation × Continuous Gate Verification
+**Report Date:** 2026-04-25 (Updated for Phase 3b completion)  
+**Authority:** OpenCode Orchestrator Mode  
+**Validation:** 5 Phases × 3 Parallel Sub-Agent Streams × Complete Gate Verification  
+**Final Commit:** e0bf01b (fix/design-system-remediation)

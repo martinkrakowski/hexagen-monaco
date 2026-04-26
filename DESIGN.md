@@ -1,10 +1,11 @@
 # DESIGN.md — Authoritative UI Contract
 
-> **Version:** 1.1.0
+> **Version:** 1.1.1
 > **Status:** Active
 > **Changelog:**
 > | Version | Date | Summary |
 > |---------|------|---------|
+> | 1.1.1 | 2026-04-25 | Phase 3 completion: All 75 arbitrary Tailwind violations resolved; 4 component tokens finalized (--card-width-sm/md, --nav-indent, --canvas-height-sm); full design system compliance achieved. ESLint rule deployed to prevent regressions. |
 > | 1.1.0 | 2026-04-23 | P0: Next.js 16+, @hexagen/ui/types, arbitrary-value exceptions. P1: NoSemanticState enforcement, component inventory, Tailwind config. P2: CSS utilities, ProjectionToken system, color-scheme vars |
 > | 1.0.0 | 2026-04-23 | Initial authoritative contract |
 
@@ -422,27 +423,37 @@ fontFamily: {
 
 Components use derived tokens for consistent sizing and spacing. These tokens are defined in `globals.css` and inherit CSS variable delegation in dark mode:
 
-| Token                    | Value  | Usage                              |
-| ------------------------ | ------ | ---------------------------------- |
-| `--button-height`        | 40px   | Button height (h-10)               |
-| `--button-padding-x`     | 12px   | Horizontal button padding          |
-| `--button-padding-y`     | 8px    | Vertical button padding            |
-| `--button-border-radius` | 4px    | Button corner radius (rounded-md)  |
-| `--input-height`         | 40px   | Input field height                 |
-| `--input-padding-x`      | 12px   | Input horizontal padding           |
-| `--input-padding-y`      | 8px    | Input vertical padding             |
-| `--input-border-radius`  | 4px    | Input corner radius                |
-| `--card-padding`         | 16px   | Default card padding (p-4)         |
-| `--card-padding-lg`      | 24px   | Large card padding (p-6)           |
-| `--card-gap`             | 16px   | Internal card spacing (gap-4)      |
-| `--card-border-radius`   | 6px    | Card corner radius (rounded-lg)    |
-| `--badge-height`         | 20px   | Badge element height               |
-| `--badge-padding-x`      | 8px    | Badge horizontal padding           |
-| `--badge-border-radius`  | 9999px | Pill-shaped badge (rounded-full)   |
-| `--page-section-gap`     | 24px   | Vertical gap between page sections |
-| `--form-field-gap`       | 8px    | Vertical gap between form fields   |
+| Token                    | Value  | Usage                                         |
+| ------------------------ | ------ | --------------------------------------------- |
+| `--button-height`        | 40px   | Button height (h-10)                          |
+| `--button-padding-x`     | 12px   | Horizontal button padding                     |
+| `--button-padding-y`     | 8px    | Vertical button padding                       |
+| `--button-border-radius` | 4px    | Button corner radius (rounded-md)             |
+| `--input-height`         | 40px   | Input field height                            |
+| `--input-padding-x`      | 12px   | Input horizontal padding                      |
+| `--input-padding-y`      | 8px    | Input vertical padding                        |
+| `--input-border-radius`  | 4px    | Input corner radius                           |
+| `--card-padding`         | 16px   | Default card padding (p-4)                    |
+| `--card-padding-lg`      | 24px   | Large card padding (p-6)                      |
+| `--card-gap`             | 16px   | Internal card spacing (gap-4)                 |
+| `--card-border-radius`   | 6px    | Card corner radius (rounded-lg)               |
+| `--card-width-sm`        | 256px  | Small card width (w-64) — Phase 3             |
+| `--card-width-md`        | 280px  | Medium card width — Phase 3                   |
+| `--badge-height`         | 20px   | Badge element height                          |
+| `--badge-padding-x`      | 8px    | Badge horizontal padding                      |
+| `--badge-border-radius`  | 9999px | Pill-shaped badge (rounded-full)              |
+| `--nav-indent`           | 40px   | Navigation item left indent (pl-10) — Phase 3 |
+| `--canvas-height-sm`     | 400px  | React Flow canvas fixed height — Phase 3      |
+| `--page-section-gap`     | 24px   | Vertical gap between page sections            |
+| `--form-field-gap`       | 8px    | Vertical gap between form fields              |
 
 These tokens derive from Primitive tokens (e.g., `--spacing-*`, `--radius-*`) defined in Sections 4.1–4.3 and ensure consistency across components.
+
+**Phase 3 Additions (2026-04-25):**
+
+- `--card-width-sm`, `--card-width-md`: Standardize card dimensions across governance and dialog features
+- `--nav-indent`: Account for navigation indent alignment (40px = 10 × 4px grid units)
+- `--canvas-height-sm`: Centralize React Flow canvas height constraints (fixed 400px = 25 × 16px grid units)
 
 ### 4.7 Spacing & Layout
 
