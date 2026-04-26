@@ -1,4 +1,7 @@
-import type { Patch } from "../../../domain/llm-response.js";
+/**
+ * Consolidated linter report type definitions used across packages.
+ * This is the single source of truth for linter report structures.
+ */
 
 export interface LintViolationLike {
   ruleId: string;
@@ -12,8 +15,4 @@ export interface LinterReportLike {
   isCompliant: boolean;
   violations: LintViolationLike[];
   scannedFilesCount: number;
-}
-
-export interface LintFilterPort {
-  filterPatches(patches: Patch[], report: LinterReportLike): Patch[];
 }

@@ -9,3 +9,4 @@ export * from "./intent-lineage.js";
 export * from "./topology-invariants.js";
 export * from "./cardinality-invariants.js";
 export * from "./shared-types.js";
+export * from "./linter-report-like.js";

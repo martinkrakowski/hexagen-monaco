@@ -1,10 +1,7 @@
-import type { Identifier } from "@hexagen/core-domain";
+import type { Identifier, LinterReportLike } from "@hexagen/core-domain";
 import type {
   ProjectSpecLike,
   ArchitectureGraphLike,
-  LinterReportLike,
-} from "../../../domain/prompt-template";
-import type {
   PromptTemplate,
   RenderedPrompt,
 } from "../../../domain/prompt-template";
