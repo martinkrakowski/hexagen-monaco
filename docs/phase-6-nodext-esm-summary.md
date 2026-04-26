@@ -230,6 +230,20 @@ Final commit. Phase 6 complete.
 
 ---
 
+## Explored but Rejected: Project-Wide NodeNext Migration
+
+**Background:** The initial Phase 6 scope included migrating 127+ TypeScript source files to add `.js` extensions and flip `tsconfig.base.json` to `moduleResolution: "NodeNext"` for stricter compile-time validation.
+
+**Rationale for rejection:** tsup bundling (Phase 6a/6b) already solves the actual runtime problem. Adding `.js` extensions monorepo-wide would:
+
+- Zero runtime benefit (tsup handles ESM correctness post-bundling)
+- Impose ongoing maintenance cost (every new relative import needs `.js`)
+- Create `apps/web` exceptions (webpack/SWC owns resolution there, not tsc)
+
+Working directory experiment (2026-04-26) confirmed: NodeNext adds complexity without benefits. Bundler + tsup is architecturally correct.
+
+---
+
 **Created:** 2026-04-25 (superseded original plan)
 **Authority:** ADR-0009, AGENTS.md §Module Resolution
-**Status:** Approved — ready for Phase 6-plan execution
+**Status:** Complete — tsup bundling is the solution
