@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import { wizardToManifest } from "@/lib/wizard-to-manifest";
+import { wizardToManifest } from "@hexagen/wizard-orchestration";
 
 export type GenerationOutcome =
   | { kind: "success"; projectId: string; manifestYaml: string }

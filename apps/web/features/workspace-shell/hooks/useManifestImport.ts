@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import yaml from "js-yaml";
-import { buildWizardData } from "@/lib/compose-wizard-data";
+import { buildWizardData } from "@hexagen/wizard-orchestration";
 import type { ProjectConfig, WizardData } from "@hexagen/project-configuration";
 import { emptyFormValues } from "../../project-wizard/config";
 
