@@ -17,8 +17,6 @@ import {
   StructuredDiffReconciliationAdapter,
   VerdictComparatorAdapter,
   GovernanceAwareConflictResolverAdapter,
-  MonotonicStatePromoterAdapter,
-  LinterReportFilterAdapter,
 } from "@hexagen/reconciliation-engine";
 import type {
   ModifyArchitectureDeps,
@@ -83,9 +81,7 @@ export const getModifyArchitectureUseCase = (
     new StructuredDiffReconciliationAdapter(),
     new VerdictComparatorAdapter(),
     new GovernanceAwareConflictResolverAdapter(),
-    new MonotonicStatePromoterAdapter(),
     undefined,
-    new LinterReportFilterAdapter(),
   );
 
   const deps: ModifyArchitectureDeps = {
