@@ -1,6 +1,6 @@
 "use client";
 
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 import { useGovernanceData } from "./hooks/useGovernanceData";
 import { GovernanceAssistantPanel } from "./GovernanceAssistantPanel";
 

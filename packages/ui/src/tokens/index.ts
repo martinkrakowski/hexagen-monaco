@@ -1,15 +1,14 @@
 export * from "./projection-token.js";
 
 export const TOKENS = {
-  colors: [
-    "primary",
-    "secondary",
-    "accent",
-    "success",
-    "warning",
-    "error",
-    "info",
-  ],
+   colors: [
+     "primary",
+     "secondary",
+     "accent",
+     "success",
+     "warning",
+     "info",
+   ],
   spacing: [
     "unit",
     "0",

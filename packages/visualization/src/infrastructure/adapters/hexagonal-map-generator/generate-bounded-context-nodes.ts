@@ -1,9 +1,9 @@
-import type { BoundedContext } from "@hexagen/shared";
+import type { BoundedContext } from "@hexagen/project-configuration";
 import type {
-  HexagonEdge,
-  HexagonNodeType,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+   HexagonEdge,
+   HexagonNodeType,
+   HexagonNodeWithLayout,
+ } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG, staggerYFor } from "./config.js";
 

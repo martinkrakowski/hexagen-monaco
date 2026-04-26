@@ -37,11 +37,11 @@ export function EditorToolbar({
           {language}
         </span>
         {isEditing && (
-          <span
-            className={`text-xs ${hasChanges ? "text-amber-500" : "text-emerald-500"}`}
-          >
-            {hasChanges ? "Unsaved changes" : "Editing"}
-          </span>
+           <span
+             className={`text-xs ${hasChanges ? "text-warning" : "text-success"}`}
+           >
+             {hasChanges ? "Unsaved changes" : "Editing"}
+           </span>
         )}
       </div>
 

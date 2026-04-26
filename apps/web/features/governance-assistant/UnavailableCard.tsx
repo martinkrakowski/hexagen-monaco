@@ -39,9 +39,7 @@ export function UnavailableCard({ status }: UnavailableCardProps) {
       </div>
       <div className="text-center space-y-1">
         <h3 className="text-base font-semibold">{msg.title}</h3>
-        <p className="text-sm text-muted-foreground max-w-[260px]">
-          {msg.body}
-        </p>
+        <p className="text-sm text-muted-foreground max-w-64">{msg.body}</p>
       </div>
     </div>
   );

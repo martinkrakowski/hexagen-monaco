@@ -79,7 +79,6 @@ export function useChatMessages({
     if (!isHistoryLoaded || isStreaming || messages.length === 0) return;
     const port = getChatPersistence();
     port.saveChatHistory(messages).catch(() => {
-      // eslint-disable-next-line no-console
       console.warn("Failed to save chat history");
     });
   }, [isHistoryLoaded, isStreaming, messages]);
@@ -155,7 +154,6 @@ export function useChatMessages({
             );
           }
         } catch (promptError) {
-          // eslint-disable-next-line no-console
           console.warn("Failed to build grounded prompt:", promptError);
           systemPrompt =
             "You are HexaGen Monaco AI. Assist with the architecture project.";

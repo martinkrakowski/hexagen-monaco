@@ -5,7 +5,7 @@ import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
 import { CodeView } from "../code-view/CodeView";
 import { EditableMonaco } from "../monaco-editor/EditableMonaco";
 
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 import type { ViewMode } from "@/types/view-mode";
 
 interface ArchitecturePreviewPaneProps {

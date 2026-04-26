@@ -4,7 +4,7 @@ import { memo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position } from "@xyflow/react";
 import { Package, Gem, Zap, Settings2, X } from "lucide-react";
-import type { DomainEventRef } from "@hexagen/shared";
+import type { DomainEventRef } from "@hexagen/project-configuration";
 import type { VisualVariantCategory } from "@hexagen/ui-projection-compiler";
 
 interface BoundedContextData extends Record<string, unknown> {
@@ -54,26 +54,26 @@ const DOMAIN_COMPASS = [
     color: "text-amber-500",
   },
   {
-    key: "valueObjects",
-    itemsKey: "valueObjectItems",
-    label: "Value Objects",
-    Icon: Gem,
-    color: "text-emerald-500",
-  },
-  {
-    key: "events",
-    itemsKey: "eventItems",
-    label: "Events",
-    Icon: Zap,
-    color: "text-violet-500",
-  },
-  {
-    key: "services",
-    itemsKey: "serviceItems",
-    label: "Services",
-    Icon: Settings2,
-    color: "text-sky-500",
-  },
+     key: "valueObjects",
+     itemsKey: "valueObjectItems",
+     label: "Value Objects",
+     Icon: Gem,
+     color: "text-success",
+   },
+   {
+     key: "events",
+     itemsKey: "eventItems",
+     label: "Events",
+     Icon: Zap,
+     color: "text-info",
+   },
+   {
+     key: "services",
+     itemsKey: "serviceItems",
+     label: "Services",
+     Icon: Settings2,
+     color: "text-info",
+   },
 ] as const;
 
 type CompassKey = (typeof DOMAIN_COMPASS)[number]["label"];
@@ -144,9 +144,9 @@ function CompassModal({ label, items, onClose }: CompassModalProps) {
                 key={`${label}-${item}`}
                 className="flex items-center gap-2 rounded-md px-3 py-2 text-sm bg-muted/50 text-foreground border border-border/50"
               >
-                <span className="text-[10px] font-mono text-muted-foreground w-4 shrink-0">
-                  {idx + 1}
-                </span>
+                 <span className="text-xs font-mono text-muted-foreground w-4 shrink-0">
+                   {idx + 1}
+                 </span>
                 {item}
               </li>
             ))}
@@ -184,9 +184,9 @@ function UnifiedBoundedContextComponent({
         style={{ width: 140, height: 28 }}
         className="relative flex flex-col items-center justify-center select-none"
       >
-        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
-          {String(data.label || "")}
-        </span>
+         <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+           {String(data.label || "")}
+         </span>
         <div className="w-full h-px bg-muted-foreground/20 mt-1" />
         {/* South handle for entity/use-case connections */}
         <Handle
@@ -389,12 +389,12 @@ function UnifiedBoundedContextComponent({
             .map((line, lineIdx) => (
               <span
                 key={`${line}-${lineIdx}`}
-                className={
-                  lineIdx > 0
-                    ? "opacity-50 text-[9px] lowercase mt-1 font-normal tracking-normal normal-case"
-                    : ""
-                }
-              >
+                 className={
+                   lineIdx > 0
+                     ? "opacity-50 text-xs lowercase mt-1 font-normal tracking-normal normal-case"
+                     : ""
+                 }
+               >
                 {line}
               </span>
             ))}
@@ -415,9 +415,9 @@ function UnifiedBoundedContextComponent({
               aria-label={`View ${label}`}
             >
               <Icon size={16} className={color} />
-              <span className="text-[7px] uppercase tracking-tighter font-bold text-muted-foreground mt-1">
-                {label}
-              </span>
+               <span className="text-xs uppercase tracking-tighter font-bold text-muted-foreground mt-1">
+                 {label}
+               </span>
               <span className="text-xs font-mono text-foreground">
                 {getStatCount(data.stats, key)}
               </span>

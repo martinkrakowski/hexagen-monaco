@@ -18,10 +18,10 @@ function GroupBoundaryNodeComponent({
       style={{ width, height, backgroundColor: "transparent" }}
     >
       <div className="absolute top-5 left-6 text-left">
-        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
+        <div className="text-xs font-bold text-muted-foreground uppercase">
           {data.label}
         </div>
-        <div className="text-[9px] text-muted-foreground/60 italic">
+        <div className="text-xs text-muted-foreground/60 italic">
           Governance Zone • Internal Bounded Contexts
         </div>
       </div>

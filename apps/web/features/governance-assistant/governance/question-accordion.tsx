@@ -48,7 +48,7 @@ export function QuestionAccordion({
           <div className="flex-1 min-w-0">
             <p
               className={[
-                "text-[13px] leading-snug transition-colors mt-1",
+                "text-sm leading-snug transition-colors mt-1",
                 isExpanded
                   ? "text-primary font-medium"
                   : "text-foreground/80 group-hover:text-foreground",

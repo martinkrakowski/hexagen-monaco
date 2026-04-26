@@ -35,7 +35,7 @@ export function StepPills({ currentStepIndex }: StepPillsProps) {
               {isCompleted ? (
                 <Check size={10} strokeWidth={3} />
               ) : (
-                <span className="text-[10px] font-semibold">{i + 1}</span>
+                <span className="text-xs font-semibold">{i + 1}</span>
               )}
               <span>{label}</span>
             </div>

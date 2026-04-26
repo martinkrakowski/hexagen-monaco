@@ -130,3 +130,15 @@ package_rules:
     allowed_imports:
       - "@hexagen/shared"
       - "@hexagen/local-llm"
+      - "@hexagen/project-configuration"
+    # Imports WizardData aliases from project-configuration for context serialization
+
+  - name: "wizard-orchestration"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/messaging"
+      - "@hexagen/project-configuration"
+      - "@hexagen/sync"
+    # Imports WizardData, BoundedContext, ExternalContext, PeerMapping from project-configuration
+    # for deterministic wizard flow coordination. Imports Manifest from sync because
+    # wizard-orchestration is the UI-facing bridge that transforms WizardData → Manifest.

@@ -11,7 +11,7 @@ export function WakingUpCard({ onCancel }: WakingUpCardProps) {
   return (
     <LazyMotion features={domAnimation}>
       <div className="flex flex-col items-center justify-center h-full p-6">
-        <div className="relative rounded-xl p-[2px] w-full max-w-[280px]">
+        <div className="relative rounded-xl p-1 w-full max-w-[var(--card-width-md)]">
           <m.div
             className="absolute inset-0 rounded-xl"
             style={{
@@ -38,7 +38,7 @@ export function WakingUpCard({ onCancel }: WakingUpCardProps) {
               ease: "linear",
             }}
           />
-          <div className="relative rounded-[10px] bg-card px-5 py-6 flex flex-col items-center gap-4">
+          <div className="relative rounded-lg bg-card px-5 py-6 flex flex-col items-center gap-4">
             <m.div
               className="flex items-center justify-center w-11 h-11 rounded-full bg-primary/10"
               animate={{ scale: [1, 1.08, 1] }}

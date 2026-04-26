@@ -11,11 +11,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   projectConfigSchema,
   type ProjectConfig,
+  type WizardData,
 } from "@hexagen/project-configuration";
-import type { WizardData } from "@hexagen/shared";
 
 import { emptyFormValues } from "../../project-wizard/config";
-import { buildWizardData } from "@/lib/compose-wizard-data";
+import { buildWizardData } from "@hexagen/wizard-orchestration";
 
 export interface UseWizardFormReturn {
   form: UseFormReturn<ProjectConfig>;

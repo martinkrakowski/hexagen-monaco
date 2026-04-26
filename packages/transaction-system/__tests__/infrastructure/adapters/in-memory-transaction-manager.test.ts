@@ -30,6 +30,71 @@ describe("InMemoryTransactionManager", () => {
 
       expect(retrieved).toEqual(tx);
     });
+
+    it("should store REM when provided", () => {
+      const rem = {
+        rules: { rule1: "value" },
+        constraints: { constraint1: "value" },
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+      const tx = manager.begin("intent-1", {}, rem);
+
+      expect(tx.metadata.rem).toEqual(rem);
+    });
+
+    it("should store lineage when provided", () => {
+      const lineage = ["intent-0", "intent-1"];
+      const tx = manager.begin("intent-2", {}, undefined, lineage);
+
+      expect(tx.metadata.lineage).toEqual(lineage);
+    });
+
+    it("should store both REM and lineage together", () => {
+      const rem = {
+        rules: { rule1: "value" },
+        constraints: { constraint1: "value" },
+        appliedAt: "2024-01-01T00:00:00Z",
+      };
+      const lineage = ["intent-0"];
+      const tx = manager.begin("intent-1", { source: "api", rulesApplied: 1 }, rem, lineage);
+
+      expect(tx.metadata.source).toBe("api");
+      expect(tx.metadata.rem).toEqual(rem);
+      expect(tx.metadata.lineage).toEqual(lineage);
+      expect(tx.metadata.rulesApplied).toBe(1);
+      // No conflicts since rulesApplied (1) matches REM rules count (1)
+      expect(tx.metadata.conflicts).toBeUndefined();
+    });
+
+    it("should be backward compatible without REM or lineage", () => {
+      const metadata = { custom: "data" };
+      const tx = manager.begin("intent-1", metadata);
+
+      expect(tx.metadata).toEqual(metadata);
+      expect(tx.metadata.rem).toBeUndefined();
+      expect(tx.metadata.lineage).toBeUndefined();
+    });
+
+    it("should warn when lineage references non-existent prior intent", () => {
+      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+      const lineage = ["non-existent-intent"];
+      manager.begin("intent-1", {}, undefined, lineage);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Lineage] Prior intent non-existent-intent not found"),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it("should validate lineage chain correctly", () => {
+      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+      const tx1 = manager.begin("intent-0");
+      const tx2 = manager.begin("intent-1", {}, undefined, [tx1.intentId]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(tx2.metadata.lineage).toEqual([tx1.intentId]);
+      consoleSpy.mockRestore();
+    });
   });
 
   describe("get()", () => {

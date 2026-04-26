@@ -1,5 +1,5 @@
 import type { LLMMessage } from "../domain/ports/llm-provider.port";
-import type { WizardData } from "@hexagen/shared";
+import type { WizardData } from "@hexagen/project-configuration";
 
 export interface ProjectContextInput {
   wizardData: WizardData;

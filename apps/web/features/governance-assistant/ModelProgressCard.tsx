@@ -207,7 +207,7 @@ export function ModelProgressCard({
     <LazyMotion features={domAnimation}>
       <div className="flex items-center justify-center w-full h-full p-4">
         <m.div
-          className={`p-1 rounded-[0.2rem] transition-all duration-700 ease-out ${borderClass}`}
+          className={`p-1 rounded-sm transition-all duration-700 ease-out ${borderClass}`}
           initial={enterInitial}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={enterSpring}
@@ -256,7 +256,7 @@ export function ModelProgressCard({
                   <button
                     type="button"
                     aria-label="Close"
-                    className="w-[30px] h-[30px] rounded-sm flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                    className="w-8 h-8 rounded-sm flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                     onClick={onCancel}
                   >
                     <CloseIcon />
@@ -279,13 +279,13 @@ export function ModelProgressCard({
                   <span className="text-sm font-semibold truncate text-foreground">
                     {displayName}
                   </span>
-                  {model?.quantizeLevel && (
-                    <span className="bg-primary/10 text-primary text-[10px] font-bold tracking-wide uppercase px-2 py-[2px] rounded-sm leading-none">
-                      {model.quantizeLevel}
-                    </span>
-                  )}
+                   {model?.quantizeLevel && (
+                     <span className="bg-primary/10 text-primary text-xs font-bold tracking-wide uppercase px-2 py-0.5 rounded-sm leading-none">
+                       {model.quantizeLevel}
+                     </span>
+                   )}
                 </div>
-                <span className="font-mono block truncate text-[10.5px] text-muted-foreground">
+                <span className="font-mono block truncate text-xs text-muted-foreground">
                   {displayModelId || "Awaiting manifest..."}
                 </span>
               </m.div>
@@ -347,14 +347,14 @@ export function ModelProgressCard({
                   <div className="flex flex-col gap-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="w-[7px] h-[7px] rounded-full bg-primary animate-dot-pulse" />
-                        <span
-                          className="text-xs font-medium text-primary"
-                          aria-live="polite"
-                        >
-                          {phaseLabel}
-                        </span>
-                      </div>
+                         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-dot-pulse" />
+                         <span
+                           className="text-xs font-medium text-primary"
+                           aria-live="polite"
+                         >
+                           {phaseLabel}
+                         </span>
+                       </div>
                       <span
                         className="font-mono text-sm font-semibold text-foreground"
                         aria-hidden="true"
@@ -365,12 +365,12 @@ export function ModelProgressCard({
 
                     <div
                       role="progressbar"
-                      aria-valuenow={percent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuetext={`${percent}% complete — ${phaseLabel}`}
-                      className="w-full h-[6px] bg-muted rounded-sm overflow-hidden relative"
-                    >
+                       aria-valuenow={percent}
+                       aria-valuemin={0}
+                       aria-valuemax={100}
+                       aria-valuetext={`${percent}% complete — ${phaseLabel}`}
+                       className="w-full h-1.5 bg-muted rounded-sm overflow-hidden relative"
+                     >
                       <div
                         className="h-full rounded-sm bg-gradient-to-r from-primary to-primary/80 transition-all duration-300 ease-out relative"
                         style={{ width: `${percent}%` }}
@@ -430,16 +430,16 @@ export function ModelProgressCard({
                     transition={footerTransition}
                   >
                     <m.button
-                      type="button"
-                      aria-label="Cancel download"
-                      className="font-sans text-[13px] font-semibold px-[18px] py-2 rounded-sm border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-none"
-                      whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
-                      whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
-                      onClick={onCancel}
-                    >
-                      <CloseIcon />
-                      Cancel Loading
-                    </m.button>
+                       type="button"
+                       aria-label="Cancel download"
+                       className="font-sans text-sm font-semibold px-5 py-2 rounded-sm border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-none"
+                       whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
+                       whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
+                       onClick={onCancel}
+                     >
+                       <CloseIcon />
+                       Cancel Loading
+                     </m.button>
                   </m.div>
                 )}
 
@@ -454,15 +454,15 @@ export function ModelProgressCard({
                   >
                     {onCancel && (
                       <m.button
-                        type="button"
-                        aria-label="Close"
-                        className="font-sans text-[13px] font-semibold px-[18px] py-2 rounded-sm border border-border text-muted-foreground hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
-                        whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
-                        onClick={onCancel}
-                      >
-                        Close
-                      </m.button>
+                         type="button"
+                         aria-label="Close"
+                         className="font-sans text-sm font-semibold px-5 py-2 rounded-sm border border-border text-muted-foreground hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                         whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
+                         whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
+                         onClick={onCancel}
+                       >
+                         Close
+                       </m.button>
                     )}
                     {onRetry && (
                       <m.button

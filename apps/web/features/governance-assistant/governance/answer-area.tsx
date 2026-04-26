@@ -21,7 +21,7 @@ export function AnswerArea({
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 rounded-full bg-primary" />
-          <p className="text-[13px] font-medium text-foreground leading-snug">
+          <p className="text-sm font-medium text-foreground leading-snug">
             AI Answer
           </p>
         </div>

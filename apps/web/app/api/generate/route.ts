@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLogger } from "@/lib/wire";
 import { getGenerateProject } from "@/lib/wire.project-generation";
-import { wizardToManifest } from "@/lib/wizard-to-manifest";
+import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import type { ExportConfig } from "@hexagen/project-generation";
 import { getToken } from "next-auth/jwt";
 

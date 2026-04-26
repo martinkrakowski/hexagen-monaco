@@ -13,7 +13,7 @@ export function SectionLabel({ label, icon: Icon }: SectionLabelProps) {
       <div className="w-4 h-4 rounded flex items-center justify-center bg-primary/10">
         {Icon && <Icon size={10} className="text-primary" strokeWidth={2.5} />}
       </div>
-      <h2 className="text-[13px] font-semibold text-foreground">{label}</h2>
+      <h2 className="text-sm font-semibold text-foreground">{label}</h2>
     </div>
   );
 }

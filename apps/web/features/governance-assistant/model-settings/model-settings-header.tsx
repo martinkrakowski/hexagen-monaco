@@ -20,12 +20,12 @@ export function ModelSettingsHeader({ onBack }: ModelSettingsHeaderProps) {
               <ArrowLeft size={14} />
             </button>
           )}
-          <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
+          <h1 className="text-base font-semibold text-foreground tracking-tight">
             AI Model Settings
           </h1>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground font-normal pl-[38px]">
+      <p className="text-xs text-muted-foreground font-normal pl-10">
         Select and manage AI models
       </p>
     </div>

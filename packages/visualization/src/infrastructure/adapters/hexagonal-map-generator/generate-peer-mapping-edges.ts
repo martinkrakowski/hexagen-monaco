@@ -1,8 +1,8 @@
-import type { BoundedContext, PeerMapping } from "@hexagen/shared";
+import type { BoundedContext, PeerMapping } from "@hexagen/project-configuration";
 import type {
-  HexagonEdge,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+   HexagonEdge,
+   HexagonNodeWithLayout,
+ } from "../../../domain/index.js";
 
 interface GeneratePeerMappingEdgesOptions {
   peerMappings: PeerMapping[];
