@@ -1,1 +1,1 @@
-export type { Manifest, LayerConfig } from "./manifest.js";
+export type { Manifest, BoundedContext, LayerConfig } from "./manifest.js";

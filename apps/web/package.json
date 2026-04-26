@@ -14,6 +14,7 @@
     "@auth/core": "^0.34.3",
     "@dagrejs/dagre": "^2.0.4",
     "@hexagen/agentic-interaction": "workspace:*",
+    "@hexagen/ai-pipeline": "workspace:*",
     "@hexagen/core-domain": "workspace:*",
     "@hexagen/eslint-plugin-ui": "workspace:*",
     "@hexagen/governance": "workspace:*",
@@ -24,8 +25,10 @@
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/project-generation": "workspace:*",
     "@hexagen/prompt-compiler": "workspace:*",
+    "@hexagen/reconciliation-engine": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
+    "@hexagen/transaction-system": "workspace:*",
     "@hexagen/ui": "workspace:*",
     "@hexagen/ui-projection-compiler": "workspace:*",
     "@hexagen/visualization": "workspace:*",
@@ -60,6 +63,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/file-saver": "^2.0.7",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.14.10",

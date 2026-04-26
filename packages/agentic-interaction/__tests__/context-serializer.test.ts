@@ -2,15 +2,24 @@ import assert from "node:assert";
 import {
   serializeProjectContext,
   buildContextForLLM,
-} from "../../application/context-serializer.js";
+} from "../src/application/context-serializer.js";
 
 (async () => {
-  // Test 1: serializeProjectContext with empty data
   const emptyContext = serializeProjectContext({
     wizardData: {
-      workspaceScope: "Test Project",
       boundedContexts: [],
       externalContexts: [],
+      governance: {
+        workspaceName: "Test Project",
+        workspaceTemplate: "modular-monolith",
+        packageManager: "yarn",
+        topologyStrictness: "flexible",
+        namespacePrefix: "@hexagen",
+        namingConventions: {
+          contextDirectoryPattern: "packages/",
+          adapterSuffix: ".adapter.ts",
+        },
+      },
       peerMappings: [],
     },
     currentStep: "Step 1",
@@ -26,10 +35,8 @@ import {
   );
   console.log("✅ Test 1: serialize empty context - passed");
 
-  // Test 2: serializeProjectContext with bounded contexts
   const withContexts = serializeProjectContext({
     wizardData: {
-      workspaceScope: "My App",
       boundedContexts: [
         {
           id: "ctx-1",
@@ -45,9 +52,18 @@ import {
         },
       ],
       externalContexts: [],
+      governance: {
+        workspaceName: "My App",
+        workspaceTemplate: "modular-monolith",
+        packageManager: "yarn",
+        topologyStrictness: "flexible",
+        namespacePrefix: "@hexagen",
+        namingConventions: {
+          contextDirectoryPattern: "packages/",
+          adapterSuffix: ".adapter.ts",
+        },
+      },
       peerMappings: [],
-      withLlm: true,
-      withBlockchain: false,
     },
     currentStep: "Step 2",
   });
@@ -57,15 +73,23 @@ import {
     "Should include context name",
   );
   assert.ok(withContexts.includes("NestJS"), "Should include framework");
-  assert.ok(withContexts.includes("LLM"), "Should include features");
   console.log("✅ Test 2: serialize with bounded contexts - passed");
 
-  // Test 3: buildContextForLLM returns correct structure
   const llmMessages = buildContextForLLM({
     wizardData: {
-      workspaceScope: "Test",
       boundedContexts: [],
       externalContexts: [],
+      governance: {
+        workspaceName: "Test",
+        workspaceTemplate: "modular-monolith",
+        packageManager: "yarn",
+        topologyStrictness: "flexible",
+        namespacePrefix: "@hexagen",
+        namingConventions: {
+          contextDirectoryPattern: "packages/",
+          adapterSuffix: ".adapter.ts",
+        },
+      },
       peerMappings: [],
     },
     currentStep: "Step 1",
@@ -85,10 +109,8 @@ import {
     "✅ Test 3: buildContextForLLM returns correct structure - passed",
   );
 
-  // Test 4: external contexts are serialized
   const withExternal = serializeProjectContext({
     wizardData: {
-      workspaceScope: "App",
       boundedContexts: [],
       externalContexts: [
         {
@@ -97,6 +119,17 @@ import {
           relationshipType: "upstream" as const,
         },
       ],
+      governance: {
+        workspaceName: "App",
+        workspaceTemplate: "modular-monolith",
+        packageManager: "yarn",
+        topologyStrictness: "flexible",
+        namespacePrefix: "@hexagen",
+        namingConventions: {
+          contextDirectoryPattern: "packages/",
+          adapterSuffix: ".adapter.ts",
+        },
+      },
       peerMappings: [],
     },
     currentStep: "Step 1",
@@ -112,12 +145,21 @@ import {
   );
   console.log("✅ Test 4: external contexts serialized - passed");
 
-  // Test 5: peer mappings are serialized
   const withMappings = serializeProjectContext({
     wizardData: {
-      workspaceScope: "App",
       boundedContexts: [],
       externalContexts: [],
+      governance: {
+        workspaceName: "App",
+        workspaceTemplate: "modular-monolith",
+        packageManager: "yarn",
+        topologyStrictness: "flexible",
+        namespacePrefix: "@hexagen",
+        namingConventions: {
+          contextDirectoryPattern: "packages/",
+          adapterSuffix: ".adapter.ts",
+        },
+      },
       peerMappings: [
         {
           consumerContext: "Checkout",

@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { FakeGenerateProjectPort } from "../../doubles/ports/generate-project.fake";
+import { FakeGenerateProjectPort } from "../../doubles/ports/generate-project.fake.js";
 
 /**
  * Minimal test suite for `FakeGenerateProjectPort`.

@@ -6,26 +6,26 @@ monorepo:
   linker: node-modules
   buildTool: turbo
   workspaces:
-    - apps/*
-    - packages/*
+  - apps/*
+  - packages/*
   root:
     hoistDevDependencies: true
     noInternalDeps: true
   eslint:
     extends:
-      - turbo
-      - prettier
+    - turbo
+    - prettier
     rules:
       no-console: warn
-      "@typescript-eslint/no-explicit-any": error
+      '@typescript-eslint/no-explicit-any': error
   tsConfigRootFile: tsconfig.base.json
   tsConfigRoot:
     compilerOptions:
       target: es2022
       lib:
-        - es2022
-        - dom
-        - dom.iterable
+      - es2022
+      - dom
+      - dom.iterable
       module: esnext
       moduleResolution: bundler
       strict: true
@@ -40,21 +40,21 @@ monorepo:
       declaration: true
       emitDeclarationOnly: true
       paths:
-        "@hexagen/*":
-          - packages/*/src/index.ts
-        "@hexagen/shared":
-          - packages/shared/src/index.ts
-        "@hexagen/shared/*":
-          - packages/shared/src/*
-        "@/*":
-          - apps/web/src/*
-          - apps/web/app/*
+        '@hexagen/*':
+        - packages/*/src/index.ts
+        '@hexagen/shared':
+        - packages/shared/src/index.ts
+        '@hexagen/shared/*':
+        - packages/shared/src/*
+        '@/*':
+        - apps/web/src/*
+        - apps/web/app/*
     include: []
     exclude:
-      - node_modules
-      - dist
-      - .next
-      - .turbo
+    - node_modules
+    - dist
+    - .next
+    - .turbo
   workspaceDefaults:
     tsConfig:
       extends: ../../tsconfig.base.json
@@ -68,254 +68,109 @@ monorepo:
         tsBuildInfoFile: ./dist/tsconfig.tsbuildinfo
         paths: {}
       include:
-        - src/**/*
+      - src/**/*
       exclude:
-        - node_modules
-        - dist
-        - .turbo
+      - node_modules
+      - dist
+      - .turbo
       references: []
     eslint:
-      # Default eslint.config.js template consumed by `generateEslintConfig`
-      # (packages/sync/src/generators/eslint.ts). Mirror of
-      # BUILTIN_FALLBACK_TEMPLATE. Per-context overrides may be declared at
-      # `bounded_contexts[<name>].generator.eslint.template`.
-      # The `{packageName}` and `{scope}` vars are available during
-      # interpolation but are unused by this default template.
-      template: |
-        import eslint from '@eslint/js';
-        import tseslint from 'typescript-eslint';
-
-        export default tseslint.config(
-          eslint.configs.recommended,
-          ...tseslint.configs.recommended,
-          {
-            rules: {
-              '@typescript-eslint/no-explicit-any': 'warn',
-              '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-            },
-          },
-          {
-            ignores: ['dist/**', 'node_modules/**'],
-          },
-        );
+      template: "import eslint from '@eslint/js';\nimport tseslint from 'typescript-eslint';\n\
+        \nexport default tseslint.config(\n  eslint.configs.recommended,\n  ...tseslint.configs.recommended,\n\
+        \  {\n    rules: {\n      '@typescript-eslint/no-explicit-any': 'warn',\n\
+        \      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern:\
+        \ '^_' }],\n    },\n  },\n  {\n    ignores: ['dist/**', 'node_modules/**'],\n\
+        \  },\n);\n"
   rootFiles:
-    # Templates for monorepo-root files consumed by `generateRootFiles`.
-    # Supports `{system}`, `{scope}`, `{packageManager}`, `{workspaces}`
-    # interpolation (see packages/sync/src/generators/root-files.ts).
-    # The `|-` block scalar strips the final newline to preserve
-    # byte-identity with `JSON.stringify(obj, null, 2)` output.
     packageJson:
-      template: |-
-        {
-          "name": "{system}",
-          "private": true,
-          "type": "module",
-          "packageManager": "{packageManager}",
-          "workspaces": {workspaces},
-          "scripts": {
-            "build": "turbo build",
-            "dev": "turbo dev",
-            "lint": "turbo lint",
-            "typecheck": "turbo typecheck",
-            "test": "turbo test",
-            "clean": "turbo clean",
-            "sync": "hexagen sync",
-            "sync:dry": "hexagen sync --dry-run",
-            "sync:force": "hexagen sync --force",
-            "lint:arch": "hexagen arch validate",
-            "format": "prettier --write \"**/*.{ts,tsx,md}\""
-          },
-          "devDependencies": {
-            "turbo": "^2.0.0",
-            "typescript": "^5.5.4",
-            "eslint": "^9.0.0",
-            "prettier": "^3.0.0",
-            "@hexagen/sync": "^0.1.0",
-            "@hexagen/arch-linter": "^0.1.0"
-          }
-        }
+      template: "{\n  \"name\": \"{system}\",\n  \"private\": true,\n  \"type\": \"\
+        module\",\n  \"packageManager\": \"{packageManager}\",\n  \"workspaces\":\
+        \ {workspaces},\n  \"scripts\": {\n    \"build\": \"turbo build\",\n    \"\
+        dev\": \"turbo dev\",\n    \"lint\": \"turbo lint\",\n    \"typecheck\": \"\
+        turbo typecheck\",\n    \"test\": \"turbo test\",\n    \"clean\": \"turbo\
+        \ clean\",\n    \"sync\": \"hexagen sync\",\n    \"sync:dry\": \"hexagen sync\
+        \ --dry-run\",\n    \"sync:force\": \"hexagen sync --force\",\n    \"lint:arch\"\
+        : \"hexagen arch validate\",\n    \"format\": \"prettier --write \\\"**/*.{ts,tsx,md}\\\
+        \"\"\n  },\n  \"devDependencies\": {\n    \"turbo\": \"^2.0.0\",\n    \"typescript\"\
+        : \"^5.5.4\",\n    \"eslint\": \"^9.0.0\",\n    \"prettier\": \"^3.0.0\",\n\
+        \    \"@hexagen/sync\": \"^0.1.0\",\n    \"@hexagen/arch-linter\": \"^0.1.0\"\
+        \n  }\n}"
     tsConfig:
-      template: |-
-        {
-          "compilerOptions": {
-            "target": "ES2022",
-            "module": "ESNext",
-            "moduleResolution": "bundler",
-            "strict": true,
-            "composite": true,
-            "declaration": true,
-            "emitDeclarationOnly": true,
-            "paths": {
-              "@hexagen/*": [
-                "./packages/*/src/index.ts"
-              ]
-            }
-          }
-        }
+      template: "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"\
+        module\": \"ESNext\",\n    \"moduleResolution\": \"bundler\",\n    \"strict\"\
+        : true,\n    \"composite\": true,\n    \"declaration\": true,\n    \"emitDeclarationOnly\"\
+        : true,\n    \"paths\": {\n      \"@hexagen/*\": [\n        \"./packages/*/src/index.ts\"\
+        \n      ]\n    }\n  }\n}"
     turbo:
-      template: |-
-        {
-          "$schema": "https://turbo.build/schema.json",
-          "tasks": {
-            "build": {
-              "dependsOn": [
-                "^build"
-              ],
-              "outputs": [
-                "dist/**"
-              ]
-            },
-            "dev": {
-              "cache": false,
-              "persistent": true
-            },
-            "lint": {
-              "dependsOn": [
-                "^build"
-              ]
-            },
-            "typecheck": {
-              "outputs": [],
-              "cache": true
-            },
-            "test": {
-              "dependsOn": [
-                "^build"
-              ]
-            }
-          }
-        }
+      template: "{\n  \"$schema\": \"https://turbo.build/schema.json\",\n  \"tasks\"\
+        : {\n    \"build\": {\n      \"dependsOn\": [\n        \"^build\"\n      ],\n\
+        \      \"outputs\": [\n        \"dist/**\"\n      ]\n    },\n    \"dev\":\
+        \ {\n      \"cache\": false,\n      \"persistent\": true\n    },\n    \"lint\"\
+        : {\n      \"dependsOn\": [\n        \"^build\"\n      ]\n    },\n    \"typecheck\"\
+        : {\n      \"outputs\": [],\n      \"cache\": true\n    },\n    \"test\":\
+        \ {\n      \"dependsOn\": [\n        \"^build\"\n      ]\n    }\n  }\n}"
   archInvariants:
-    # Templates for `.architecture/**` content emitted by
-    # `generateArchitectureFiles` (packages/sync/src/generators/architecture-files.ts).
-    # Supports `{scope}`, `{template}`, `{workspaceTemplate}`, `{system}`,
-    # and `{ownershipBlock}` interpolation. `{{` / `}}` are literal-brace
-    # escape sequences preserved through the template engine.
-    # Mirrors the built-in fallbacks for workspaceTemplate=modular-monolith
-    # (LAYER_RULES_DEFAULT, LINTER_CONFIG_DEFAULT, GENERATOR_CONFIG_TEMPLATE).
     layerRules:
-      template: |
-        # HexaGen — Architectural Invariants
-        # Template: {template} (flexible mode)
-
-        shared_kernel:
-          package: "@{scope}/shared"
-          allowed_in_all_layers: true
-
-        layers:
-          domain:
-            access_rule: "internal-only"
-            allowed_imports: ["@{scope}/shared"]
-
-          application:
-            access_rule: "ports-only"
-            allowed_imports: ["domain", "@{scope}/shared"]
-
-          infrastructure:
-            access_rule: "adapters"
-            allowed_imports: ["domain", "application", "@{scope}/shared"]
+      template: "# HexaGen — Architectural Invariants\n# Template: {template} (flexible\
+        \ mode)\n\nshared_kernel:\n  package: \"@{scope}/shared\"\n  allowed_in_all_layers:\
+        \ true\n\nlayers:\n  domain:\n    access_rule: \"internal-only\"\n    allowed_imports:\
+        \ [\"@{scope}/shared\"]\n\n  application:\n    access_rule: \"ports-only\"\
+        \n    allowed_imports: [\"domain\", \"@{scope}/shared\"]\n\n  infrastructure:\n\
+        \    access_rule: \"adapters\"\n    allowed_imports: [\"domain\", \"application\"\
+        , \"@{scope}/shared\"]\n"
     linterConfig:
-      template: |
-        # Rules for @hexagen/arch-linter
-        # Template: {template} (flexible mode)
-
-        global_whitelist:
-          - "@{scope}/shared"
-          - "@{scope}/shared/**"
-
-        test_double_rules:
-          allowed_cross_package_imports: true
+      template: "# Rules for @hexagen/arch-linter\n# Template: {template} (flexible\
+        \ mode)\n\nglobal_whitelist:\n  - \"@{scope}/shared\"\n  - \"@{scope}/shared/**\"\
+        \n\ntest_double_rules:\n  allowed_cross_package_imports: true\n"
     generatorConfig:
-      template: |
-        generator:
-          version: "1.0"
-          description: "Global invariants and safety rules"
-          workspace_template: "{workspaceTemplate}"
-
-          invariants:
-            - name: composite-safety
-              description: "Every tsconfig.json must contain paths: {{}} to override inherited source mappings."
-              priority: critical
-              failure: abort-and-cleanup
-
-            - name: barrel-ownership-boundary
-              description: "Barrels may only re-export types owned by the current bounded context."
-              priority: critical
-              failure: abort-and-cleanup
-
-            - name: port-single-ownership
-              description: "Each port interface belongs to exactly one bounded context."
-              priority: critical
-              failure: abort-and-cleanup
-
-            - name: dependency-consistency
-              description: "Every @hexagen/* import must have a matching entry in package.json."
-              priority: high
-              failure: abort
-
-            - name: self-import-prevention
-              description: "No package imports itself by name."
-              priority: high
-              failure: abort
-
-            - name: signature-synchronization
-              description: "Generated consumers must derive exact signatures from the canonical port."
-              priority: high
-              failure: abort
-
-            - name: no-empty-stubs
-              description: "No empty barrels (export {{}}) in src/."
-              priority: medium
-              failure: warn-and-continue
-
-            - name: exports-field-mandatory
-              description: "Every package.json must include a complete exports map."
-              priority: medium
-              failure: warn-and-continue
-
-            - name: test-double-parity
-              description: "Test doubles must implement the same interface as the canonical port."
-              priority: medium
-              failure: warn-and-continue
-
-          bootstrap-sequence:
-            - load-ownership-map
-            - validate-port-ownership-map
-            - generate-package-skeleton
-            - enforce-tsconfig-paths-override
-            - generate-exports-field
-            - synchronize-signatures
-            - validate-barrel-chain
-            - enforce-dependency-consistency
-            - final-composite-reference-check
-
-          failure-behavior:
-            critical: abort-and-cleanup
-            high: abort
-            medium: warn-and-continue
-
-          ownership-registry:
-            ports:
-        {ownershipBlock}
+      template: "generator:\n  version: \"1.0\"\n  description: \"Global invariants\
+        \ and safety rules\"\n  workspace_template: \"{workspaceTemplate}\"\n\n  invariants:\n\
+        \    - name: composite-safety\n      description: \"Every tsconfig.json must\
+        \ contain paths: {{}} to override inherited source mappings.\"\n      priority:\
+        \ critical\n      failure: abort-and-cleanup\n\n    - name: barrel-ownership-boundary\n\
+        \      description: \"Barrels may only re-export types owned by the current\
+        \ bounded context.\"\n      priority: critical\n      failure: abort-and-cleanup\n\
+        \n    - name: port-single-ownership\n      description: \"Each port interface\
+        \ belongs to exactly one bounded context.\"\n      priority: critical\n  \
+        \    failure: abort-and-cleanup\n\n    - name: dependency-consistency\n  \
+        \    description: \"Every @hexagen/* import must have a matching entry in\
+        \ package.json.\"\n      priority: high\n      failure: abort\n\n    - name:\
+        \ self-import-prevention\n      description: \"No package imports itself by\
+        \ name.\"\n      priority: high\n      failure: abort\n\n    - name: signature-synchronization\n\
+        \      description: \"Generated consumers must derive exact signatures from\
+        \ the canonical port.\"\n      priority: high\n      failure: abort\n\n  \
+        \  - name: no-empty-stubs\n      description: \"No empty barrels (export {{}})\
+        \ in src/.\"\n      priority: medium\n      failure: warn-and-continue\n\n\
+        \    - name: exports-field-mandatory\n      description: \"Every package.json\
+        \ must include a complete exports map.\"\n      priority: medium\n      failure:\
+        \ warn-and-continue\n\n    - name: test-double-parity\n      description:\
+        \ \"Test doubles must implement the same interface as the canonical port.\"\
+        \n      priority: medium\n      failure: warn-and-continue\n\n  bootstrap-sequence:\n\
+        \    - load-ownership-map\n    - validate-port-ownership-map\n    - generate-package-skeleton\n\
+        \    - enforce-tsconfig-paths-override\n    - generate-exports-field\n   \
+        \ - synchronize-signatures\n    - validate-barrel-chain\n    - enforce-dependency-consistency\n\
+        \    - final-composite-reference-check\n\n  failure-behavior:\n    critical:\
+        \ abort-and-cleanup\n    high: abort\n    medium: warn-and-continue\n\n  ownership-registry:\n\
+        \    ports:\n{ownershipBlock}\n"
   turboConfig:
     globalDependencies:
-      - "**/.env.*"
+    - '**/.env.*'
     pipeline:
       clean:
         cache: false
       build:
         dependsOn:
-          - ^build
+        - ^build
         outputs:
-          - dist/**
-          - .next/**
-          - "!.next/cache/**"
+        - dist/**
+        - .next/**
+        - '!.next/cache/**'
       lint:
         dependsOn:
-          - ^build
+        - ^build
       test:
         dependsOn:
-          - ^build
+        - ^build
       dev:
         cache: false
         persistent: true
@@ -329,47 +184,47 @@ generator:
     createOnlyIfMissing: true
     nonDestructive: true
     protectedRootFiles:
-      - .gitignore
-      - turbo.json
-      - yarn.lock
-      - .architecture/
-      - .architecture/manifest.yaml
-      - .architecture/generator.config.yaml
-      - README.md
-      - .env
-      - .env.local
-      - .env.development
-      - .env.production
-      - .env.test
+    - .gitignore
+    - turbo.json
+    - yarn.lock
+    - .architecture/
+    - .architecture/manifest.yaml
+    - .architecture/generator.config.yaml
+    - README.md
+    - .env
+    - .env.local
+    - .env.development
+    - .env.production
+    - .env.test
     layers:
       domain:
         folder: src/domain
       application:
         folder: src/application
         subfolders:
-          - ports/in
-          - ports/out
-          - use-cases
+        - ports/in
+        - ports/out
+        - use-cases
       infrastructure:
         folder: src/infrastructure
         subfolders:
-          - adapters
+        - adapters
     packageJson:
       mergeStrategy: preserveExisting
       protectedKeys:
-        - private
-        - version
-        - license
-        - scripts
-        - dependencies
-        - devDependencies
-        - peerDependencies
-        - optionalDependencies
-        - main
-        - module
-        - types
-        - exports
-        - bin
+      - private
+      - version
+      - license
+      - scripts
+      - dependencies
+      - devDependencies
+      - peerDependencies
+      - optionalDependencies
+      - main
+      - module
+      - types
+      - exports
+      - bin
       injectIfMissing:
         scripts:
           build: tsc
@@ -378,62 +233,68 @@ generator:
         devDependencies:
           typescript: ^5.5.4
           eslint: ^9.0.0
-          "@typescript-eslint/parser": ^8.0.0
-          "@typescript-eslint/eslint-plugin": ^8.0.0
+          '@typescript-eslint/parser': ^8.0.0
+          '@typescript-eslint/eslint-plugin': ^8.0.0
           eslint-config-prettier: ^9.1.0
     stubs:
       enabled: false
-      # Set to true to enable stub generation for new/empty bounded contexts.
-      # Leave false on hexagen-monaco self-regen (all code is hand-written).
-      # Generated child projects (external mode) set to true via UI toManifest.
       templates:
-        inPort: "// @generated in-port stub — edit freely\nexport interface {name}Port {}\n"
-        outPort: "// @generated out-port stub — edit freely\nexport interface {name}Port {}\n"
-        adapter: "// @generated adapter stub — edit freely\nexport class {name}Adapter {}\n"
-        useCase: "// @generated use-case stub — edit freely\nexport class {name}UseCase {}\n"
-        entity: "// @generated entity stub — edit freely\nexport class {name} {}\n"
-        valueObject: "// @generated value-object stub — edit freely\nexport type {name} = unknown;\n"
-        domainService: "// @generated domain-service stub — edit freely\nexport class {name}Service {}\n"
+        inPort: '// @generated in-port stub — edit freely
+
+          export interface {name}Port {}
+
+          '
+        outPort: '// @generated out-port stub — edit freely
+
+          export interface {name}Port {}
+
+          '
+        adapter: '// @generated adapter stub — edit freely
+
+          export class {name}Adapter {}
+
+          '
+        useCase: '// @generated use-case stub — edit freely
+
+          export class {name}UseCase {}
+
+          '
+        entity: '// @generated entity stub — edit freely
+
+          export class {name} {}
+
+          '
+        valueObject: '// @generated value-object stub — edit freely
+
+          export type {name} = unknown;
+
+          '
+        domainService: '// @generated domain-service stub — edit freely
+
+          export class {name}Service {}
+
+          '
       naming:
-        inPort: "{name}.in-port.ts"
-        outPort: "{name}.out-port.ts"
-        adapter: "{name}.adapter.ts"
-        useCase: "{name}.use-case.ts"
-        entity: "{name}.ts"
-        valueObject: "{name}.vo.ts"
-        domainService: "{name}.service.ts"
+        inPort: '{name}.in-port.ts'
+        outPort: '{name}.out-port.ts'
+        adapter: '{name}.adapter.ts'
+        useCase: '{name}.use-case.ts'
+        entity: '{name}.ts'
+        valueObject: '{name}.vo.ts'
+        domainService: '{name}.service.ts'
     apps:
-      # Framework-specific templates consumed by `generateApps`
-      # (packages/sync/src/generators/apps.ts). Mirror of
-      # BUILTIN_FRAMEWORK_TEMPLATES. Template interpolation vars:
-      # {appName}, {system}, {version}, {depends_on}.
       frameworks:
         next.js:
           packageJson:
-            template: |
-              {
-                "name": "@{system}/{appName}",
-                "version": "0.0.0",
-                "private": true,
-                "type": "module",
-                "scripts": {
-                  "build": "next build",
-                  "dev": "next dev",
-                  "lint": "eslint src --ext .ts,.tsx",
-                  "typecheck": "tsc --noEmit"
-                },
-                "dependencies": {
-                  "next": "^15.0.0",
-                  "react": "^19.0.0",
-                  "react-dom": "^19.0.0"
-                },
-                "devDependencies": {
-                  "typescript": "^5.5.4",
-                  "eslint": "^9.0.0",
-                  "@typescript-eslint/parser": "^8.0.0",
-                  "@typescript-eslint/eslint-plugin": "^8.0.0"
-                }
-              }
+            template: "{\n  \"name\": \"@{system}/{appName}\",\n  \"version\": \"\
+              0.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\"\
+              : {\n    \"build\": \"next build\",\n    \"dev\": \"next dev\",\n  \
+              \  \"lint\": \"eslint src --ext .ts,.tsx\",\n    \"typecheck\": \"tsc\
+              \ --noEmit\"\n  },\n  \"dependencies\": {\n    \"next\": \"^15.0.0\"\
+              ,\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\"\n  },\n\
+              \  \"devDependencies\": {\n    \"typescript\": \"^5.5.4\",\n    \"eslint\"\
+              : \"^9.0.0\",\n    \"@typescript-eslint/parser\": \"^8.0.0\",\n    \"\
+              @typescript-eslint/eslint-plugin\": \"^8.0.0\"\n  }\n}\n"
           tsConfig:
             extends: ../../tsconfig.base.json
             compilerOptions:
@@ -444,41 +305,24 @@ generator:
               emitDeclarationOnly: true
               jsx: react-jsx
             include:
-              - src/**/*
+            - src/**/*
             exclude:
-              - node_modules
-              - dist
+            - node_modules
+            - dist
           entryPoint:
             path: src/app/page.tsx
-            template: |
-              // Auto-generated Next.js application
-              export default function HomePage() {
-                return <div>Welcome to {system}</div>;
-              }
+            template: "// Auto-generated Next.js application\nexport default function\
+              \ HomePage() {\n  return <div>Welcome to {system}</div>;\n}\n"
         fastify:
           packageJson:
-            template: |
-              {
-                "name": "@{system}/{appName}",
-                "version": "0.0.0",
-                "private": true,
-                "type": "module",
-                "scripts": {
-                  "build": "tsc",
-                  "dev": "tsc --watch",
-                  "lint": "eslint src --ext .ts,.tsx",
-                  "typecheck": "tsc --noEmit"
-                },
-                "dependencies": {
-                  "fastify": "^5.0.0"
-                },
-                "devDependencies": {
-                  "typescript": "^5.5.4",
-                  "eslint": "^9.0.0",
-                  "@typescript-eslint/parser": "^8.0.0",
-                  "@typescript-eslint/eslint-plugin": "^8.0.0"
-                }
-              }
+            template: "{\n  \"name\": \"@{system}/{appName}\",\n  \"version\": \"\
+              0.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\"\
+              : {\n    \"build\": \"tsc\",\n    \"dev\": \"tsc --watch\",\n    \"\
+              lint\": \"eslint src --ext .ts,.tsx\",\n    \"typecheck\": \"tsc --noEmit\"\
+              \n  },\n  \"dependencies\": {\n    \"fastify\": \"^5.0.0\"\n  },\n \
+              \ \"devDependencies\": {\n    \"typescript\": \"^5.5.4\",\n    \"eslint\"\
+              : \"^9.0.0\",\n    \"@typescript-eslint/parser\": \"^8.0.0\",\n    \"\
+              @typescript-eslint/eslint-plugin\": \"^8.0.0\"\n  }\n}\n"
           tsConfig:
             extends: ../../tsconfig.base.json
             compilerOptions:
@@ -489,45 +333,25 @@ generator:
               emitDeclarationOnly: true
               jsx: preserve
             include:
-              - src/**/*
+            - src/**/*
             exclude:
-              - node_modules
-              - dist
+            - node_modules
+            - dist
           entryPoint:
             path: src/index.ts
-            template: |
-              // Auto-generated Fastify application
-              import fastify from 'fastify';
-
-              const server = fastify();
-
-              server.get('/', async () => {
-                return { status: 'ok' };
-              });
-
-              export default server;
+            template: "// Auto-generated Fastify application\nimport fastify from\
+              \ 'fastify';\n\nconst server = fastify();\n\nserver.get('/', async ()\
+              \ => {\n  return { status: 'ok' };\n});\n\nexport default server;\n"
         plain-ts:
           packageJson:
-            template: |
-              {
-                "name": "@{system}/{appName}",
-                "version": "0.0.0",
-                "private": true,
-                "type": "module",
-                "scripts": {
-                  "build": "tsc",
-                  "dev": "tsc --watch",
-                  "lint": "eslint src --ext .ts,.tsx",
-                  "typecheck": "tsc --noEmit"
-                },
-                "dependencies": {},
-                "devDependencies": {
-                  "typescript": "^5.5.4",
-                  "eslint": "^9.0.0",
-                  "@typescript-eslint/parser": "^8.0.0",
-                  "@typescript-eslint/eslint-plugin": "^8.0.0"
-                }
-              }
+            template: "{\n  \"name\": \"@{system}/{appName}\",\n  \"version\": \"\
+              0.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\"\
+              : {\n    \"build\": \"tsc\",\n    \"dev\": \"tsc --watch\",\n    \"\
+              lint\": \"eslint src --ext .ts,.tsx\",\n    \"typecheck\": \"tsc --noEmit\"\
+              \n  },\n  \"dependencies\": {},\n  \"devDependencies\": {\n    \"typescript\"\
+              : \"^5.5.4\",\n    \"eslint\": \"^9.0.0\",\n    \"@typescript-eslint/parser\"\
+              : \"^8.0.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.0.0\"\n\
+              \  }\n}\n"
           tsConfig:
             extends: ../../tsconfig.base.json
             compilerOptions:
@@ -537,851 +361,885 @@ generator:
               declaration: true
               emitDeclarationOnly: true
             include:
-              - src/**/*
+            - src/**/*
             exclude:
-              - node_modules
-              - dist
+            - node_modules
+            - dist
           entryPoint:
             path: src/index.ts
-            template: |
-              // Auto-generated plain-TypeScript application entry point
-              export function main(): void {
-                // Application bootstrap for {appName}
-              }
+            template: "// Auto-generated plain-TypeScript application entry point\n\
+              export function main(): void {\n  // Application bootstrap for {appName}\n\
+              }\n"
 mvk:
   spec: .architecture/mvk/spec-v1.md
   driftReport: .architecture/mvk/drift-report-v1.md
   decisions:
-    - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
+  - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
   package: packages/core-domain
 planes:
   kernel:
-    - core-domain
-    - intent-compiler
-    - layout-engine
-    - ui-projection-compiler
-    - transaction-system
-    - prompt-compiler
-    - architectural-enforcement
-    - wizard-orchestration
-    - monaco-orchestration
+  - core-domain
+  - intent-compiler
+  - layout-engine
+  - ui-projection-compiler
+  - transaction-system
+  - prompt-compiler
+  - architectural-enforcement
+  - wizard-orchestration
+  - monaco-orchestration
   projection:
-    - ui
-    - visualization
-    - web-driver
+  - ui
+  - visualization
+  - web-driver
   probabilistic:
-    - local-llm
-    - agentic-interaction
-    - reconciliation-engine
-    - mcp-server
+  - local-llm
+  - agentic-interaction
+  - reconciliation-engine
+  - mcp-server
   infrastructure:
-    - persistence
-    - messaging
-    - external-integration
-    - deployment
-    - sync
-    - runtime
+  - persistence
+  - messaging
+  - external-integration
+  - deployment
+  - sync
+  - runtime
   shared-kernel:
-    - shared
-    - core-domain
+  - shared
+  - core-domain
 bounded_contexts:
-  - name: core-domain
-    type: core
-    description: >-
-      Semantic kernel — MVK contracts, domain AST, governance AST, topology and
-      cardinality invariants
-    layers:
-      domain:
-        entities:
-          - DomainAST
-          - DomainNode
-          - DomainEdge
-        value_objects:
-          - NodeKind
-          - EdgeKind
-          - TopologyInvariants
-          - CardinalityInvariants
-          - IntentLineage
-          - RRP
-          - REM
-          - NodeVisualSpec
-          - DomainCommand
-      application:
-        ports:
-          in: []
-          out: []
-      infrastructure:
-        adapters: []
-  - name: shared
-    type: shared-kernel
-    description: Shared primitives, custom errors, base classes, utilities
-    layers:
-      domain:
-        value_objects:
-          - CustomError
-          - Identifier
-          - PersistedEditorWorkspace
-          - PersistedCanvasLayout
-    generator:
-      tsConfig:
-        compilerOptions:
-          emitDeclarationOnly: false
-  - name: project-configuration
-    type: core
-    description: Governance core — manifest parsing, validation, project topology
-    layers:
-      domain:
-        entities:
-          - ProjectSpec
-          - BoundedContext
-          - Entity
-          - ValueObject
-          - Port
-          - UseCase
-          - Adapter
-          - Driver
-        value_objects: []
-      application:
-        use_cases:
-          - GenerateProjectUseCase
-          - ValidateSpecUseCase
-          - RenderManifestUseCase
-        ports:
-          in:
-            - ValidateSpecPort
-            - RenderManifestPort
-            - TelemetryPort
-            - GenerateProjectPort
-            - LoggerPort
-          out:
-            - ProjectGeneratorPort
-            - DownloadProviderPort
-      infrastructure:
-        adapters: []
-    generator:
-      dependencies:
-        js-yaml: ^4.1.0
-        zod: ^3.23.8
-  - name: sync
-    type: core
-    description: >-
-      SyncEngine — idempotent regeneration, structured reporting, aggregation of
-      generator results
-    layers:
-      domain:
-        entities:
-          - GeneratorResult
-          - SyncReport
-      application:
-        use_cases:
-          - RunSyncUseCase
-          - AggregateGeneratorResultsUseCase
-        ports:
-          in:
-            - GeneratorPort
-      infrastructure:
-        adapters:
-          - FileSystemGeneratorAdapter
-          - ArchLinterAdapter
-    depends_on:
-      - shared
-      - project-configuration
-      - visualization
-      - governance
-    generator:
-      tsConfig:
-        compilerOptions:
-          emitDeclarationOnly: false
-          moduleResolution: NodeNext
-          module: NodeNext
-          target: es2022
-          allowJs: false
-          esModuleInterop: true
-          skipLibCheck: true
-          forceConsistentCasingInFileNames: true
-          baseUrl: "."
-  - name: wizard-orchestration
-    type: core
-    description: Deterministic wizard flows, intent processing, state projections
-    layers:
-      domain:
-        entities:
-          - WizardSession
-        value_objects:
-          - WizardStep
-          - IntentPayload
-          - ProjectionViewModel
-          - ActiveWorkspace
-      application:
-        use_cases:
-          - ProcessIntentUseCase
-          - ProjectWizardStateUseCase
-          - ValidateStepUseCase
-        ports:
-          in:
-            - ProcessIntentPort
-            - ProjectWizardStatePort
-            - ValidateStepPort
-            - IProjectWizardController
-            - QueryActiveWorkspacePort
-            - SetActiveWorkspacePort
-            - ClearActiveWorkspacePort
-          out:
-            - WizardPersistencePort
-            - WizardTelemetryPort
-            - MonacoSyncPort
-            - WizardCompletionSignalPort
-    depends_on:
-      - messaging
-  - name: monaco-orchestration
-    type: core
-    description: Semantic code editing with patch-based mutations, confidence gating, undo
-    layers:
-      domain:
-        entities:
-          - MonacoSession
-        value_objects:
-          - SemanticPatch
-          - ConfidenceScore
-          - PatchIntentMetadata
-      application:
-        use_cases:
-          - ApplySemanticPatchUseCase
-          - ValidatePatchIntentUseCase
-          - UndoLastPatchUseCase
-          - ProjectCurrentBufferStateUseCase
-        ports:
-          in:
-            - ValidatePatchIntentPort
-            - UndoLastPatchPort
-            - ProjectCurrentBufferStatePort
-            - ApplySemanticPatchPort
-          out:
-            - MonacoPersistencePort
-            - SemanticModelAdapterPort
-            - TsMorphPort
-    generator:
-      dependencies:
-        monaco-editor: ^0.51.0
-        ts-morph: ^22.0.0
-  - name: visualization
-    type: supporting
-    description: Interactive architecture graph, module dependency view, DDD canvas
-    layers:
-      domain:
-        value_objects:
-          - GraphLayoutOptions
-          - HexagonNode
-          - HexagonNodeWithLayout
-          - HexagonEdge
-          - CanvasViewport
-      application:
-        use_cases:
-          - RenderHexagonCanvasUseCase
-          - ExportGraphImageUseCase
-        ports:
-          in:
-            - RenderHexagonCanvasPort
-            - ExportGraphImagePort
-          out:
-            - ArchitectureGraphProviderPort
-    depends_on:
-      - project-configuration
-    generator:
-      dependencies:
-        "@dagrejs/dagre": ^2.0.4
-  - name: external-integration
-    type: supporting
-    description: >-
-      External authentication and identity providers — GitHub OAuth, session
-      management
-    layers:
-      domain:
-        value_objects:
-          - AuthSession
-          - ProviderIdentity
-          - GitHubProvider
-      application:
-        use_cases:
-          - InitiateAuthUseCase
-          - GetAuthSessionUseCase
-          - RevokeAuthUseCase
-        ports:
-          in:
-            - QueryAuthSessionPort
-            - InitiateAuthPort
-            - RevokeAuthPort
-          out:
-            - OAuthProviderPort
-            - SessionReadPort
-  - name: messaging
-    type: supporting
-    description: Domain events, intent bus, pluggable transports
-    layers:
-      domain:
-        value_objects:
-          - DomainEvent
-          - Intent
-      application:
-        ports:
-          out:
-            - EventBusPort
-            - IntentBusPort
-  - name: persistence
-    type: supporting
-    description: >-
-      Architecture snapshots, manifest versioning, change history, evolution
-      ledger
-    layers:
-      domain:
-        entities:
-          - Snapshot
-          - Version
-      infrastructure:
-        adapters: []
-  - name: agentic-interaction
-    type: supporting
-    description: >-
-      AI assistant integration — ports for LLM providers, suggestion engine,
-      cloud chat
-    layers:
-      domain:
-        value_objects:
-          - Suggestion
-          - ConfidenceScore
-      application:
-        ports:
-          out:
-            - LLMProviderPort
-            - SuggestionEnginePort
-            - CloudLLMProviderPort
-            - SecretVaultPort
-      infrastructure:
-        adapters:
-          - OpenAICompatibleAdapter
-    depends_on:
-      - local-llm
-  - name: web-driver
-    type: driver
-    description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI
-    layers:
-      domain:
-        entities:
-          - Project
-          - MonacoSessionState
-        ports:
-          out:
-            - EditorWorkspacePersistencePort
-            - CanvasLayoutPersistencePort
-      application:
-        use_cases:
-          - ProjectViewProjectionUseCase
-          - PersistSessionIntentHandler
-        factories:
-          - createWebUseCaseFactories
-      infrastructure:
-        adapters:
-          - LocalStoragePersistenceAdapter
-          - LocalStorageCanvasLayoutAdapter
-          - ArchitectureGraphProviderAdapter
-    driver_for: apps/web
-    generator:
-      dependencies:
-        "@xyflow/react": ^12.10.1
-        react-markdown: ^9.0.0
-        remark-gfm: ^4.0.0
-        react-syntax-highlighter: ^15.6.0
-        "@tailwindcss/typography": ^0.5.0
-    depends_on:
-      - agentic-interaction
-      - monaco-orchestration
-      - visualization
-      - wizard-orchestration
-    wiring:
-      - Intent Bus dispatches to projections/use-case factories only
-      - >-
-        MonacoPersistencePort is owned by monaco-orchestration and implemented
-        here by LocalStoragePersistenceAdapter
-      - >-
-        ArchitectureGraphProviderPort is owned by visualization and implemented
-        here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
-  - name: project-generation
-    type: core
-    description: >-
-      Project scaffolding engine — generates full project structure from
-      specification
-    layers:
-      domain:
-        value_objects:
-          - ProjectSpecification
-          - ExportIntent
-      application:
-        use_cases:
-          - GenerateProjectUseCase
-          - InitiateExportUseCase
+- name: core-domain
+  type: core
+  description: Semantic kernel — MVK contracts, domain AST, governance AST, topology
+    and cardinality invariants
+  layers:
+    domain:
+      entities:
+      - DomainAST
+      - DomainNode
+      - DomainEdge
+      value_objects:
+      - NodeKind
+      - EdgeKind
+      - TopologyInvariants
+      - CardinalityInvariants
+      - IntentLineage
+      - RRP
+      - REM
+      - NodeVisualSpec
+      - DomainCommand
+    application:
+      ports:
+        in: []
+        out: []
+    infrastructure:
+      adapters: []
+- name: shared
+  type: shared-kernel
+  description: Shared primitives, custom errors, base classes, utilities
+  layers:
+    domain:
+      value_objects:
+      - CustomError
+      - Identifier
+      - PersistedEditorWorkspace
+      - PersistedCanvasLayout
+  generator:
+    tsConfig:
+      compilerOptions:
+        emitDeclarationOnly: false
+- name: project-configuration
+  type: core
+  description: Governance core — manifest parsing, validation, project topology
+  layers:
+    domain:
+      entities:
+      - ProjectSpec
+      - BoundedContext
+      - Entity
+      - ValueObject
+      - Port
+      - UseCase
+      - Adapter
+      - Driver
+      value_objects: []
+    application:
+      use_cases:
+      - GenerateProjectUseCase
+      - ValidateSpecUseCase
+      - RenderManifestUseCase
       ports:
         in:
-          - RunProjectGenerationPort
-          - InitiateExportPort
+        - ValidateSpecPort
+        - RenderManifestPort
+        - TelemetryPort
+        - GenerateProjectPort
+        - LoggerPort
         out:
-          - ExternalProjectGeneratorPort
-          - ZipCreatorPort
-          - ProjectExporterPort
+        - ProjectGeneratorPort
+        - DownloadProviderPort
+    infrastructure:
+      adapters: []
+  generator:
+    dependencies:
+      js-yaml: ^4.1.0
+      zod: ^3.23.8
+- name: sync
+  type: core
+  description: SyncEngine — idempotent regeneration, structured reporting, aggregation
+    of generator results
+  layers:
+    domain:
+      entities:
+      - GeneratorResult
+      - SyncReport
+    application:
+      use_cases:
+      - RunSyncUseCase
+      - AggregateGeneratorResultsUseCase
+      ports:
+        in:
+        - GeneratorPort
+    infrastructure:
+      adapters:
+      - FileSystemGeneratorAdapter
+      - ArchLinterAdapter
+  depends_on:
+  - shared
+  - project-configuration
+  - visualization
+  - governance
+  generator:
+    tsConfig:
+      compilerOptions:
+        emitDeclarationOnly: false
+        moduleResolution: NodeNext
+        module: NodeNext
+        target: es2022
+        allowJs: false
+        esModuleInterop: true
+        skipLibCheck: true
+        forceConsistentCasingInFileNames: true
+        baseUrl: .
+- name: wizard-orchestration
+  type: core
+  description: Deterministic wizard flows, intent processing, state projections
+  layers:
+    domain:
+      entities:
+      - WizardSession
+      value_objects:
+      - WizardStep
+      - IntentPayload
+      - ProjectionViewModel
+      - ActiveWorkspace
+    application:
+      use_cases:
+      - ProcessIntentUseCase
+      - ProjectWizardStateUseCase
+      - ValidateStepUseCase
+      ports:
+        in:
+        - ProcessIntentPort
+        - ProjectWizardStatePort
+        - ValidateStepPort
+        - IProjectWizardController
+        - QueryActiveWorkspacePort
+        - SetActiveWorkspacePort
+        - ClearActiveWorkspacePort
+        out:
+        - WizardPersistencePort
+        - WizardTelemetryPort
+        - MonacoSyncPort
+        - WizardCompletionSignalPort
+  depends_on:
+  - messaging
+- name: monaco-orchestration
+  type: core
+  description: Semantic code editing with patch-based mutations, confidence gating,
+    undo
+  layers:
+    domain:
+      entities:
+      - MonacoSession
+      value_objects:
+      - SemanticPatch
+      - ConfidenceScore
+      - PatchIntentMetadata
+    application:
+      use_cases:
+      - ApplySemanticPatchUseCase
+      - ValidatePatchIntentUseCase
+      - UndoLastPatchUseCase
+      - ProjectCurrentBufferStateUseCase
+      ports:
+        in:
+        - ValidatePatchIntentPort
+        - UndoLastPatchPort
+        - ProjectCurrentBufferStatePort
+        - ApplySemanticPatchPort
+        out:
+        - MonacoPersistencePort
+        - SemanticModelAdapterPort
+        - TsMorphPort
+  generator:
+    dependencies:
+      monaco-editor: ^0.51.0
+      ts-morph: ^22.0.0
+- name: visualization
+  type: supporting
+  description: Interactive architecture graph, module dependency view, DDD canvas
+  layers:
+    domain:
+      value_objects:
+      - GraphLayoutOptions
+      - HexagonNode
+      - HexagonNodeWithLayout
+      - HexagonEdge
+      - CanvasViewport
+    application:
+      use_cases:
+      - RenderHexagonCanvasUseCase
+      - ExportGraphImageUseCase
+      ports:
+        in:
+        - RenderHexagonCanvasPort
+        - ExportGraphImagePort
+        out:
+        - ArchitectureGraphProviderPort
+  depends_on:
+  - project-configuration
+  generator:
+    dependencies:
+      '@dagrejs/dagre': ^2.0.4
+- name: external-integration
+  type: supporting
+  description: External authentication and identity providers — GitHub OAuth, session
+    management
+  layers:
+    domain:
+      value_objects:
+      - AuthSession
+      - ProviderIdentity
+      - GitHubProvider
+    application:
+      use_cases:
+      - InitiateAuthUseCase
+      - GetAuthSessionUseCase
+      - RevokeAuthUseCase
+      ports:
+        in:
+        - QueryAuthSessionPort
+        - InitiateAuthPort
+        - RevokeAuthPort
+        out:
+        - OAuthProviderPort
+        - SessionReadPort
+- name: messaging
+  type: supporting
+  description: Domain events, intent bus, pluggable transports
+  layers:
+    domain:
+      value_objects:
+      - DomainEvent
+      - Intent
+    application:
+      ports:
+        out:
+        - EventBusPort
+        - IntentBusPort
+- name: persistence
+  type: supporting
+  description: Architecture snapshots, manifest versioning, change history, evolution
+    ledger
+  layers:
+    domain:
+      entities:
+      - Snapshot
+      - Version
+    infrastructure:
+      adapters: []
+- name: agentic-interaction
+  type: supporting
+  description: AI assistant integration — ports for LLM providers, suggestion engine,
+    cloud chat, and architecture modification pipeline orchestration (Phase 5)
+  layers:
+    domain:
+      value_objects:
+      - Suggestion
+      - ConfidenceScore
+      - CloudProviderEndpoint
+      - ProviderFallbackChain
+    application:
+      use_cases:
+      - ModifyArchitectureUseCase
+      - GenerateSuggestionUseCase
+      - SecureChatDispatchUseCase
+      ports:
+        in:
+        - ArchitectureModificationPort
+        out:
+        - LLMProviderPort
+        - SuggestionEnginePort
+        - CloudLLMProviderPort
+        - SecretVaultPort
+    infrastructure:
+      adapters:
+      - OpenAICompatibleAdapter
+      - CloudLLMPipelineAdapter
+      - InMemoryNLParserAdapter
+      - InMemoryPromptCompilerAdapter
+      - InMemoryLLMSenderAdapter
+      - InMemoryReconciliationAdapter
+      - InMemoryManifestMutationAdapter
+      - InMemoryLintValidationAdapter
+  depends_on:
+  - local-llm
+  - ai-pipeline
+  - prompt-compiler
+  - reconciliation-engine
+  - transaction-system
+- name: web-driver
+  type: driver
+  description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic
+    UI
+  layers:
+    domain:
+      entities:
+      - Project
+      - MonacoSessionState
+      ports:
+        out:
+        - EditorWorkspacePersistencePort
+        - CanvasLayoutPersistencePort
+    application:
+      use_cases:
+      - ProjectViewProjectionUseCase
+      - PersistSessionIntentHandler
+      factories:
+      - createWebUseCaseFactories
+    infrastructure:
+      adapters:
+      - LocalStoragePersistenceAdapter
+      - LocalStorageCanvasLayoutAdapter
+      - ArchitectureGraphProviderAdapter
+  driver_for: apps/web
+  generator:
+    dependencies:
+      '@xyflow/react': ^12.10.1
+      react-markdown: ^9.0.0
+      remark-gfm: ^4.0.0
+      react-syntax-highlighter: ^15.6.0
+      '@tailwindcss/typography': ^0.5.0
+  depends_on:
+  - agentic-interaction
+  - monaco-orchestration
+  - visualization
+  - wizard-orchestration
+  wiring:
+  - Intent Bus dispatches to projections/use-case factories only
+  - MonacoPersistencePort is owned by monaco-orchestration and implemented here by
+    LocalStoragePersistenceAdapter
+  - ArchitectureGraphProviderPort is owned by visualization and implemented here by
+    ArchitectureGraphProviderAdapter (stub — returns empty graph)
+- name: project-generation
+  type: core
+  description: Project scaffolding engine — generates full project structure from
+    specification
+  layers:
+    domain:
+      value_objects:
+      - ProjectSpecification
+      - ExportIntent
+    application:
+      use_cases:
+      - GenerateProjectUseCase
+      - InitiateExportUseCase
+    ports:
+      in:
+      - RunProjectGenerationPort
+      - InitiateExportPort
+      out:
+      - ExternalProjectGeneratorPort
+      - ZipCreatorPort
+      - ProjectExporterPort
+    infrastructure:
+      adapters:
+      - ExternalSyncEngineAdapter
+      - JsZipCreatorAdapter
+- name: governance
+  type: supporting
+  description: Governance read surface — exposes architectural decisions, invariants,
+    linter config, and workspace context as typed resources for AI agent consumption
+  layers:
+    domain: {}
+    application:
+      use_cases:
+      - GetDecisionsResourceUseCase
+      - GetInvariantsResourceUseCase
+      - GetLinterConfigResourceUseCase
+      - GetWorkspaceContextResourceUseCase
+      ports:
+        in: []
+        out:
+        - GovernanceReadPort
+    infrastructure:
+      adapters:
+      - GovernanceReadAdapter
+  depends_on:
+  - shared
+- name: mcp-server
+  type: core
+  description: MCP server — exposes architectural tools and resources over stdio transport
+    for AI agent interaction (audit, scaffold, dependency management, governance reads,
+    manifest diff)
+  layers:
+    domain: {}
+    application:
+      use_cases:
+      - GetManifestResourceUseCase
+      - GetGraphResourceUseCase
+      - GetLinterReportResourceUseCase
+      - GetDecisionsResourceUseCase
+      - GetInvariantsResourceUseCase
+      - GetLinterConfigResourceUseCase
+      - GetWorkspaceContextResourceUseCase
+      - DiffManifestToolUseCase
+      - AuditBoundariesToolUseCase
+      - ScaffoldModuleToolUseCase
+      - AddDependencyToolUseCase
+      - CreatePortToolUseCase
+      - CreateAdapterToolUseCase
+      - RemovePortToolUseCase
+      - RemoveContextToolUseCase
+      ports:
+        in:
+        - McpServerPort
+        out:
+        - ProjectConfigurationReadPort
+        - ManifestWritePort
+        - LinterPort
+        - ArchitectureQueryPort
+        - ScaffoldingPort
+        - GovernanceReadPort
+        - ManifestDiffPort
+    infrastructure:
+      adapters:
+      - MCPServerAdapter
+      - ProjectConfigurationReadAdapter
+      - ManifestWriteAdapter
+      - LinterAdapter
+      - SyncEngineAdapter
+      - InMemoryEventBusAdapter
+      - GovernanceReadAdapter
+      - ManifestDiffAdapter
+  depends_on:
+  - shared
+  - messaging
+  - project-configuration
+  - governance
+  - visualization
+  - sync
+- name: architectural-enforcement
+  type: supporting
+  status: frozen
+  description: Architectural enforcement tooling — frozen as of 2026-04-25. ESLint
+    plugin lives in @hexagen/eslint-plugin-ui. Boundary validation in tools/arch-linter.
+  layers:
+    domain: {}
+    application: {}
+    infrastructure: {}
+- name: code-generation
+  type: supporting
+  status: frozen
+  description: Code generation tooling — frozen as of 2026-04-25. Code generation
+    integrated into @hexagen/sync and @hexagen/project-generation.
+  layers:
+    domain: {}
+    application: {}
+    infrastructure: {}
+- name: deployment
+  type: supporting
+  description: Deployment infrastructure — CI/CD pipelines, container definitions
+  layers:
+    domain: {}
+    infrastructure: {}
+- name: local-llm
+  type: supporting
+  description: 'Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides offline-capable
+    local AI inference with worker-based architecture and IndexedDB model caching.
+    Enforces ACL: all LLM inputs must come through prompt-compiler''s structured request
+    port. Schema validation at response boundary rejects schema-drift.'
+  layers:
+    domain:
+      value_objects:
+      - LLMProgress
+      - ModelMetadata
+      - LLMEngineState
+      - HardwareProfile
+      - ChatMessage
+      - GovernanceEntry
+      - DomainModelId
+      - LLMRequest
+      - LLMResponse
+      - SchemaValidationResult
+      - ModelCatalog
+      - ModelDescriptor
+      - CloudProviderCatalog
+      - CloudProviderConfig
+      - RecommendationResult
+      - CompatibilityIssue
+    application:
+      use_cases:
+      - InitializeModelUseCase
+      - StreamGenerateUseCase
+      - RecommendModelUseCase
+      ports:
+        in:
+        - SendStructuredRequestPort
+        - CompiledPromptAdapterPort
+        out:
+        - LocalLLMProviderPort
+        - WebGPUDetectorPort
+        - HardwareProfilerPort
+        - ChatPersistencePort
+    infrastructure:
+      adapters:
+      - WebLLMAdapter
+      - WebGPUCapabilityAdapter
+      - BrowserHardwareProfilerAdapter
+      - IDBChatPersistenceAdapter
+      - CompiledPromptAdapter
+  generator:
+    dependencies:
+      '@mlc-ai/web-llm': ^0.2.0
+  depends_on:
+  - prompt-compiler
+  - shared
+  - project-configuration
+  - visualization
+  - governance
+- name: ui
+  type: supporting
+  description: Projection layer — UI atoms, tokens, controllers isolated from semantic
+    state via 3-layer information firewall
+  layers:
+    domain:
+      types:
+      - ForbiddenBrandHelpers
+      - InformationStateBrand
+      - ForbiddenToken
+      - InteractionStateOnly
+      - NoSemanticState
+    infrastructure:
+      adapters: []
+    presentation:
+      elements:
+      - Badge
+      - Button
+      - Card
+      - Icon
+      - Input
+      - Label
+      - Textarea
+      controllers:
+      - useDialog
+      - useDisclosure
+      - useFocusTrap
+      - usePress
+      - useRovingTabIndex
+      modules:
+      - FileDropZone
+      - Tabs
+      - ViewToggle
+      sections:
+      - Dialog
+      tokens:
+      - ProjectionToken
+  generator:
+    tsConfig:
+      compilerOptions:
+        jsx: react-jsx
+- name: ai-pipeline
+  type: core
+  description: 'NL-to-DomainCommand parser and intent processing for AI-driven architecture
+    modification. Phase 2b: Bridges the gap between user intent (chat) and domain
+    commands that can be executed by the architecture modification system.'
+  layers:
+    domain:
+      value_objects:
+      - ParsedIntent
+    application:
+      use_cases:
+      - ParseNLIntentUseCase
+      ports:
+        in:
+        - NLToDomainCommandParserPort
+        out: []
+    infrastructure:
+      adapters:
+      - NLToDomainCommandParserAdapter
+  depends_on:
+  - core-domain
+  - shared
+- name: intent-compiler
+  type: core
+  description: 'Semantic intent compilation pipeline — gesture parsing, topology and
+    cardinality invariant validation, rejection emission. Phase 2a: Unfrozen with
+    concrete adapters for manifest-aware gesture parsing, topology/cardinality validation,
+    and console rejection emission.'
+  layers:
+    domain:
+      entities:
+      - Gesture
+      - Rejection
+      value_objects:
+      - ParsedGesture
+      - TopologyCheckResult
+      - CardinalityCheckResult
+    application:
+      use_cases:
+      - ParseGestureUseCase
+      - ValidateTopologyUseCase
+      - ValidateCardinalityUseCase
+      - EmitRejectionUseCase
+      ports:
+        in:
+        - GestureParserPort
+        - TopologyCheckerPort
+        - CardinalityCheckerPort
+        - RejectEmitterPort
+        out: []
+    infrastructure:
+      adapters:
+      - ManifestAwareGestureParserAdapter
+      - TopologyValidatorAdapter
+      - CardinalityValidatorAdapter
+      - ConsoleRejectEmitterAdapter
+  depends_on:
+  - core-domain
+  - shared
+- name: layout-engine
+  type: core
+  description: 'Graph layout solver — dagre-based automatic layout for hexagonal context
+    maps. Narrowed: constraint/affordance/stability/violation paths removed (aspirational,
+    no consumers).'
+  layers:
+    domain: {}
+    application:
+      use_cases:
+      - SolveGraphLayoutUseCase
+      ports:
+        in:
+        - GraphLayoutPort
+        out: []
+    infrastructure:
+      adapters:
+      - DagreGraphLayoutAdapter
+  depends_on: []
+- name: ui-projection-compiler
+  type: core
+  description: 'Projection compiler — maps domain node types to visual variants for
+    canvas rendering. Narrowed: icon/affordance/realizability/compatibility paths
+    removed (aspirational, no consumers). Zero runtime or projection-framework imports
+    (React/xyflow banned).'
+  layers:
+    domain:
+      value_objects:
+      - VisualVariant
+    application:
+      use_cases:
+      - MapNodeVisualUseCase
+      ports:
+        in:
+        - MapNodeVisualPort
+        - ResolveVariantPort
+        out: []
+    infrastructure:
+      adapters:
+      - CvaVariantResolverAdapter
+      - DefaultNodeVisualMapperAdapter
+  depends_on:
+  - core-domain
+  - shared
+- name: transaction-system
+  type: core
+  status: frozen
+  description: 'Transaction orchestration — speculative state machine, backpressure
+    control, semantic caching for intent processing pipeline. FROZEN: Zero runtime
+    consumers; REM + prompt-compiler determinism pending Phase 5.'
+  layers:
+    domain:
+      entities:
+      - Transaction
+      - SpeculativeState
+      value_objects:
+      - TransactionId
+      - BackpressureSignal
+      - CacheEntry
+    application:
+      use_cases:
+      - ExecuteTransactionUseCase
+      - RollbackTransactionUseCase
+      - CommitTransactionUseCase
+      - CommitPatchesUseCase
+      - QueryCacheUseCase
+      ports:
+        in:
+        - TransactionManagerPort
+        - SpeculativeStateMachinePort
+        - BackpressureControllerPort
+        - SemanticCachePort
+        out:
+        - ManifestMutationPort
+        - LintValidationPort
+    infrastructure:
+      adapters:
+      - SyncDelegatingManifestMutationAdapter
+      - CliLintValidationAdapter
+      - DomainCommandToManifestPatchAdapter
+    depends_on:
+    - core-domain
+    - intent-compiler
+    - shared
+    - sync
+- name: prompt-compiler
+  type: core
+  description: Prompt compilation — builds contextual prompts from ProjectSpec, ArchitectureGraph,
+    LinterReport, and user intent for LLM consumption. Enforces ACL by producing schema-validated
+    prompts that are the only legal input to LLM inference.
+  layers:
+    domain:
+      value_objects:
+      - PromptTemplate
+      - PromptVariable
+      - PromptContext
+      - SystemInstruction
+      - StructuredOutputSchema
+      - PromptCacheKey
+      - GovernanceQuestionTemplates
+      - WizardContextSerializer
+    application:
+      use_cases:
+      - CompilePromptUseCase
+      - RenderPromptUseCase
+      - CachePromptUseCase
+      ports:
+        in:
+        - PromptCompilerPort
+        - BuildSystemInstructionPort
+        - GenerateZodSchemaPort
+        - CachePromptPort
+        out:
+        - PromptCachePort
+    infrastructure:
+      adapters:
+      - DefaultPromptCompilerAdapter
+      - GroundedPromptBuilderAdapter
+      - RRPSystemInstructionBuilderAdapter
+      - RRPZodSchemaGeneratorAdapter
+      - InMemoryPromptCacheAdapter
+      - WizardContextSerializerAdapter
+  depends_on:
+  - core-domain
+  - shared
+  - project-configuration
+  - visualization
+  - governance
+- name: reconciliation-engine
+  type: core
+  description: 'Reconciliation Engine — compares StructuredLLMOutput with ProjectSpec
+    to produce patches for bounded context and architecture graph changes. Phase 3:
+    Unfrozen with concrete adapters for structured diff reconciliation, verdict comparison,
+    monotonic state promotion, governance-aware conflict resolution, and ManifestPatchPort
+    (outbound).'
+  layers:
+    domain:
+      value_objects:
+      - LLMResponse
+      - StructuredLLMOutput
+      - ReconciliationResult
+      - Patch
+      - Verdict
+      - ReconciliationState
+    application:
+      use_cases:
+      - CompareVerdictsUseCase
+      - PromoteStateUseCase
+      - ResolveConflictUseCase
+      - ReconcileUseCase
+      ports:
+        in:
+        - ReconciliationPort
+        - CompareVerdictsPort
+        - PromoteStatePort
+        - ResolveConflictPort
+        - LintFilterPort
+        out:
+        - ManifestPatchPort
       infrastructure:
         adapters:
-          - ExternalSyncEngineAdapter
-          - JsZipCreatorAdapter
-  - name: governance
-    type: supporting
-    description: >-
-      Governance read surface — exposes architectural decisions, invariants,
-      linter config, and workspace context as typed resources for AI agent
-      consumption
-    layers:
-      domain: {}
-      application:
-        use_cases:
-          - GetDecisionsResourceUseCase
-          - GetInvariantsResourceUseCase
-          - GetLinterConfigResourceUseCase
-          - GetWorkspaceContextResourceUseCase
-        ports:
-          in: []
-          out:
-            - GovernanceReadPort
-      infrastructure:
-        adapters:
-          - GovernanceReadAdapter
-    depends_on:
-      - shared
-  - name: mcp-server
-    type: core
-    description: >-
-      MCP server — exposes architectural tools and resources over stdio
-      transport for AI agent interaction (audit, scaffold, dependency
-      management, governance reads, manifest diff)
-    layers:
-      domain: {}
-      application:
-        use_cases:
-          - GetManifestResourceUseCase
-          - GetGraphResourceUseCase
-          - GetLinterReportResourceUseCase
-          - GetDecisionsResourceUseCase
-          - GetInvariantsResourceUseCase
-          - GetLinterConfigResourceUseCase
-          - GetWorkspaceContextResourceUseCase
-          - DiffManifestToolUseCase
-          - AuditBoundariesToolUseCase
-          - ScaffoldModuleToolUseCase
-          - AddDependencyToolUseCase
-          - CreatePortToolUseCase
-          - CreateAdapterToolUseCase
-          - RemovePortToolUseCase
-          - RemoveContextToolUseCase
-        ports:
-          in:
-            - McpServerPort
-          out:
-            - ProjectConfigurationReadPort
-            - ManifestWritePort
-            - LinterPort
-            - ArchitectureQueryPort
-            - ScaffoldingPort
-            - GovernanceReadPort
-            - ManifestDiffPort
-      infrastructure:
-        adapters:
-          - MCPServerAdapter
-          - ProjectConfigurationReadAdapter
-          - ManifestWriteAdapter
-          - LinterAdapter
-          - SyncEngineAdapter
-          - InMemoryEventBusAdapter
-          - GovernanceReadAdapter
-          - ManifestDiffAdapter
-    depends_on:
-      - shared
-      - messaging
-      - project-configuration
-      - governance
-      - visualization
-      - sync
-  - name: architectural-enforcement
-    type: supporting
-    status: frozen
-    description: >-
-      Architectural enforcement tooling — frozen as of 2026-04-25. ESLint plugin
-      lives in @hexagen/eslint-plugin-ui. Boundary validation in tools/arch-linter.
-    layers:
-      domain: {}
-      application: {}
-      infrastructure: {}
-
-  - name: code-generation
-    type: supporting
-    status: frozen
-    description: >-
-      Code generation tooling — frozen as of 2026-04-25. Code generation
-      integrated into @hexagen/sync and @hexagen/project-generation.
-    layers:
-      domain: {}
-      application: {}
-      infrastructure: {}
-
-  - name: deployment
-    type: supporting
-    description: Deployment infrastructure — CI/CD pipelines, container definitions
-    layers:
-      domain: {}
-      infrastructure: {}
-
-  - name: local-llm
-    type: supporting
-    description: >-
-      Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
-      offline-capable local AI inference with worker-based architecture and
-      IndexedDB model caching. Enforces ACL: all LLM inputs must come through
-      prompt-compiler's structured request port. Schema validation at response
-      boundary rejects schema-drift.
-    layers:
-      domain:
-        value_objects:
-          - LLMProgress
-          - ModelMetadata
-          - LLMEngineState
-          - HardwareProfile
-          - ChatMessage
-          - GovernanceEntry
-          - DomainModelId
-          - LLMRequest
-          - LLMResponse
-          - SchemaValidationResult
-          - ModelCatalog
-          - ModelDescriptor
-          - CloudProviderCatalog
-          - CloudProviderConfig
-          - RecommendationResult
-          - CompatibilityIssue
-      application:
-        use_cases:
-          - InitializeModelUseCase
-          - StreamGenerateUseCase
-          - RecommendModelUseCase
-        ports:
-          in:
-            - SendStructuredRequestPort
-            - CompiledPromptAdapterPort
-          out:
-            - LocalLLMProviderPort
-            - WebGPUDetectorPort
-            - HardwareProfilerPort
-            - ChatPersistencePort
-      infrastructure:
-        adapters:
-          - WebLLMAdapter
-          - WebGPUCapabilityAdapter
-          - BrowserHardwareProfilerAdapter
-          - IDBChatPersistenceAdapter
-          - CompiledPromptAdapter
-    generator: { dependencies: { "@mlc-ai/web-llm": "^0.2.0" } }
-    depends_on:
-      - prompt-compiler
-      - shared
-      - project-configuration
-      - visualization
-      - governance
-  - name: ui
-    type: supporting
-    description: >-
-      Projection layer — UI atoms, tokens, controllers isolated from semantic
-      state via 3-layer information firewall
-    layers:
-      domain:
-        types:
-          - ForbiddenBrandHelpers
-          - InformationStateBrand
-          - ForbiddenToken
-          - InteractionStateOnly
-          - NoSemanticState
-      infrastructure:
-        adapters: []
-      presentation:
-        elements:
-          - Badge
-          - Button
-          - Card
-          - Icon
-          - Input
-          - Label
-          - Textarea
-        controllers:
-          - useDialog
-          - useDisclosure
-          - useFocusTrap
-          - usePress
-          - useRovingTabIndex
-        modules:
-          - FileDropZone
-          - Tabs
-          - ViewToggle
-        sections:
-          - Dialog
-        tokens:
-          - ProjectionToken
-    generator:
-      tsConfig:
-        compilerOptions:
-          jsx: react-jsx
-  - name: intent-compiler
-    type: core
-    status: frozen
-    description: >-
-      Semantic intent compilation pipeline — gesture parsing, topology and
-      cardinality invariant validation, rejection emission. FROZEN: no runtime
-      consumers; domain types and ports preserved for future use.
-    layers:
-      domain:
-        entities:
-          - Gesture
-          - Rejection
-        value_objects:
-          - ParsedGesture
-          - TopologyCheckResult
-          - CardinalityCheckResult
-      application:
-        use_cases:
-          - ParseGestureUseCase
-          - ValidateTopologyUseCase
-          - ValidateCardinalityUseCase
-          - EmitRejectionUseCase
-        ports:
-          in:
-            - GestureParserPort
-            - TopologyCheckerPort
-            - CardinalityCheckerPort
-            - RejectEmitterPort
-          out: []
-      infrastructure:
-        adapters: []
-    depends_on:
-      - core-domain
-      - shared
-  - name: layout-engine
-    type: core
-    description: >-
-      Graph layout solver — dagre-based automatic layout for hexagonal context
-      maps. Narrowed: constraint/affordance/stability/violation paths removed
-      (aspirational, no consumers).
-    layers:
-      domain: {}
-      application:
-        use_cases:
-        - SolveGraphLayoutUseCase
-        ports:
-          in:
-          - GraphLayoutPort
-          out: []
-      infrastructure:
-        adapters:
-        - DagreGraphLayoutAdapter
-    depends_on: []
-  - name: ui-projection-compiler
-    type: core
-    description: >-
-      Projection compiler — maps domain node types to visual variants for canvas
-      rendering. Narrowed: icon/affordance/realizability/compatibility paths
-      removed (aspirational, no consumers). Zero runtime or projection-framework
-      imports (React/xyflow banned).
-    layers:
-      domain:
-        value_objects:
-          - VisualVariant
-      application:
-        use_cases:
-          - MapNodeVisualUseCase
-        ports:
-          in:
-            - MapNodeVisualPort
-            - ResolveVariantPort
-          out: []
-      infrastructure:
-        adapters:
-          - CvaVariantResolverAdapter
-          - DefaultNodeVisualMapperAdapter
-    depends_on:
-      - core-domain
-      - shared
-  - name: transaction-system
-    type: core
-    status: frozen
-    description: >-
-      Transaction orchestration — speculative state machine, backpressure
-      control, semantic caching for intent processing pipeline. FROZEN: Zero
-      runtime consumers; REM + prompt-compiler determinism pending Phase 5.
-    layers:
-      domain:
-        entities:
-          - Transaction
-          - SpeculativeState
-        value_objects:
-          - TransactionId
-          - BackpressureSignal
-          - CacheEntry
-      application:
-        use_cases:
-          - ExecuteTransactionUseCase
-          - RollbackTransactionUseCase
-          - CommitTransactionUseCase
-          - QueryCacheUseCase
-        ports:
-          in:
-            - TransactionManagerPort
-            - SpeculativeStateMachinePort
-            - BackpressureControllerPort
-            - SemanticCachePort
-          out: []
-      infrastructure:
-        adapters: []
-    depends_on:
-      - core-domain
-      - intent-compiler
-      - shared
-  - name: prompt-compiler
-    type: core
-    description: >-
-      Prompt compilation — builds contextual prompts from ProjectSpec,
-      ArchitectureGraph, LinterReport, and user intent for LLM consumption.
-      Enforces ACL by producing schema-validated prompts that are the only legal
-      input to LLM inference.
-    layers:
-      domain:
-        value_objects:
-          - PromptTemplate
-          - PromptVariable
-          - PromptContext
-          - SystemInstruction
-          - StructuredOutputSchema
-          - PromptCacheKey
-          - GovernanceQuestionTemplates
-          - WizardContextSerializer
-      application:
-        use_cases:
-          - CompilePromptUseCase
-          - RenderPromptUseCase
-          - CachePromptUseCase
-        ports:
-          in:
-            - PromptCompilerPort
-            - BuildSystemInstructionPort
-            - GenerateZodSchemaPort
-            - CachePromptPort
-          out:
-            - PromptCachePort
-      infrastructure:
-        adapters:
-          - DefaultPromptCompilerAdapter
-          - GroundedPromptBuilderAdapter
-          - RRPSystemInstructionBuilderAdapter
-          - RRPZodSchemaGeneratorAdapter
-          - InMemoryPromptCacheAdapter
-          - WizardContextSerializerAdapter
-    depends_on:
-      - core-domain
-      - shared
-      - project-configuration
-      - visualization
-      - governance
-  - name: reconciliation-engine
-    type: core
-    status: frozen
-    description: >-
-      Reconciliation Engine — compares StructuredLLMOutput with ProjectSpec to
-      produce patches for bounded context and architecture graph changes.
-      FROZEN: no runtime consumers; domain types and ports preserved for future
-      use.
-    layers:
-      domain:
-        value_objects:
-          - LLMResponse
-          - StructuredLLMOutput
-          - ReconciliationResult
-          - Patch
-          - Verdict
-          - ReconciliationState
-      application:
-        use_cases:
-          - CompareVerdictsUseCase
-          - PromoteStateUseCase
-          - ResolveConflictUseCase
-        ports:
-          in:
-            - ReconciliationPort
-            - CompareVerdictsPort
-            - PromoteStatePort
-            - ResolveConflictPort
-          out: []
-      infrastructure:
-        adapters: []
-    depends_on:
-      - core-domain
-      - shared
-  - name: runtime
-    type: shared-kernel
-    description: >-
-      Runtime type guards and generators for MVK contracts — provides
-      runtime validation of DomainAST, NodeKind, EdgeKind, TopologyInvariants,
-      CardinalityInvariants, and IntentLineage.
-    layers:
-      domain:
-        value_objects:
-          - NodeKindGuard
-          - EdgeKindGuard
-          - TopologyInvariantGuard
-          - CardinalityInvariantGuard
-          - IntentLineageRuntime
-      infrastructure:
-        adapters: []
-    depends_on:
-      - core-domain
+        - StructuredDiffReconciliationAdapter
+        - VerdictComparatorAdapter
+        - MonotonicStatePromoterAdapter
+        - GovernanceAwareConflictResolverAdapter
+        - LinterReportFilterAdapter
+  depends_on:
+  - core-domain
+  - governance
+  - shared
+- name: runtime
+  type: shared-kernel
+  description: Runtime type guards and generators for MVK contracts — provides runtime
+    validation of DomainAST, NodeKind, EdgeKind, TopologyInvariants, CardinalityInvariants,
+    and IntentLineage.
+  layers:
+    domain:
+      value_objects:
+      - NodeKindGuard
+      - EdgeKindGuard
+      - TopologyInvariantGuard
+      - CardinalityInvariantGuard
+      - IntentLineageRuntime
+    infrastructure:
+      adapters: []
+  depends_on:
+  - core-domain
 apps:
-  - name: web
-    driver: next.js
-    framework: next.js
-    version: "16.x"
-    description: >-
-      Frontend application — wizard, monaco editor, agentic UI, visualization
-      canvas
-    depends_on:
-      - shared
-      - project-configuration
-      - wizard-orchestration
-      - monaco-orchestration
-      - visualization
-      - sync
-      - agentic-interaction
-      - local-llm
-      - messaging
-      - project-generation
-      - prompt-compiler
-      - ui-projection-compiler
-      - web-driver
-  - name: api-gateway
-    driver: fastify
-    framework: fastify
-    version: "5.x"
-    description: Public HTTP API + command gateway (future phase)
-    depends_on:
-      - project-configuration
-      - messaging
-      - shared
-  - name: tui
-    driver: cli
-    framework: plain-ts
-    description: >-
-      Terminal UI — MCP server integration for AI agent interaction via ink
-      and React
-    depends_on:
-      - shared
-      - agentic-interaction
-      - mcp-server
+- name: web
+  driver: next.js
+  framework: next.js
+  version: 16.x
+  description: Frontend application — wizard, monaco editor, agentic UI, visualization
+    canvas
+  depends_on:
+  - shared
+  - project-configuration
+  - wizard-orchestration
+  - monaco-orchestration
+  - visualization
+  - sync
+  - agentic-interaction
+  - local-llm
+  - messaging
+  - project-generation
+  - prompt-compiler
+  - ui-projection-compiler
+  - web-driver
+- name: api-gateway
+  driver: fastify
+  framework: fastify
+  version: 5.x
+  description: Public HTTP API + command gateway (future phase)
+  depends_on:
+  - project-configuration
+  - messaging
+  - shared
+- name: tui
+  driver: cli
+  framework: plain-ts
+  description: Terminal UI — MCP server integration for AI agent interaction via ink
+    and React
+  depends_on:
+  - shared
+  - agentic-interaction
+  - mcp-server

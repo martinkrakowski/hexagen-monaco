@@ -15,16 +15,22 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts || true",
     "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
+    "@hexagen/ai-pipeline": "workspace:*",
+    "@hexagen/core-domain": "workspace:*",
     "@hexagen/local-llm": "workspace:*",
+    "@hexagen/prompt-compiler": "workspace:*",
+    "@hexagen/reconciliation-engine": "workspace:*",
     "@hexagen/shared": "workspace:*",
-    "js-yaml": "^4.1.1"
+    "@hexagen/transaction-system": "workspace:*",
+    "js-yaml": "^4.1.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

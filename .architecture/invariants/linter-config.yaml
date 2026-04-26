@@ -21,6 +21,7 @@ package_rules:
     # implements IArchitectureGraphProviderPort owned by visualization
     # agentic-interaction is allowed because web-driver depends on it per manifest
     # and implements ports like SecretVaultPort from its application layer
+
   - name: "sync"
     allowed_imports:
       - "@hexagen/shared"
@@ -94,8 +95,11 @@ package_rules:
       - "@hexagen/shared"
       - "@hexagen/core-domain"
       - "@hexagen/intent-compiler"
+      - "@hexagen/sync"
     # transaction-system orchestrates intent compilation results and manages
     # speculative state, backpressure, and semantic caching.
+    # SyncDelegatingManifestMutationAdapter delegates to @hexagen/sync (loadManifest/saveManifest)
+    # to avoid dual manifest writers causing drift. See Phase 4 plan review.
 
   - name: "prompt-compiler"
     allowed_imports:
@@ -126,12 +130,26 @@ package_rules:
     # FROZEN: no runtime consumers. Unused deps removed.
     # Domain types and ports preserved for future use.
 
+  - name: "ai-pipeline"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+    # ai-pipeline bridges NL intent to DomainCommand[] via core-domain types.
+    # It provides PipelineRun/PipelineStep value objects consumed by agentic-interaction.
+
   - name: "agentic-interaction"
     allowed_imports:
       - "@hexagen/shared"
+      - "@hexagen/core-domain"
       - "@hexagen/local-llm"
       - "@hexagen/project-configuration"
-    # Imports WizardData aliases from project-configuration for context serialization
+      - "@hexagen/ai-pipeline"
+      - "@hexagen/prompt-compiler"
+      - "@hexagen/reconciliation-engine"
+      - "@hexagen/transaction-system"
+    # Phase 5: agentic-interaction orchestrates the full AI pipeline
+    # (NL parse → prompt compile → LLM inference → reconcile → commit).
+    # It imports port types and value objects from each pipeline stage package.
 
   - name: "wizard-orchestration"
     allowed_imports:

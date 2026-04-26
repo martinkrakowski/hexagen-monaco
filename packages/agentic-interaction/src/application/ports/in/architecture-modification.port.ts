@@ -1,0 +1,21 @@
+import type { PipelineStep } from "@hexagen/ai-pipeline";
+import type { IntentLineage } from "@hexagen/core-domain";
+import type { Result } from "@hexagen/shared";
+import type { Patch } from "@hexagen/reconciliation-engine";
+
+export interface ModificationResult {
+  pipelineRunId: string;
+  patchesApplied: number;
+  lintPassed: boolean;
+  transactionId: string;
+  steps: PipelineStep[];
+  patches: Patch[];
+}
+
+export interface ArchitectureModificationPort {
+  modifyArchitecture(
+    intent: string,
+    currentManifestPath: string,
+    lineage: IntentLineage,
+  ): Promise<Result<ModificationResult, Error>>;
+}

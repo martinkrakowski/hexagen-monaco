@@ -1,0 +1,299 @@
+import type { NLToDomainCommandParserPort } from "@hexagen/ai-pipeline";
+import type { PipelineStep, PipelineRun } from "@hexagen/ai-pipeline";
+import {
+  createPipelineRun,
+  createPipelineStep,
+  startRun,
+  completeRun,
+  failRun,
+  startStep,
+  completeStep,
+  failStep,
+  updateRunStep,
+} from "@hexagen/ai-pipeline";
+import type { DomainCommand, IntentLineage } from "@hexagen/core-domain";
+import type {
+  PromptCompilerPort,
+  PromptCompileRequest,
+  RenderedPrompt,
+  ProjectSpecLike as PromptProjectSpecLike,
+  ArchitectureGraphLike,
+  LinterReportLike,
+} from "@hexagen/prompt-compiler";
+import type { SendStructuredRequestPort, LLMRequest } from "@hexagen/local-llm";
+import { DomainModelId } from "@hexagen/local-llm";
+import type {
+  ReconcileUseCase,
+  ReconcileRequest,
+  Patch,
+  StructuredLLMOutput,
+  ProjectSpecLike,
+} from "@hexagen/reconciliation-engine";
+import type {
+  Transaction,
+  TransactionManagerPort,
+  ManifestMutationPort,
+  LintValidationPort,
+} from "@hexagen/transaction-system";
+import type { Result } from "@hexagen/shared";
+import type { ModificationResult } from "../ports/in/architecture-modification.port.js";
+
+const STEP_PARSE = "parse-nl-intent";
+const STEP_COMPILE_PROMPT = "compile-prompt";
+const STEP_LLM_INFERENCE = "llm-inference";
+const STEP_RECONCILE = "reconcile";
+const STEP_COMMIT = "commit-patches";
+
+export interface ModifyArchitectureDeps {
+  readonly nlParser: NLToDomainCommandParserPort;
+  readonly promptCompiler: PromptCompilerPort;
+  readonly llmSender: SendStructuredRequestPort;
+  readonly reconcileUseCase: ReconcileUseCase;
+  readonly transactionManager: TransactionManagerPort;
+  readonly manifestMutation: ManifestMutationPort;
+  readonly lintValidation: LintValidationPort;
+  readonly manifestProvider: () => Promise<ProjectSpecLike>;
+  readonly architectureGraphProvider: () => Promise<ArchitectureGraphLike>;
+  readonly linterReportProvider: () => Promise<LinterReportLike>;
+}
+
+export class ModifyArchitectureUseCase {
+  constructor(private readonly deps: ModifyArchitectureDeps) {}
+
+  async execute(
+    intent: string,
+    manifestPath: string,
+    lineage: IntentLineage,
+  ): Promise<Result<ModificationResult, Error>> {
+    const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    let run: PipelineRun = createPipelineRun(runId, intent, [
+      createPipelineStep(STEP_PARSE, { intent }),
+      createPipelineStep(STEP_COMPILE_PROMPT),
+      createPipelineStep(STEP_LLM_INFERENCE),
+      createPipelineStep(STEP_RECONCILE),
+      createPipelineStep(STEP_COMMIT, { manifestPath }),
+    ]);
+    run = startRun(run);
+
+    try {
+      run = this.advanceStep(run, STEP_PARSE, startStep);
+      const commands = await this.parseNL(intent);
+      run = this.advanceStep(run, STEP_PARSE, completeStep);
+
+      run = this.advanceStep(run, STEP_COMPILE_PROMPT, startStep);
+      const renderedPrompt = await this.compilePrompt(intent);
+      run = this.advanceStep(run, STEP_COMPILE_PROMPT, completeStep);
+
+      run = this.advanceStep(run, STEP_LLM_INFERENCE, startStep);
+      const llmOutput = await this.runLLMInference(renderedPrompt);
+      run = this.advanceStep(run, STEP_LLM_INFERENCE, completeStep);
+
+      run = this.advanceStep(run, STEP_RECONCILE, startStep);
+      const patches = await this.reconcile(llmOutput, run.id);
+      run = this.advanceStep(run, STEP_RECONCILE, completeStep);
+
+      run = this.advanceStep(run, STEP_COMMIT, startStep);
+      const commitResult = await this.commitPatches(
+        patches,
+        lineage,
+        manifestPath,
+      );
+      if (!commitResult.success) {
+        run = this.advanceStep(run, STEP_COMMIT, (s) =>
+          failStep(s, commitResult.error.message),
+        );
+        run = failRun(run);
+        return { success: false, error: commitResult.error };
+      }
+
+      const lintResult =
+        await this.deps.lintValidation.validateManifest(manifestPath);
+      const lintPassed = lintResult.success && lintResult.value.valid;
+      if (!lintPassed) {
+        await this.deps.manifestMutation.restoreFromGit(manifestPath);
+        const reason = lintResult.success
+          ? `Lint validation failed: ${lintResult.value.errors.join("; ")}`
+          : lintResult.error.message;
+        this.deps.transactionManager.rollback(commitResult.value.id, reason);
+        run = this.advanceStep(run, STEP_COMMIT, (s) => failStep(s, reason));
+        run = failRun(run);
+        return { success: false, error: new Error(reason) };
+      }
+
+      run = this.advanceStep(run, STEP_COMMIT, completeStep);
+      run = completeRun(run);
+
+      return {
+        success: true,
+        value: {
+          pipelineRunId: run.id,
+          patchesApplied: patches.length,
+          lintPassed,
+          transactionId: commitResult.value.id,
+          steps: run.steps,
+          patches,
+        },
+      };
+    } catch (err) {
+      const currentStep = run.steps.find((s) => s.status === "running");
+      if (currentStep) {
+        run = updateRunStep(run, currentStep.name, (s) =>
+          failStep(s, (err as Error).message),
+        );
+      }
+      run = failRun(run);
+      return { success: false, error: err as Error };
+    }
+  }
+
+  private async parseNL(intent: string): Promise<DomainCommand[]> {
+    const result = await this.deps.nlParser.parse(intent);
+    if (!result.success) {
+      throw new Error(`NL parsing failed: ${result.error.message}`);
+    }
+    return result.value;
+  }
+
+  private async compilePrompt(intent: string): Promise<RenderedPrompt> {
+    const manifest = await this.deps.manifestProvider();
+    const architectureGraph = await this.deps.architectureGraphProvider();
+    const linterReport = await this.deps.linterReportProvider();
+
+    const request: PromptCompileRequest = {
+      name: "architecture-modification",
+      manifest: manifest as unknown as PromptProjectSpecLike,
+      architectureGraph,
+      linterReport,
+      userIntent: intent,
+    };
+    const template = await this.deps.promptCompiler.compile(request);
+    return this.deps.promptCompiler.render(template);
+  }
+
+  private async runLLMInference(
+    renderedPrompt: RenderedPrompt,
+  ): Promise<StructuredLLMOutput> {
+    const { z } = await import("zod");
+    const structuredOutputSchema = z.object({
+      manifest: z.object({
+        boundedContexts: z
+          .array(z.object({ id: z.string(), name: z.string() }))
+          .optional(),
+        externalContexts: z.array(z.unknown()).optional(),
+        governance: z.unknown().optional(),
+        peerMappings: z.array(z.unknown()).optional(),
+      }),
+      architectureGraph: z.object({
+        nodes: z.array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            type: z.string(),
+            status: z.string().optional(),
+          }),
+        ),
+        edges: z.array(
+          z.object({
+            source: z.string(),
+            target: z.string(),
+            relationship: z.string(),
+            isValid: z.boolean(),
+            violationReason: z.string().optional(),
+          }),
+        ),
+      }),
+      reasoning: z.string(),
+    });
+
+    const llmRequest: LLMRequest = {
+      id: `llm-req-${Date.now()}`,
+      modelId: DomainModelId.QWEN_CODER_3B,
+      messages: [
+        { role: "system", content: renderedPrompt.systemPrompt },
+        { role: "user", content: renderedPrompt.userPrompt },
+      ],
+      schema: structuredOutputSchema,
+    };
+    const result = await this.deps.llmSender.sendRequest(llmRequest);
+    if (!result.success) {
+      const errMsg =
+        result.error instanceof Error
+          ? result.error.message
+          : String(result.error);
+      throw new Error(`LLM inference failed: ${errMsg}`);
+    }
+    const parsed = structuredOutputSchema.safeParse(
+      JSON.parse(result.value.content),
+    );
+    if (!parsed.success) {
+      throw new Error(
+        `LLM output schema validation failed: ${parsed.error.message}`,
+      );
+    }
+    return parsed.data as StructuredLLMOutput;
+  }
+
+  private async reconcile(
+    llmOutput: StructuredLLMOutput,
+    intentId: string,
+  ): Promise<Patch[]> {
+    const currentManifest = await this.deps.manifestProvider();
+    const linterReport = await this.deps.linterReportProvider();
+    const request: ReconcileRequest = {
+      structuredOutput: llmOutput,
+      currentManifest,
+      intentId,
+    };
+    const result = await this.deps.reconcileUseCase.execute(
+      request,
+      undefined,
+      linterReport,
+    );
+    if (!result.success) {
+      throw new Error(`Reconciliation failed: ${result.errors.join("; ")}`);
+    }
+    return result.patches;
+  }
+
+  private async commitPatches(
+    patches: Patch[],
+    lineage: IntentLineage,
+    manifestPath: string,
+  ): Promise<Result<Transaction, Error>> {
+    const transaction = this.deps.transactionManager.begin(lineage.intentId, {
+      intentId: lineage.intentId,
+      origin: lineage.origin,
+    });
+    this.deps.transactionManager.transition(transaction.id, "speculative");
+
+    const applyResult = await this.deps.manifestMutation.applyPatches(
+      patches,
+      manifestPath,
+    );
+    if (!applyResult.success) {
+      await this.deps.manifestMutation.restoreFromGit(manifestPath);
+      this.deps.transactionManager.rollback(
+        transaction.id,
+        `Patch application failed: ${applyResult.error.message}`,
+      );
+      return { success: false, error: applyResult.error };
+    }
+
+    const committedTx = this.deps.transactionManager.commit(transaction.id);
+    if (!committedTx) {
+      return {
+        success: false,
+        error: new Error(`Failed to commit transaction ${transaction.id}`),
+      };
+    }
+    return { success: true, value: committedTx };
+  }
+
+  private advanceStep(
+    run: PipelineRun,
+    stepName: string,
+    updater: (step: PipelineStep) => PipelineStep,
+  ): PipelineRun {
+    return updateRunStep(run, stepName, updater);
+  }
+}

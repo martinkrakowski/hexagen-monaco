@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts || true",
     "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts",

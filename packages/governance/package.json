@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc && node ../../scripts/fix-esm-barrels.js dist",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

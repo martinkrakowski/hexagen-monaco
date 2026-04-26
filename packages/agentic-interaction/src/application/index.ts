@@ -11,9 +11,13 @@ export type {
   ServerLLMRequestPort,
   ServerLLMRequest,
   ServerLLMUserInfo,
+  ArchitectureModificationPort,
+  ModificationResult,
 } from "./ports/index.js";
 
 // Export use cases
 export { GenerateSuggestionUseCase } from "./use-cases/generate-suggestion.use-case.js";
 export { SecureChatDispatchUseCase } from "./use-cases/secure-chat-dispatch.use-case.js";
 export { HandleServerChatUseCase } from "./use-cases/index.js";
+export { ModifyArchitectureUseCase } from "./use-cases/modify-architecture.use-case.js";
+export type { ModifyArchitectureDeps } from "./use-cases/modify-architecture.use-case.js";

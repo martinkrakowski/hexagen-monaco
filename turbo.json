@@ -3,6 +3,7 @@
   "globalDependencies": ["**/.env.*", "NODE_ENV"],
   "globalEnv": [
     "APP_VERSION",
+    "CI",
     "COMMIT_HASH",
     "DEBUG",
     "GITHUB_ID",
@@ -12,7 +13,14 @@
     "NEXTAUTH_URL",
     "NEXT_PUBLIC_LLM_API_KEY",
     "NEXT_PUBLIC_LLM_BASE_URL",
-    "NEXT_PUBLIC_LLM_MODEL"
+    "NEXT_PUBLIC_LLM_MODEL",
+    "TEST_RESOLVE_API_KEY",
+    "TEST_RESOLVE_MISSING_KEY",
+    "TEST_RESOLVE_EMPTY_KEY",
+    "TEST_PRIMARY_KEY",
+    "TEST_FALLBACK_KEY",
+    "TEST_OPENAI_API_KEY",
+    "TEST_OPENAI_FALLBACK_API_KEY"
   ],
   "pipeline": {
     "build": {

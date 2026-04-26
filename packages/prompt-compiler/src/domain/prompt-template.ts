@@ -1,3 +1,5 @@
+import type { LinterReportLike } from "@hexagen/core-domain";
+
 export type Identifier = string;
 
 export interface ProjectSpecLike {
@@ -18,17 +20,7 @@ export interface ArchitectureGraphLike {
   }>;
 }
 
-export interface LinterReportLike {
-  timestamp: string;
-  isCompliant: boolean;
-  violations: Array<{
-    ruleId: string;
-    severity: string;
-    file: string;
-    message: string;
-  }>;
-  scannedFilesCount: number;
-}
+export type { LinterReportLike } from "@hexagen/core-domain";
 
 export interface PromptVariable {
   name: string;

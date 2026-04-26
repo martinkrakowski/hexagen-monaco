@@ -41,6 +41,8 @@ const nextConfig = {
   // Workspace packages to transpile
   transpilePackages: [
     "@hexagen/agentic-interaction",
+    "@hexagen/ai-pipeline",
+    "@hexagen/core-domain",
     "@hexagen/eslint-plugin-ui",
     "@hexagen/governance",
     "@hexagen/local-llm",
@@ -49,8 +51,10 @@ const nextConfig = {
     "@hexagen/project-configuration",
     "@hexagen/project-generation",
     "@hexagen/prompt-compiler",
+    "@hexagen/reconciliation-engine",
     "@hexagen/shared",
     "@hexagen/sync",
+    "@hexagen/transaction-system",
     "@hexagen/ui",
     "@hexagen/ui-projection-compiler",
     "@hexagen/visualization",
