@@ -16,7 +16,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup && tsc -p tsconfig.build.json --emitDeclarationOnly && node ../../scripts/fix-esm-barrels.js dist",
     "typecheck": "tsc --noEmit",
     "cli": "node dist/cli.js",
     "test": "tsx --test \"__tests__/**/*.test.ts\" \"__tests__/**/*.spec.ts\"",
@@ -39,6 +39,7 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.3.5",
+    "tsup": "^8.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3"
   },

@@ -1,9 +1,35 @@
 # Phase 6: ESM Module Resolution & TypeScript nodeNext Migration
 
-**Status:** 📋 Deferred Follow-Up Ticket  
-**Priority:** Medium (Infrastructure)  
-**Effort Estimate:** 4–6 hours  
-**Blocker For:** Node.js ESM runtime interoperability; sync CLI NodeNext validation
+⚠️ **STATUS: SUPERSEDED**
+
+This specification has been superseded by a narrower, lower-risk approach. See:
+
+- **New plan:** `docs/phase-6-nodext-esm-summary.md` (updated 2026-04-25)
+- **Architecture Decision:** `.architecture/decisions/ADR-0009-published-cli-bundling.md`
+
+---
+
+### Why Superseded
+
+The original plan proposed a monorepo-wide flip of `moduleResolution: bundler` → `nodeNext` affecting ~900 source files across 28 packages. After architectural review:
+
+1. **AGENTS.md Policy Conflict:** Reversal not justified; existing dual-resolution policy is correct for this deployment profile.
+2. **Blocker Analysis:** Only `@hexagen/sync` (published to npm) requires ESM-valid output. Other 27 packages are bundled (Next.js consumes via webpack).
+3. **Lower-Risk Alternative:** Bundle `@hexagen/sync` with `tsup` (industry standard for published CLIs). Zero source-file changes; 1 package affected; same effort budget (~4h).
+
+### Decision Rationale
+
+See ADR-0009. The new approach:
+
+- Keeps AGENTS.md policy intact
+- Uses `tsup` to bundle `@hexagen/sync` as self-contained artifact
+- Preserves ~900 files untouched
+- Aligns with Vercel, Biome, Drizzle, Vitest publishing patterns
+- Reduces rollback surface from 28 packages → 1
+
+---
+
+## Original Specification (Historical Reference)
 
 ---
 

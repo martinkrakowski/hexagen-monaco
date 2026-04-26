@@ -159,7 +159,31 @@ When editing `.architecture/manifest.yaml` or `.architecture/invariants/linter-c
 
 ## Appendix: Module Resolution
 
-| Package    | Resolution | Extension handling                       |
-| ---------- | ---------- | ---------------------------------------- |
-| sync (CLI) | NodeNext   | Explicit `.js` extensions required       |
-| All others | bundler    | Extensionless or `.js` via webpack alias |
+**Policy:** Dual-resolution architecture based on deployment target.
+
+**Codified in:** `.architecture/decisions/ADR-0009-published-cli-bundling.md`
+
+| Package                         | Resolution         | Extension Handling              | Rationale                                                                                             |
+| ------------------------------- | ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `@hexagen/sync` (published CLI) | `bundler` (source) | Inlined via `tsup` → ESM bundle | Published npm package consumed by Node.js; `tsup` bundles workspace deps into self-contained artifact |
+| All other packages              | `bundler`          | Extensionless via webpack alias | Consumed by `apps/web` (Next.js webpack context) or internal monorepo use                             |
+
+**Key Implementation Notes:**
+
+- `@hexagen/sync` uses `tsup` for build (not `tsc`). See `.architecture/decisions/ADR-0009-published-cli-bundling.md` for rationale.
+- Source code in `@hexagen/sync` and dependencies remains `bundler`-resolved during development.
+- `tsup` handles ESM transpilation and extension normalization at publish-time.
+- All _source_ files in the monorepo use `bundler` resolution (AGENTS.md §Operating Modes).
+- Transitive workspace dependencies (`@hexagen/governance`, `@hexagen/project-configuration`, etc.) are inlined into the `@hexagen/sync` bundle, not published separately.
+
+**Why Not Monorepo-Wide NodeNext?**
+
+Originally proposed (Phases 1–5 work). Rejected in favor of targeted bundling because:
+
+1. Reverses established policy without deployment justification
+2. 900-file refactor; high review risk
+3. Transitive dependency fragility for external consumers
+4. Industry precedent: published CLIs use bundling, not module-resolution config flips
+5. Preserves AGENTS.md dual-resolution policy (correct for this deployment profile)
+
+See ADR-0009 for full decision record.
