@@ -56,7 +56,12 @@ describe("InMemoryTransactionManager", () => {
         appliedAt: "2024-01-01T00:00:00Z",
       };
       const lineage = ["intent-0"];
-      const tx = manager.begin("intent-1", { source: "api", rulesApplied: 1 }, rem, lineage);
+      const tx = manager.begin(
+        "intent-1",
+        { source: "api", rulesApplied: 1 },
+        rem,
+        lineage,
+      );
 
       expect(tx.metadata.source).toBe("api");
       expect(tx.metadata.rem).toEqual(rem);
@@ -81,7 +86,9 @@ describe("InMemoryTransactionManager", () => {
       manager.begin("intent-1", {}, undefined, lineage);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[Lineage] Prior intent non-existent-intent not found"),
+        expect.stringContaining(
+          "[Lineage] Prior intent non-existent-intent not found",
+        ),
       );
       consoleSpy.mockRestore();
     });

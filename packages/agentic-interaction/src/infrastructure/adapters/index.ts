@@ -2,3 +2,5 @@
 
 export * from "./openai-compatible.adapter.js";
 export * from "./server-llm.adapter.js";
+export * from "./in-memory-pipeline-ports.adapter.js";
+export * from "./cloud-llm-pipeline.adapter.js";

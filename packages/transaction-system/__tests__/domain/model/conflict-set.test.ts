@@ -1,4 +1,7 @@
-import { detectConflicts, type RuleExecutionManifest } from "../../../src/domain/transaction.js";
+import {
+  detectConflicts,
+  type RuleExecutionManifest,
+} from "../../../src/domain/transaction.js";
 import { createTransaction } from "../../../src/domain/transaction.js";
 
 describe("Conflict Detection", () => {
@@ -61,9 +64,9 @@ describe("Conflict Detection", () => {
       const conflictSet = detectConflicts(tx, rem);
 
       expect(conflictSet.hasConflicts).toBe(true);
-      expect(conflictSet.conflicts.some((c) => c.type === "lineage-broken")).toBe(
-        true,
-      );
+      expect(
+        conflictSet.conflicts.some((c) => c.type === "lineage-broken"),
+      ).toBe(true);
     });
 
     it("should not detect lineage conflicts when lineage is valid", () => {
@@ -76,9 +79,9 @@ describe("Conflict Detection", () => {
 
       const conflictSet = detectConflicts(tx, rem);
 
-      expect(conflictSet.conflicts.some((c) => c.type === "lineage-broken")).toBe(
-        false,
-      );
+      expect(
+        conflictSet.conflicts.some((c) => c.type === "lineage-broken"),
+      ).toBe(false);
     });
 
     it("should set detectedAt timestamp", () => {

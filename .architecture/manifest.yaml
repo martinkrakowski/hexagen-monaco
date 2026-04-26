@@ -661,14 +661,22 @@ bounded_contexts:
 - name: agentic-interaction
   type: supporting
   description: AI assistant integration — ports for LLM providers, suggestion engine,
-    cloud chat
+    cloud chat, and architecture modification pipeline orchestration (Phase 5)
   layers:
     domain:
       value_objects:
       - Suggestion
       - ConfidenceScore
+      - CloudProviderEndpoint
+      - ProviderFallbackChain
     application:
+      use_cases:
+      - ModifyArchitectureUseCase
+      - GenerateSuggestionUseCase
+      - SecureChatDispatchUseCase
       ports:
+        in:
+        - ArchitectureModificationPort
         out:
         - LLMProviderPort
         - SuggestionEnginePort
@@ -677,8 +685,19 @@ bounded_contexts:
     infrastructure:
       adapters:
       - OpenAICompatibleAdapter
+      - CloudLLMPipelineAdapter
+      - InMemoryNLParserAdapter
+      - InMemoryPromptCompilerAdapter
+      - InMemoryLLMSenderAdapter
+      - InMemoryReconciliationAdapter
+      - InMemoryManifestMutationAdapter
+      - InMemoryLintValidationAdapter
   depends_on:
   - local-llm
+  - ai-pipeline
+  - prompt-compiler
+  - reconciliation-engine
+  - transaction-system
 - name: web-driver
   type: driver
   description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic
@@ -1062,6 +1081,7 @@ bounded_contexts:
       - ExecuteTransactionUseCase
       - RollbackTransactionUseCase
       - CommitTransactionUseCase
+      - CommitPatchesUseCase
       - QueryCacheUseCase
       ports:
         in:
@@ -1069,13 +1089,19 @@ bounded_contexts:
         - SpeculativeStateMachinePort
         - BackpressureControllerPort
         - SemanticCachePort
-        out: []
+        out:
+        - ManifestMutationPort
+        - LintValidationPort
     infrastructure:
-      adapters: []
-  depends_on:
-  - core-domain
-  - intent-compiler
-  - shared
+      adapters:
+      - SyncDelegatingManifestMutationAdapter
+      - CliLintValidationAdapter
+      - DomainCommandToManifestPatchAdapter
+    depends_on:
+    - core-domain
+    - intent-compiler
+    - shared
+    - sync
 - name: prompt-compiler
   type: core
   description: Prompt compilation — builds contextual prompts from ProjectSpec, ArchitectureGraph,
@@ -1121,10 +1147,11 @@ bounded_contexts:
   - governance
 - name: reconciliation-engine
   type: core
-  status: frozen
   description: 'Reconciliation Engine — compares StructuredLLMOutput with ProjectSpec
-    to produce patches for bounded context and architecture graph changes. FROZEN:
-    no runtime consumers; domain types and ports preserved for future use.'
+    to produce patches for bounded context and architecture graph changes. Phase 3:
+    Unfrozen with concrete adapters for structured diff reconciliation, verdict comparison,
+    monotonic state promotion, governance-aware conflict resolution, and ManifestPatchPort
+    (outbound).'
   layers:
     domain:
       value_objects:
@@ -1139,18 +1166,24 @@ bounded_contexts:
       - CompareVerdictsUseCase
       - PromoteStateUseCase
       - ResolveConflictUseCase
+      - ReconcileUseCase
       ports:
         in:
         - ReconciliationPort
         - CompareVerdictsPort
         - PromoteStatePort
         - ResolveConflictPort
-        out: []
-    infrastructure:
-      adapters: []
-  depends_on:
-  - core-domain
-  - shared
+        out:
+        - ManifestPatchPort
+      infrastructure:
+        adapters:
+        - StructuredDiffReconciliationAdapter
+        - VerdictComparatorAdapter
+        - MonotonicStatePromoterAdapter
+        - GovernanceAwareConflictResolverAdapter
+    depends_on:
+    - core-domain
+    - shared
 - name: runtime
   type: shared-kernel
   description: Runtime type guards and generators for MVK contracts — provides runtime

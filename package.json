@@ -58,6 +58,7 @@
     "prettier": "^3.2.5",
     "turbo": "^1.13.3",
     "typescript": "^5.4.5",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.0"
   },
   "resolutions": {

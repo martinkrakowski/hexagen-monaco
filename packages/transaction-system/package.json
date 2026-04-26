@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",
-    "@hexagen/shared": "workspace:*"
+    "@hexagen/shared": "workspace:*",
+    "@hexagen/sync": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

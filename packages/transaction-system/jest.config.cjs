@@ -8,6 +8,7 @@ module.exports = {
     "^@hexagen/core-domain$": "<rootDir>/../core-domain/src/index.ts",
     "^@hexagen/intent-compiler$": "<rootDir>/../intent-compiler/src/index.ts",
     "^@hexagen/shared$": "<rootDir>/../shared/src/index.ts",
+    "^@hexagen/sync$": "<rootDir>/../sync/src/index.ts",
   },
   transform: {
     "^.+\\.tsx?$": [

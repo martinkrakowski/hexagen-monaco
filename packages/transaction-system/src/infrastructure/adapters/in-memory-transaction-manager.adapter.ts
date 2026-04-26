@@ -68,7 +68,9 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
         (t) => t.intentId === priorIntent,
       );
       if (!priorTx) {
-        console.warn(`[Lineage] Prior intent ${priorIntent} not found in transaction store`);
+        console.warn(
+          `[Lineage] Prior intent ${priorIntent} not found in transaction store`,
+        );
       }
     }
 

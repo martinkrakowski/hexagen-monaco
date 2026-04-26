@@ -22,3 +22,13 @@ export type {
   VaultStatus,
   VaultError,
 } from "./value-objects/index.js";
+export type {
+  CloudProviderEndpoint,
+  ProviderFallbackChain,
+  ResolvedProvider,
+} from "./provider-config.js";
+export {
+  resolveApiKey,
+  resolveFallbackChain,
+  createDefaultFallbackChain,
+} from "./provider-config.js";

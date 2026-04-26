@@ -1195,7 +1195,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@eslint/js@npm:9.39.4":
+"@eslint/js@npm:9.39.4, @eslint/js@npm:^9.0.0":
   version: 9.39.4
   resolution: "@eslint/js@npm:9.39.4"
   checksum: 10c0/5aa7dea2cbc5decf7f5e3b0c6f86a084ccee0f792d288ca8e839f8bc1b64e03e227068968e49b26096e6f71fd857ab6e42691d1b993826b9a3883f1bdd7a0e46
@@ -1364,17 +1364,23 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/agentic-interaction@workspace:packages/agentic-interaction"
   dependencies:
+    "@hexagen/ai-pipeline": "workspace:*"
+    "@hexagen/core-domain": "workspace:*"
     "@hexagen/local-llm": "workspace:*"
+    "@hexagen/prompt-compiler": "workspace:*"
+    "@hexagen/reconciliation-engine": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/transaction-system": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
     js-yaml: "npm:^4.1.1"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.0.0"
+    zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
 
-"@hexagen/ai-pipeline@workspace:packages/ai-pipeline":
+"@hexagen/ai-pipeline@workspace:*, @hexagen/ai-pipeline@workspace:packages/ai-pipeline":
   version: 0.0.0-use.local
   resolution: "@hexagen/ai-pipeline@workspace:packages/ai-pipeline"
   dependencies:
@@ -1386,6 +1392,7 @@ __metadata:
     eslint: "npm:^8.57.0"
     eslint-config-prettier: "npm:^10.1.8"
     jest: "npm:^30.3.0"
+    jest-environment-jsdom: "npm:^30.3.0"
     ts-jest: "npm:^29.4.9"
     typescript: "npm:^5.5.4"
   languageName: unknown
@@ -1687,21 +1694,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/reconciliation-engine@workspace:packages/reconciliation-engine":
+"@hexagen/reconciliation-engine@workspace:*, @hexagen/reconciliation-engine@workspace:packages/reconciliation-engine":
   version: 0.0.0-use.local
   resolution: "@hexagen/reconciliation-engine@workspace:packages/reconciliation-engine"
   dependencies:
+    "@eslint/js": "npm:^9.0.0"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@types/jest": "npm:^30.0.0"
-    "@typescript-eslint/eslint-plugin": "npm:^8.0.0"
-    "@typescript-eslint/parser": "npm:^8.0.0"
-    eslint: "npm:^8.57.0"
-    eslint-config-prettier: "npm:^10.1.8"
+    eslint: "npm:^9.0.0"
     jest: "npm:^30.3.0"
     jest-environment-jsdom: "npm:^30.3.0"
     ts-jest: "npm:^29.4.9"
     typescript: "npm:^5.5.4"
+    typescript-eslint: "npm:^8.0.0"
   languageName: unknown
   linkType: soft
 
@@ -1752,6 +1758,7 @@ __metadata:
   dependencies:
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/sync": "workspace:*"
     "@types/jest": "npm:^30.0.0"
     "@typescript-eslint/eslint-plugin": "npm:^8.0.0"
     "@typescript-eslint/parser": "npm:^8.0.0"
@@ -3822,6 +3829,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@typescript-eslint/eslint-plugin@npm:8.59.0":
+  version: 8.59.0
+  resolution: "@typescript-eslint/eslint-plugin@npm:8.59.0"
+  dependencies:
+    "@eslint-community/regexpp": "npm:^4.12.2"
+    "@typescript-eslint/scope-manager": "npm:8.59.0"
+    "@typescript-eslint/type-utils": "npm:8.59.0"
+    "@typescript-eslint/utils": "npm:8.59.0"
+    "@typescript-eslint/visitor-keys": "npm:8.59.0"
+    ignore: "npm:^7.0.5"
+    natural-compare: "npm:^1.4.0"
+    ts-api-utils: "npm:^2.5.0"
+  peerDependencies:
+    "@typescript-eslint/parser": ^8.59.0
+    eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
+    typescript: ">=4.8.4 <6.1.0"
+  checksum: 10c0/f98171ecad6a5106fe978df155f4b65a72dfdadfcd663651b633b61480b543e74796baa224a1393e323f9514901604fe6302323c4b80b79f7a98512a01bc6461
+  languageName: node
+  linkType: hard
+
 "@typescript-eslint/eslint-plugin@npm:^8.0.0":
   version: 8.58.2
   resolution: "@typescript-eslint/eslint-plugin@npm:8.58.2"
@@ -3895,6 +3922,22 @@ __metadata:
     eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
     typescript: ">=4.8.4 <6.0.0"
   checksum: 10c0/61c9dab481e795b01835c00c9c7c845f1d7ea7faf3b8657fccee0f8658a65390cb5fe2b5230ae8c4241bd6e0c32aa9455a91989a492bd3bd6fec7c7d9339377a
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/parser@npm:8.59.0":
+  version: 8.59.0
+  resolution: "@typescript-eslint/parser@npm:8.59.0"
+  dependencies:
+    "@typescript-eslint/scope-manager": "npm:8.59.0"
+    "@typescript-eslint/types": "npm:8.59.0"
+    "@typescript-eslint/typescript-estree": "npm:8.59.0"
+    "@typescript-eslint/visitor-keys": "npm:8.59.0"
+    debug: "npm:^4.4.3"
+  peerDependencies:
+    eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
+    typescript: ">=4.8.4 <6.1.0"
+  checksum: 10c0/996a7b43f8a515ebbd06455c9f53065c561c8519bc4f634d6783b92832aa69e47945478d1601a87582f9f7b303becc172d5d7f776e201b2a2d375bc762ad4015
   languageName: node
   linkType: hard
 
@@ -4170,6 +4213,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@typescript-eslint/type-utils@npm:8.59.0":
+  version: 8.59.0
+  resolution: "@typescript-eslint/type-utils@npm:8.59.0"
+  dependencies:
+    "@typescript-eslint/types": "npm:8.59.0"
+    "@typescript-eslint/typescript-estree": "npm:8.59.0"
+    "@typescript-eslint/utils": "npm:8.59.0"
+    debug: "npm:^4.4.3"
+    ts-api-utils: "npm:^2.5.0"
+  peerDependencies:
+    eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
+    typescript: ">=4.8.4 <6.1.0"
+  checksum: 10c0/e2f2176a9bce81c19b53accf4e9189c60b1b84717cf129a6d003a2271019e30d410d2ccdc0fc6a37cbb8274a1b297d7d30a116189110f9d24a86391ee24a9fef
+  languageName: node
+  linkType: hard
+
 "@typescript-eslint/types@npm:8.56.1, @typescript-eslint/types@npm:^8.56.1":
   version: 8.56.1
   resolution: "@typescript-eslint/types@npm:8.56.1"
@@ -4360,7 +4419,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/utils@npm:^8.0.0":
+"@typescript-eslint/utils@npm:8.59.0, @typescript-eslint/utils@npm:^8.0.0":
   version: 8.59.0
   resolution: "@typescript-eslint/utils@npm:8.59.0"
   dependencies:
@@ -7057,7 +7116,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint@npm:^9.7.0":
+"eslint@npm:^9.0.0, eslint@npm:^9.7.0":
   version: 9.39.4
   resolution: "eslint@npm:9.39.4"
   dependencies:
@@ -8291,6 +8350,7 @@ __metadata:
     prettier: "npm:^3.2.5"
     turbo: "npm:^1.13.3"
     typescript: "npm:^5.4.5"
+    typescript-eslint: "npm:^8.0.0"
     vitest: "npm:^4.1.0"
   bin:
     hexagen: ./cli.js
@@ -14342,6 +14402,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"typescript-eslint@npm:^8.0.0":
+  version: 8.59.0
+  resolution: "typescript-eslint@npm:8.59.0"
+  dependencies:
+    "@typescript-eslint/eslint-plugin": "npm:8.59.0"
+    "@typescript-eslint/parser": "npm:8.59.0"
+    "@typescript-eslint/typescript-estree": "npm:8.59.0"
+    "@typescript-eslint/utils": "npm:8.59.0"
+  peerDependencies:
+    eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
+    typescript: ">=4.8.4 <6.1.0"
+  checksum: 10c0/b14b4bf6878e9745d92c0bc2b3c68ea29e8e524037a10e05873ad58b0dd1961313c05f406273b99c4128fd49bde2d9b3233bcec636896e9a70ed8167a3d0a9c5
+  languageName: node
+  linkType: hard
+
 "typescript-eslint@npm:^8.46.0":
   version: 8.56.1
   resolution: "typescript-eslint@npm:8.56.1"
@@ -14845,6 +14920,7 @@ __metadata:
     "@auth/core": "npm:^0.34.3"
     "@dagrejs/dagre": "npm:^2.0.4"
     "@hexagen/agentic-interaction": "workspace:*"
+    "@hexagen/ai-pipeline": "workspace:*"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/eslint-plugin-ui": "workspace:*"
     "@hexagen/governance": "workspace:*"
@@ -14855,8 +14931,10 @@ __metadata:
     "@hexagen/project-configuration": "workspace:*"
     "@hexagen/project-generation": "workspace:*"
     "@hexagen/prompt-compiler": "workspace:*"
+    "@hexagen/reconciliation-engine": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
+    "@hexagen/transaction-system": "workspace:*"
     "@hexagen/ui": "workspace:*"
     "@hexagen/ui-projection-compiler": "workspace:*"
     "@hexagen/visualization": "workspace:*"
