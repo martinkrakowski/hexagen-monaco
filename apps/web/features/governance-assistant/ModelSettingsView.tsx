@@ -274,7 +274,7 @@ export function ModelSettingsView({
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
         {recommendedModelId && !isDetectingHardware && (
           <div className="mb-6">
-            <h2 className="text-[12px] font-semibold text-muted-foreground uppercase mb-3">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase mb-3">
               ✨ Recommended for Your System
             </h2>
             {LOCAL_MODELS.find((m) => m.modelId === recommendedModelId) && (

@@ -35,7 +35,7 @@ export function PortColumn<T extends string>({
         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">
           {title}
         </h4>
-        <p className="text-[10px] text-muted-foreground">{description}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <div className="space-y-2">
         {ports.map((port) => (

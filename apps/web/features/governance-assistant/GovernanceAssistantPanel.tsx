@@ -407,7 +407,7 @@ export function GovernanceAssistantPanel({
                   G
                 </span>
               </div>
-              <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+              <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
                 Governance Checks
               </span>
             </div>
@@ -502,7 +502,7 @@ export function GovernanceAssistantPanel({
 
                       {followUpQuestions.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-border/50">
-                          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60 mb-2">
+                          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60 mb-2">
                             Follow-up Questions
                           </p>
                           <div className="flex flex-wrap gap-1.5">

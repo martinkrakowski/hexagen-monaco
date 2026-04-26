@@ -53,7 +53,7 @@ export function GraphCanvasWrapper({
 
   if ("error" in state) {
     return (
-      <div className="flex items-center justify-center w-full h-full min-h-[400px]">
+      <div className="flex items-center justify-center w-full h-full min-h-96">
         <div className="text-destructive">
           Failed to load graph: {state.error.message}
         </div>
@@ -63,7 +63,7 @@ export function GraphCanvasWrapper({
 
   if (state.nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center w-full h-full min-h-[400px] bg-muted/20">
+      <div className="flex items-center justify-center w-full h-full min-h-96 bg-muted/20">
         <div className="text-center text-muted-foreground">
           <p className="text-lg font-medium mb-2">No Architecture Data</p>
           <p className="text-sm">
@@ -80,7 +80,7 @@ export function GraphCanvasWrapper({
 
   return (
     <ReactFlowProvider>
-      <div className="w-full h-full min-h-[400px] relative">
+      <div className="w-full h-full min-h-96 relative">
         <HexagonCanvas
           nodes={state.nodes}
           edges={state.edges}

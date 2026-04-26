@@ -237,7 +237,7 @@ export function HexagonCanvas({
   );
 
   return (
-    <div className="w-full h-full min-h-[400px]">
+    <div className="w-full h-full min-h-96">
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
