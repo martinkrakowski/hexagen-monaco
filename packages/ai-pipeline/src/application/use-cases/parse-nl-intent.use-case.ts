@@ -51,8 +51,8 @@ export class ParseNLIntentUseCase {
 
     const trimmedIntent = intent.trim();
 
-    // Delegate to parser port
-    const parseResult = await this.parser.parse(trimmedIntent);
+    // Delegate to parser port with metadata for richer result
+    const parseResult = await this.parser.parseWithMetadata(trimmedIntent);
 
     if (!parseResult.success) {
       return {
@@ -65,15 +65,15 @@ export class ParseNLIntentUseCase {
       };
     }
 
-    // Create ParsedIntent value object
-    // Default confidence and intent type - these would be enriched by concrete adapters
+    // Create ParsedIntent value object with metadata from parser
     const parsedIntent = createParsedIntent(
       trimmedIntent,
-      parseResult.value,
-      0.8, // Default confidence (can be overridden by adapter)
-      "generic", // Default intent type (concrete adapters override this)
-      {}, // Default empty parameters (adapters populate this)
+      parseResult.value.commands,
+      parseResult.value.metadata.confidence,
+      parseResult.value.metadata.intentType,
+      parseResult.value.metadata.parameters,
       {
+        matchedPattern: parseResult.value.metadata.intentType,
         tokens: trimmedIntent.split(/\s+/),
       },
     );

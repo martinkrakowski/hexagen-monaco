@@ -5,4 +5,5 @@
 export type {
   NLToDomainCommandParserPort,
   NLParsingError,
+  NLParsingMetadata,
 } from "./nl-parser.port.js";

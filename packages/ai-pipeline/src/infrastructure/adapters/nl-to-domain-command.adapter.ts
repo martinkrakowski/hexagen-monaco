@@ -14,6 +14,7 @@ import { NodeKind, EdgeKind } from "@hexagen/core-domain";
 import type {
   NLToDomainCommandParserPort,
   NLParsingError,
+  NLParsingMetadata,
 } from "../../application/ports/in/nl-parser.port.js";
 
 /**
@@ -24,12 +25,28 @@ import type {
 const CONTEXT_NAME_REGEX = /^[a-z0-9_-]+$/;
 
 /**
+ * Confidence scores per intent type
+ */
+const INTENT_CONFIDENCE: Record<string, number> = {
+  create_bounded_context: 0.95,
+  create_port: 0.9,
+  rename_context: 0.85,
+  create_entity: 0.9,
+  create_use_case: 0.9,
+  create_edge: 0.9,
+  update_context: 0.8,
+};
+
+/**
  * Pattern matching rule for NL intent
  */
 interface PatternRule {
   pattern: RegExp;
   intentType: string;
-  handler: (match: RegExpMatchArray) => DomainCommand[] | null;
+  handler: (match: RegExpMatchArray) => {
+    commands: DomainCommand[];
+    parameters: Record<string, unknown>;
+  } | null;
 }
 
 /**
@@ -47,18 +64,21 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
         intentType: "create_bounded_context",
         handler: (match) => {
           const contextName = match[1];
-          return [
-            {
-              type: "CreateNode",
-              payload: {
-                kind: NodeKind.BoundedContext,
-                attributes: {
-                  name: contextName,
-                  description: `Bounded context: ${contextName}`,
+          return {
+            commands: [
+              {
+                type: "CreateNode",
+                payload: {
+                  kind: NodeKind.BoundedContext,
+                  attributes: {
+                    name: contextName,
+                    description: `Bounded context: ${contextName}`,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { contextName },
+          };
         },
       },
 
@@ -72,20 +92,23 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           const contextName = match[2];
           const portName = match[3];
 
-          return [
-            {
-              type: "CreateNode",
-              payload: {
-                kind: NodeKind.Port,
-                attributes: {
-                  name: portName,
-                  portType,
-                  parentContext: contextName,
-                  description: `${portType.charAt(0).toUpperCase() + portType.slice(1)} port: ${portName}`,
+          return {
+            commands: [
+              {
+                type: "CreateNode",
+                payload: {
+                  kind: NodeKind.Port,
+                  attributes: {
+                    name: portName,
+                    portType,
+                    parentContext: contextName,
+                    description: `${portType.charAt(0).toUpperCase() + portType.slice(1)} port: ${portName}`,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { portType, contextName, portName },
+          };
         },
       },
 
@@ -98,20 +121,20 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           const oldName = match[1];
           const newName = match[2];
 
-          // Note: This is a simplified implementation. In a real system,
-          // we would need to resolve the oldName to a node ID first.
-          // For now, we create an update command with oldName as proxy ID.
-          return [
-            {
-              type: "UpdateNode",
-              payload: {
-                nodeId: oldName as Identifier,
-                attributes: {
-                  name: newName,
+          return {
+            commands: [
+              {
+                type: "UpdateNode",
+                payload: {
+                  nodeId: oldName as Identifier,
+                  attributes: {
+                    name: newName,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { oldName, newName },
+          };
         },
       },
 
@@ -124,19 +147,22 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           const entityName = match[1];
           const contextName = match[2];
 
-          return [
-            {
-              type: "CreateNode",
-              payload: {
-                kind: NodeKind.Entity,
-                attributes: {
-                  name: entityName,
-                  parentContext: contextName,
-                  description: `Entity: ${entityName}`,
+          return {
+            commands: [
+              {
+                type: "CreateNode",
+                payload: {
+                  kind: NodeKind.Entity,
+                  attributes: {
+                    name: entityName,
+                    parentContext: contextName,
+                    description: `Entity: ${entityName}`,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { entityName, contextName },
+          };
         },
       },
 
@@ -149,19 +175,22 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           const useCaseName = match[1];
           const contextName = match[2];
 
-          return [
-            {
-              type: "CreateNode",
-              payload: {
-                kind: NodeKind.UseCase,
-                attributes: {
-                  name: useCaseName,
-                  parentContext: contextName,
-                  description: `Use case: ${useCaseName}`,
+          return {
+            commands: [
+              {
+                type: "CreateNode",
+                payload: {
+                  kind: NodeKind.UseCase,
+                  attributes: {
+                    name: useCaseName,
+                    parentContext: contextName,
+                    description: `Use case: ${useCaseName}`,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { useCaseName, contextName },
+          };
         },
       },
 
@@ -174,19 +203,22 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           const source = match[1];
           const target = match[2];
 
-          return [
-            {
-              type: "CreateEdge",
-              payload: {
-                kind: EdgeKind.Dependency,
-                source: source as Identifier,
-                target: target as Identifier,
-                attributes: {
-                  description: `Link from ${source} to ${target}`,
+          return {
+            commands: [
+              {
+                type: "CreateEdge",
+                payload: {
+                  kind: EdgeKind.Dependency,
+                  source: source as Identifier,
+                  target: target as Identifier,
+                  attributes: {
+                    description: `Link from ${source} to ${target}`,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { source, target },
+          };
         },
       },
 
@@ -199,18 +231,21 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
           const contextId = match[1];
           const property = match[2].trim();
 
-          return [
-            {
-              type: "UpdateNode",
-              payload: {
-                nodeId: contextId as Identifier,
-                attributes: {
-                  configuration: property,
-                  description: `Updated to: ${property}`,
+          return {
+            commands: [
+              {
+                type: "UpdateNode",
+                payload: {
+                  nodeId: contextId as Identifier,
+                  attributes: {
+                    configuration: property,
+                    description: `Updated to: ${property}`,
+                  },
                 },
-              },
-            } as DomainCommand,
-          ];
+              } as DomainCommand,
+            ],
+            parameters: { contextId, property },
+          };
         },
       },
     ];
@@ -219,6 +254,21 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
   async parse(
     intent: string,
   ): Promise<Result<DomainCommand[], NLParsingError>> {
+    const result = await this.parseWithMetadata(intent);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, value: result.value.commands };
+  }
+
+  async parseWithMetadata(
+    intent: string,
+  ): Promise<
+    Result<
+      { commands: DomainCommand[]; metadata: NLParsingMetadata },
+      NLParsingError
+    >
+  > {
     if (!intent || intent.trim().length === 0) {
       return {
         success: false,
@@ -234,11 +284,19 @@ export class NLToDomainCommandParserAdapter implements NLToDomainCommandParserPo
     for (const rule of this.patterns) {
       const match = intent.match(rule.pattern);
       if (match) {
-        const commands = rule.handler(match);
-        if (commands) {
+        const result = rule.handler(match);
+        if (result) {
+          const confidence = INTENT_CONFIDENCE[rule.intentType] ?? 0.8;
           return {
             success: true,
-            value: commands,
+            value: {
+              commands: result.commands,
+              metadata: {
+                intentType: rule.intentType,
+                parameters: result.parameters,
+                confidence,
+              },
+            },
           };
         }
       }

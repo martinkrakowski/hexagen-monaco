@@ -5,6 +5,7 @@ import type { PromoteStatePort } from "../ports/in/promote-state.port.js";
 import type {
   LintFilterPort,
   LinterReportLike,
+  LintViolationLike,
 } from "../ports/in/lint-filter.port.js";
 import type { ManifestPatchPort } from "../ports/out/manifest-patch.port.js";
 import type { ReconcileRequest } from "../ports/in/reconcile.port.js";
@@ -47,7 +48,7 @@ export class ReconcileUseCase {
       patches = this.lintFilterPort.filterPatches(patches, linterReport);
     }
 
-    const verdicts = this.generateVerdicts(patches);
+    const verdicts = this.generateVerdicts(patches, linterReport);
 
     const sortedVerdicts = this.sortVerdicts(verdicts);
 
@@ -57,6 +58,10 @@ export class ReconcileUseCase {
 
     for (const verdict of acceptedVerdicts) {
       state = this.promoteStatePort.promoteState(state, verdict.id);
+    }
+
+    if (acceptedVerdicts.length > 0) {
+      state = this.promoteStatePort.promoteToPhase(state, "approved");
     }
 
     const finalPatches = this.extractAcceptedPatches(patches, acceptedVerdicts);
@@ -84,9 +89,44 @@ export class ReconcileUseCase {
     };
   }
 
-  private generateVerdicts(patches: Patch[]): Verdict[] {
-    return patches.map((patch) =>
-      createVerdict(patch.id, true, `Auto-accepted patch ${patch.id}`),
+  private generateVerdicts(
+    patches: Patch[],
+    linterReport?: LinterReportLike,
+  ): Verdict[] {
+    return patches.map((patch) => {
+      if (this.hasErrorViolation(patch, linterReport)) {
+        const violation = this.findErrorViolation(patch, linterReport!);
+        return createVerdict(
+          patch.id,
+          false,
+          `Blocked by lint: ${violation!.file}`,
+        );
+      }
+      return createVerdict(patch.id, true, `Auto-accepted patch ${patch.id}`);
+    });
+  }
+
+  private hasErrorViolation(patch: Patch, report?: LinterReportLike): boolean {
+    if (!report) return false;
+    return report.violations.some(
+      (v) =>
+        v.severity === "error" &&
+        (v.file === patch.targetId ||
+          v.file === patch.payload.file ||
+          v.file === patch.payload.target),
+    );
+  }
+
+  private findErrorViolation(
+    patch: Patch,
+    report: LinterReportLike,
+  ): LintViolationLike | undefined {
+    return report.violations.find(
+      (v) =>
+        v.severity === "error" &&
+        (v.file === patch.targetId ||
+          v.file === patch.payload.file ||
+          v.file === patch.payload.target),
     );
   }
 

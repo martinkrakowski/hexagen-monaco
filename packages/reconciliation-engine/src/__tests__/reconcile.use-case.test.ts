@@ -234,7 +234,85 @@ describe("ReconcileUseCase with LintFilterPort", () => {
     expect(result.patches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("should not filter when LintFilterPort is not provided", async () => {
+  it("should reject patch when lint report has error on target file", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+      undefined,
+      new LinterReportFilterAdapter(),
+    );
+
+    const report = makeReport([
+      {
+        ruleId: "R001",
+        severity: "error",
+        file: "bc-1",
+        message: "Boundary violation",
+      },
+    ]);
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request, undefined, report);
+
+    expect(result.success).toBe(true);
+    expect(result.patches).toHaveLength(0);
+    expect(result.summary).toContain("rejected");
+  });
+
+  it("should accept patch when lint report is clean", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+      undefined,
+      new LinterReportFilterAdapter(),
+    );
+
+    const report = makeReport([]);
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request, undefined, report);
+
+    expect(result.success).toBe(true);
+    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should accept all patches when no linter report provided", async () => {
+    const useCase = new ReconcileUseCase(
+      new StructuredDiffReconciliationAdapter(),
+      new VerdictComparatorAdapter(),
+      new GovernanceAwareConflictResolverAdapter(),
+      new MonotonicStatePromoterAdapter(),
+      undefined,
+      new LinterReportFilterAdapter(),
+    );
+
+    const request = makeRequest(
+      { boundedContexts: [{ id: "bc-1", name: "NewContext" }] },
+      { nodes: [], edges: [] },
+      { boundedContexts: [] },
+    );
+
+    const result = await useCase.execute(request);
+
+    expect(result.success).toBe(true);
+    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should reject patches when lint report has errors even without LintFilterPort", async () => {
     const useCase = new ReconcileUseCase(
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
@@ -260,6 +338,7 @@ describe("ReconcileUseCase with LintFilterPort", () => {
     const result = await useCase.execute(request, undefined, report);
 
     expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+    expect(result.patches).toHaveLength(0);
+    expect(result.summary).toContain("rejected");
   });
 });

@@ -1,13 +1,9 @@
-import type { PromoteStatePort } from "../../application/ports/in/promote-state.port.js";
+import type {
+  PromoteStatePort,
+  ReconciliationPhase,
+} from "../../application/ports/in/promote-state.port.js";
 import type { ReconciliationState } from "../../domain/reconciliation-state.js";
 import { addVerdict, promoteState } from "../../domain/reconciliation-state.js";
-
-type ReconciliationPhase =
-  | "pending"
-  | "diffing"
-  | "verdict"
-  | "approved"
-  | "rejected";
 
 const PHASE_ORDER: ReconciliationPhase[] = [
   "pending",
@@ -52,6 +48,10 @@ export class MonotonicStatePromoterAdapter implements PromoteStatePort {
       version: state.version + 1,
       lastUpdated: Date.now(),
       isStable: targetPhase === "approved" || targetPhase === "rejected",
+      pendingVerdicts:
+        targetPhase === "approved" || targetPhase === "rejected"
+          ? []
+          : state.pendingVerdicts,
     };
   }
 
