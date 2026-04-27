@@ -51,7 +51,7 @@ function resolveExtension(importPath, sourceFile) {
   //   - For .d.ts consumer: check for `${path}.d.ts` (the type counterpart)
   const siblingProbe = path.resolve(
     dir,
-    isDts ? `${importPath}.d.ts` : `${importPath}.js`
+    isDts ? `${importPath}.d.ts` : `${importPath}.js`,
   );
   if (fs.existsSync(siblingProbe)) {
     return `${importPath}.js`;
@@ -61,7 +61,7 @@ function resolveExtension(importPath, sourceFile) {
   const indexProbe = path.resolve(
     dir,
     importPath,
-    isDts ? "index.d.ts" : "index.js"
+    isDts ? "index.d.ts" : "index.js",
   );
   if (fs.existsSync(indexProbe)) {
     return `${importPath}/index.js`;
@@ -118,7 +118,7 @@ function fixESM(distDir) {
             const resolved = resolveExtension(importPath, fullPath);
             importsFixed++;
             return `${prefix}${resolved}${suffix}`;
-          }
+          },
         );
 
         if (content !== originalContent) {
@@ -134,7 +134,9 @@ function fixESM(distDir) {
   walk(distDir);
 
   if (filesFixed > 0) {
-    console.log(`\n✅ Fixed ${filesFixed} files (${importsFixed} import paths)\n`);
+    console.log(
+      `\n✅ Fixed ${filesFixed} files (${importsFixed} import paths)\n`,
+    );
   } else {
     console.log(`\n✓ No fixes needed\n`);
   }

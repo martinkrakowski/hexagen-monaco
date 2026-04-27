@@ -150,7 +150,7 @@ function prepare(packageDir) {
   const distDir = path.join(absPackageDir, "dist");
   if (!fs.existsSync(distDir)) {
     console.error(
-      `❌ dist/ not found at ${distDir}. Run the package build before staging.`
+      `❌ dist/ not found at ${distDir}. Run the package build before staging.`,
     );
     process.exit(1);
   }
@@ -172,7 +172,7 @@ function prepare(packageDir) {
 
   fs.writeFileSync(
     path.join(publishDir, "package.json"),
-    JSON.stringify(staged, null, 2) + "\n"
+    JSON.stringify(staged, null, 2) + "\n",
   );
 
   // 2. Copy dist/
@@ -205,20 +205,28 @@ function prepare(packageDir) {
     srcPkg.packageManager ? "packageManager" : null,
   ].filter(Boolean);
 
-  console.log(`✅ Staged publishable package at ${path.relative(process.cwd(), publishDir) || publishDir}`);
+  console.log(
+    `✅ Staged publishable package at ${path.relative(process.cwd(), publishDir) || publishDir}`,
+  );
   console.log(`   Name:     ${staged.name}@${staged.version}`);
   console.log(`   Files:    ${fileCount} total`);
   console.log(
-    `   Stripped: ${strippedDepCount} workspace dep(s); field(s): ${strippedFields.join(", ") || "none"}`
+    `   Stripped: ${strippedDepCount} workspace dep(s); field(s): ${strippedFields.join(", ") || "none"}`,
   );
   if (!readmeIncluded) {
-    console.log(`   ⚠  No README.md at package root — consumers may need context`);
+    console.log(
+      `   ⚠  No README.md at package root — consumers may need context`,
+    );
   }
   if (!licenseSource) {
-    console.log(`   ⚠  No LICENSE file found — neither package-local nor repo-root`);
+    console.log(
+      `   ⚠  No LICENSE file found — neither package-local nor repo-root`,
+    );
   }
   console.log(``);
-  console.log(`   Next: cd ${path.relative(process.cwd(), publishDir) || publishDir} && npm pack`);
+  console.log(
+    `   Next: cd ${path.relative(process.cwd(), publishDir) || publishDir} && npm pack`,
+  );
 }
 
 const arg = process.argv[2];

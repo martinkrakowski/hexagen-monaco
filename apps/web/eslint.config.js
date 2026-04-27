@@ -48,7 +48,7 @@ export default [
               importNames: ["LLMMessage", "LocalLLMProviderPort"],
               allowTypeImports: true,
               message:
-                "LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest[\"messages\"] instead. See ADR 0021.",
+                'LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest["messages"] instead. See ADR 0021.',
             },
           ],
         },
@@ -67,7 +67,7 @@ export default [
               importNames: ["LLMMessage", "LocalLLMProviderPort"],
               allowTypeImports: true,
               message:
-                "LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest[\"messages\"] instead. See ADR 0021.",
+                'LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest["messages"] instead. See ADR 0021.',
             },
           ],
         },

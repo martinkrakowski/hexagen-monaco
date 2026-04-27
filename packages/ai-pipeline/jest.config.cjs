@@ -7,11 +7,14 @@ module.exports = {
   testMatch: ["**/__tests__/**/*.test.ts", "**/*.test.ts"],
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   transform: {
-    "^.+\\.tsx?$": ["ts-jest", {
-      tsconfig: {
-        module: "esnext",
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        tsconfig: {
+          module: "esnext",
+        },
       },
-    }],
+    ],
   },
   collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
   moduleNameMapper: {
