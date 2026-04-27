@@ -49,48 +49,38 @@ export async function POST(request: NextRequest) {
         );
       };
 
-      try {
-        send("pipeline_start", { intent: body.intent });
+ try {
+      send("pipeline_start", { intent: body.intent });
 
-        const stepNames = [
-          "parse-nl-intent",
-          "compile-prompt",
-          "llm-inference",
-          "reconcile",
-          "commit-patches",
-        ];
-        for (const name of stepNames) {
-          send("step_running", { name });
-        }
+      const useCase = getModifyArchitectureUseCase();
+      const result = await useCase.execute(
+        body.intent,
+        manifestPath,
+        lineage,
+      );
 
-        const useCase = getModifyArchitectureUseCase();
-        const result = await useCase.execute(
-          body.intent,
-          manifestPath,
-          lineage,
-        );
-
-        if (result.success) {
-          for (const step of result.value.steps) {
-            send("step_complete", {
-              name: step.name,
-              status: step.status,
-              durationMs: step.endTime ? step.endTime - step.startTime : null,
-            });
-          }
-
-          send("pipeline_complete", {
-            pipelineRunId: result.value.pipelineRunId,
-            patchesApplied: result.value.patchesApplied,
-            lintPassed: result.value.lintPassed,
-            transactionId: result.value.transactionId,
-            patches: result.value.patches ?? [],
-          });
-        } else {
-          send("pipeline_error", {
-            error: result.error.message,
+      if (result.success) {
+        for (const step of result.value.steps) {
+          send("step_running", { name: step.name });
+          send("step_complete", {
+            name: step.name,
+            status: step.status,
+            durationMs: step.endTime ? step.endTime - step.startTime : null,
           });
         }
+
+        send("pipeline_complete", {
+          pipelineRunId: result.value.pipelineRunId,
+          patchesApplied: result.value.patchesApplied,
+          lintPassed: result.value.lintPassed,
+          transactionId: result.value.transactionId,
+          patches: result.value.patches ?? [],
+        });
+      } else {
+        send("pipeline_error", {
+          error: result.error.message,
+        });
+      }
       } catch (err) {
         const logger = getLogger();
         logger.errorWithException(

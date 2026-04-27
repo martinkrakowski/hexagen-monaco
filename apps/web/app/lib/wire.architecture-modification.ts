@@ -7,11 +7,11 @@ import {
   InMemoryNLParserAdapter,
   InMemoryPromptCompilerAdapter,
   InMemoryLLMSenderAdapter,
-  InMemoryManifestMutationAdapter,
   InMemoryLintValidationAdapter,
   CloudLLMPipelineAdapter,
   createDefaultFallbackChain,
 } from "@hexagen/agentic-interaction";
+import { SyncDelegatingManifestMutationAdapter } from "@hexagen/transaction-system";
 import {
   ReconcileUseCase,
   StructuredDiffReconciliationAdapter,
@@ -92,7 +92,7 @@ export const getModifyArchitectureUseCase = (
     llmSender,
     reconcileUseCase,
     transactionManager: new InMemoryTransactionManager(),
-    manifestMutation: new InMemoryManifestMutationAdapter(),
+    manifestMutation: new SyncDelegatingManifestMutationAdapter(process.cwd()),
     lintValidation: new InMemoryLintValidationAdapter(),
     manifestProvider: async () => emptyManifest,
     architectureGraphProvider: async () => emptyArchitectureGraph,
