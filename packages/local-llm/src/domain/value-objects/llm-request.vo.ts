@@ -15,6 +15,7 @@ export interface LLMRequest {
   topP?: number;
   stream?: boolean;
   metadata?: Record<string, unknown>;
+  signal?: AbortSignal;
 }
 
 export function createLLMRequest(

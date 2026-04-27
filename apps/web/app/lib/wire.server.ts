@@ -161,18 +161,18 @@ export interface StepCallbacks {
  * - Per-request instances for callback-based scenarios (SSE) prevent cross-request state leakage
  *
  * @param mode Pipeline mode: 'in-memory' (fast, local) or 'cloud' (actual LLM API)
- * @param cloudConfig Optional cloud provider configuration (API keys, fallback chain)
+ * @param signal Optional AbortSignal to cancel LLM inference
  * @param callbacks Optional step lifecycle callbacks (onStepRunning, onStepComplete)
  * @returns Fresh or cached ModifyArchitectureUseCase instance
  */
 export const getModifyArchitectureUseCase = (
   mode: PipelineMode = "in-memory",
-  cloudConfig?: CloudPipelineConfig,
+  signal?: AbortSignal,
   callbacks?: StepCallbacks,
 ): ModifyArchitectureUseCase => {
-  if (cachedUseCase && cachedMode === mode && !callbacks) return cachedUseCase;
+  if (cachedUseCase && cachedMode === mode && !callbacks && !signal) return cachedUseCase;
 
-  const llmSender = createLLMSender(mode, cloudConfig);
+  const llmSender = createLLMSender(mode, undefined);
 
   const reconcileUseCase = new ReconcileUseCase(
     new StructuredDiffReconciliationAdapter(),
@@ -224,6 +224,7 @@ export const getModifyArchitectureUseCase = (
       );
       return emptyLinterReport;
     },
+    signal,
     ...callbacks,
   };
 
