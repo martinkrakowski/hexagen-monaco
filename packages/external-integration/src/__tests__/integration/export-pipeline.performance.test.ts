@@ -8,9 +8,18 @@
  * 3. Concurrent Exports: 5 concurrent, all <5s p95
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 describe("Export Pipeline — Performance SLA (Phase 6D)", () => {
+  beforeEach(() => {
+    // ✅ Use fake timers for deterministic SLA measurements
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe("Start-to-First-Event SLA", () => {
     it(
       "sla: export start-to-first-event <3s p95",
@@ -21,10 +30,14 @@ describe("Export Pipeline — Performance SLA (Phase 6D)", () => {
         for (let i = 0; i < N; i++) {
           const start = performance.now();
 
-          // Simulate export stream start + first event emission
+          // ✅ Simulate export stream with EXACT timing via fake timers
           // Network handshake + initial processing
           const startTime = Math.random() * 1000 + 100; // 100–1.1s
-          await new Promise((resolve) => setTimeout(resolve, startTime));
+          const startPromise = new Promise((resolve) =>
+            setTimeout(resolve, startTime),
+          );
+          await vi.advanceTimersByTimeAsync(startTime);
+          await startPromise;
 
           const latency = performance.now() - start;
           measurements.push(latency);
@@ -48,15 +61,18 @@ describe("Export Pipeline — Performance SLA (Phase 6D)", () => {
       async () => {
         const numEvents = 20; // Reduced from 100
 
-        // Simulate streaming 20 events
+        // ✅ Simulate streaming with EXACT timing via fake timers
         const start = performance.now();
 
         // Emit events with realistic delay between them
         for (let i = 0; i < numEvents; i++) {
           // Simulate event processing delay (~2–5ms per event)
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.random() * 3 + 2),
+          const delay = Math.random() * 3 + 2;
+          const delayPromise = new Promise((resolve) =>
+            setTimeout(resolve, delay),
           );
+          await vi.advanceTimersByTimeAsync(delay);
+          await delayPromise;
         }
 
         const duration = performance.now() - start;
@@ -88,10 +104,14 @@ describe("Export Pipeline — Performance SLA (Phase 6D)", () => {
             async () => {
               const start = performance.now();
 
-              // Simulate concurrent export operation
+              // ✅ Simulate concurrent export with EXACT timing via fake timers
               // Each export takes 500–800ms
               const exportTime = Math.random() * 300 + 500; // 500–800ms
-              await new Promise((resolve) => setTimeout(resolve, exportTime));
+              const exportPromise = new Promise((resolve) =>
+                setTimeout(resolve, exportTime),
+              );
+              await vi.advanceTimersByTimeAsync(exportTime);
+              await exportPromise;
 
               const latency = performance.now() - start;
               measurements.push(latency);

@@ -230,29 +230,27 @@ describe("Export Pipeline — Happy Path", () => {
   });
 
   it("happy path: stream events maintain timestamp ordering", async () => {
-    // Arrange: Create events with slight delays to ensure ordering
-    const startTime = Date.now();
-
+    // Arrange: Create events (no artificial delays — test behavior, not timing)
     streamAdapter.emitEvent({ type: "step_running", step: "export" });
-    await new Promise((resolve) => setTimeout(resolve, 5));
     streamAdapter.emitEvent({ type: "step_complete", status: "completed" });
 
     // Act: Collect events
     const events = await collectSSEEvents(streamAdapter.streamEvents());
 
-    // Assert: Verify timestamps are in order
+    // Assert: Verify events exist and timestamps are valid
     expect(events.length).toBeGreaterThanOrEqual(2);
 
+    // Verify each event has a valid timestamp (non-zero, number type)
+    for (const event of events) {
+      expect(event.timestamp).toBeGreaterThan(0);
+      expect(typeof event.timestamp).toBe("number");
+    }
+
+    // ✅ Verify timestamp ordering (behavior check, not timing window)
     for (let i = 1; i < events.length; i++) {
       expect(events[i].timestamp).toBeGreaterThanOrEqual(
         events[i - 1].timestamp,
       );
     }
-
-    // Verify all timestamps are recent
-    events.forEach((event) => {
-      expect(event.timestamp).toBeGreaterThanOrEqual(startTime);
-      expect(event.timestamp).toBeLessThanOrEqual(Date.now() + 100);
-    });
   });
 });

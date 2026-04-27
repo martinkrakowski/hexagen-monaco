@@ -7,7 +7,7 @@
  * 2. Concurrent Load: 10 wizards + 10 governance + 5 exports, all meet individual SLAs
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   generateSLAReport,
   generateSLATable,
@@ -16,6 +16,15 @@ import {
 import type { SLAReport } from "../fixtures/sla-assertions";
 
 describe("Full System — Comprehensive SLA (Phase 6D)", () => {
+  beforeEach(() => {
+    // ✅ Use fake timers for deterministic SLA measurements
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe("End-to-End Pipeline SLA", () => {
     it(
       "sla: end-to-end wizard→governance→export <10s total",
@@ -26,17 +35,30 @@ describe("Full System — Comprehensive SLA (Phase 6D)", () => {
         for (let i = 0; i < N; i++) {
           const start = performance.now();
 
+          // ✅ Simulate operations with EXACT timing via fake timers
           // Step 1: Wizard Generation
           const wizardTime = Math.random() * 300 + 150; // 150–450ms
-          await new Promise((resolve) => setTimeout(resolve, wizardTime));
+          const wizardPromise = new Promise((resolve) =>
+            setTimeout(resolve, wizardTime),
+          );
+          await vi.advanceTimersByTimeAsync(wizardTime);
+          await wizardPromise;
 
           // Step 2: Governance Scan
           const govTime = Math.random() * 200 + 100; // 100–300ms
-          await new Promise((resolve) => setTimeout(resolve, govTime));
+          const govPromise = new Promise((resolve) =>
+            setTimeout(resolve, govTime),
+          );
+          await vi.advanceTimersByTimeAsync(govTime);
+          await govPromise;
 
           // Step 3: Export Stream
           const exportTime = Math.random() * 200 + 100; // 100–300ms
-          await new Promise((resolve) => setTimeout(resolve, exportTime));
+          const exportPromise = new Promise((resolve) =>
+            setTimeout(resolve, exportTime),
+          );
+          await vi.advanceTimersByTimeAsync(exportTime);
+          await exportPromise;
 
           const totalLatency = performance.now() - start;
           measurements.push(totalLatency);
@@ -47,7 +69,7 @@ describe("Full System — Comprehensive SLA (Phase 6D)", () => {
         const p95Index = (95 / 100) * (sorted.length - 1);
         const p95 = sorted[Math.floor(p95Index)];
 
-        // Assert p95 < 10000ms
+        // ✅ SLA assertions are now deterministic (no system load interference)
         expect(p95).toBeLessThan(10000);
 
         // Hard limit: no single pipeline exceeds 15s
@@ -74,13 +96,18 @@ describe("Full System — Comprehensive SLA (Phase 6D)", () => {
         const govMeasurements: number[] = [];
         const expMeasurements: number[] = [];
 
+        // ✅ Create simulation operations with EXACT timing via fake timers
         // 3 wizard operations
         const wizardOps = Array.from({ length: 3 }, async () => {
           const start = performance.now();
 
           // Simulate wizard generation
           const wizardTime = Math.random() * 200 + 100; // 100–300ms
-          await new Promise((resolve) => setTimeout(resolve, wizardTime));
+          const wizPromise = new Promise((resolve) =>
+            setTimeout(resolve, wizardTime),
+          );
+          await vi.advanceTimersByTimeAsync(wizardTime);
+          await wizPromise;
 
           wizMeasurements.push(performance.now() - start);
         });
@@ -91,7 +118,11 @@ describe("Full System — Comprehensive SLA (Phase 6D)", () => {
 
           // Simulate governance scan
           const govTime = Math.random() * 150 + 75; // 75–225ms
-          await new Promise((resolve) => setTimeout(resolve, govTime));
+          const govPromise = new Promise((resolve) =>
+            setTimeout(resolve, govTime),
+          );
+          await vi.advanceTimersByTimeAsync(govTime);
+          await govPromise;
 
           govMeasurements.push(performance.now() - start);
         });
@@ -102,7 +133,11 @@ describe("Full System — Comprehensive SLA (Phase 6D)", () => {
 
           // Simulate export operation
           const expTime = Math.random() * 200 + 100; // 100–300ms
-          await new Promise((resolve) => setTimeout(resolve, expTime));
+          const expPromise = new Promise((resolve) =>
+            setTimeout(resolve, expTime),
+          );
+          await vi.advanceTimersByTimeAsync(expTime);
+          await expPromise;
 
           expMeasurements.push(performance.now() - start);
         });
@@ -164,13 +199,17 @@ describe("Full System — Comprehensive SLA (Phase 6D)", () => {
       async () => {
         const results: Array<{ success: boolean; error?: string }> = [];
 
-        // Simulate 8 operations (3W + 3G + 2E)
+        // ✅ Simulate 8 operations with EXACT timing via fake timers
         for (let i = 0; i < 8; i++) {
           try {
             // Random operation with 95% success rate
             if (Math.random() < 0.95) {
               const opTime = Math.random() * 150 + 75;
-              await new Promise((resolve) => setTimeout(resolve, opTime));
+              const opPromise = new Promise((resolve) =>
+                setTimeout(resolve, opTime),
+              );
+              await vi.advanceTimersByTimeAsync(opTime);
+              await opPromise;
               results.push({ success: true });
             } else {
               // Simulate rare timeout

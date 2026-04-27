@@ -8,9 +8,18 @@
  * 3. State Persistence: <500ms p95
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 describe("Project Wizard — Performance SLA (Phase 6D)", () => {
+  beforeEach(() => {
+    // ✅ Use fake timers for deterministic SLA measurements
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe("Generation SLA", () => {
     it(
       "sla: project generation <5s p95, <6s p99",
@@ -21,9 +30,13 @@ describe("Project Wizard — Performance SLA (Phase 6D)", () => {
         for (let i = 0; i < N; i++) {
           const start = performance.now();
 
-          // Simulate wizard generation operation
+          // ✅ Simulate wizard generation with EXACT timing via fake timers
           const operationTime = Math.random() * 800 + 200; // 200–1000ms
-          await new Promise((resolve) => setTimeout(resolve, operationTime));
+          const opPromise = new Promise((resolve) =>
+            setTimeout(resolve, operationTime),
+          );
+          await vi.advanceTimersByTimeAsync(operationTime);
+          await opPromise;
 
           const latency = performance.now() - start;
           measurements.push(latency);
@@ -61,9 +74,13 @@ describe("Project Wizard — Performance SLA (Phase 6D)", () => {
           // Simulate timeout scenario
           const start = performance.now();
 
-          // Simulate recovery delay (network backoff + retry)
+          // ✅ Simulate recovery with EXACT timing via fake timers
           const recoveryTime = Math.random() * 600 + 200; // 200–800ms
-          await new Promise((resolve) => setTimeout(resolve, recoveryTime));
+          const recoveryPromise = new Promise((resolve) =>
+            setTimeout(resolve, recoveryTime),
+          );
+          await vi.advanceTimersByTimeAsync(recoveryTime);
+          await recoveryPromise;
 
           const latency = performance.now() - start;
           measurements.push(latency);
@@ -96,9 +113,13 @@ describe("Project Wizard — Performance SLA (Phase 6D)", () => {
           // Simulate state save/load cycle
           const start = performance.now();
 
-          // Simulate persistence I/O
+          // ✅ Simulate persistence with EXACT timing via fake timers
           const persistenceTime = Math.random() * 200 + 30; // 30–230ms
-          await new Promise((resolve) => setTimeout(resolve, persistenceTime));
+          const persistPromise = new Promise((resolve) =>
+            setTimeout(resolve, persistenceTime),
+          );
+          await vi.advanceTimersByTimeAsync(persistenceTime);
+          await persistPromise;
 
           const latency = performance.now() - start;
           measurements.push(latency);

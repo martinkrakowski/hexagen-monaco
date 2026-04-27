@@ -8,9 +8,18 @@
  * 3. Violation Scanning: <1.5s p95 (violation count invariant)
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 describe("Governance Assistant — Performance SLA (Phase 6D)", () => {
+  beforeEach(() => {
+    // ✅ Use fake timers for deterministic SLA measurements
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe("Linting SLA", () => {
     it(
       "sla: linting <2s p95, <2.5s p99",
@@ -21,9 +30,13 @@ describe("Governance Assistant — Performance SLA (Phase 6D)", () => {
         for (let i = 0; i < N; i++) {
           const start = performance.now();
 
-          // Simulate linting operation
+          // ✅ Simulate linting operation with EXACT timing via fake timers
           const lintTime = Math.random() * 700 + 150; // 150–850ms
-          await new Promise((resolve) => setTimeout(resolve, lintTime));
+          const lintPromise = new Promise((resolve) =>
+            setTimeout(resolve, lintTime),
+          );
+          await vi.advanceTimersByTimeAsync(lintTime);
+          await lintPromise;
 
           const latency = performance.now() - start;
           measurements.push(latency);
@@ -36,7 +49,7 @@ describe("Governance Assistant — Performance SLA (Phase 6D)", () => {
         const p95 = sorted[Math.floor(p95Index)];
         const p99 = sorted[Math.floor(p99Index)];
 
-        // Assert p95 < 2000ms
+        // ✅ SLA assertions are now deterministic (fake timers control timing)
         expect(p95).toBeLessThan(2000);
 
         // Assert p99 < 2500ms
@@ -60,9 +73,13 @@ describe("Governance Assistant — Performance SLA (Phase 6D)", () => {
         for (let i = 0; i < N; i++) {
           const start = performance.now();
 
-          // Simulate graph building from manifest
+          // ✅ Simulate graph building with EXACT timing via fake timers
           const graphBuildTime = Math.random() * 400 + 50; // 50–450ms
-          await new Promise((resolve) => setTimeout(resolve, graphBuildTime));
+          const buildPromise = new Promise((resolve) =>
+            setTimeout(resolve, graphBuildTime),
+          );
+          await vi.advanceTimersByTimeAsync(graphBuildTime);
+          await buildPromise;
 
           const latency = performance.now() - start;
           measurements.push(latency);
@@ -93,9 +110,13 @@ describe("Governance Assistant — Performance SLA (Phase 6D)", () => {
           for (let i = 0; i < 5; i++) {
             const start = performance.now();
 
-            // Simulate scanning with varying violation counts
+            // ✅ Simulate scanning with EXACT timing via fake timers
             const scanTime = Math.random() * 600 + 100 + violationCount * 5; // 100ms + ~5ms per violation
-            await new Promise((resolve) => setTimeout(resolve, scanTime));
+            const scanPromise = new Promise((resolve) =>
+              setTimeout(resolve, scanTime),
+            );
+            await vi.advanceTimersByTimeAsync(scanTime);
+            await scanPromise;
 
             const latency = performance.now() - start;
             measurements.push(latency);
