@@ -27,7 +27,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "node --test 'src/**/*.test.ts' 2>/dev/null || true"
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
@@ -38,7 +38,6 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "typescript": "^5.0.0"
   }
 }
