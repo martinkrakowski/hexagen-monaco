@@ -1,0 +1,107 @@
+system: test-hexagen
+scope: hexagen
+architecture: modular-monolith
+monorepo:
+  packageManager: yarn@4.12.0
+  linker: node-modules
+  buildTool: turbo
+  workspaces:
+    - packages/*
+  root:
+    hoistDevDependencies: true
+    noInternalDeps: true
+
+bounded_contexts:
+  - name: core-domain
+    type: core
+    description: Semantic kernel for domain model contracts
+    layers:
+      domain:
+        entities:
+          - DomainNode
+        value_objects:
+          - NodeKind
+      application:
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
+
+  - name: shared
+    type: shared-kernel
+    description: Shared primitives and utilities
+    layers:
+      domain:
+        value_objects:
+          - CustomError
+
+  - name: project-configuration
+    type: core
+    description: Manifest parsing and validation
+    layers:
+      domain:
+        entities:
+          - ProjectSpec
+          - BoundedContext
+        value_objects: []
+      application:
+        use_cases:
+          - ValidateSpecUseCase
+        ports:
+          in:
+            - ValidateSpecPort
+          out:
+            - ProjectGeneratorPort
+      infrastructure:
+        adapters: []
+
+  - name: wizard-orchestration
+    type: core
+    description: Project wizard orchestration
+    layers:
+      domain:
+        entities:
+          - WizardSession
+        value_objects: []
+      application:
+        use_cases:
+          - ProcessIntentUseCase
+        ports:
+          in:
+            - ProcessIntentPort
+          out:
+            - WizardPersistencePort
+      infrastructure:
+        adapters: []
+
+  - name: governance
+    type: core
+    description: Architecture governance and linting
+    layers:
+      domain:
+        entities:
+          - LinterReport
+        value_objects: []
+      application:
+        use_cases:
+          - ScanManifestUseCase
+        ports:
+          in:
+            - ScanManifestPort
+          out:
+            - ArchitectureGraphProviderPort
+            - LinterPort
+      infrastructure:
+        adapters: []
+
+generator:
+  version: 0.2.0
+  sync:
+    idempotent: true
+    createOnlyIfMissing: true
+    nonDestructive: true
+    protectedRootFiles:
+      - .gitignore
+      - turbo.json
+      - yarn.lock

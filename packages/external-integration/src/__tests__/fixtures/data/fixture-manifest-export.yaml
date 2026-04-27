@@ -1,0 +1,92 @@
+system: test-hexagen-export
+scope: hexagen
+architecture: modular-monolith
+monorepo:
+  packageManager: yarn@4.12.0
+  linker: node-modules
+  buildTool: turbo
+  workspaces:
+    - packages/*
+  root:
+    hoistDevDependencies: true
+    noInternalDeps: true
+
+bounded_contexts:
+  - name: core-domain
+    type: core
+    description: Semantic kernel for domain model contracts
+    layers:
+      domain:
+        entities:
+          - DomainNode
+        value_objects:
+          - NodeKind
+      application:
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
+
+  - name: shared
+    type: shared-kernel
+    description: Shared primitives and utilities
+    layers:
+      domain:
+        value_objects:
+          - CustomError
+
+  - name: external-integration
+    type: core
+    description: External system integration
+    layers:
+      domain:
+        entities:
+          - AuthSession
+        value_objects: []
+      application:
+        use_cases:
+          - InitiateAuthUseCase
+          - ExportManifestUseCase
+        ports:
+          in:
+            - InitiateAuthPort
+            - ExportManifestPort
+          out:
+            - OAuthProviderPort
+            - GitHubProviderPort
+            - CloudStoragePort
+            - SSEStreamPort
+      infrastructure:
+        adapters: []
+
+  - name: project-configuration
+    type: core
+    description: Manifest parsing and validation
+    layers:
+      domain:
+        entities:
+          - ProjectSpec
+          - BoundedContext
+        value_objects: []
+      application:
+        use_cases:
+          - ValidateSpecUseCase
+        ports:
+          in:
+            - ValidateSpecPort
+          out:
+            - ProjectGeneratorPort
+      infrastructure:
+        adapters: []
+
+generator:
+  version: 0.2.0
+  sync:
+    idempotent: true
+    createOnlyIfMissing: true
+    nonDestructive: true
+    protectedRootFiles:
+      - .gitignore
+      - turbo.json
+      - yarn.lock

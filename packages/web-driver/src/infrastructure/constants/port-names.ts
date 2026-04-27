@@ -108,6 +108,34 @@ export const PORT_NAMES = {
   MAP_NODE_VISUAL_USE_CASE: "MapNodeVisualUseCase",
   /** Solve graph auto-layout (dagre, ELK, etc.) */
   SOLVE_GRAPH_LAYOUT_USE_CASE: "SolveGraphLayoutUseCase",
+
+  // ============================================================================
+  // Project Generation Ports
+  // ============================================================================
+  /** Project generator for manifests */
+  PROJECT_GENERATOR: "ProjectGeneratorPort",
+  /** File writer for generated files */
+  FILE_WRITER: "FileWriterPort",
+
+  // ============================================================================
+  // Governance & Linting Ports
+  // ============================================================================
+  /** Architecture linter for validation */
+  LINTER: "LinterPort",
+  /** Manifest reader for parsing */
+  MANIFEST_READER: "ManifestReaderPort",
+
+  // ============================================================================
+  // External Integration Ports
+  // ============================================================================
+  /** GitHub provider for OAuth and repositories */
+  GITHUB_PROVIDER: "GitHubProviderPort",
+  /** Cloud storage provider (S3/GCS) */
+  CLOUD_STORAGE: "CloudStoragePort",
+  /** SSE stream adapter for events */
+  SSE_STREAM: "SSEStreamPort",
+  /** Transaction manager for distributed operations */
+  TRANSACTION_MANAGER: "TransactionManagerPort",
 } as const;
 
 /**

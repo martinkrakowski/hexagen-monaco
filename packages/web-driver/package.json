@@ -16,6 +16,11 @@
       "types": "./dist/infrastructure/constants/index.d.ts",
       "source": "./src/infrastructure/constants/index.ts",
       "default": "./dist/infrastructure/constants/index.js"
+    },
+    "./__tests__/fixtures": {
+      "types": "./dist/__tests__/fixtures/index.d.ts",
+      "source": "./src/__tests__/fixtures/index.ts",
+      "default": "./dist/__tests__/fixtures/index.js"
     }
   },
   "scripts": {
@@ -33,6 +38,7 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }
