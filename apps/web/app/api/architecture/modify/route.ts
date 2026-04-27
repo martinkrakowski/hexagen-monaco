@@ -2,9 +2,32 @@
 // Endpoint to modify architecture via natural language intent
 
 import { NextRequest, NextResponse } from "next/server";
+import path from "path";
 import { getModifyArchitectureUseCase } from "@/lib/wire.architecture-modification";
 import { getLogger } from "@/lib/wire";
 import type { IntentLineage } from "@hexagen/core-domain";
+
+/**
+ * Validates that a manifest path is within the allowed .architecture directory.
+ * Prevents directory traversal attacks by normalizing and checking path boundaries.
+ * @throws {Error} If path traversal is detected
+ */
+function validateManifestPath(rawPath: string): string {
+  const cwd = process.cwd();
+  const allowedBase = path.join(cwd, ".architecture");
+  const resolvedPath = path.resolve(cwd, rawPath);
+
+  if (
+    !resolvedPath.startsWith(allowedBase + path.sep) &&
+    resolvedPath !== allowedBase
+  ) {
+    throw new Error(
+      `Invalid path: traversal detected. Path must be within .architecture directory.`,
+    );
+  }
+
+  return resolvedPath;
+}
 
 interface ModifyRequestBody {
   intent: string;
@@ -30,7 +53,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const manifestPath = body.manifestPath ?? ".architecture/manifest.yaml";
+  let manifestPath: string;
+  try {
+    manifestPath = validateManifestPath(
+      body.manifestPath ?? ".architecture/manifest.yaml",
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Invalid manifest path";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
   const lineage: IntentLineage = body.lineage ?? {
     intentId: `intent-${Date.now()}_v1`,
     origin: { type: "user", actorId: "api" },

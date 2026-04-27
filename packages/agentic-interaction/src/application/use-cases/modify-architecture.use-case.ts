@@ -120,7 +120,32 @@ export class ModifyArchitectureUseCase {
         await this.deps.lintValidation.validateManifest(manifestPath);
       const lintPassed = lintResult.success && lintResult.value.valid;
       if (!lintPassed) {
-        await this.deps.manifestMutation.restoreFromGit(manifestPath);
+        const restoreResult =
+          await this.deps.manifestMutation.restoreFromGit(manifestPath);
+
+        if (!restoreResult.success) {
+          // Restoration failed — this is a critical error
+          const lintReason = lintResult.success
+            ? `Lint validation failed: ${lintResult.value.errors.join("; ")}`
+            : lintResult.error.message;
+          const criticalError = new Error(
+            `Manifest corruption detected: lint validation failed and restore failed. ` +
+              `Original error: ${lintReason}. ` +
+              `Restore error: ${restoreResult.error.message}`,
+          );
+
+          this.deps.transactionManager.rollback(
+            commitResult.value.id,
+            criticalError.message,
+          );
+          run = this.advanceStep(run, STEP_COMMIT, (s) =>
+            failStep(s, criticalError.message),
+          );
+          run = failRun(run);
+          return { success: false, error: criticalError };
+        }
+
+        // Restore succeeded, proceed with normal rollback
         const reason = lintResult.success
           ? `Lint validation failed: ${lintResult.value.errors.join("; ")}`
           : lintResult.error.message;
@@ -281,7 +306,25 @@ export class ModifyArchitectureUseCase {
       manifestPath,
     );
     if (!applyResult.success) {
-      await this.deps.manifestMutation.restoreFromGit(manifestPath);
+      const restoreResult =
+        await this.deps.manifestMutation.restoreFromGit(manifestPath);
+
+      if (!restoreResult.success) {
+        // Restoration failed — this is a critical error
+        const criticalError = new Error(
+          `Manifest corruption detected: patch application failed and restore failed. ` +
+            `Original error: ${applyResult.error.message}. ` +
+            `Restore error: ${restoreResult.error.message}`,
+        );
+
+        this.deps.transactionManager.rollback(
+          transaction.id,
+          criticalError.message,
+        );
+        return { success: false, error: criticalError };
+      }
+
+      // Restore succeeded, proceed with normal rollback
       this.deps.transactionManager.rollback(
         transaction.id,
         `Patch application failed: ${applyResult.error.message}`,

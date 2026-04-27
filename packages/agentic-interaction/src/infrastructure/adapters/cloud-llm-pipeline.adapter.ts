@@ -9,11 +9,13 @@ import type { DomainModelId } from "@hexagen/local-llm";
 import type {
   ProviderFallbackChain,
   ResolvedProvider,
+  SecretVaultPort,
 } from "../../domain/provider-config.js";
 import { resolveFallbackChain } from "../../domain/provider-config.js";
 
 export interface CloudLLMPipelineAdapterConfig {
   fallbackChain: ProviderFallbackChain;
+  secretVault: SecretVaultPort;
   fetchFn?: typeof fetch;
 }
 
@@ -45,7 +47,10 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
   }
 
   async sendRequest(request: LLMRequest): Promise<Result<LLMResponse>> {
-    const providers = resolveFallbackChain(this.config.fallbackChain);
+    const providers = resolveFallbackChain(
+      this.config.secretVault,
+      this.config.fallbackChain,
+    );
     if (providers.length === 0) {
       return {
         success: false,
@@ -76,7 +81,10 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
   async *streamStructuredRequest(
     request: LLMRequest,
   ): AsyncGenerator<Result<string>> {
-    const providers = resolveFallbackChain(this.config.fallbackChain);
+    const providers = resolveFallbackChain(
+      this.config.secretVault,
+      this.config.fallbackChain,
+    );
     if (providers.length === 0) {
       yield {
         success: false,

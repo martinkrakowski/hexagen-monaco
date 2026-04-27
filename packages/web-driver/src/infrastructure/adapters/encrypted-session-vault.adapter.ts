@@ -1,11 +1,11 @@
 import { ok, err } from "@hexagen/shared";
 import type { Result } from "@hexagen/shared";
-import type { SecretVaultPort } from "@hexagen/agentic-interaction";
 import type {
   VaultState,
   VaultStatus,
   VaultError,
 } from "@hexagen/agentic-interaction";
+import type { UserSecretVaultPort } from "../../application/ports/user-secret-vault.port.js";
 
 const VAULT_STORAGE_KEY = "hexagen:vault:encrypted-payload";
 
@@ -29,7 +29,7 @@ const VAULT_STORAGE_KEY = "hexagen:vault:encrypted-payload";
  * This adapter is suitable for within-session persistence with encryption.
  * For maximum security, use ephemeral mode (EphemeralSecretVaultAdapter).
  */
-export class EncryptedSessionVaultAdapter implements SecretVaultPort {
+export class EncryptedSessionVaultAdapter implements UserSecretVaultPort {
   private inMemoryKey: string | null = null;
   private encryptionKey: CryptoKey | null = null;
 

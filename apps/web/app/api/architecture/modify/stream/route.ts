@@ -3,9 +3,32 @@
 // Emits pipeline step progress events as they complete
 
 import { NextRequest } from "next/server";
+import path from "path";
 import { getModifyArchitectureUseCase } from "@/lib/wire.architecture-modification";
 import { getLogger } from "@/lib/wire";
 import type { IntentLineage } from "@hexagen/core-domain";
+
+/**
+ * Validates that a manifest path is within the allowed .architecture directory.
+ * Prevents directory traversal attacks by normalizing and checking path boundaries.
+ * @throws {Error} If path traversal is detected
+ */
+function validateManifestPath(rawPath: string): string {
+  const cwd = process.cwd();
+  const allowedBase = path.join(cwd, ".architecture");
+  const resolvedPath = path.resolve(cwd, rawPath);
+
+  if (
+    !resolvedPath.startsWith(allowedBase + path.sep) &&
+    resolvedPath !== allowedBase
+  ) {
+    throw new Error(
+      `Invalid path: traversal detected. Path must be within .architecture directory.`,
+    );
+  }
+
+  return resolvedPath;
+}
 
 interface StreamRequestBody {
   intent: string;
@@ -31,7 +54,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const manifestPath = body.manifestPath ?? ".architecture/manifest.yaml";
+  let manifestPath: string;
+  try {
+    manifestPath = validateManifestPath(
+      body.manifestPath ?? ".architecture/manifest.yaml",
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Invalid manifest path";
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", message })}\n\n`,
+      { status: 400, headers: { "Content-Type": "text/event-stream" } },
+    );
+  }
   const lineage: IntentLineage = body.lineage ?? {
     intentId: `intent-${Date.now()}_v1`,
     origin: { type: "user", actorId: "api" },
@@ -44,19 +79,59 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: string, data: unknown) => {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
+        try {
+          const serialized = JSON.stringify(data);
+          controller.enqueue(
+            encoder.encode(`event: ${event}\ndata: ${serialized}\n\n`),
+          );
+        } catch (err) {
+          const logger = getLogger();
+          logger.errorWithException(
+            err,
+            `[api/architecture/modify/stream] Failed to serialize SSE event: ${event}`,
+          );
+
+          // Attempt to send error event
+          try {
+            controller.enqueue(
+              encoder.encode(
+                `event: pipeline_error\ndata: ${JSON.stringify({
+                  error: "Internal serialization failure",
+                })}\n\n`,
+              ),
+            );
+          } catch {
+            // Last resort: close stream
+            controller.close();
+          }
+        }
       };
 
       try {
         send("pipeline_start", { intent: body.intent });
 
-        const useCase = getModifyArchitectureUseCase("in-memory", undefined, {
-          onStepRunning: (name) => send("step_running", { name }),
-          onStepComplete: (name, status, durationMs) =>
-            send("step_complete", { name, status, durationMs }),
-        });
+        let useCase;
+        try {
+          useCase = getModifyArchitectureUseCase("in-memory", undefined, {
+            onStepRunning: (name) => send("step_running", { name }),
+            onStepComplete: (name, status, durationMs) =>
+              send("step_complete", { name, status, durationMs }),
+          });
+        } catch (err) {
+          const logger = getLogger();
+          logger.errorWithException(
+            err,
+            "[api/architecture/modify/stream] Use case wiring failed",
+          );
+
+          const message =
+            err instanceof Error
+              ? err.message
+              : "Failed to initialize pipeline";
+          send("pipeline_error", { error: message });
+          controller.close();
+          return;
+        }
 
         const result = await useCase.execute(
           body.intent,
@@ -97,6 +172,7 @@ export async function POST(request: NextRequest) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

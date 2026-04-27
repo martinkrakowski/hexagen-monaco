@@ -30,21 +30,36 @@ export type ResolvedProvider = CloudProviderEndpoint & {
   apiKey: string;
 };
 
+/**
+ * Port interface for retrieving secrets from external vault.
+ * Abstracts environment variables, key management systems, etc.
+ */
+export interface SecretVaultPort {
+  /**
+   * Retrieve API key by environment variable name.
+   * @param envVarName Name of the environment variable (e.g., "OPENAI_API_KEY")
+   * @returns API key value or null if not found/empty
+   */
+  getSecret(envVarName: string): string | null;
+}
+
 export function resolveApiKey(
+  vault: SecretVaultPort,
   endpoint: CloudProviderEndpoint,
 ): ResolvedProvider | null {
-  const apiKey = process.env[endpoint.apiKeyEnvVar];
+  const apiKey = vault.getSecret(endpoint.apiKeyEnvVar);
   if (!apiKey || apiKey.trim().length === 0) return null;
   return { ...endpoint, apiKey };
 }
 
 export function resolveFallbackChain(
+  vault: SecretVaultPort,
   chain: ProviderFallbackChain,
 ): ResolvedProvider[] {
   const candidates = [chain.primary, ...chain.fallbacks];
   const resolved: ResolvedProvider[] = [];
   for (const endpoint of candidates) {
-    const r = resolveApiKey(endpoint);
+    const r = resolveApiKey(vault, endpoint);
     if (r) resolved.push(r);
   }
   return resolved;

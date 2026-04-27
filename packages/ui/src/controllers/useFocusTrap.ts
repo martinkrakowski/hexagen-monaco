@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useCallback, type RefObject } from "react";
 
 export interface UseFocusTrapOptions {

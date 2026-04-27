@@ -26,6 +26,7 @@ export type {
   CloudProviderEndpoint,
   ProviderFallbackChain,
   ResolvedProvider,
+  SecretVaultPort,
 } from "./provider-config.js";
 export {
   resolveApiKey,

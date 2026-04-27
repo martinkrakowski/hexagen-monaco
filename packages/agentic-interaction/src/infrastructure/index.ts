@@ -8,5 +8,8 @@ export {
   InMemoryManifestMutationAdapter,
   InMemoryLintValidationAdapter,
 } from "./adapters/in-memory-pipeline-ports.adapter.js";
-export { CloudLLMPipelineAdapter } from "./adapters/cloud-llm-pipeline.adapter.js";
-export type { CloudLLMPipelineAdapterConfig } from "./adapters/cloud-llm-pipeline.adapter.js";
+export {
+  CloudLLMPipelineAdapter,
+  type CloudLLMPipelineAdapterConfig,
+} from "./adapters/cloud-llm-pipeline.adapter.js";
+export { EnvironmentSecretVaultAdapter } from "./adapters/environment-secret-vault.adapter.js";

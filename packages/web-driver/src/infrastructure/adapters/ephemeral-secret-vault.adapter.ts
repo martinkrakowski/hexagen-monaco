@@ -1,14 +1,14 @@
 import { ok, err } from "@hexagen/shared";
 import type { Result } from "@hexagen/shared";
-import type { SecretVaultPort } from "@hexagen/agentic-interaction";
 import type {
   VaultState,
   VaultStatus,
   VaultError,
 } from "@hexagen/agentic-interaction";
+import type { UserSecretVaultPort } from "../../application/ports/user-secret-vault.port.js";
 
 /**
- * Ephemeral (in-memory only) implementation of the SecretVaultPort.
+ * Ephemeral (in-memory only) implementation of the UserSecretVaultPort.
  *
  * This adapter stores the API key solely in volatile application memory.
  * The key is:
@@ -24,7 +24,7 @@ import type {
  * This adapter is suitable for ephemeral trust models but does not persist
  * across sessions. For session persistence, use EncryptedSessionVaultAdapter.
  */
-export class EphemeralSecretVaultAdapter implements SecretVaultPort {
+export class EphemeralSecretVaultAdapter implements UserSecretVaultPort {
   private inMemoryKey: string | null = null;
 
   async getStatus(): Promise<Result<VaultStatus, VaultError>> {
