@@ -23,3 +23,18 @@ export {
   ERROR_RECOVERABILITY_MAP,
 } from "./error-adapters";
 export type { ErrorResult } from "./error-adapters";
+
+export {
+  IntegrationScenario,
+  createCrossBoundaryRegistry,
+  wireWizardToPersistence,
+  wireGovernanceToManifestReader,
+  wireExportToGovernance,
+  createFixtureManifest,
+  createNonCompliantFixtureManifest,
+  cloneRegistry,
+  getPersistenceAdapter,
+  getLinterAdapter,
+  getTransactionManager,
+} from "./cross-boundary-registry";
+export type { CrossBoundaryManifest } from "./cross-boundary-registry";
