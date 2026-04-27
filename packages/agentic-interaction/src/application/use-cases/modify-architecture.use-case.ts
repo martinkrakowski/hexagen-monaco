@@ -1,5 +1,9 @@
 import type { NLToDomainCommandParserPort } from "@hexagen/ai-pipeline";
-import type { PipelineStep, PipelineRun } from "@hexagen/ai-pipeline";
+import type {
+  PipelineStep,
+  PipelineRun,
+  PipelineStepStatus,
+} from "@hexagen/ai-pipeline";
 import {
   createPipelineRun,
   createPipelineStep,
@@ -55,6 +59,12 @@ export interface ModifyArchitectureDeps {
   readonly manifestProvider: () => Promise<ProjectSpecLike>;
   readonly architectureGraphProvider: () => Promise<ArchitectureGraphLike>;
   readonly linterReportProvider: () => Promise<LinterReportLike>;
+  readonly onStepRunning?: (stepName: string) => void;
+  readonly onStepComplete?: (
+    stepName: string,
+    status: PipelineStepStatus,
+    durationMs: number | null,
+  ) => void;
 }
 
 export class ModifyArchitectureUseCase {
@@ -294,6 +304,25 @@ export class ModifyArchitectureUseCase {
     stepName: string,
     updater: (step: PipelineStep) => PipelineStep,
   ): PipelineRun {
-    return updateRunStep(run, stepName, updater);
+    const preStep = run.steps.find((s) => s.name === stepName);
+    const startTime = preStep?.startTime ?? Date.now();
+    run = updateRunStep(run, stepName, (s) => ({
+      ...updater(s),
+      startTime: s.startTime ?? startTime,
+    }));
+    const postStep = run.steps.find((s) => s.name === stepName);
+    if (postStep?.status === "running") {
+      this.deps.onStepRunning?.(stepName);
+    } else if (
+      postStep?.status === "completed" ||
+      postStep?.status === "failed"
+    ) {
+      this.deps.onStepComplete?.(
+        stepName,
+        postStep.status,
+        postStep.endTime ? postStep.endTime - startTime : null,
+      );
+    }
+    return run;
   }
 }

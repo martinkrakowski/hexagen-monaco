@@ -49,38 +49,34 @@ export async function POST(request: NextRequest) {
         );
       };
 
- try {
-      send("pipeline_start", { intent: body.intent });
+      try {
+        send("pipeline_start", { intent: body.intent });
 
-      const useCase = getModifyArchitectureUseCase();
-      const result = await useCase.execute(
-        body.intent,
-        manifestPath,
-        lineage,
-      );
+        const useCase = getModifyArchitectureUseCase("in-memory", undefined, {
+          onStepRunning: (name) => send("step_running", { name }),
+          onStepComplete: (name, status, durationMs) =>
+            send("step_complete", { name, status, durationMs }),
+        });
 
-      if (result.success) {
-        for (const step of result.value.steps) {
-          send("step_running", { name: step.name });
-          send("step_complete", {
-            name: step.name,
-            status: step.status,
-            durationMs: step.endTime ? step.endTime - step.startTime : null,
+        const result = await useCase.execute(
+          body.intent,
+          manifestPath,
+          lineage,
+        );
+
+        if (result.success) {
+          send("pipeline_complete", {
+            pipelineRunId: result.value.pipelineRunId,
+            patchesApplied: result.value.patchesApplied,
+            lintPassed: result.value.lintPassed,
+            transactionId: result.value.transactionId,
+            patches: result.value.patches ?? [],
+          });
+        } else {
+          send("pipeline_error", {
+            error: result.error.message,
           });
         }
-
-        send("pipeline_complete", {
-          pipelineRunId: result.value.pipelineRunId,
-          patchesApplied: result.value.patchesApplied,
-          lintPassed: result.value.lintPassed,
-          transactionId: result.value.transactionId,
-          patches: result.value.patches ?? [],
-        });
-      } else {
-        send("pipeline_error", {
-          error: result.error.message,
-        });
-      }
       } catch (err) {
         const logger = getLogger();
         logger.errorWithException(

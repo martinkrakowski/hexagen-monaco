@@ -70,11 +70,21 @@ function createLLMSender(
 let cachedUseCase: ModifyArchitectureUseCase | null = null;
 let cachedMode: PipelineMode | null = null;
 
+export interface StepCallbacks {
+  onStepRunning?: (stepName: string) => void;
+  onStepComplete?: (
+    stepName: string,
+    status: "pending" | "running" | "completed" | "failed" | "skipped",
+    durationMs: number | null,
+  ) => void;
+}
+
 export const getModifyArchitectureUseCase = (
   mode: PipelineMode = "in-memory",
   cloudConfig?: CloudPipelineConfig,
+  callbacks?: StepCallbacks,
 ): ModifyArchitectureUseCase => {
-  if (cachedUseCase && cachedMode === mode) return cachedUseCase;
+  if (cachedUseCase && cachedMode === mode && !callbacks) return cachedUseCase;
 
   const llmSender = createLLMSender(mode, cloudConfig);
 
@@ -97,6 +107,7 @@ export const getModifyArchitectureUseCase = (
     manifestProvider: async () => emptyManifest,
     architectureGraphProvider: async () => emptyArchitectureGraph,
     linterReportProvider: async () => emptyLinterReport,
+    ...callbacks,
   };
 
   cachedUseCase = new ModifyArchitectureUseCase(deps);
