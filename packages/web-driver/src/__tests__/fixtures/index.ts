@@ -9,3 +9,17 @@ export {
   getMockPort,
 } from "./port-registry.mock";
 export type { MockPortRegistry, PortRegistry } from "./port-registry.mock";
+
+export {
+  ErrorScenario,
+  createErrorInjectingRegistry,
+  createTimeoutAdapter,
+  createFailingAdapter,
+  createDelayedAdapter,
+  createValidationErrorAdapter,
+  createParseErrorAdapter,
+  createAuthErrorAdapter,
+  ERROR_SEVERITY_MAP,
+  ERROR_RECOVERABILITY_MAP,
+} from "./error-adapters";
+export type { ErrorResult } from "./error-adapters";
