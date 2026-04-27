@@ -8,11 +8,8 @@ import { getModifyArchitectureUseCase } from "@/lib/wire.server";
 import { getLogger } from "@/lib/wire";
 import type { IntentLineage } from "@hexagen/core-domain";
 
-/**
- * Validates that a manifest path is within the allowed .architecture directory.
- * Prevents directory traversal attacks by normalizing and checking path boundaries.
- * @throws {Error} If path traversal is detected
- */
+const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+
 function validateManifestPath(rawPath: string): string {
   const cwd = process.cwd();
   const allowedBase = path.join(cwd, ".architecture");
@@ -75,9 +72,12 @@ export async function POST(request: NextRequest) {
     validation: { valid: true },
   };
 
+  const abortSignal = request.signal;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+
       const send = (event: string, data: unknown) => {
         try {
           const serialized = JSON.stringify(data);
@@ -91,7 +91,6 @@ export async function POST(request: NextRequest) {
             `[api/architecture/modify/stream] Failed to serialize SSE event: ${event}`,
           );
 
-          // Attempt to send error event
           try {
             controller.enqueue(
               encoder.encode(
@@ -101,13 +100,42 @@ export async function POST(request: NextRequest) {
               ),
             );
           } catch {
-            // Last resort: close stream
+            clearInterval(heartbeatTimer);
             controller.close();
           }
         }
       };
 
+      const startHeartbeat = () => {
+        heartbeatTimer = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(": heartbeat\n\n"));
+          } catch {
+            clearInterval(heartbeatTimer);
+          }
+        }, SSE_HEARTBEAT_INTERVAL_MS);
+      };
+
+      const cleanup = () => {
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = undefined;
+        }
+      };
+
       try {
+        startHeartbeat();
+
+        const abortHandler = () => {
+          cleanup();
+          try {
+            controller.close();
+          } catch {
+            // Stream already closed by client disconnect
+          }
+        };
+        abortSignal.addEventListener("abort", abortHandler, { once: true });
+
         send("pipeline_start", { intent: body.intent });
 
         let useCase;
@@ -129,6 +157,8 @@ export async function POST(request: NextRequest) {
               ? err.message
               : "Failed to initialize pipeline";
           send("pipeline_error", { error: message });
+          cleanup();
+          abortSignal.removeEventListener("abort", abortHandler);
           controller.close();
           return;
         }
@@ -152,17 +182,24 @@ export async function POST(request: NextRequest) {
             error: result.error.message,
           });
         }
+
+        abortSignal.removeEventListener("abort", abortHandler);
       } catch (err) {
         const logger = getLogger();
         logger.errorWithException(
           err,
-          "[api/architecture/modify/stream] Failed",
+          "[api/architecture/modify/stream] Pipeline execution failed",
         );
         const message =
           err instanceof Error ? err.message : "Internal server error";
         send("pipeline_error", { error: message });
       } finally {
-        controller.close();
+        cleanup();
+        try {
+          controller.close();
+        } catch {
+          // Stream already closed
+        }
       }
     },
   });

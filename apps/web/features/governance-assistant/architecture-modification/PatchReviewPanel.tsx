@@ -5,8 +5,8 @@ import type { Patch } from "@hexagen/reconciliation-engine";
 
 interface PatchReviewPanelProps {
   patches: Patch[];
-  onAccept: (patch: Patch) => void;
-  onReject: (patch: Patch) => void;
+  onAcceptAll: () => void;
+  onRejectAll: () => void;
 }
 
 const PATCH_TYPE_CONFIG: Record<
@@ -37,69 +37,40 @@ const PATCH_TYPE_CONFIG: Record<
   },
 };
 
-function PatchCard({
-  patch,
-  onAccept,
-  onReject,
-}: {
-  patch: Patch;
-  onAccept: (patch: Patch) => void;
-  onReject: (patch: Patch) => void;
-}) {
+function PatchCard({ patch }: { patch: Patch }) {
   const config = PATCH_TYPE_CONFIG[patch.type];
   const Icon = config.icon;
   const payloadEntries = Object.entries(patch.payload);
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${config.colorClass}`} />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {config.label}
-              </span>
-            </div>
-            <p className="text-sm font-medium text-foreground font-mono truncate">
-              {patch.targetId}
-            </p>
-            {payloadEntries.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {payloadEntries.map(([key, value]) => (
-                  <div key={key} className="flex items-center gap-1.5 text-xs">
-                    <span className="text-muted-foreground font-mono">
-                      {key}:
-                    </span>
-                    <span className="text-foreground font-mono truncate">
-                      {typeof value === "object"
-                        ? JSON.stringify(value)
-                        : String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+      <div className="flex items-start gap-2.5 min-w-0">
+        <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${config.colorClass}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {config.label}
+            </span>
           </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => onAccept(patch)}
-            className="h-7 w-7 rounded-md flex items-center justify-center text-success hover:bg-success/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            title="Accept patch"
-          >
-            <Check className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onReject(patch)}
-            className="h-7 w-7 rounded-md flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            title="Reject patch"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <p className="text-sm font-medium text-foreground font-mono truncate">
+            {patch.targetId}
+          </p>
+          {payloadEntries.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {payloadEntries.map(([key, value]) => (
+                <div key={key} className="flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground font-mono">
+                    {key}:
+                  </span>
+                  <span className="text-foreground font-mono truncate">
+                    {typeof value === "object"
+                      ? JSON.stringify(value)
+                      : String(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -108,8 +79,8 @@ function PatchCard({
 
 export function PatchReviewPanel({
   patches,
-  onAccept,
-  onReject,
+  onAcceptAll,
+  onRejectAll,
 }: PatchReviewPanelProps) {
   if (patches.length === 0) {
     return (
@@ -126,14 +97,27 @@ export function PatchReviewPanel({
         <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
           Proposed Patches ({patches.length})
         </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onAcceptAll}
+            className="h-7 px-3 rounded-md flex items-center gap-1.5 text-xs font-medium text-success hover:bg-success/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Accept All
+          </button>
+          <button
+            type="button"
+            onClick={onRejectAll}
+            className="h-7 px-3 rounded-md flex items-center gap-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-3.5 w-3.5" />
+            Reject All
+          </button>
+        </div>
       </div>
       {patches.map((patch) => (
-        <PatchCard
-          key={patch.id}
-          patch={patch}
-          onAccept={onAccept}
-          onReject={onReject}
-        />
+        <PatchCard key={patch.id} patch={patch} />
       ))}
     </div>
   );

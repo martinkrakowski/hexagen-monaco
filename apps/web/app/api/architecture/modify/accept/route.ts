@@ -1,10 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
+import path from "path";
+import {
+  getTransactionManager,
+  getManifestMutation,
+  getLintValidation,
+} from "@/lib/wire.server";
 import { getLogger } from "@/lib/wire";
 
+function validateManifestPath(rawPath: string): string {
+  const cwd = process.cwd();
+  const allowedBase = path.join(cwd, ".architecture");
+  const resolvedPath = path.resolve(cwd, rawPath);
+
+  if (
+    !resolvedPath.startsWith(allowedBase + path.sep) &&
+    resolvedPath !== allowedBase
+  ) {
+    throw new Error(
+      `Invalid path: traversal detected. Path must be within .architecture directory.`,
+    );
+  }
+
+  return resolvedPath;
+}
+
 export async function POST(request: NextRequest) {
+  let transactionId: string | undefined;
   try {
     const body = await request.json();
-    const { transactionId, patches } = body;
+    transactionId = (body as { transactionId?: string }).transactionId;
+    const { manifestPath } = body as {
+      transactionId?: string;
+      manifestPath?: string;
+    };
 
     if (!transactionId) {
       return NextResponse.json(
@@ -13,22 +41,130 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const transactionManager = getTransactionManager();
+    const tx = transactionManager.get(transactionId);
+    if (!tx) {
+      return NextResponse.json(
+        { success: false, error: "Transaction not found" },
+        { status: 404 },
+      );
+    }
+
+    if (tx.status !== "speculative") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Transaction is in '${tx.status}' state, expected 'speculative'`,
+        },
+        { status: 409 },
+      );
+    }
+
+    let resolvedManifestPath: string;
+    try {
+      resolvedManifestPath = validateManifestPath(
+        manifestPath ?? ".architecture/manifest.yaml",
+      );
+    } catch (err) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: err instanceof Error ? err.message : "Invalid manifest path",
+        },
+        { status: 400 },
+      );
+    }
+
+    const patches = (tx.metadata.patches ??
+      []) as import("@hexagen/core-domain").Patch[];
+
+    const manifestMutation = getManifestMutation();
+    const applyResult = await manifestMutation.applyPatches(
+      patches,
+      resolvedManifestPath,
+    );
+    if (!applyResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Patch application failed: ${applyResult.error.message}`,
+        },
+        { status: 500 },
+      );
+    }
+
+    const lintValidation = getLintValidation();
+    const lintResult =
+      await lintValidation.validateManifest(resolvedManifestPath);
+    let lintPassed = false;
+    let lintErrors: string[] = [];
+
+    if (lintResult.success) {
+      lintPassed = lintResult.value.valid;
+      lintErrors = lintResult.value.errors;
+    }
+
+    if (!lintPassed) {
+      const restoreResult =
+        await manifestMutation.restoreFromGit(resolvedManifestPath);
+      if (!restoreResult.success) {
+        const logger = getLogger();
+        logger.errorWithException(
+          restoreResult.error,
+          "[api/architecture/modify/accept] Git restore failed after lint violation",
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Lint validation failed and git restore failed. Manual intervention required.",
+            lintErrors,
+          },
+          { status: 500 },
+        );
+      }
+
+      transactionManager.rollback(transactionId);
+
+      return NextResponse.json({
+        success: false,
+        error: "Lint validation failed. Patches reverted.",
+        lintPassed: false,
+        lintErrors,
+      });
+    }
+
+    transactionManager.commit(transactionId);
+
     const logger = getLogger();
-    logger.info("[api/architecture/modify/accept] Accepting patches", {
-      transactionId,
-      patchCount: Array.isArray(patches) ? patches.length : 0,
-    });
+    logger.info(
+      "[api/architecture/modify/accept] Patches accepted and committed",
+      {
+        transactionId,
+        patchCount: patches.length,
+        lintPassed,
+      },
+    );
 
     return NextResponse.json({
       success: true,
       transactionId,
-      status: "accepted",
+      status: "committed",
+      patchesApplied: patches.length,
+      lintPassed,
     });
   } catch (error) {
     const logger = getLogger();
-    logger.errorWithException(error, "[api/architecture/modify/accept] Failed");
+    logger.errorWithException(
+      error,
+      `[api/architecture/modify/accept] Unexpected error${transactionId ? ` for transaction ${transactionId}` : ""}`,
+    );
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Accept failed: unexpected error";
     return NextResponse.json(
-      { success: false, error: (error as Error).message },
+      { success: false, error: message },
       { status: 500 },
     );
   }

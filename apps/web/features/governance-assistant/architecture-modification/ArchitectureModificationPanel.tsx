@@ -23,8 +23,8 @@ export function ArchitectureModificationPanel() {
     modify,
     abort,
     reset,
-    acceptPatch,
-    rejectPatch,
+    acceptPatches,
+    rejectPatches,
   } = useArchitectureModification();
 
   const patches = result?.patches ?? [];
@@ -93,10 +93,18 @@ export function ArchitectureModificationPanel() {
                     Lint:{" "}
                     <span
                       className={
-                        result.lintPassed ? "text-success" : "text-destructive"
+                        result.lintPassed === null
+                          ? "text-muted-foreground"
+                          : result.lintPassed
+                            ? "text-success"
+                            : "text-destructive"
                       }
                     >
-                      {result.lintPassed ? "Passed" : "Failed"}
+                      {result.lintPassed === null
+                        ? "Pending review"
+                        : result.lintPassed
+                          ? "Passed"
+                          : "Failed"}
                     </span>
                   </span>
                   <span className="font-mono">
@@ -127,8 +135,8 @@ export function ArchitectureModificationPanel() {
         {isCompleted && patches.length > 0 && (
           <PatchReviewPanel
             patches={patches}
-            onAccept={acceptPatch}
-            onReject={rejectPatch}
+            onAcceptAll={acceptPatches}
+            onRejectAll={rejectPatches}
           />
         )}
 

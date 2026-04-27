@@ -1,10 +1,35 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
 import { loadManifest, saveManifest } from "@hexagen/sync";
 import type { Manifest, BoundedContext } from "@hexagen/sync";
 import type { Patch } from "@hexagen/core-domain";
-import { execSync } from "node:child_process";
-import path from "node:path";
 import type { ManifestMutationPort } from "../../application/ports/out/manifest-mutation.port.js";
 import type { Result } from "../../application/result.js";
+
+const execFileAsync = promisify(execFile);
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 500;
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = MAX_RETRIES,
+  delayMs: number = RETRY_DELAY_MS,
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err as Error;
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
 
 export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPort {
   constructor(private readonly workspaceRoot: string) {}
@@ -36,13 +61,20 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
   async restoreFromGit(manifestPath: string): Promise<Result<void, Error>> {
     try {
       const relativePath = path.relative(this.workspaceRoot, manifestPath);
-      execSync(`git checkout -- ${relativePath}`, {
-        cwd: this.workspaceRoot,
-        stdio: "pipe",
-      });
+      await retryWithBackoff(() =>
+        execFileAsync("git", ["checkout", "--", relativePath], {
+          cwd: this.workspaceRoot,
+          timeout: 30_000,
+        }),
+      );
       return { success: true, value: undefined };
     } catch (err) {
-      return { success: false, error: err as Error };
+      return {
+        success: false,
+        error: new Error(
+          `Git restore failed for ${manifestPath}: ${(err as Error).message}`,
+        ),
+      };
     }
   }
 
@@ -81,12 +113,12 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
   private applyAddNode(manifest: Manifest, patch: Patch): void {
     const contexts = manifest.bounded_contexts ?? [];
     const ctxId = patch.targetId;
-    
+
     // Check for duplicate context
     if (contexts.some((c) => c.name === ctxId)) {
       throw new Error(`Bounded context '${ctxId}' already exists`);
     }
-    
+
     const context: BoundedContext = {
       name: ctxId,
       type: (patch.payload.kind as BoundedContext["type"]) ?? "core",
