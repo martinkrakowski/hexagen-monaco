@@ -10,8 +10,9 @@ export * from "./application/ports";
 // Re-export use-cases (application layer)
 export * from "./application/use-cases";
 
-// Re-export infrastructure adapters (if intentionally public)
+// Re-export infrastructure adapters and constants (if intentionally public)
 export * from "./infrastructure/adapters";
+export * from "./infrastructure/constants";
 
 // Factory that wires the entire web-driver bounded context
 import { LocalStoragePersistenceAdapter } from "./infrastructure/adapters/local-storage-persistence.adapter";

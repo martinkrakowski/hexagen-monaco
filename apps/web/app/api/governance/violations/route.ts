@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { execSync } from "child_process";
+import { exec } from "child_process";
+import { promisify } from "util";
 import { LinterReportSchema } from "@hexagen/governance";
+
+const execAsync = promisify(exec);
 
 interface Violation {
   id: string;
@@ -16,9 +19,9 @@ export async function GET() {
     let errors: string[] = [];
 
     try {
-      execSync("yarn lint:arch", {
+      await execAsync("yarn lint:arch", {
         cwd: process.cwd(),
-        stdio: "pipe",
+        timeout: 30000, // 30s timeout to prevent hanging
       });
     } catch (error) {
       valid = false;

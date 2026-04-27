@@ -2,6 +2,8 @@
 // Client-only wiring — all browser adapters + all client getters
 // Safe to import in Next.js client components
 
+import { PORT_NAMES } from "@hexagen/web-driver";
+
 import type {
   CanvasLayoutPersistencePort,
   EditorWorkspacePersistencePort,
@@ -70,53 +72,56 @@ export const wireDependencies = () => {
   // Monaco persistence port → concrete localStorage adapter
   const localStorageAdapter = new LocalStoragePersistenceAdapter();
   registry.set(
-    "MonacoPersistencePort",
+    PORT_NAMES.MONACO_PERSISTENCE,
     localStorageAdapter satisfies MonacoPersistencePort,
   );
 
   // Wizard persistence port → same localStorage adapter
   registry.set(
-    "WizardPersistencePort",
+    PORT_NAMES.WIZARD_PERSISTENCE,
     localStorageAdapter satisfies WizardPersistencePort,
   );
 
   // Editor workspace persistence port → same localStorage adapter
   registry.set(
-    "EditorWorkspacePersistencePort",
+    PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
     localStorageAdapter satisfies EditorWorkspacePersistencePort,
   );
 
   // Canvas layout persistence port → dedicated adapter
   const canvasLayoutAdapter = new LocalStorageCanvasLayoutAdapter();
   registry.set(
-    "CanvasLayoutPersistencePort",
+    PORT_NAMES.CANVAS_LAYOUT_PERSISTENCE,
     canvasLayoutAdapter satisfies CanvasLayoutPersistencePort,
   );
 
   // Logger port → console logger for web app
-  registry.set("LoggerPort", createWebLogger() satisfies LoggerPort);
+  registry.set(PORT_NAMES.LOGGER, createWebLogger() satisfies LoggerPort);
 
   // Architecture graph provider port → concrete adapter instance
   registry.set(
-    "ArchitectureGraphProviderPort",
+    PORT_NAMES.ARCHITECTURE_GRAPH_PROVIDER,
     new ArchitectureGraphProviderAdapter() satisfies IArchitectureGraphProviderPort,
   );
 
   // Hexagonal map generator port → concrete adapter instance
   registry.set(
-    "GenerateHexagonalMapPort",
+    PORT_NAMES.GENERATE_HEXAGONAL_MAP,
     new HexagonalMapGeneratorAdapter() satisfies GenerateHexagonalMapPort,
   );
 
   // Event Bus → in-memory implementation
-  registry.set("EventBusPort", createEventBus() satisfies EventBusPort);
+  registry.set(PORT_NAMES.EVENT_BUS, createEventBus() satisfies EventBusPort);
 
   // Intent Bus → in-memory implementation
-  registry.set("IntentBusPort", createIntentBus() satisfies IntentBusPort);
+  registry.set(
+    PORT_NAMES.INTENT_BUS,
+    createIntentBus() satisfies IntentBusPort,
+  );
 
   // LLM Provider → server adapter with env config
   registry.set(
-    "LLMProviderPort",
+    PORT_NAMES.LLM_PROVIDER,
     createLLMProvider() satisfies LLMProviderPort,
   );
 
@@ -129,39 +134,39 @@ export const wireDependencies = () => {
       }),
   });
   registry.set(
-    "LocalLLMProviderPort",
+    PORT_NAMES.LOCAL_LLM_PROVIDER,
     localLLMAdapter satisfies LocalLLMProviderPort,
   );
   registry.set(
-    "ModelLifecyclePort",
+    PORT_NAMES.MODEL_LIFECYCLE,
     localLLMAdapter satisfies ModelLifecyclePort,
   );
   registry.set(
-    "SendStructuredRequestPort",
+    PORT_NAMES.SEND_STRUCTURED_REQUEST,
     localLLMAdapter satisfies SendStructuredRequestPort,
   );
 
   // WebGPU Detector → browser capability adapter
   registry.set(
-    "WebGPUDetectorPort",
+    PORT_NAMES.WEBGPU_DETECTOR,
     new WebGPUCapabilityAdapter() satisfies WebGPUDetectorPort,
   );
 
   // Hardware Profiler → browser hardware detection adapter
   registry.set(
-    "HardwareProfilerPort",
+    PORT_NAMES.HARDWARE_PROFILER,
     new BrowserHardwareProfilerAdapter() satisfies HardwareProfilerPort,
   );
 
   // Chat Persistence → IndexedDB adapter
   registry.set(
-    "ChatPersistencePort",
+    PORT_NAMES.CHAT_PERSISTENCE,
     new IDBChatPersistenceAdapter() satisfies ChatPersistencePort,
   );
 
   // Secret Vault → ephemeral in-memory adapter (browser-side user vault)
   registry.set(
-    "SecretVaultPort",
+    PORT_NAMES.SECRET_VAULT,
     new EphemeralSecretVaultAdapter() satisfies UserSecretVaultPort,
   );
 
@@ -170,21 +175,21 @@ export const wireDependencies = () => {
   const mapNodeVisualPort: MapNodeVisualPort =
     new DefaultNodeVisualMapperAdapter(variantResolver);
   const mapNodeVisualUseCase = new MapNodeVisualUseCase(mapNodeVisualPort);
-  registry.set("MapNodeVisualUseCase", mapNodeVisualUseCase);
+  registry.set(PORT_NAMES.MAP_NODE_VISUAL_USE_CASE, mapNodeVisualUseCase);
 
   // Graph layout → dagre-based auto-layout
   const dagreGraphLayoutAdapter = new DagreGraphLayoutAdapter();
   const solveGraphLayoutUseCase = new SolveGraphLayoutUseCase(
     dagreGraphLayoutAdapter,
   );
-  registry.set("SolveGraphLayoutUseCase", solveGraphLayoutUseCase);
+  registry.set(PORT_NAMES.SOLVE_GRAPH_LAYOUT_USE_CASE, solveGraphLayoutUseCase);
 
   // Server LLM Request Port -> dedicated use case
   const defaultModel = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
   registry.set(
-    "ServerLLMRequestPort",
+    PORT_NAMES.SERVER_LLM_REQUEST,
     new HandleServerChatUseCase(
-      registry.get("LLMProviderPort") as LLMProviderPort,
+      registry.get(PORT_NAMES.LLM_PROVIDER) as LLMProviderPort,
       defaultModel,
     ) satisfies ServerLLMRequestPort,
   );
@@ -216,63 +221,70 @@ export const dependencies = wireDependencies();
 
 // Typed convenience getters
 export const getMonacoPersistence = () =>
-  dependencies.get<MonacoPersistencePort>("MonacoPersistencePort");
+  dependencies.get<MonacoPersistencePort>(PORT_NAMES.MONACO_PERSISTENCE);
 
 export const getArchitectureGraphProvider = () =>
   dependencies.get<IArchitectureGraphProviderPort>(
-    "ArchitectureGraphProviderPort",
+    PORT_NAMES.ARCHITECTURE_GRAPH_PROVIDER,
   );
 
-export const getLogger = () => dependencies.get<LoggerPort>("LoggerPort");
+export const getLogger = () => dependencies.get<LoggerPort>(PORT_NAMES.LOGGER);
 
-export const getEventBus = () => dependencies.get<EventBusPort>("EventBusPort");
+export const getEventBus = () =>
+  dependencies.get<EventBusPort>(PORT_NAMES.EVENT_BUS);
 
 export const getIntentBus = () =>
-  dependencies.get<IntentBusPort>("IntentBusPort");
+  dependencies.get<IntentBusPort>(PORT_NAMES.INTENT_BUS);
 
 export const getLLMProvider = () =>
-  dependencies.get<LLMProviderPort>("LLMProviderPort");
+  dependencies.get<LLMProviderPort>(PORT_NAMES.LLM_PROVIDER);
 
 export const getWizardPersistence = () =>
-  dependencies.get<WizardPersistencePort>("WizardPersistencePort");
+  dependencies.get<WizardPersistencePort>(PORT_NAMES.WIZARD_PERSISTENCE);
 
 export const getEditorWorkspacePersistence = () =>
   dependencies.get<EditorWorkspacePersistencePort>(
-    "EditorWorkspacePersistencePort",
+    PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
   );
 
 export const getCanvasLayoutPersistence = () =>
-  dependencies.get<CanvasLayoutPersistencePort>("CanvasLayoutPersistencePort");
+  dependencies.get<CanvasLayoutPersistencePort>(
+    PORT_NAMES.CANVAS_LAYOUT_PERSISTENCE,
+  );
 
 export const getLocalLLMProvider = () =>
-  dependencies.get<LocalLLMProviderPort>("LocalLLMProviderPort");
+  dependencies.get<LocalLLMProviderPort>(PORT_NAMES.LOCAL_LLM_PROVIDER);
 
 export const getModelLifecycle = () =>
-  dependencies.get<ModelLifecyclePort>("ModelLifecyclePort");
+  dependencies.get<ModelLifecyclePort>(PORT_NAMES.MODEL_LIFECYCLE);
 
 export const getSendStructuredRequest = () =>
-  dependencies.get<SendStructuredRequestPort>("SendStructuredRequestPort");
+  dependencies.get<SendStructuredRequestPort>(
+    PORT_NAMES.SEND_STRUCTURED_REQUEST,
+  );
 
 export const getWebGPUDetector = () =>
-  dependencies.get<WebGPUDetectorPort>("WebGPUDetectorPort");
+  dependencies.get<WebGPUDetectorPort>(PORT_NAMES.WEBGPU_DETECTOR);
 
 export const getHardwareProfiler = () =>
-  dependencies.get<HardwareProfilerPort>("HardwareProfilerPort");
+  dependencies.get<HardwareProfilerPort>(PORT_NAMES.HARDWARE_PROFILER);
 
 export const getChatPersistence = () =>
-  dependencies.get<ChatPersistencePort>("ChatPersistencePort");
+  dependencies.get<ChatPersistencePort>(PORT_NAMES.CHAT_PERSISTENCE);
 
 export const getSecretVault = () =>
-  dependencies.get<UserSecretVaultPort>("SecretVaultPort");
+  dependencies.get<UserSecretVaultPort>(PORT_NAMES.SECRET_VAULT);
 
 export const getServerLLMRequestPort = () =>
-  dependencies.get<ServerLLMRequestPort>("ServerLLMRequestPort");
+  dependencies.get<ServerLLMRequestPort>(PORT_NAMES.SERVER_LLM_REQUEST);
 
 export const getMapNodeVisualUseCase = () =>
-  dependencies.get<MapNodeVisualUseCase>("MapNodeVisualUseCase");
+  dependencies.get<MapNodeVisualUseCase>(PORT_NAMES.MAP_NODE_VISUAL_USE_CASE);
 
 export const getGenerateHexagonalMapUseCase = () =>
-  dependencies.get<GenerateHexagonalMapPort>("GenerateHexagonalMapPort");
+  dependencies.get<GenerateHexagonalMapPort>(PORT_NAMES.GENERATE_HEXAGONAL_MAP);
 
 export const getSolveGraphLayoutUseCase = () =>
-  dependencies.get<SolveGraphLayoutUseCase>("SolveGraphLayoutUseCase");
+  dependencies.get<SolveGraphLayoutUseCase>(
+    PORT_NAMES.SOLVE_GRAPH_LAYOUT_USE_CASE,
+  );

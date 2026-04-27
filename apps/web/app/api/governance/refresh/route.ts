@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { execSync } from "child_process";
-import { readdir } from "fs/promises";
-import { writeFileSync, unlinkSync } from "fs";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { readdir, writeFile, unlink } from "fs/promises";
 import path from "path";
 import os from "os";
 import * as yaml from "js-yaml";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+
+const execAsync = promisify(exec);
 
 // ---------------------------------------------------------------------------
 // Shared types (match existing endpoint response shapes)
@@ -47,19 +49,19 @@ interface RefreshRequestBody {
 // Violations — write manifest to tmpdir, run arch-linter with --manifest
 // ---------------------------------------------------------------------------
 
-function runViolations(manifestYaml: string): Violation[] {
+async function runViolations(manifestYaml: string): Promise<Violation[]> {
   const tmpPath = path.join(
     os.tmpdir(),
     `hexagen-governance-${Date.now()}.yaml`,
   );
 
   try {
-    writeFileSync(tmpPath, manifestYaml, "utf-8");
+    await writeFile(tmpPath, manifestYaml, "utf-8");
 
     try {
-      execSync(`yarn lint:arch --manifest ${tmpPath}`, {
+      await execAsync(`yarn lint:arch --manifest ${tmpPath}`, {
         cwd: process.cwd(),
-        stdio: "pipe",
+        timeout: 30000, // 30s timeout to prevent hanging
       });
       return [];
     } catch (error) {
@@ -79,7 +81,7 @@ function runViolations(manifestYaml: string): Violation[] {
     }
   } finally {
     try {
-      unlinkSync(tmpPath);
+      await unlink(tmpPath);
     } catch {
       // best-effort cleanup
     }
@@ -233,9 +235,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Run all three analyses. Violations is sync (execSync), the others async.
-    const violations = runViolations(body.manifestYaml);
-    const [suggestions, portAdapterStatus] = await Promise.all([
+    // Run all three analyses in parallel (all now async)
+    const [violations, suggestions, portAdapterStatus] = await Promise.all([
+      runViolations(body.manifestYaml),
       runSuggestions(body.manifestYaml, body.openFileContent),
       runStatus(body.manifestYaml),
     ]);

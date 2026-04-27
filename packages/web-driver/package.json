@@ -11,12 +11,18 @@
       "types": "./dist/index.d.ts",
       "source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./infrastructure/constants": {
+      "types": "./dist/infrastructure/constants/index.d.ts",
+      "source": "./src/infrastructure/constants/index.ts",
+      "default": "./dist/infrastructure/constants/index.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
