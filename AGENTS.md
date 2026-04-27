@@ -27,6 +27,35 @@ If any command fails — **STOP**. Fix existing errors before writing anything n
 
 ---
 
+## Tech Stack Reference
+
+**Critical:** Do not reference Vite, Vitest, or Jest. This project uses:
+
+| Tool                      | Purpose                 | Details                                                      |
+| ------------------------- | ----------------------- | ------------------------------------------------------------ |
+| **Yarn**                  | Package manager         | Workspaces monorepo                                          |
+| **Node.js `node:test`**   | Test runner             | Built-in module; import from `'node:test'`                   |
+| **Node.js `node:assert`** | Test assertions         | Use `assert.strictEqual()`, `assert.match()`, NOT `expect()` |
+| **Next.js**               | Web framework           | `apps/web` with TypeScript + `@hexagen/ui` components        |
+| **Turbo**                 | Build orchestrator      | `yarn build`, `yarn lint`, `yarn typecheck`                  |
+| **TypeScript**            | Language                | All source files `.ts` / `.tsx`                              |
+| **ESLint + Prettier**     | Linting                 | `yarn lint` across monorepo                                  |
+| **Arch Linter**           | Architecture validation | `yarn lint:arch` (reads `.architecture/manifest.yaml`)       |
+
+**Test Execution:**
+
+```bash
+# Run all tests
+yarn test
+
+# Run specific test file
+node --test <path-to-file>.test.ts
+```
+
+**Never suggest:** Vitest, Vite bundler, Jest, `expect()` API, `vi.mock()`, `.test.tsx` for unit tests.
+
+---
+
 ## Commands After Edits
 
 | Trigger                 | Command                                     | On Failure                  |
