@@ -1,12 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import type { Manifest } from "./types/manifest.js";
 import { ok, err, type Result } from "./domain/result.js";
 import { ManifestSchema } from "@hexagen/project-configuration";
 
 export type { Result };
+
+const execAsync = promisify(exec);
 
 export async function loadManifest(
   workspaceRoot: string,
@@ -51,11 +54,15 @@ export async function validateManifest(
   workspaceRoot: string,
 ): Promise<Result<{ valid: boolean; errors: string[] }, Error>> {
   try {
-    execSync("yarn workspace @hexagen/arch-linter lint:arch", {
-      cwd: workspaceRoot,
-      stdio: "pipe",
-    });
+    const { stderr } = await execAsync(
+      "yarn workspace @hexagen/arch-linter lint:arch",
+      {
+        cwd: workspaceRoot,
+        timeout: 30_000,
+      },
+    );
 
+    void stderr;
     return ok({ valid: true, errors: [] });
   } catch (errObj) {
     const error = errObj as Error & { stderr?: string | Buffer };

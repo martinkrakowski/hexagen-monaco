@@ -38,6 +38,8 @@ interface ArchitectureModificationState {
   steps: StepProgress[];
   result: ArchitectureModificationResult | null;
   error: string | null;
+  optimisticStatus: "idle" | "accepting" | "rejecting";
+  previousResult: ArchitectureModificationResult | null;
 }
 
 const PIPELINE_STEP_NAMES = [
@@ -64,6 +66,8 @@ export function useArchitectureModification() {
     steps: [],
     result: null,
     error: null,
+    optimisticStatus: "idle",
+    previousResult: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -80,6 +84,8 @@ export function useArchitectureModification() {
       steps: getInitialSteps(),
       result: null,
       error: null,
+      optimisticStatus: "idle",
+      previousResult: null,
     });
 
     try {
@@ -223,6 +229,8 @@ export function useArchitectureModification() {
       steps: [],
       result: null,
       error: null,
+      optimisticStatus: "idle",
+      previousResult: null,
     });
   }, []);
 
@@ -230,39 +238,29 @@ export function useArchitectureModification() {
     if (!state.result?.transactionId) {
       throw new Error("No active transaction to accept");
     }
-    const response = await fetch("/api/architecture/modify/accept", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        transactionId: state.result.transactionId,
-      }),
-    });
-    const data = (await response.json()) as {
-      success: boolean;
-      error?: string;
-      transactionId?: string;
-      status?: string;
-      patchesApplied?: number;
-      lintPassed?: boolean;
-      lintErrors?: string[];
-    };
-    if (!data.success) {
-      throw new Error(data.error ?? "Accept failed");
-    }
-    return data;
-  }, [state.result?.transactionId]);
 
-  const rejectPatches = useCallback(
-    async (reason?: string) => {
-      if (!state.result?.transactionId) {
-        throw new Error("No active transaction to reject");
-      }
-      const response = await fetch("/api/architecture/modify/reject", {
+    setState((prev) => ({
+      ...prev,
+      optimisticStatus: "accepting",
+      previousResult: prev.result,
+    }));
+
+    const optimisticResult: ArchitectureModificationResult = {
+      ...state.result,
+      steps: state.result.steps.map((s) => ({
+        ...s,
+        status: "completed" as PipelineStepStatus,
+      })),
+    };
+
+    setState((prev) => ({ ...prev, result: optimisticResult }));
+
+    try {
+      const response = await fetch("/api/architecture/modify/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transactionId: state.result.transactionId,
-          reason: reason ?? "User rejected the changes",
         }),
       });
       const data = (await response.json()) as {
@@ -270,14 +268,96 @@ export function useArchitectureModification() {
         error?: string;
         transactionId?: string;
         status?: string;
-        reason?: string;
+        patchesApplied?: number;
+        lintPassed?: boolean;
+        lintErrors?: string[];
       };
       if (!data.success) {
-        throw new Error(data.error ?? "Reject failed");
+        setState((prev) => ({
+          ...prev,
+          optimisticStatus: "idle",
+          result: prev.previousResult,
+        }));
+        throw new Error(data.error ?? "Accept failed");
       }
+      setState((prev) => ({
+        ...prev,
+        optimisticStatus: "idle",
+        previousResult: null,
+      }));
       return data;
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        optimisticStatus: "idle",
+        result: prev.previousResult,
+      }));
+      throw error;
+    }
+  }, [state.result?.transactionId, state.result]);
+
+  const rejectPatches = useCallback(
+    async (reason?: string) => {
+      if (!state.result?.transactionId) {
+        throw new Error("No active transaction to reject");
+      }
+
+      setState((prev) => ({
+        ...prev,
+        optimisticStatus: "rejecting",
+        previousResult: prev.result,
+      }));
+
+      const optimisticResult: ArchitectureModificationResult = {
+        ...state.result,
+        steps: state.result.steps.map((s) => ({
+          ...s,
+          status: "completed" as PipelineStepStatus,
+        })),
+      };
+
+      setState((prev) => ({ ...prev, result: optimisticResult }));
+
+      try {
+        const response = await fetch("/api/architecture/modify/reject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transactionId: state.result.transactionId,
+            reason: reason ?? "User rejected the changes",
+          }),
+        });
+        const data = (await response.json()) as {
+          success: boolean;
+          error?: string;
+          transactionId?: string;
+          status?: string;
+          reason?: string;
+        };
+        if (!data.success) {
+          setState((prev) => ({
+            ...prev,
+            optimisticStatus: "idle",
+            result: prev.previousResult,
+          }));
+          throw new Error(data.error ?? "Reject failed");
+        }
+        setState((prev) => ({
+          ...prev,
+          optimisticStatus: "idle",
+          previousResult: null,
+        }));
+        return data;
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          optimisticStatus: "idle",
+          result: prev.previousResult,
+        }));
+        throw error;
+      }
     },
-    [state.result?.transactionId],
+    [state.result?.transactionId, state.result],
   );
 
   return {
