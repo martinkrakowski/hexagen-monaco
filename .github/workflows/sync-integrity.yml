@@ -44,3 +44,6 @@ jobs:
 
       - name: "Verify Architectural Rules After Sync"
         run: yarn workspace @hexagen/sync run cli sync --dry-run --allow-dirty
+
+      - name: "Run Test Suite"
+        run: yarn turbo run test --output-logs=full --log-order=stream

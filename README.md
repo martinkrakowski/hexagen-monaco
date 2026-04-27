@@ -181,6 +181,45 @@ HEXAGEN_ROOT=/path/to/project hexagen-lint
 yarn lint:arch
 ```
 
+## Testing Strategy
+
+Tests are run in **CI only** (GitHub Actions), not during local pre-commits. This approach provides:
+
+- ✅ **Fast local commits:** Pre-commit runs lint + typecheck only (~2–5s)
+- ✅ **Comprehensive CI coverage:** Full test suite runs in consistent CI environment
+- ✅ **Industry standard:** Matches practices from React, Vue, Next.js (tests in CI)
+- ✅ **No workarounds needed:** No `--no-verify` required for fast commits
+
+### Running Tests Locally
+
+Before pushing, run the full test suite locally:
+
+```bash
+# Run entire test suite
+yarn test
+
+# Run tests for a specific package
+yarn workspace @hexagen/web-driver test
+
+# Run tests in watch mode
+yarn test --watch
+
+# Run tests with coverage report
+yarn test --coverage
+```
+
+### Continuous Integration
+
+The `.github/workflows/sync-integrity.yml` workflow runs on all PRs and pushes to `main`/`develop`:
+
+1. **Build:** `yarn turbo run build` (33 packages)
+2. **Typecheck:** `yarn turbo run typecheck` (55 packages)
+3. **Lint:** `yarn turbo run lint` (architecture + ESLint)
+4. **Linter Integrity:** `yarn workspace @hexagen/sync run cli sync --dry-run`
+5. **Test Suite:** `yarn turbo run test` (all 268+ tests)
+
+All steps must pass before merging to `main`.
+
 ## Tech Stack
 
 - **Monorepo Engine:** Yarn 4 + Turborepo
@@ -189,6 +228,7 @@ yarn lint:arch
 - **TUI:** Ink (React for CLIs)
 - **Manifest:** YAML
 - **Analysis:** Babel/AST for semantic patching
+- **Testing:** Vitest (unit/integration), Node.js test runner
 
 ---
 

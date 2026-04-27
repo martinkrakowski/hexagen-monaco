@@ -1,2 +1,3 @@
 npx lint-staged
-yarn turbo test
+yarn turbo lint
+yarn turbo typecheck
