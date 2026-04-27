@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { getModifyArchitectureUseCase } from "@/lib/wire.architecture-modification";
+import { getModifyArchitectureUseCase } from "@/lib/wire.server";
 import { getLogger } from "@/lib/wire";
 import type { IntentLineage } from "@hexagen/core-domain";
 

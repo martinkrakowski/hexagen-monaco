@@ -1,10 +1,10 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { SecretVaultPort } from "@hexagen/agentic-interaction";
+import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import { getSecretVault } from "./wire.js";
 
-const SecretVaultContext = createContext<SecretVaultPort | null>(null);
+const SecretVaultContext = createContext<UserSecretVaultPort | null>(null);
 
 export function SecretVaultProvider({ children }: { children: ReactNode }) {
   // The vault is a singleton from wire.ts
@@ -16,7 +16,7 @@ export function SecretVaultProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useSecretVault(): SecretVaultPort {
+export function useSecretVault(): UserSecretVaultPort {
   const context = useContext(SecretVaultContext);
   if (!context) {
     throw new Error("useSecretVault must be used within a SecretVaultProvider");

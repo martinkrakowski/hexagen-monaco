@@ -1,7 +1,13 @@
-// apps/web/app/lib/wire.architecture-modification.ts
-// Server-side only wiring for architecture modification pipeline
-// Supports both in-memory (testing) and cloud LLM (production) modes
+// apps/web/app/lib/wire.server.ts
+// Server-only wiring for project generation and architecture modification
+// NEVER imported by client code
 
+import {
+  GenerateProjectUseCase,
+  ExternalSyncEngineAdapter,
+  ArchiveExporterAdapter,
+  GitHubExporterAdapter,
+} from "@hexagen/project-generation";
 import {
   ModifyArchitectureUseCase,
   InMemoryNLParserAdapter,
@@ -10,6 +16,7 @@ import {
   InMemoryLintValidationAdapter,
   CloudLLMPipelineAdapter,
   createDefaultFallbackChain,
+  EnvironmentSecretVaultAdapter,
 } from "@hexagen/agentic-interaction";
 import { SyncDelegatingManifestMutationAdapter } from "@hexagen/transaction-system";
 import {
@@ -48,6 +55,34 @@ const emptyLinterReport: LinterReportLike = {
   scannedFilesCount: 0,
 };
 
+// ============================================================================
+// Project Generation Wiring
+// ============================================================================
+
+export const getGenerateProject = (
+  destination: "archive" | "github" = "archive",
+): GenerateProjectUseCase => {
+  const externalGenerator = new ExternalSyncEngineAdapter();
+  const exporter =
+    destination === "github"
+      ? new GitHubExporterAdapter()
+      : new ArchiveExporterAdapter();
+  return new GenerateProjectUseCase(externalGenerator, exporter);
+};
+
+// ============================================================================
+// Architecture Modification Wiring
+// ============================================================================
+
+// Lazy singleton for environment variable access (domain-layer SecretVaultPort)
+let envVaultInstance: EnvironmentSecretVaultAdapter | null = null;
+const getEnvironmentVault = (): EnvironmentSecretVaultAdapter => {
+  if (!envVaultInstance) {
+    envVaultInstance = new EnvironmentSecretVaultAdapter();
+  }
+  return envVaultInstance;
+};
+
 export type PipelineMode = "in-memory" | "cloud";
 
 export interface CloudPipelineConfig {
@@ -61,7 +96,10 @@ function createLLMSender(
   if (mode === "cloud") {
     const fallbackChain =
       cloudConfig?.fallbackChain ?? createDefaultFallbackChain();
-    const adapterConfig: CloudLLMPipelineAdapterConfig = { fallbackChain };
+    const adapterConfig: CloudLLMPipelineAdapterConfig = {
+      fallbackChain,
+      secretVault: getEnvironmentVault(),
+    };
     return new CloudLLMPipelineAdapter(adapterConfig);
   }
   return new InMemoryLLMSenderAdapter();

@@ -2,10 +2,10 @@
 
 import { useReducer, useCallback } from "react";
 import { getClientProviders } from "@hexagen/local-llm";
-import type { SecretVaultPort } from "@hexagen/agentic-interaction";
+import type { UserSecretVaultPort } from "@hexagen/web-driver";
 
 interface CloudModelSettingsViewProps {
-  vault: SecretVaultPort;
+  vault: UserSecretVaultPort;
   onConnect: (provider: string, model: string) => Promise<void>;
   isConnecting?: boolean;
   error?: string | null;

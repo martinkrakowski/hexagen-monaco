@@ -4,6 +4,9 @@
 // Re-export domain entities (pure)
 export * from "./domain";
 
+// Re-export ports (application layer)
+export * from "./application/ports";
+
 // Re-export use-cases (application layer)
 export * from "./application/use-cases";
 

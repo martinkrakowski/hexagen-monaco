@@ -1,4 +1,4 @@
-import type { SecretVaultPort } from "@hexagen/agentic-interaction";
+import type { UserSecretVaultPort } from "@hexagen/web-driver";
 
 export type RetrieveApiKeyResult =
   | { success: true; apiKey: string }
@@ -12,7 +12,7 @@ export type RetrieveApiKeyResult =
  * Previously this was 23 LOC inlined at the top of sendMessage.
  */
 export async function retrieveApiKey(
-  vault: SecretVaultPort | null,
+  vault: UserSecretVaultPort | null,
 ): Promise<RetrieveApiKeyResult> {
   if (!vault) {
     return { success: false, message: "Vault not initialized" };

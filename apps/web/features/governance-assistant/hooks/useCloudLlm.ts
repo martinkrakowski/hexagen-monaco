@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { SecretVaultPort } from "@hexagen/agentic-interaction";
+import type { UserSecretVaultPort } from "@hexagen/web-driver";
 
 import { retrieveApiKey } from "./cloud-llm/retrieve-api-key";
 import { buildCloudMessageHistory } from "./cloud-llm/build-cloud-history";
@@ -46,11 +46,11 @@ export function useCloudLLM() {
     errorMessage: null,
   });
 
-  const vaultRef = useRef<SecretVaultPort | null>(null);
+  const vaultRef = useRef<UserSecretVaultPort | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
 
-  const setVault = useCallback((vault: SecretVaultPort) => {
+  const setVault = useCallback((vault: UserSecretVaultPort) => {
     vaultRef.current = vault;
   }, []);
 
