@@ -38,3 +38,17 @@ export {
   getTransactionManager,
 } from "./cross-boundary-registry";
 export type { CrossBoundaryManifest } from "./cross-boundary-registry";
+
+export {
+  assertLatencyPercentile,
+  assertDurationWithinSLA,
+  assertNoTimeoutCascade,
+  assertMemoryStable,
+  computeLatencyStats,
+  generateSLAReport,
+  formatLatency,
+  generateSLATable,
+  allSLAsPassed,
+  getSLAPassRate,
+} from "./sla-assertions";
+export type { SLAReport } from "./sla-assertions";
