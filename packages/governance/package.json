@@ -16,7 +16,7 @@
     "build": "tsc && node ../../scripts/fix-esm-barrels.js dist",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "tsx --test __tests__/**/*.test.ts"
   },
   "dependencies": {
     "@hexagen/shared": "workspace:*",
@@ -25,7 +25,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
   }
 }

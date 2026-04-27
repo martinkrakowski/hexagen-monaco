@@ -4,7 +4,7 @@ import {
   DependencyEventSchema,
   LinterReportSchema,
   ArchitecturalEventSchema,
-} from "../../src/domain/model/linter-report/linter-report";
+} from "../../../src/domain/model/linter-report/index.js";
 
 (() => {
   const violationResult = BoundaryViolationSchema.safeParse({

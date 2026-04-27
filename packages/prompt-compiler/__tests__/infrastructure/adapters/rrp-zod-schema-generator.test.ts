@@ -56,7 +56,9 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
       await adapter.generate(request);
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[Zod] Example data failed validation against contract"),
+        expect.stringContaining(
+          "[Zod] Example data failed validation against contract",
+        ),
       );
       consoleSpy.mockRestore();
     });

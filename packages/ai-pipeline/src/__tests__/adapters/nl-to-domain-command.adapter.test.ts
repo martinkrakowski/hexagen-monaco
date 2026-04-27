@@ -185,7 +185,9 @@ describe("NLToDomainCommandParserAdapter", () => {
     });
 
     it("should parse 'Create an edge from auth to database' with hyphens in names", async () => {
-      const result = await adapter.parse("Create an edge from auth to database");
+      const result = await adapter.parse(
+        "Create an edge from auth to database",
+      );
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -202,9 +204,7 @@ describe("NLToDomainCommandParserAdapter", () => {
 
   describe("Update Context Pattern (Phase A.3)", () => {
     it("should parse 'Update user-service to use GraphQL'", async () => {
-      const result = await adapter.parse(
-        "update user-service to use GraphQL",
-      );
+      const result = await adapter.parse("update user-service to use GraphQL");
 
       expect(result.success).toBe(true);
       if (result.success) {

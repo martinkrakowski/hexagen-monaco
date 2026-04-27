@@ -15,7 +15,12 @@ shared_kernels:
 layers:
   domain:
     access_rule: "internal-only"
-    allowed_imports: ["@hexagen/shared", "@hexagen/core-domain", "@hexagen/project-configuration"]
+    allowed_imports:
+      [
+        "@hexagen/shared",
+        "@hexagen/core-domain",
+        "@hexagen/project-configuration",
+      ]
 
   application:
     access_rule: "ports-only"

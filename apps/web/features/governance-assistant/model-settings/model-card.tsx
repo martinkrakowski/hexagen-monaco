@@ -69,9 +69,9 @@ export function ModelCard({
   if (isConfirmDelete) {
     return (
       <div className={`rounded-xl border p-4 transition-all ${borderClass}`}>
-         <p className="text-sm text-destructive font-medium mb-1.5">
-           Delete {descriptor.displayName}?
-         </p>
+        <p className="text-sm text-destructive font-medium mb-1.5">
+          Delete {descriptor.displayName}?
+        </p>
         <p className="text-xs text-muted-foreground mb-3">
           This will free ~{descriptor.downloadSizeGB} GB and remove the model
           from your device. It will need to be re-downloaded if you want to use
@@ -79,18 +79,18 @@ export function ModelCard({
         </p>
         {error && <p className="text-xs text-destructive mb-2">{error}</p>}
         <div className="flex gap-2">
-           <button
-             onClick={onConfirmDelete}
-             disabled={buttonDisabled}
-             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50"
-           >
+          <button
+            onClick={onConfirmDelete}
+            disabled={buttonDisabled}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50"
+          >
             {isDeleting ? "Deleting…" : "Confirm Delete"}
           </button>
-           <button
-             onClick={onCancelDelete}
-             disabled={isDeleting}
-             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-           >
+          <button
+            onClick={onCancelDelete}
+            disabled={isDeleting}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+          >
             Cancel
           </button>
         </div>
@@ -101,9 +101,7 @@ export function ModelCard({
   if (isPendingSwitch) {
     return (
       <div className={`rounded-xl border p-4 transition-all ${borderClass}`}>
-         <p className="text-sm text-warning font-medium mb-1">
-           Switch models?
-         </p>
+        <p className="text-sm text-warning font-medium mb-1">Switch models?</p>
         <p className="text-xs text-muted-foreground mb-3">
           Switching will clear your current conversation with{" "}
           {currentModelDisplayName ?? "the current model"}. The new model (
@@ -111,18 +109,18 @@ export function ModelCard({
         </p>
         {error && <p className="text-xs text-destructive mb-2">{error}</p>}
         <div className="flex gap-2">
-           <button
-             onClick={onConfirmSwitch}
-             disabled={buttonDisabled}
-             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-warning text-white hover:bg-warning/90 transition-colors disabled:opacity-50"
-           >
+          <button
+            onClick={onConfirmSwitch}
+            disabled={buttonDisabled}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-warning text-white hover:bg-warning/90 transition-colors disabled:opacity-50"
+          >
             {isSwitching ? "Switching…" : "Switch & Clear"}
           </button>
-           <button
-             onClick={onCancelSwitch}
-             disabled={isSwitching}
-             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
-           >
+          <button
+            onClick={onCancelSwitch}
+            disabled={isSwitching}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+          >
             Cancel
           </button>
         </div>
@@ -134,29 +132,29 @@ export function ModelCard({
     <div className={`rounded-xl border p-4 transition-all ${borderClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-           <div className="flex items-center gap-2">
-             <h3 className="text-sm font-medium text-foreground truncate">
-               {descriptor.displayName}
-             </h3>
-             {isCurrent && (
-               <span className="inline-flex items-center rounded-full bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success shrink-0">
-                 Active
-               </span>
-             )}
-             {isRecommended && (
-               <span className="inline-flex items-center rounded-full bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent shrink-0">
-                 ✨ Recommended
-               </span>
-             )}
-             {cacheStatus?.isCached && (
-               <span className="inline-flex items-center rounded-full bg-blue/10 px-1.5 py-0.5 text-xs font-medium text-blue shrink-0">
-                 Cached
-               </span>
-             )}
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-medium text-foreground truncate">
+              {descriptor.displayName}
+            </h3>
+            {isCurrent && (
+              <span className="inline-flex items-center rounded-full bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success shrink-0">
+                Active
+              </span>
+            )}
+            {isRecommended && (
+              <span className="inline-flex items-center rounded-full bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent shrink-0">
+                ✨ Recommended
+              </span>
+            )}
+            {cacheStatus?.isCached && (
+              <span className="inline-flex items-center rounded-full bg-blue/10 px-1.5 py-0.5 text-xs font-medium text-blue shrink-0">
+                Cached
+              </span>
+            )}
           </div>
-           <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-             {descriptor.description}
-           </p>
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+            {descriptor.description}
+          </p>
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground/80">
             <span>~{descriptor.downloadSizeGB} GB</span>
             <span>·</span>
@@ -191,17 +189,17 @@ export function ModelCard({
             <button
               onClick={onDelete}
               disabled={isLoading || isDeleting}
-               className="px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
-               title="Delete cached model"
-             >
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+              title="Delete cached model"
+            >
               Delete
             </button>
           )}
           <button
             onClick={onSelectModel}
             disabled={isLoading || isSwitching || isCurrent}
-             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-           >
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+          >
             {isSwitching && isPendingSwitch
               ? "Switching…"
               : isCurrent

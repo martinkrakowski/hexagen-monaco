@@ -1,9 +1,12 @@
-import type { BoundedContext, ExternalContext } from "@hexagen/project-configuration";
 import type {
-   HexagonEdge,
-   HexagonNodeType,
-   HexagonNodeWithLayout,
- } from "../../../domain/index.js";
+  BoundedContext,
+  ExternalContext,
+} from "@hexagen/project-configuration";
+import type {
+  HexagonEdge,
+  HexagonNodeType,
+  HexagonNodeWithLayout,
+} from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 

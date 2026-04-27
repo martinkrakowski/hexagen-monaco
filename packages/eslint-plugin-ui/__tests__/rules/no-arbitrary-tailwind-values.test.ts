@@ -1,13 +1,13 @@
 /**
  * Test Suite: no-arbitrary-tailwind-values
- * 
+ *
  * This file documents the expected behavior of the ESLint rule.
  * Note: This project does not have a Jest test runner configured.
  * Rule validation is performed via:
  * 1. yarn lint integration (active in web app)
  * 2. Manual code inspection during refactoring
  * 3. Type checking via TypeScript strict mode
- * 
+ *
  * Expected behaviors:
  */
 
@@ -63,10 +63,10 @@ describe("no-arbitrary-tailwind-values", () => {
 
 /**
  * Integration Validation:
- * 
+ *
  * After this rule is activated in the web app's .eslintrc,
  * run: yarn lint
- * 
+ *
  * Expected output should show violations in these files (Phase 3.3):
  * - ModelProgressCard.tsx (12 violations)
  * - model-card.tsx (8 violations)
@@ -74,6 +74,6 @@ describe("no-arbitrary-tailwind-values", () => {
  * - BoundedContext.tsx (8+ violations)
  * - StepHeader.tsx (4 violations)
  * - PeerContextNode.tsx (4+ violations)
- * 
+ *
  * After refactoring (Phase 3.3), yarn lint should report 0 violations.
  */
