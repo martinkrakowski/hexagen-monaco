@@ -46,6 +46,60 @@ const STEP_LLM_INFERENCE = "llm-inference";
 const STEP_RECONCILE = "reconcile";
 const STEP_COMMIT = "commit-patches";
 
+const RETRYABLE_STATUS_CODES = new Set([429, 503]);
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+
+interface RetryOptions {
+  maxAttempts?: number;
+  delaysMs?: number[];
+  signal?: AbortSignal;
+}
+
+class LLMServiceError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = "LLMServiceError";
+  }
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {},
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? MAX_RETRY_ATTEMPTS;
+  const delaysMs = options.delaysMs ?? RETRY_DELAYS_MS;
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err as Error;
+
+      if (options.signal?.aborted) {
+        throw lastError;
+      }
+
+      const isRetryable =
+        lastError instanceof LLMServiceError &&
+        RETRYABLE_STATUS_CODES.has(lastError.statusCode);
+
+      if (!isRetryable || attempt >= maxAttempts) {
+        throw lastError;
+      }
+
+      const delay = delaysMs[attempt - 1] ?? delaysMs[delaysMs.length - 1];
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 export interface ModifyArchitectureDeps {
   readonly nlParser: NLToDomainCommandParserPort;
   readonly promptCompiler: PromptCompilerPort;
@@ -55,6 +109,7 @@ export interface ModifyArchitectureDeps {
   readonly manifestProvider: () => Promise<ProjectSpecLike>;
   readonly architectureGraphProvider: () => Promise<ArchitectureGraphLike>;
   readonly linterReportProvider: () => Promise<LinterReportLike>;
+  readonly signal?: AbortSignal;
   readonly onStepRunning?: (stepName: string) => void;
   readonly onStepComplete?: (
     stepName: string,
@@ -201,17 +256,34 @@ export class ModifyArchitectureUseCase {
         { role: "user", content: renderedPrompt.userPrompt },
       ],
       schema: structuredOutputSchema,
+      signal: this.deps.signal,
     };
-    const result = await this.deps.llmSender.sendRequest(llmRequest);
-    if (!result.success) {
-      const errMsg =
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error);
-      throw new Error(`LLM inference failed: ${errMsg}`);
-    }
+
+    const executeLlmCall = async () => {
+      const result = await this.deps.llmSender.sendRequest(llmRequest);
+      if (!result.success) {
+        const errMsg =
+          result.error instanceof Error
+            ? result.error.message
+            : String(result.error);
+        const statusCode = (result.error as Error & { statusCode?: number })
+          ?.statusCode;
+        if (typeof statusCode === "number") {
+          throw new LLMServiceError(`LLM inference failed: ${errMsg}`, statusCode);
+        }
+        throw new Error(`LLM inference failed: ${errMsg}`);
+      }
+      return result.value;
+    };
+
+    const result = await withRetry(executeLlmCall, {
+      maxAttempts: MAX_RETRY_ATTEMPTS,
+      delaysMs: RETRY_DELAYS_MS,
+      signal: this.deps.signal,
+    });
+
     const parsed = structuredOutputSchema.safeParse(
-      JSON.parse(result.value.content),
+      JSON.parse(result.content),
     );
     if (!parsed.success) {
       throw new Error(
