@@ -60,7 +60,7 @@ import {
   createEventBus,
   createIntentBus,
   createLLMProvider,
-} from "./wire.shared.js";
+} from "./wire.shared";
 
 /**
  * Simple registry-based composition for ports used by web-driver use-cases.

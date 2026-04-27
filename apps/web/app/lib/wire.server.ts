@@ -117,6 +117,22 @@ export interface StepCallbacks {
   ) => void;
 }
 
+/**
+ * Get or create the ModifyArchitectureUseCase with all dependencies wired.
+ *
+ * **Caching Strategy**:
+ * - Cached when: mode matches cached mode AND no callbacks provided (singleton pattern)
+ * - New instance when: mode differs OR callbacks provided (fresh per-request for SSE)
+ *
+ * **Rationale**:
+ * - Singleton caching improves performance for repeated non-streaming operations (in-memory mode)
+ * - Per-request instances for callback-based scenarios (SSE) prevent cross-request state leakage
+ *
+ * @param mode Pipeline mode: 'in-memory' (fast, local) or 'cloud' (actual LLM API)
+ * @param cloudConfig Optional cloud provider configuration (API keys, fallback chain)
+ * @param callbacks Optional step lifecycle callbacks (onStepRunning, onStepComplete)
+ * @returns Fresh or cached ModifyArchitectureUseCase instance
+ */
 export const getModifyArchitectureUseCase = (
   mode: PipelineMode = "in-memory",
   cloudConfig?: CloudPipelineConfig,
@@ -142,13 +158,69 @@ export const getModifyArchitectureUseCase = (
     transactionManager: new InMemoryTransactionManager(),
     manifestMutation: new SyncDelegatingManifestMutationAdapter(process.cwd()),
     lintValidation: new InMemoryLintValidationAdapter(),
-    manifestProvider: async () => emptyManifest,
-    architectureGraphProvider: async () => emptyArchitectureGraph,
-    linterReportProvider: async () => emptyLinterReport,
+    /**
+     * DEVELOPMENT STUB: Returns empty manifest.
+     * Production code should override with actual ProjectSpec provider.
+     * If you see empty manifests in tests or development, this stub was used.
+     */
+    manifestProvider: async () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[STUB] manifestProvider not overridden — returning empty manifest",
+      );
+      return emptyManifest;
+    },
+    /**
+     * DEVELOPMENT STUB: Returns empty architecture graph.
+     * Production code should override with actual ArchitectureGraph provider.
+     * If you see empty graphs in tests or development, this stub was used.
+     */
+    architectureGraphProvider: async () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[STUB] architectureGraphProvider not overridden — returning empty graph",
+      );
+      return emptyArchitectureGraph;
+    },
+    /**
+     * DEVELOPMENT STUB: Returns empty linter report (always compliant).
+     * Production code should override with actual LinterReport provider.
+     * If you see empty reports in tests or development, this stub was used.
+     */
+    linterReportProvider: async () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[STUB] linterReportProvider not overridden — returning empty report",
+      );
+      return emptyLinterReport;
+    },
     ...callbacks,
   };
 
   cachedUseCase = new ModifyArchitectureUseCase(deps);
   cachedMode = mode;
   return cachedUseCase;
+};
+
+/**
+ * Clear the ModifyArchitectureUseCase singleton cache.
+ *
+ * **When to call**:
+ * - Testing: Reset state between test cases to prevent cross-test pollution
+ * - Development: Clear stale instances during hot-reload or code changes
+ * - Long-running processes: Invalidate cache if configuration changes at runtime
+ *
+ * **Example (tests)**:
+ * ```typescript
+ * afterEach(() => clearModifyArchitectureCache());
+ * ```
+ *
+ * **Behavior**:
+ * - Sets `cachedUseCase` and `cachedMode` to null
+ * - Next call to `getModifyArchitectureUseCase()` creates a fresh instance
+ * - No-op if already cleared
+ */
+export const clearModifyArchitectureCache = (): void => {
+  cachedUseCase = null;
+  cachedMode = null;
 };

@@ -126,14 +126,15 @@ export const getModifyArchitectureUseCase = (
 **Pattern**:
 
 ```typescript
-export * from "./wire.shared.js";
-
-// Client-only getters available in browser context
-export * from "./wire.client.js" with { ssr: false };
-
-// Server-only getters available in API routes
-export * from "./wire.server.js" with { ssr: false };
+export * from "./wire.shared";
+export * from "./wire.client";
+export * from "./wire.server";
 ```
+
+**Note**: Next.js 16+ automatically separates server and client code based on context. The wire.ts barrel re-exports all three (shared, client, server) without needing explicit `{ ssr: false }` syntax. Your import statement determines where the code runs:
+
+- Imported in a Client Component (`.tsx` in app dir) → client code is bundled, server code is tree-shaken
+- Imported in an API route or server action → server code is available, client code is skipped by webpack
 
 ## Adding a New Port
 

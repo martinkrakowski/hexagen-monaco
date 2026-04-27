@@ -44,9 +44,16 @@ export const createLLMProvider = (): LLMProviderPort => {
   const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
 
   if (!apiKey) {
-    console.warn(
-      "[LLMProviderPort] No API key configured - LLM features will be disabled",
-    );
+    /**
+     * Warn only in development environments to avoid exposing configuration
+     * concerns in production logs. Production logging should capture actual
+     * failures (requests failing due to missing auth), not configuration issues.
+     */
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[LLMProviderPort] No API key configured - LLM features will be disabled",
+      );
+    }
   }
 
   return new ServerLLMAdapter(apiKey, baseUrl, model);

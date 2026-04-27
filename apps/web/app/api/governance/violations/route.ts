@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { LinterReportSchema } from "@hexagen/governance";
+import { PERFORMANCE_TARGETS } from "@hexagen/web-driver";
 
 const execAsync = promisify(exec);
 
@@ -11,6 +12,7 @@ interface Violation {
   message: string;
   context?: string;
   severity: "HIGH" | "MEDIUM" | "LOW";
+  errorCode?: string; // Discriminates timeout/permission vs execution errors
 }
 
 export async function GET() {
@@ -18,14 +20,19 @@ export async function GET() {
     let valid = true;
     let errors: string[] = [];
 
+    let errorCode: string | undefined;
+
     try {
       await execAsync("yarn lint:arch", {
         cwd: process.cwd(),
-        timeout: 30000, // 30s timeout to prevent hanging
+        timeout: PERFORMANCE_TARGETS.LINTER.timeout,
       });
     } catch (error) {
       valid = false;
-      const err = error as Error & { stderr?: string | Buffer };
+      const err = error as Error & { stderr?: string | Buffer; code?: string };
+
+      // Discriminate error types for severity classification
+      errorCode = err.code;
       const message = err.stderr ? String(err.stderr) : err.message;
       errors = message
         .split("\n")
@@ -33,11 +40,19 @@ export async function GET() {
         .filter((line) => line.length > 0);
     }
 
+    // Determine severity based on error code
+    const isSoftError =
+      errorCode === "ETIMEDOUT" ||
+      errorCode === "ENOENT" ||
+      errorCode === "EACCES";
+    const violationSeverity = isSoftError ? "MEDIUM" : "HIGH";
+
     const violations: Violation[] = errors.map((msg, idx) => ({
       id: String(idx + 1),
       type: "error" as const,
       message: msg,
-      severity: "HIGH" as const,
+      severity: violationSeverity as "HIGH" | "MEDIUM",
+      errorCode: errorCode,
     }));
 
     const report = LinterReportSchema.parse({

@@ -15,6 +15,30 @@
 /**
  * All port identifiers, grouped by domain for clarity.
  * Each entry maps the constant name (SCREAMING_SNAKE_CASE) to the string identifier.
+ *
+ * @example
+ * // Static registration (compile-time safety)
+ * registry.set(PORT_NAMES.LOGGER, loggerAdapter);
+ * const logger = registry.get<LoggerPort>(PORT_NAMES.LOGGER);
+ *
+ * @example
+ * // Testing: Mock a port for test isolation
+ * const mockVault = { getSecret: async () => 'test-key' };
+ * registry.set(PORT_NAMES.SECRET_VAULT, mockVault);
+ *
+ * @example
+ * // Conditional availability (browser-only, server-only, etc.)
+ * if (typeof window !== 'undefined') {
+ *   registry.set(PORT_NAMES.WEBGPU_DETECTOR, webgpuAdapter);
+ * } else {
+ *   registry.set(PORT_NAMES.WEBGPU_DETECTOR, noOpAdapter);
+ * }
+ *
+ * @example
+ * // Dynamic registration at runtime
+ * const createDynamicPort = (config: RuntimeConfig) => {
+ *   registry.set(PORT_NAMES.LLM_PROVIDER, new LLMAdapter(config));
+ * };
  */
 export const PORT_NAMES = {
   // ============================================================================

@@ -14,7 +14,7 @@ if (typeof window !== "undefined") {
 }
 
 // Re-export all client-safe getters for backward compatibility
-export * from "./wire.client.js";
+export * from "./wire.client";
 
 // Re-export shared utilities
 export {
@@ -22,7 +22,7 @@ export {
   createEventBus,
   createIntentBus,
   createLLMProvider,
-} from "./wire.shared.js";
+} from "./wire.shared";
 
 // Note: Server-only getters (getGenerateProject, getModifyArchitectureUseCase) are in wire.server.ts
 // Import them directly: import { getGenerateProject } from "@/lib/wire.server"
