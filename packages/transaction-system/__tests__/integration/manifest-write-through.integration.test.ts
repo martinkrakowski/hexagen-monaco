@@ -22,15 +22,22 @@ const createMockSync = () => {
   let currentManifest: Record<string, unknown> = { bounded_contexts: [] };
 
   return {
-    loadManifest: jest.fn().mockImplementation(async (_workspaceRoot: string) => ({
-      success: true,
-      value: JSON.parse(JSON.stringify(currentManifest)),
-    })),
-    saveManifest: jest.fn().mockImplementation(async (workspaceRoot: string, manifest: unknown) => {
-      saved.push({ workspaceRoot, manifest });
-      currentManifest = JSON.parse(JSON.stringify(manifest)) as Record<string, unknown>;
-      return { success: true, value: undefined };
-    }),
+    loadManifest: jest
+      .fn()
+      .mockImplementation(async (_workspaceRoot: string) => ({
+        success: true,
+        value: JSON.parse(JSON.stringify(currentManifest)),
+      })),
+    saveManifest: jest
+      .fn()
+      .mockImplementation(async (workspaceRoot: string, manifest: unknown) => {
+        saved.push({ workspaceRoot, manifest });
+        currentManifest = JSON.parse(JSON.stringify(manifest)) as Record<
+          string,
+          unknown
+        >;
+        return { success: true, value: undefined };
+      }),
     getSavedManifests: () => saved,
     setCurrentManifest: (m: Record<string, unknown>) => {
       currentManifest = m;
@@ -56,13 +63,14 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
   beforeEach(() => {
     const mockSync = createMockSync();
-    (jest.requireMock("@hexagen/sync") as Record<string, unknown>)._mockSync = mockSync;
-    jest.mocked(
-      require("@hexagen/sync").loadManifest,
-    ).mockImplementation(mockSync.loadManifest);
-    jest.mocked(
-      require("@hexagen/sync").saveManifest,
-    ).mockImplementation(mockSync.saveManifest);
+    (jest.requireMock("@hexagen/sync") as Record<string, unknown>)._mockSync =
+      mockSync;
+    jest
+      .mocked(require("@hexagen/sync").loadManifest)
+      .mockImplementation(mockSync.loadManifest);
+    jest
+      .mocked(require("@hexagen/sync").saveManifest)
+      .mockImplementation(mockSync.saveManifest);
     adapter = new SyncDelegatingManifestMutationAdapter("/tmp/test-workspace");
   });
 
@@ -83,7 +91,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
         },
       ];
 
-      const result = await adapter.applyPatches(patches, ".architecture/manifest.yaml");
+      const result = await adapter.applyPatches(
+        patches,
+        ".architecture/manifest.yaml",
+      );
 
       expect(result.success).toBe(true);
       expect(loadManifest).toHaveBeenCalledWith("/tmp/test-workspace");
@@ -111,8 +122,13 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = saveManifest.mock.calls[0][1] as Record<string, unknown>;
-      const contexts = savedManifest.bounded_contexts as Array<Record<string, unknown>>;
+      const savedManifest = saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      const contexts = savedManifest.bounded_contexts as Array<
+        Record<string, unknown>
+      >;
       expect(contexts).toHaveLength(1);
       expect(contexts[0].name).toBe("new-service");
       expect(contexts[0].type).toBe("core");
@@ -142,8 +158,13 @@ describe("Manifest Write-Through - Integration Tests", () => {
       expect(loadManifest).toHaveBeenCalledTimes(1);
       expect(saveManifest).toHaveBeenCalledTimes(1);
 
-      const savedManifest = saveManifest.mock.calls[0][1] as Record<string, unknown>;
-      const contexts = savedManifest.bounded_contexts as Array<Record<string, unknown>>;
+      const savedManifest = saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      const contexts = savedManifest.bounded_contexts as Array<
+        Record<string, unknown>
+      >;
       expect(contexts).toHaveLength(2);
       expect(contexts[0].name).toBe("context-a");
       expect(contexts[1].name).toBe("context-b");
@@ -154,7 +175,11 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       (loadManifest as jest.Mock).mockResolvedValueOnce({
         success: true,
-        value: { bounded_contexts: [{ name: "existing", type: "core", description: "Existing" }] },
+        value: {
+          bounded_contexts: [
+            { name: "existing", type: "core", description: "Existing" },
+          ],
+        },
       });
 
       const patches: Patch[] = [
@@ -166,7 +191,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
         },
       ];
 
-      const result = await adapter.applyPatches(patches, ".architecture/manifest.yaml");
+      const result = await adapter.applyPatches(
+        patches,
+        ".architecture/manifest.yaml",
+      );
 
       expect(result.success).toBe(false);
       expect(result.error?.message).toContain("already exists");
@@ -190,7 +218,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
         },
       ];
 
-      const result = await adapter.applyPatches(patches, ".architecture/manifest.yaml");
+      const result = await adapter.applyPatches(
+        patches,
+        ".architecture/manifest.yaml",
+      );
 
       expect(result.success).toBe(false);
       expect(result.error?.message).toContain("not found");
@@ -223,8 +254,13 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = saveManifest.mock.calls[0][1] as Record<string, unknown>;
-      const contexts = savedManifest.bounded_contexts as Array<Record<string, unknown>>;
+      const savedManifest = saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      const contexts = savedManifest.bounded_contexts as Array<
+        Record<string, unknown>
+      >;
       expect(contexts).toHaveLength(1);
       expect(contexts[0].name).toBe("keep-me");
     });
@@ -235,7 +271,9 @@ describe("Manifest Write-Through - Integration Tests", () => {
       (loadManifest as jest.Mock).mockResolvedValueOnce({
         success: true,
         value: {
-          bounded_contexts: [{ name: "update-me", type: "core", description: "Original" }],
+          bounded_contexts: [
+            { name: "update-me", type: "core", description: "Original" },
+          ],
         },
       });
 
@@ -250,8 +288,13 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = saveManifest.mock.calls[0][1] as Record<string, unknown>;
-      const contexts = savedManifest.bounded_contexts as Array<Record<string, unknown>>;
+      const savedManifest = saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      const contexts = savedManifest.bounded_contexts as Array<
+        Record<string, unknown>
+      >;
       expect(contexts[0].description).toBe("Updated");
     });
 
@@ -279,8 +322,13 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = saveManifest.mock.calls[0][1] as Record<string, unknown>;
-      const contexts = savedManifest.bounded_contexts as Array<Record<string, unknown>>;
+      const savedManifest = saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      const contexts = savedManifest.bounded_contexts as Array<
+        Record<string, unknown>
+      >;
       const sourceCtx = contexts.find((c) => c.name === "source-ctx");
       expect(sourceCtx?.depends_on).toContain("target-ctx");
     });
@@ -300,8 +348,9 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should NOT be InMemoryManifestMutationAdapter", () => {
-      const adapterInstance =
-        new SyncDelegatingManifestMutationAdapter("/test");
+      const adapterInstance = new SyncDelegatingManifestMutationAdapter(
+        "/test",
+      );
 
       expect(adapterInstance.constructor.name).not.toBe(
         "InMemoryManifestMutationAdapter",
@@ -331,7 +380,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
         },
       ];
 
-      const result = await adapter.applyPatches(patches, ".architecture/manifest.yaml");
+      const result = await adapter.applyPatches(
+        patches,
+        ".architecture/manifest.yaml",
+      );
 
       expect(result.success).toBe(false);
       expect(result.error?.message).toBe("disk full");
@@ -353,7 +405,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
         },
       ];
 
-      const result = await adapter.applyPatches(patches, ".architecture/manifest.yaml");
+      const result = await adapter.applyPatches(
+        patches,
+        ".architecture/manifest.yaml",
+      );
 
       expect(result.success).toBe(false);
       expect(result.error?.message).toBe("unexpected crash");

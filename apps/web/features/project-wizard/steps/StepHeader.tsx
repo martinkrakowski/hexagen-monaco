@@ -17,20 +17,20 @@ export function StepHeader({
 }: StepHeaderProps) {
   return (
     <div className="flex-shrink-0 p-2">
-       {debugLabel && (
-         <div className="text-xs font-mono bg-muted text-muted-foreground p-2 rounded border border-border mb-4">
-           {debugLabel}
-         </div>
-       )}
-       <div className="relative flex w-full justify-between mb-4">
-         <div className="absolute top-1/2 left-3.5 right-3.5 h-0.5 -translate-y-1/2 bg-muted z-0" />
+      {debugLabel && (
+        <div className="text-xs font-mono bg-muted text-muted-foreground p-2 rounded border border-border mb-4">
+          {debugLabel}
+        </div>
+      )}
+      <div className="relative flex w-full justify-between mb-4">
+        <div className="absolute top-1/2 left-3.5 right-3.5 h-0.5 -translate-y-1/2 bg-muted z-0" />
         {currentStep > 1 && (
-           <div
-             className="absolute top-1/2 left-3.5 h-0.5 -translate-y-1/2 bg-primary z-0"
-             style={{
-               width: `calc(${((currentStep - 1) / (totalSteps - 1)) * 100}% - 28px)`,
-             }}
-           />
+          <div
+            className="absolute top-1/2 left-3.5 h-0.5 -translate-y-1/2 bg-primary z-0"
+            style={{
+              width: `calc(${((currentStep - 1) / (totalSteps - 1)) * 100}% - 28px)`,
+            }}
+          />
         )}
         {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
           const isCompleted = step < currentStep;

@@ -1,10 +1,10 @@
 import type { Result } from "@hexagen/shared";
 import type {
-   WizardData,
-   BoundedContext,
-   ExternalContext,
-   PeerMapping,
- } from "@hexagen/project-configuration";
+  WizardData,
+  BoundedContext,
+  ExternalContext,
+  PeerMapping,
+} from "@hexagen/project-configuration";
 
 export interface ProjectContext {
   boundedContexts: BoundedContext[];

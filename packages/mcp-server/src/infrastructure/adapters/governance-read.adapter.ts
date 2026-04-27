@@ -21,9 +21,7 @@ export class GovernanceReadAdapter implements GovernanceReadPort {
         ".architecture/decisions",
       );
       const entries = await fs.readdir(decisionsDir);
-      const mdFiles = entries
-        .filter((f) => f.endsWith(".md"))
-        .sort();
+      const mdFiles = entries.filter((f) => f.endsWith(".md")).sort();
 
       const decisions: GovernanceDecision[] = [];
       for (const filename of mdFiles) {

@@ -51,18 +51,18 @@ export function ExportStatusStrip({
 
   if (state.kind === "success") {
     return (
-       <div
-         role="status"
-         aria-live="polite"
-         className="flex items-center gap-2 px-6 py-2 bg-success/10 border-b border-success/30 text-sm text-success dark:text-success/80"
-       >
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-2 px-6 py-2 bg-success/10 border-b border-success/30 text-sm text-success dark:text-success/80"
+      >
         <CheckCircle2 className="w-4 h-4" />
         <span className="flex-1">{state.message}</span>
         <button
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-           className="p-0.5 hover:bg-success/20 rounded"
+          className="p-0.5 hover:bg-success/20 rounded"
         >
           <X className="w-3.5 h-3.5" />
         </button>

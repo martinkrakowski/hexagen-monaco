@@ -23,6 +23,7 @@
 ## Future Activation Path
 
 Once Phase 5 (Intent Lineage + AI Pipeline) is complete and transaction semantics are needed, this package can be unfrozen by:
+
 1. Re-wiring ExecuteTransactionUseCase in `apps/web/lib/wire.ts`
 2. Implementing lineage tracking for speculative intent processing
 3. Adding reconciliation UI for conflict/backpressure resolution

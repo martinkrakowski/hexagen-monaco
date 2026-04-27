@@ -279,11 +279,11 @@ export function ModelProgressCard({
                   <span className="text-sm font-semibold truncate text-foreground">
                     {displayName}
                   </span>
-                   {model?.quantizeLevel && (
-                     <span className="bg-primary/10 text-primary text-xs font-bold tracking-wide uppercase px-2 py-0.5 rounded-sm leading-none">
-                       {model.quantizeLevel}
-                     </span>
-                   )}
+                  {model?.quantizeLevel && (
+                    <span className="bg-primary/10 text-primary text-xs font-bold tracking-wide uppercase px-2 py-0.5 rounded-sm leading-none">
+                      {model.quantizeLevel}
+                    </span>
+                  )}
                 </div>
                 <span className="font-mono block truncate text-xs text-muted-foreground">
                   {displayModelId || "Awaiting manifest..."}
@@ -347,14 +347,14 @@ export function ModelProgressCard({
                   <div className="flex flex-col gap-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-dot-pulse" />
-                         <span
-                           className="text-xs font-medium text-primary"
-                           aria-live="polite"
-                         >
-                           {phaseLabel}
-                         </span>
-                       </div>
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-dot-pulse" />
+                        <span
+                          className="text-xs font-medium text-primary"
+                          aria-live="polite"
+                        >
+                          {phaseLabel}
+                        </span>
+                      </div>
                       <span
                         className="font-mono text-sm font-semibold text-foreground"
                         aria-hidden="true"
@@ -365,12 +365,12 @@ export function ModelProgressCard({
 
                     <div
                       role="progressbar"
-                       aria-valuenow={percent}
-                       aria-valuemin={0}
-                       aria-valuemax={100}
-                       aria-valuetext={`${percent}% complete — ${phaseLabel}`}
-                       className="w-full h-1.5 bg-muted rounded-sm overflow-hidden relative"
-                     >
+                      aria-valuenow={percent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuetext={`${percent}% complete — ${phaseLabel}`}
+                      className="w-full h-1.5 bg-muted rounded-sm overflow-hidden relative"
+                    >
                       <div
                         className="h-full rounded-sm bg-gradient-to-r from-primary to-primary/80 transition-all duration-300 ease-out relative"
                         style={{ width: `${percent}%` }}
@@ -430,16 +430,16 @@ export function ModelProgressCard({
                     transition={footerTransition}
                   >
                     <m.button
-                       type="button"
-                       aria-label="Cancel download"
-                       className="font-sans text-sm font-semibold px-5 py-2 rounded-sm border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-none"
-                       whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
-                       whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
-                       onClick={onCancel}
-                     >
-                       <CloseIcon />
-                       Cancel Loading
-                     </m.button>
+                      type="button"
+                      aria-label="Cancel download"
+                      className="font-sans text-sm font-semibold px-5 py-2 rounded-sm border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-none"
+                      whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
+                      whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
+                      onClick={onCancel}
+                    >
+                      <CloseIcon />
+                      Cancel Loading
+                    </m.button>
                   </m.div>
                 )}
 
@@ -454,15 +454,15 @@ export function ModelProgressCard({
                   >
                     {onCancel && (
                       <m.button
-                         type="button"
-                         aria-label="Close"
-                         className="font-sans text-sm font-semibold px-5 py-2 rounded-sm border border-border text-muted-foreground hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                         whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
-                         whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
-                         onClick={onCancel}
-                       >
-                         Close
-                       </m.button>
+                        type="button"
+                        aria-label="Close"
+                        className="font-sans text-sm font-semibold px-5 py-2 rounded-sm border border-border text-muted-foreground hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        whileHover={{ scale: shouldReduceMotion ? 1 : 1.02 }}
+                        whileTap={{ scale: shouldReduceMotion ? 1 : 0.97 }}
+                        onClick={onCancel}
+                      >
+                        Close
+                      </m.button>
                     )}
                     {onRetry && (
                       <m.button
