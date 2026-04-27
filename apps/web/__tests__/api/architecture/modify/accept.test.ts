@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import {
   getTransactionManager,
   clearModifyArchitectureCache,
-} from "../../../app/lib/wire.server.js";
+} from "../../../../../app/lib/wire.server";
 
 function makeRequest(body: unknown): NextRequest {
   return new NextRequest(
@@ -20,7 +20,7 @@ function makeRequest(body: unknown): NextRequest {
 describe("POST /api/architecture/modify/accept", () => {
   it("should return 400 if transactionId is missing", async () => {
     const { POST } =
-      await import("../../../app/api/architecture/modify/accept/route.js");
+      await import("../../../../app/api/architecture/modify/accept/route");
     const response = await POST(makeRequest({}));
     assert.strictEqual(response.status, 400);
     const body = await response.json();
@@ -31,7 +31,7 @@ describe("POST /api/architecture/modify/accept", () => {
   it("should return 404 if transaction not found", async () => {
     clearModifyArchitectureCache();
     const { POST } =
-      await import("../../../app/api/architecture/modify/accept/route.js");
+      await import("../../../../app/api/architecture/modify/accept/route");
     const response = await POST(
       makeRequest({ transactionId: "nonexistent-txn" }),
     );
@@ -46,7 +46,7 @@ describe("POST /api/architecture/modify/accept", () => {
     const txManager = getTransactionManager();
     const tx = txManager.begin("test-intent", {});
     const { POST } =
-      await import("../../../app/api/architecture/modify/accept/route.js");
+      await import("../../../../app/api/architecture/modify/accept/route");
     const response = await POST(makeRequest({ transactionId: tx.id }));
     assert.strictEqual(response.status, 409);
     const body = await response.json();
@@ -61,7 +61,7 @@ describe("POST /api/architecture/modify/accept", () => {
     const tx = txManager.begin("test-intent", {});
     txManager.transition(tx.id, "speculative");
     const { POST } =
-      await import("../../../app/api/architecture/modify/accept/route.js");
+      await import("../../../../app/api/architecture/modify/accept/route");
     const response = await POST(
       makeRequest({
         transactionId: tx.id,

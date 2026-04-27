@@ -8,7 +8,7 @@ import { getModifyArchitectureUseCase } from "@/lib/wire.server";
 import { getLogger } from "@/lib/wire";
 import type { IntentLineage } from "@hexagen/core-domain";
 
-const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+const SSE_HEARTBEAT_INTERVAL_MS = 5_000;
 
 function validateManifestPath(rawPath: string): string {
   const cwd = process.cwd();
@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+      let llmAbortController: AbortController | undefined;
+      let isAborted = false;
 
       const send = (event: string, data: unknown) => {
         try {
@@ -116,7 +118,15 @@ export async function POST(request: NextRequest) {
         }, SSE_HEARTBEAT_INTERVAL_MS);
       };
 
+      const stopLlmInference = () => {
+        if (llmAbortController && !isAborted) {
+          isAborted = true;
+          llmAbortController.abort();
+        }
+      };
+
       const cleanup = () => {
+        stopLlmInference();
         if (heartbeatTimer) {
           clearInterval(heartbeatTimer);
           heartbeatTimer = undefined;
@@ -138,9 +148,11 @@ export async function POST(request: NextRequest) {
 
         send("pipeline_start", { intent: body.intent });
 
+        llmAbortController = new AbortController();
+
         let useCase;
         try {
-          useCase = getModifyArchitectureUseCase("in-memory", undefined, {
+          useCase = getModifyArchitectureUseCase("in-memory", llmAbortController.signal, {
             onStepRunning: (name) => send("step_running", { name }),
             onStepComplete: (name, status, durationMs) =>
               send("step_complete", { name, status, durationMs }),
