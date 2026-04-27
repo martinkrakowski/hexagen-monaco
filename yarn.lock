@@ -15737,6 +15737,7 @@ __metadata:
     tailwind-merge: "npm:^2.5.2"
     tailwindcss: "npm:^3.4.6"
     tailwindcss-animate: "npm:^1.0.7"
+    tsx: "npm:^4.21.0"
     typescript: "npm:^5.5.3"
     uuid: "npm:^9.0.0"
     zod: "npm:^3.23.8"
