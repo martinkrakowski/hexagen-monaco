@@ -120,7 +120,6 @@ describe("Suite 3.3: Integration Test — Path Traversal Protection", () => {
       }),
     );
 
-    const body = await response.json();
     assert.ok(
       response.status === 200 || response.status === 500,
       `Expected 200 or 500, got ${response.status}`,

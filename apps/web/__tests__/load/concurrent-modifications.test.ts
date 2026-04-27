@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import {
   getTransactionManager,
   clearModifyArchitectureCache,
-} from "../../../app/lib/wire.server.js";
+} from "../../../app/lib/wire.server";
 
 function makeAcceptRequest(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/architecture/modify/accept", {
@@ -23,12 +23,12 @@ function makeRejectRequest(body: unknown): NextRequest {
 }
 
 async function loadAcceptRoute() {
-  const mod = await import("../../../app/api/architecture/modify/accept/route.js");
+  const mod = await import("../../../app/api/architecture/modify/accept/route");
   return mod.POST;
 }
 
 async function loadRejectRoute() {
-  const mod = await import("../../../app/api/architecture/modify/reject/route.js");
+  const mod = await import("../../../app/api/architecture/modify/reject/route");
   return mod.POST;
 }
 

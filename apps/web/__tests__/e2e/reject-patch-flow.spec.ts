@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import {
   getTransactionManager,
   clearModifyArchitectureCache,
-} from "../../../app/lib/wire.server.js";
+} from "../../../app/lib/wire.server";
 
 function makeRejectRequest(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/architecture/modify/reject", {
@@ -15,7 +15,7 @@ function makeRejectRequest(body: unknown): NextRequest {
 }
 
 async function loadRoute() {
-  const mod = await import("../../../app/api/architecture/modify/reject/route.js");
+  const mod = await import("../../../app/api/architecture/modify/reject/route");
   return mod.POST;
 }
 
@@ -123,7 +123,7 @@ describe("Suite 3.2: E2E Test — Reject Flow", () => {
     assert.strictEqual(afterTx?.status, "rolled_back");
   });
 
-  it("User rejects twice (double-submission) → second request rejected with 404", async () => {
+  it("User rejects twice (double-submission) → second request rejected with 409", async () => {
     const txManager = getTransactionManager();
 
     const tx = txManager.begin("test-intent-reject-twice", {
