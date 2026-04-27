@@ -6,7 +6,7 @@ import type { Patch } from "@hexagen/reconciliation-engine";
 export interface ModificationResult {
   pipelineRunId: string;
   patchesApplied: number;
-  lintPassed: boolean;
+  lintPassed: boolean | null;
   transactionId: string;
   steps: PipelineStep[];
   patches: Patch[];

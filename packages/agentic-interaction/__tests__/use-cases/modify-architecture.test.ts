@@ -25,8 +25,6 @@ import type { ProjectSpecLike, Patch } from "@hexagen/reconciliation-engine";
 import type {
   Transaction,
   TransactionManagerPort,
-  ManifestMutationPort,
-  LintValidationPort,
 } from "@hexagen/transaction-system";
 
 function makeLineage(overrides: Partial<IntentLineage> = {}): IntentLineage {
@@ -78,36 +76,6 @@ function createFailingLLMSender(): SendStructuredRequestPort {
       error: new Error("LLM unavailable"),
     }),
     streamStructuredRequest: async function* () {},
-  };
-}
-
-function createFailingLintValidation(): LintValidationPort {
-  return {
-    validateManifest: async () => ({
-      success: true,
-      value: { valid: false, errors: ["port in >1 context"] },
-    }),
-  };
-}
-
-function createErrorLintValidation(): LintValidationPort {
-  return {
-    validateManifest: async () => ({
-      success: false,
-      error: new Error("linter crashed"),
-    }),
-  };
-}
-
-function createNullCommitTransactionManager(): TransactionManagerPort {
-  const tx = makeTransaction();
-  return {
-    begin: () => tx,
-    transition: () => makeTransaction({ status: "speculative" }),
-    get: () => tx,
-    list: () => [],
-    commit: () => null,
-    rollback: () => makeTransaction({ status: "rolled_back" }),
   };
 }
 
@@ -185,26 +153,12 @@ function createMockDeps(
     rollback: () => makeTransaction({ status: "rolled_back" }),
   };
 
-  const manifestMutation: ManifestMutationPort = {
-    applyPatches: async () => ({ success: true, value: undefined }),
-    restoreFromGit: async () => ({ success: true, value: undefined }),
-  };
-
-  const lintValidation: LintValidationPort = {
-    validateManifest: async () => ({
-      success: true,
-      value: { valid: true, errors: [] as string[] },
-    }),
-  };
-
   return {
     nlParser,
     promptCompiler,
     llmSender,
     reconcileUseCase,
     transactionManager,
-    manifestMutation,
-    lintValidation,
     manifestProvider: async () => ({ boundedContexts: [] }) as ProjectSpecLike,
     architectureGraphProvider: async () =>
       ({ nodes: [], edges: [] }) as ArchitectureGraphLike,
@@ -235,9 +189,13 @@ function createMockDeps(
       assert.strictEqual(
         result.value.patchesApplied,
         0,
-        "Should report 0 patches",
+        "Should report 0 patches applied (speculative)",
       );
-      assert.strictEqual(result.value.lintPassed, true, "Lint should pass");
+      assert.strictEqual(
+        result.value.lintPassed,
+        null,
+        "Lint should be null (not validated yet)",
+      );
       assert.strictEqual(
         result.value.transactionId,
         "txn-test-1",
@@ -303,7 +261,7 @@ function createMockDeps(
     let rendered = false;
     let llmCalled = false;
     let reconciled = false;
-    let committed = false;
+    let transactionBegun = false;
 
     const mockReconcileUseCase = new ReconcileUseCase(
       {
@@ -354,14 +312,14 @@ function createMockDeps(
       },
       reconcileUseCase: mockReconcileUseCase,
       transactionManager: {
-        begin: () => makeTransaction(),
+        begin: () => {
+          transactionBegun = true;
+          return makeTransaction();
+        },
         transition: () => makeTransaction({ status: "speculative" }),
         get: () => makeTransaction(),
         list: () => [],
-        commit: () => {
-          committed = true;
-          return makeTransaction({ status: "committed" });
-        },
+        commit: () => makeTransaction({ status: "committed" }),
         rollback: () => makeTransaction({ status: "rolled_back" }),
       },
     });
@@ -377,7 +335,7 @@ function createMockDeps(
     assert.ok(rendered, "Prompt renderer should be called");
     assert.ok(llmCalled, "LLM sender should be called");
     assert.ok(reconciled, "Reconciliation should be called");
-    assert.ok(committed, "Transaction commit should be called");
+    assert.ok(transactionBegun, "Transaction begin should be called");
     console.log("✅ Test 2: all ports called - passed");
   }
 
@@ -482,152 +440,6 @@ function createMockDeps(
       );
     }
     console.log("✅ Test 6: reconciliation failure - passed");
-  }
-
-  // --- Lint validation failure (rollback) ---
-  {
-    let restoreFromGitCalled = false;
-    let rollbackCalled = false;
-    const deps = createMockDeps({
-      lintValidation: createFailingLintValidation(),
-      manifestMutation: {
-        applyPatches: async () => ({ success: true, value: undefined }),
-        restoreFromGit: async () => {
-          restoreFromGitCalled = true;
-          return { success: true, value: undefined };
-        },
-      },
-      transactionManager: {
-        begin: () => makeTransaction(),
-        transition: () => makeTransaction({ status: "speculative" }),
-        get: () => makeTransaction(),
-        list: () => [],
-        commit: () => makeTransaction({ status: "committed" }),
-        rollback: () => {
-          rollbackCalled = true;
-          return makeTransaction({ status: "rolled_back" });
-        },
-      },
-    });
-    const useCase = new ModifyArchitectureUseCase(deps);
-    const result = await useCase.execute(
-      "Add a context",
-      ".architecture/manifest.yaml",
-      makeLineage(),
-    );
-
-    assert.ok(!result.success, "Should fail on lint validation error");
-    if (!result.success) {
-      assert.ok(
-        result.error.message.includes("Lint validation failed"),
-        "Error should mention lint",
-      );
-    }
-    assert.ok(restoreFromGitCalled, "Should restore from git on lint failure");
-    assert.ok(rollbackCalled, "Should rollback transaction on lint failure");
-    console.log("✅ Test 7: lint validation failure with rollback - passed");
-  }
-
-  // --- Lint validation error (linter crashes) ---
-  {
-    let restoreFromGitCalled = false;
-    const deps = createMockDeps({
-      lintValidation: createErrorLintValidation(),
-      manifestMutation: {
-        applyPatches: async () => ({ success: true, value: undefined }),
-        restoreFromGit: async () => {
-          restoreFromGitCalled = true;
-          return { success: true, value: undefined };
-        },
-      },
-    });
-    const useCase = new ModifyArchitectureUseCase(deps);
-    const result = await useCase.execute(
-      "Add a context",
-      ".architecture/manifest.yaml",
-      makeLineage(),
-    );
-
-    assert.ok(!result.success, "Should fail on lint error");
-    if (!result.success) {
-      assert.ok(
-        result.error.message.includes("linter crashed"),
-        "Error should mention linter crash",
-      );
-    }
-    assert.ok(
-      restoreFromGitCalled,
-      "Should restore from git when linter crashes",
-    );
-    console.log("✅ Test 8: lint validation error (linter crashes) - passed");
-  }
-
-  // --- Patch application failure ---
-  {
-    let restoreFromGitCalled = false;
-    let rollbackCalled = false;
-    const deps = createMockDeps({
-      manifestMutation: {
-        applyPatches: async () => ({
-          success: false,
-          error: new Error("disk full"),
-        }),
-        restoreFromGit: async () => {
-          restoreFromGitCalled = true;
-          return { success: true, value: undefined };
-        },
-      },
-      transactionManager: {
-        begin: () => makeTransaction(),
-        transition: () => makeTransaction({ status: "speculative" }),
-        get: () => makeTransaction(),
-        list: () => [],
-        commit: () => makeTransaction({ status: "committed" }),
-        rollback: () => {
-          rollbackCalled = true;
-          return makeTransaction({ status: "rolled_back" });
-        },
-      },
-    });
-    const useCase = new ModifyArchitectureUseCase(deps);
-    const result = await useCase.execute(
-      "Add a context",
-      ".architecture/manifest.yaml",
-      makeLineage(),
-    );
-
-    assert.ok(!result.success, "Should fail on patch application error");
-    if (!result.success) {
-      assert.ok(
-        result.error.message.includes("disk full"),
-        "Error should mention disk full",
-      );
-    }
-    assert.ok(restoreFromGitCalled, "Should restore from git on patch failure");
-    assert.ok(rollbackCalled, "Should rollback on patch failure");
-    console.log("✅ Test 9: patch application failure - passed");
-  }
-
-  // --- Commit returns null ---
-  {
-    const deps = createMockDeps({
-      transactionManager: createNullCommitTransactionManager(),
-    });
-    const useCase = new ModifyArchitectureUseCase(deps);
-    const result = await useCase.execute(
-      "Add a context",
-      ".architecture/manifest.yaml",
-      makeLineage(),
-    );
-
-    assert.ok(!result.success, "Should fail when commit returns null");
-    if (!result.success) {
-      assert.ok(
-        result.error.message.includes("Failed to commit transaction"),
-        "Error should mention commit failure",
-      );
-    }
-    console.log("✅ Test 10: commit returns null - passed");
   }
 
   // --- Step names and metadata ---

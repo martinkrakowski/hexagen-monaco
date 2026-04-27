@@ -1,74 +1,77 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { NextRequest } from "next/server";
+import {
+  getTransactionManager,
+  clearModifyArchitectureCache,
+} from "../../../app/lib/wire.server.js";
+
+function makeRequest(body: unknown): NextRequest {
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/accept",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
 
 describe("POST /api/architecture/modify/accept", () => {
-  beforeEach(() => {
-    vi.spyOn(console, "info").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("should return 400 if transactionId is missing", async () => {
     const { POST } =
       await import("../../../app/api/architecture/modify/accept/route.js");
-    const mockRequest = new Request(
-      "http://localhost:3000/api/architecture/modify/accept",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      },
-    );
-    const response = await POST(mockRequest);
-    expect(response.status).toBe(400);
+    const response = await POST(makeRequest({}));
+    assert.strictEqual(response.status, 400);
     const body = await response.json();
-    expect(body.success).toBe(false);
-    expect(body.error).toBe("transactionId is required");
+    assert.strictEqual(body.success, false);
+    assert.strictEqual(body.error, "transactionId is required");
   });
 
-  it("should return success for valid accept request", async () => {
+  it("should return 404 if transaction not found", async () => {
+    clearModifyArchitectureCache();
     const { POST } =
       await import("../../../app/api/architecture/modify/accept/route.js");
-    const mockRequest = new Request(
-      "http://localhost:3000/api/architecture/modify/accept",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transactionId: "txn-123",
-          patches: [{ type: "add", path: "test", content: "content" }],
-        }),
-      },
+    const response = await POST(
+      makeRequest({ transactionId: "nonexistent-txn" }),
     );
-    const response = await POST(mockRequest);
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 404);
     const body = await response.json();
-    expect(body.success).toBe(true);
-    expect(body.transactionId).toBe("txn-123");
-    expect(body.status).toBe("accepted");
+    assert.strictEqual(body.success, false);
+    assert.strictEqual(body.error, "Transaction not found");
   });
 
-  it("should handle patches array in request", async () => {
+  it("should return 409 if transaction is not in speculative state", async () => {
+    clearModifyArchitectureCache();
+    const txManager = getTransactionManager();
+    const tx = txManager.begin("test-intent", {});
     const { POST } =
       await import("../../../app/api/architecture/modify/accept/route.js");
-    const mockRequest = new Request(
-      "http://localhost:3000/api/architecture/modify/accept",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transactionId: "txn-456",
-          patches: [
-            { type: "modify", path: "file1.txt", content: "new content" },
-            { type: "delete", path: "file2.txt" },
-          ],
-        }),
-      },
-    );
-    const response = await POST(mockRequest);
-    expect(response.status).toBe(200);
+    const response = await POST(makeRequest({ transactionId: tx.id }));
+    assert.strictEqual(response.status, 409);
     const body = await response.json();
-    expect(body.success).toBe(true);
+    assert.strictEqual(body.success, false);
+    assert.ok(body.error.includes("pending"));
+    clearModifyArchitectureCache();
+  });
+
+  it("should reject path traversal in manifestPath", async () => {
+    clearModifyArchitectureCache();
+    const txManager = getTransactionManager();
+    const tx = txManager.begin("test-intent", {});
+    txManager.transition(tx.id, "speculative");
+    const { POST } =
+      await import("../../../app/api/architecture/modify/accept/route.js");
+    const response = await POST(
+      makeRequest({
+        transactionId: tx.id,
+        manifestPath: "../../etc/passwd",
+      }),
+    );
+    assert.strictEqual(response.status, 400);
+    const body = await response.json();
+    assert.strictEqual(body.success, false);
+    assert.ok(body.error.includes("traversal"));
+    clearModifyArchitectureCache();
   });
 });

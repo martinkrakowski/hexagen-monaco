@@ -1,6 +1,9 @@
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { LintValidationPort } from "../../application/ports/out/lint-validation.port.js";
 import type { Result } from "../../application/result.js";
+
+const execFileAsync = promisify(execFile);
 
 export class CliLintValidationAdapter implements LintValidationPort {
   constructor(private readonly workspaceRoot: string) {}
@@ -9,12 +12,12 @@ export class CliLintValidationAdapter implements LintValidationPort {
     _manifestPath: string,
   ): Promise<Result<{ valid: boolean; errors: string[] }, Error>> {
     try {
-      execSync("yarn lint:arch", {
+      const { stderr } = await execFileAsync("yarn", ["lint:arch"], {
         cwd: this.workspaceRoot,
-        stdio: "pipe",
         timeout: 60_000,
       });
 
+      void stderr;
       return { success: true, value: { valid: true, errors: [] } };
     } catch (errObj) {
       const error = errObj as Error & { stderr?: string | Buffer };

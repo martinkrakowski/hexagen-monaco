@@ -36,8 +36,6 @@ import type {
 import type {
   Transaction,
   TransactionManagerPort,
-  ManifestMutationPort,
-  LintValidationPort,
 } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
 import type { ModificationResult } from "../ports/in/architecture-modification.port.js";
@@ -54,8 +52,6 @@ export interface ModifyArchitectureDeps {
   readonly llmSender: SendStructuredRequestPort;
   readonly reconcileUseCase: ReconcileUseCase;
   readonly transactionManager: TransactionManagerPort;
-  readonly manifestMutation: ManifestMutationPort;
-  readonly lintValidation: LintValidationPort;
   readonly manifestProvider: () => Promise<ProjectSpecLike>;
   readonly architectureGraphProvider: () => Promise<ArchitectureGraphLike>;
   readonly linterReportProvider: () => Promise<LinterReportLike>;
@@ -103,56 +99,13 @@ export class ModifyArchitectureUseCase {
       run = this.advanceStep(run, STEP_RECONCILE, completeStep);
 
       run = this.advanceStep(run, STEP_COMMIT, startStep);
-      const commitResult = await this.commitPatches(
-        patches,
-        lineage,
-        manifestPath,
-      );
-      if (!commitResult.success) {
+      const txResult = this.beginTransaction(patches, lineage);
+      if (!txResult.success) {
         run = this.advanceStep(run, STEP_COMMIT, (s) =>
-          failStep(s, commitResult.error.message),
+          failStep(s, txResult.error.message),
         );
         run = failRun(run);
-        return { success: false, error: commitResult.error };
-      }
-
-      const lintResult =
-        await this.deps.lintValidation.validateManifest(manifestPath);
-      const lintPassed = lintResult.success && lintResult.value.valid;
-      if (!lintPassed) {
-        const restoreResult =
-          await this.deps.manifestMutation.restoreFromGit(manifestPath);
-
-        if (!restoreResult.success) {
-          // Restoration failed — this is a critical error
-          const lintReason = lintResult.success
-            ? `Lint validation failed: ${lintResult.value.errors.join("; ")}`
-            : lintResult.error.message;
-          const criticalError = new Error(
-            `Manifest corruption detected: lint validation failed and restore failed. ` +
-              `Original error: ${lintReason}. ` +
-              `Restore error: ${restoreResult.error.message}`,
-          );
-
-          this.deps.transactionManager.rollback(
-            commitResult.value.id,
-            criticalError.message,
-          );
-          run = this.advanceStep(run, STEP_COMMIT, (s) =>
-            failStep(s, criticalError.message),
-          );
-          run = failRun(run);
-          return { success: false, error: criticalError };
-        }
-
-        // Restore succeeded, proceed with normal rollback
-        const reason = lintResult.success
-          ? `Lint validation failed: ${lintResult.value.errors.join("; ")}`
-          : lintResult.error.message;
-        this.deps.transactionManager.rollback(commitResult.value.id, reason);
-        run = this.advanceStep(run, STEP_COMMIT, (s) => failStep(s, reason));
-        run = failRun(run);
-        return { success: false, error: new Error(reason) };
+        return { success: false, error: txResult.error };
       }
 
       run = this.advanceStep(run, STEP_COMMIT, completeStep);
@@ -162,9 +115,9 @@ export class ModifyArchitectureUseCase {
         success: true,
         value: {
           pipelineRunId: run.id,
-          patchesApplied: patches.length,
-          lintPassed,
-          transactionId: commitResult.value.id,
+          patchesApplied: 0,
+          lintPassed: null,
+          transactionId: txResult.value.id,
           steps: run.steps,
           patches,
         },
@@ -290,56 +243,17 @@ export class ModifyArchitectureUseCase {
     return result.patches;
   }
 
-  private async commitPatches(
+  private beginTransaction(
     patches: Patch[],
     lineage: IntentLineage,
-    manifestPath: string,
-  ): Promise<Result<Transaction, Error>> {
+  ): Result<Transaction, Error> {
     const transaction = this.deps.transactionManager.begin(lineage.intentId, {
       intentId: lineage.intentId,
       origin: lineage.origin,
+      patches,
     });
     this.deps.transactionManager.transition(transaction.id, "speculative");
-
-    const applyResult = await this.deps.manifestMutation.applyPatches(
-      patches,
-      manifestPath,
-    );
-    if (!applyResult.success) {
-      const restoreResult =
-        await this.deps.manifestMutation.restoreFromGit(manifestPath);
-
-      if (!restoreResult.success) {
-        // Restoration failed — this is a critical error
-        const criticalError = new Error(
-          `Manifest corruption detected: patch application failed and restore failed. ` +
-            `Original error: ${applyResult.error.message}. ` +
-            `Restore error: ${restoreResult.error.message}`,
-        );
-
-        this.deps.transactionManager.rollback(
-          transaction.id,
-          criticalError.message,
-        );
-        return { success: false, error: criticalError };
-      }
-
-      // Restore succeeded, proceed with normal rollback
-      this.deps.transactionManager.rollback(
-        transaction.id,
-        `Patch application failed: ${applyResult.error.message}`,
-      );
-      return { success: false, error: applyResult.error };
-    }
-
-    const committedTx = this.deps.transactionManager.commit(transaction.id);
-    if (!committedTx) {
-      return {
-        success: false,
-        error: new Error(`Failed to commit transaction ${transaction.id}`),
-      };
-    }
-    return { success: true, value: committedTx };
+    return { success: true, value: transaction };
   }
 
   private advanceStep(

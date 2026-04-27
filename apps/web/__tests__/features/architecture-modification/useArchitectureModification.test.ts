@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import type { PipelineStepStatus } from "@hexagen/ai-pipeline";
-import type { Patch } from "@hexagen/reconciliation-engine";
 
 // ─── useArchitectureModification (logic-only validation) ─────────────────────
 
@@ -108,8 +107,8 @@ const PIPELINE_STEP_NAMES = [
 {
   const completeData = {
     pipelineRunId: "run-123",
-    patchesApplied: 3,
-    lintPassed: true,
+    patchesApplied: 0,
+    lintPassed: null as boolean | null,
     transactionId: "txn-456",
   };
   assert.ok(
@@ -121,8 +120,9 @@ const PIPELINE_STEP_NAMES = [
     "Should have patchesApplied",
   );
   assert.ok(
-    typeof completeData.lintPassed === "boolean",
-    "Should have lintPassed",
+    completeData.lintPassed === null ||
+      typeof completeData.lintPassed === "boolean",
+    "lintPassed should be boolean or null",
   );
   assert.ok(
     typeof completeData.transactionId === "string",
@@ -143,11 +143,9 @@ const PIPELINE_STEP_NAMES = [
     },
     abort: () => {},
     reset: () => {},
-    acceptPatch: (_patch: Patch) => {
-      void _patch;
-    },
-    rejectPatch: (_patch: Patch) => {
-      void _patch;
+    acceptPatches: () => {},
+    rejectPatches: (_reason?: string) => {
+      void _reason;
     },
   };
   assert.ok(typeof hookReturn.status === "string", "Should have status");
@@ -165,12 +163,12 @@ const PIPELINE_STEP_NAMES = [
     "Should have reset function",
   );
   assert.ok(
-    typeof hookReturn.acceptPatch === "function",
-    "Should have acceptPatch function",
+    typeof hookReturn.acceptPatches === "function",
+    "Should have acceptPatches function",
   );
   assert.ok(
-    typeof hookReturn.rejectPatch === "function",
-    "Should have rejectPatch function",
+    typeof hookReturn.rejectPatches === "function",
+    "Should have rejectPatches function",
   );
   console.log("✅ Hook test 5: hook return shape - passed");
 }

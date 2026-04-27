@@ -19,7 +19,7 @@ export interface StepProgress {
 export interface PipelineCompleteData {
   pipelineRunId: string;
   patchesApplied: number;
-  lintPassed: boolean;
+  lintPassed: boolean | null;
   transactionId: string;
   patches: Patch[];
 }
@@ -27,7 +27,7 @@ export interface PipelineCompleteData {
 export interface ArchitectureModificationResult {
   pipelineRunId: string;
   patchesApplied: number;
-  lintPassed: boolean;
+  lintPassed: boolean | null;
   transactionId: string;
   steps: StepProgress[];
   patches: Patch[];
@@ -226,39 +226,54 @@ export function useArchitectureModification() {
     });
   }, []);
 
-  const acceptPatch = useCallback(
-    async (patch: Patch) => {
-      const response = await fetch("/api/architecture/modify/accept", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transactionId: state.result?.transactionId,
-          patches: [patch],
-        }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error);
-      }
-      return data;
-    },
-    [state.result?.transactionId],
-  );
+  const acceptPatches = useCallback(async () => {
+    if (!state.result?.transactionId) {
+      throw new Error("No active transaction to accept");
+    }
+    const response = await fetch("/api/architecture/modify/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transactionId: state.result.transactionId,
+      }),
+    });
+    const data = (await response.json()) as {
+      success: boolean;
+      error?: string;
+      transactionId?: string;
+      status?: string;
+      patchesApplied?: number;
+      lintPassed?: boolean;
+      lintErrors?: string[];
+    };
+    if (!data.success) {
+      throw new Error(data.error ?? "Accept failed");
+    }
+    return data;
+  }, [state.result?.transactionId]);
 
-  const rejectPatch = useCallback(
-    async (patch: Patch) => {
+  const rejectPatches = useCallback(
+    async (reason?: string) => {
+      if (!state.result?.transactionId) {
+        throw new Error("No active transaction to reject");
+      }
       const response = await fetch("/api/architecture/modify/reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionId: state.result?.transactionId,
-          patches: [patch],
-          reason: "User rejected",
+          transactionId: state.result.transactionId,
+          reason: reason ?? "User rejected the changes",
         }),
       });
-      const data = await response.json();
+      const data = (await response.json()) as {
+        success: boolean;
+        error?: string;
+        transactionId?: string;
+        status?: string;
+        reason?: string;
+      };
       if (!data.success) {
-        throw new Error(data.error);
+        throw new Error(data.error ?? "Reject failed");
       }
       return data;
     },
@@ -270,7 +285,7 @@ export function useArchitectureModification() {
     modify,
     abort,
     reset,
-    acceptPatch,
-    rejectPatch,
+    acceptPatches,
+    rejectPatches,
   };
 }

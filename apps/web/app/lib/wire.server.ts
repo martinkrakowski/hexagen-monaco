@@ -13,12 +13,15 @@ import {
   InMemoryNLParserAdapter,
   InMemoryPromptCompilerAdapter,
   InMemoryLLMSenderAdapter,
-  InMemoryLintValidationAdapter,
   CloudLLMPipelineAdapter,
   createDefaultFallbackChain,
   EnvironmentSecretVaultAdapter,
 } from "@hexagen/agentic-interaction";
-import { SyncDelegatingManifestMutationAdapter } from "@hexagen/transaction-system";
+import {
+  InMemoryTransactionManager,
+  SyncDelegatingManifestMutationAdapter,
+  CliLintValidationAdapter,
+} from "@hexagen/transaction-system";
 import {
   ReconcileUseCase,
   StructuredDiffReconciliationAdapter,
@@ -32,7 +35,6 @@ import type {
   ProviderFallbackChain,
 } from "@hexagen/agentic-interaction";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import type {
   ProjectSpecLike,
   ArchitectureGraphLike,
@@ -81,6 +83,36 @@ const getEnvironmentVault = (): EnvironmentSecretVaultAdapter => {
     envVaultInstance = new EnvironmentSecretVaultAdapter();
   }
   return envVaultInstance;
+};
+
+let _transactionManager: InMemoryTransactionManager | null = null;
+
+export const getTransactionManager = (): InMemoryTransactionManager => {
+  if (!_transactionManager) {
+    _transactionManager = new InMemoryTransactionManager();
+  }
+  return _transactionManager;
+};
+
+let _manifestMutation: SyncDelegatingManifestMutationAdapter | null = null;
+
+export const getManifestMutation =
+  (): SyncDelegatingManifestMutationAdapter => {
+    if (!_manifestMutation) {
+      _manifestMutation = new SyncDelegatingManifestMutationAdapter(
+        process.cwd(),
+      );
+    }
+    return _manifestMutation;
+  };
+
+let _lintValidation: CliLintValidationAdapter | null = null;
+
+export const getLintValidation = (): CliLintValidationAdapter => {
+  if (!_lintValidation) {
+    _lintValidation = new CliLintValidationAdapter(process.cwd());
+  }
+  return _lintValidation;
 };
 
 export type PipelineMode = "in-memory" | "cloud";
@@ -155,9 +187,7 @@ export const getModifyArchitectureUseCase = (
     promptCompiler: new InMemoryPromptCompilerAdapter(),
     llmSender,
     reconcileUseCase,
-    transactionManager: new InMemoryTransactionManager(),
-    manifestMutation: new SyncDelegatingManifestMutationAdapter(process.cwd()),
-    lintValidation: new InMemoryLintValidationAdapter(),
+    transactionManager: getTransactionManager(),
     /**
      * DEVELOPMENT STUB: Returns empty manifest.
      * Production code should override with actual ProjectSpec provider.
@@ -223,4 +253,7 @@ export const getModifyArchitectureUseCase = (
 export const clearModifyArchitectureCache = (): void => {
   cachedUseCase = null;
   cachedMode = null;
+  _transactionManager = null;
+  _manifestMutation = null;
+  _lintValidation = null;
 };

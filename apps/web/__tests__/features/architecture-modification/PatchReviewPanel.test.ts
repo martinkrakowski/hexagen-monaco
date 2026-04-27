@@ -72,32 +72,24 @@ const PATCH_TYPE_LABELS: Record<Patch["type"], string> = {
   console.log("✅ PatchReview test 2: patch rendering properties - passed");
 }
 
-// Validate accept/reject callbacks shape
+// Validate accept/reject callbacks shape (transaction-level)
 {
-  let acceptedPatch: Patch | null = null;
-  let rejectedPatch: Patch | null = null;
+  let accepted = false;
+  let rejected = false;
 
-  const onAccept = (patch: Patch) => {
-    acceptedPatch = patch;
+  const onAcceptAll = () => {
+    accepted = true;
   };
-  const onReject = (patch: Patch) => {
-    rejectedPatch = patch;
+  const onRejectAll = () => {
+    rejected = true;
   };
 
-  onAccept(samplePatches[0]);
-  assert.deepStrictEqual(
-    acceptedPatch,
-    samplePatches[0],
-    "Accept should receive the patch",
-  );
+  onAcceptAll();
+  assert.strictEqual(accepted, true, "AcceptAll should be triggered");
 
-  onReject(samplePatches[1]);
-  assert.deepStrictEqual(
-    rejectedPatch,
-    samplePatches[1],
-    "Reject should receive the patch",
-  );
-  console.log("✅ PatchReview test 3: accept/reject callbacks - passed");
+  onRejectAll();
+  assert.strictEqual(rejected, true, "RejectAll should be triggered");
+  console.log("✅ PatchReview test 3: accept/reject all callbacks - passed");
 }
 
 // Validate empty patches renders correctly
