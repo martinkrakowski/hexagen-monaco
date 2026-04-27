@@ -1875,6 +1875,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/report-governance@workspace:packages/report-governance":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/report-governance@workspace:packages/report-governance"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/runtime@workspace:packages/runtime":
   version: 0.0.0-use.local
   resolution: "@hexagen/runtime@workspace:packages/runtime"

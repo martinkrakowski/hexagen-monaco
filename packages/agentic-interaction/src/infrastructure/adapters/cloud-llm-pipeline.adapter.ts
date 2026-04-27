@@ -286,6 +286,9 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       provider.timeoutMs ?? 60000,
     );
 
+    const requestAbortHandler = () => abortController.abort();
+    request.signal?.addEventListener("abort", requestAbortHandler);
+
     try {
       const httpResponse = await this.fetchFn(
         `${provider.baseUrl}/chat/completions`,
@@ -301,12 +304,14 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       );
 
       clearTimeout(timeout);
+      request.signal?.removeEventListener("abort", requestAbortHandler);
 
       if (!httpResponse.ok) {
         const errorText = await httpResponse.text();
         const error = new Error(
           `LLM API error: ${httpResponse.status} ${errorText}`,
-        );
+        ) as Error & { statusCode?: number };
+        error.statusCode = httpResponse.status;
         if (isRetryable(httpResponse.status)) {
           return null;
         }
@@ -340,6 +345,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       return { success: true, value: response };
     } catch (error) {
       clearTimeout(timeout);
+      request.signal?.removeEventListener("abort", requestAbortHandler);
       if (error instanceof DOMException && error.name === "AbortError") {
         return null;
       }
