@@ -6,11 +6,11 @@ Phase A introduces three new adapters across the reconciliation, transaction, an
 
 ## Phase A Changes Summary
 
-| Component | Package | File | Type | Purpose |
-|-----------|---------|------|------|---------|
-| ManifestPatchAdapter | @hexagen/reconciliation-engine | manifest-patch.adapter.ts | Adapter | Validates LLM-generated manifest patches for duplicate nodes |
-| SyncDelegatingManifestMutationAdapter | @hexagen/transaction-system | sync-delegating-manifest-mutation.adapter.ts | Adapter | Delegates manifest mutations to sync system via transaction boundary |
-| NLToDomainCommandAdapter | @hexagen/ai-pipeline | nl-to-domain-command.adapter.ts | Adapter | Converts natural language intents into domain commands |
+| Component                             | Package                        | File                                         | Type    | Purpose                                                              |
+| ------------------------------------- | ------------------------------ | -------------------------------------------- | ------- | -------------------------------------------------------------------- |
+| ManifestPatchAdapter                  | @hexagen/reconciliation-engine | manifest-patch.adapter.ts                    | Adapter | Validates LLM-generated manifest patches for duplicate nodes         |
+| SyncDelegatingManifestMutationAdapter | @hexagen/transaction-system    | sync-delegating-manifest-mutation.adapter.ts | Adapter | Delegates manifest mutations to sync system via transaction boundary |
+| NLToDomainCommandAdapter              | @hexagen/ai-pipeline           | nl-to-domain-command.adapter.ts              | Adapter | Converts natural language intents into domain commands               |
 
 ---
 
@@ -18,16 +18,17 @@ Phase A introduces three new adapters across the reconciliation, transaction, an
 
 All tests must pass before Phase B can commence.
 
-| Adapter | Package | Test File | Location | Test Count | Status | Gate |
-|---------|---------|-----------|----------|------------|--------|------|
-| ManifestPatchAdapter | @hexagen/reconciliation-engine | manifest-patch.adapter.test.ts | `packages/reconciliation-engine/src/__tests__/` | 6 | ⏳ Pending | `RECONCILIATION_GATE` |
-| SyncDelegatingManifestMutationAdapter | @hexagen/transaction-system | sync-delegating-manifest-mutation.adapter.test.ts | `packages/transaction-system/__tests__/infrastructure/adapters/` | 5 | ⏳ Pending | `TRANSACTION_GATE` |
-| NLToDomainCommandAdapter | @hexagen/ai-pipeline | nl-to-domain-command.adapter.test.ts | `packages/ai-pipeline/src/__tests__/adapters/` | 7 | ⏳ Pending | `AI_PIPELINE_GATE` |
-| **TOTAL PHASE A TESTS** | | | | **18** | ⏳ Pending | `PHASE_A_GATE` |
+| Adapter                               | Package                        | Test File                                         | Location                                                         | Test Count | Status     | Gate                  |
+| ------------------------------------- | ------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------- | ---------- | ---------- | --------------------- |
+| ManifestPatchAdapter                  | @hexagen/reconciliation-engine | manifest-patch.adapter.test.ts                    | `packages/reconciliation-engine/src/__tests__/`                  | 6          | ⏳ Pending | `RECONCILIATION_GATE` |
+| SyncDelegatingManifestMutationAdapter | @hexagen/transaction-system    | sync-delegating-manifest-mutation.adapter.test.ts | `packages/transaction-system/__tests__/infrastructure/adapters/` | 5          | ⏳ Pending | `TRANSACTION_GATE`    |
+| NLToDomainCommandAdapter              | @hexagen/ai-pipeline           | nl-to-domain-command.adapter.test.ts              | `packages/ai-pipeline/src/__tests__/adapters/`                   | 7          | ⏳ Pending | `AI_PIPELINE_GATE`    |
+| **TOTAL PHASE A TESTS**               |                                |                                                   |                                                                  | **18**     | ⏳ Pending | `PHASE_A_GATE`        |
 
 ### Test Case Descriptions
 
 #### ManifestPatchAdapter (6 tests)
+
 - ✅ Should reject patches with duplicate add_node targetIds
 - ✅ Should accept mixed patches with different add_node targetIds
 - ✅ Should accept patches with duplicate targetIds if not both add_node
@@ -36,6 +37,7 @@ All tests must pass before Phase B can commence.
 - ✅ Should enforce patch ordering constraints
 
 #### SyncDelegatingManifestMutationAdapter (5 tests)
+
 - ✅ Should delegate manifest mutations to sync system
 - ✅ Should respect transaction boundaries
 - ✅ Should handle rollback scenarios
@@ -43,6 +45,7 @@ All tests must pass before Phase B can commence.
 - ✅ Should validate delegation metadata
 
 #### NLToDomainCommandAdapter (7 tests)
+
 - ✅ Should parse simple domain commands from NL input
 - ✅ Should handle complex multi-step intents
 - ✅ Should map NL entities to domain entities
@@ -66,7 +69,7 @@ Tests must run **sequentially, not in parallel**, to ensure clean isolation betw
 # 1. Reconciliation Engine Tests
 yarn workspace @hexagen/reconciliation-engine test -- --testNamePattern="ManifestPatchAdapter"
 
-# 2. Transaction System Tests  
+# 2. Transaction System Tests
 yarn workspace @hexagen/transaction-system test -- --testNamePattern="SyncDelegatingManifestMutationAdapter"
 
 # 3. AI Pipeline Tests
@@ -123,23 +126,27 @@ ai-pipeline:
 ## Gate Criteria
 
 ### RECONCILIATION_GATE
+
 - ✅ manifest-patch.adapter.test.ts: 6/6 tests passing
 - ✅ No lint errors in manifest-patch.adapter.ts
 - ✅ TypeCheck passes for @hexagen/reconciliation-engine
 
 ### TRANSACTION_GATE
+
 - ✅ sync-delegating-manifest-mutation.adapter.test.ts: 5/5 tests passing
 - ✅ No lint errors in sync-delegating-manifest-mutation.adapter.ts
 - ✅ TypeCheck passes for @hexagen/transaction-system
 - ✅ No circular dependency with reconciliation-engine
 
 ### AI_PIPELINE_GATE
+
 - ✅ nl-to-domain-command.adapter.test.ts: 7/7 tests passing
 - ✅ No lint errors in nl-to-domain-command.adapter.ts
 - ✅ TypeCheck passes for @hexagen/ai-pipeline
 - ✅ No circular dependencies with other Phase A packages
 
 ### PHASE_A_GATE (Master Gate)
+
 - ✅ All three sub-gates passing
 - ✅ Full monorepo build succeeds
 - ✅ yarn lint:arch passes

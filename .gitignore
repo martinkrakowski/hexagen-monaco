@@ -101,11 +101,12 @@ downloads/
 *.pem
 
 # ───────────────────────────────────────────────
-# Test coverage
-# ───────────────────────────────────────────────
+# Test coverage & reports
 coverage/
 .nyc_output/
 *.lcov
+apps/web/playwright-report/
+apps/web/test-results/
 
 # ───────────────────────────────────────────────
 # HexaGen generated files
