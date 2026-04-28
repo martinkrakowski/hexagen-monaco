@@ -5,6 +5,7 @@ import type { ChatMessage } from "@hexagen/local-llm";
 import type { LLMRequest } from "@hexagen/local-llm";
 
 import { getChatPersistence } from "@/lib/wire";
+import { useGovernanceThreadStore } from "../../stores/useGovernanceThreadStore";
 
 import type { ConversationEntry } from "./types";
 
@@ -72,9 +73,11 @@ export function useGovernanceThread({
   messages,
   isStreaming,
 }: UseGovernanceThreadOptions): UseGovernanceThreadReturn {
-  const [conversationThread, setConversationThread] = useState<
-    ConversationEntry[]
-  >([]);
+  // Use Zustand store for thread state (survives unmount/remount)
+  const { getThread, setThread, updateEntry } = useGovernanceThreadStore();
+
+  const conversationThread = contextKey ? getThread(contextKey) : [];
+
   const [regeneratingEntryId, setRegeneratingEntryId] = useState<string | null>(
     null,
   );
@@ -89,7 +92,6 @@ export function useGovernanceThread({
   // Effect: load thread on contextKey change.
   useEffect(() => {
     if (contextKey === null) {
-      setConversationThread([]);
       governanceHistoryRef.current = [];
       pendingQuestionLabelRef.current = null;
       threadLoadingRef.current = false;
@@ -108,7 +110,7 @@ export function useGovernanceThread({
       .loadGovernanceThread(contextKey)
       .then((result) => {
         if (result.success) {
-          setConversationThread(result.value);
+          setThread(contextKey, result.value);
           const rebuilt: LLMRequest["messages"] = [];
           for (const entry of result.value) {
             rebuilt.push(
@@ -118,7 +120,7 @@ export function useGovernanceThread({
           }
           governanceHistoryRef.current = rebuilt;
         } else {
-          setConversationThread([]);
+          setThread(contextKey, []);
           governanceHistoryRef.current = [];
         }
         pendingQuestionLabelRef.current = null;
@@ -127,18 +129,18 @@ export function useGovernanceThread({
         setLoadCompleteToken((prev) => prev + 1);
       })
       .catch(() => {
-        setConversationThread([]);
+        setThread(contextKey, []);
         governanceHistoryRef.current = [];
         pendingQuestionLabelRef.current = null;
         threadLoadingRef.current = false;
         setThreadLoaded(true);
         setLoadCompleteToken((prev) => prev + 1);
       });
-  }, [contextKey]);
+  }, [contextKey, setThread]);
 
   // Effect: finalize the thread entry when streaming completes.
   useEffect(() => {
-    if (wasStreamingRef.current && !isStreaming) {
+    if (wasStreamingRef.current && !isStreaming && contextKey) {
       let lastAnswer = "";
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === "assistant") {
@@ -149,46 +151,60 @@ export function useGovernanceThread({
 
       if (lastAnswer) {
         const targetEntryId = regeneratingEntryId;
+        const currentThread = getThread(contextKey);
 
-        setConversationThread((prev) => {
-          if (prev.length === 0) return prev;
-          if (targetEntryId) {
-            // Regeneration: find + overwrite the specific entry.
-            const targetIndex = prev.findIndex((e) => e.id === targetEntryId);
-            if (targetIndex === -1) return prev;
-            const targetEntry = prev[targetIndex];
-            if (targetEntry.answer !== "") return prev; // already finalized
-            const updated = [...prev];
-            updated[targetIndex] = { ...targetEntry, answer: lastAnswer };
-            return updated;
-          }
-          // Normal: append to last entry.
-          const last = prev[prev.length - 1];
-          if (last.answer) return prev; // already finalized
-          return [...prev.slice(0, -1), { ...last, answer: lastAnswer }];
-        });
-
-        // Rebuild governanceHistoryRef from the full (post-mutation) thread.
-        setConversationThread((prev) => {
-          const rebuilt: LLMRequest["messages"] = [];
-          for (const entry of prev) {
-            rebuilt.push(
-              { role: "user", content: entry.questionLabel },
-              { role: "assistant", content: entry.answer },
-            );
-          }
-          governanceHistoryRef.current = rebuilt;
-          return prev;
-        });
+        if (currentThread.length === 0) {
+          wasStreamingRef.current = isStreaming;
+          return;
+        }
 
         if (targetEntryId) {
+          // Regeneration: find + overwrite the specific entry.
+          const targetIndex = currentThread.findIndex(
+            (e) => e.id === targetEntryId,
+          );
+          if (targetIndex !== -1) {
+            const targetEntry = currentThread[targetIndex];
+            if (targetEntry.answer === "") {
+              updateEntry(contextKey, targetEntryId, (entry) => {
+                entry.answer = lastAnswer;
+              });
+            }
+          }
           setRegeneratingEntryId(null);
+        } else {
+          // Normal: append to last entry.
+          const last = currentThread[currentThread.length - 1];
+          if (!last.answer) {
+            updateEntry(contextKey, last.id, (entry) => {
+              entry.answer = lastAnswer;
+            });
+          }
         }
+
+        // Rebuild governanceHistoryRef from the updated thread.
+        const updatedThread = getThread(contextKey);
+        const rebuilt: LLMRequest["messages"] = [];
+        for (const entry of updatedThread) {
+          rebuilt.push(
+            { role: "user", content: entry.questionLabel },
+            { role: "assistant", content: entry.answer },
+          );
+        }
+        governanceHistoryRef.current = rebuilt;
+
         pendingQuestionLabelRef.current = null;
       }
     }
     wasStreamingRef.current = isStreaming;
-  }, [isStreaming, messages, regeneratingEntryId]);
+  }, [
+    isStreaming,
+    messages,
+    regeneratingEntryId,
+    contextKey,
+    getThread,
+    updateEntry,
+  ]);
 
   // Effect: persist thread after finalization.
   useEffect(() => {
@@ -200,6 +216,24 @@ export function useGovernanceThread({
       // Silently swallow persistence failures — non-critical path
     });
   }, [contextKey, isStreaming, conversationThread]);
+
+  // Provide a setConversationThread wrapper for backward compatibility
+  // with existing consumers (useGovernanceQuestionActions).
+  const setConversationThread = (
+    updater:
+      | ConversationEntry[]
+      | ((prev: ConversationEntry[]) => ConversationEntry[]),
+  ) => {
+    if (!contextKey) return;
+
+    if (typeof updater === "function") {
+      const currentThread = getThread(contextKey);
+      const newThread = updater(currentThread);
+      setThread(contextKey, newThread);
+    } else {
+      setThread(contextKey, updater);
+    }
+  };
 
   return {
     conversationThread,

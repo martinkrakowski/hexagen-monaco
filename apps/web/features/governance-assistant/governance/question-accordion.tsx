@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { ChevronDown, MessageSquare } from "lucide-react";
 import type { PrebakedQuestion } from "@hexagen/prompt-compiler";
 
@@ -9,7 +10,7 @@ interface QuestionAccordionProps {
   children: React.ReactNode;
 }
 
-export function QuestionAccordion({
+export const QuestionAccordion = memo(function QuestionAccordion({
   question,
   isExpanded,
   onToggle,
@@ -74,4 +75,4 @@ export function QuestionAccordion({
       )}
     </div>
   );
-}
+});

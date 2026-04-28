@@ -5,6 +5,7 @@
 import { PORT_NAMES } from "@hexagen/web-driver";
 import type { ProjectDiscardedEvent } from "@hexagen/monaco-orchestration";
 import type { DomainEvent } from "@hexagen/messaging";
+import { useGovernanceThreadStore } from "../../features/governance-assistant/stores/useGovernanceThreadStore";
 
 import type {
   CanvasLayoutPersistencePort,
@@ -172,7 +173,11 @@ export const wireDependencies = () => {
   eventBus.subscribe<ProjectDiscardedEvent>(
     "ProjectDiscarded",
     (event: DomainEvent<ProjectDiscardedEvent>) => {
+      // Clear IndexedDB persistence
       void chatPersistence.purgeProjectData(event.payload.projectId);
+
+      // Clear Zustand thread store
+      useGovernanceThreadStore.getState().clearAllThreads();
     },
   );
 
