@@ -50,4 +50,19 @@ export interface ChatPersistencePort {
    * Clear a specific governance conversation thread from storage.
    */
   clearGovernanceThread(contextKey: string): Promise<Result<void>>;
+
+  /**
+   * Purge all project-scoped data from persistent storage.
+   * Called when a user discards a project to prevent state leakage.
+   *
+   * Removes:
+   * - Wizard drafts
+   * - All governance threads for the project
+   * - Workspace state
+   *
+   * @param projectId - Unique identifier of the project to purge
+   * @returns Result indicating success or failure
+   * @see ADR-0029: AI Governance Panel Storage Lifecycle
+   */
+  purgeProjectData(projectId: string): Promise<Result<void>>;
 }

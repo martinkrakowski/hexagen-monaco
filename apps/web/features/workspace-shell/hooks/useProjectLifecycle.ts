@@ -14,6 +14,8 @@ import { useProjectGenerationFlow } from "./useProjectGenerationFlow";
 import { useWizardAutosave } from "./useWizardAutosave";
 import { useBeforeUnloadWarning } from "./useBeforeUnloadWarning";
 import type { WizardDraft } from "@hexagen/shared";
+import { getEventBus, getChatPersistence } from "@/lib/wire";
+import { PROJECT_DISCARDED_EVENT } from "@hexagen/monaco-orchestration";
 import type {
   UseWorkspaceShellUiReturn,
   WorkspaceShellState,
@@ -220,14 +222,36 @@ export function useProjectLifecycle(
     editor.clearActiveWorkspace();
   }, [uiState, form, updateProject, ui, editor]);
 
-  const handleDiscardAndNew = useCallback(() => {
+  const handleDiscardAndNew = useCallback(async () => {
+    // Determine projectId for cleanup
+    const projectId =
+      uiState.kind === "edit" ? uiState.projectId : crypto.randomUUID();
+
+    // 1. Emit ProjectDiscarded domain event
+    const eventBus = getEventBus();
+    eventBus.publish({
+      type: PROJECT_DISCARDED_EVENT,
+      payload: {
+        projectId,
+        timestamp: new Date(),
+        reason: "user_initiated" as const,
+      },
+      timestamp: Date.now(),
+      source: "useProjectLifecycle",
+    });
+
+    // 2. Await storage purge to prevent race condition
+    const chatPersistence = getChatPersistence();
+    await chatPersistence.purgeProjectData(projectId);
+
+    // 3. Reset UI state only after I/O completes
     form.reset(emptyFormValues);
     ui.setStep(0);
     ui.enterGenesisMode();
     ui.closeDialog();
     editor.clearSession();
     editor.clearActiveWorkspace();
-  }, [form, ui, editor]);
+  }, [form, ui, editor, uiState]);
 
   const loadedProject =
     uiState.kind === "edit" ? (loadProject(uiState.projectId) ?? null) : null;
