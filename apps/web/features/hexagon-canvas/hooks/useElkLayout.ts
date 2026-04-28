@@ -208,6 +208,9 @@ function buildElkGraph(
   const elkNodesById: Record<string, ElkNode> = {};
   const rootChildren: ElkNode[] = [];
 
+  // Track which parent contains which nodes for edge distribution
+  const nodeParentMap: Record<string, string> = {};
+
   // 2. First pass: Initialize all ELK node objects
   nodes.forEach((node) => {
     const isBoundedContext = node.type === "bounded-context";
@@ -261,6 +264,9 @@ function buildElkGraph(
       const parentElkNode = elkNodesById[node.parentId];
       const parentNode = nodes.find((n) => n.id === node.parentId);
 
+      // Track parent relationship for edge distribution
+      nodeParentMap[node.id] = node.parentId;
+
       // For compass-positioned groups, set explicit x,y coordinates
       if (node.side && ["north", "south", "east", "west"].includes(node.side)) {
         const parentWidth = parentNode?.width || 800;
@@ -310,7 +316,48 @@ function buildElkGraph(
     }
   });
 
-  // 4. Return the fully nested ELK Graph structure
+  // 4. Distribute edges to appropriate hierarchy levels
+  // Edges should be placed at the lowest common ancestor of source and target
+  const edgesByParent: Record<string, LayoutEdge[]> = { root: [] };
+
+  edges.forEach((edge) => {
+    const sourceParent = nodeParentMap[edge.source] || "root";
+    const targetParent = nodeParentMap[edge.target] || "root";
+
+    // If both nodes share the same parent, add edge to that parent
+    // Otherwise, add to root level for cross-hierarchy edges
+    const edgeParent = sourceParent === targetParent ? sourceParent : "root";
+
+    if (!edgesByParent[edgeParent]) {
+      edgesByParent[edgeParent] = [];
+    }
+    edgesByParent[edgeParent].push(edge);
+  });
+
+  // 5. Assign edges to their respective parent nodes
+  Object.entries(edgesByParent).forEach(([parentId, parentEdges]) => {
+    const elkEdges = parentEdges.map((edge) => ({
+      id: edge.id,
+      sources: [edge.source],
+      targets: [edge.target],
+    }));
+
+    if (parentId === "root") {
+      // Root level edges
+      rootChildren.forEach((child) => {
+        if (!child.edges) child.edges = [];
+      });
+    } else {
+      // Add edges to the parent node
+      const parentElkNode = elkNodesById[parentId];
+      if (parentElkNode) {
+        if (!parentElkNode.edges) parentElkNode.edges = [];
+        parentElkNode.edges.push(...elkEdges);
+      }
+    }
+  });
+
+  // 6. Return the fully nested ELK Graph structure
   return {
     id: "root",
     layoutOptions: {
@@ -329,11 +376,12 @@ function buildElkGraph(
       "elk.edgeRouting": "POLYLINE",
     },
     children: rootChildren,
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      sources: [edge.source],
-      targets: [edge.target],
-    })),
+    edges:
+      edgesByParent["root"]?.map((edge) => ({
+        id: edge.id,
+        sources: [edge.source],
+        targets: [edge.target],
+      })) || [],
   };
 }
 
