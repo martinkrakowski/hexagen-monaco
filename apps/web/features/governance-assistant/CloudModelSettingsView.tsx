@@ -8,7 +8,9 @@ interface CloudModelSettingsViewProps {
   vault: UserSecretVaultPort;
   onConnect: (provider: string, model: string) => Promise<void>;
   isConnecting?: boolean;
-  error?: string | null;
+  connectionError?: string | null;
+  onRetry?: () => void;
+  onCancelConnection?: () => void;
 }
 
 interface CloudFormState {
@@ -65,7 +67,9 @@ export function CloudModelSettingsView({
   vault,
   onConnect,
   isConnecting,
-  error,
+  connectionError,
+  onRetry,
+  onCancelConnection,
 }: CloudModelSettingsViewProps) {
   const [state, dispatch] = useReducer(cloudFormReducer, initialState);
   const { selectedProvider, selectedModel, apiKey, rememberKey, isStoring } =
@@ -208,22 +212,47 @@ export function CloudModelSettingsView({
           </label>
         )}
 
-        {error && (
-          <p className="text-xs text-destructive text-center">{error}</p>
+        {connectionError && (
+          <div className="space-y-2">
+            <p className="text-xs text-destructive text-center">
+              {connectionError}
+            </p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="w-full h-9 rounded-md border border-input bg-background text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                Retry Connection
+              </button>
+            )}
+          </div>
         )}
 
-        <button
-          type="button"
-          onClick={handleConnect}
-          disabled={!canConnect}
-          className="w-full h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isStoring
-            ? "Storing key..."
-            : isConnecting
-              ? "Connecting..."
-              : "Connect"}
-        </button>
+        {!connectionError && (
+          <button
+            type="button"
+            onClick={handleConnect}
+            disabled={!canConnect}
+            className="w-full h-9 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isStoring
+              ? "Storing key..."
+              : isConnecting
+                ? "Connecting..."
+                : "Connect"}
+          </button>
+        )}
+
+        {isConnecting && onCancelConnection && (
+          <button
+            type="button"
+            onClick={onCancelConnection}
+            className="w-full h-9 rounded-md border border-input bg-background text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+          >
+            Cancel
+          </button>
+        )}
       </div>
     </div>
   );
