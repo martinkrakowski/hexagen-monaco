@@ -22,6 +22,17 @@ export type {
   VaultState,
   VaultStatus,
   VaultError,
+  ProjectDescription,
+  ValidationError,
+  ValidationResult,
+  GeneratedManifest,
+  GenerationMetadata,
+} from "./domain/value-objects/index.js";
+export {
+  ProjectDescriptionValidator,
+  createProjectDescription,
+  GeneratedManifestValidator,
+  createGeneratedManifest,
 } from "./domain/value-objects/index.js";
 export type {
   CloudProviderEndpoint,
@@ -48,6 +59,11 @@ export { SecureChatDispatchUseCase } from "./application/use-cases/secure-chat-d
 export { HandleServerChatUseCase } from "./application/use-cases/index.js";
 export { ModifyArchitectureUseCase } from "./application/use-cases/modify-architecture.use-case.js";
 export type { ModifyArchitectureDeps } from "./application/use-cases/modify-architecture.use-case.js";
+export {
+  GenerateManifestFromDescriptionUseCase,
+  type GenerateManifestFromDescriptionRequest,
+  type GenerateManifestFromDescriptionResponse,
+} from "./application/use-cases/index.js";
 export {
   serializeProjectContext,
   buildContextForLLM,
