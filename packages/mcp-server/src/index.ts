@@ -13,9 +13,12 @@ import { GetInvariantsResourceUseCase } from "./application/use-cases/get-invari
 import { GetLinterConfigResourceUseCase } from "./application/use-cases/get-linter-config-resource.use-case.js";
 import { GetManifestResourceUseCase } from "./application/use-cases/get-manifest-resource.use-case.js";
 import { GetWorkspaceContextResourceUseCase } from "./application/use-cases/get-workspace-context-resource.use-case.js";
+import { InitializeFeatureWorktreeToolUseCase } from "./application/use-cases/initialize-feature-worktree-tool.use-case.js";
+import { LogAgentRemediationToolUseCase } from "./application/use-cases/log-agent-remediation-tool.use-case.js";
 import { RemoveContextToolUseCase } from "./application/use-cases/remove-context-tool.use-case.js";
 import { RemovePortToolUseCase } from "./application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "./application/use-cases/scaffold-module-tool.use-case.js";
+import { SubmitArchitecturalSpecToolUseCase } from "./application/use-cases/submit-architectural-spec-tool.use-case.js";
 import type { ArchitectureQueryPort } from "./application/ports/out/sync-engine.port.js";
 import type { ManifestDiffPort } from "./application/ports/out/manifest-diff.port.js";
 import type { GovernanceReadPort } from "./application/ports/out/governance-read.port.js";
@@ -23,6 +26,7 @@ import type { ManifestWritePort } from "./application/ports/out/manifest-write.p
 import type { ProjectConfigurationReadPort } from "./application/ports/out/project-configuration-read.port.js";
 import type { LinterPort } from "./application/ports/out/linter.port.js";
 import type { ScaffoldingPort } from "./application/ports/out/scaffolding.port.js";
+import type { ReportGovernancePort } from "./application/ports/out/report-governance.port.js";
 import { GovernanceReadAdapter } from "./infrastructure/adapters/governance-read.adapter.js";
 import { LinterAdapter } from "./infrastructure/adapters/linter.adapter.js";
 import { ManifestDiffAdapter } from "./infrastructure/adapters/manifest-diff.adapter.js";
@@ -30,6 +34,7 @@ import { ManifestWriteAdapter } from "./infrastructure/adapters/manifest-write.a
 import { ProjectConfigurationReadAdapter } from "./infrastructure/adapters/project-configuration-read.adapter.js";
 import { SyncEngineAdapter } from "./infrastructure/adapters/sync-engine.adapter.js";
 import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-event-bus.adapter.js";
+import { ReportGovernanceAdapter } from "./infrastructure/adapters/report-governance.adapter.js";
 
 export interface MCPCompositionRoot {
   projectConfigurationReadPort: ProjectConfigurationReadPort;
@@ -40,6 +45,7 @@ export interface MCPCompositionRoot {
   linterPort: LinterPort;
   manifestDiffPort: ManifestDiffPort;
   eventBusPort: EventBusPort;
+  reportGovernancePort: ReportGovernancePort;
 }
 
 export function createDefaultMCPCompositionRoot(
@@ -59,6 +65,7 @@ export function createDefaultMCPCompositionRoot(
     linterPort: new LinterAdapter(syncEngineAdapter),
     manifestDiffPort: new ManifestDiffAdapter(workspaceRoot),
     eventBusPort: new InMemoryEventBusAdapter(),
+    reportGovernancePort: new ReportGovernanceAdapter(workspaceRoot),
   };
 }
 
@@ -118,6 +125,12 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
   const diffManifestToolUseCase = new DiffManifestToolUseCase(
     root.manifestDiffPort,
   );
+  const initializeFeatureWorktreeToolUseCase =
+    new InitializeFeatureWorktreeToolUseCase(root.reportGovernancePort);
+  const submitArchitecturalSpecToolUseCase =
+    new SubmitArchitecturalSpecToolUseCase(root.reportGovernancePort);
+  const logAgentRemediationToolUseCase =
+    new LogAgentRemediationToolUseCase(root.reportGovernancePort);
 
   return new MCPServerAdapter({
     getManifestResourceUseCase,
@@ -136,6 +149,9 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     removeContextToolUseCase,
     createContextToolUseCase,
     diffManifestToolUseCase,
+    initializeFeatureWorktreeToolUseCase,
+    submitArchitecturalSpecToolUseCase,
+    logAgentRemediationToolUseCase,
   });
 }
 

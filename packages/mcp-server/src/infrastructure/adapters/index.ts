@@ -12,4 +12,5 @@ export * from "./manifest-resource.adapter.js";
 export * from "./manifest-write.adapter.js";
 export * from "./mcp-server.adapter.js";
 export * from "./project-configuration-read.adapter.js";
+export * from "./report-governance.adapter.js";
 export * from "./sync-engine.adapter.js";

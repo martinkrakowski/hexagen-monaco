@@ -12,9 +12,12 @@ import type { GetLinterConfigResourceUseCase } from "../../application/use-cases
 import type { GetLinterReportResourceUseCase } from "../../application/use-cases/get-linter-report-resource.use-case.js";
 import type { GetManifestResourceUseCase } from "../../application/use-cases/get-manifest-resource.use-case.js";
 import type { GetWorkspaceContextResourceUseCase } from "../../application/use-cases/get-workspace-context-resource.use-case.js";
+import type { InitializeFeatureWorktreeToolUseCase } from "../../application/use-cases/initialize-feature-worktree-tool.use-case.js";
+import type { LogAgentRemediationToolUseCase } from "../../application/use-cases/log-agent-remediation-tool.use-case.js";
 import type { RemoveContextToolUseCase } from "../../application/use-cases/remove-context-tool.use-case.js";
 import type { RemovePortToolUseCase } from "../../application/use-cases/remove-port-tool.use-case.js";
 import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
+import type { SubmitArchitecturalSpecToolUseCase } from "../../application/use-cases/submit-architectural-spec-tool.use-case.js";
 
 interface MCPServerAdapterDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
@@ -33,6 +36,9 @@ interface MCPServerAdapterDependencies {
   removeContextToolUseCase: RemoveContextToolUseCase;
   createContextToolUseCase: CreateContextToolUseCase;
   diffManifestToolUseCase: DiffManifestToolUseCase;
+  initializeFeatureWorktreeToolUseCase: InitializeFeatureWorktreeToolUseCase;
+  submitArchitecturalSpecToolUseCase: SubmitArchitecturalSpecToolUseCase;
+  logAgentRemediationToolUseCase: LogAgentRemediationToolUseCase;
 }
 
 interface MCPServerRuntime {
@@ -413,9 +419,67 @@ export class MCPServerAdapter implements MCPServerPort {
                     "Path to manifest file for comparison (required when compare_source is 'file')",
                 },
               },
-            },
           },
-        ],
+        },
+        {
+          name: "hexagen_initialize_feature_worktree",
+          description:
+            "Initialize a feature worktree with report governance tracking",
+          inputSchema: {
+            type: "object",
+            properties: {
+              feature_id: {
+                type: "string",
+                description: "Feature identifier (kebab-case)",
+              },
+            },
+            required: ["feature_id"],
+          },
+        },
+        {
+          name: "hexagen_submit_architectural_spec",
+          description:
+            "Submit an architectural specification for a feature",
+          inputSchema: {
+            type: "object",
+            properties: {
+              feature_id: {
+                type: "string",
+                description: "Feature identifier",
+              },
+              spec_content: {
+                type: "string",
+                description:
+                  "Architectural specification content (markdown)",
+              },
+            },
+            required: ["feature_id", "spec_content"],
+          },
+        },
+        {
+          name: "hexagen_log_agent_remediation",
+          description:
+            "Log an agent remediation action for a feature",
+          inputSchema: {
+            type: "object",
+            properties: {
+              feature_id: {
+                type: "string",
+                description: "Feature identifier",
+              },
+              agent_id: {
+                type: "string",
+                description: "Agent identifier",
+              },
+              remediation_content: {
+                type: "string",
+                description: "Remediation content (markdown)",
+              },
+            },
+            required: ["feature_id", "agent_id", "remediation_content"],
+          },
+        },
+      ],
       };
     });
 
@@ -592,7 +656,62 @@ export class MCPServerAdapter implements MCPServerPort {
             };
           }
 
-          throw new Error(`Unknown tool: ${name}`);
+          if (name === "hexagen_initialize_feature_worktree") {
+        const result =
+          await this.dependencies.initializeFeatureWorktreeToolUseCase.execute({
+            featureId: args.feature_id as string,
+          });
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(result, null, 2) },
+          ],
+        };
+      }
+
+      if (name === "hexagen_submit_architectural_spec") {
+        const result =
+          await this.dependencies.submitArchitecturalSpecToolUseCase.execute({
+            featureId: args.feature_id as string,
+            specContent: args.spec_content as string,
+          });
+        if (!result.success) {
+          return {
+            isError: true,
+            content: [
+              { type: "text", text: result.error ?? "Unknown error" },
+            ],
+          };
+        }
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(result, null, 2) },
+          ],
+        };
+      }
+
+      if (name === "hexagen_log_agent_remediation") {
+        const result =
+          await this.dependencies.logAgentRemediationToolUseCase.execute({
+            featureId: args.feature_id as string,
+            agentId: args.agent_id as string,
+            remediationContent: args.remediation_content as string,
+          });
+        if (!result.logged) {
+          return {
+            isError: true,
+            content: [
+              { type: "text", text: result.error ?? "Unknown error" },
+            ],
+          };
+        }
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(result, null, 2) },
+          ],
+        };
+      }
+
+      throw new Error(`Unknown tool: ${name}`);
         } catch (error) {
           return {
             isError: true,
