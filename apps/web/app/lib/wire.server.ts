@@ -40,6 +40,37 @@ import type {
   ArchitectureGraphLike,
   LinterReportLike,
 } from "@hexagen/prompt-compiler";
+import { existsSync } from "fs";
+import { join, dirname } from "path";
+
+/**
+ * Find the monorepo root by searching upward for .architecture/manifest.yaml
+ *
+ * This fixes the workspace root resolution issue where process.cwd() resolves
+ * to apps/web instead of the monorepo root, causing manifest mutations to
+ * target the wrong directory.
+ *
+ * @param from Starting directory (defaults to process.cwd())
+ * @returns Monorepo root path
+ * @throws Error if no manifest found
+ */
+function findMonorepoRoot(from: string = process.cwd()): string {
+  let current = from;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const manifestPath = join(current, ".architecture", "manifest.yaml");
+    if (existsSync(manifestPath)) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      throw new Error(
+        `Could not locate monorepo root from ${from}. No .architecture/manifest.yaml found.`,
+      );
+    }
+    current = parent;
+  }
+}
 
 const emptyManifest: ProjectSpecLike = {
   boundedContexts: [],
@@ -99,8 +130,9 @@ let _manifestMutation: SyncDelegatingManifestMutationAdapter | null = null;
 export const getManifestMutation =
   (): SyncDelegatingManifestMutationAdapter => {
     if (!_manifestMutation) {
+      const workspaceRoot = findMonorepoRoot();
       _manifestMutation = new SyncDelegatingManifestMutationAdapter(
-        process.cwd(),
+        workspaceRoot,
       );
     }
     return _manifestMutation;
@@ -110,7 +142,8 @@ let _lintValidation: CliLintValidationAdapter | null = null;
 
 export const getLintValidation = (): CliLintValidationAdapter => {
   if (!_lintValidation) {
-    _lintValidation = new CliLintValidationAdapter(process.cwd());
+    const workspaceRoot = findMonorepoRoot();
+    _lintValidation = new CliLintValidationAdapter(workspaceRoot);
   }
   return _lintValidation;
 };
@@ -170,7 +203,8 @@ export const getModifyArchitectureUseCase = (
   signal?: AbortSignal,
   callbacks?: StepCallbacks,
 ): ModifyArchitectureUseCase => {
-  if (cachedUseCase && cachedMode === mode && !callbacks && !signal) return cachedUseCase;
+  if (cachedUseCase && cachedMode === mode && !callbacks && !signal)
+    return cachedUseCase;
 
   const llmSender = createLLMSender(mode, undefined);
 
