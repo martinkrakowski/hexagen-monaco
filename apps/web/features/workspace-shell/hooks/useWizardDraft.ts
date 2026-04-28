@@ -68,20 +68,33 @@ export function useWizardDraft() {
     }
   }, []);
 
-  const loadDraft = useCallback(async (): Promise<WizardDraft | null> => {
-    if (typeof window === "undefined") return null;
+  const loadDraft = useCallback(
+    async (currentProjectId?: string): Promise<WizardDraft | null> => {
+      if (typeof window === "undefined") return null;
 
-    try {
-      const persistence = getWizardPersistence();
-      const result = await persistence.loadDraft();
-      if (result.success) {
-        return result.value;
+      try {
+        const persistence = getWizardPersistence();
+        const result = await persistence.loadDraft();
+        if (result.success && result.value) {
+          // Hydration guard: reject stale drafts from previous projects
+          if (
+            currentProjectId &&
+            result.value.sessionId &&
+            result.value.sessionId !== currentProjectId
+          ) {
+            // Stale draft detected - purge it
+            await persistence.clearDraft();
+            return null;
+          }
+          return result.value;
+        }
+      } catch {
+        // No draft
       }
-    } catch {
-      // No draft
-    }
-    return null;
-  }, []);
+      return null;
+    },
+    [],
+  );
 
   if (!mounted) {
     return {

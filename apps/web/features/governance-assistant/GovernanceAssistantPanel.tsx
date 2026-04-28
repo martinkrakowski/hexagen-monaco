@@ -5,7 +5,8 @@ import { Loader2 } from "lucide-react";
 import type { WizardData } from "@hexagen/project-configuration";
 import { useGovernanceAssistant } from "./hooks/useGovernanceAssistant";
 import { useLocalLLM } from "@/llm-driver/useLocalLlm";
-import { useCloudLLM, type UseCloudLLMConfig } from "./hooks/useCloudLlm";
+import { useCloudLLM } from "./hooks/useCloudLlm";
+import { useCloudConnection } from "./hooks/useCloudConnection";
 import { useSecretVault } from "./hooks/useSecretVault";
 import { getClientProviders } from "@hexagen/local-llm";
 import {
@@ -123,12 +124,10 @@ export function GovernanceAssistantPanel({
   const prevStepIndexRef = useRef(currentStepIndex);
   const prevActiveItemRef = useRef(activeItem);
   const [mode, setMode] = useState<LLMMode>("local");
-  const [cloudConfig, setCloudConfig] = useState<UseCloudLLMConfig | null>(
-    null,
-  );
   const autoNavigatedToSettings = useRef(false);
 
   const cloudLLM = useCloudLLM();
+  const cloudConnection = useCloudConnection();
   const vault = useSecretVault();
 
   if (vault) {
@@ -150,15 +149,25 @@ export function GovernanceAssistantPanel({
 
   const handleCloudConnect = useCallback(
     async (provider: string, model: string) => {
-      setCloudConfig({ provider, model });
+      await cloudConnection.connect(provider, model, vault);
     },
-    [],
+    [cloudConnection, vault],
   );
 
   const handleCloudDisconnect = useCallback(() => {
-    setCloudConfig(null);
+    cloudConnection.disconnect();
     cloudLLM.clearMessages();
-  }, [cloudLLM]);
+  }, [cloudConnection, cloudLLM]);
+
+  const handleRetryConnection = useCallback(() => {
+    if (cloudConnection.error && vault) {
+      const lastProvider = cloudConnection.config?.provider;
+      const lastModel = cloudConnection.config?.model;
+      if (lastProvider && lastModel) {
+        cloudConnection.retry(lastProvider, lastModel, vault);
+      }
+    }
+  }, [cloudConnection, vault]);
 
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
@@ -206,7 +215,7 @@ export function GovernanceAssistantPanel({
   const showBootSpinner = status === "unavailable" || status === "opt_in";
 
   if (mode === "cloud") {
-    if (!cloudConfig) {
+    if (cloudConnection.state !== "connected") {
       return (
         <div className="flex flex-col h-full">
           <div className="flex border-b border-border shrink-0">
@@ -229,7 +238,18 @@ export function GovernanceAssistantPanel({
               <CloudModelSettingsView
                 vault={vault}
                 onConnect={handleCloudConnect}
-                error={cloudLLM.errorMessage}
+                isConnecting={cloudConnection.state === "connecting"}
+                connectionError={cloudConnection.error?.message ?? null}
+                onRetry={
+                  cloudConnection.error?.retryable
+                    ? handleRetryConnection
+                    : undefined
+                }
+                onCancelConnection={
+                  cloudConnection.state === "connecting"
+                    ? cloudConnection.cancel
+                    : undefined
+                }
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
@@ -243,11 +263,13 @@ export function GovernanceAssistantPanel({
     }
 
     const providerInfo = getClientProviders().find(
-      (p) => p.id === cloudConfig.provider,
+      (p) => p.id === cloudConnection.config?.provider,
     );
     const modelName =
-      providerInfo?.models.find((m) => m.id === cloudConfig.model)
-        ?.displayName ?? cloudConfig.model;
+      providerInfo?.models.find((m) => m.id === cloudConnection.config?.model)
+        ?.displayName ??
+      cloudConnection.config?.model ??
+      "Unknown Model";
 
     return (
       <div className="flex flex-col h-full">
@@ -272,7 +294,8 @@ export function GovernanceAssistantPanel({
             isStreaming={cloudLLM.status === "streaming"}
             error={cloudLLM.errorMessage}
             onSendMessage={(content) =>
-              cloudLLM.sendMessage(content, cloudConfig)
+              cloudConnection.config &&
+              cloudLLM.sendMessage(content, cloudConnection.config)
             }
             onAbort={cloudLLM.abort}
             onClear={cloudLLM.clearMessages}

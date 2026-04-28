@@ -1,4 +1,4 @@
-import { get, set, del } from "idb-keyval";
+import { get, set, del, keys } from "idb-keyval";
 import type { Result } from "@hexagen/shared";
 import type { ChatPersistencePort } from "../../domain/ports/index.js";
 import type { ChatMessage } from "../../domain/value-objects/index.js";
@@ -6,6 +6,8 @@ import type { GovernanceEntry } from "../../domain/value-objects/index.js";
 
 const CHAT_HISTORY_KEY = "hexagen:chat-history";
 const GOVERNANCE_PREFIX = "hexagen:governance:";
+const WIZARD_DRAFT_PREFIX = "hexagen:wizard-draft:";
+const WORKSPACE_PREFIX = "hexagen:workspace:";
 
 /**
  * IndexedDB adapter for chat persistence via idb-keyval.
@@ -83,6 +85,45 @@ export class IDBChatPersistenceAdapter implements ChatPersistencePort {
     try {
       const key = GOVERNANCE_PREFIX + contextKey;
       await del(key);
+      return { success: true, value: undefined };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err : new Error(String(err)),
+      };
+    }
+  }
+
+  /**
+   * Purge all project-scoped data from IndexedDB.
+   * Called when user discards a project to prevent state leakage.
+   *
+   * Deletes:
+   * - Wizard drafts: hexagen:wizard-draft:{projectId}
+   * - Governance threads: hexagen:governance:{projectId}-*
+   * - Workspace state: hexagen:workspace:{projectId}
+   *
+   * @param projectId - Unique identifier of the project to purge
+   * @returns Result indicating success or failure
+   */
+  async purgeProjectData(projectId: string): Promise<Result<void>> {
+    try {
+      // Get all keys from IndexedDB
+      const allKeys = await keys();
+
+      // Filter keys that belong to this project
+      const projectKeys = allKeys.filter((key) => {
+        const keyStr = String(key);
+        return (
+          keyStr === `${WIZARD_DRAFT_PREFIX}${projectId}` ||
+          keyStr === `${WORKSPACE_PREFIX}${projectId}` ||
+          keyStr.startsWith(`${GOVERNANCE_PREFIX}${projectId}-`)
+        );
+      });
+
+      // Delete all project-scoped keys
+      await Promise.all(projectKeys.map((key) => del(key)));
+
       return { success: true, value: undefined };
     } catch (err) {
       return {

@@ -3,6 +3,9 @@
 // Safe to import in Next.js client components
 
 import { PORT_NAMES } from "@hexagen/web-driver";
+import type { ProjectDiscardedEvent } from "@hexagen/monaco-orchestration";
+import type { DomainEvent } from "@hexagen/messaging";
+import { useGovernanceThreadStore } from "../../features/governance-assistant/stores/useGovernanceThreadStore";
 
 import type {
   CanvasLayoutPersistencePort,
@@ -158,10 +161,24 @@ export const wireDependencies = () => {
     new BrowserHardwareProfilerAdapter() satisfies HardwareProfilerPort,
   );
 
-  // Chat Persistence → IndexedDB adapter
+  // Chat Persistence → IndexedDB adapter with event subscription
+  const chatPersistence = new IDBChatPersistenceAdapter();
   registry.set(
     PORT_NAMES.CHAT_PERSISTENCE,
-    new IDBChatPersistenceAdapter() satisfies ChatPersistencePort,
+    chatPersistence satisfies ChatPersistencePort,
+  );
+
+  // Subscribe to ProjectDiscarded events for automatic cleanup
+  const eventBus = registry.get(PORT_NAMES.EVENT_BUS) as EventBusPort;
+  eventBus.subscribe<ProjectDiscardedEvent>(
+    "ProjectDiscarded",
+    (event: DomainEvent<ProjectDiscardedEvent>) => {
+      // Clear IndexedDB persistence
+      void chatPersistence.purgeProjectData(event.payload.projectId);
+
+      // Clear Zustand thread store
+      useGovernanceThreadStore.getState().clearAllThreads();
+    },
   );
 
   // Secret Vault → ephemeral in-memory adapter (browser-side user vault)
