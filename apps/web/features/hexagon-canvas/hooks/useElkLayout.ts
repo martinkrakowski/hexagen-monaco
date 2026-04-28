@@ -314,21 +314,32 @@ function buildElkGraph(
         const southTypes = ["south", "infrastructure"];
         const eastWestTypes = ["east", "west", "driven", "driving"];
 
+        // Debug info
+        console.log(
+          `Setting layout for node ${node.id} with side ${node.side}`,
+        );
+
         if (northTypes.includes(node.side) || southTypes.includes(node.side)) {
+          console.log(
+            `  - Applying RIGHT direction layout to ${node.id} (${node.side})`,
+          );
           elkNode.layoutOptions = {
             ...elkNode.layoutOptions,
             "elk.algorithm": "layered",
             "elk.direction": "RIGHT", // Horizontal layout
-            "elk.spacing.nodeNode": "20",
-            "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+            "elk.spacing.nodeNode": "30", // Increased spacing
+            "elk.padding": "[top=30,left=30,bottom=30,right=30]",
           };
         } else if (eastWestTypes.includes(node.side)) {
+          console.log(
+            `  - Applying DOWN direction layout to ${node.id} (${node.side})`,
+          );
           elkNode.layoutOptions = {
             ...elkNode.layoutOptions,
             "elk.algorithm": "layered",
             "elk.direction": "DOWN", // Vertical layout
-            "elk.spacing.nodeNode": "20",
-            "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+            "elk.spacing.nodeNode": "30", // Increased spacing
+            "elk.padding": "[top=30,left=30,bottom=30,right=30]",
           };
         }
       } else {

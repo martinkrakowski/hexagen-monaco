@@ -279,6 +279,8 @@ export function generateBoundedContextNodes({
       type: "port" as HexagonNodeType,
       label: port,
       side: "west",
+      // Using zIndex to make inbound ports more visible
+      style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X, y: yOffset },
     });
 
@@ -304,6 +306,8 @@ export function generateBoundedContextNodes({
       type: "port" as HexagonNodeType,
       label: port,
       side: "east",
+      // Using zIndex to make outbound ports more visible
+      style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.EAST_PORT_OFFSET_X, y: yOffset },
     });
 
