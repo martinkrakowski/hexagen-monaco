@@ -8,9 +8,10 @@ import { contextCommander } from "./commands/arch/context/command.js";
 import { removeCommander } from "./commands/arch/remove.js";
 import { diffCommander } from "./commands/arch/diff.js";
 import { editCommander } from "./commands/arch/edit.js";
-import { LogLevel, type LoggerPort } from "@hexagen/shared";
+import { refactorCommander } from "./commands/arch/refactor.js";
+import type { LoggerPort } from "@hexagen/shared";
 
-function createLogger(prefix: string): LoggerPort {
+function createLogger(): LoggerPort {
   return {
     error: (msg, ctx) => console.error(`[sync] ${msg}`, ctx ?? ""),
     warn: (msg, ctx) => console.warn(`[sync] ${msg}`, ctx ?? ""),
@@ -29,7 +30,7 @@ function createLogger(prefix: string): LoggerPort {
   };
 }
 
-const logger = createLogger("[sync]");
+const logger = createLogger();
 
 function buildProgram(): Command {
   const program = new Command();
@@ -95,6 +96,7 @@ function buildProgram(): Command {
   archCommand.addCommand(removeCommander);
   archCommand.addCommand(diffCommander);
   archCommand.addCommand(editCommander);
+  archCommand.addCommand(refactorCommander);
 
   return program;
 }
