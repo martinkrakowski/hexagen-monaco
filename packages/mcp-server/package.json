@@ -25,6 +25,7 @@
     "@hexagen/governance": "workspace:*",
     "@hexagen/messaging": "workspace:*",
     "@hexagen/project-configuration": "workspace:*",
+    "@hexagen/report-governance": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
     "@hexagen/visualization": "workspace:*",

@@ -6,4 +6,5 @@ export * from "./manifest-diff.port.js";
 export * from "./manifest-write.port.js";
 export * from "./project-configuration-read.port.js";
 export * from "./scaffolding.port.js";
+export * from "./report-governance.port.js";
 export * from "./sync-engine.port.js";

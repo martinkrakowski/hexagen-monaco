@@ -35,6 +35,7 @@
     { "path": "./packages/project-configuration" },
     { "path": "./packages/project-generation" },
     { "path": "./packages/prompt-compiler" },
+    { "path": "./packages/report-governance" },
     { "path": "./packages/reconciliation-engine" },
     { "path": "./packages/runtime" },
     { "path": "./packages/shared" },
