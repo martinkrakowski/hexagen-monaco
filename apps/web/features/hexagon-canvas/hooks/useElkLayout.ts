@@ -291,7 +291,7 @@ function buildElkGraph(
       // Track parent relationship for edge distribution
       nodeParentMap[node.id] = node.parentId;
 
-      // For compass-positioned groups, set explicit x,y coordinates
+      // For compass-positioned groups, set explicit x,y coordinates and appropriate layout direction
       if (node.side && ["north", "south", "east", "west"].includes(node.side)) {
         const parentWidth = parentNode?.width || 800;
         const parentHeight = parentNode?.height || 600;
@@ -306,6 +306,31 @@ function buildElkGraph(
           parentHeight,
           elkNode.height || 300,
         );
+
+        // Set inner layout direction based on compass position
+        // North/South groups should have horizontal layout (children side by side)
+        // East/West groups should have vertical layout (children stacked)
+        const northTypes = ["north", "presentation"];
+        const southTypes = ["south", "infrastructure"];
+        const eastWestTypes = ["east", "west", "driven", "driving"];
+
+        if (northTypes.includes(node.side) || southTypes.includes(node.side)) {
+          elkNode.layoutOptions = {
+            ...elkNode.layoutOptions,
+            "elk.algorithm": "layered",
+            "elk.direction": "RIGHT", // Horizontal layout
+            "elk.spacing.nodeNode": "20",
+            "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+          };
+        } else if (eastWestTypes.includes(node.side)) {
+          elkNode.layoutOptions = {
+            ...elkNode.layoutOptions,
+            "elk.algorithm": "layered",
+            "elk.direction": "DOWN", // Vertical layout
+            "elk.spacing.nodeNode": "20",
+            "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+          };
+        }
       } else {
         // Center elements (Domain, Use Cases) - position in middle-bottom area
         const parentWidth = parentNode?.width || 800;

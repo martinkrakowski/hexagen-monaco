@@ -230,7 +230,7 @@ export function generateBoundedContextNodes({
     const xOffset =
       adapter.side === "north"
         ? LAYOUT_CONFIG.NORTH_ADAPTER_X_OFFSET
-        : LAYOUT_CONFIG.SOUTH_ADAPTER_X_OFFSET;
+        : LAYOUT_CONFIG.SOUTH_ADAPTER_X_OFFSET - adapter.handleIndex * 60; // Offset each south adapter to avoid overlap
 
     nodes.push({
       id: adapter.id,

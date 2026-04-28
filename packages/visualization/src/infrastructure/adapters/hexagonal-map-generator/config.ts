@@ -40,13 +40,13 @@ export const LAYOUT_CONFIG = {
   NORTH_OFFSET_STEP: 120,
   SOUTH_OFFSET_BASE: 600,
   SOUTH_OFFSET_ADDITIONAL: 80,
-  SOUTH_OFFSET_STEP: 120,
+  SOUTH_OFFSET_STEP: 180, // Increased from 120 to give more horizontal separation
 
   NORTH_ADAPTER_X_OFFSET: 330,
   SOUTH_ADAPTER_X_OFFSET: 460,
 
-  WEST_PORT_OFFSET_X: -480,
-  EAST_PORT_OFFSET_X: 775,
+  WEST_PORT_OFFSET_X: -550, // Increased from -480 to push further out
+  EAST_PORT_OFFSET_X: 845, // Increased from 775 to push further out
   PORT_OFFSET_BASE_Y: -40,
   PORT_OFFSET_STEP_Y: 100,
 
