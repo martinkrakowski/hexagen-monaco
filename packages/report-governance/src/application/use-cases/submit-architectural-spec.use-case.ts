@@ -4,13 +4,20 @@ import type { ReportRepositoryPort } from "../ports/out/report-repository.port.j
 import { nextPhase } from "../../domain/value-objects/report-phase.js";
 import { createTimestamp } from "../../domain/value-objects/timestamp.js";
 import { advancePhase } from "../../domain/model/feature-report/index.js";
-import { FeatureReportNotFoundError, InvalidPhaseTransitionError } from "../../domain/index.js";
+import {
+  FeatureReportNotFoundError,
+  InvalidPhaseTransitionError,
+} from "../../domain/index.js";
 import { featureIdValue } from "../../domain/value-objects/feature-id.js";
 
 export class SubmitArchitecturalSpecUseCase {
   constructor(private readonly reportRepo: ReportRepositoryPort) {}
 
-  async execute(featureId: FeatureId, specContent: string, projectRoot: string): Promise<Result<void, Error>> {
+  async execute(
+    featureId: FeatureId,
+    specContent: string,
+    projectRoot: string,
+  ): Promise<Result<void, Error>> {
     try {
       const loadResult = await this.reportRepo.load(featureId, projectRoot);
       if (!loadResult.success) {
@@ -18,12 +25,23 @@ export class SubmitArchitecturalSpecUseCase {
       }
       const report = loadResult.value;
       if (!report) {
-        return { success: false, error: new FeatureReportNotFoundError(featureIdValue(featureId)) };
+        return {
+          success: false,
+          error: new FeatureReportNotFoundError(featureIdValue(featureId)),
+        };
       }
       if (report.currentPhase !== "01-blueprint") {
-        return { success: false, error: new Error("Current phase is not 01-blueprint") };
+        return {
+          success: false,
+          error: new Error("Current phase is not 01-blueprint"),
+        };
       }
-      const appendResult = await this.reportRepo.appendPhaseReport(featureId, "01-blueprint", specContent, projectRoot);
+      const appendResult = await this.reportRepo.appendPhaseReport(
+        featureId,
+        "01-blueprint",
+        specContent,
+        projectRoot,
+      );
       if (!appendResult.success) {
         return { success: false, error: appendResult.error as Error };
       }

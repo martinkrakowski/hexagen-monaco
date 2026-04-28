@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import type { Patch } from "@hexagen/reconciliation-engine";
 
-
 export type WizardModificationStatus =
   | "idle"
   | "streaming"

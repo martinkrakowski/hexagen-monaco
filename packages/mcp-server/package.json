@@ -28,6 +28,7 @@
     "@hexagen/report-governance": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
+    "@hexagen/transaction-system": "workspace:*",
     "@hexagen/visualization": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "js-yaml": "^4.1.1",

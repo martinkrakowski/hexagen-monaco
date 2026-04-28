@@ -1748,6 +1748,7 @@ __metadata:
     "@hexagen/report-governance": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
+    "@hexagen/transaction-system": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@modelcontextprotocol/sdk": "npm:^1.0.0"
     "@types/js-yaml": "npm:^4.0.9"

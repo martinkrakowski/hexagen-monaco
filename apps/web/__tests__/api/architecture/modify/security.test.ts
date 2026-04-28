@@ -7,28 +7,36 @@ import {
 } from "../../../../app/lib/wire.server.js";
 
 function makeAcceptRequest(body: unknown): NextRequest {
-  return new NextRequest("http://localhost:3000/api/architecture/modify/accept", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/accept",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 function makeRejectRequest(body: unknown): NextRequest {
-  return new NextRequest("http://localhost:3000/api/architecture/modify/reject", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/reject",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 async function loadAcceptRoute() {
-  const mod = await import("../../../../app/api/architecture/modify/accept/route.js");
+  const mod =
+    await import("../../../../app/api/architecture/modify/accept/route.js");
   return mod.POST;
 }
 
 async function loadRejectRoute() {
-  const mod = await import("../../../../app/api/architecture/modify/reject/route.js");
+  const mod =
+    await import("../../../../app/api/architecture/modify/reject/route.js");
   return mod.POST;
 }
 

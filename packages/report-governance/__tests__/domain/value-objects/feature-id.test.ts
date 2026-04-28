@@ -13,17 +13,11 @@ describe("createFeatureId", () => {
   });
 
   it("throws FeatureIdValidationError for empty string", () => {
-    assert.throws(
-      () => createFeatureId(""),
-      FeatureIdValidationError,
-    );
+    assert.throws(() => createFeatureId(""), FeatureIdValidationError);
   });
 
   it("throws FeatureIdValidationError for whitespace-only string", () => {
-    assert.throws(
-      () => createFeatureId("   "),
-      FeatureIdValidationError,
-    );
+    assert.throws(() => createFeatureId("   "), FeatureIdValidationError);
   });
 });
 

@@ -10,4 +10,5 @@ export const createFeatureId = (raw: string): FeatureId => {
   return raw as FeatureId;
 };
 
-export const featureIdValue = (id: FeatureId): string => id as unknown as string;
+export const featureIdValue = (id: FeatureId): string =>
+  id as unknown as string;

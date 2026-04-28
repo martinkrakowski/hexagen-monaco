@@ -7,14 +7,18 @@ import type { FeatureReport } from "../../../src/domain/index.js";
 import type { Result } from "@hexagen/shared";
 
 class InMemoryReportRepository implements ReportRepositoryPort {
-  public savedReports: Array<{ report: FeatureReport; projectRoot: string }> = [];
+  public savedReports: Array<{ report: FeatureReport; projectRoot: string }> =
+    [];
   private shouldFail = false;
 
   constructor(shouldFail = false) {
     this.shouldFail = shouldFail;
   }
 
-  async save(report: FeatureReport, projectRoot: string): Promise<Result<void>> {
+  async save(
+    report: FeatureReport,
+    projectRoot: string,
+  ): Promise<Result<void>> {
     if (this.shouldFail) {
       return { success: false, error: new Error("save failed") };
     }

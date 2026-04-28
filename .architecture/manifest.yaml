@@ -790,6 +790,10 @@ bounded_contexts:
           - InitializeFeatureWorktreeToolUseCase
           - SubmitArchitecturalSpecToolUseCase
           - LogAgentRemediationToolUseCase
+          - GetTransactionToolUseCase
+          - ListTransactionsToolUseCase
+          - AcceptTransactionToolUseCase
+          - RejectTransactionToolUseCase
         ports:
           in:
             - McpServerPort
@@ -802,6 +806,7 @@ bounded_contexts:
             - GovernanceReadPort
             - ManifestDiffPort
             - ReportGovernancePort
+            - TransactionManagerPort
       infrastructure:
         adapters:
           - MCPServerAdapter
@@ -821,6 +826,7 @@ bounded_contexts:
       - visualization
       - sync
       - report-governance
+      - transaction-system
   - name: architectural-enforcement
     type: supporting
     status: frozen

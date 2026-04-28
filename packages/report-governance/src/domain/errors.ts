@@ -14,7 +14,9 @@ export class InvalidPhaseTransitionError extends Error {
 
 export class ReportPersistenceError extends Error {
   constructor(operation: string, path: string, cause: Error) {
-    super(`Report persistence failed during '${operation}' on path '${path}': ${cause.message}`);
+    super(
+      `Report persistence failed during '${operation}' on path '${path}': ${cause.message}`,
+    );
     this.name = "ReportPersistenceError";
     this.cause = cause;
   }

@@ -69,13 +69,14 @@ Executes the AI pipeline for architecture modification using Server-Sent Events 
 
 **Request Body:**
 
-| Field         | Type      | Required | Description                                                    |
-|---------------|-----------|----------|----------------------------------------------------------------|
-| `intent`      | `string`  | Yes      | Natural language intent describing the desired change         |
-| `manifestPath`| `string`  | No       | Path to manifest file (default: `.architecture/manifest.yaml`) |
-| `lineage`     | `object`  | No       | IntentLineage metadata for tracking                            |
+| Field          | Type     | Required | Description                                                    |
+| -------------- | -------- | -------- | -------------------------------------------------------------- |
+| `intent`       | `string` | Yes      | Natural language intent describing the desired change          |
+| `manifestPath` | `string` | No       | Path to manifest file (default: `.architecture/manifest.yaml`) |
+| `lineage`      | `object` | No       | IntentLineage metadata for tracking                            |
 
 **Request Example:**
+
 ```json
 {
   "intent": "Add a new bounded context called 'ordering' for handling customer orders",
@@ -87,15 +88,15 @@ Executes the AI pipeline for architecture modification using Server-Sent Events 
 
 **SSE Event Types:**
 
-| Event            | Data Shape                                                            |
-|------------------|----------------------------------------------------------------------|
-| `pipeline_start` | `{ intent: string }`                                                 |
-| `step_running`   | `{ name: string }`                                                   |
-| `step_complete`  | `{ name: string, status: PipelineStepStatus, durationMs: number }`  |
+| Event               | Data Shape                                                              |
+| ------------------- | ----------------------------------------------------------------------- |
+| `pipeline_start`    | `{ intent: string }`                                                    |
+| `step_running`      | `{ name: string }`                                                      |
+| `step_complete`     | `{ name: string, status: PipelineStepStatus, durationMs: number }`      |
 | `pipeline_complete` | `{ pipelineRunId, patchesApplied, lintPassed, transactionId, patches }` |
-| `pipeline_error` | `{ error: string }`                                                  |
-| `error`          | `{ type: "error", message: string }`                                |
-| `: heartbeat`    | (comment-only keepalive every 15s)                                  |
+| `pipeline_error`    | `{ error: string }`                                                     |
+| `error`             | `{ type: "error", message: string }`                                    |
+| `: heartbeat`       | (comment-only keepalive every 15s)                                      |
 
 **Pipeline Steps:**
 
@@ -106,6 +107,7 @@ Executes the AI pipeline for architecture modification using Server-Sent Events 
 5. `commit-patches` — Commits patches to transaction (speculative state)
 
 **Response Example (pipeline_complete event):**
+
 ```json
 {
   "pipelineRunId": "run-abc123",
@@ -126,8 +128,8 @@ Executes the AI pipeline for architecture modification using Server-Sent Events 
 
 **Error Responses:**
 
-| Status | Meaning                                      |
-|--------|----------------------------------------------|
+| Status | Meaning                                     |
+| ------ | ------------------------------------------- |
 | `400`  | Invalid JSON body or missing `intent` field |
 
 ---
@@ -144,12 +146,13 @@ Commits a speculative transaction, applying its patches to the manifest after li
 
 **Request Body:**
 
-| Field          | Type     | Required | Description                                          |
-|----------------|----------|----------|------------------------------------------------------|
-| `transactionId`| `string` | Yes      | Transaction ID from Phase 1 (pipeline_complete event)|
-| `manifestPath` | `string` | No       | Path to manifest (default: `.architecture/manifest.yaml`) |
+| Field           | Type     | Required | Description                                               |
+| --------------- | -------- | -------- | --------------------------------------------------------- |
+| `transactionId` | `string` | Yes      | Transaction ID from Phase 1 (pipeline_complete event)     |
+| `manifestPath`  | `string` | No       | Path to manifest (default: `.architecture/manifest.yaml`) |
 
 **Request Example:**
+
 ```json
 {
   "transactionId": "tx-speculative-001",
@@ -171,13 +174,13 @@ Commits a speculative transaction, applying its patches to the manifest after li
 
 **Error Responses:**
 
-| Status | Condition                                        | Body Example                                                              |
-|--------|--------------------------------------------------|--------------------------------------------------------------------------|
-| `400`  | Missing `transactionId`                          | `{ "success": false, "error": "transactionId is required" }`            |
-| `404`  | Transaction not found                            | `{ "success": false, "error": "Transaction not found" }`                 |
-| `409`  | Transaction not in `speculative` state           | `{ "success": false, "error": "Transaction is in 'committed' state..." }` |
+| Status | Condition                                        | Body Example                                                                      |
+| ------ | ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `400`  | Missing `transactionId`                          | `{ "success": false, "error": "transactionId is required" }`                      |
+| `404`  | Transaction not found                            | `{ "success": false, "error": "Transaction not found" }`                          |
+| `409`  | Transaction not in `speculative` state           | `{ "success": false, "error": "Transaction is in 'committed' state..." }`         |
 | `500`  | Lint validation failed (git restore also failed) | `{ "success": false, "error": "Lint validation failed...", "lintErrors": [...] }` |
-| `500`  | Unexpected server error                           | `{ "success": false, "error": "Accept failed: unexpected error" }`       |
+| `500`  | Unexpected server error                          | `{ "success": false, "error": "Accept failed: unexpected error" }`                |
 
 **Behavior:**
 
@@ -202,13 +205,14 @@ Rolls back a speculative transaction, restoring the manifest from git and discar
 
 **Request Body:**
 
-| Field          | Type     | Required | Description                                               |
-|----------------|----------|----------|-----------------------------------------------------------|
-| `transactionId`| `string` | Yes      | Transaction ID from Phase 1 (pipeline_complete event)     |
-| `manifestPath` | `string` | No       | Path to manifest (default: `.architecture/manifest.yaml`) |
-| `reason`       | `string` | No       | Reason for rejection (default: `"User rejected"`)          |
+| Field           | Type     | Required | Description                                               |
+| --------------- | -------- | -------- | --------------------------------------------------------- |
+| `transactionId` | `string` | Yes      | Transaction ID from Phase 1 (pipeline_complete event)     |
+| `manifestPath`  | `string` | No       | Path to manifest (default: `.architecture/manifest.yaml`) |
+| `reason`        | `string` | No       | Reason for rejection (default: `"User rejected"`)         |
 
 **Request Example:**
+
 ```json
 {
   "transactionId": "tx-speculative-001",
@@ -229,12 +233,12 @@ Rolls back a speculative transaction, restoring the manifest from git and discar
 
 **Error Responses:**
 
-| Status | Condition                                        | Body Example                                                               |
-|--------|--------------------------------------------------|----------------------------------------------------------------------------|
-| `400`  | Missing `transactionId`                          | `{ "success": false, "error": "transactionId is required" }`             |
-| `404`  | Transaction not found                            | `{ "success": false, "error": "Transaction not found" }`                   |
-| `409`  | Transaction not in `speculative` state           | `{ "success": false, "error": "Transaction is in 'committed' state..." }` |
-| `500`  | Unexpected server error                           | `{ "success": false, "error": "Reject failed: unexpected error" }`        |
+| Status | Condition                              | Body Example                                                              |
+| ------ | -------------------------------------- | ------------------------------------------------------------------------- |
+| `400`  | Missing `transactionId`                | `{ "success": false, "error": "transactionId is required" }`              |
+| `404`  | Transaction not found                  | `{ "success": false, "error": "Transaction not found" }`                  |
+| `409`  | Transaction not in `speculative` state | `{ "success": false, "error": "Transaction is in 'committed' state..." }` |
+| `500`  | Unexpected server error                | `{ "success": false, "error": "Reject failed: unexpected error" }`        |
 
 **Behavior:**
 
@@ -248,17 +252,17 @@ Rolls back a speculative transaction, restoring the manifest from git and discar
 
 ## Error Codes
 
-| HTTP Status | Error Code                    | Description                                                  |
-|-------------|-------------------------------|--------------------------------------------------------------|
-| `400`       | `transactionId is required`   | Missing required field                                       |
-| `400`       | `Invalid manifest path`       | Path traversal detected                                     |
-| `400`       | `'intent' must be a non-empty string` | Empty or missing intent field                    |
-| `404`       | `Transaction not found`       | No transaction exists with given ID                         |
-| `409`       | `Transaction is in '{state}' state, expected 'speculative'` | Invalid state transition          |
-| `500`       | `Lint validation failed`     | Lint errors found; manifest restored from git              |
-| `500`       | `Lint validation failed and git restore failed` | Manual intervention required   |
-| `500`       | `Accept failed: unexpected error` | Internal server error                              |
-| `500`       | `Reject failed: unexpected error` | Internal server error                              |
+| HTTP Status | Error Code                                                  | Description                                   |
+| ----------- | ----------------------------------------------------------- | --------------------------------------------- |
+| `400`       | `transactionId is required`                                 | Missing required field                        |
+| `400`       | `Invalid manifest path`                                     | Path traversal detected                       |
+| `400`       | `'intent' must be a non-empty string`                       | Empty or missing intent field                 |
+| `404`       | `Transaction not found`                                     | No transaction exists with given ID           |
+| `409`       | `Transaction is in '{state}' state, expected 'speculative'` | Invalid state transition                      |
+| `500`       | `Lint validation failed`                                    | Lint errors found; manifest restored from git |
+| `500`       | `Lint validation failed and git restore failed`             | Manual intervention required                  |
+| `500`       | `Accept failed: unexpected error`                           | Internal server error                         |
+| `500`       | `Reject failed: unexpected error`                           | Internal server error                         |
 
 ---
 
@@ -278,7 +282,9 @@ function validateManifestPath(rawPath: string): string {
     !resolvedPath.startsWith(allowedBase + path.sep) &&
     resolvedPath !== allowedBase
   ) {
-    throw new Error("Invalid path: traversal detected. Path must be within .architecture directory.");
+    throw new Error(
+      "Invalid path: traversal detected. Path must be within .architecture directory.",
+    );
   }
   return resolvedPath;
 }

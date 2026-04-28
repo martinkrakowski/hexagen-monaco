@@ -7,11 +7,14 @@ import {
 } from "../../../app/lib/wire.server";
 
 function makeAcceptRequest(body: unknown): NextRequest {
-  return new NextRequest("http://localhost:3000/api/architecture/modify/accept", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/accept",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 async function loadRoute() {
@@ -90,8 +93,7 @@ describe("Suite 3.1: E2E Test — Accept Flow", () => {
     assert.strictEqual(body.lintPassed, false);
     assert.ok(body.lintErrors);
     assert.ok(
-      body.error?.includes("Lint validation failed") ||
-        response.status === 500,
+      body.error?.includes("Lint validation failed") || response.status === 500,
     );
 
     const afterTx = txManager.get(tx.id);

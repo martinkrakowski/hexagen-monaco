@@ -43,17 +43,20 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | If `true`, validates input without persisting. Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean — whether this was a dry run
 - `registered`: boolean — context was created (false if already existed)
 - `alreadyExisted`: boolean — context was already in manifest
 - `message`: string — human-readable summary
 
 **Common Usage:**
+
 - Starting a new bounded context for a feature
 - Expanding the architecture with supporting domains
 - Creating shared-kernel contexts for cross-cutting concerns
 
 **Example Call:**
+
 ```json
 {
   "name": "hexagen_create_context",
@@ -67,6 +70,7 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 ```
 
 **Validation Error Examples:**
+
 - `name must be lowercase kebab-case (e.g., 'user-management')` — use hyphens, not underscores or camelCase
 - `cannot use reserved name 'core'` — rename to `core-domain`, `core-services`, etc.
 - `type must be one of: core, supporting, driver, shared-kernel` — check enum values
@@ -86,17 +90,20 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean
 - `fileCreated`: string — path to created port interface file (optional)
 - `message`: string
 
 **Common Usage:**
+
 - Adding inbound ports (HTTP handlers, message consumers, CLI commands)
 - Adding outbound ports (database adapters, external service calls, file I/O)
 
 **Example Calls:**
 
-*Inbound port for HTTP REST endpoint:*
+_Inbound port for HTTP REST endpoint:_
+
 ```json
 {
   "name": "hexagen_create_port",
@@ -109,7 +116,8 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 }
 ```
 
-*Outbound port for database:*
+_Outbound port for database:_
+
 ```json
 {
   "name": "hexagen_create_port",
@@ -123,6 +131,7 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 ```
 
 **Key Notes:**
+
 - Inbound ports are typically injectable dependencies passed to use-cases
 - Outbound ports represent contracts to external systems (repos, APIs, messaging)
 - Port name convention: use `*Port` suffix for clarity
@@ -141,16 +150,19 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean
 - `fileCreated`: string — path to created adapter file (optional)
 - `message`: string
 
 **Common Usage:**
+
 - Creating PostgreSQL adapters for repository ports
 - Creating REST client adapters for external APIs
 - Creating message queue adapters for event publishing
 
 **Example Call:**
+
 ```json
 {
   "name": "hexagen_create_adapter",
@@ -163,6 +175,7 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 ```
 
 **Behavior:**
+
 - Automatically derives adapter name: `PaymentRepository` + `Adapter` → `PaymentRepositoryAdapter`
 - Links the adapter to the port in manifest for traceability
 - Creates a scaffold with proper structure (imports, exports, class skeleton)
@@ -181,18 +194,21 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean
 - `updated`: boolean — dependency was added or already existed
 - `message`: string
 
 **Common Usage:**
+
 - After implementing a cross-module import, declare it in manifest for linting
 - Bridge dependencies when two contexts must communicate
 - Document transitive dependencies for architecture documentation
 
 **Example Calls:**
 
-*Application layer depends on domain:*
+_Application layer depends on domain:_
+
 ```json
 {
   "name": "hexagen_add_dependency",
@@ -204,7 +220,8 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 }
 ```
 
-*One core context depends on shared-kernel:*
+_One core context depends on shared-kernel:_
+
 ```json
 {
   "name": "hexagen_add_dependency",
@@ -217,6 +234,7 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 ```
 
 **Validation:**
+
 - If `target_module` does not exist, linter will reject it
 - Circular dependencies are detected after `yarn lint:arch`
 - Cross-layer imports (e.g., application importing infrastructure) are flagged as violations
@@ -238,16 +256,19 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean
 - `removed`: boolean — port was found and removed
 - `message`: string
 
 **Common Usage:**
+
 - Consolidating redundant ports
 - Removing deprecated interfaces during refactoring
 - Fixing duplicate port registrations (anti-pattern)
 
 **Example Call:**
+
 ```json
 {
   "name": "hexagen_remove_port",
@@ -275,16 +296,19 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean
 - `removed`: boolean — context was found and removed
 - `message`: string
 
 **Common Usage:**
+
 - Retiring obsolete domains
 - Consolidating contexts during system redesign
 - Removing test/experimental bounded contexts
 
 **Example Call:**
+
 ```json
 {
   "name": "hexagen_remove_context",
@@ -296,6 +320,7 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 ```
 
 **Safety Checks:**
+
 - Linter will report dangling dependencies if other contexts reference the removed context
 - Always verify no other contexts depend on this before removal
 
@@ -316,17 +341,20 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 | `dry_run` | boolean | No | Default: `false`. |
 
 **Output:**
+
 - `dryRun`: boolean
 - `message`: string
 - `filesCreated`: string[] — paths to created files
 - `registeredInManifest`: boolean — context was registered
 
 **Common Usage:**
+
 - Rapid initialization of new bounded contexts with full DSL structure
 - Bootstrapping new features with pre-built directories and barrel exports
 - Ensuring consistent folder layout across teams
 
 **Example Call:**
+
 ```json
 {
   "name": "hexagen_scaffold_module",
@@ -340,6 +368,7 @@ All tools are available via MCP (Model Context Protocol) when running the `@hexa
 ```
 
 **Output Example:**
+
 ```
 message: "Scaffolded module notification-service and registered in manifest."
 filesCreated: [
@@ -367,17 +396,20 @@ filesCreated: [
 | `file_path` | string | No | Path to manifest file (required if `compare_source == 'file'`). |
 
 **Output:**
+
 - `diff`: object — structured diff object
 - `formatted`: string — human-readable diff (plain text)
 
 **Common Usage:**
+
 - Before committing, verify all manifest changes are intentional
 - Debugging architecture changes during code review
 - Understanding which contexts/ports/adapters were added/removed
 
 **Example Calls:**
 
-*Compare against git HEAD (default):*
+_Compare against git HEAD (default):_
+
 ```json
 {
   "name": "hexagen_diff_manifest",
@@ -385,7 +417,8 @@ filesCreated: [
 }
 ```
 
-*Compare against a specific file:*
+_Compare against a specific file:_
+
 ```json
 {
   "name": "hexagen_diff_manifest",
@@ -397,6 +430,7 @@ filesCreated: [
 ```
 
 **Output Example (formatted text):**
+
 ```
 Added contexts:
   + payment-processing (core)
@@ -422,6 +456,7 @@ Modified dependencies:
 | `dry_run` | boolean | No | Default: `true` (linter is read-only). |
 
 **Output:**
+
 - `dryRun`: boolean
 - `report`: LinterReport object containing:
   - `violations`: array of rule violations
@@ -429,11 +464,13 @@ Modified dependencies:
   - `pass`: boolean — all rules passed
 
 **Common Usage:**
+
 - After every manifest mutation, verify architecture integrity
 - Debugging boundary violations and dependency cycles
 - Generating reports for architecture documentation
 
 **Example Call:**
+
 ```json
 {
   "name": "hexagen_audit_boundaries",
@@ -444,6 +481,7 @@ Modified dependencies:
 ```
 
 **Violation Categories:**
+
 - **Boundary Violation**: Module imports from another without declared dependency
 - **Port Single Ownership**: Port exists in multiple contexts (duplicate registration)
 - **Circular Dependency**: Two contexts depend on each other
@@ -457,12 +495,14 @@ Modified dependencies:
 ### Golden Rule: Always Use CLI Tools
 
 ❌ **NEVER do this:**
+
 ```bash
 # Direct YAML editing causes corruption
 sed -i 's/old-context/new-context/g' .architecture/manifest.yaml
 ```
 
 ✅ **Always do this:**
+
 ```json
 {
   "name": "hexagen_remove_context",
@@ -503,12 +543,36 @@ When performing multi-step mutations, batch related operations:
 5. **Commit** (only after all pass)
 
 Example:
+
 ```json
 [
-  { "tool": "hexagen_create_context", "args": { "name": "order-processing", "type": "core" } },
-  { "tool": "hexagen_create_port", "args": { "domain_name": "order-processing", "port_name": "CreateOrderPort", "type": "inbound" } },
-  { "tool": "hexagen_create_port", "args": { "domain_name": "order-processing", "port_name": "OrderRepositoryPort", "type": "outbound" } },
-  { "tool": "hexagen_add_dependency", "args": { "source_module": "order-processing/application", "target_module": "order-processing/domain" } }
+  {
+    "tool": "hexagen_create_context",
+    "args": { "name": "order-processing", "type": "core" }
+  },
+  {
+    "tool": "hexagen_create_port",
+    "args": {
+      "domain_name": "order-processing",
+      "port_name": "CreateOrderPort",
+      "type": "inbound"
+    }
+  },
+  {
+    "tool": "hexagen_create_port",
+    "args": {
+      "domain_name": "order-processing",
+      "port_name": "OrderRepositoryPort",
+      "type": "outbound"
+    }
+  },
+  {
+    "tool": "hexagen_add_dependency",
+    "args": {
+      "source_module": "order-processing/application",
+      "target_module": "order-processing/domain"
+    }
+  }
 ]
 // Run yarn lint:arch after all
 ```
@@ -601,6 +665,7 @@ yarn lint:arch
 ```
 
 **Expected Output:**
+
 - All context, ports, and dependencies registered
 - No linter violations
 - `yarn lint:arch` passes
@@ -693,6 +758,7 @@ git commit -m "Refactor: consolidate order management domains"
 ### Anti-Pattern 1: Direct YAML Editing
 
 ❌ **BAD:**
+
 ```bash
 # NEVER use sed, awk, vim, or text editors directly
 sed -i 's/my-context/new-context/g' .architecture/manifest.yaml
@@ -701,6 +767,7 @@ sed -i 's/my-context/new-context/g' .architecture/manifest.yaml
 **Why:** Indentation corruption, validation bypass, orphaned references.
 
 ✅ **GOOD:**
+
 ```json
 { "name": "hexagen_remove_context", "arguments": { "context_name": "my-context" } }
 { "name": "hexagen_create_context", "arguments": { "name": "new-context", "type": "core" } }
@@ -711,6 +778,7 @@ sed -i 's/my-context/new-context/g' .architecture/manifest.yaml
 ### Anti-Pattern 2: Skipping `yarn lint:arch`
 
 ❌ **BAD:**
+
 ```bash
 # Create context, add ports, then commit without verifying
 yarn git add .architecture/manifest.yaml
@@ -720,6 +788,7 @@ yarn git commit -m "Add new context"
 **Why:** Violations slip through into committed code. Other agents inherit broken architecture state.
 
 ✅ **GOOD:**
+
 ```bash
 # Create context, add ports
 yarn lint:arch  # VERIFY before commit
@@ -731,6 +800,7 @@ git commit -m "Add new context"
 ### Anti-Pattern 3: Modifying YAML After Tool Execution
 
 ❌ **BAD:**
+
 ```bash
 # Use CLI tool, then "fix" the output by hand
 hexagen_create_port --help
@@ -740,6 +810,7 @@ vim .architecture/manifest.yaml  # Then manually adjust indentation
 **Why:** Introduces the same corruption the tool was designed to prevent.
 
 ✅ **GOOD:**
+
 ```bash
 # Trust the tool. If output is wrong, report the error and retry.
 # DO NOT manually edit after tool execution.
@@ -750,6 +821,7 @@ vim .architecture/manifest.yaml  # Then manually adjust indentation
 ### Anti-Pattern 4: Circular Mutations Without Validation
 
 ❌ **BAD:**
+
 ```json
 // Create context
 // Remove port
@@ -761,6 +833,7 @@ vim .architecture/manifest.yaml  # Then manually adjust indentation
 **Why:** If an intermediate step fails, you won't know until the end. Harder to debug.
 
 ✅ **GOOD:**
+
 ```json
 // Create context → yarn lint:arch
 // Remove port → yarn lint:arch
@@ -773,17 +846,22 @@ vim .architecture/manifest.yaml  # Then manually adjust indentation
 ### Anti-Pattern 5: Assuming Adapter Creation is Enough
 
 ❌ **BAD:**
+
 ```json
 // Create adapter WITHOUT creating the port first
 {
   "name": "hexagen_create_adapter",
-  "arguments": { "port_name": "PaymentRepositoryPort", "infrastructure_name": "payment-infrastructure" }
+  "arguments": {
+    "port_name": "PaymentRepositoryPort",
+    "infrastructure_name": "payment-infrastructure"
+  }
 }
 ```
 
 **Why:** Linter will complain `Port PaymentRepositoryPort not found`. Adapter has no contract.
 
 ✅ **GOOD:**
+
 ```json
 // Step 1: Create port
 { "name": "hexagen_create_port", "arguments": { "domain_name": "payment", "port_name": "PaymentRepositoryPort", "type": "outbound" } }
@@ -802,6 +880,7 @@ vim .architecture/manifest.yaml  # Then manually adjust indentation
 **Root Cause:** Code imports from another module, but manifest doesn't register the dependency.
 
 **Fix:**
+
 ```json
 {
   "name": "hexagen_add_dependency",
@@ -813,6 +892,7 @@ vim .architecture/manifest.yaml  # Then manually adjust indentation
 ```
 
 Then:
+
 ```bash
 yarn lint:arch
 ```
@@ -824,11 +904,12 @@ yarn lint:arch
 **Root Cause:** Port name was accidentally registered in two contexts.
 
 **Fix:**
+
 ```json
 {
   "name": "hexagen_remove_port",
   "arguments": {
-    "context_name": "context-b",  // The duplicate
+    "context_name": "context-b", // The duplicate
     "port_name": "DuplicatePort",
     "direction": "outbound"
   }
@@ -836,6 +917,7 @@ yarn lint:arch
 ```
 
 Then:
+
 ```bash
 yarn lint:arch
 ```
@@ -847,6 +929,7 @@ yarn lint:arch
 **Root Cause:** Contexts form a cycle. Break it by removing one edge.
 
 **Fix:**
+
 1. Identify which dependency is the "wrong" direction (typically application → infrastructure)
 2. Remove it:
 
@@ -860,9 +943,10 @@ yarn lint:arch
 }
 ```
 
-*(Note: If `hexagen_remove_dependency` isn't available, restructure using ports/adapters to break the cycle.)*
+_(Note: If `hexagen_remove_dependency` isn't available, restructure using ports/adapters to break the cycle.)_
 
 Then:
+
 ```bash
 yarn lint:arch
 ```
@@ -874,6 +958,7 @@ yarn lint:arch
 **Root Cause:** YAML indentation is corrupted (usually from direct editing).
 
 **Recovery:**
+
 1. Restore manifest from git:
    ```bash
    git checkout .architecture/manifest.yaml
@@ -891,6 +976,7 @@ yarn lint:arch
 **Root Cause:** Adapter was created before port, or port was removed without removing adapters.
 
 **Fix:**
+
 1. Check if port exists:
    ```json
    { "name": "hexagen_diff_manifest", "arguments": {} }
@@ -918,6 +1004,7 @@ yarn lint:arch
    ```
 
 Then:
+
 ```bash
 yarn lint:arch
 ```
@@ -931,11 +1018,13 @@ yarn lint:arch
 When delegating manifest-related work to sub-agents:
 
 1. **Inject this file** into the sub-agent's system prompt:
+
    ```
    Read `.agents/manifest-cli-guidance.md` for best practices.
    ```
 
 2. **Specify which tools are required** for the task:
+
    ```
    Use hexagen_create_context and hexagen_create_port to implement the bounded context DSL.
    Use hexagen_audit_boundaries after all mutations.
@@ -955,12 +1044,13 @@ When asked to modify `.architecture/manifest.yaml`:
 2. **Plan your tool calls** before executing (e.g., create context → add ports → add dependencies)
 3. **Execute tools in sequence**, verifying after each step
 4. **Report back** with summary of changes and linter status:
+
    ```
    Completed:
    - Created context: order-management
    - Added ports: CreateOrderPort (inbound), OrderRepositoryPort (outbound)
    - Added dependency: order-management/application → order-management/domain
-   
+
    Verification: yarn lint:arch ✓ PASSED
    ```
 
@@ -974,14 +1064,17 @@ When delegating manifest work:
 You are tasked with updating `.architecture/manifest.yaml` using CLI tools.
 
 ### Required Reading
+
 - `.agents/manifest-cli-guidance.md` (mandatory before any tool use)
 
 ### Constraints
+
 - **NEVER edit YAML directly**. Always use hexagen CLI tools.
 - After every tool call, run `yarn lint:arch` to verify architecture integrity.
 - If linter fails, use appropriate CLI tool to fix (do NOT manually edit YAML).
 
 ### Tools Available
+
 - hexagen_create_context
 - hexagen_create_port
 - hexagen_add_dependency
@@ -989,12 +1082,14 @@ You are tasked with updating `.architecture/manifest.yaml` using CLI tools.
 - hexagen_diff_manifest
 
 ### Success Criteria
+
 - All manifest changes applied using CLI tools
 - `yarn lint:arch` passes
 - `hexagen_diff_manifest` shows intentional changes only
 - No YAML files were edited manually
 
 ### Your Task
+
 [Specific mutation request here]
 ```
 
@@ -1004,17 +1099,17 @@ You are tasked with updating `.architecture/manifest.yaml` using CLI tools.
 
 Use this table to choose the right tool for your task:
 
-| Task | Tool(s) | Verification |
-|------|---------|--------------|
-| Add new bounded context | `hexagen_create_context` | `yarn lint:arch` |
-| Add port to context | `hexagen_create_port` | `yarn lint:arch` |
-| Create adapter for port | `hexagen_create_adapter` | `yarn lint:arch` |
-| Connect modules via dependency | `hexagen_add_dependency` | `yarn lint:arch` |
-| Remove redundant port | `hexagen_remove_port` | `yarn lint:arch` |
-| Remove obsolete context | `hexagen_remove_context` | `yarn lint:arch` |
-| Scaffold full module | `hexagen_scaffold_module` | `yarn lint:arch` |
-| Check for violations | `hexagen_audit_boundaries` | (read-only) |
-| Review recent changes | `hexagen_diff_manifest` | (read-only) |
+| Task                           | Tool(s)                    | Verification     |
+| ------------------------------ | -------------------------- | ---------------- |
+| Add new bounded context        | `hexagen_create_context`   | `yarn lint:arch` |
+| Add port to context            | `hexagen_create_port`      | `yarn lint:arch` |
+| Create adapter for port        | `hexagen_create_adapter`   | `yarn lint:arch` |
+| Connect modules via dependency | `hexagen_add_dependency`   | `yarn lint:arch` |
+| Remove redundant port          | `hexagen_remove_port`      | `yarn lint:arch` |
+| Remove obsolete context        | `hexagen_remove_context`   | `yarn lint:arch` |
+| Scaffold full module           | `hexagen_scaffold_module`  | `yarn lint:arch` |
+| Check for violations           | `hexagen_audit_boundaries` | (read-only)      |
+| Review recent changes          | `hexagen_diff_manifest`    | (read-only)      |
 
 ---
 

@@ -16,12 +16,12 @@ idle → speculative → committed  (accept)
                     ↘ rolled_back  (reject)
 ```
 
-| State         | Description                                              |
-|---------------|----------------------------------------------------------|
-| `idle`        | No active modification request                           |
-| `speculative` | Patches generated, awaiting user review                 |
-| `committed`   | Patches applied, lint passed, manifest updated          |
-| `rolled_back` | User rejected or lint failed, manifest restored         |
+| State         | Description                                     |
+| ------------- | ----------------------------------------------- |
+| `idle`        | No active modification request                  |
+| `speculative` | Patches generated, awaiting user review         |
+| `committed`   | Patches applied, lint passed, manifest updated  |
+| `rolled_back` | User rejected or lint failed, manifest restored |
 
 A transaction can only be accepted or rejected while in `speculative` state. Attempting accept/reject on any other state returns HTTP 409.
 
@@ -38,13 +38,13 @@ import { useArchitectureModification } from "@/features/governance-assistant/hoo
 
 function MyComponent() {
   const {
-    status,        // ArchitectureModificationStatus
-    steps,         // StepProgress[]
-    result,        // PipelineCompleteData | null
-    error,         // string | null
-    modify,        // (intent: string) => Promise<void>
-    abort,         // () => void
-    reset,         // () => void
+    status, // ArchitectureModificationStatus
+    steps, // StepProgress[]
+    result, // PipelineCompleteData | null
+    error, // string | null
+    modify, // (intent: string) => Promise<void>
+    abort, // () => void
+    reset, // () => void
     acceptPatches, // () => Promise<AcceptResult>
     rejectPatches, // (reason?: string) => Promise<RejectResult>
   } = useArchitectureModification();
@@ -63,6 +63,7 @@ async function handleIntentSubmit(intent: string) {
 ```
 
 The `modify` function:
+
 1. Sets status to `streaming`
 2. POSTs to `/api/architecture/modify/stream` with the intent
 3. Parses SSE events, updating `steps` with progress
@@ -305,6 +306,7 @@ function handleEvent(event: string, data: unknown) {
 **Cause**: The generated patches, when applied, caused lint validation errors.
 
 **Solution**: Review the `lintErrors` array in the response. Common causes:
+
 - Generated patches target files that don't exist
 - Generated patches violate manifest schema constraints
 - Generated patches conflict with existing bounded contexts or ports
@@ -326,6 +328,7 @@ function handleEvent(event: string, data: unknown) {
 **Cause**: Transaction is in an invalid state for the requested operation.
 
 **Solution**: Verify transaction state. Use `TransactionManager.get(transactionId)` to inspect. Common scenarios:
+
 - Transaction already committed → nothing to accept/reject
 - Transaction already rolled back → nothing to accept/reject
 - Transaction in `pending` state → wait for `speculative`

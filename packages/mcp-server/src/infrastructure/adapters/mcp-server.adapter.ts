@@ -18,6 +18,10 @@ import type { RemoveContextToolUseCase } from "../../application/use-cases/remov
 import type { RemovePortToolUseCase } from "../../application/use-cases/remove-port-tool.use-case.js";
 import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
 import type { SubmitArchitecturalSpecToolUseCase } from "../../application/use-cases/submit-architectural-spec-tool.use-case.js";
+import type { GetTransactionToolUseCase } from "../../application/use-cases/get-transaction-tool.use-case.js";
+import type { ListTransactionsToolUseCase } from "../../application/use-cases/list-transactions-tool.use-case.js";
+import type { AcceptTransactionToolUseCase } from "../../application/use-cases/accept-transaction-tool.use-case.js";
+import type { RejectTransactionToolUseCase } from "../../application/use-cases/reject-transaction-tool.use-case.js";
 
 interface MCPServerAdapterDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
@@ -39,6 +43,10 @@ interface MCPServerAdapterDependencies {
   initializeFeatureWorktreeToolUseCase: InitializeFeatureWorktreeToolUseCase;
   submitArchitecturalSpecToolUseCase: SubmitArchitecturalSpecToolUseCase;
   logAgentRemediationToolUseCase: LogAgentRemediationToolUseCase;
+  getTransactionToolUseCase: GetTransactionToolUseCase;
+  listTransactionsToolUseCase: ListTransactionsToolUseCase;
+  acceptTransactionToolUseCase: AcceptTransactionToolUseCase;
+  rejectTransactionToolUseCase: RejectTransactionToolUseCase;
 }
 
 interface MCPServerRuntime {
@@ -419,67 +427,124 @@ export class MCPServerAdapter implements MCPServerPort {
                     "Path to manifest file for comparison (required when compare_source is 'file')",
                 },
               },
+            },
           },
-        },
-        {
-          name: "hexagen_initialize_feature_worktree",
-          description:
-            "Initialize a feature worktree with report governance tracking",
-          inputSchema: {
-            type: "object",
-            properties: {
-              feature_id: {
-                type: "string",
-                description: "Feature identifier (kebab-case)",
+          {
+            name: "hexagen_initialize_feature_worktree",
+            description:
+              "Initialize a feature worktree with report governance tracking",
+            inputSchema: {
+              type: "object",
+              properties: {
+                feature_id: {
+                  type: "string",
+                  description: "Feature identifier (kebab-case)",
+                },
+              },
+              required: ["feature_id"],
+            },
+          },
+          {
+            name: "hexagen_submit_architectural_spec",
+            description: "Submit an architectural specification for a feature",
+            inputSchema: {
+              type: "object",
+              properties: {
+                feature_id: {
+                  type: "string",
+                  description: "Feature identifier",
+                },
+                spec_content: {
+                  type: "string",
+                  description: "Architectural specification content (markdown)",
+                },
+              },
+              required: ["feature_id", "spec_content"],
+            },
+          },
+          {
+            name: "hexagen_log_agent_remediation",
+            description: "Log an agent remediation action for a feature",
+            inputSchema: {
+              type: "object",
+              properties: {
+                feature_id: {
+                  type: "string",
+                  description: "Feature identifier",
+                },
+                agent_id: {
+                  type: "string",
+                  description: "Agent identifier",
+                },
+                remediation_content: {
+                  type: "string",
+                  description: "Remediation content (markdown)",
+                },
+              },
+              required: ["feature_id", "agent_id", "remediation_content"],
+            },
+          },
+          {
+            name: "hexagen_get_transaction",
+            description: "Get transaction details by ID",
+            inputSchema: {
+              type: "object",
+              properties: {
+                transaction_id: {
+                  type: "string",
+                  description: "Transaction ID",
+                },
+              },
+              required: ["transaction_id"],
+            },
+          },
+          {
+            name: "hexagen_list_transactions",
+            description: "List all transactions with optional status filter",
+            inputSchema: {
+              type: "object",
+              properties: {
+                status: {
+                  type: "string",
+                  enum: ["pending", "speculative", "committed", "rolled_back"],
+                  description: "Filter by transaction status (optional)",
+                },
               },
             },
-            required: ["feature_id"],
           },
-        },
-        {
-          name: "hexagen_submit_architectural_spec",
-          description:
-            "Submit an architectural specification for a feature",
-          inputSchema: {
-            type: "object",
-            properties: {
-              feature_id: {
-                type: "string",
-                description: "Feature identifier",
+          {
+            name: "hexagen_accept_transaction",
+            description: "Accept a transaction and mark it as committed",
+            inputSchema: {
+              type: "object",
+              properties: {
+                transaction_id: {
+                  type: "string",
+                  description: "Transaction ID to accept",
+                },
               },
-              spec_content: {
-                type: "string",
-                description:
-                  "Architectural specification content (markdown)",
-              },
+              required: ["transaction_id"],
             },
-            required: ["feature_id", "spec_content"],
           },
-        },
-        {
-          name: "hexagen_log_agent_remediation",
-          description:
-            "Log an agent remediation action for a feature",
-          inputSchema: {
-            type: "object",
-            properties: {
-              feature_id: {
-                type: "string",
-                description: "Feature identifier",
+          {
+            name: "hexagen_reject_transaction",
+            description: "Reject a transaction and mark it as rolled back",
+            inputSchema: {
+              type: "object",
+              properties: {
+                transaction_id: {
+                  type: "string",
+                  description: "Transaction ID to reject",
+                },
+                reason: {
+                  type: "string",
+                  description: "Reason for rejection (optional)",
+                },
               },
-              agent_id: {
-                type: "string",
-                description: "Agent identifier",
-              },
-              remediation_content: {
-                type: "string",
-                description: "Remediation content (markdown)",
-              },
+              required: ["transaction_id"],
             },
-            required: ["feature_id", "agent_id", "remediation_content"],
           },
-        },
-      ],
+        ],
       };
     });
 
@@ -657,61 +722,151 @@ export class MCPServerAdapter implements MCPServerPort {
           }
 
           if (name === "hexagen_initialize_feature_worktree") {
-        const result =
-          await this.dependencies.initializeFeatureWorktreeToolUseCase.execute({
-            featureId: args.feature_id as string,
-          });
-        return {
-          content: [
-            { type: "text", text: JSON.stringify(result, null, 2) },
-          ],
-        };
-      }
+            const result =
+              await this.dependencies.initializeFeatureWorktreeToolUseCase.execute(
+                {
+                  featureId: args.feature_id as string,
+                },
+              );
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
 
-      if (name === "hexagen_submit_architectural_spec") {
-        const result =
-          await this.dependencies.submitArchitecturalSpecToolUseCase.execute({
-            featureId: args.feature_id as string,
-            specContent: args.spec_content as string,
-          });
-        if (!result.success) {
-          return {
-            isError: true,
-            content: [
-              { type: "text", text: result.error ?? "Unknown error" },
-            ],
-          };
-        }
-        return {
-          content: [
-            { type: "text", text: JSON.stringify(result, null, 2) },
-          ],
-        };
-      }
+          if (name === "hexagen_submit_architectural_spec") {
+            const result =
+              await this.dependencies.submitArchitecturalSpecToolUseCase.execute(
+                {
+                  featureId: args.feature_id as string,
+                  specContent: args.spec_content as string,
+                },
+              );
+            if (!result.success) {
+              return {
+                isError: true,
+                content: [
+                  { type: "text", text: result.error ?? "Unknown error" },
+                ],
+              };
+            }
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
 
-      if (name === "hexagen_log_agent_remediation") {
-        const result =
-          await this.dependencies.logAgentRemediationToolUseCase.execute({
-            featureId: args.feature_id as string,
-            agentId: args.agent_id as string,
-            remediationContent: args.remediation_content as string,
-          });
-        if (!result.logged) {
-          return {
-            isError: true,
-            content: [
-              { type: "text", text: result.error ?? "Unknown error" },
-            ],
-          };
-        }
-        return {
-          content: [
-            { type: "text", text: JSON.stringify(result, null, 2) },
-          ],
-        };
-      }
+          if (name === "hexagen_log_agent_remediation") {
+            const result =
+              await this.dependencies.logAgentRemediationToolUseCase.execute({
+                featureId: args.feature_id as string,
+                agentId: args.agent_id as string,
+                remediationContent: args.remediation_content as string,
+              });
+            if (!result.logged) {
+              return {
+                isError: true,
+                content: [
+                  { type: "text", text: result.error ?? "Unknown error" },
+                ],
+              };
+            }
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result, null, 2) },
+              ],
+            };
+          }
 
-      throw new Error(`Unknown tool: ${name}`);
+          if (name === "hexagen_get_transaction") {
+            const result =
+              await this.dependencies.getTransactionToolUseCase.execute({
+                transaction_id: args.transaction_id as string,
+              });
+            if (!result.success) {
+              return {
+                isError: true,
+                content: [
+                  { type: "text", text: result.error ?? "Unknown error" },
+                ],
+              };
+            }
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result.value, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_list_transactions") {
+            const result =
+              await this.dependencies.listTransactionsToolUseCase.execute({
+                status: args.status as
+                  | "pending"
+                  | "speculative"
+                  | "committed"
+                  | "rolled_back"
+                  | undefined,
+              });
+            if (!result.success) {
+              return {
+                isError: true,
+                content: [
+                  { type: "text", text: result.error ?? "Unknown error" },
+                ],
+              };
+            }
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result.value, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_accept_transaction") {
+            const result =
+              await this.dependencies.acceptTransactionToolUseCase.execute({
+                transaction_id: args.transaction_id as string,
+              });
+            if (!result.success) {
+              return {
+                isError: true,
+                content: [
+                  { type: "text", text: result.error ?? "Unknown error" },
+                ],
+              };
+            }
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result.value, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_reject_transaction") {
+            const result =
+              await this.dependencies.rejectTransactionToolUseCase.execute({
+                transaction_id: args.transaction_id as string,
+                reason: args.reason as string | undefined,
+              });
+            if (!result.success) {
+              return {
+                isError: true,
+                content: [
+                  { type: "text", text: result.error ?? "Unknown error" },
+                ],
+              };
+            }
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(result.value, null, 2) },
+              ],
+            };
+          }
+
+          throw new Error(`Unknown tool: ${name}`);
         } catch (error) {
           return {
             isError: true,

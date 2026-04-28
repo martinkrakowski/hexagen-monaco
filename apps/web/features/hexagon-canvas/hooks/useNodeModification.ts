@@ -46,15 +46,18 @@ export function useNodeModification() {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const recordChange = useCallback((change: Omit<CanvasChange, "timestamp">) => {
-    setState((prev) => ({
-      ...prev,
-      pendingChanges: [
-        ...prev.pendingChanges,
-        { ...change, timestamp: Date.now() },
-      ],
-    }));
-  }, []);
+  const recordChange = useCallback(
+    (change: Omit<CanvasChange, "timestamp">) => {
+      setState((prev) => ({
+        ...prev,
+        pendingChanges: [
+          ...prev.pendingChanges,
+          { ...change, timestamp: Date.now() },
+        ],
+      }));
+    },
+    [],
+  );
 
   const onNodeDragStop = useCallback(
     (before: HexagonNode, after: HexagonNode) => {
@@ -96,129 +99,126 @@ export function useNodeModification() {
     [recordChange],
   );
 
-  const debouncedGenerateModification = useCallback(
-    async (intent: string) => {
-      if (!intent.trim()) return;
+  const debouncedGenerateModification = useCallback(async (intent: string) => {
+    if (!intent.trim()) return;
 
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
 
-      debounceTimerRef.current = setTimeout(async () => {
-        abortControllerRef.current?.abort();
-        const abortController = new AbortController();
-        abortControllerRef.current = abortController;
+    debounceTimerRef.current = setTimeout(async () => {
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
-        setState((prev) => ({
-          ...prev,
-          status: "streaming",
-          transactionId: null,
-          patches: [],
-          error: null,
-        }));
+      setState((prev) => ({
+        ...prev,
+        status: "streaming",
+        transactionId: null,
+        patches: [],
+        error: null,
+      }));
 
-        try {
-          const response = await fetch(STREAM_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ intent }),
-            signal: abortController.signal,
-          });
+      try {
+        const response = await fetch(STREAM_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent }),
+          signal: abortController.signal,
+        });
 
-          if (!response.ok) {
-            let errorMsg = `HTTP ${response.status}`;
-            try {
-              const errorBody = await response.json();
-              errorMsg = (errorBody as { error?: string }).error ?? errorMsg;
-            } catch {
-              // Ignore JSON parse errors on error responses.
-            }
-            setState((prev) => ({
-              ...prev,
-              status: "failed",
-              error: errorMsg,
-            }));
-            return;
+        if (!response.ok) {
+          let errorMsg = `HTTP ${response.status}`;
+          try {
+            const errorBody = await response.json();
+            errorMsg = (errorBody as { error?: string }).error ?? errorMsg;
+          } catch {
+            // Ignore JSON parse errors on error responses.
           }
-
-          const reader = response.body?.getReader();
-          if (!reader) {
-            setState((prev) => ({
-              ...prev,
-              status: "failed",
-              error: "No response body",
-            }));
-            return;
-          }
-
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let streamDone = false;
-
-          while (!streamDone) {
-            const { done, value } = await reader.read();
-            if (done) {
-              streamDone = true;
-              break;
-            }
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-
-            let currentEvent = "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.startsWith("event: ")) {
-                currentEvent = trimmed.slice(7);
-              } else if (trimmed.startsWith("data: ") && currentEvent) {
-                const data = trimmed.slice(6);
-                let parsed: Record<string, unknown>;
-                try {
-                  parsed = JSON.parse(data) as Record<string, unknown>;
-                } catch {
-                  continue;
-                }
-
-                if (currentEvent === "pipeline_complete") {
-                  const patches = (parsed.patches ?? []) as Patch[];
-                  const transactionId = (parsed.transactionId as string) ?? "";
-                  setState({
-                    status: "review",
-                    transactionId,
-                    patches,
-                    error: null,
-                    pendingChanges: [],
-                  });
-                } else if (currentEvent === "pipeline_error") {
-                  setState((prev) => ({
-                    ...prev,
-                    status: "failed",
-                    error: (parsed.error as string) ?? "Pipeline error",
-                  }));
-                }
-
-                currentEvent = "";
-              }
-            }
-          }
-        } catch (error) {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return;
-          }
-          const errorMsg = error instanceof Error ? error.message : String(error);
           setState((prev) => ({
             ...prev,
             status: "failed",
             error: errorMsg,
           }));
-        } finally {
-          abortControllerRef.current = null;
+          return;
         }
-      }, DEBOUNCE_MS);
-    },
-    [],
-  );
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          setState((prev) => ({
+            ...prev,
+            status: "failed",
+            error: "No response body",
+          }));
+          return;
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamDone = false;
+
+        while (!streamDone) {
+          const { done, value } = await reader.read();
+          if (done) {
+            streamDone = true;
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          let currentEvent = "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("event: ")) {
+              currentEvent = trimmed.slice(7);
+            } else if (trimmed.startsWith("data: ") && currentEvent) {
+              const data = trimmed.slice(6);
+              let parsed: Record<string, unknown>;
+              try {
+                parsed = JSON.parse(data) as Record<string, unknown>;
+              } catch {
+                continue;
+              }
+
+              if (currentEvent === "pipeline_complete") {
+                const patches = (parsed.patches ?? []) as Patch[];
+                const transactionId = (parsed.transactionId as string) ?? "";
+                setState({
+                  status: "review",
+                  transactionId,
+                  patches,
+                  error: null,
+                  pendingChanges: [],
+                });
+              } else if (currentEvent === "pipeline_error") {
+                setState((prev) => ({
+                  ...prev,
+                  status: "failed",
+                  error: (parsed.error as string) ?? "Pipeline error",
+                }));
+              }
+
+              currentEvent = "";
+            }
+          }
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        setState((prev) => ({
+          ...prev,
+          status: "failed",
+          error: errorMsg,
+        }));
+      } finally {
+        abortControllerRef.current = null;
+      }
+    }, DEBOUNCE_MS);
+  }, []);
 
   const submitPendingChanges = useCallback(
     (nodes: HexagonNode[]) => {
@@ -370,7 +370,9 @@ function buildIntentFromChanges(
         parts.push(`Move bounded context "${label}" to new position`);
       }
       if (change.after.label && change.after.label !== node?.label) {
-        parts.push(`Rename bounded context "${label}" to "${change.after.label}"`);
+        parts.push(
+          `Rename bounded context "${label}" to "${change.after.label}"`,
+        );
       }
     }
   }

@@ -6,7 +6,10 @@ import type { ReportRepositoryPort } from "../ports/out/report-repository.port.j
 export class GetFeatureContextUseCase {
   constructor(private readonly reportRepo: ReportRepositoryPort) {}
 
-  async execute(featureId: FeatureId, projectRoot: string): Promise<Result<FeatureReport | null, Error>> {
+  async execute(
+    featureId: FeatureId,
+    projectRoot: string,
+  ): Promise<Result<FeatureReport | null, Error>> {
     try {
       const result = await this.reportRepo.load(featureId, projectRoot);
       if (result.success) {

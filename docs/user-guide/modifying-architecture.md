@@ -7,6 +7,7 @@ User guide for using the architecture modification UI to propose and review chan
 Architecture modification allows you to describe desired changes to your project's architecture using natural language. The system generates patches (proposed changes) that you can review before they are applied to the manifest.
 
 For example, you might say:
+
 - "Add a new bounded context called 'billing' for handling payments"
 - "Add a 'persist-order' port to the 'ordering' bounded context"
 - "Remove the 'notifications' bounded context"
@@ -39,17 +40,18 @@ The Patch Review Panel displays the proposed changes after the generation phase 
 ### Understanding the Display
 
 Each patch shows:
+
 - **Target**: Which part of the manifest is affected (e.g., `boundedContexts[2]`)
 - **Type**: The type of change (`add`, `modify`, `delete`)
 - **Preview**: A summary of what will change
 
 ### Patch Types
 
-| Type   | Description                                      |
-|--------|--------------------------------------------------|
-| `add`  | Adds a new element to the manifest               |
-| `modify` | Changes an existing element                     |
-| `delete` | Removes an element from the manifest            |
+| Type     | Description                          |
+| -------- | ------------------------------------ |
+| `add`    | Adds a new element to the manifest   |
+| `modify` | Changes an existing element          |
+| `delete` | Removes an element from the manifest |
 
 ### What Happens When You Accept
 
@@ -70,8 +72,8 @@ Each patch shows:
 
 During the generation phase, you'll see step-by-step progress:
 
-| Step              | Description                                        |
-|-------------------|---------------------------------------------------|
+| Step              | Description                                       |
+| ----------------- | ------------------------------------------------- |
 | `parse-nl-intent` | Understanding your natural language request       |
 | `compile-prompt`  | Preparing the request for the AI                  |
 | `llm-inference`   | Generating proposed changes                       |
@@ -88,12 +90,12 @@ When you accept changes, the system validates the manifest. If lint validation f
 
 ### Common Lint Errors
 
-| Error Message                           | Cause                                        | Resolution                            |
-|----------------------------------------|----------------------------------------------|---------------------------------------|
-| `Duplicate bounded context name`       | Two contexts with the same name              | Modify your intent to use a unique name |
-| `Invalid port reference`               | Port references a non-existent context       | Verify context names in your intent   |
-| `Port already exists in this context`  | Adding a port that already exists            | Modify your intent or choose a different name |
-| `Required field missing`               | Generated patch missing required manifest field | The AI may need clearer intent      |
+| Error Message                         | Cause                                           | Resolution                                    |
+| ------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
+| `Duplicate bounded context name`      | Two contexts with the same name                 | Modify your intent to use a unique name       |
+| `Invalid port reference`              | Port references a non-existent context          | Verify context names in your intent           |
+| `Port already exists in this context` | Adding a port that already exists               | Modify your intent or choose a different name |
+| `Required field missing`              | Generated patch missing required manifest field | The AI may need clearer intent                |
 
 ### Handling Lint Errors
 
@@ -121,6 +123,7 @@ When you accept changes, the system validates the manifest. If lint validation f
 ### Q: Why does acceptance take longer than generation?
 
 **A**: Acceptance involves:
+
 1. Applying all patches to the manifest file
 2. Running lint validation (which may parse and analyze multiple files)
 3. If lint fails, running `git restore` to revert changes
@@ -130,6 +133,7 @@ Generation only needs to run the AI pipeline, which produces patches without val
 ### Q: What if I don't see all my expected changes?
 
 **A**: The AI may:
+
 - Split your request into multiple patches with different targets
 - Determine that some changes require prerequisites (e.g., adding a context before adding its ports)
 - Skip changes that conflict with existing architecture
@@ -152,10 +156,10 @@ Review the patch list carefully. If changes are missing, try a more specific int
 
 ## Tips for Effective Intents
 
-| Guidance | Example |
-|----------|---------|
-| Be specific about names | "Add 'billing' bounded context" instead of "Add a context for payments" |
-| Mention type when relevant | "Add a 'core' context called 'ordering'" |
-| Reference existing elements accurately | "Add a port to the 'ordering' context" (verify context name exists) |
+| Guidance                                     | Example                                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Be specific about names                      | "Add 'billing' bounded context" instead of "Add a context for payments"                    |
+| Mention type when relevant                   | "Add a 'core' context called 'ordering'"                                                   |
+| Reference existing elements accurately       | "Add a port to the 'ordering' context" (verify context name exists)                        |
 | Describe desired outcome, not implementation | "Customers should be able to place orders" instead of "Implement order placement workflow" |
-| One logical change per request | Separate "Add new context" and "Add ports to existing context" into different requests |
+| One logical change per request               | Separate "Add new context" and "Add ports to existing context" into different requests     |

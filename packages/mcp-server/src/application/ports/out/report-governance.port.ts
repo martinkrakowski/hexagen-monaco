@@ -1,4 +1,8 @@
-export type ReportPhase = "01-blueprint" | "02-implementation" | "03-verification" | "04-remediation";
+export type ReportPhase =
+  | "01-blueprint"
+  | "02-implementation"
+  | "03-verification"
+  | "04-remediation";
 
 export interface ReportManifest {
   featureId: string;
@@ -50,14 +54,26 @@ export interface GetFeatureContextOutputBase {
   featureId: string;
   currentPhase: ReportPhase;
   manifest: ReportManifest;
-  phaseHistory: Array<{ from: ReportPhase | null; to: ReportPhase; occurredAt: number }>;
+  phaseHistory: Array<{
+    from: ReportPhase | null;
+    to: ReportPhase;
+    occurredAt: number;
+  }>;
 }
 
 export type GetFeatureContextOutput = GetFeatureContextOutputBase | null;
 
 export interface ReportGovernancePort {
-  initializeFeatureWorktree(input: InitializeFeatureWorktreeInput): Promise<InitializeFeatureWorktreeOutput>;
-  submitArchitecturalSpec(input: SubmitArchitecturalSpecInput): Promise<SubmitArchitecturalSpecOutput>;
-  logAgentRemediation(input: LogAgentRemediationInput): Promise<LogAgentRemediationOutput>;
-  getFeatureContext(input: GetFeatureContextInput): Promise<GetFeatureContextOutput>;
+  initializeFeatureWorktree(
+    input: InitializeFeatureWorktreeInput,
+  ): Promise<InitializeFeatureWorktreeOutput>;
+  submitArchitecturalSpec(
+    input: SubmitArchitecturalSpecInput,
+  ): Promise<SubmitArchitecturalSpecOutput>;
+  logAgentRemediation(
+    input: LogAgentRemediationInput,
+  ): Promise<LogAgentRemediationOutput>;
+  getFeatureContext(
+    input: GetFeatureContextInput,
+  ): Promise<GetFeatureContextOutput>;
 }

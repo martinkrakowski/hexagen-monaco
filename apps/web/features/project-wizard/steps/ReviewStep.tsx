@@ -1,6 +1,14 @@
 "use client";
 
-import { Check, X, Plus, Minus, Pencil, ArrowRight, Loader2 } from "lucide-react";
+import {
+  Check,
+  X,
+  Plus,
+  Minus,
+  Pencil,
+  ArrowRight,
+  Loader2,
+} from "lucide-react";
 import type { Patch } from "@hexagen/reconciliation-engine";
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
@@ -168,11 +176,7 @@ export function ReviewStep({
         />
       </div>
 
-      <WizardFooter
-        onBack={onBack}
-        canProceed={!isLoading}
-        showNext={false}
-      />
+      <WizardFooter onBack={onBack} canProceed={!isLoading} showNext={false} />
     </div>
   );
 }
