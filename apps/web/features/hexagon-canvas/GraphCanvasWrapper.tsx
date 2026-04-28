@@ -87,11 +87,13 @@ function GraphCanvasInner({ projectId, wizardData }: GraphCanvasWrapperProps) {
 
   /**
    * Handle clean-up (recalculate layout)
+   * Clears localStorage positions first to force fresh ELK layout calculation
    */
   const handleCleanup = useCallback(async () => {
     if ("error" in state) return;
 
-    await state.recalculateLayout();
+    // Clear localStorage positions to force fresh layout calculation
+    await state.clearCanvasLayout();
     shouldFitViewRef.current = true;
   }, [state]);
 
