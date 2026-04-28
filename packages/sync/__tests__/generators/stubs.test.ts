@@ -249,8 +249,11 @@ describe("generateStubs – happy-path emission", () => {
     assert.deepEqual(result.created, [expected]);
 
     const body = await fs.readFile(expected, "utf8");
-    assert.match(body, /export type Money = unknown;/);
+    assert.match(body, /export class Money/);
     assert.match(body, /@generated value-object stub/);
+    assert.match(body, /static create\(value: unknown\)/);
+    assert.match(body, /getValue\(\): unknown/);
+    assert.match(body, /equals\(other: Money\): boolean/);
   });
 
   it("creates an in-port stub with the .in-port.ts suffix and interpolated {name}", async () => {
