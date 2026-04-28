@@ -6614,6 +6614,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"elkjs@npm:^0.11.1":
+  version: 0.11.1
+  resolution: "elkjs@npm:0.11.1"
+  checksum: 10c0/e2216a7439c9dc65413e5f8d9e46bf829c32dacbfd869585bae8f8775b3cd5802d0ac9ccf0f45ad14decfa622244a092533263cc3a596e6d82e8247bf6bf84d7
+  languageName: node
+  linkType: hard
+
 "emittery@npm:^0.13.1":
   version: 0.13.1
   resolution: "emittery@npm:0.13.1"
@@ -15764,6 +15771,7 @@ __metadata:
     baseline-browser-mapping: "npm:^2.10.0"
     class-variance-authority: "npm:^0.7.0"
     clsx: "npm:^2.1.1"
+    elkjs: "npm:^0.11.1"
     eslint: "npm:^10.1.0"
     eslint-config-next: "npm:^16.1.6"
     eslint-config-prettier: "npm:^10.1.8"
@@ -15793,6 +15801,7 @@ __metadata:
     typescript: "npm:^5.5.3"
     uuid: "npm:^9.0.0"
     zod: "npm:^3.23.8"
+    zundo: "npm:^2.3.0"
     zustand: "npm:^5.0.12"
   languageName: unknown
   linkType: soft
@@ -16171,6 +16180,18 @@ __metadata:
   version: 4.3.6
   resolution: "zod@npm:4.3.6"
   checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307
+  languageName: node
+  linkType: hard
+
+"zundo@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "zundo@npm:2.3.0"
+  peerDependencies:
+    zustand: ^4.3.0 || ^5.0.0
+  peerDependenciesMeta:
+    zustand:
+      optional: false
+  checksum: 10c0/673d13570b1029830a7ace37b7946c6d878a6493c565727351bd5791f6e46e4b25eb132f96985137bc3f0aa3c7f69093ef87ea2bfb4aa5805b0eb804e8eaa916
   languageName: node
   linkType: hard
 

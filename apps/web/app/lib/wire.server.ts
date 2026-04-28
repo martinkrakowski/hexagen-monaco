@@ -56,13 +56,16 @@ import { join, dirname } from "path";
  */
 function findMonorepoRoot(from: string = process.cwd()): string {
   let current = from;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  const maxDepth = 10; // Prevent infinite loop
+  let depth = 0;
+
+  while (depth < maxDepth) {
     const manifestPath = join(current, ".architecture", "manifest.yaml");
     if (existsSync(manifestPath)) {
       return current;
     }
     const parent = dirname(current);
+    depth++;
     if (parent === current) {
       throw new Error(
         `Could not locate monorepo root from ${from}. No .architecture/manifest.yaml found.`,
@@ -70,6 +73,10 @@ function findMonorepoRoot(from: string = process.cwd()): string {
     }
     current = parent;
   }
+
+  throw new Error(
+    `Could not locate monorepo root from ${from}. Maximum search depth (${maxDepth}) exceeded.`,
+  );
 }
 
 const emptyManifest: ProjectSpecLike = {
