@@ -9,6 +9,7 @@
 // Reads manifest declarations and generates wiring code so developers don't need
 // to manually wire 10-15 files per new use case.
 
+import fs from "node:fs";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
@@ -253,8 +254,9 @@ ${useCases.map((uc) => `  get${uc}`).join(",\n")}
 };
 `;
 
-    // TODO: Write file using fs.writeFileSync(compositionRootPath, compositionRootContent)
-    void compositionRootContent; // Suppress unused variable warning
+    // Write composition root file
+    fs.mkdirSync(path.dirname(compositionRootPath), { recursive: true });
+    fs.writeFileSync(compositionRootPath, compositionRootContent, "utf-8");
 
     result.created.push(compositionRootPath);
     config.logger.info(
@@ -285,8 +287,9 @@ ${useCases.map((uc) => `  get${uc}`).join(",\n")}
 
       const testDoubleContent = generateTestDouble(port, []);
 
-      // TODO: Write file using fs.writeFileSync(testDoublePath, testDoubleContent)
-      void testDoubleContent; // Suppress unused variable warning
+      // Write test double file
+      fs.mkdirSync(path.dirname(testDoublePath), { recursive: true });
+      fs.writeFileSync(testDoublePath, testDoubleContent, "utf-8");
 
       result.created.push(testDoublePath);
       config.logger.debug(
@@ -333,8 +336,9 @@ ${toolRegistrations.map((t) => `  ${t}`).join(",\n")}
 ];
 `;
 
-    // TODO: Write file using fs.writeFileSync(mcpToolsPath, mcpToolsContent)
-    void mcpToolsContent; // Suppress unused variable warning
+    // Write MCP tools file
+    fs.mkdirSync(path.dirname(mcpToolsPath), { recursive: true });
+    fs.writeFileSync(mcpToolsPath, mcpToolsContent, "utf-8");
 
     result.created.push(mcpToolsPath);
     config.logger.info(`generateWiring: created MCP tools at ${mcpToolsPath}`);

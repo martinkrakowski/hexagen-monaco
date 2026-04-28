@@ -8,6 +8,7 @@
 //
 // Reduces test writing time from 15-20 minutes to ~5 minutes per use case.
 
+import fs from "node:fs";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
@@ -430,8 +431,9 @@ export async function generateTests(
 
       const testContent = generateUnitTest(useCase, outPorts);
 
-      // TODO: Write file using fs.writeFileSync(testPath, testContent)
-      void testContent; // Suppress unused variable warning
+      // Write unit test file
+      fs.mkdirSync(path.dirname(testPath), { recursive: true });
+      fs.writeFileSync(testPath, testContent, "utf-8");
 
       result.created.push(testPath);
       config.logger.debug(
@@ -463,8 +465,9 @@ export async function generateTests(
 
       const testContent = generateIntegrationTest(useCase);
 
-      // TODO: Write file using fs.writeFileSync(testPath, testContent)
-      void testContent; // Suppress unused variable warning
+      // Write integration test file
+      fs.mkdirSync(path.dirname(testPath), { recursive: true });
+      fs.writeFileSync(testPath, testContent, "utf-8");
 
       result.created.push(testPath);
       config.logger.debug(
@@ -496,8 +499,9 @@ export async function generateTests(
 
       const builderContent = generateDataBuilder(entity);
 
-      // TODO: Write file using fs.writeFileSync(builderPath, builderContent)
-      void builderContent; // Suppress unused variable warning
+      // Write data builder file
+      fs.mkdirSync(path.dirname(builderPath), { recursive: true });
+      fs.writeFileSync(builderPath, builderContent, "utf-8");
 
       result.created.push(builderPath);
       config.logger.debug(
