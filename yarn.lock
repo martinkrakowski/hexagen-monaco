@@ -1745,6 +1745,7 @@ __metadata:
     "@hexagen/governance": "workspace:*"
     "@hexagen/messaging": "workspace:*"
     "@hexagen/project-configuration": "workspace:*"
+    "@hexagen/report-governance": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
     "@hexagen/visualization": "workspace:*"
@@ -1872,6 +1873,17 @@ __metadata:
     ts-jest: "npm:^29.4.9"
     typescript: "npm:^5.5.4"
     typescript-eslint: "npm:^8.0.0"
+  languageName: unknown
+  linkType: soft
+
+"@hexagen/report-governance@workspace:*, @hexagen/report-governance@workspace:packages/report-governance":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/report-governance@workspace:packages/report-governance"
+  dependencies:
+    "@hexagen/shared": "workspace:*"
+    "@types/node": "npm:^20.0.0"
+    eslint: "npm:^8.57.0"
+    typescript: "npm:^5.0.0"
   languageName: unknown
   linkType: soft
 

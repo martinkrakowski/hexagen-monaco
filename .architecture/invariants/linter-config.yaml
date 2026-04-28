@@ -60,8 +60,10 @@ package_rules:
       - "@hexagen/project-configuration"
       - "@hexagen/governance"
       - "@hexagen/visualization"
+      - "@hexagen/report-governance"
     # mcp-server uses EventBusPort from messaging for domain event publication.
     # It imports manifest/governance/visualization types for MCP resource adapters.
+    # It imports use cases and adapters from report-governance for feature tracking.
     # Moved from @hexagen/shared during Phase 4 schema migration.
 
   - name: "intent-compiler"
