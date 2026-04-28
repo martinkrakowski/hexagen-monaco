@@ -26,6 +26,11 @@ import type {
   StubTemplates,
   StubsConfig,
 } from "../types/manifest.js";
+import {
+  analyzePortFile,
+  generateAdapterFromPort,
+  generateUseCaseFromPort,
+} from "./port-analyzer.js";
 
 /**
  * Reporter shape matching the one used by sibling generators
@@ -57,21 +62,289 @@ type StubKind =
  * the `@generated ... stub — edit freely` marker so downstream tooling can
  * distinguish a pristine scaffold from a user-authored file, and so a
  * second run with identical content is reported as `unchanged`.
+ *
+ * Enhanced templates (Phase 1 - Agent-Friendly Scaffolding):
+ * - Include proper TypeScript structure
+ * - Add constructor DI patterns for classes
+ * - Include JSDoc comments for documentation
+ * - Provide method signature scaffolds
+ * - Add type imports placeholders
  */
 const DEFAULT_TEMPLATES: Required<StubTemplates> = {
-  inPort:
-    "// @generated in-port stub — edit freely\nexport interface {name}Port {}\n",
-  outPort:
-    "// @generated out-port stub — edit freely\nexport interface {name}Port {}\n",
-  adapter:
-    "// @generated adapter stub — edit freely\nexport class {name}Adapter {}\n",
-  useCase:
-    "// @generated use-case stub — edit freely\nexport class {name}UseCase {}\n",
-  entity: "// @generated entity stub — edit freely\nexport class {name} {}\n",
-  valueObject:
-    "// @generated value-object stub — edit freely\nexport type {name} = unknown;\n",
-  domainService:
-    "// @generated domain-service stub — edit freely\nexport class {name}Service {}\n",
+  inPort: `// @generated in-port stub — edit freely
+/**
+ * {name}Port defines the contract for {name} operations.
+ *
+ * This is an inbound port in the Hexagonal Architecture pattern.
+ * Implement this interface in your use case or domain service.
+ */
+export interface {name}Port {
+  /**
+   * TODO: Define your port methods here
+   * Example:
+   * execute(input: {name}Input): Promise<Result<{name}Output, Error>>;
+   */
+}
+`,
+  outPort: `// @generated out-port stub — edit freely
+/**
+ * {name}Port defines the contract for external {name} operations.
+ *
+ * This is an outbound port in the Hexagonal Architecture pattern.
+ * Implement this interface in your infrastructure adapter.
+ */
+export interface {name}Port {
+  /**
+   * TODO: Define your port methods here
+   * Example:
+   * fetch(id: string): Promise<Result<{name}Data, Error>>;
+   */
+}
+`,
+  adapter: `// @generated adapter stub — edit freely
+/**
+ * {name}Adapter implements the {name}Port interface.
+ *
+ * This adapter connects your application to external systems/infrastructure.
+ *
+ * @example
+ * const adapter = new {name}Adapter(dependencies);
+ * const result = await adapter.execute(input);
+ */
+export class {name}Adapter {
+  /**
+   * Constructor with dependency injection.
+   *
+   * @param deps - Dependencies required by this adapter
+   *
+   * TODO: Define your dependencies
+   * Example:
+   * constructor(private readonly httpClient: HttpClientPort) {}
+   */
+  constructor() {
+    // TODO: Initialize dependencies
+  }
+
+  /**
+   * TODO: Implement port methods here
+   * Example:
+   * async execute(input: InputType): Promise<Result<OutputType, Error>> {
+   *   // Implementation
+   * }
+   */
+}
+`,
+  useCase: `// @generated use-case stub — edit freely
+import type { Result } from '@hexagen/shared';
+
+/**
+ * {name}UseCase orchestrates the {name} business operation.
+ *
+ * This use case follows the Hexagonal Architecture pattern:
+ * - Depends on ports (interfaces), not concrete implementations
+ * - Contains business logic, not infrastructure concerns
+ * - Returns Result<T, Error> for explicit error handling
+ *
+ * @example
+ * const useCase = new {name}UseCase(dependencies);
+ * const result = await useCase.execute(input);
+ * if (result.success) {
+ *   // Handle success
+ * } else {
+ *   // Handle error
+ * }
+ */
+export class {name}UseCase {
+  /**
+   * Constructor with dependency injection.
+   *
+   * @param deps - Port dependencies (interfaces, not implementations)
+   *
+   * TODO: Define your port dependencies
+   * Example:
+   * constructor(
+   *   private readonly repository: RepositoryPort,
+   *   private readonly validator: ValidatorPort,
+   * ) {}
+   */
+  constructor() {
+    // TODO: Initialize dependencies
+  }
+
+  /**
+   * Execute the use case.
+   *
+   * @param input - Use case input data
+   * @returns Result containing output or error
+   *
+   * TODO: Define input/output types
+   * Example:
+   * async execute(input: {name}Input): Promise<Result<{name}Output, Error>> {
+   *   // 1. Validate input
+   *   // 2. Execute business logic
+   *   // 3. Return result
+   * }
+   */
+  async execute(input: unknown): Promise<Result<unknown, Error>> {
+    // TODO: Implement use case logic
+    return { success: false, error: new Error('Not implemented') };
+  }
+}
+`,
+  entity: `// @generated entity stub — edit freely
+/**
+ * {name} is a domain entity with identity and lifecycle.
+ *
+ * Domain entities:
+ * - Have unique identity (ID)
+ * - Contain business logic and invariants
+ * - Are mutable (unlike value objects)
+ * - Enforce domain rules in their methods
+ *
+ * @example
+ * const entity = new {name}(id, props);
+ * entity.performAction();
+ */
+export class {name} {
+  /**
+   * Constructor for {name} entity.
+   *
+   * @param id - Unique identifier
+   * @param props - Entity properties
+   *
+   * TODO: Define your entity properties
+   * Example:
+   * constructor(
+   *   private readonly id: string,
+   *   private name: string,
+   *   private status: Status,
+   * ) {
+   *   // Validate invariants
+   * }
+   */
+  constructor(private readonly id: string) {
+    // TODO: Initialize entity state
+    // TODO: Validate invariants
+  }
+
+  /**
+   * Get entity ID.
+   */
+  getId(): string {
+    return this.id;
+  }
+
+  /**
+   * TODO: Add domain methods here
+   * Example:
+   * performAction(): Result<void, Error> {
+   *   // Validate business rules
+   *   // Update state
+   *   // Return result
+   * }
+   */
+}
+`,
+  valueObject: `// @generated value-object stub — edit freely
+/**
+ * {name} is an immutable value object.
+ *
+ * Value objects:
+ * - Are immutable (no setters)
+ * - Are compared by value, not identity
+ * - Contain validation logic
+ * - Can be shared safely
+ *
+ * @example
+ * const vo = {name}.create(rawValue);
+ * if (vo.success) {
+ *   // Use vo.value
+ * }
+ */
+export class {name} {
+  /**
+   * Private constructor enforces factory pattern.
+   * Use {name}.create() instead.
+   */
+  private constructor(private readonly value: unknown) {
+    // Value is immutable after construction
+  }
+
+  /**
+   * Factory method with validation.
+   *
+   * @param value - Raw value to wrap
+   * @returns Result containing {name} or validation error
+   *
+   * TODO: Implement validation logic
+   * Example:
+   * static create(value: string): Result<{name}, Error> {
+   *   if (!value || value.length === 0) {
+   *     return { success: false, error: new Error('Value cannot be empty') };
+   *   }
+   *   return { success: true, value: new {name}(value) };
+   * }
+   */
+  static create(value: unknown): { success: boolean; value?: {name}; error?: Error } {
+    // TODO: Add validation
+    return { success: true, value: new {name}(value) };
+  }
+
+  /**
+   * Get the wrapped value.
+   */
+  getValue(): unknown {
+    return this.value;
+  }
+
+  /**
+   * Value objects are compared by value.
+   */
+  equals(other: {name}): boolean {
+    return this.value === other.value;
+  }
+}
+`,
+  domainService: `// @generated domain-service stub — edit freely
+/**
+ * {name}Service encapsulates domain logic that doesn't belong to a single entity.
+ *
+ * Domain services:
+ * - Contain stateless domain logic
+ * - Operate on multiple entities/value objects
+ * - Are part of the domain layer (no infrastructure)
+ * - Express domain concepts that aren't natural entity methods
+ *
+ * @example
+ * const service = new {name}Service(dependencies);
+ * const result = service.performOperation(entity1, entity2);
+ */
+export class {name}Service {
+  /**
+   * Constructor with dependency injection.
+   *
+   * @param deps - Domain-layer dependencies (other services, factories)
+   *
+   * TODO: Define your dependencies
+   * Example:
+   * constructor(
+   *   private readonly validator: ValidationService,
+   *   private readonly factory: EntityFactory,
+   * ) {}
+   */
+  constructor() {
+    // TODO: Initialize dependencies
+  }
+
+  /**
+   * TODO: Add domain service methods here
+   * Example:
+   * performOperation(entity1: Entity1, entity2: Entity2): Result<Output, Error> {
+   *   // Domain logic that spans multiple entities
+   * }
+   */
+}
+`,
 };
 
 /**
@@ -316,6 +589,61 @@ function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
 }
 
 /**
+ * Try to find and analyze a related port file for an adapter or use case.
+ *
+ * For adapters: looks for the corresponding out-port
+ * For use cases: looks for the corresponding in-port
+ *
+ * @param moduleDir - Package root directory
+ * @param name - Adapter or use case name
+ * @param kind - 'adapter' or 'useCase'
+ * @param context - Bounded context
+ * @returns Port analysis result or null if port file doesn't exist
+ */
+async function tryAnalyzeRelatedPort(
+  moduleDir: string,
+  name: string,
+  kind: "adapter" | "useCase",
+  context: BoundedContext,
+): Promise<ReturnType<typeof analyzePortFile>> {
+  // Determine which port to look for
+  const portType = kind === "adapter" ? "out" : "in";
+  const portSubdir = `application/ports/${portType}`;
+
+  // Try to find a matching port name
+  // Convention: FooAdapter implements FooPort, FooUseCase implements FooPort
+  const portName = name.replace(/Adapter$|UseCase$/, "Port");
+
+  // Check if this port is declared in the manifest
+  const declaredPorts =
+    portType === "in"
+      ? context.layers?.application?.ports?.in || []
+      : context.layers?.application?.ports?.out || [];
+
+  if (!declaredPorts.includes(portName)) {
+    return null;
+  }
+
+  // Try to find the port file
+  // Common naming patterns: FooPort.in-port.ts, foo-port.in-port.ts, FooPort.ts
+  const possibleFilenames = [
+    `${portName}.${portType}-port.ts`,
+    `${portName.toLowerCase()}.${portType}-port.ts`,
+    `${portName}.ts`,
+  ];
+
+  for (const filename of possibleFilenames) {
+    const portFilePath = path.join(moduleDir, "src", portSubdir, filename);
+    const analysis = analyzePortFile(portFilePath);
+    if (analysis) {
+      return analysis;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Generate stub scaffold files for a single bounded context.
  *
  * This is an opt-in generator: it no-ops unless the manifest declares
@@ -396,12 +724,46 @@ export async function generateStubs(
         `stubs.naming.${kind}`,
         config,
       );
-      const content = interpolateWithLog(
-        contentTemplate,
-        name,
-        `stubs.templates.${kind}`,
-        config,
-      );
+
+      let content: string;
+
+      // Try to generate from port analysis for adapters and use cases
+      if (kind === "adapter" || kind === "useCase") {
+        const portAnalysis = await tryAnalyzeRelatedPort(
+          moduleDir,
+          name,
+          kind,
+          context,
+        );
+
+        if (portAnalysis) {
+          // Generate from port analysis
+          if (kind === "adapter") {
+            content = generateAdapterFromPort(portAnalysis, name);
+          } else {
+            // For use cases, find related out-ports
+            const outPorts = context.layers?.application?.ports?.out || [];
+            content = generateUseCaseFromPort(portAnalysis, name, outPorts);
+          }
+          config.logger.debug(`Generated ${kind} '${name}' from port analysis`);
+        } else {
+          // Fall back to template
+          content = interpolateWithLog(
+            contentTemplate,
+            name,
+            `stubs.templates.${kind}`,
+            config,
+          );
+        }
+      } else {
+        // Use template for other kinds
+        content = interpolateWithLog(
+          contentTemplate,
+          name,
+          `stubs.templates.${kind}`,
+          config,
+        );
+      }
 
       const filePath = path.join(moduleDir, "src", subdir, filename);
       const status = await writeStubFile(filePath, content, config, report);

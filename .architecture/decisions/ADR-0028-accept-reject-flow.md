@@ -9,6 +9,7 @@ The architecture modification flow originally combined patch generation and mani
 **Problem Statement**:
 
 The original Flow 1 (`/api/architecture/modify`) would:
+
 1. Accept a natural language intent
 2. Execute the AI pipeline to generate patches
 3. Immediately apply patches to the manifest
@@ -24,6 +25,7 @@ This created two problems:
 Split Flow 1 into two distinct phases:
 
 ### Phase 1: Generate (streaming)
+
 - Endpoint: `POST /api/architecture/modify/stream`
 - Executes AI pipeline and returns SSE stream of step progress
 - Creates a transaction in `speculative` status
@@ -31,6 +33,7 @@ Split Flow 1 into two distinct phases:
 - Returns `transactionId` for use in Phase 2
 
 ### Phase 2: Accept or Reject (separate endpoints)
+
 - `POST /api/architecture/modify/accept` — applies patches, validates lint, commits transaction
 - `POST /api/architecture/modify/reject` — restores manifest from git, rolls back transaction
 
@@ -45,12 +48,12 @@ idle → speculative → committed  (accept)
                     ↘ rolled_back  (reject)
 ```
 
-| State         | Transitions                        | Description                                         |
-|---------------|------------------------------------|-----------------------------------------------------|
-| `idle`        | (initial)                          | No active transaction                               |
-| `speculative` | `committed`, `rolled_back`         | Patches generated, awaiting user review             |
-| `committed`   | —                                  | Patches applied, lint passed, manifest updated      |
-| `rolled_back` | —                                  | User rejected or lint failed, manifest restored    |
+| State         | Transitions                | Description                                     |
+| ------------- | -------------------------- | ----------------------------------------------- |
+| `idle`        | (initial)                  | No active transaction                           |
+| `speculative` | `committed`, `rolled_back` | Patches generated, awaiting user review         |
+| `committed`   | —                          | Patches applied, lint passed, manifest updated  |
+| `rolled_back` | —                          | User rejected or lint failed, manifest restored |
 
 ---
 
@@ -59,15 +62,17 @@ idle → speculative → committed  (accept)
 ### POST /api/architecture/modify/stream
 
 **Request Body:**
+
 ```typescript
 interface StreamRequestBody {
-  intent: string;            // Required: natural language intent
-  manifestPath?: string;     // Optional: defaults to ".architecture/manifest.yaml"
-  lineage?: IntentLineage;   // Optional: lineage tracking metadata
+  intent: string; // Required: natural language intent
+  manifestPath?: string; // Optional: defaults to ".architecture/manifest.yaml"
+  lineage?: IntentLineage; // Optional: lineage tracking metadata
 }
 ```
 
 **SSE Events:**
+
 - `pipeline_start` — `{ intent: string }`
 - `step_running` — `{ name: string }`
 - `step_complete` — `{ name: string, status: PipelineStepStatus, durationMs: number }`
@@ -80,14 +85,16 @@ interface StreamRequestBody {
 ### POST /api/architecture/modify/accept
 
 **Request Body:**
+
 ```typescript
 interface AcceptRequestBody {
-  transactionId: string;    // Required: from Phase 1 response
-  manifestPath?: string;   // Optional: defaults to ".architecture/manifest.yaml"
+  transactionId: string; // Required: from Phase 1 response
+  manifestPath?: string; // Optional: defaults to ".architecture/manifest.yaml"
 }
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -99,6 +106,7 @@ interface AcceptRequestBody {
 ```
 
 **Error Responses:**
+
 - `400`: Missing `transactionId`
 - `404`: Transaction not found
 - `409`: Transaction not in `speculative` state
@@ -107,15 +115,17 @@ interface AcceptRequestBody {
 ### POST /api/architecture/modify/reject
 
 **Request Body:**
+
 ```typescript
 interface RejectRequestBody {
-  transactionId: string;   // Required: from Phase 1 response
-  manifestPath?: string;    // Optional: defaults to ".architecture/manifest.yaml"
-  reason?: string;          // Optional: defaults to "User rejected"
+  transactionId: string; // Required: from Phase 1 response
+  manifestPath?: string; // Optional: defaults to ".architecture/manifest.yaml"
+  reason?: string; // Optional: defaults to "User rejected"
 }
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -126,6 +136,7 @@ interface RejectRequestBody {
 ```
 
 **Error Responses:**
+
 - `400`: Missing `transactionId`
 - `404`: Transaction not found
 - `409`: Transaction not in `speculative` state
@@ -153,6 +164,7 @@ This ensures the manifest is never left in an invalid state after an accept oper
 Apply patches immediately, validate asynchronously, notify user of failures via notification.
 
 **Rejected because:**
+
 - User has no opportunity to review before changes affect manifest
 - Requires complex notification system for async failure handling
 - Rollback of committed changes requires git history traversal
@@ -162,6 +174,7 @@ Apply patches immediately, validate asynchronously, notify user of failures via 
 Keep original atomic flow, provide undo/redo capability for users to revert changes.
 
 **Rejected because:**
+
 - More complex implementation (command pattern + history stack)
 - Undo is less explicit than reject — user may not realize changes were applied
 - Does not solve the lint-on-commit problem
@@ -171,6 +184,7 @@ Keep original atomic flow, provide undo/redo capability for users to revert chan
 Add an explicit "preview" phase where patches are displayed but not stored.
 
 **Rejected because:**
+
 - Frontend complexity — requires additional UI state for preview mode
 - Transaction already serves as the preview mechanism (patches stored in metadata)
 - Additional phase increases round-trip latency

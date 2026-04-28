@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import type { ArchitectureGraph } from "@hexagen/visualization";
 import type { LinterReport } from "@hexagen/governance";
 import type { Result } from "@hexagen/shared";
@@ -12,6 +13,8 @@ import type {
   ScaffoldingPort,
 } from "../../application/ports/out/scaffolding.port.js";
 import { readManifestDocument } from "./manifest-io.js";
+
+const execAsync = promisify(exec);
 
 function toKebabCase(input: string): string {
   return input
@@ -75,9 +78,8 @@ export class SyncEngineAdapter
       let errors: string[] = [];
 
       try {
-        execSync("yarn lint:arch", {
+        await execAsync("yarn lint:arch", {
           cwd: this.workspaceRoot,
-          stdio: "pipe",
           timeout: 30_000,
         });
       } catch (error) {

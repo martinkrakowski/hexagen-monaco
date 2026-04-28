@@ -38,7 +38,10 @@ export class ReportGovernanceAdapter implements ReportGovernancePort {
     input: InitializeFeatureWorktreeInput,
   ): Promise<InitializeFeatureWorktreeOutput> {
     const featureId = createFeatureId(input.featureId);
-    const result = await this.initUseCase.execute(featureId, this.workspaceRoot);
+    const result = await this.initUseCase.execute(
+      featureId,
+      this.workspaceRoot,
+    );
 
     if (!result.success) {
       throw result.error;
@@ -76,7 +79,10 @@ export class ReportGovernanceAdapter implements ReportGovernancePort {
           featureId: featureIdValue(featureId),
           phase: "02-implementation",
           success: false,
-          error: result.error instanceof Error ? result.error.message : String(result.error),
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
         };
       }
 
@@ -112,7 +118,10 @@ export class ReportGovernanceAdapter implements ReportGovernancePort {
         return {
           featureId: featureIdValue(featureId),
           logged: false,
-          error: result.error instanceof Error ? result.error.message : String(result.error),
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
         };
       }
 
@@ -130,10 +139,15 @@ export class ReportGovernanceAdapter implements ReportGovernancePort {
     }
   }
 
-  async getFeatureContext(input: GetFeatureContextInput): Promise<GetFeatureContextOutput> {
+  async getFeatureContext(
+    input: GetFeatureContextInput,
+  ): Promise<GetFeatureContextOutput> {
     try {
       const featureId = createFeatureId(input.featureId);
-      const result = await this.contextUseCase.execute(featureId, this.workspaceRoot);
+      const result = await this.contextUseCase.execute(
+        featureId,
+        this.workspaceRoot,
+      );
 
       if (!result.success) {
         return null;
@@ -149,10 +163,12 @@ export class ReportGovernanceAdapter implements ReportGovernancePort {
         manifest: {
           featureId: featureIdValue(result.value.manifest.featureId),
           currentPhase: result.value.manifest.currentPhase,
-          phaseHistory: result.value.manifest.phaseHistory.map((transition) => ({
-            phase: transition.to,
-            timestamp: String(timestampValue(transition.occurredAt)),
-          })),
+          phaseHistory: result.value.manifest.phaseHistory.map(
+            (transition) => ({
+              phase: transition.to,
+              timestamp: String(timestampValue(transition.occurredAt)),
+            }),
+          ),
           createdAt: String(timestampValue(result.value.manifest.createdAt)),
           updatedAt: String(timestampValue(result.value.manifest.updatedAt)),
         },

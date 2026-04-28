@@ -269,7 +269,10 @@ export class ModifyArchitectureUseCase {
         const statusCode = (result.error as Error & { statusCode?: number })
           ?.statusCode;
         if (typeof statusCode === "number") {
-          throw new LLMServiceError(`LLM inference failed: ${errMsg}`, statusCode);
+          throw new LLMServiceError(
+            `LLM inference failed: ${errMsg}`,
+            statusCode,
+          );
         }
         throw new Error(`LLM inference failed: ${errMsg}`);
       }
@@ -282,9 +285,7 @@ export class ModifyArchitectureUseCase {
       signal: this.deps.signal,
     });
 
-    const parsed = structuredOutputSchema.safeParse(
-      JSON.parse(result.content),
-    );
+    const parsed = structuredOutputSchema.safeParse(JSON.parse(result.content));
     if (!parsed.success) {
       throw new Error(
         `LLM output schema validation failed: ${parsed.error.message}`,

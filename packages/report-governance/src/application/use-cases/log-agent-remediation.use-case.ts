@@ -7,7 +7,12 @@ import { featureIdValue } from "../../domain/value-objects/feature-id.js";
 export class LogAgentRemediationUseCase {
   constructor(private readonly reportRepo: ReportRepositoryPort) {}
 
-  async execute(featureId: FeatureId, agentId: string, content: string, projectRoot: string): Promise<Result<void, Error>> {
+  async execute(
+    featureId: FeatureId,
+    agentId: string,
+    content: string,
+    projectRoot: string,
+  ): Promise<Result<void, Error>> {
     try {
       const loadResult = await this.reportRepo.load(featureId, projectRoot);
       if (!loadResult.success) {
@@ -15,10 +20,18 @@ export class LogAgentRemediationUseCase {
       }
       const report = loadResult.value;
       if (!report) {
-        return { success: false, error: new FeatureReportNotFoundError(featureIdValue(featureId)) };
+        return {
+          success: false,
+          error: new FeatureReportNotFoundError(featureIdValue(featureId)),
+        };
       }
       const formatted = `---\nagent: ${agentId}\ntimestamp: ${Date.now()}\n---\n\n${content}`;
-      const appendResult = await this.reportRepo.appendPhaseReport(featureId, "04-remediation", formatted, projectRoot);
+      const appendResult = await this.reportRepo.appendPhaseReport(
+        featureId,
+        "04-remediation",
+        formatted,
+        projectRoot,
+      );
       if (!appendResult.success) {
         return { success: false, error: appendResult.error as Error };
       }

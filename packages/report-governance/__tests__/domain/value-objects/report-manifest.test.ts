@@ -33,7 +33,11 @@ describe("transitionManifestPhase", () => {
     const now = createTimestamp(1000);
     const manifest = createReportManifest(id, "01-blueprint", now);
     const later = createTimestamp(2000);
-    const transitioned = transitionManifestPhase(manifest, "02-implementation", later);
+    const transitioned = transitionManifestPhase(
+      manifest,
+      "02-implementation",
+      later,
+    );
     assert.strictEqual(transitioned.currentPhase, "02-implementation");
   });
 
@@ -42,7 +46,11 @@ describe("transitionManifestPhase", () => {
     const now = createTimestamp(1000);
     const manifest = createReportManifest(id, "01-blueprint", now);
     const later = createTimestamp(2000);
-    const transitioned = transitionManifestPhase(manifest, "02-implementation", later);
+    const transitioned = transitionManifestPhase(
+      manifest,
+      "02-implementation",
+      later,
+    );
     assert.strictEqual(transitioned.phaseHistory.length, 2);
     const last = transitioned.phaseHistory[1];
     assert.strictEqual(last.from, "01-blueprint");
@@ -55,7 +63,11 @@ describe("transitionManifestPhase", () => {
     const now = createTimestamp(1000);
     const manifest = createReportManifest(id, "01-blueprint", now);
     const later = createTimestamp(2000);
-    const transitioned = transitionManifestPhase(manifest, "02-implementation", later);
+    const transitioned = transitionManifestPhase(
+      manifest,
+      "02-implementation",
+      later,
+    );
     assert.strictEqual(transitioned.updatedAt, later);
   });
 });

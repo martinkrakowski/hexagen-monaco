@@ -7,11 +7,14 @@ import {
 } from "../../../app/lib/wire.server";
 
 function makeRejectRequest(body: unknown): NextRequest {
-  return new NextRequest("http://localhost:3000/api/architecture/modify/reject", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/reject",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 async function loadRoute() {

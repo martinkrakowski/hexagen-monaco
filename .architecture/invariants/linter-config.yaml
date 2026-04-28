@@ -2,8 +2,8 @@
 # Aligning with manifest.yaml 'shared-kernel' type.
 
 global_whitelist:
-  - "@hexagen/shared"
-  - "@hexagen/shared/**"
+  - '@hexagen/shared'
+  - '@hexagen/shared/**'
 
 # Test doubles may import port interfaces from any package.
 # Required for type safety and test-double-parity (AGENTS.md §8)
@@ -12,153 +12,155 @@ test_double_rules:
 
 # Enforce strict boundaries for drivers
 package_rules:
-  - name: "web-driver"
+  - name: 'web-driver'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/visualization"
-      - "@hexagen/agentic-interaction"
+      - '@hexagen/shared'
+      - '@hexagen/visualization'
+      - '@hexagen/agentic-interaction'
     # visualization is allowed because ArchitectureGraphProviderAdapter
     # implements IArchitectureGraphProviderPort owned by visualization
     # agentic-interaction is allowed because web-driver depends on it per manifest
     # and implements ports like SecretVaultPort from its application layer
 
-  - name: "sync"
+  - name: 'sync'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/project-configuration"
-      - "@hexagen/visualization"
-      - "@hexagen/governance"
+      - '@hexagen/shared'
+      - '@hexagen/project-configuration'
+      - '@hexagen/visualization'
+      - '@hexagen/governance'
     # sync imports manifest schemas from project-configuration for parsing,
     # visualization for ArchitectureGraphSchema, and governance for LinterReportSchema.
     # These were consolidated from @hexagen/shared during Phase 4 schema migration.
 
-  - name: "project-generation"
+  - name: 'project-generation'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/sync"
+      - '@hexagen/shared'
+      - '@hexagen/sync'
     # project-generation intentionally imports sync for External Project Generation MVP.
     # See ADR-0003 for details.
 
-  - name: "project-configuration"
+  - name: 'project-configuration'
     allowed_imports:
-      - "@hexagen/shared"
+      - '@hexagen/shared'
     # project-configuration should only import from shared kernel.
     # Sync types should come from shared kernel after consolidation.
 
-  - name: "visualization"
+  - name: 'visualization'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/project-configuration"
+      - '@hexagen/shared'
+      - '@hexagen/project-configuration'
     # visualization imports BoundedContextTypeSchema from project-configuration
     # for architecture graph node type classification.
     # Moved from @hexagen/shared during Phase 4 schema migration.
 
-  - name: "mcp-server"
+  - name: 'mcp-server'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/messaging"
-      - "@hexagen/project-configuration"
-      - "@hexagen/governance"
-      - "@hexagen/visualization"
-      - "@hexagen/report-governance"
+      - '@hexagen/shared'
+      - '@hexagen/messaging'
+      - '@hexagen/project-configuration'
+      - '@hexagen/governance'
+      - '@hexagen/visualization'
+      - '@hexagen/report-governance'
+      - '@hexagen/transaction-system'
     # mcp-server uses EventBusPort from messaging for domain event publication.
     # It imports manifest/governance/visualization types for MCP resource adapters.
     # It imports use cases and adapters from report-governance for feature tracking.
+    # It imports TransactionManagerPort from transaction-system for MCP transaction tools.
     # Moved from @hexagen/shared during Phase 4 schema migration.
 
-  - name: "intent-compiler"
+  - name: 'intent-compiler'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
     # FROZEN: no runtime consumers. @hexagen/runtime dep removed.
     # Domain types and ports preserved for future use.
 
-  - name: "ui-projection-compiler"
+  - name: 'ui-projection-compiler'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
     # NARROWED: only MapNodeVisual path retained (real consumers in wire.ts).
     # @hexagen/layout-engine dep removed (Affordance type no longer needed).
 
-  - name: "layout-engine"
+  - name: 'layout-engine'
     allowed_imports: []
     # NARROWED: only GraphLayout path retained (real consumers in wire.ts).
     # No @hexagen/* imports remain — pure dagre-based geometry.
 
-  - name: "runtime"
+  - name: 'runtime'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
     # runtime provides type guards and generators for MVK contracts.
     # It imports core-domain types to perform runtime validation.
 
-  - name: "transaction-system"
+  - name: 'transaction-system'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/intent-compiler"
-      - "@hexagen/sync"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/intent-compiler'
+      - '@hexagen/sync'
     # transaction-system orchestrates intent compilation results and manages
     # speculative state, backpressure, and semantic caching.
     # SyncDelegatingManifestMutationAdapter delegates to @hexagen/sync (loadManifest/saveManifest)
     # to avoid dual manifest writers causing drift. See Phase 4 plan review.
 
-  - name: "prompt-compiler"
+  - name: 'prompt-compiler'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/project-configuration"
-      - "@hexagen/visualization"
-      - "@hexagen/governance"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/project-configuration'
+      - '@hexagen/visualization'
+      - '@hexagen/governance'
     # Phase 5: prompt-compiler now uses ProjectSpec, ArchitectureGraph, LinterReport
     # instead of DomainAST and governanceRules: string[]. These kernel contracts
     # provide richer context for prompt compilation.
 
-  - name: "local-llm"
+  - name: 'local-llm'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/prompt-compiler"
-      - "@hexagen/project-configuration"
-      - "@hexagen/visualization"
-      - "@hexagen/governance"
+      - '@hexagen/shared'
+      - '@hexagen/prompt-compiler'
+      - '@hexagen/project-configuration'
+      - '@hexagen/visualization'
+      - '@hexagen/governance'
     # local-llm enforces ACL: all LLM inputs must come through prompt-compiler.
     # Phase 5: CompiledPromptAdapterPort uses ProjectSpec, ArchitectureGraph,
     # LinterReport for structured prompt compilation.
 
-  - name: "reconciliation-engine"
+  - name: 'reconciliation-engine'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
     # FROZEN: no runtime consumers. Unused deps removed.
     # Domain types and ports preserved for future use.
 
-  - name: "ai-pipeline"
+  - name: 'ai-pipeline'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
     # ai-pipeline bridges NL intent to DomainCommand[] via core-domain types.
     # It provides PipelineRun/PipelineStep value objects consumed by agentic-interaction.
 
-  - name: "agentic-interaction"
+  - name: 'agentic-interaction'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/local-llm"
-      - "@hexagen/project-configuration"
-      - "@hexagen/ai-pipeline"
-      - "@hexagen/prompt-compiler"
-      - "@hexagen/reconciliation-engine"
-      - "@hexagen/transaction-system"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/local-llm'
+      - '@hexagen/project-configuration'
+      - '@hexagen/ai-pipeline'
+      - '@hexagen/prompt-compiler'
+      - '@hexagen/reconciliation-engine'
+      - '@hexagen/transaction-system'
     # Phase 5: agentic-interaction orchestrates the full AI pipeline
     # (NL parse → prompt compile → LLM inference → reconcile → commit).
     # It imports port types and value objects from each pipeline stage package.
 
-  - name: "wizard-orchestration"
+  - name: 'wizard-orchestration'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/messaging"
-      - "@hexagen/project-configuration"
-      - "@hexagen/sync"
+      - '@hexagen/shared'
+      - '@hexagen/messaging'
+      - '@hexagen/project-configuration'
+      - '@hexagen/sync'
     # Imports WizardData, BoundedContext, ExternalContext, PeerMapping from project-configuration
     # for deterministic wizard flow coordination. Imports Manifest from sync because
     # wizard-orchestration is the UI-facing bridge that transforms WizardData → Manifest.

@@ -7,19 +7,25 @@ import {
 } from "../../../app/lib/wire.server";
 
 function makeAcceptRequest(body: unknown): NextRequest {
-  return new NextRequest("http://localhost:3000/api/architecture/modify/accept", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/accept",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 function makeRejectRequest(body: unknown): NextRequest {
-  return new NextRequest("http://localhost:3000/api/architecture/modify/reject", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return new NextRequest(
+    "http://localhost:3000/api/architecture/modify/reject",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 async function loadAcceptRoute() {

@@ -152,11 +152,15 @@ export async function POST(request: NextRequest) {
 
         let useCase;
         try {
-          useCase = getModifyArchitectureUseCase("in-memory", llmAbortController.signal, {
-            onStepRunning: (name) => send("step_running", { name }),
-            onStepComplete: (name, status, durationMs) =>
-              send("step_complete", { name, status, durationMs }),
-          });
+          useCase = getModifyArchitectureUseCase(
+            "in-memory",
+            llmAbortController.signal,
+            {
+              onStepRunning: (name) => send("step_running", { name }),
+              onStepComplete: (name, status, durationMs) =>
+                send("step_complete", { name, status, durationMs }),
+            },
+          );
         } catch (err) {
           const logger = getLogger();
           logger.errorWithException(

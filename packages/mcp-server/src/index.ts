@@ -1,5 +1,8 @@
 import { MCPServerAdapter } from "./infrastructure/adapters/mcp-server.adapter.js";
 import type { EventBusPort } from "@hexagen/messaging";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
+import { AcceptTransactionToolUseCase } from "./application/use-cases/accept-transaction-tool.use-case.js";
 import { AddDependencyToolUseCase } from "./application/use-cases/add-dependency-tool.use-case.js";
 import { AuditBoundariesToolUseCase } from "./application/use-cases/audit-boundaries-tool.use-case.js";
 import { DiffManifestToolUseCase } from "./application/use-cases/diff-manifest-tool.use-case.js";
@@ -12,9 +15,12 @@ import { GetDecisionsResourceUseCase } from "./application/use-cases/get-decisio
 import { GetInvariantsResourceUseCase } from "./application/use-cases/get-invariants-resource.use-case.js";
 import { GetLinterConfigResourceUseCase } from "./application/use-cases/get-linter-config-resource.use-case.js";
 import { GetManifestResourceUseCase } from "./application/use-cases/get-manifest-resource.use-case.js";
+import { GetTransactionToolUseCase } from "./application/use-cases/get-transaction-tool.use-case.js";
 import { GetWorkspaceContextResourceUseCase } from "./application/use-cases/get-workspace-context-resource.use-case.js";
 import { InitializeFeatureWorktreeToolUseCase } from "./application/use-cases/initialize-feature-worktree-tool.use-case.js";
+import { ListTransactionsToolUseCase } from "./application/use-cases/list-transactions-tool.use-case.js";
 import { LogAgentRemediationToolUseCase } from "./application/use-cases/log-agent-remediation-tool.use-case.js";
+import { RejectTransactionToolUseCase } from "./application/use-cases/reject-transaction-tool.use-case.js";
 import { RemoveContextToolUseCase } from "./application/use-cases/remove-context-tool.use-case.js";
 import { RemovePortToolUseCase } from "./application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "./application/use-cases/scaffold-module-tool.use-case.js";
@@ -46,6 +52,7 @@ export interface MCPCompositionRoot {
   manifestDiffPort: ManifestDiffPort;
   eventBusPort: EventBusPort;
   reportGovernancePort: ReportGovernancePort;
+  transactionManagerPort: TransactionManagerPort;
 }
 
 export function createDefaultMCPCompositionRoot(
@@ -66,6 +73,7 @@ export function createDefaultMCPCompositionRoot(
     manifestDiffPort: new ManifestDiffAdapter(workspaceRoot),
     eventBusPort: new InMemoryEventBusAdapter(),
     reportGovernancePort: new ReportGovernanceAdapter(workspaceRoot),
+    transactionManagerPort: new InMemoryTransactionManager(),
   };
 }
 
@@ -129,8 +137,21 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     new InitializeFeatureWorktreeToolUseCase(root.reportGovernancePort);
   const submitArchitecturalSpecToolUseCase =
     new SubmitArchitecturalSpecToolUseCase(root.reportGovernancePort);
-  const logAgentRemediationToolUseCase =
-    new LogAgentRemediationToolUseCase(root.reportGovernancePort);
+  const logAgentRemediationToolUseCase = new LogAgentRemediationToolUseCase(
+    root.reportGovernancePort,
+  );
+  const getTransactionToolUseCase = new GetTransactionToolUseCase(
+    root.transactionManagerPort,
+  );
+  const listTransactionsToolUseCase = new ListTransactionsToolUseCase(
+    root.transactionManagerPort,
+  );
+  const acceptTransactionToolUseCase = new AcceptTransactionToolUseCase(
+    root.transactionManagerPort,
+  );
+  const rejectTransactionToolUseCase = new RejectTransactionToolUseCase(
+    root.transactionManagerPort,
+  );
 
   return new MCPServerAdapter({
     getManifestResourceUseCase,
@@ -152,6 +173,10 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     initializeFeatureWorktreeToolUseCase,
     submitArchitecturalSpecToolUseCase,
     logAgentRemediationToolUseCase,
+    getTransactionToolUseCase,
+    listTransactionsToolUseCase,
+    acceptTransactionToolUseCase,
+    rejectTransactionToolUseCase,
   });
 }
 
