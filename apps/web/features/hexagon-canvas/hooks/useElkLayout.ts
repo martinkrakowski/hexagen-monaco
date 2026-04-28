@@ -256,6 +256,30 @@ function buildElkGraph(
     };
   });
 
+  // 2.5. Detect nodes with children and add layout algorithm
+  // This is critical for domain nodes that contain entities
+  nodes.forEach((node) => {
+    const hasChildren = nodes.some((n) => n.parentId === node.id);
+    if (
+      hasChildren &&
+      node.type !== "bounded-context" &&
+      node.type !== "group"
+    ) {
+      // Compound nodes like Domain / Use Cases need their own layout algorithm
+      // so ELK can position their nested children instead of leaving them at (0,0).
+      const elkNode = elkNodesById[node.id];
+      elkNode.layoutOptions = {
+        ...elkNode.layoutOptions,
+        "elk.algorithm": "layered",
+        "elk.direction": direction,
+        "elk.padding": "[top=20,left=10,bottom=10,right=10]",
+        "elk.spacing.nodeNode": "20",
+        "elk.layered.spacing.nodeNodeBetweenLayers": "30",
+        "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+      };
+    }
+  });
+
   // 3. Second pass: Build the nested tree structure with explicit compass positioning
   nodes.forEach((node) => {
     const elkNode = elkNodesById[node.id];
@@ -316,17 +340,88 @@ function buildElkGraph(
     }
   });
 
-  // 4. Distribute edges to appropriate hierarchy levels
-  // Edges should be placed at the lowest common ancestor of source and target
+  // 4. Distribute edges to appropriate hierarchy levels.
+  // ELK cannot route an edge directly between a compound node and its own descendant,
+  // so those parent-child edges are excluded from the layout graph.
+
+  /**
+   * Find the lowest common container that can own an edge between two nodes.
+   *
+   * Important: edge ownership is based on the nodes' parent chains, not the nodes
+   * themselves. If one endpoint is a compound node, that node cannot also be the
+   * graph that owns the edge because it is not a child of itself.
+   *
+   * @param sourceId - The source node ID
+   * @param targetId - The target node ID
+   * @param parentMap - Map of node IDs to their parent IDs
+   * @returns The ID of the lowest common container, or 'root' if no common container
+   */
+  const findLowestCommonContainer = (
+    sourceId: string,
+    targetId: string,
+    parentMap: Record<string, string>,
+  ): string => {
+    // Edge case: A node connecting to itself
+    if (sourceId === targetId) return parentMap[sourceId] || "root";
+
+    // Build the ancestor path for the source node's containers.
+    const sourcePath = new Set<string>();
+    let currentSource: string | undefined = parentMap[sourceId];
+
+    while (currentSource) {
+      sourcePath.add(currentSource);
+      currentSource = parentMap[currentSource];
+    }
+    // Always include root in the path
+    sourcePath.add("root");
+
+    // Walk up the target's container path until we hit a shared owner.
+    let currentTarget: string | undefined = parentMap[targetId];
+    while (currentTarget) {
+      if (sourcePath.has(currentTarget)) {
+        return currentTarget;
+      }
+      currentTarget = parentMap[currentTarget];
+    }
+
+    // Fallback to root if they exist in completely detached trees
+    return "root";
+  };
+
+  const isAncestorOf = (
+    ancestorId: string,
+    nodeId: string,
+    parentMap: Record<string, string>,
+  ): boolean => {
+    let currentParent = parentMap[nodeId];
+
+    while (currentParent) {
+      if (currentParent === ancestorId) {
+        return true;
+      }
+      currentParent = parentMap[currentParent];
+    }
+
+    return false;
+  };
+
   const edgesByParent: Record<string, LayoutEdge[]> = { root: [] };
 
   edges.forEach((edge) => {
-    const sourceParent = nodeParentMap[edge.source] || "root";
-    const targetParent = nodeParentMap[edge.target] || "root";
+    // ELK rejects edges from a compound node to its own descendant. React Flow can
+    // still render those edges after layout, so skip them here.
+    if (
+      isAncestorOf(edge.source, edge.target, nodeParentMap) ||
+      isAncestorOf(edge.target, edge.source, nodeParentMap)
+    ) {
+      return;
+    }
 
-    // If both nodes share the same parent, add edge to that parent
-    // Otherwise, add to root level for cross-hierarchy edges
-    const edgeParent = sourceParent === targetParent ? sourceParent : "root";
+    const edgeParent = findLowestCommonContainer(
+      edge.source,
+      edge.target,
+      nodeParentMap,
+    );
 
     if (!edgesByParent[edgeParent]) {
       edgesByParent[edgeParent] = [];
@@ -473,8 +568,8 @@ export function useElkLayout() {
           const layoutNode = node as HexagonNodeWithLayout;
           return {
             id: node.id,
-            width: 180,
-            height: 100,
+            width: layoutNode.style?.width ?? 180,
+            height: layoutNode.style?.height ?? 100,
             parentId: layoutNode.parentId,
             type: node.type,
             side: layoutNode.side,
@@ -498,7 +593,6 @@ export function useElkLayout() {
 
         return { positions };
       } catch (error) {
-        // eslint-disable-next-line no-console
         console.error("ELK layout calculation failed:", error);
         throw new Error(
           `ELK layout failed: ${error instanceof Error ? error.message : String(error)}`,

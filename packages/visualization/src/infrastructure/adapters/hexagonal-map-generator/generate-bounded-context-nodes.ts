@@ -126,6 +126,9 @@ export function generateBoundedContextNodes({
       id: entityId,
       label: name,
       type: "entity" as HexagonNodeType,
+      parentId: domainNodeId,
+      extent: "parent",
+      draggable: false,
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -153,6 +156,9 @@ export function generateBoundedContextNodes({
       id: useCaseId,
       label: name,
       type: "use-case" as HexagonNodeType,
+      parentId: useCasesNodeId,
+      extent: "parent",
+      draggable: false,
       position: { x: posX, y: posY },
     });
     edges.push({
