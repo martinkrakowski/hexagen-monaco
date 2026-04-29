@@ -42,8 +42,8 @@ export const LAYOUT_CONFIG = {
   SOUTH_OFFSET_ADDITIONAL: 80,
   SOUTH_OFFSET_STEP: 180, // Increased from 120 to give more horizontal separation
 
-  NORTH_ADAPTER_X_OFFSET: 330,
-  SOUTH_ADAPTER_X_OFFSET: 460,
+  // Default dimensions for adapter nodes (matches useElkLayout default)
+  ADAPTER_NODE_WIDTH: 180,
 
   WEST_PORT_OFFSET_X: -550, // Increased from -480 to push further out
   EAST_PORT_OFFSET_X: 845, // Increased from 775 to push further out

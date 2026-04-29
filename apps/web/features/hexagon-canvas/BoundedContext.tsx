@@ -434,38 +434,28 @@ function UnifiedBoundedContextComponent({
       </div>
 
       <>
+        {/*
+         * Hexagonal architecture: four compass sides, one handle per side.
+         * north = driving adapters (API / UI)       -> target
+         * south = driven adapters (persistence, messaging, telemetry) -> source
+         * west  = inbound ports (user-facing abstractions) -> target
+         * east  = outbound ports (infrastructure abstractions) -> source
+         *
+         * All adapters/ports on a given side share a single handle. If a side
+         * needs multiple adapters, they stack outside the hex and their edges
+         * converge on the same compass handle.
+         */}
         <Handle
           type="target"
           position={Position.Top}
-          id="north-0"
-          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-        />
-        <Handle
-          type="target"
-          position={Position.Top}
-          id="north-1"
-          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-          style={{ left: "60%" }}
-        />
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="south-0"
+          id="north"
           className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
         />
         <Handle
           type="source"
           position={Position.Bottom}
-          id="south-1"
+          id="south"
           className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-          style={{ left: "35%" }}
-        />
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="south-2"
-          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-          style={{ left: "70%" }}
         />
         <Handle
           type="target"

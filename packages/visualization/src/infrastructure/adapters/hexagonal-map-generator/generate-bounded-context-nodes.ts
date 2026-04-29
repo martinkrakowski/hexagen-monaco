@@ -58,11 +58,9 @@ export function generateBoundedContextNodes({
     id: contextId,
     type: "bounded-context" as HexagonNodeType,
     label: ctx.name || `Context ${index + 1}`,
-    position: { x: hexX - groupX, y: hexY - groupY },
-    parentId: "monorepo-boundary",
-    extent: "parent",
+    position: { x: hexX, y: hexY },
     isRoot: isRootContext,
-    draggable: isRootContext,
+    draggable: true,
     style: { width: hexDimension, height: hexDimension },
     stats: {
       aggregates: entityItems.length,
@@ -128,7 +126,7 @@ export function generateBoundedContextNodes({
       type: "entity" as HexagonNodeType,
       parentId: domainNodeId,
       extent: "parent",
-      draggable: false,
+      draggable: true,
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -158,7 +156,7 @@ export function generateBoundedContextNodes({
       type: "use-case" as HexagonNodeType,
       parentId: useCasesNodeId,
       extent: "parent",
-      draggable: false,
+      draggable: true,
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -217,6 +215,11 @@ export function generateBoundedContextNodes({
   }
 
   adapters.forEach((adapter) => {
+    // Hexagonal architecture: one handle per compass side. When multiple
+    // adapters live on the same side, they stack vertically outside the hex
+    // (same x as the handle, y offset per index) and all edges converge on
+    // the single `north` / `south` handle. This mirrors how inbound/outbound
+    // ports stack outside the west/east handles below.
     const yOffset =
       adapter.side === "north"
         ? hexY -
@@ -227,17 +230,21 @@ export function generateBoundedContextNodes({
           LAYOUT_CONFIG.SOUTH_OFFSET_ADDITIONAL +
           adapter.handleIndex * LAYOUT_CONFIG.SOUTH_OFFSET_STEP;
 
-    const xOffset =
-      adapter.side === "north"
-        ? LAYOUT_CONFIG.NORTH_ADAPTER_X_OFFSET
-        : LAYOUT_CONFIG.SOUTH_ADAPTER_X_OFFSET - adapter.handleIndex * 60; // Offset each south adapter to avoid overlap
+    // Center adapter horizontally on the hex's compass handle (both north
+    // and south handles sit at 50% of the hex width by default).
+    const adapterX =
+      hexX + hexDimension / 2 - LAYOUT_CONFIG.ADAPTER_NODE_WIDTH / 2;
 
     nodes.push({
       id: adapter.id,
       type: "port" as HexagonNodeType,
       label: adapter.label,
-      position: { x: hexX + xOffset, y: yOffset },
+      position: { x: adapterX, y: yOffset },
       side: adapter.side,
+      // NOTE: Adapters are independent nodes positioned via compass positioning.
+      // They are NOT children of the bounded context (no parentId).
+      // This allows them to be positioned outside the bounded context visually.
+      // The 'side' property is used by useElkLayout for compass positioning.
     });
 
     const edgeConfig =
@@ -245,12 +252,12 @@ export function generateBoundedContextNodes({
         ? {
             source: adapter.id,
             target: contextId,
-            targetHandle: `north-${adapter.handleIndex}`,
+            targetHandle: "north",
           }
         : {
             source: contextId,
             target: adapter.id,
-            sourceHandle: `south-${adapter.handleIndex}`,
+            sourceHandle: "south",
             targetHandle: "south",
           };
 

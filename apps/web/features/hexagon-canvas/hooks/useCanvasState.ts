@@ -119,12 +119,16 @@ export function useCanvasState(
           result.positions.map((p) => [p.nodeId, { x: p.x, y: p.y }]),
         );
 
-        // Root-level adapters/ports (type=port with a compass side and no parentId)
-        // are positioned by config offsets in generate-bounded-context-nodes.ts.
-        // We preserve their original hardcoded positions rather than letting ELK's
-        // layered/partitioning algorithm redistribute them, because ELK conflates
-        // north/south with west/east into horizontal lanes, which breaks compass
-        // semantics. See docs/COMPASS_LAYOUT_REMEDIATION.md.
+        // The generator positions root-level adapters/ports around a bounded
+        // context hex at specific compass offsets, and positions the bounded
+        // context itself using HEX_POSITION_OFFSET_*. We preserve these
+        // hardcoded positions because ELK's layered/partitioning algorithm
+        // conflates north/south with west/east into horizontal lanes, which
+        // breaks compass semantics. The bounded context is also anchored so it
+        // stays at the visual center of its compass satellites. ELK then only
+        // influences positions of children INSIDE the bounded context
+        // (domain, usecases, entities, use-cases). See
+        // docs/COMPASS_LAYOUT_REMEDIATION.md.
         return nodes.map((node) => {
           const nodeWithLayout = node as HexagonNode & {
             parentId?: string;
@@ -134,8 +138,9 @@ export function useCanvasState(
             node.type === "port" &&
             nodeWithLayout.side !== undefined &&
             !nodeWithLayout.parentId;
-          if (isRootAdapterOrPort) {
-            return node; // keep original hardcoded position
+          const isBoundedContext = node.type === "bounded-context";
+          if (isRootAdapterOrPort || isBoundedContext) {
+            return node; // keep original generator position
           }
           const position = positionMap.get(node.id);
           return position ? { ...node, position } : node;
@@ -153,6 +158,50 @@ export function useCanvasState(
   );
 
   /**
+   * Regenerate a fresh, compiled graph from wizardData.
+   * Does NOT run ELK — caller decides whether to run layout or apply saved
+   * positions. Returns null when wizardData has no bounded contexts.
+   */
+  const regenerateGraphFromWizard = useCallback((): {
+    nodes: HexagonNode[];
+    edges: HexagonEdge[];
+  } | null => {
+    if (!wizardData?.boundedContexts?.length) {
+      return null;
+    }
+    const generateMap = getGenerateHexagonalMapUseCase();
+    const { nodes, edges } = generateMap.execute({ wizardData });
+    const mapNodeVisualUseCase = getMapNodeVisualUseCase();
+
+    const compiledNodes = nodes.map((node) => {
+      const needsCompilation = [
+        "entity",
+        "use-case",
+        "port",
+        "adapter",
+      ].includes(node.type ?? "");
+      if (needsCompilation && mapNodeVisualUseCase) {
+        const kind = nodeKindFromHexagonType(node.type, node.side);
+        const projection = mapNodeVisualUseCase.execute({
+          nodeId: node.id,
+          kind,
+          label: node.label,
+          category: node.category,
+        });
+        return {
+          ...node,
+          category: projection.category,
+          compilerCategory: projection.category,
+          variant: projection.variant,
+        };
+      }
+      return node;
+    });
+
+    return { nodes: compiledNodes, edges };
+  }, [wizardData]);
+
+  /**
    * Load and process graph data
    */
   const loadGraph = useCallback(async () => {
@@ -163,35 +212,9 @@ export function useCanvasState(
     }
 
     if (wizardData?.boundedContexts?.length) {
-      const generateMap = getGenerateHexagonalMapUseCase();
-      const { nodes, edges } = generateMap.execute({ wizardData });
-      const mapNodeVisualUseCase = getMapNodeVisualUseCase();
-
-      // Compile visual projections
-      const compiledNodes = nodes.map((node) => {
-        const needsCompilation = [
-          "entity",
-          "use-case",
-          "port",
-          "adapter",
-        ].includes(node.type ?? "");
-        if (needsCompilation && mapNodeVisualUseCase) {
-          const kind = nodeKindFromHexagonType(node.type, node.side);
-          const projection = mapNodeVisualUseCase.execute({
-            nodeId: node.id,
-            kind,
-            label: node.label,
-            category: node.category,
-          });
-          return {
-            ...node,
-            category: projection.category,
-            compilerCategory: projection.category,
-            variant: projection.variant,
-          };
-        }
-        return node;
-      });
+      const regenerated = regenerateGraphFromWizard();
+      if (!regenerated) return;
+      const { nodes: compiledNodes, edges } = regenerated;
 
       // Check if manifest changed
       const newHash = generateManifestHash(wizardData);
@@ -257,6 +280,7 @@ export function useCanvasState(
     nodePositions,
     applySavedPositions,
     calculateElkLayout,
+    regenerateGraphFromWizard,
     setManifestHash,
     setGraph,
   ]);
@@ -318,17 +342,40 @@ export function useCanvasState(
   }, []);
 
   /**
-   * Clear layout and recalculate
+   * Clear persisted layout + regenerate canonical graph from wizardData, then
+   * run ELK. Used by the Clean-up button. This drops any user-dragged
+   * positions and returns the canvas to its pristine generator-produced
+   * layout with fresh ELK positioning for internal nodes.
+   *
+   * Falls back to recalculating the current store graph when wizardData is
+   * unavailable (e.g., non-wizard flows that load a projectId).
    */
   const handleClearCanvasLayout = useCallback(async () => {
     await clearLayout();
-    // Recalculate layout
+
+    const regenerated = regenerateGraphFromWizard();
+    if (regenerated) {
+      const { nodes: freshNodes, edges: freshEdges } = regenerated;
+      const laidOutNodes = await calculateElkLayout(freshNodes, freshEdges);
+      setGraph(laidOutNodes, freshEdges);
+      return;
+    }
+
     const laidOutNodes = await calculateElkLayout(nodes, edges);
     setGraph(laidOutNodes, edges);
-  }, [clearLayout, nodes, edges, calculateElkLayout, setGraph]);
+  }, [
+    clearLayout,
+    regenerateGraphFromWizard,
+    nodes,
+    edges,
+    calculateElkLayout,
+    setGraph,
+  ]);
 
   /**
-   * Force recalculate layout (for "Clean-up" button)
+   * Force recalculate layout on the current store graph (does NOT regenerate).
+   * Kept for callers that want to re-run ELK without discarding in-progress
+   * user edits. The Clean-up button uses handleClearCanvasLayout above.
    */
   const recalculateLayout = useCallback(async () => {
     const laidOutNodes = await calculateElkLayout(nodes, edges);
