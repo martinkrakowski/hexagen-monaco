@@ -344,7 +344,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            PRESENTATION
+            APIs
           </text>
           <text
             x="50"
@@ -355,7 +355,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            INFRASTRUCTURE
+            EXTERNAL INTEGRATIONS
           </text>
           <text
             x="-2"
@@ -366,7 +366,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            DRIVING
+            PRESENTATION
           </text>
           <text
             x="108"
@@ -377,7 +377,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            DRIVEN
+            STATE &amp; STORAGE
           </text>
         </g>
       </svg>

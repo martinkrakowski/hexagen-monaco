@@ -179,142 +179,119 @@ export function generateBoundedContextNodes({
     });
   });
 
-  const adapters: Array<{
-    id: string;
-    label: string;
-    side: "north" | "south";
-    handleIndex: number;
-  }> = [];
+  // ---------------------------------------------------------------------
+  // Hexagonal compass mapping (wizard fields -> sides)
+  //
+  //   West  (Presentation         / Primary Adapter)  <- uiFramework + inboundPorts
+  //   North (APIs                 / Primary Adapter)  <- apiFramework / infrastructureTarget
+  //   East  (State & Storage      / Secondary Port )  <- persistenceAdapter + outboundPorts
+  //   South (External Integrations/ Secondary Port )  <- messagingAdapter + telemetryProvider
+  //
+  // Display labels are FIXED per side ("Presentation", "APIs", "State & Storage",
+  // "External Integrations"). The node id still encodes the underlying wizard
+  // value so each item renders as a distinct card when multiple values exist
+  // on the same side.
+  // ---------------------------------------------------------------------
 
-  let northCount = 0;
   const apiLabel = ctx.infrastructureTarget
     ? ctx.infrastructureTarget.charAt(0).toUpperCase() +
       ctx.infrastructureTarget.slice(1)
     : ctx.apiFramework;
-  if (apiLabel) {
-    adapters.push({
-      id: `adapter-${contextId}-${apiLabel}`,
-      label: apiLabel,
-      side: "north",
-      handleIndex: northCount++,
-    });
-  }
-  if (ctx.uiFramework) {
-    adapters.push({
-      id: `adapter-${contextId}-${ctx.uiFramework}`,
-      label: ctx.uiFramework,
-      side: "north",
-      handleIndex: northCount++,
-    });
-  }
 
-  let southCount = 0;
-  for (const field of [
-    ctx.messagingAdapter,
-    ctx.persistenceAdapter,
-    ctx.telemetryProvider,
-  ] as const) {
-    if (!field) continue;
-    adapters.push({
-      id: `adapter-${contextId}-${field}`,
-      label: field,
-      side: "south",
-      handleIndex: southCount++,
-    });
-  }
+  const westItems: string[] = [];
+  if (ctx.uiFramework) westItems.push(ctx.uiFramework);
+  westItems.push(...(ctx.portConfiguration?.inboundPorts ?? []));
 
-  adapters.forEach((adapter) => {
-    // Hexagonal architecture: one handle per compass side. When multiple
-    // adapters live on the same side, they stack vertically outside the hex
-    // (same x as the handle, y offset per index) and all edges converge on
-    // the single `north` / `south` handle. This mirrors how inbound/outbound
-    // ports stack outside the west/east handles below.
+  const northItems: string[] = [];
+  if (apiLabel) northItems.push(apiLabel);
+
+  const eastItems: string[] = [];
+  if (ctx.persistenceAdapter) eastItems.push(ctx.persistenceAdapter);
+  eastItems.push(...(ctx.portConfiguration?.outboundPorts ?? []));
+
+  const southItems: string[] = [];
+  if (ctx.messagingAdapter) southItems.push(ctx.messagingAdapter);
+  if (ctx.telemetryProvider) southItems.push(ctx.telemetryProvider);
+
+  // --- North: APIs (Primary Adapter) --------------------------------------
+  northItems.forEach((item, i) => {
+    const nodeId = `adapter-${contextId}-north-${item}-${i}`;
     const yOffset =
-      adapter.side === "north"
-        ? hexY -
-          LAYOUT_CONFIG.NORTH_OFFSET_BASE -
-          adapter.handleIndex * LAYOUT_CONFIG.NORTH_OFFSET_STEP
-        : hexY +
-          LAYOUT_CONFIG.SOUTH_OFFSET_BASE +
-          LAYOUT_CONFIG.SOUTH_OFFSET_ADDITIONAL +
-          adapter.handleIndex * LAYOUT_CONFIG.SOUTH_OFFSET_STEP;
-
-    // Center adapter horizontally on the hex's compass handle (both north
-    // and south handles sit at 50% of the hex width by default).
+      hexY -
+      LAYOUT_CONFIG.NORTH_OFFSET_BASE -
+      i * LAYOUT_CONFIG.NORTH_OFFSET_STEP;
     const adapterX =
       hexX + hexDimension / 2 - LAYOUT_CONFIG.ADAPTER_NODE_WIDTH / 2;
 
     nodes.push({
-      id: adapter.id,
+      id: nodeId,
       type: "adapter" as HexagonNodeType,
-      label: adapter.label,
+      label: item,
+      side: "north",
+      category: "primary-adapter",
       position: { x: adapterX, y: yOffset },
-      side: adapter.side,
-      // Compass role in hexagonal architecture:
-      //   north = driving adapter (Controller / UI / CLI / Event Subscriber)
-      //   south = driven adapter (DB client / API client / Message Producer)
-      // The category hint flows through MapNodeVisualUseCase to set both the
-      // rendered label text ("PRIMARY ADAPTER" / "SECONDARY ADAPTER") and
-      // the visual variant palette.
-      category:
-        adapter.side === "north" ? "primary-adapter" : "secondary-adapter",
-      // NOTE: Adapters are independent nodes positioned via compass positioning.
-      // They are NOT children of the bounded context (no parentId).
-      // This allows them to be positioned outside the bounded context visually.
-      // The 'side' property is used by useElkLayout for compass positioning.
     });
 
-    const edgeConfig =
-      adapter.side === "north"
-        ? {
-            source: adapter.id,
-            target: contextId,
-            targetHandle: "north",
-          }
-        : {
-            source: contextId,
-            target: adapter.id,
-            sourceHandle: "south",
-            targetHandle: "south",
-          };
-
     edges.push({
-      id: `e-${adapter.id}`,
-      source: edgeConfig.source,
-      target: edgeConfig.target,
-      sourceHandle: edgeConfig.sourceHandle,
-      targetHandle: edgeConfig.targetHandle,
+      id: `e-${nodeId}`,
+      source: nodeId,
+      target: contextId,
+      targetHandle: "north",
       type: "smoothstep",
     });
   });
 
-  const inboundPorts = ctx.portConfiguration?.inboundPorts ?? [];
-  const outboundPorts = ctx.portConfiguration?.outboundPorts ?? [];
+  // --- South: External Integrations (Secondary Port) ----------------------
+  southItems.forEach((item, i) => {
+    const nodeId = `adapter-${contextId}-south-${item}-${i}`;
+    const yOffset =
+      hexY +
+      LAYOUT_CONFIG.SOUTH_OFFSET_BASE +
+      LAYOUT_CONFIG.SOUTH_OFFSET_ADDITIONAL +
+      i * LAYOUT_CONFIG.SOUTH_OFFSET_STEP;
+    const adapterX =
+      hexX + hexDimension / 2 - LAYOUT_CONFIG.ADAPTER_NODE_WIDTH / 2;
 
-  inboundPorts.forEach((port, i) => {
-    const portId = `port-in-${contextId}-${port}-${i}`;
+    nodes.push({
+      id: nodeId,
+      type: "adapter" as HexagonNodeType,
+      label: item,
+      side: "south",
+      category: "secondary-port",
+      position: { x: adapterX, y: yOffset },
+    });
+
+    edges.push({
+      id: `e-${nodeId}`,
+      source: contextId,
+      sourceHandle: "south",
+      target: nodeId,
+      targetHandle: "south",
+      type: "smoothstep",
+    });
+  });
+
+  // --- West: Presentation (Primary Adapter) -------------------------------
+  westItems.forEach((item, i) => {
+    const nodeId = `port-in-${contextId}-${item}-${i}`;
     const yOffset =
       hexY +
       LAYOUT_CONFIG.PORT_OFFSET_BASE_Y +
       i * LAYOUT_CONFIG.PORT_OFFSET_STEP_Y;
 
     nodes.push({
-      id: portId,
+      id: nodeId,
       type: "adapter" as HexagonNodeType,
-      label: "Presentation",
+      label: item,
       side: "west",
-      // West compass = primary / driving side -> primary adapter
-      // Represents the presentation layer (ReactJS components)
-      // Visual flow: From West edge, inward to Application Core
       category: "primary-adapter",
-      // Using zIndex to make inbound adapters more visible
       style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X, y: yOffset },
     });
 
     edges.push({
-      id: `edge-${portId}`,
-      source: portId,
+      id: `edge-${nodeId}`,
+      source: nodeId,
       sourceHandle: "east",
       target: contextId,
       targetHandle: "west",
@@ -322,33 +299,30 @@ export function generateBoundedContextNodes({
     });
   });
 
-  outboundPorts.forEach((port, i) => {
-    const portId = `port-out-${contextId}-${port}-${i}`;
+  // --- East: State & Storage (Secondary Port) -----------------------------
+  eastItems.forEach((item, i) => {
+    const nodeId = `port-out-${contextId}-${item}-${i}`;
     const yOffset =
       hexY +
       LAYOUT_CONFIG.PORT_OFFSET_BASE_Y +
       i * LAYOUT_CONFIG.PORT_OFFSET_STEP_Y;
 
     nodes.push({
-      id: portId,
+      id: nodeId,
       type: "adapter" as HexagonNodeType,
-      label: "External Integrations",
-      side: "south",
-      // South compass = secondary / driven side -> secondary port
-      // Represents outbound communication to external third-party systems
-      // Visual flow: From Application Core, downward to the South edge
+      label: item,
+      side: "east",
       category: "secondary-port",
-      // Using zIndex to make outbound adapters more visible
       style: { width: 180, zIndex: 20 },
-      position: { x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X, y: yOffset },
+      position: { x: hexX + LAYOUT_CONFIG.EAST_PORT_OFFSET_X, y: yOffset },
     });
 
     edges.push({
-      id: `edge-${portId}`,
+      id: `edge-${nodeId}`,
       source: contextId,
-      sourceHandle: "south",
-      target: portId,
-      targetHandle: "north",
+      sourceHandle: "east",
+      target: nodeId,
+      targetHandle: "west",
       type: "smoothstep",
     });
   });
