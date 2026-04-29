@@ -12,14 +12,15 @@ interface PortColumnProps<T extends string> {
 }
 
 /**
- * One hemisphere of the hexagonal port-configuration card — either
- * "West: Inbound Ports" or "East: Outbound Ports". Generic over the
- * port value union so InboundPortValue and OutboundPortValue can
- * each flow through without widening.
+ * One compass-aligned column of the port-configuration panel — one of:
+ *   - "North: APIs"                 (inbound ports)
+ *   - "East: State & Storage"       (outbound, persistence)
+ *   - "South: External Integrations" (outbound, 3rd-party)
  *
- * Typed as <T extends string> at the boundary; consumers pass
- * InboundPortValue or OutboundPortValue; checkbox callbacks receive
- * the correctly-narrowed value (no `as never` casts).
+ * Generic over the port value union so InboundPortValue and OutboundPortValue
+ * can each flow through without widening. Typed as <T extends string> at the
+ * boundary; consumers pass InboundPortValue or OutboundPortValue; checkbox
+ * callbacks receive the correctly-narrowed value (no `as never` casts).
  */
 export function PortColumn<T extends string>({
   title,

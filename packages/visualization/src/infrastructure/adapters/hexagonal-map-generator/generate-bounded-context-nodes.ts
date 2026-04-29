@@ -182,15 +182,28 @@ export function generateBoundedContextNodes({
   // ---------------------------------------------------------------------
   // Hexagonal compass mapping (wizard fields -> sides)
   //
-  //   West  (Presentation         / Primary Adapter)  <- uiFramework + inboundPorts
-  //   North (APIs                 / Primary Adapter)  <- apiFramework / infrastructureTarget
-  //   East  (State & Storage      / Secondary Port )  <- persistenceAdapter + outboundPorts
-  //   South (External Integrations/ Secondary Port )  <- messagingAdapter + telemetryProvider
+  //   West  (Presentation          / Primary Adapter) <- uiFramework
+  //   North (APIs                  / Primary Adapter) <- apiFramework /
+  //                                                      infrastructureTarget +
+  //                                                      inboundPorts (all)
+  //   East  (State & Storage       / Secondary Port ) <- persistenceAdapter +
+  //                                                      outboundPorts (DB-flavored)
+  //   South (External Integrations / Secondary Port ) <- messagingAdapter +
+  //                                                      telemetryProvider +
+  //                                                      outboundPorts (3rd-party)
   //
-  // Display labels are FIXED per side ("Presentation", "APIs", "State & Storage",
-  // "External Integrations"). The node id still encodes the underlying wizard
-  // value so each item renders as a distinct card when multiple values exist
-  // on the same side.
+  // Outbound ports split across two driven sides per the wizard's port
+  // catalog classification (apps/web/.../port-catalog.ts). The mapping is
+  // duplicated here (as a small inline set) to keep the visualization
+  // package free of wizard-layer imports. Values must stay in sync with the
+  // catalog's `compass` field. Unknown outbound port values fall through to
+  // South (External Integrations) as a safe default.
+  //
+  // Per-card display labels use the underlying wizard value (e.g.
+  // "React Router", "relational-db") while the compass perimeter text
+  // ("PRESENTATION", "APIs", "STATE & STORAGE", "EXTERNAL INTEGRATIONS")
+  // comes from the static hex component and provides the architectural
+  // anchor.
   // ---------------------------------------------------------------------
 
   const apiLabel = ctx.infrastructureTarget
@@ -198,20 +211,31 @@ export function generateBoundedContextNodes({
       ctx.infrastructureTarget.slice(1)
     : ctx.apiFramework;
 
+  // Outbound-port → compass classification. Must stay in sync with
+  // apps/web/features/project-wizard/steps/port-configuration-step/port-catalog.ts
+  const EAST_OUTBOUND_PORTS = new Set<string>(["relational-db", "document-db"]);
+  const inboundPorts = ctx.portConfiguration?.inboundPorts ?? [];
+  const outboundPorts = ctx.portConfiguration?.outboundPorts ?? [];
+
   const westItems: string[] = [];
   if (ctx.uiFramework) westItems.push(ctx.uiFramework);
-  westItems.push(...(ctx.portConfiguration?.inboundPorts ?? []));
 
   const northItems: string[] = [];
   if (apiLabel) northItems.push(apiLabel);
+  northItems.push(...inboundPorts);
 
   const eastItems: string[] = [];
   if (ctx.persistenceAdapter) eastItems.push(ctx.persistenceAdapter);
-  eastItems.push(...(ctx.portConfiguration?.outboundPorts ?? []));
+  eastItems.push(
+    ...outboundPorts.filter((port) => EAST_OUTBOUND_PORTS.has(port)),
+  );
 
   const southItems: string[] = [];
   if (ctx.messagingAdapter) southItems.push(ctx.messagingAdapter);
   if (ctx.telemetryProvider) southItems.push(ctx.telemetryProvider);
+  southItems.push(
+    ...outboundPorts.filter((port) => !EAST_OUTBOUND_PORTS.has(port)),
+  );
 
   // --- North: APIs (Primary Adapter) --------------------------------------
   northItems.forEach((item, i) => {

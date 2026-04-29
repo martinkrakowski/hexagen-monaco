@@ -18,9 +18,14 @@ interface ContextPortCardProps {
 }
 
 /**
- * Per-context card showing the hexagonal split of driving (west,
- * inbound) vs driven (east, outbound) adapters. Two PortColumn
- * instances in a 2-column grid.
+ * Per-context card showing the three compass-aligned port groups:
+ *
+ *   North: APIs                 — driving / machine-driven entry points
+ *   East:  State & Storage      — driven / persistence adapters
+ *   South: External Integrations — driven / 3rd-party service adapters
+ *
+ * The WEST side (Presentation) is configured via the separate `uiFramework`
+ * field on an earlier step and is intentionally absent from this panel.
  */
 export function ContextPortCard({
   context,
@@ -35,6 +40,13 @@ export function ContextPortCard({
 
   const fieldPrefix = `boundedContexts.${contextIndex}.portConfiguration`;
 
+  const eastOutboundPorts = OUTBOUND_PORTS.filter(
+    (entry) => entry.compass === "east",
+  );
+  const southOutboundPorts = OUTBOUND_PORTS.filter(
+    (entry) => entry.compass === "south",
+  );
+
   return (
     <div className="border border-border rounded-lg p-0 space-y-4 bg-card">
       <div className="flex items-center gap-2 border-b border-border p-2">
@@ -44,20 +56,28 @@ export function ContextPortCard({
         <h3 className="font-medium">{context.name || "Unnamed"}</h3>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 pt-0 p-2">
+      <div className="grid grid-cols-3 gap-6 pt-0 p-2">
         <PortColumn
-          title="West: Inbound Ports"
-          description="Driving adapters that receive requests"
+          title="North: APIs"
+          description="Machine-driven entry points (REST, GraphQL, events, CLI)"
           name={`${fieldPrefix}.inbound`}
           ports={INBOUND_PORTS}
           selectedPorts={portConfig.inboundPorts ?? []}
           onToggle={onToggleInbound}
         />
         <PortColumn
-          title="East: Outbound Ports"
-          description="Driven adapters that make external calls"
-          name={`${fieldPrefix}.outbound`}
-          ports={OUTBOUND_PORTS}
+          title="East: State & Storage"
+          description="Persistence adapters (databases, caches, stores)"
+          name={`${fieldPrefix}.outbound.east`}
+          ports={eastOutboundPorts}
+          selectedPorts={portConfig.outboundPorts ?? []}
+          onToggle={onToggleOutbound}
+        />
+        <PortColumn
+          title="South: External Integrations"
+          description="3rd-party service clients (APIs, messaging, email)"
+          name={`${fieldPrefix}.outbound.south`}
+          ports={southOutboundPorts}
           selectedPorts={portConfig.outboundPorts ?? []}
           onToggle={onToggleOutbound}
         />
