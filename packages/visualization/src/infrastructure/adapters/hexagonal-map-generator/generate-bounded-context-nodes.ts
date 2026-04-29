@@ -111,11 +111,19 @@ export function generateBoundedContextNodes({
   });
 
   entityItems.forEach((name: string, i: number) => {
+    // Entities are rendered as root-level draggable cards below the bounded
+    // context (south of the south-adapter stack), stacked vertically under
+    // the Domain column inside the hex. They are NOT React-Flow children of
+    // Domain: Domain is rendered as a 140x28 label, which would force
+    // `extent: 'parent'` children to clamp to (0,0) and visually stack on top
+    // of each other. Positions are absolute (hexX/hexY offsets).
     const posX = isRootContext
-      ? LAYOUT_CONFIG.ENTITY_START_X
+      ? hexX + LAYOUT_CONFIG.ENTITY_START_X
       : hexX + LAYOUT_CONFIG.SATELLITE_ENTITY_START_X;
     const posY = isRootContext
-      ? LAYOUT_CONFIG.ENTITY_START_Y + i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
+      ? hexY +
+        LAYOUT_CONFIG.ENTITY_START_Y +
+        i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
       : hexY +
         LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y +
         i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT;
@@ -124,8 +132,6 @@ export function generateBoundedContextNodes({
       id: entityId,
       label: name,
       type: "entity" as HexagonNodeType,
-      parentId: domainNodeId,
-      extent: "parent",
       draggable: true,
       position: { x: posX, y: posY },
     });
@@ -141,11 +147,16 @@ export function generateBoundedContextNodes({
   });
 
   useCaseItems.forEach((name: string, i: number) => {
+    // Use cases are rendered as root-level draggable cards below the bounded
+    // context (south of the south-adapter stack), stacked vertically under
+    // the Use Cases column inside the hex. Same rationale as entities above.
     const posX = isRootContext
       ? hexX + LAYOUT_CONFIG.USECASE_X_OFFSET
       : hexX + LAYOUT_CONFIG.SATELLITE_USECASE_X_OFFSET;
     const posY = isRootContext
-      ? LAYOUT_CONFIG.USECASE_START_Y + i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
+      ? hexY +
+        LAYOUT_CONFIG.USECASE_START_Y +
+        i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
       : hexY +
         LAYOUT_CONFIG.SATELLITE_USECASE_START_Y +
         i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT;
@@ -154,8 +165,6 @@ export function generateBoundedContextNodes({
       id: useCaseId,
       label: name,
       type: "use-case" as HexagonNodeType,
-      parentId: useCasesNodeId,
-      extent: "parent",
       draggable: true,
       position: { x: posX, y: posY },
     });
@@ -237,10 +246,18 @@ export function generateBoundedContextNodes({
 
     nodes.push({
       id: adapter.id,
-      type: "port" as HexagonNodeType,
+      type: "adapter" as HexagonNodeType,
       label: adapter.label,
       position: { x: adapterX, y: yOffset },
       side: adapter.side,
+      // Compass role in hexagonal architecture:
+      //   north = driving adapter (Controller / UI / CLI / Event Subscriber)
+      //   south = driven adapter (DB client / API client / Message Producer)
+      // The category hint flows through MapNodeVisualUseCase to set both the
+      // rendered label text ("PRIMARY ADAPTER" / "SECONDARY ADAPTER") and
+      // the visual variant palette.
+      category:
+        adapter.side === "north" ? "primary-adapter" : "secondary-adapter",
       // NOTE: Adapters are independent nodes positioned via compass positioning.
       // They are NOT children of the bounded context (no parentId).
       // This allows them to be positioned outside the bounded context visually.
@@ -283,10 +300,12 @@ export function generateBoundedContextNodes({
 
     nodes.push({
       id: portId,
-      type: "port" as HexagonNodeType,
+      type: "adapter" as HexagonNodeType,
       label: port,
       side: "west",
-      // Using zIndex to make inbound ports more visible
+      // West compass = primary / driving side -> primary adapter
+      category: "primary-adapter",
+      // Using zIndex to make inbound adapters more visible
       style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X, y: yOffset },
     });
@@ -310,10 +329,12 @@ export function generateBoundedContextNodes({
 
     nodes.push({
       id: portId,
-      type: "port" as HexagonNodeType,
+      type: "adapter" as HexagonNodeType,
       label: port,
       side: "east",
-      // Using zIndex to make outbound ports more visible
+      // East compass = secondary / driven side -> secondary adapter
+      category: "secondary-adapter",
+      // Using zIndex to make outbound adapters more visible
       style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.EAST_PORT_OFFSET_X, y: yOffset },
     });
