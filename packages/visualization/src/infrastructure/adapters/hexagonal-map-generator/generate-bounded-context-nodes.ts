@@ -301,9 +301,11 @@ export function generateBoundedContextNodes({
     nodes.push({
       id: portId,
       type: "adapter" as HexagonNodeType,
-      label: port,
+      label: "Presentation",
       side: "west",
       // West compass = primary / driving side -> primary adapter
+      // Represents the presentation layer (ReactJS components)
+      // Visual flow: From West edge, inward to Application Core
       category: "primary-adapter",
       // Using zIndex to make inbound adapters more visible
       style: { width: 180, zIndex: 20 },
@@ -330,21 +332,23 @@ export function generateBoundedContextNodes({
     nodes.push({
       id: portId,
       type: "adapter" as HexagonNodeType,
-      label: port,
-      side: "east",
-      // East compass = secondary / driven side -> secondary adapter
-      category: "secondary-adapter",
+      label: "External Integrations",
+      side: "south",
+      // South compass = secondary / driven side -> secondary port
+      // Represents outbound communication to external third-party systems
+      // Visual flow: From Application Core, downward to the South edge
+      category: "secondary-port",
       // Using zIndex to make outbound adapters more visible
       style: { width: 180, zIndex: 20 },
-      position: { x: hexX + LAYOUT_CONFIG.EAST_PORT_OFFSET_X, y: yOffset },
+      position: { x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X, y: yOffset },
     });
 
     edges.push({
       id: `edge-${portId}`,
       source: contextId,
-      sourceHandle: "east",
+      sourceHandle: "south",
       target: portId,
-      targetHandle: "west",
+      targetHandle: "north",
       type: "smoothstep",
     });
   });
