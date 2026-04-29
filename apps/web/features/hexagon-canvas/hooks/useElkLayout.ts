@@ -445,6 +445,20 @@ function buildElkGraph(
       return;
     }
 
+    // ELK's layered algorithm cannot route edges that cross hierarchy levels
+    // when the intermediate containers use different algorithms (e.g., the
+    // bounded-context uses `algorithm: box` while root uses `algorithm: layered`).
+    // `hierarchyHandling: INCLUDE_CHILDREN` is set on both, but the mixed
+    // algorithms still cause UnsupportedGraphException. In practice this occurs
+    // for edges like Domain (inside bounded context) → Entity (root-level card
+    // south of the hex). React Flow renders these edges fine on its own based
+    // on absolute node positions, so we exclude them from the ELK layout graph.
+    const sourceHasParent = !!nodeParentMap[edge.source];
+    const targetHasParent = !!nodeParentMap[edge.target];
+    if (sourceHasParent !== targetHasParent) {
+      return;
+    }
+
     const edgeParent = findLowestCommonContainer(
       edge.source,
       edge.target,

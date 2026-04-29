@@ -119,28 +119,33 @@ export function useCanvasState(
           result.positions.map((p) => [p.nodeId, { x: p.x, y: p.y }]),
         );
 
-        // The generator positions root-level adapters/ports around a bounded
-        // context hex at specific compass offsets, and positions the bounded
-        // context itself using HEX_POSITION_OFFSET_*. We preserve these
-        // hardcoded positions because ELK's layered/partitioning algorithm
-        // conflates north/south with west/east into horizontal lanes, which
-        // breaks compass semantics. The bounded context is also anchored so it
-        // stays at the visual center of its compass satellites. ELK then only
-        // influences positions of children INSIDE the bounded context
-        // (domain, usecases, entities, use-cases). See
-        // docs/COMPASS_LAYOUT_REMEDIATION.md.
+        // The generator positions ALL root-level nodes explicitly using
+        // LAYOUT_CONFIG offsets:
+        //   - The bounded-context hex
+        //   - Compass adapters on N/S (primary/secondary adapters)
+        //   - Compass ports on W/E (primary/secondary ports)
+        //   - Root-level entities and use-cases stacked south of the hex
+        // We preserve these positions and let ELK influence ONLY the inner
+        // layout (currently just the Domain / UseCases column labels inside
+        // the hex). ELK's layered/partitioning algorithm conflates north/south
+        // with west/east into horizontal lanes, which breaks compass semantics,
+        // so applying it to the perimeter would misplace every compass node.
+        // See docs/architectural-reviews/HEXAGONAL-LAYOUT-REMEDIATION-2026-04-29.md.
         return nodes.map((node) => {
           const nodeWithLayout = node as HexagonNode & {
             parentId?: string;
             side?: "north" | "south" | "east" | "west";
           };
-          const isRootAdapterOrPort =
-            node.type === "port" &&
-            nodeWithLayout.side !== undefined &&
-            !nodeWithLayout.parentId;
-          const isBoundedContext = node.type === "bounded-context";
-          if (isRootAdapterOrPort || isBoundedContext) {
-            return node; // keep original generator position
+          // Any root-level node (no parentId) is generator-positioned.
+          const isRootLevel = !nodeWithLayout.parentId;
+          // Domain / UseCases column labels live INSIDE the hex (parentId set
+          // to the bounded-context id). They are laid out by the generator at
+          // the bottom band of the hex (DOMAIN_NODE_X/Y, USECASES_NODE_X/Y).
+          // ELK's box algorithm would otherwise repack them into arbitrary
+          // positions inside the hex.
+          const isInnerLabel = node.type === "inner";
+          if (isRootLevel || isInnerLabel) {
+            return node;
           }
           const position = positionMap.get(node.id);
           return position ? { ...node, position } : node;

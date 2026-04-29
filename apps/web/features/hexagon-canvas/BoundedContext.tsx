@@ -210,7 +210,7 @@ function UnifiedBoundedContextComponent({
       hexColor: "",
     };
 
-    if (nodeType === "port") {
+    if (nodeType === "port" || nodeType === "adapter") {
       const side = data.side as "north" | "south" | undefined;
       const showNorth = side === "north";
       const showSouth = side === "south";
@@ -224,7 +224,7 @@ function UnifiedBoundedContextComponent({
             className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
           >
             {data.compilerCategory
-              ? String(data.compilerCategory).toUpperCase()
+              ? String(data.compilerCategory).replace(/-/g, " ").toUpperCase()
               : null}
           </div>
           <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
@@ -280,7 +280,7 @@ function UnifiedBoundedContextComponent({
           className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
         >
           {data.compilerCategory
-            ? String(data.compilerCategory).toUpperCase()
+            ? String(data.compilerCategory).replace(/-/g, " ").toUpperCase()
             : null}
         </div>
         <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">

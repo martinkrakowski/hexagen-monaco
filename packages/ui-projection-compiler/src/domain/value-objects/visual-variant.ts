@@ -14,6 +14,14 @@ export type VisualVariantCategory =
   | "policy"
   | "aggregate"
   | "service"
+  // Hexagonal Architecture four-quadrant labels (Primary/Secondary × Port/Adapter).
+  // Primary = driving side (North / West) — actors that initiate interaction.
+  // Secondary = driven side (South / East) — systems the core depends on.
+  // See user guidance in HEXAGONAL-LAYOUT-REMEDIATION-2026-04-29.md (follow-up).
+  | "primary-adapter"
+  | "secondary-adapter"
+  | "primary-port"
+  | "secondary-port"
   | "default";
 
 export interface VisualVariant {

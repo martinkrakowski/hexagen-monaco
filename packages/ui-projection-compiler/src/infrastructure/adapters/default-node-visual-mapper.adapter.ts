@@ -50,6 +50,10 @@ export class DefaultNodeVisualMapperAdapter implements MapNodeVisualPort {
         "policy",
         "aggregate",
         "service",
+        "primary-adapter",
+        "primary-port",
+        "secondary-adapter",
+        "secondary-port",
         "default",
       ];
       if (known.includes(normalized)) {

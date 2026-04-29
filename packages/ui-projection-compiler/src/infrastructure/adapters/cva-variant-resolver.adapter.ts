@@ -133,6 +133,45 @@ export class CvaVariantResolverAdapter implements ResolveVariantPort {
       headerText: "text-white",
       hexColor: "#0ea5e9",
     },
+    // Hexagonal Architecture 4-quadrant palette. Primary (driving, N/W) uses
+    // warm/cool pairings; Secondary (driven, S/E) uses orange/teal pairings so
+    // the compass role is visually encoded. Adapter = saturated; Port = muted.
+    "primary-adapter": {
+      category: "primary-adapter",
+      headerBg: "bg-blue-600",
+      bodyBg: "bg-card",
+      border: "border-blue-500/30",
+      handleColor: "!bg-blue-500",
+      headerText: "text-white",
+      hexColor: "#3b82f6",
+    },
+    "primary-port": {
+      category: "primary-port",
+      headerBg: "bg-violet-600",
+      bodyBg: "bg-card",
+      border: "border-violet-500/30",
+      handleColor: "!bg-violet-500",
+      headerText: "text-white",
+      hexColor: "#8b5cf6",
+    },
+    "secondary-adapter": {
+      category: "secondary-adapter",
+      headerBg: "bg-teal-600",
+      bodyBg: "bg-card",
+      border: "border-teal-500/30",
+      handleColor: "!bg-teal-500",
+      headerText: "text-white",
+      hexColor: "#14b8a6",
+    },
+    "secondary-port": {
+      category: "secondary-port",
+      headerBg: "bg-orange-600",
+      bodyBg: "bg-card",
+      border: "border-orange-500/30",
+      handleColor: "!bg-orange-500",
+      headerText: "text-white",
+      hexColor: "#f97316",
+    },
     default: {
       category: "default",
       headerBg: "bg-muted",
