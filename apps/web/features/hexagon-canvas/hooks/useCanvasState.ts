@@ -119,7 +119,24 @@ export function useCanvasState(
           result.positions.map((p) => [p.nodeId, { x: p.x, y: p.y }]),
         );
 
+        // Root-level adapters/ports (type=port with a compass side and no parentId)
+        // are positioned by config offsets in generate-bounded-context-nodes.ts.
+        // We preserve their original hardcoded positions rather than letting ELK's
+        // layered/partitioning algorithm redistribute them, because ELK conflates
+        // north/south with west/east into horizontal lanes, which breaks compass
+        // semantics. See docs/COMPASS_LAYOUT_REMEDIATION.md.
         return nodes.map((node) => {
+          const nodeWithLayout = node as HexagonNode & {
+            parentId?: string;
+            side?: "north" | "south" | "east" | "west";
+          };
+          const isRootAdapterOrPort =
+            node.type === "port" &&
+            nodeWithLayout.side !== undefined &&
+            !nodeWithLayout.parentId;
+          if (isRootAdapterOrPort) {
+            return node; // keep original hardcoded position
+          }
           const position = positionMap.get(node.id);
           return position ? { ...node, position } : node;
         });

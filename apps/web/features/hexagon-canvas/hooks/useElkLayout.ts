@@ -307,38 +307,30 @@ function buildElkGraph(
           elkNode.height || 300,
         );
 
-        // Set inner layout direction based on compass position
-        // North/South groups should have horizontal layout (children side by side)
-        // East/West groups should have vertical layout (children stacked)
+        // Set inner layout direction based on compass position.
+        // Note: currently no node satisfies (parentId && side) in the generated
+        // graph — adapters/ports are root-level with hardcoded positions (see
+        // calculateElkLayout in useCanvasState.ts). This block is kept for future
+        // use when/if adapter nodes are restructured as children of bounded
+        // contexts. See docs/COMPASS_LAYOUT_REMEDIATION.md.
         const northTypes = ["north", "presentation"];
         const southTypes = ["south", "infrastructure"];
         const eastWestTypes = ["east", "west", "driven", "driving"];
 
-        // Debug info
-        console.log(
-          `Setting layout for node ${node.id} with side ${node.side}`,
-        );
-
         if (northTypes.includes(node.side) || southTypes.includes(node.side)) {
-          console.log(
-            `  - Applying RIGHT direction layout to ${node.id} (${node.side})`,
-          );
           elkNode.layoutOptions = {
             ...elkNode.layoutOptions,
             "elk.algorithm": "layered",
-            "elk.direction": "RIGHT", // Horizontal layout
-            "elk.spacing.nodeNode": "30", // Increased spacing
+            "elk.direction": "RIGHT",
+            "elk.spacing.nodeNode": "30",
             "elk.padding": "[top=30,left=30,bottom=30,right=30]",
           };
         } else if (eastWestTypes.includes(node.side)) {
-          console.log(
-            `  - Applying DOWN direction layout to ${node.id} (${node.side})`,
-          );
           elkNode.layoutOptions = {
             ...elkNode.layoutOptions,
             "elk.algorithm": "layered",
-            "elk.direction": "DOWN", // Vertical layout
-            "elk.spacing.nodeNode": "30", // Increased spacing
+            "elk.direction": "DOWN",
+            "elk.spacing.nodeNode": "30",
             "elk.padding": "[top=30,left=30,bottom=30,right=30]",
           };
         }
