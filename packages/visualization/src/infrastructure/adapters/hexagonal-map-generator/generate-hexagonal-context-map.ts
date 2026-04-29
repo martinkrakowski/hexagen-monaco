@@ -27,17 +27,12 @@ export function generateHexagonalContextMap(wizardData: WizardData): {
     LAYOUT_CONFIG.GROUP_MIN_WIDTH,
     contextCount * LAYOUT_CONFIG.GROUP_SPACING + 400,
   );
-  const groupHeight = LAYOUT_CONFIG.GROUP_HEIGHT;
-  const groupX = canvasCenterX - groupWidth / 2;
-  const groupY = canvasCenterY - groupHeight / 2;
 
-  nodes.push({
-    id: "monorepo-boundary",
-    type: "group",
-    label: "MONOREPO BOUNDARY",
-    position: { x: groupX, y: groupY },
-    style: { width: groupWidth, height: groupHeight },
-  });
+  // Removed monorepo-boundary container to let bounded contexts float freely
+  // This allows ELK to position them dynamically without fighting static offsets
+  // Set groupX and groupY to 0 since there's no container offset
+  const groupX = 0;
+  const groupY = 0;
 
   for (let i = 0; i < contextCount; i++) {
     const result = generateBoundedContextNodes({

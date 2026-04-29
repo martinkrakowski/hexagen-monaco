@@ -18,6 +18,10 @@ describe("CvaVariantResolverAdapter", () => {
     "policy",
     "aggregate",
     "service",
+    "primary-adapter",
+    "primary-port",
+    "secondary-adapter",
+    "secondary-port",
     "default",
   ])("resolves every known category: %s", (category) => {
     const variant = adapter.resolve(category);

@@ -210,7 +210,7 @@ function UnifiedBoundedContextComponent({
       hexColor: "",
     };
 
-    if (nodeType === "port") {
+    if (nodeType === "port" || nodeType === "adapter") {
       const side = data.side as "north" | "south" | undefined;
       const showNorth = side === "north";
       const showSouth = side === "south";
@@ -224,7 +224,7 @@ function UnifiedBoundedContextComponent({
             className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
           >
             {data.compilerCategory
-              ? String(data.compilerCategory).toUpperCase()
+              ? String(data.compilerCategory).replace(/-/g, " ").toUpperCase()
               : null}
           </div>
           <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
@@ -280,7 +280,7 @@ function UnifiedBoundedContextComponent({
           className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
         >
           {data.compilerCategory
-            ? String(data.compilerCategory).toUpperCase()
+            ? String(data.compilerCategory).replace(/-/g, " ").toUpperCase()
             : null}
         </div>
         <div className="h-[calc(100%-28px)] flex items-center justify-center px-2">
@@ -344,7 +344,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            PRESENTATION
+            APIs
           </text>
           <text
             x="50"
@@ -355,7 +355,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            INFRASTRUCTURE
+            EXTERNAL INTEGRATIONS
           </text>
           <text
             x="-2"
@@ -366,7 +366,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            DRIVING
+            PRESENTATION
           </text>
           <text
             x="108"
@@ -377,7 +377,7 @@ function UnifiedBoundedContextComponent({
             letterSpacing="0.8"
             fontWeight="700"
           >
-            DRIVEN
+            STATE &amp; STORAGE
           </text>
         </g>
       </svg>
@@ -434,38 +434,28 @@ function UnifiedBoundedContextComponent({
       </div>
 
       <>
+        {/*
+         * Hexagonal architecture: four compass sides, one handle per side.
+         * north = driving adapters (API / UI)       -> target
+         * south = driven adapters (persistence, messaging, telemetry) -> source
+         * west  = inbound ports (user-facing abstractions) -> target
+         * east  = outbound ports (infrastructure abstractions) -> source
+         *
+         * All adapters/ports on a given side share a single handle. If a side
+         * needs multiple adapters, they stack outside the hex and their edges
+         * converge on the same compass handle.
+         */}
         <Handle
           type="target"
           position={Position.Top}
-          id="north-0"
-          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-        />
-        <Handle
-          type="target"
-          position={Position.Top}
-          id="north-1"
-          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-          style={{ left: "60%" }}
-        />
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="south-0"
+          id="north"
           className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
         />
         <Handle
           type="source"
           position={Position.Bottom}
-          id="south-1"
+          id="south"
           className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-          style={{ left: "35%" }}
-        />
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="south-2"
-          className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
-          style={{ left: "70%" }}
         />
         <Handle
           type="target"

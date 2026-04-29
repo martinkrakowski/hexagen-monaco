@@ -58,11 +58,9 @@ export function generateBoundedContextNodes({
     id: contextId,
     type: "bounded-context" as HexagonNodeType,
     label: ctx.name || `Context ${index + 1}`,
-    position: { x: hexX - groupX, y: hexY - groupY },
-    parentId: "monorepo-boundary",
-    extent: "parent",
+    position: { x: hexX, y: hexY },
     isRoot: isRootContext,
-    draggable: isRootContext,
+    draggable: true,
     style: { width: hexDimension, height: hexDimension },
     stats: {
       aggregates: entityItems.length,
@@ -113,11 +111,19 @@ export function generateBoundedContextNodes({
   });
 
   entityItems.forEach((name: string, i: number) => {
+    // Entities are rendered as root-level draggable cards below the bounded
+    // context (south of the south-adapter stack), stacked vertically under
+    // the Domain column inside the hex. They are NOT React-Flow children of
+    // Domain: Domain is rendered as a 140x28 label, which would force
+    // `extent: 'parent'` children to clamp to (0,0) and visually stack on top
+    // of each other. Positions are absolute (hexX/hexY offsets).
     const posX = isRootContext
-      ? LAYOUT_CONFIG.ENTITY_START_X
+      ? hexX + LAYOUT_CONFIG.ENTITY_START_X
       : hexX + LAYOUT_CONFIG.SATELLITE_ENTITY_START_X;
     const posY = isRootContext
-      ? LAYOUT_CONFIG.ENTITY_START_Y + i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
+      ? hexY +
+        LAYOUT_CONFIG.ENTITY_START_Y +
+        i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT
       : hexY +
         LAYOUT_CONFIG.SATELLITE_ENTITY_START_Y +
         i * LAYOUT_CONFIG.ENTITY_ROW_HEIGHT;
@@ -126,6 +132,7 @@ export function generateBoundedContextNodes({
       id: entityId,
       label: name,
       type: "entity" as HexagonNodeType,
+      draggable: true,
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -140,11 +147,16 @@ export function generateBoundedContextNodes({
   });
 
   useCaseItems.forEach((name: string, i: number) => {
+    // Use cases are rendered as root-level draggable cards below the bounded
+    // context (south of the south-adapter stack), stacked vertically under
+    // the Use Cases column inside the hex. Same rationale as entities above.
     const posX = isRootContext
       ? hexX + LAYOUT_CONFIG.USECASE_X_OFFSET
       : hexX + LAYOUT_CONFIG.SATELLITE_USECASE_X_OFFSET;
     const posY = isRootContext
-      ? LAYOUT_CONFIG.USECASE_START_Y + i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
+      ? hexY +
+        LAYOUT_CONFIG.USECASE_START_Y +
+        i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT
       : hexY +
         LAYOUT_CONFIG.SATELLITE_USECASE_START_Y +
         i * LAYOUT_CONFIG.USECASE_ROW_HEIGHT;
@@ -153,6 +165,7 @@ export function generateBoundedContextNodes({
       id: useCaseId,
       label: name,
       type: "use-case" as HexagonNodeType,
+      draggable: true,
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -166,119 +179,143 @@ export function generateBoundedContextNodes({
     });
   });
 
-  const adapters: Array<{
-    id: string;
-    label: string;
-    side: "north" | "south";
-    handleIndex: number;
-  }> = [];
+  // ---------------------------------------------------------------------
+  // Hexagonal compass mapping (wizard fields -> sides)
+  //
+  //   West  (Presentation          / Primary Adapter) <- uiFramework
+  //   North (APIs                  / Primary Adapter) <- apiFramework /
+  //                                                      infrastructureTarget +
+  //                                                      inboundPorts (all)
+  //   East  (State & Storage       / Secondary Port ) <- persistenceAdapter +
+  //                                                      outboundPorts (DB-flavored)
+  //   South (External Integrations / Secondary Port ) <- messagingAdapter +
+  //                                                      telemetryProvider +
+  //                                                      outboundPorts (3rd-party)
+  //
+  // Outbound ports split across two driven sides per the wizard's port
+  // catalog classification (apps/web/.../port-catalog.ts). The mapping is
+  // duplicated here (as a small inline set) to keep the visualization
+  // package free of wizard-layer imports. Values must stay in sync with the
+  // catalog's `compass` field. Unknown outbound port values fall through to
+  // South (External Integrations) as a safe default.
+  //
+  // Per-card display labels use the underlying wizard value (e.g.
+  // "React Router", "relational-db") while the compass perimeter text
+  // ("PRESENTATION", "APIs", "STATE & STORAGE", "EXTERNAL INTEGRATIONS")
+  // comes from the static hex component and provides the architectural
+  // anchor.
+  // ---------------------------------------------------------------------
 
-  let northCount = 0;
   const apiLabel = ctx.infrastructureTarget
     ? ctx.infrastructureTarget.charAt(0).toUpperCase() +
       ctx.infrastructureTarget.slice(1)
     : ctx.apiFramework;
-  if (apiLabel) {
-    adapters.push({
-      id: `adapter-${contextId}-${apiLabel}`,
-      label: apiLabel,
-      side: "north",
-      handleIndex: northCount++,
-    });
-  }
-  if (ctx.uiFramework) {
-    adapters.push({
-      id: `adapter-${contextId}-${ctx.uiFramework}`,
-      label: ctx.uiFramework,
-      side: "north",
-      handleIndex: northCount++,
-    });
-  }
 
-  let southCount = 0;
-  for (const field of [
-    ctx.messagingAdapter,
-    ctx.persistenceAdapter,
-    ctx.telemetryProvider,
-  ] as const) {
-    if (!field) continue;
-    adapters.push({
-      id: `adapter-${contextId}-${field}`,
-      label: field,
-      side: "south",
-      handleIndex: southCount++,
-    });
-  }
+  // Outbound-port → compass classification. Must stay in sync with
+  // apps/web/features/project-wizard/steps/port-configuration-step/port-catalog.ts
+  const EAST_OUTBOUND_PORTS = new Set<string>(["relational-db", "document-db"]);
+  const inboundPorts = ctx.portConfiguration?.inboundPorts ?? [];
+  const outboundPorts = ctx.portConfiguration?.outboundPorts ?? [];
 
-  adapters.forEach((adapter) => {
+  const westItems: string[] = [];
+  if (ctx.uiFramework) westItems.push(ctx.uiFramework);
+
+  const northItems: string[] = [];
+  if (apiLabel) northItems.push(apiLabel);
+  northItems.push(...inboundPorts);
+
+  const eastItems: string[] = [];
+  if (ctx.persistenceAdapter) eastItems.push(ctx.persistenceAdapter);
+  eastItems.push(
+    ...outboundPorts.filter((port) => EAST_OUTBOUND_PORTS.has(port)),
+  );
+
+  const southItems: string[] = [];
+  if (ctx.messagingAdapter) southItems.push(ctx.messagingAdapter);
+  if (ctx.telemetryProvider) southItems.push(ctx.telemetryProvider);
+  southItems.push(
+    ...outboundPorts.filter((port) => !EAST_OUTBOUND_PORTS.has(port)),
+  );
+
+  // --- North: APIs (Primary Adapter) --------------------------------------
+  northItems.forEach((item, i) => {
+    const nodeId = `adapter-${contextId}-north-${item}-${i}`;
     const yOffset =
-      adapter.side === "north"
-        ? hexY -
-          LAYOUT_CONFIG.NORTH_OFFSET_BASE -
-          adapter.handleIndex * LAYOUT_CONFIG.NORTH_OFFSET_STEP
-        : hexY +
-          LAYOUT_CONFIG.SOUTH_OFFSET_BASE +
-          LAYOUT_CONFIG.SOUTH_OFFSET_ADDITIONAL +
-          adapter.handleIndex * LAYOUT_CONFIG.SOUTH_OFFSET_STEP;
-
-    const xOffset =
-      adapter.side === "north"
-        ? LAYOUT_CONFIG.NORTH_ADAPTER_X_OFFSET
-        : LAYOUT_CONFIG.SOUTH_ADAPTER_X_OFFSET;
+      hexY -
+      LAYOUT_CONFIG.NORTH_OFFSET_BASE -
+      i * LAYOUT_CONFIG.NORTH_OFFSET_STEP;
+    const adapterX =
+      hexX + hexDimension / 2 - LAYOUT_CONFIG.ADAPTER_NODE_WIDTH / 2;
 
     nodes.push({
-      id: adapter.id,
-      type: "port" as HexagonNodeType,
-      label: adapter.label,
-      position: { x: hexX + xOffset, y: yOffset },
-      side: adapter.side,
+      id: nodeId,
+      type: "adapter" as HexagonNodeType,
+      label: item,
+      side: "north",
+      category: "primary-adapter",
+      position: { x: adapterX, y: yOffset },
     });
 
-    const edgeConfig =
-      adapter.side === "north"
-        ? {
-            source: adapter.id,
-            target: contextId,
-            targetHandle: `north-${adapter.handleIndex}`,
-          }
-        : {
-            source: contextId,
-            target: adapter.id,
-            sourceHandle: `south-${adapter.handleIndex}`,
-            targetHandle: "south",
-          };
-
     edges.push({
-      id: `e-${adapter.id}`,
-      source: edgeConfig.source,
-      target: edgeConfig.target,
-      sourceHandle: edgeConfig.sourceHandle,
-      targetHandle: edgeConfig.targetHandle,
+      id: `e-${nodeId}`,
+      source: nodeId,
+      target: contextId,
+      targetHandle: "north",
       type: "smoothstep",
     });
   });
 
-  const inboundPorts = ctx.portConfiguration?.inboundPorts ?? [];
-  const outboundPorts = ctx.portConfiguration?.outboundPorts ?? [];
+  // --- South: External Integrations (Secondary Port) ----------------------
+  southItems.forEach((item, i) => {
+    const nodeId = `adapter-${contextId}-south-${item}-${i}`;
+    const yOffset =
+      hexY +
+      LAYOUT_CONFIG.SOUTH_OFFSET_BASE +
+      LAYOUT_CONFIG.SOUTH_OFFSET_ADDITIONAL +
+      i * LAYOUT_CONFIG.SOUTH_OFFSET_STEP;
+    const adapterX =
+      hexX + hexDimension / 2 - LAYOUT_CONFIG.ADAPTER_NODE_WIDTH / 2;
 
-  inboundPorts.forEach((port, i) => {
-    const portId = `port-in-${contextId}-${port}-${i}`;
+    nodes.push({
+      id: nodeId,
+      type: "adapter" as HexagonNodeType,
+      label: item,
+      side: "south",
+      category: "secondary-port",
+      position: { x: adapterX, y: yOffset },
+    });
+
+    edges.push({
+      id: `e-${nodeId}`,
+      source: contextId,
+      sourceHandle: "south",
+      target: nodeId,
+      targetHandle: "south",
+      type: "smoothstep",
+    });
+  });
+
+  // --- West: Presentation (Primary Adapter) -------------------------------
+  westItems.forEach((item, i) => {
+    const nodeId = `port-in-${contextId}-${item}-${i}`;
     const yOffset =
       hexY +
       LAYOUT_CONFIG.PORT_OFFSET_BASE_Y +
       i * LAYOUT_CONFIG.PORT_OFFSET_STEP_Y;
 
     nodes.push({
-      id: portId,
-      type: "port" as HexagonNodeType,
-      label: port,
+      id: nodeId,
+      type: "adapter" as HexagonNodeType,
+      label: item,
       side: "west",
+      category: "primary-adapter",
+      style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.WEST_PORT_OFFSET_X, y: yOffset },
     });
 
     edges.push({
-      id: `edge-${portId}`,
-      source: portId,
+      id: `edge-${nodeId}`,
+      source: nodeId,
       sourceHandle: "east",
       target: contextId,
       targetHandle: "west",
@@ -286,26 +323,29 @@ export function generateBoundedContextNodes({
     });
   });
 
-  outboundPorts.forEach((port, i) => {
-    const portId = `port-out-${contextId}-${port}-${i}`;
+  // --- East: State & Storage (Secondary Port) -----------------------------
+  eastItems.forEach((item, i) => {
+    const nodeId = `port-out-${contextId}-${item}-${i}`;
     const yOffset =
       hexY +
       LAYOUT_CONFIG.PORT_OFFSET_BASE_Y +
       i * LAYOUT_CONFIG.PORT_OFFSET_STEP_Y;
 
     nodes.push({
-      id: portId,
-      type: "port" as HexagonNodeType,
-      label: port,
+      id: nodeId,
+      type: "adapter" as HexagonNodeType,
+      label: item,
       side: "east",
+      category: "secondary-port",
+      style: { width: 180, zIndex: 20 },
       position: { x: hexX + LAYOUT_CONFIG.EAST_PORT_OFFSET_X, y: yOffset },
     });
 
     edges.push({
-      id: `edge-${portId}`,
+      id: `edge-${nodeId}`,
       source: contextId,
       sourceHandle: "east",
-      target: portId,
+      target: nodeId,
       targetHandle: "west",
       type: "smoothstep",
     });
