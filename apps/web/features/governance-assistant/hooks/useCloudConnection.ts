@@ -177,7 +177,9 @@ export function useCloudConnection() {
         if (isRetryable) {
           const delay = calculateRetryDelay(retryCount);
           retryTimeoutRef.current = setTimeout(() => {
-            connectRef.current?.(provider, model, vault, retryCount + 1);
+            if (connectRef.current) {
+              connectRef.current(provider, model, vault, retryCount + 1);
+            }
           }, delay);
         }
       } finally {
@@ -202,7 +204,9 @@ export function useCloudConnection() {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
-      connectRef.current?.(provider, model, vault, 0);
+      if (connectRef.current) {
+        connectRef.current(provider, model, vault, 0);
+      }
     },
     [],
   );
