@@ -55,11 +55,25 @@ export interface UseProjectLifecycleReturn {
   handleLoadProject: (id: string) => Promise<void>;
   handleGenerate: () => Promise<void>;
   handleManifestLoaded: (yamlContent: string) => Promise<void>;
+  /**
+   * Processes a newly generated manifest from the Welcome screen.
+   * Prompts the user or directly imports based on current editor state.
+   * @param yamlContent - The YAML string of the generated manifest
+   */
   handleWelcomeManifestGenerated: (yamlContent: string) => Promise<void>;
+  /**
+   * Cancels the new project creation workflow.
+   */
   handleCancelNewProject: () => void;
   handleResumeDraft: () => void;
   handleDiscardDraft: () => Promise<void>;
+  /**
+   * Saves current project and applies a pending generated manifest to a new project.
+   */
   handleSaveAndNew: () => void;
+  /**
+   * Discards current project state and applies a pending generated manifest to a new project.
+   */
   handleDiscardAndNew: () => void;
 }
 
