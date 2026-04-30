@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import type { UseCloudLLMConfig } from "./useCloudLlm";
 
@@ -66,6 +66,24 @@ export function useCloudConnection() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<
+    | ((
+        provider: string,
+        model: string,
+        vault: UserSecretVaultPort | null,
+        retryCount?: number,
+      ) => Promise<void>)
+    | null
+  >(null);
+
+  // Cleanup retry timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Attempt to connect to Cloud LLM with timeout and retry logic.
@@ -159,7 +177,7 @@ export function useCloudConnection() {
         if (isRetryable) {
           const delay = calculateRetryDelay(retryCount);
           retryTimeoutRef.current = setTimeout(() => {
-            connect(provider, model, vault, retryCount + 1);
+            connectRef.current?.(provider, model, vault, retryCount + 1);
           }, delay);
         }
       } finally {
@@ -168,6 +186,11 @@ export function useCloudConnection() {
     },
     [connectionState.state],
   );
+
+  // Keep connectRef current with latest connect function to avoid stale closures
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   /**
    * Manually retry connection (resets retry count).
@@ -179,9 +202,9 @@ export function useCloudConnection() {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
-      connect(provider, model, vault, 0);
+      connectRef.current?.(provider, model, vault, 0);
     },
-    [connect],
+    [],
   );
 
   /**
