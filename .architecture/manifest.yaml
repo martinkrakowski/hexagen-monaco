@@ -883,6 +883,7 @@ bounded_contexts:
           out:
             - EditorWorkspacePersistencePort
             - CanvasLayoutPersistencePort
+            - ByokStore
       application:
         use_cases:
           - ProjectViewProjectionUseCase
@@ -893,7 +894,8 @@ bounded_contexts:
         adapters:
           - LocalStoragePersistenceAdapter
           - LocalStorageCanvasLayoutAdapter
-          - ArchitectureGraphProviderAdapter
+            - ArchitectureGraphProviderAdapter
+            - LocalStorageByokStoreAdapter
     driver_for: apps/web
     generator:
       dependencies:
@@ -907,6 +909,7 @@ bounded_contexts:
       - monaco-orchestration
       - visualization
       - wizard-orchestration
+      - byok
     wiring:
       - Intent Bus dispatches to projections/use-case factories only
       - >-
@@ -1489,6 +1492,7 @@ apps:
       - prompt-compiler
       - ui-projection-compiler
       - web-driver
+  - byok
   - name: api-gateway
     driver: fastify
     framework: fastify

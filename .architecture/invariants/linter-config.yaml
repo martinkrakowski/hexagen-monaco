@@ -12,15 +12,18 @@ test_double_rules:
 
 # Enforce strict boundaries for drivers
 package_rules:
-  - name: 'web-driver'
-    allowed_imports:
-      - '@hexagen/shared'
-      - '@hexagen/visualization'
-      - '@hexagen/agentic-interaction'
-    # visualization is allowed because ArchitectureGraphProviderAdapter
-    # implements IArchitectureGraphProviderPort owned by visualization
-    # agentic-interaction is allowed because web-driver depends on it per manifest
-    # and implements ports like SecretVaultPort from its application layer
+- name: 'web-driver'
+  allowed_imports:
+  - '@hexagen/shared'
+  - '@hexagen/visualization'
+  - '@hexagen/agentic-interaction'
+  - '@hexagen/byok'
+  # visualization is allowed because ArchitectureGraphProviderAdapter
+  # implements IArchitectureGraphProviderPort owned by visualization
+  # agentic-interaction is allowed because web-driver depends on it per manifest
+  # and implements ports like SecretVaultPort from its application layer
+  # byok is allowed because LocalStorageByokStoreAdapter stores BYOK ciphertext
+  # entries and ByokStore port uses ByokProvider type from the byok context
 
   - name: 'sync'
     allowed_imports:
