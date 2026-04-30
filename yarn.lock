@@ -1608,6 +1608,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/byok@workspace:*, @hexagen/byok@workspace:packages/byok":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/byok@workspace:packages/byok"
+  dependencies:
+    "@hexagen/shared": "workspace:*"
+    typescript: "npm:^5.5.4"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/code-generation@workspace:packages/code-generation":
   version: 0.0.0-use.local
   resolution: "@hexagen/code-generation@workspace:packages/code-generation"
@@ -2025,6 +2034,7 @@ __metadata:
   resolution: "@hexagen/web-driver@workspace:packages/web-driver"
   dependencies:
     "@hexagen/agentic-interaction": "workspace:*"
+    "@hexagen/byok": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
@@ -15800,6 +15810,7 @@ __metadata:
     "@dagrejs/dagre": "npm:^2.0.4"
     "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/ai-pipeline": "workspace:*"
+    "@hexagen/byok": "workspace:*"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/eslint-plugin-ui": "workspace:*"
     "@hexagen/governance": "workspace:*"

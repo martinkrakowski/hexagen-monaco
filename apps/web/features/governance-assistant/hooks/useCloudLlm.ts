@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { UserSecretVaultPort } from "@hexagen/web-driver";
+import type { UserSecretVaultPort, ByokStore } from "@hexagen/web-driver";
+import type { ByokProvider } from "@hexagen/byok";
 
 import { retrieveApiKey } from "./cloud-llm/retrieve-api-key";
 import { buildCloudMessageHistory } from "./cloud-llm/build-cloud-history";
@@ -29,16 +30,6 @@ export interface UseCloudLLMConfig {
 
 const CHAT_ENDPOINT = "/api/llm/chat";
 
-/**
- * Cloud LLM chat hook. Owns the chat state machine and the send/
- * abort/clear actions. The streaming transport (fetch + SSE parse)
- * lives in ./cloud-llm/stream-cloud-chat-response, parallel to the
- * local LLM's ./local-llm/stream-assistant-response helper.
- *
- * Vault-provided API key is injected via setVault (called by the
- * parent when the vault becomes available) and retrieved
- * just-in-time by each sendMessage.
- */
 export function useCloudLLM() {
   const [state, setState] = useState<CloudLLMState>({
     status: "idle",
@@ -47,11 +38,16 @@ export function useCloudLLM() {
   });
 
   const vaultRef = useRef<UserSecretVaultPort | null>(null);
+  const byokStoreRef = useRef<ByokStore | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
 
   const setVault = useCallback((vault: UserSecretVaultPort) => {
     vaultRef.current = vault;
+  }, []);
+
+  const setByokStore = useCallback((store: ByokStore) => {
+    byokStoreRef.current = store;
   }, []);
 
   const sendMessage = useCallback(
@@ -63,22 +59,33 @@ export function useCloudLLM() {
       if (isStreamingRef.current) return;
       if (!config.provider || !config.model) return;
 
-      // 1. Retrieve API key from vault.
-      const keyResult = await retrieveApiKey(vaultRef.current);
-      if (!keyResult.success) {
-        setState((prev) => ({
-          ...prev,
-          status: "error",
-          errorMessage: keyResult.message,
-        }));
-        return;
+      let byokCiphertext: string | undefined;
+      let byokProvider: ByokProvider | undefined;
+
+      if (byokStoreRef.current) {
+        const entry = byokStoreRef.current.getEntry(
+          config.provider as ByokProvider,
+        );
+        if (entry) {
+          byokCiphertext = entry.ciphertext;
+          byokProvider = entry.provider;
+        }
+      }
+
+      if (!byokCiphertext) {
+        const keyResult = await retrieveApiKey(vaultRef.current);
+        if (!keyResult.success) {
+          setState((prev) => ({
+            ...prev,
+            status: "error",
+            errorMessage: keyResult.message,
+          }));
+          return;
+        }
       }
 
       isStreamingRef.current = true;
 
-      // 2. Snapshot prior messages BEFORE the setState below, so
-      // buildCloudMessageHistory sees the pre-send state (avoids the
-      // batching-dependent snapshot trick in the original code).
       const priorMessages = state.messages;
       const now = Date.now();
       const assistantId = `assistant-${now}`;
@@ -94,29 +101,36 @@ export function useCloudLLM() {
         ],
       }));
 
-      // 3. Build the LLM-facing history.
       const historyMessages = buildCloudMessageHistory(
         priorMessages,
         content,
         systemPrompt,
       );
 
-      // 4. Fetch + stream.
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
       try {
+        const requestBody: Record<string, unknown> = {
+          messages: historyMessages,
+          provider: config.provider,
+          model: config.model,
+          temperature: 0.7,
+          maxTokens: 2048,
+        };
+
+        if (byokCiphertext && byokProvider) {
+          requestBody.byokCiphertext = byokCiphertext;
+          requestBody.byokProvider = byokProvider;
+        } else {
+          const keyResult = await retrieveApiKey(vaultRef.current);
+          requestBody.apiKey = keyResult.success ? keyResult.apiKey : "";
+        }
+
         const response = await fetch(CHAT_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: historyMessages,
-            provider: config.provider,
-            model: config.model,
-            apiKey: keyResult.apiKey,
-            temperature: 0.7,
-            maxTokens: 2048,
-          }),
+          body: JSON.stringify(requestBody),
           signal: abortController.signal,
         });
 
@@ -139,6 +153,18 @@ export function useCloudLLM() {
             ),
           }));
           return;
+        }
+
+        const rotatedCiphertext = response.headers.get(
+          "X-Byok-Rotated-Ciphertext",
+        );
+        if (rotatedCiphertext && byokStoreRef.current && byokProvider) {
+          byokStoreRef.current.setEntry({
+            ciphertext: rotatedCiphertext,
+            provider: byokProvider,
+            keyId: `rotated-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+          });
         }
 
         await streamCloudChatResponse({
@@ -199,5 +225,6 @@ export function useCloudLLM() {
     clearMessages,
     clearError,
     setVault,
+    setByokStore,
   };
 }

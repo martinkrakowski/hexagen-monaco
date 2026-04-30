@@ -5,6 +5,7 @@ This folder contains the complete, atomically-phased development plan for integr
 ## 📄 Documents
 
 ### 1. **welcome-screen-integration-plan.md** (Main Plan — 806 lines)
+
 Comprehensive specification including:
 - **Feature Overview** — What, why, when
 - **System Invariants** — Non-negotiable constraints
@@ -17,6 +18,7 @@ Comprehensive specification including:
 **Read this first for complete detail and decision-making context.**
 
 ### 2. **WELCOME_SCREEN_PHASES.md** (Visual Reference — 261 lines)
+
 Quick reference with diagrams:
 - **System Context** — ASCII diagram of ProjectWorkspace layout
 - **Phase Execution Flow** — Flowchart showing all 6 phases
@@ -29,6 +31,7 @@ Quick reference with diagrams:
 **Use this for understanding relationships and quick lookup during development.**
 
 ### 3. **README_WELCOME_SCREEN.md** (This file — Navigation)
+
 High-level overview and document index.
 
 ---
@@ -36,15 +39,18 @@ High-level overview and document index.
 ## 🎯 Quick Start
 
 ### For Project Managers / Reviewers
+
 1. Read **welcome-screen-integration-plan.md** → System Invariants, Timeline, Success Criteria
 2. Reference **WELCOME_SCREEN_PHASES.md** → Phase Execution Flow, Phase Dependencies
 
 ### For Developers
+
 1. Skim **welcome-screen-integration-plan.md** → Your assigned phase(s)
 2. Read **WELCOME_SCREEN_PHASES.md** → Component Dependency Graph, Data Flow
 3. Use **welcome-screen-integration-plan.md** → Detailed deliverables for your phase
 
 ### For QA / Testing
+
 1. Read **welcome-screen-integration-plan.md** → Phase 3 (Error Handling) and Phase 6 (QA)
 2. Reference **WELCOME_SCREEN_PHASES.md** → Risk & Mitigation Summary
 
@@ -52,16 +58,16 @@ High-level overview and document index.
 
 ## 📋 Phase Summary
 
-| Phase | Agent Type | Duration | Complexity | Gating |
-|-------|-----------|----------|-----------|--------|
-| 0 | N/A | Trivial | — | ✓ Already complete |
-| 1 | Domain Worker (UI) | 1.5h | Low | `yarn build && yarn typecheck` |
-| 2 | Domain Worker (Logic) | 2h | Medium | `yarn test` (parsing) |
-| 3 | QA Worker (Testing) | 1.5h | Medium | Integration tests pass |
-| 4 | Domain Worker (Orch.) | 2h | High | Lifecycle tests pass |
-| 5 | Domain Worker (Logic) | 1.5h | Medium | Unit tests pass |
-| 6 | QA Worker (Validation) | 1h | Low | Full quality gate + manual smoke test |
-| **Total** | — | **9.5h** | — | PR Ready ✓ |
+| Phase     | Agent Type             | Duration | Complexity | Gating                                |
+| --------- | ---------------------- | -------- | ---------- | ------------------------------------- |
+| 0         | N/A                    | Trivial  | —          | ✓ Already complete                    |
+| 1         | Domain Worker (UI)     | 1.5h     | Low        | `yarn build && yarn typecheck`        |
+| 2         | Domain Worker (Logic)  | 2h       | Medium     | `yarn test` (parsing)                 |
+| 3         | QA Worker (Testing)    | 1.5h     | Medium     | Integration tests pass                |
+| 4         | Domain Worker (Orch.)  | 2h       | High       | Lifecycle tests pass                  |
+| 5         | Domain Worker (Logic)  | 1.5h     | Medium     | Unit tests pass                       |
+| 6         | QA Worker (Validation) | 1h       | Low        | Full quality gate + manual smoke test |
+| **Total** | —                      | **9.5h** | —          | PR Ready ✓                            |
 
 ---
 
@@ -163,4 +169,3 @@ These **cannot be violated** at any phase:
 **Created:** April 30, 2026  
 **Total Effort:** ~9.5 hours (atomic, gated phases)  
 **Worktree Path:** `/Users/martin/Projects/hexagen-monaco-worktrees/new-project-welcome-screen-integration-workspace`
-

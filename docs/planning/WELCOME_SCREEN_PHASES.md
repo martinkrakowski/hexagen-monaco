@@ -210,35 +210,39 @@ Phase 6 (Docs & QA)
 
 ## Gating Criteria Between Phases
 
-| From | To | Gate Check |
-|------|-----|-----------|
-| Phase 0 → 1 | Explicit (all deps present) | — |
-| Phase 1 → 2 | `yarn build && yarn typecheck && yarn lint` passes | TypeScript integrity |
-| Phase 2 → 3 | `yarn test` passes (parsing tests) | Logic correctness |
-| Phase 3 → 4 | Integration tests pass (error scenarios) | Resilience verified |
-| Phase 4 → 5 | Lifecycle tests pass (form hydration) | State integrity |
-| Phase 5 → 6 | All unit tests pass | Logic completeness |
-| Phase 6 → PR | Full quality gate + manual smoke test | Release ready |
+| From         | To                                                 | Gate Check           |
+| ------------ | -------------------------------------------------- | -------------------- |
+| Phase 0 → 1  | Explicit (all deps present)                        | —                    |
+| Phase 1 → 2  | `yarn build && yarn typecheck && yarn lint` passes | TypeScript integrity |
+| Phase 2 → 3  | `yarn test` passes (parsing tests)                 | Logic correctness    |
+| Phase 3 → 4  | Integration tests pass (error scenarios)           | Resilience verified  |
+| Phase 4 → 5  | Lifecycle tests pass (form hydration)              | State integrity      |
+| Phase 5 → 6  | All unit tests pass                                | Logic completeness   |
+| Phase 6 → PR | Full quality gate + manual smoke test              | Release ready        |
 
 ## Architecture Decisions
 
 ### Decision 1: Modal Dialog vs. Inline
 **Chosen:** Modal Dialog (`WelcomeManifestDialog`)
+
 - **Rationale:** Immersive, focused UX; doesn't disrupt wizard layout
 - **Alternative:** Replace left pane temporarily (more complex routing)
 
 ### Decision 2: One-Step or Two-Step Manifest Load
 **Chosen:** Single "Use This Manifest" → Direct Load
+
 - **Rationale:** User sees preview, clicks use → loads directly
 - **Alternative:** Show preview dialog, then separate "Import" step (extra friction)
 
 ### Decision 3: Auto-Complete Behavior
 **Chosen:** Read-only hints + full editability
+
 - **Rationale:** Show which steps were auto-generated, user can still refine
 - **Alternative:** Fully locked steps (restrictive) or fully editable without hints (confusing)
 
 ### Decision 4: Landing Step
 **Chosen:** First incomplete step (or summary if all complete)
+
 - **Rationale:** Encourages refinement; summary available for review
 - **Alternative:** Always land on step 1 (ignores completeness); always summary (skips refinement)
 
@@ -246,13 +250,13 @@ Phase 6 (Docs & QA)
 
 ## Risk & Mitigation Summary
 
-| Risk | Mitigation | Phase |
-|------|-----------|-------|
-| YAML parsing edge cases | Comprehensive test coverage | Phase 2 |
-| LLM timeout / poor UX | 15s timeout + exponential backoff retry | Phase 3 |
-| Form state corruption | Immutable reset + validation | Phase 4 |
-| Race condition (click while generating) | Disable button during generation | Phase 1 |
-| User confusion (auto-generated vs. manual) | Visual hints + read-only markers | Phase 5 |
+| Risk                                       | Mitigation                              | Phase   |
+| ------------------------------------------ | --------------------------------------- | ------- |
+| YAML parsing edge cases                    | Comprehensive test coverage             | Phase 2 |
+| LLM timeout / poor UX                      | 15s timeout + exponential backoff retry | Phase 3 |
+| Form state corruption                      | Immutable reset + validation            | Phase 4 |
+| Race condition (click while generating)    | Disable button during generation        | Phase 1 |
+| User confusion (auto-generated vs. manual) | Visual hints + read-only markers        | Phase 5 |
 
 ---
 

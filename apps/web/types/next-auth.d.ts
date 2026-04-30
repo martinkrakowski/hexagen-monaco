@@ -7,6 +7,8 @@ declare module "next-auth" {
       name?: string;
       /** GitHub username (login), distinct from the display name. */
       login?: string;
+      /** GitHub numeric user ID — JWT 'sub' claim. Used as AAD for BYOK encryption. */
+      sub?: string;
     } & DefaultSession["user"];
   }
 }
