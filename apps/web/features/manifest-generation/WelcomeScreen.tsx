@@ -15,6 +15,7 @@ import {
   Label,
 } from "@hexagen/ui";
 import { useManifestGeneration } from "./useManifestGeneration";
+import { ERROR_MESSAGES } from "./errorMessages";
 import { ManifestPreview } from "./ManifestPreview";
 
 const MIN_LENGTH = 10;
@@ -189,7 +190,25 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
             </div>
 
             {/* Error Display */}
-            {generation.isError && generation.error && (
+            {generation.isError && generation.errorCategory && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex flex-col gap-3">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  <strong>{generation.errorCategory === "NETWORK" ? "Connection Error:" : "Error:"}</strong> {ERROR_MESSAGES[generation.errorCategory] || generation.error}
+                </p>
+                {["NETWORK", "TIMEOUT", "RATE_LIMIT"].includes(generation.errorCategory) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    onClick={handleGenerate}
+                    disabled={generation.isGenerating}
+                  >
+                    Try Again
+                  </Button>
+                )}
+              </div>
+            )}
+            {generation.isError && !generation.errorCategory && generation.error && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
                 <p className="text-sm text-red-800 dark:text-red-200">
                   <strong>Error:</strong> {generation.error}

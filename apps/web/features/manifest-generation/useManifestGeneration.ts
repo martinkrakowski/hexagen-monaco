@@ -2,7 +2,8 @@
  * Hook for managing manifest generation from natural language
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { classifyError, ERROR_MESSAGES, ErrorCategory } from "./errorMessages";
 
 interface GenerationMetadata {
   model: string;
@@ -22,14 +23,31 @@ interface GenerationState {
   status: "idle" | "generating" | "success" | "error";
   result: GeneratedManifest | null;
   error: string | null;
+  errorCategory: ErrorCategory | null;
+  retryCount: number;
 }
+
+const MAX_RETRIES = 3;
+const BASE_BACKOFF_MS = 1000;
 
 export function useManifestGeneration() {
   const [state, setState] = useState<GenerationState>({
     status: "idle",
     result: null,
     error: null,
+    errorCategory: null,
+    retryCount: 0,
   });
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
 
   const generate = useCallback(
     async (
@@ -40,11 +58,21 @@ export function useManifestGeneration() {
         deployment?: string;
         additionalContext?: string;
       },
+      attempt = 0
     ) => {
-      setState({ status: "generating", result: null, error: null });
+      setState((prev) => ({
+        ...prev,
+        status: "generating",
+        retryCount: attempt,
+      }));
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
 
       try {
-        const response = await fetch("/api/manifest/generate", {
+        const fetchPromise = fetch("/api/manifest/generate", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -53,15 +81,49 @@ export function useManifestGeneration() {
             description,
             ...options,
           }),
+          signal: abortControllerRef.current.signal,
         });
 
-        const data = await response.json();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutRef.current = setTimeout(() => {
+            abortControllerRef.current?.abort();
+            reject(new Error("Request timeout"));
+          }, 30000);
+        });
 
-        if (!response.ok || !data.success) {
+        const response = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+        let data;
+        let parsingError = false;
+        try {
+          data = await response.json();
+        } catch {
+          parsingError = true;
+        }
+
+        if (!response.ok || !data?.success || parsingError) {
+          const status = response.status;
+          const category = classifyError(parsingError ? new Error("json") : null, status);
+          
+          const isTransient = category === "NETWORK" || category === "TIMEOUT" || category === "RATE_LIMIT" || status >= 500;
+          
+          if (isTransient && attempt < MAX_RETRIES) {
+            const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt);
+            timeoutRef.current = setTimeout(() => {
+              generate(description, options, attempt + 1).catch(() => {});
+            }, backoff);
+            return;
+          }
+
+          const errorMessage = data?.error || data?.details || ERROR_MESSAGES[category];
           setState({
             status: "error",
             result: null,
-            error: data.error || data.details || "Failed to generate manifest",
+            error: errorMessage,
+            errorCategory: category,
+            retryCount: attempt,
           });
           return;
         }
@@ -76,12 +138,33 @@ export function useManifestGeneration() {
             metadata: data.metadata,
           },
           error: null,
+          errorCategory: null,
+          retryCount: attempt,
         });
       } catch (error) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        const category = classifyError(error);
+        const isTransient = category === "NETWORK" || category === "TIMEOUT";
+
+        if (isTransient && attempt < MAX_RETRIES) {
+          const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt);
+          timeoutRef.current = setTimeout(() => {
+            generate(description, options, attempt + 1).catch(() => {});
+          }, backoff);
+          return;
+        }
+
         setState({
           status: "error",
           result: null,
-          error: error instanceof Error ? error.message : "Network error",
+          error: ERROR_MESSAGES[category],
+          errorCategory: category,
+          retryCount: attempt,
         });
       }
     },
@@ -89,7 +172,13 @@ export function useManifestGeneration() {
   );
 
   const reset = useCallback(() => {
-    setState({ status: "idle", result: null, error: null });
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    setState({ status: "idle", result: null, error: null, errorCategory: null, retryCount: 0 });
   }, []);
 
   return {
