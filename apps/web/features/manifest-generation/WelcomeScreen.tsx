@@ -79,14 +79,14 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-background">
       <div className="w-full max-w-3xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-4xl font-bold text-foreground">
             Welcome to HexaGen Monaco
           </h1>
-          <p className="text-lg text-slate-600 dark:text-slate-400">
+          <p className="text-lg text-muted-foreground">
             Describe your project in natural language, and we'll generate a
             complete hexagonal architecture manifest
           </p>
@@ -105,10 +105,10 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
                 <span
                   className={`text-sm ${
                     charCount < MIN_LENGTH
-                      ? "text-slate-500"
+                      ? "text-muted-foreground"
                       : charCount > MAX_LENGTH
-                        ? "text-red-500"
-                        : "text-green-600"
+                        ? "text-destructive"
+                        : "text-success"
                   }`}
                 >
                   {charCount} / {MAX_LENGTH}
@@ -119,12 +119,11 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Example: A task management system with user authentication, project boards, and real-time collaboration features..."
-                className="resize-none"
-                style={{ minHeight: "150px" }}
+                className="resize-none min-h-[var(--textarea-min-height)]"
                 disabled={generation.isGenerating}
               />
               {charCount < MIN_LENGTH && charCount > 0 && (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-muted-foreground">
                   Minimum {MIN_LENGTH} characters required
                 </p>
               )}
@@ -155,12 +154,14 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
                 size="sm"
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 disabled={generation.isGenerating}
+                aria-expanded={showAdvanced}
+                aria-controls="advanced-options-panel"
               >
                 {showAdvanced ? "▼" : "▶"} Advanced Options
               </Button>
 
               {showAdvanced && (
-                <div className="space-y-3 pl-4 border-l-2 border-slate-200 dark:border-slate-700">
+                <div id="advanced-options-panel" className="space-y-3 pl-4 border-l-2 border-border">
                   <div className="space-y-1">
                     <Label htmlFor="platform">Platform (optional)</Label>
                     <input
@@ -191,8 +192,8 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
 
             {/* Error Display */}
             {generation.isError && generation.errorCategory && (
-              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex flex-col gap-3">
-                <p className="text-sm text-red-800 dark:text-red-200">
+              <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md flex flex-col gap-3" role="alert">
+                <p className="text-sm text-destructive">
                   <strong>{generation.errorCategory === "NETWORK" ? "Connection Error:" : "Error:"}</strong> {ERROR_MESSAGES[generation.errorCategory] || generation.error}
                 </p>
                 {["NETWORK", "TIMEOUT", "RATE_LIMIT"].includes(generation.errorCategory) && (
@@ -209,8 +210,8 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
               </div>
             )}
             {generation.isError && !generation.errorCategory && generation.error && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                <p className="text-sm text-red-800 dark:text-red-200">
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md" role="alert">
+                <p className="text-sm text-destructive">
                   <strong>Error:</strong> {generation.error}
                 </p>
               </div>
@@ -225,7 +226,8 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
             >
               {generation.isGenerating ? (
                 <>
-                  <span className="animate-spin mr-2">⏳</span>
+                  <span className="animate-spin mr-2" aria-hidden="true">⏳</span>
+                  <span className="sr-only">Generating manifest...</span>
                   Generating Manifest...
                 </>
               ) : (
@@ -236,7 +238,7 @@ export function WelcomeScreen({ onUseManifest }: WelcomeScreenProps) {
         </Card>
 
         {/* Info Footer */}
-        <div className="text-center text-sm text-slate-500 dark:text-slate-400">
+        <div className="text-center text-sm text-muted-foreground">
           <p>
             Your description will be analyzed using AI to identify bounded
             contexts, ports, adapters, and dependencies.

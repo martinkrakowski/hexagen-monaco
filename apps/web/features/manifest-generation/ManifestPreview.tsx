@@ -40,10 +40,10 @@ export function ManifestPreview({
 }: ManifestPreviewProps) {
   const confidenceColor =
     confidence >= 0.8
-      ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200"
+      ? "bg-success/20 text-success"
       : confidence >= 0.6
-        ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200"
-        : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200";
+        ? "bg-warning/20 text-warning"
+        : "bg-destructive/20 text-destructive";
 
   const handleCopyToClipboard = () => {
     navigator.clipboard.writeText(manifest);
@@ -56,15 +56,15 @@ export function ManifestPreview({
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-8 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="flex flex-col min-h-screen p-8 bg-background">
       <div className="w-full max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+            <h1 className="text-3xl font-bold text-foreground">
               Generated Manifest
             </h1>
-            <p className="text-slate-600 dark:text-slate-400">
+            <p className="text-muted-foreground">
               Review your manifest and proceed to the project wizard
             </p>
           </div>
@@ -80,10 +80,10 @@ export function ManifestPreview({
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                <h3 className="text-sm font-medium text-muted-foreground">
                   Confidence Score
                 </h3>
-                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                <p className="text-2xl font-bold text-foreground">
                   {(confidence * 100).toFixed(0)}%
                 </p>
               </div>
@@ -95,7 +95,7 @@ export function ManifestPreview({
                     : "Low"}
               </Badge>
             </div>
-            <div className="mt-4 text-sm text-slate-600 dark:text-slate-400">
+            <div className="mt-4 text-sm text-muted-foreground">
               <p>
                 Model: {metadata.model} • Processing: {metadata.processingTime}
                 ms • Tokens: {metadata.tokensUsed}
@@ -121,7 +121,7 @@ export function ManifestPreview({
                 </div>
               </CardHeader>
               <CardContent>
-                <pre className="p-4 bg-slate-900 dark:bg-slate-950 text-slate-100 rounded-md overflow-x-auto text-sm font-mono max-h-96 overflow-y-auto">
+                <pre className="p-4 bg-muted text-foreground rounded-md overflow-x-auto text-sm font-mono max-h-96 overflow-y-auto">
                   {manifest}
                 </pre>
               </CardContent>
@@ -134,7 +134,7 @@ export function ManifestPreview({
             {warnings.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-orange-600 dark:text-orange-400">
+                  <CardTitle className="text-warning">
                     ⚠️ Warnings
                   </CardTitle>
                 </CardHeader>
@@ -143,7 +143,7 @@ export function ManifestPreview({
                     {warnings.map((warning, index) => (
                       <li
                         key={index}
-                        className="text-slate-700 dark:text-slate-300"
+                        className="text-foreground"
                       >
                         • {warning}
                       </li>
@@ -157,7 +157,7 @@ export function ManifestPreview({
             {suggestions.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-blue-600 dark:text-blue-400">
+                  <CardTitle className="text-info">
                     💡 Suggestions
                   </CardTitle>
                 </CardHeader>
@@ -166,7 +166,7 @@ export function ManifestPreview({
                     {suggestions.map((suggestion, index) => (
                       <li
                         key={index}
-                        className="text-slate-700 dark:text-slate-300"
+                        className="text-foreground"
                       >
                         • {suggestion}
                       </li>

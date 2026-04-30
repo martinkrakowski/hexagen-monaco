@@ -113,7 +113,7 @@ export function DesktopLayout({
               isCollapsed={rightCollapse.isCollapsed}
               onCollapse={rightCollapse.collapse}
             />
-            <CardContent className="p-0 h-[calc(100%-3rem)] overflow-hidden">
+            <CardContent className="p-0 h-[var(--resizable-panel-height)] overflow-hidden">
               {right}
             </CardContent>
           </Card>

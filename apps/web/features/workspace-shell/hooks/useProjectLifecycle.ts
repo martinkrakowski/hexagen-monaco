@@ -182,7 +182,7 @@ export function useProjectLifecycle(
         name: saved.name,
         isDirty: false,
         lastModifiedAt: Date.now(),
-        wizardData: saved.formState as unknown as Record<string, unknown>,
+        wizardData: { ...saved.formState },
         manifestYaml: saved.manifestYaml,
       });
     },
