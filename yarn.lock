@@ -1608,6 +1608,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/byok@workspace:packages/byok":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/byok@workspace:packages/byok"
+  dependencies:
+    "@hexagen/shared": "workspace:*"
+    typescript: "npm:^5.5.4"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/code-generation@workspace:packages/code-generation":
   version: 0.0.0-use.local
   resolution: "@hexagen/code-generation@workspace:packages/code-generation"

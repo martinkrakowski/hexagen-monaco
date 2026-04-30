@@ -1,0 +1,27 @@
+{
+  "name": "@hexagen/byok",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test __tests__/**/*.test.ts",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@hexagen/shared": "workspace:*"
+  }
+}
