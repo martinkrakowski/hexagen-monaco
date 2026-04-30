@@ -207,6 +207,115 @@ monorepo:
 
         test_double_rules:
           allowed_cross_package_imports: true
+
+        package_rules:
+          - name: 'web-driver'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/visualization'
+              - '@hexagen/agentic-interaction'
+              - '@hexagen/byok'
+
+          - name: 'sync'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/project-configuration'
+              - '@hexagen/visualization'
+              - '@hexagen/governance'
+              - '@hexagen/core-domain'
+
+          - name: 'project-generation'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/sync'
+
+          - name: 'project-configuration'
+            allowed_imports:
+              - '@hexagen/shared'
+
+          - name: 'visualization'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/project-configuration'
+
+          - name: 'mcp-server'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/messaging'
+              - '@hexagen/project-configuration'
+              - '@hexagen/governance'
+              - '@hexagen/visualization'
+              - '@hexagen/report-governance'
+              - '@hexagen/transaction-system'
+
+          - name: 'intent-compiler'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+
+          - name: 'ui-projection-compiler'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+
+          - name: 'layout-engine'
+            allowed_imports: []
+
+          - name: 'runtime'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+
+          - name: 'transaction-system'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+              - '@hexagen/intent-compiler'
+              - '@hexagen/sync'
+
+          - name: 'prompt-compiler'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+              - '@hexagen/project-configuration'
+              - '@hexagen/visualization'
+              - '@hexagen/governance'
+
+          - name: 'local-llm'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/prompt-compiler'
+              - '@hexagen/project-configuration'
+              - '@hexagen/visualization'
+              - '@hexagen/governance'
+
+          - name: 'reconciliation-engine'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+
+          - name: 'ai-pipeline'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+
+          - name: 'agentic-interaction'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/core-domain'
+              - '@hexagen/local-llm'
+              - '@hexagen/project-configuration'
+              - '@hexagen/ai-pipeline'
+              - '@hexagen/prompt-compiler'
+              - '@hexagen/reconciliation-engine'
+              - '@hexagen/transaction-system'
+
+          - name: 'wizard-orchestration'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/messaging'
+              - '@hexagen/project-configuration'
+              - '@hexagen/sync'
     generatorConfig:
       template: |
         generator:
