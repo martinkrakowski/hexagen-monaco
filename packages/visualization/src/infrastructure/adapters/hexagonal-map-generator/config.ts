@@ -43,10 +43,10 @@ export const LAYOUT_CONFIG = {
   // opposite halves of the canvas south of the hex.
   ENTITY_ROW_HEIGHT: 120,
   ENTITY_START_X: -60,
-  ENTITY_START_Y: 960, // hexY + 960 -> first card at y=960, ~48px below last south adapter at y=912 (see SOUTH_OFFSET_BASE below)
+  ENTITY_START_Y: 1160, // hexY + 1160 -> first card at y=1160, ~48px below last south adapter at y=1112 (see SOUTH_OFFSET_BASE below)
 
   SATELLITE_ENTITY_START_X: -60,
-  SATELLITE_ENTITY_START_Y: 780,
+  SATELLITE_ENTITY_START_Y: 980,
 
   USECASE_ROW_HEIGHT: 120,
   USECASE_X_OFFSET: 380,
@@ -57,12 +57,12 @@ export const LAYOUT_CONFIG = {
 
   NORTH_OFFSET_BASE: 280,
   NORTH_OFFSET_STEP: 120,
-  // Reduced from 600 so south-adapter stack sits closer to the hex bottom
-  // edge. With 3 adapters at step 180:
-  //   adapter 0: hexY + (400+80)          = hexY + 480  (spans [480, 552])
-  //   adapter 2: hexY + (400+80+2*180)    = hexY + 840  (spans [840, 912])
-  //   entity 0:  hexY + 960               gap = 48px
-  SOUTH_OFFSET_BASE: 400,
+  // Increased from 400 to push south-adapter stack further from hex bottom.
+  // With 3 adapters at step 180:
+  //   adapter 0: hexY + (600+80)          = hexY + 680  (spans [680, 752])
+  //   adapter 2: hexY + (600+80+2*180)    = hexY + 1040 (spans [1040, 1112])
+  //   entity 0:  hexY + 1160              gap = 48px
+  SOUTH_OFFSET_BASE: 600,
   SOUTH_OFFSET_ADDITIONAL: 80,
   SOUTH_OFFSET_STEP: 180,
 
