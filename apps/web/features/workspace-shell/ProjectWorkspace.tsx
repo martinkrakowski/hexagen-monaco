@@ -138,17 +138,17 @@ export function ProjectWorkspace() {
 
         <NewProjectConfirmDialog
           open={ui.dialog.kind === "new-project"}
-          onClose={ui.closeDialog}
+          onClose={lifecycle.handleCancelNewProject}
           loadedProject={lifecycle.loadedProject}
           onSaveAndNew={lifecycle.handleSaveAndNew}
           onDiscardAndNew={lifecycle.handleDiscardAndNew}
-          onCancel={ui.closeDialog}
+          onCancel={lifecycle.handleCancelNewProject}
         />
 
         <WelcomeManifestDialog
           open={ui.dialog.kind === "welcome-manifest"}
           onClose={ui.closeDialog}
-          onUseManifest={lifecycle.handleManifestLoaded}
+          onUseManifest={lifecycle.handleWelcomeManifestGenerated}
         />
       </div>
     </ExportProvider>

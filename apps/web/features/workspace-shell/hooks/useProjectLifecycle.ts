@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
@@ -53,6 +53,8 @@ export interface UseProjectLifecycleReturn {
   handleLoadProject: (id: string) => Promise<void>;
   handleGenerate: () => Promise<void>;
   handleManifestLoaded: (yamlContent: string) => Promise<void>;
+  handleWelcomeManifestGenerated: (yamlContent: string) => Promise<void>;
+  handleCancelNewProject: () => void;
   handleResumeDraft: () => void;
   handleDiscardDraft: () => Promise<void>;
   handleSaveAndNew: () => void;
@@ -100,6 +102,8 @@ export function useProjectLifecycle(
       setActiveWorkspace: editor.setActiveWorkspace,
       setEditorSessionId: editor.setSessionId,
     });
+
+  const [pendingWelcomeManifest, setPendingWelcomeManifest] = useState<string | null>(null);
 
   const hasGenerated = uiState.kind === "edit";
 
@@ -188,6 +192,18 @@ export function useProjectLifecycle(
     [importManifest, form, ui],
   );
 
+  const handleWelcomeManifestGenerated = useCallback(
+    async (yamlContent: string) => {
+      if (uiState.kind === "edit") {
+        setPendingWelcomeManifest(yamlContent);
+        ui.openDialog({ kind: "new-project" });
+      } else {
+        await handleManifestLoaded(yamlContent);
+      }
+    },
+    [uiState.kind, ui, handleManifestLoaded],
+  );
+
   // Draft actions
   const handleResumeDraft = useCallback(() => {
     if (!draft) return;
@@ -202,8 +218,13 @@ export function useProjectLifecycle(
     ui.closeDialog();
   }, [clearDraft, ui]);
 
+  const handleCancelNewProject = useCallback(() => {
+    setPendingWelcomeManifest(null);
+    ui.closeDialog();
+  }, [ui]);
+
   // New-project actions
-  const handleSaveAndNew = useCallback(() => {
+  const handleSaveAndNew = useCallback(async () => {
     if (uiState.kind === "edit") {
       const formData = form.getValues();
       const wizardData = buildWizardData(
@@ -214,13 +235,21 @@ export function useProjectLifecycle(
       );
       updateProject(uiState.projectId, formData, JSON.stringify(wizardData));
     }
+
+    if (pendingWelcomeManifest) {
+      const yamlContent = pendingWelcomeManifest;
+      setPendingWelcomeManifest(null);
+      await handleManifestLoaded(yamlContent);
+      return;
+    }
+
     form.reset(emptyFormValues);
     ui.setStep(0);
     ui.enterGenesisMode();
     ui.closeDialog();
     editor.clearSession();
     editor.clearActiveWorkspace();
-  }, [uiState, form, updateProject, ui, editor]);
+  }, [uiState, form, updateProject, ui, editor, pendingWelcomeManifest, handleManifestLoaded]);
 
   const handleDiscardAndNew = useCallback(async () => {
     // Determine projectId for cleanup
@@ -244,14 +273,24 @@ export function useProjectLifecycle(
     const chatPersistence = getChatPersistence();
     await chatPersistence.purgeProjectData(projectId);
 
-    // 3. Reset UI state only after I/O completes
+    // 3. Handle pending welcome manifest if present
+    if (pendingWelcomeManifest) {
+      const yamlContent = pendingWelcomeManifest;
+      setPendingWelcomeManifest(null);
+      editor.clearSession();
+      editor.clearActiveWorkspace();
+      await handleManifestLoaded(yamlContent);
+      return;
+    }
+
+    // 4. Reset UI state only after I/O completes
     form.reset(emptyFormValues);
     ui.setStep(0);
     ui.enterGenesisMode();
     ui.closeDialog();
     editor.clearSession();
     editor.clearActiveWorkspace();
-  }, [form, ui, editor, uiState]);
+  }, [form, ui, editor, uiState, pendingWelcomeManifest, handleManifestLoaded]);
 
   const loadedProject =
     uiState.kind === "edit" ? (loadProject(uiState.projectId) ?? null) : null;
@@ -268,9 +307,11 @@ export function useProjectLifecycle(
     handleLoadProject,
     handleGenerate,
     handleManifestLoaded,
+    handleWelcomeManifestGenerated,
     handleResumeDraft,
     handleDiscardDraft,
     handleSaveAndNew,
     handleDiscardAndNew,
+    handleCancelNewProject,
   };
 }
