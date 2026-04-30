@@ -192,4 +192,162 @@ describe("ProxyRequestUseCase", () => {
     const events = auditLog.getEvents();
     assert.ok(events.some((e) => e.eventType === "byok.decrypt_failure"));
   });
+
+  describe("streamExecute", () => {
+    it("returns ReadableStream on valid ciphertext and non-revoked key", async () => {
+      const { useCase } = await setupProxyDeps();
+
+      const result = await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: { model: "gpt-4", messages: [], stream: true },
+        userId: "user-1",
+      });
+
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.ok(result.value.stream instanceof ReadableStream);
+        const reader = result.value.stream.getReader();
+        const { value } = await reader.read();
+        assert.ok(value instanceof Uint8Array);
+        reader.releaseLock();
+      }
+    });
+
+    it("returns err with kind key_revoked when key is revoked", async () => {
+      const revocation = new StubRevocationAdapter();
+      await revocation.revoke({
+        userId: "user-1",
+        provider: "openai",
+        keyId: "some-key",
+        revokedAt: new Date().toISOString(),
+        revokedBy: "admin",
+      });
+
+      const { useCase } = await setupProxyDeps({ revocation });
+
+      const result = await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.strictEqual(result.error.kind, "key_revoked");
+      }
+    });
+
+    it("returns err with kind invalid_ciphertext when decryption fails", async () => {
+      const { useCase } = await setupProxyDeps();
+
+      const result = await useCase.streamExecute({
+        ciphertext: "invalid-no-prefix",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.strictEqual(result.error.kind, "invalid_ciphertext");
+      }
+    });
+
+    it("returns err when provider stream proxy fails", async () => {
+      const providerProxy = new StubProviderProxyAdapter({ shouldFail: true });
+      const { useCase } = await setupProxyDeps({ providerProxy });
+
+      const result = await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.strictEqual(result.error.kind, "provider_error");
+      }
+    });
+
+    it("sets rotatedCiphertext when decrypt version < active version", async () => {
+      const encryption = new StubEncryptionAdapter({ activeVersion: 2 });
+      const { useCase } = await setupProxyDeps({ encryption });
+
+      const result = await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.strictEqual(typeof result.value.rotatedCiphertext, "string");
+      }
+    });
+
+    it("does not set rotatedCiphertext when decrypt version === active version", async () => {
+      const encryption = new StubEncryptionAdapter({ activeVersion: 1 });
+      const { useCase } = await setupProxyDeps({ encryption });
+
+      const result = await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.strictEqual(result.value.rotatedCiphertext, undefined);
+      }
+    });
+
+    it("records streaming audit event on success", async () => {
+      const auditLog = new StubAuditLogAdapter();
+      const { useCase } = await setupProxyDeps({ auditLog });
+
+      await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      const events = auditLog.getEvents();
+      assert.ok(
+        events.some(
+          (e) =>
+            e.eventType === "byok.proxy_called" &&
+            e.details?.streaming === true,
+        ),
+      );
+    });
+
+    it("records streaming audit event on provider failure", async () => {
+      const providerProxy = new StubProviderProxyAdapter({ shouldFail: true });
+      const auditLog = new StubAuditLogAdapter();
+      const { useCase } = await setupProxyDeps({ providerProxy, auditLog });
+
+      await useCase.streamExecute({
+        ciphertext: "v1:some-ciphertext",
+        provider: "openai",
+        payload: {},
+        userId: "user-1",
+      });
+
+      const events = auditLog.getEvents();
+      assert.ok(
+        events.some(
+          (e) =>
+            e.eventType === "byok.proxy_called" &&
+            e.details?.failed === true &&
+            e.details?.streaming === true,
+        ),
+      );
+    });
+  });
 });

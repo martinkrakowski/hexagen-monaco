@@ -13,8 +13,17 @@ export interface ProxyRequestOutput {
   readonly rotatedCiphertext?: string;
 }
 
+export interface ProxyStreamResult {
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly rotatedCiphertext?: string;
+}
+
 export interface ProxyRequestPort {
   execute(
     input: ProxyRequestInput,
   ): Promise<Result<ProxyRequestOutput, ByokError>>;
+
+  streamExecute(
+    input: ProxyRequestInput,
+  ): Promise<Result<ProxyStreamResult, ByokError>>;
 }

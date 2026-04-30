@@ -13,8 +13,18 @@ export interface ProviderProxyResponse {
   statusCode: number;
 }
 
+export interface ProviderStreamProxyRequest {
+  rawKey: string;
+  provider: ByokProvider;
+  payload: Record<string, unknown>;
+}
+
 export interface ProviderProxyPort {
   proxy(
     request: ProviderProxyRequest,
   ): Promise<Result<ProviderProxyResponse, ByokError>>;
+
+  streamProxy(
+    request: ProviderStreamProxyRequest,
+  ): Promise<Result<ReadableStream<Uint8Array>, ByokError>>;
 }

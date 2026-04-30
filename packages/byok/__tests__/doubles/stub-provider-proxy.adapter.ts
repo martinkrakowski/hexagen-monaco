@@ -4,6 +4,7 @@ import type {
   ProviderProxyPort,
   ProviderProxyRequest,
   ProviderProxyResponse,
+  ProviderStreamProxyRequest,
 } from "../../src/application/ports/out/provider-proxy-port.port.js";
 
 export class StubProviderProxyAdapter implements ProviderProxyPort {
@@ -36,5 +37,35 @@ export class StubProviderProxyAdapter implements ProviderProxyPort {
         statusCode: 200,
       },
     };
+  }
+
+  async streamProxy(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _request: ProviderStreamProxyRequest,
+  ): Promise<Result<ReadableStream<Uint8Array>, ByokError>> {
+    if (this.shouldFail) {
+      return {
+        success: false,
+        error: {
+          kind: "provider_error",
+          message: "Stub provider proxy stream failure",
+          statusCode: this.failStatusCode,
+        },
+      };
+    }
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"stub "}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"stream"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(new TextEncoder().encode(chunk));
+        }
+        controller.close();
+      },
+    });
+    return { success: true, value: stream };
   }
 }
