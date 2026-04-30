@@ -99,6 +99,7 @@ temp-*
 downloads/
 .cache/
 *.pem
+graphify-out/
 
 # ───────────────────────────────────────────────
 # Test coverage & reports
