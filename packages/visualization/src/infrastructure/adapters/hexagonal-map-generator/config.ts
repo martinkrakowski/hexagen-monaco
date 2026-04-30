@@ -36,24 +36,24 @@ export const LAYOUT_CONFIG = {
   // the bounded context, below the south-adapter stack. They stack vertically
   // in two columns spread wide enough that each column's edge-drop from
   // Domain / UseCases lands cleanly on the card's north handle:
-  //   entity column:   hexX - 60 .. hexX + 120   (card width 180, center x=30)
-  //   usecase column:  hexX + 380 .. hexX + 560 (card width 180, center x=470)
+  //   entity column:   hexX - 120 .. hexX + 60   (card width 180, center x=-30)
+  //   usecase column:  hexX + 440 .. hexX + 620 (card width 180, center x=530)
   // The widened x separation mirrors the user's hexagonal-architecture
   // guidance: driving (west-ish) and driven (east-ish) side children occupy
   // opposite halves of the canvas south of the hex.
   ENTITY_ROW_HEIGHT: 120,
-  ENTITY_START_X: -60,
-  ENTITY_START_Y: 1160, // hexY + 1160 -> first card at y=1160, ~48px below last south adapter at y=1112 (see SOUTH_OFFSET_BASE below)
+  ENTITY_START_X: -120, // Moved further left (was -60)
+  ENTITY_START_Y: 1060, // Moved closer to hex (was 1160)
 
-  SATELLITE_ENTITY_START_X: -60,
-  SATELLITE_ENTITY_START_Y: 980,
+  SATELLITE_ENTITY_START_X: -100, // Moved further left (was -60)
+  SATELLITE_ENTITY_START_Y: 480, // Much closer to hex (was 880)
 
   USECASE_ROW_HEIGHT: 120,
-  USECASE_X_OFFSET: 380,
-  USECASE_START_Y: 960,
+  USECASE_X_OFFSET: 440, // Moved further right (was 380)
+  USECASE_START_Y: 1060, // Moved closer to hex (was 960)
 
-  SATELLITE_USECASE_X_OFFSET: 280,
-  SATELLITE_USECASE_START_Y: 780,
+  SATELLITE_USECASE_X_OFFSET: 340, // Moved further right (was 280)
+  SATELLITE_USECASE_START_Y: 680, // Moved closer to hex (was 780)
 
   NORTH_OFFSET_BASE: 280,
   NORTH_OFFSET_STEP: 120,
