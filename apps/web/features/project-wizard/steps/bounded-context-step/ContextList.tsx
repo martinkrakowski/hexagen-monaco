@@ -14,6 +14,7 @@ interface ContextListProps {
   onRequestDelete: (id: string) => void;
   onConfirmDelete: (id: string) => void;
   onCancelDelete: () => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -30,8 +31,9 @@ export function ContextList({
   onRequestDelete,
   onConfirmDelete,
   onCancelDelete,
+  readOnly,
 }: ContextListProps) {
-  const isDeletable = contexts.length > 1;
+  const isDeletable = !readOnly && contexts.length > 1;
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -62,14 +64,16 @@ export function ContextList({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onAddContext}
-        className="w-full mt-4 py-3 px-4 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
-      >
-        <Plus className="h-4 w-4" />
-        Add Context
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={onAddContext}
+          className="w-full mt-4 py-3 px-4 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add Context
+        </button>
+      )}
     </div>
   );
 }

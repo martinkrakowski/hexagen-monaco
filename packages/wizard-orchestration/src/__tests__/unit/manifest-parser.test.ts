@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseManifestToWizardData } from "../../../application/manifest-parser";
+import { parseManifestToWizardData } from "../../application/manifest-parser";
 import type { WizardData } from "@hexagen/project-configuration";
 
 describe("parseManifestToWizardData", () => {
@@ -9,6 +9,7 @@ scope: "@hexagen/test"
 architecture: "modular-monolith"
 bounded_contexts:
   - name: "UserContext"
+    type: "core"
     description: "Handles user management"
     layers:
       domain:
@@ -44,8 +45,11 @@ bounded_contexts:
   it("should handle missing optional fields gracefully", () => {
     const minimalManifestYaml = `
 system: minimal-system
+scope: "@hexagen/test"
+architecture: "modular-monolith"
 bounded_contexts:
   - name: "MinimalContext"
+    type: "supporting"
     description: "A minimal context"
     layers: {}
 `;
@@ -59,8 +63,11 @@ bounded_contexts:
   it("should map infrastructure adapters correctly", () => {
     const manifestWithAdapters = `
 system: adapter-test
+scope: "@hexagen/test"
+architecture: "modular-monolith"
 bounded_contexts:
   - name: "AdapterContext"
+    type: "driver"
     description: "Context with adapters"
     layers:
       infrastructure:
@@ -74,8 +81,11 @@ bounded_contexts:
   it("should handle single adapter correctly", () => {
     const manifestWithSingleAdapter = `
 system: single-adapter-test
+scope: "@hexagen/test"
+architecture: "modular-monolith"
 bounded_contexts:
   - name: "SingleAdapterContext"
+    type: "core"
     description: "Context with single adapter"
     layers:
       infrastructure:

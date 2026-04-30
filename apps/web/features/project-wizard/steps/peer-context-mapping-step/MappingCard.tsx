@@ -14,6 +14,7 @@ interface MappingCardProps {
   onRequestDelete: () => void;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -33,6 +34,7 @@ export function MappingCard({
   onRequestDelete,
   onConfirmDelete,
   onCancelDelete,
+  readOnly,
 }: MappingCardProps) {
   const boundaryLabel =
     mapping.communicationBoundary === "in-process" ? "In-Process" : "Networked";
@@ -88,7 +90,7 @@ export function MappingCard({
             No
           </button>
         </div>
-      ) : (
+      ) : !readOnly && (
         <X
           role="button"
           tabIndex={0}

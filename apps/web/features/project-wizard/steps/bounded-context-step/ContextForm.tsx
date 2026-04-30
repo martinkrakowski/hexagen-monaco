@@ -11,6 +11,7 @@ interface ContextFormProps {
   fieldPrefix: string;
   onBack: () => void;
   onUpdate: (updater: (ctx: BoundedContext) => BoundedContext) => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -28,10 +29,11 @@ export function ContextForm({
   fieldPrefix,
   onBack,
   onUpdate,
+  readOnly,
 }: ContextFormProps) {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="shrink-0 p-2 space-y-3 border-b border-border">
+      <div className="shrink-0 p-2 border-b border-border">
         <button
           type="button"
           onClick={onBack}
@@ -40,7 +42,9 @@ export function ContextForm({
           <ArrowLeft className="h-4 w-4" />
           Back to context list
         </button>
+      </div>
 
+      <fieldset disabled={readOnly} className="p-2 space-y-3">
         <label className="block w-full">
           <span className="block text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1.5">
             Context Name
@@ -57,13 +61,13 @@ export function ContextForm({
         </label>
 
         <ContextFormInfrastructure context={context} onUpdate={onUpdate} />
-      </div>
 
-      <ContextFormDomain
-        context={context}
-        fieldPrefix={fieldPrefix}
-        onUpdate={onUpdate}
-      />
+        <ContextFormDomain
+          context={context}
+          fieldPrefix={fieldPrefix}
+          onUpdate={onUpdate}
+        />
+      </fieldset>
     </div>
   );
 }
