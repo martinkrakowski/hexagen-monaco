@@ -64,6 +64,9 @@ export function useCloudConnection() {
       error: null,
     });
 
+  const connectionStateRef = useRef(connectionState.state);
+  connectionStateRef.current = connectionState.state;
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const connectRef = useRef<
@@ -95,8 +98,8 @@ export function useCloudConnection() {
       vault: UserSecretVaultPort | null,
       retryCount = 0,
     ): Promise<void> => {
-      // Prevent concurrent connection attempts
-      if (connectionState.state === "connecting") {
+      // Prevent concurrent connection attempts (ref-based to avoid stale closure)
+      if (connectionStateRef.current === "connecting") {
         return;
       }
 
@@ -186,7 +189,7 @@ export function useCloudConnection() {
         abortControllerRef.current = null;
       }
     },
-    [connectionState.state],
+    [],
   );
 
   // Keep connectRef current with latest connect function to avoid stale closures

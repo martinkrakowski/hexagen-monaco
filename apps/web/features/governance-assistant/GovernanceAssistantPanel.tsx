@@ -7,7 +7,7 @@ import { useGovernanceAssistant } from "./hooks/useGovernanceAssistant";
 import { useLocalLLM } from "@/llm-driver/useLocalLlm";
 import { useCloudLLM } from "./hooks/useCloudLlm";
 import { useCloudConnection } from "./hooks/useCloudConnection";
-import { useSecretVault } from "./hooks/useSecretVault";
+import { useSecretVault } from "@/lib/vault-context";
 import { getClientProviders } from "@hexagen/local-llm";
 import {
   type Violation,
@@ -129,10 +129,7 @@ export function GovernanceAssistantPanel({
   const cloudLLM = useCloudLLM();
   const cloudConnection = useCloudConnection();
   const vault = useSecretVault();
-
-  if (vault) {
-    cloudLLM.setVault(vault);
-  }
+  cloudLLM.setVault(vault);
 
   const { status, progress, errorMessage, autoLoading } = llmEngineState;
 
@@ -160,7 +157,7 @@ export function GovernanceAssistantPanel({
   }, [cloudConnection, cloudLLM]);
 
   const handleRetryConnection = useCallback(() => {
-    if (cloudConnection.error && vault) {
+    if (cloudConnection.error) {
       const lastProvider = cloudConnection.config?.provider;
       const lastModel = cloudConnection.config?.model;
       if (lastProvider && lastModel) {
@@ -234,28 +231,22 @@ export function GovernanceAssistantPanel({
             </button>
           </div>
           <div className="flex-1 min-h-0">
-            {vault ? (
-              <CloudModelSettingsView
-                vault={vault}
-                onConnect={handleCloudConnect}
-                isConnecting={cloudConnection.state === "connecting"}
-                connectionError={cloudConnection.error?.message ?? null}
-                onRetry={
-                  cloudConnection.error?.retryable
-                    ? handleRetryConnection
-                    : undefined
-                }
-                onCancelConnection={
-                  cloudConnection.state === "connecting"
-                    ? cloudConnection.cancel
-                    : undefined
-                }
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            )}
+            <CloudModelSettingsView
+              vault={vault}
+              onConnect={handleCloudConnect}
+              isConnecting={cloudConnection.state === "connecting"}
+              connectionError={cloudConnection.error?.message ?? null}
+              onRetry={
+                cloudConnection.error?.retryable
+                  ? handleRetryConnection
+                  : undefined
+              }
+              onCancelConnection={
+                cloudConnection.state === "connecting"
+                  ? cloudConnection.cancel
+                  : undefined
+              }
+            />
           </div>
           <PanelFooter showHint={false} />
         </div>
