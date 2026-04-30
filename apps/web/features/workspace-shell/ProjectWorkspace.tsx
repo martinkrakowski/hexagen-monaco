@@ -19,6 +19,7 @@ import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { LoadManifestDialog } from "./LoadManifestDialog";
 import { ResumeDraftDialog } from "./ResumeDraftDialog";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
+import { WelcomeManifestDialog } from "./WelcomeManifestDialog";
 
 /**
  * Root layout for the project workspace. Pure composition — no state,
@@ -54,6 +55,7 @@ export function ProjectWorkspace() {
           onLoadManifest={() => ui.openDialog({ kind: "load-manifest" })}
           isEditing={isEditing}
           onNewProject={() => ui.openDialog({ kind: "new-project" })}
+          onOpenWelcomeManifest={() => ui.openDialog({ kind: "welcome-manifest" })}
           onLoadSavedProject={(project) =>
             lifecycle.handleLoadProject(project.id)
           }
@@ -141,6 +143,12 @@ export function ProjectWorkspace() {
           onSaveAndNew={lifecycle.handleSaveAndNew}
           onDiscardAndNew={lifecycle.handleDiscardAndNew}
           onCancel={ui.closeDialog}
+        />
+
+        <WelcomeManifestDialog
+          open={ui.dialog.kind === "welcome-manifest"}
+          onClose={ui.closeDialog}
+          onUseManifest={lifecycle.handleManifestLoaded}
         />
       </div>
     </ExportProvider>

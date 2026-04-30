@@ -12,7 +12,8 @@ export type WorkspaceDialogState =
   | { kind: "load-manifest" }
   | { kind: "resume-draft"; projectId: string }
   | { kind: "delete-confirm"; projectId: string }
-  | { kind: "saved-projects" };
+  | { kind: "saved-projects" }
+  | { kind: "welcome-manifest" };
 
 import type { ViewMode } from "@/types/view-mode";
 
