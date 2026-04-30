@@ -5,9 +5,25 @@ import yaml from "js-yaml";
 
 /**
  * Parses a YAML manifest string into WizardData structure
+ * 
  * @param yamlString - The YAML manifest string to parse
  * @returns WizardData object ready for form hydration
  * @throws Error if parsing fails or validation fails
+ * 
+ * The function performs the following steps:
+ * 1. Parses the YAML string to a JavaScript object
+ * 2. Validates the parsed object against ManifestSchema
+ * 3. Maps bounded contexts to WizardData structure:
+ *    - Generates IDs based on context names
+ *    - Maps domain entities and value objects
+ *    - Extracts use cases
+ *    - Searches for persistence adapters (Prisma, TypeORM, Mongoose, Drizzle)
+ *    - Searches for messaging adapters (BullMQ, Temporal, RabbitMQ)
+ *    - Filters inbound ports to valid types (rest-controller, graphql-resolver, etc.)
+ *    - Filters outbound ports to valid types (relational-db, document-db, etc.)
+ * 4. Maps workspace governance settings from manifest properties
+ * 
+ * Returns a complete WizardData structure that can be used to hydrate the project wizard.
  */
 export function parseManifestToWizardData(yamlString: string): WizardData {
   if (!yamlString || yamlString.trim().length === 0) {
@@ -59,19 +75,27 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
           domainEvents: [],
           apiFramework: undefined,
           uiFramework: "",
+          /**
+           * Extracts a persistence adapter from the infrastructure adapters array.
+           * Searches for Prisma, TypeORM, Mongoose, or Drizzle, regardless of position.
+           */
           persistenceAdapter: (() => {
-            const adapter = validatedBc.layers?.infrastructure?.adapters?.[0];
-            if (adapter === "Prisma" || adapter === "TypeORM" || adapter === "Mongoose" || adapter === "Drizzle") {
-              return adapter;
-            }
-            return "";
+            const adapters = validatedBc.layers?.infrastructure?.adapters ?? [];
+            const persistence = adapters.find(a => 
+              a === "Prisma" || a === "TypeORM" || a === "Mongoose" || a === "Drizzle"
+            );
+            return persistence ?? "";
           })(),
+          /**
+           * Extracts a messaging adapter from the infrastructure adapters array.
+           * Searches for BullMQ, Temporal, or RabbitMQ, regardless of position.
+           */
           messagingAdapter: (() => {
-            const adapter = validatedBc.layers?.infrastructure?.adapters?.[1];
-            if (adapter === "BullMQ" || adapter === "Temporal" || adapter === "RabbitMQ") {
-              return adapter;
-            }
-            return "";
+            const adapters = validatedBc.layers?.infrastructure?.adapters ?? [];
+            const messaging = adapters.find(a =>
+              a === "BullMQ" || a === "Temporal" || a === "RabbitMQ"
+            );
+            return messaging ?? "";
           })(),
           telemetryProvider: "",
           externalApiPorts: [],
@@ -85,9 +109,19 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
           webhookEndpoints: [],
           entities: validatedBc.layers?.domain?.entities ?? [],
           useCases: validatedBc.layers?.application?.use_cases ?? [],
+          /**
+           * Port configuration with validated type filtering. This ensures only allowed port
+           * types are included, preventing invalid values from being used in the UI.
+           */
           portConfiguration: {
-            inboundPorts: (validatedBc.layers?.application?.ports?.in as ("rest-controller" | "graphql-resolver" | "event-listener" | "cli-command")[]) ?? [],
-            outboundPorts: (validatedBc.layers?.application?.ports?.out as ("relational-db" | "document-db" | "external-service-client" | "message-publisher")[]) ?? [],
+            inboundPorts: (validatedBc.layers?.application?.ports?.in ?? []).filter(
+              (p): p is "rest-controller" | "graphql-resolver" | "event-listener" | "cli-command" =>
+                ["rest-controller", "graphql-resolver", "event-listener", "cli-command"].includes(p)
+            ),
+            outboundPorts: (validatedBc.layers?.application?.ports?.out ?? []).filter(
+              (p): p is "relational-db" | "document-db" | "external-service-client" | "message-publisher" =>
+                ["relational-db", "document-db", "external-service-client", "message-publisher"].includes(p)
+            ),
           },
         };
      }) ?? [],

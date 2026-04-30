@@ -60,6 +60,12 @@ export function useManifestGeneration() {
       },
       attempt = 0
     ) => {
+      // Clear any pending retry timeouts to prevent race conditions
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
       setState((prev) => ({
         ...prev,
         status: "generating",

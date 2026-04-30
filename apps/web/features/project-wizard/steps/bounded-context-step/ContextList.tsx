@@ -44,7 +44,9 @@ export function ContextList({
               No bounded contexts yet.
             </p>
             <p className="text-xs text-muted-foreground">
-              Add a context to get started.
+              {readOnly
+                ? "No bounded contexts defined in the manifest."
+                : "Add a context to get started."}
             </p>
           </div>
         ) : (

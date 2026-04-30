@@ -129,7 +129,11 @@ export function GovernanceAssistantPanel({
   const cloudLLM = useCloudLLM();
   const cloudConnection = useCloudConnection();
   const vault = useSecretVault();
-  cloudLLM.setVault(vault);
+  
+  // Set vault on cloudLLM when it changes
+  useEffect(() => {
+    cloudLLM.setVault(vault);
+  }, [cloudLLM, vault]);
 
   const { status, progress, errorMessage, autoLoading } = llmEngineState;
 

@@ -61,14 +61,14 @@ describe("useManifestGeneration", () => {
     // Wait for the first fetch to fail and trigger retry
     await waitFor(() => {
       assert.strictEqual((global.fetch as Mock<typeof global.fetch>).mock.callCount(), 2);
+      
+      // Ensure state reflects success after retry
+      assert.strictEqual(result.current.isGenerating, false);
+      assert.strictEqual(result.current.isSuccess, true);
+      assert.strictEqual(result.current.status, "success");
+      assert.deepStrictEqual(result.current.result?.manifest, "valid-yaml");
+      assert.strictEqual(result.current.error, null);
     }, { timeout: 3000 });
-
-    // Ensure state reflects success after retry
-    assert.strictEqual(result.current.isGenerating, false);
-    assert.strictEqual(result.current.isSuccess, true);
-    assert.strictEqual(result.current.status, "success");
-    assert.deepStrictEqual(result.current.result?.manifest, "valid-yaml");
-    assert.strictEqual(result.current.error, null);
   });
 
   it("should classify invalid JSON responses as PARSING error", async () => {

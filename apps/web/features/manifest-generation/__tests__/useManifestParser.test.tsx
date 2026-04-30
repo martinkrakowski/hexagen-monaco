@@ -1,5 +1,5 @@
 import { renderHook, act } from "@testing-library/react";
-import { useManifestParser } from "./useManifestParser";
+import { useManifestParser } from "../useManifestParser";
 
 describe("useManifestParser", () => {
   const validManifestYaml = `
