@@ -19,6 +19,7 @@ interface MappingListProps {
   onRequestDelete: (id: string) => void;
   onConfirmDelete: (id: string) => void;
   onCancelDelete: () => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -39,6 +40,7 @@ export function MappingList({
   onRequestDelete,
   onConfirmDelete,
   onCancelDelete,
+  readOnly,
 }: MappingListProps) {
   if (boundedContexts.length < 2) {
     return (
@@ -89,21 +91,24 @@ export function MappingList({
                 onRequestDelete={() => onRequestDelete(mappingId)}
                 onConfirmDelete={() => onConfirmDelete(mappingId)}
                 onCancelDelete={onCancelDelete}
+                readOnly={readOnly}
               />
             );
           })
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onAddMapping}
-        disabled={boundedContexts.length < 2}
-        className="w-full mt-4 py-3 px-4 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <Plus className="h-4 w-4" />
-        Add Mapping
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={onAddMapping}
+          disabled={boundedContexts.length < 2}
+          className="w-full mt-4 py-3 px-4 border border-dashed border-input rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Plus className="h-4 w-4" />
+          Add Mapping
+        </button>
+      )}
     </div>
   );
 }

@@ -24,6 +24,10 @@ export type {
   DomainEventRef,
   PeerMapping,
 } from "./schema";
+// Re-export schema constants
+export {
+  PortConfigurationSchema,
+} from "./schema";
 // Re-export manifest schema types for consumers
 export {
   BoundedContextTypeSchema,

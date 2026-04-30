@@ -7,7 +7,6 @@ This folder contains the complete, atomically-phased development plan for integr
 ### 1. **welcome-screen-integration-plan.md** (Main Plan — 806 lines)
 
 Comprehensive specification including:
-
 - **Feature Overview** — What, why, when
 - **System Invariants** — Non-negotiable constraints
 - **Phase 0–6** — Detailed deliverables, agent delegation, acceptance criteria
@@ -21,7 +20,6 @@ Comprehensive specification including:
 ### 2. **WELCOME_SCREEN_PHASES.md** (Visual Reference — 261 lines)
 
 Quick reference with diagrams:
-
 - **System Context** — ASCII diagram of ProjectWorkspace layout
 - **Phase Execution Flow** — Flowchart showing all 6 phases
 - **Component Dependency Graph** — How pieces wire together

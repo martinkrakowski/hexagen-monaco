@@ -16,6 +16,7 @@ interface MappingFormProps {
   isStrictTemplate: boolean;
   onBack: () => void;
   onUpdate: (updates: Partial<PeerContextMapping>) => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -30,6 +31,7 @@ export function MappingForm({
   isStrictTemplate,
   onBack,
   onUpdate,
+  readOnly,
 }: MappingFormProps) {
   const contextOptions = boundedContexts.map((ctx) => ({
     id: ctx.id,
@@ -50,7 +52,7 @@ export function MappingForm({
         Back to mapping list
       </button>
 
-      <div className="space-y-6">
+      <fieldset disabled={readOnly} className="space-y-6">
         <MappingFormContexts
           mapping={mapping}
           contextOptions={contextOptions}
@@ -64,7 +66,7 @@ export function MappingForm({
           isStrictTemplate={isStrictTemplate}
           onUpdate={onUpdate}
         />
-      </div>
+      </fieldset>
     </div>
   );
 }

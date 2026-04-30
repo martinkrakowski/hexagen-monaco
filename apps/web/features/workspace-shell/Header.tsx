@@ -14,6 +14,7 @@ interface HeaderProps {
   onLoadManifest: () => void;
   onNewProject: () => void;
   onLoadSavedProject: (project: SavedProject) => void;
+  onOpenWelcomeManifest: () => void;
   isEditing?: boolean;
 }
 
@@ -21,6 +22,7 @@ export function Header({
   onLoadManifest,
   onNewProject,
   onLoadSavedProject,
+  onOpenWelcomeManifest,
   isEditing = false,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
@@ -50,6 +52,7 @@ export function Header({
           <HeaderMenu
             onLoadManifest={onLoadManifest}
             onNewProject={onNewProject}
+            onOpenWelcomeManifest={onOpenWelcomeManifest}
             onToggleTheme={toggleTheme}
             theme={theme}
           />

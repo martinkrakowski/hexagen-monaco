@@ -124,6 +124,10 @@
   --page-section-gap: 24px;
   --form-field-gap: 8px;
 
+  /* Form & Panel Tokens */
+  --textarea-min-height: 150px;
+  --resizable-panel-height: calc(100% - 3rem);
+
   /* Card Width Tokens (Phase 3 Remediation) */
   --card-width-sm: 256px; /* w-64 equivalent */
   --card-width-md: 280px; /* Governance card width */

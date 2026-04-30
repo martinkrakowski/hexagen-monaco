@@ -223,28 +223,24 @@ Phase 6 (Docs & QA)
 ## Architecture Decisions
 
 ### Decision 1: Modal Dialog vs. Inline
-
 **Chosen:** Modal Dialog (`WelcomeManifestDialog`)
 
 - **Rationale:** Immersive, focused UX; doesn't disrupt wizard layout
 - **Alternative:** Replace left pane temporarily (more complex routing)
 
 ### Decision 2: One-Step or Two-Step Manifest Load
-
 **Chosen:** Single "Use This Manifest" → Direct Load
 
 - **Rationale:** User sees preview, clicks use → loads directly
 - **Alternative:** Show preview dialog, then separate "Import" step (extra friction)
 
 ### Decision 3: Auto-Complete Behavior
-
 **Chosen:** Read-only hints + full editability
 
 - **Rationale:** Show which steps were auto-generated, user can still refine
 - **Alternative:** Fully locked steps (restrictive) or fully editable without hints (confusing)
 
 ### Decision 4: Landing Step
-
 **Chosen:** First incomplete step (or summary if all complete)
 
 - **Rationale:** Encourages refinement; summary available for review

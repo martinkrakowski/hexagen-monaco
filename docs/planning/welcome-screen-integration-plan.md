@@ -74,11 +74,19 @@ These constraints hold across all phases:
 Add `"welcome-manifest"` dialog variant:
 
 ```typescript
+<<<<<<< HEAD
+type DialogKind = 
+  | "load-manifest" 
+  | "resume-draft" 
+  | "new-project"
+  | "welcome-manifest";  // NEW
+=======
 type DialogKind =
   | "load-manifest"
   | "resume-draft"
   | "new-project"
   | "welcome-manifest"; // NEW
+>>>>>>> origin/main
 
 interface DialogState {
   kind: DialogKind;
@@ -198,16 +206,15 @@ export interface ParseResult {
 export function parseGeneratedManifest(yaml: string): ParseResult {
   try {
     const parsed = parseYAML(yaml);
-
+    
     // Validate against manifest schema
     // Map parsed YAML to WizardFormData
     // Return success result
+    
   } catch (error) {
     return {
       success: false,
-      errors: [
-        /* user-friendly messages */
-      ],
+      errors: [/* user-friendly messages */],
     };
   }
 }
@@ -228,15 +235,15 @@ export function parseGeneratedManifest(yaml: string): ParseResult {
 export function useManifestParser() {
   const parse = useCallback((yaml: string) => {
     const result = parseGeneratedManifest(yaml);
-
+    
     if (!result.success) {
       // Log errors to console for debugging
       return { success: false, errors: result.errors };
     }
-
+    
     return { success: true, formData: result.formData };
   }, []);
-
+  
   return { parse };
 }
 ```
@@ -322,8 +329,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   NETWORK_ERROR: "Network error. Please check your connection and retry.",
   TIMEOUT_ERROR: "Request took too long (>15s). Please try again.",
   RATE_LIMIT: "Rate limit reached. Please wait a few minutes and retry.",
-  INVALID_YAML:
-    "Generated manifest format is invalid. Please try different input.",
+  INVALID_YAML: "Generated manifest format is invalid. Please try different input.",
   PARSING_ERROR: "Could not parse the generated manifest. Please regenerate.",
   LLM_ERROR: "AI service error. Please retry or contact support.",
 };
@@ -342,6 +348,26 @@ const generate = useCallback(
   async (description: string, options?: GenerationOptions) => {
     const maxRetries = 2;
     let lastError: Error | null = null;
+<<<<<<< HEAD
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Attempt generation
+        const response = await fetch("/api/manifest/generate", { /* ... */ });
+        // Handle response
+        
+      } catch (error) {
+        lastError = error as Error;
+        
+        if (attempt < maxRetries) {
+          // Exponential backoff
+          const delay = 1000 * Math.pow(2, attempt);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+=======
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -361,6 +387,7 @@ const generate = useCallback(
       }
     }
 
+>>>>>>> origin/main
     // All retries exhausted
     setState({
       status: "error",
@@ -376,7 +403,10 @@ const generate = useCallback(
 **File:** `apps/web/features/manifest-generation/integration.test.ts`
 
 Test scenarios:
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - Network timeout → user sees "Request took too long" + retry button
 - Invalid YAML response → user sees "Format invalid" + regenerate button
 - Rate limit 429 → user sees helpful message
@@ -410,7 +440,10 @@ Implement comprehensive error handling for the manifest generation flow. Classif
 **Goal:** Wire dialog result back to project lifecycle. Handle save/discard workflow when user generates manifest while editing existing project.
 
 **Atomic Completion Criterion:**
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - `lifecycle.handleWelcomeManifestGenerated()` integrates manifest into form state
 - If project is being edited → trigger save/discard dialog first (INV-1)
 - If no project editing → load manifest and advance to wizard
@@ -436,7 +469,11 @@ const handleWelcomeManifestGenerated = useCallback(
       ui.openDialog({ kind: "new-project" });
       return;
     }
+<<<<<<< HEAD
+    
+=======
 
+>>>>>>> origin/main
     // No project editing → load manifest directly
     const parseResult = parser.parse(manifestYaml);
     if (!parseResult.success) {
@@ -444,6 +481,15 @@ const handleWelcomeManifestGenerated = useCallback(
       onParseError?.(parseResult.errors);
       return;
     }
+<<<<<<< HEAD
+    
+    // Hydrate form state
+    form.reset(parseResult.formData);
+    
+    // Close welcome dialog
+    ui.closeDialog();
+    
+=======
 
     // Hydrate form state
     form.reset(parseResult.formData);
@@ -451,6 +497,7 @@ const handleWelcomeManifestGenerated = useCallback(
     // Close welcome dialog
     ui.closeDialog();
 
+>>>>>>> origin/main
     // Advance to first wizard step
     ui.setCurrentStepIndex(0);
   },
@@ -466,7 +513,11 @@ const handleWelcomeManifestGenerated = useCallback(
 const handleSaveAndNew = useCallback(async () => {
   // Save current project
   await saveProject();
+<<<<<<< HEAD
+  
+=======
 
+>>>>>>> origin/main
   // Load pending manifest if exists
   if (pendingManifest) {
     const parseResult = parser.parse(pendingManifest);
@@ -475,7 +526,11 @@ const handleSaveAndNew = useCallback(async () => {
   } else {
     form.reset(DEFAULT_FORM_STATE);
   }
+<<<<<<< HEAD
+  
+=======
 
+>>>>>>> origin/main
   ui.closeDialog();
   ui.setCurrentStepIndex(0);
 }, []);
@@ -498,7 +553,10 @@ const handleSaveAndNew = useCallback(async () => {
 **File:** `apps/web/features/workspace-shell/ProjectWorkspace.integration.test.ts`
 
 Test scenarios:
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - Generate manifest while no project loaded → loads directly
 - Generate manifest while editing project → triggers save/discard
 - User saves + generates → manifest loads after save
@@ -533,7 +591,10 @@ Implement the lifecycle handler `handleWelcomeManifestGenerated()` in `useProjec
 **Goal:** Smart step navigation based on generated manifest completeness.
 
 **Atomic Completion Criterion:**
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - Wizard evaluates which steps are "complete" based on manifest data
 - Skips completed steps or shows them as read-only
 - User can navigate back to refine any step
@@ -577,11 +638,19 @@ const isStepComplete = stepCompleteness[wizardSteps[currentStepIndex].id].comple
 return (
   <>
     {/* Show step as read-only if auto-generated */}
+<<<<<<< HEAD
+    <CurrentStep 
+      readOnly={isStepComplete && isGeneratedFromAI}
+      {...props}
+    />
+    
+=======
     <CurrentStep
       readOnly={isStepComplete && isGeneratedFromAI}
       {...props}
     />
 
+>>>>>>> origin/main
     {/* Navigation hints */}
     {isStepComplete && (
       <InfoPanel>
@@ -600,7 +669,11 @@ return (
 const handleWelcomeManifestGenerated = useCallback(
   async (manifestYaml: string) => {
     // ... existing logic ...
+<<<<<<< HEAD
+    
+=======
 
+>>>>>>> origin/main
     // Smart landing: jump to first incomplete step
     const completeness = analyzeManifestCompleteness(formData);
     for (let i = 0; i < wizardSteps.length; i++) {
@@ -609,7 +682,11 @@ const handleWelcomeManifestGenerated = useCallback(
         return;
       }
     }
+<<<<<<< HEAD
+    
+=======
 
+>>>>>>> origin/main
     // All steps complete → go to summary
     ui.setCurrentStepIndex(wizardSteps.length - 1);
   },
@@ -622,7 +699,10 @@ const handleWelcomeManifestGenerated = useCallback(
 **File:** `apps/web/features/manifest-generation/analyzeManifestCompleteness.test.ts`
 
 Test cases:
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - Fully populated manifest → all steps complete
 - Partial manifest (only workspace + contexts) → ports incomplete
 - Empty manifest → all steps incomplete
@@ -656,7 +736,10 @@ Implement manifest completeness analysis (`analyzeManifestCompleteness()`) that 
 **Goal:** Document the feature, run full test suite, and verify all acceptance criteria.
 
 **Atomic Completion Criterion:**
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - Feature is fully documented in code and user guides
 - All tests pass: `yarn test`
 - Full build succeeds: `yarn build && yarn typecheck && yarn lint`
@@ -672,7 +755,10 @@ Implement manifest completeness analysis (`analyzeManifestCompleteness()`) that 
 #### 6.1 Code Documentation
 
 Update JSDoc comments in all new/modified files:
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - `WelcomeManifestDialog.tsx`
 - `parseGeneratedManifest.ts`
 - `errorMessages.ts`
@@ -684,7 +770,10 @@ Update JSDoc comments in all new/modified files:
 **File:** `docs/architecture/welcome-screen-integration.md` (create)
 
 Sections:
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - Feature overview
 - Component diagram (dialog → parser → lifecycle → wizard)
 - Data flow (manifest YAML → form state)
@@ -696,7 +785,10 @@ Sections:
 **File:** `docs/user-guide/welcome-screen.md` (create)
 
 Sections:
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
 - How to use the AI welcome screen
 - Example inputs
 - Interpreting confidence scores
@@ -754,6 +846,18 @@ Write comprehensive JSDoc comments for all new and modified files. Create archit
 
 ## Summary Timeline
 
+<<<<<<< HEAD
+| Phase | Duration | Work | Complexity |
+|-------|----------|------|-----------|
+| 0 | Trivial | Verify deps | — |
+| 1 | 1.5h | Dialog state + routing | Low |
+| 2 | 2h | Manifest parsing + hydration | Medium |
+| 3 | 1.5h | Error handling + retry | Medium |
+| 4 | 2h | Lifecycle integration | High |
+| 5 | 1.5h | Wizard navigation | Medium |
+| 6 | 1h | Docs + QA | Low |
+| **Total** | **~9.5 hours** | — | — |
+=======
 | Phase     | Duration       | Work                         | Complexity |
 | --------- | -------------- | ---------------------------- | ---------- |
 | 0         | Trivial        | Verify deps                  | —          |
@@ -764,6 +868,7 @@ Write comprehensive JSDoc comments for all new and modified files. Create archit
 | 5         | 1.5h           | Wizard navigation            | Medium     |
 | 6         | 1h             | Docs + QA                    | Low        |
 | **Total** | **~9.5 hours** | —                            | —          |
+>>>>>>> origin/main
 
 ---
 
@@ -782,6 +887,15 @@ Write comprehensive JSDoc comments for all new and modified files. Create archit
 
 ## Risk Mitigation
 
+<<<<<<< HEAD
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| YAML parsing fails on edge cases | High | Comprehensive test coverage in Phase 2; fallback to error state |
+| LLM timeout causes poor UX | Medium | Implement 15s timeout + retry logic in Phase 3 |
+| Form hydration corrupts state | High | Use immutable form reset in Phase 4; validate form after load |
+| Race condition: user clicks "New" while generating | Medium | Disable button during generation; queue requests |
+| Manifest completeness logic is too aggressive | Medium | Conservative heuristics; user can always refine steps |
+=======
 | Risk                                               | Impact | Mitigation                                                      |
 | -------------------------------------------------- | ------ | --------------------------------------------------------------- |
 | YAML parsing fails on edge cases                   | High   | Comprehensive test coverage in Phase 2; fallback to error state |
@@ -789,6 +903,7 @@ Write comprehensive JSDoc comments for all new and modified files. Create archit
 | Form hydration corrupts state                      | High   | Use immutable form reset in Phase 4; validate form after load   |
 | Race condition: user clicks "New" while generating | Medium | Disable button during generation; queue requests                |
 | Manifest completeness logic is too aggressive      | Medium | Conservative heuristics; user can always refine steps           |
+>>>>>>> origin/main
 
 ---
 

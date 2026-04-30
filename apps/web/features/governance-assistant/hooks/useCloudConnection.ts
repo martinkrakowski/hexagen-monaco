@@ -5,6 +5,22 @@ import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import type { UseCloudLLMConfig } from "./useCloudLlm";
 
 /**
+ * Wrap a promise with a timeout that rejects if not resolved within timeoutMs.
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs),
+    ),
+  ]);
+}
+
+/**
  * Finite State Machine for Cloud LLM connection lifecycle.
  * States: IDLE -> CONNECTING -> CONNECTED | ERROR
  *
@@ -40,21 +56,7 @@ function calculateRetryDelay(attemptNumber: number): number {
   return BASE_RETRY_DELAY_MS * Math.pow(2, attemptNumber);
 }
 
-/**
- * Wrap a promise with a timeout that rejects if not resolved within timeoutMs.
- */
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  timeoutMessage: string,
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs),
-    ),
-  ]);
-}
+
 
 export function useCloudConnection() {
   const [connectionState, setConnectionState] =
@@ -84,6 +86,11 @@ export function useCloudConnection() {
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     };
   }, []);

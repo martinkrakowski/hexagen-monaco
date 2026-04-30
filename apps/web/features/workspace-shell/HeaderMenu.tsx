@@ -6,6 +6,7 @@ import { Sun, Moon, Import, PlusCircle, Menu } from "lucide-react";
 interface HeaderMenuProps {
   onLoadManifest: () => void;
   onNewProject?: () => void;
+  onOpenWelcomeManifest: () => void;
   onToggleTheme: () => void;
   theme: "light" | "dark";
 }
@@ -13,6 +14,7 @@ interface HeaderMenuProps {
 export function HeaderMenu({
   onLoadManifest,
   onNewProject,
+  onOpenWelcomeManifest,
   onToggleTheme,
   theme,
 }: HeaderMenuProps) {
@@ -29,6 +31,11 @@ export function HeaderMenu({
 
   const handleLoadManifest = () => {
     onLoadManifest();
+    closeMenu();
+  };
+
+  const handleOpenWelcomeManifest = () => {
+    onOpenWelcomeManifest();
     closeMenu();
   };
 
@@ -58,6 +65,13 @@ export function HeaderMenu({
         >
           <Import className="w-4 h-4" />
           Load Manifest
+        </button>
+        <button
+          onClick={handleOpenWelcomeManifest}
+          className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-muted transition-colors"
+        >
+          <Sun className="w-4 h-4" />
+          ✨ Generate Manifest from AI
         </button>
         <button
           onClick={handleToggleTheme}
