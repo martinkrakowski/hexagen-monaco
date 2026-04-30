@@ -43,17 +43,17 @@ export const LAYOUT_CONFIG = {
   // opposite halves of the canvas south of the hex.
   ENTITY_ROW_HEIGHT: 120,
   ENTITY_START_X: -120, // Moved further left (was -60)
-  ENTITY_START_Y: 1060, // Moved closer to hex (was 1160)
+  ENTITY_START_Y: 530, // Decreased by 50% from 1060
 
   SATELLITE_ENTITY_START_X: -100, // Moved further left (was -60)
-  SATELLITE_ENTITY_START_Y: 480, // Much closer to hex (was 880)
+  SATELLITE_ENTITY_START_Y: 240, // Decreased by 50% from 480
 
   USECASE_ROW_HEIGHT: 120,
   USECASE_X_OFFSET: 440, // Moved further right (was 380)
-  USECASE_START_Y: 1060, // Moved closer to hex (was 960)
+  USECASE_START_Y: 530, // Decreased by 50% from 1060
 
   SATELLITE_USECASE_X_OFFSET: 340, // Moved further right (was 280)
-  SATELLITE_USECASE_START_Y: 680, // Moved closer to hex (was 780)
+  SATELLITE_USECASE_START_Y: 340, // Decreased by 50% from 680
 
   NORTH_OFFSET_BASE: 280,
   NORTH_OFFSET_STEP: 120,
