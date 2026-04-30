@@ -17,6 +17,7 @@
 
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { enableMapSet } from "immer";
 import type { GovernanceEntry } from "@hexagen/local-llm";
 
 interface GovernanceThreadState {
@@ -61,6 +62,8 @@ interface GovernanceThreadState {
    */
   appendEntry: (contextKey: string, entry: GovernanceEntry) => void;
 }
+
+enableMapSet();
 
 export const useGovernanceThreadStore = create<GovernanceThreadState>()(
   immer((set, get) => ({

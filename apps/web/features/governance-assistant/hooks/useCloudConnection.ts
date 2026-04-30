@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import type { UseCloudLLMConfig } from "./useCloudLlm";
 
@@ -64,8 +64,29 @@ export function useCloudConnection() {
       error: null,
     });
 
+  const connectionStateRef = useRef(connectionState.state);
+  connectionStateRef.current = connectionState.state;
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<
+    | ((
+        provider: string,
+        model: string,
+        vault: UserSecretVaultPort | null,
+        retryCount?: number,
+      ) => Promise<void>)
+    | null
+  >(null);
+
+  // Cleanup retry timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Attempt to connect to Cloud LLM with timeout and retry logic.
@@ -77,8 +98,8 @@ export function useCloudConnection() {
       vault: UserSecretVaultPort | null,
       retryCount = 0,
     ): Promise<void> => {
-      // Prevent concurrent connection attempts
-      if (connectionState.state === "connecting") {
+      // Prevent concurrent connection attempts (ref-based to avoid stale closure)
+      if (connectionStateRef.current === "connecting") {
         return;
       }
 
@@ -159,15 +180,22 @@ export function useCloudConnection() {
         if (isRetryable) {
           const delay = calculateRetryDelay(retryCount);
           retryTimeoutRef.current = setTimeout(() => {
-            connect(provider, model, vault, retryCount + 1);
+            if (connectRef.current) {
+              connectRef.current(provider, model, vault, retryCount + 1);
+            }
           }, delay);
         }
       } finally {
         abortControllerRef.current = null;
       }
     },
-    [connectionState.state],
+    [],
   );
+
+  // Keep connectRef current with latest connect function to avoid stale closures
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   /**
    * Manually retry connection (resets retry count).
@@ -179,9 +207,11 @@ export function useCloudConnection() {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
-      connect(provider, model, vault, 0);
+      if (connectRef.current) {
+        connectRef.current(provider, model, vault, 0);
+      }
     },
-    [connect],
+    [],
   );
 
   /**

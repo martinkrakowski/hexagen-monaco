@@ -42,6 +42,7 @@ const nextConfig = {
   transpilePackages: [
     '@hexagen/agentic-interaction',
     '@hexagen/ai-pipeline',
+    '@hexagen/byok',
     '@hexagen/core-domain',
     '@hexagen/eslint-plugin-ui',
     '@hexagen/governance',

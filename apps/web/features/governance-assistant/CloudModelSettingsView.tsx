@@ -1,8 +1,24 @@
 "use client";
 
-import { useReducer, useCallback } from "react";
+import { useState, useEffect, useReducer, useCallback } from "react";
 import { getClientProviders } from "@hexagen/local-llm";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
+
+/**
+ * Wrap a promise with a timeout that rejects if not resolved within timeoutMs.
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs),
+    ),
+  ]);
+}
 
 interface CloudModelSettingsViewProps {
   vault: UserSecretVaultPort;
@@ -74,6 +90,7 @@ export function CloudModelSettingsView({
   const [state, dispatch] = useReducer(cloudFormReducer, initialState);
   const { selectedProvider, selectedModel, apiKey, rememberKey, isStoring } =
     state;
+  const [storeError, setStoreError] = useState<string | null>(null);
 
   const clientProviders = getClientProviders();
   const currentProvider = clientProviders.find(
@@ -85,6 +102,11 @@ export function CloudModelSettingsView({
       return m.available;
     }) ?? [];
 
+  // Clear storeError when user modifies form fields
+  useEffect(() => {
+    setStoreError(null);
+  }, [apiKey, selectedProvider, selectedModel]);
+
   const canConnect =
     selectedProvider &&
     selectedModel &&
@@ -95,19 +117,36 @@ export function CloudModelSettingsView({
   const handleConnect = useCallback(async () => {
     if (!canConnect) return;
 
+    setStoreError(null);
     dispatch({ type: "SET_STORING", payload: true });
     try {
-      const storeResult = await vault.store(apiKey, rememberKey);
+      const storeResult = await withTimeout(
+        vault.store(apiKey, rememberKey),
+        5000,
+        "Vault operation timed out. Please try again.",
+      );
       if (!storeResult.success) {
+        const errorMsg =
+          storeResult.error?.message || "Failed to store API key.";
+        setStoreError(errorMsg);
+        dispatch({ type: "SET_STORING", payload: false });
         return;
       }
 
-      await onConnect(selectedProvider, selectedModel);
+      await withTimeout(
+        onConnect(selectedProvider, selectedModel),
+        15000,
+        "Connection timed out. Please try again.",
+      );
 
       dispatch({
         type: "SET_PROVIDER",
         payload: "",
       });
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : "Connection failed.";
+      setStoreError(errorMsg);
     } finally {
       dispatch({ type: "SET_STORING", payload: false });
     }
@@ -212,12 +251,12 @@ export function CloudModelSettingsView({
           </label>
         )}
 
-        {connectionError && (
+        {(storeError || connectionError) && (
           <div className="space-y-2">
             <p className="text-xs text-destructive text-center">
-              {connectionError}
+              {storeError || connectionError}
             </p>
-            {onRetry && (
+            {!storeError && onRetry && (
               <button
                 type="button"
                 onClick={onRetry}

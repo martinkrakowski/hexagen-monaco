@@ -16,6 +16,7 @@
     "@dagrejs/dagre": "^2.0.4",
     "@hexagen/agentic-interaction": "workspace:*",
     "@hexagen/ai-pipeline": "workspace:*",
+    "@hexagen/byok": "workspace:*",
     "@hexagen/core-domain": "workspace:*",
     "@hexagen/eslint-plugin-ui": "workspace:*",
     "@hexagen/governance": "workspace:*",
