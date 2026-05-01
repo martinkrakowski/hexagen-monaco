@@ -46,7 +46,6 @@ export function WelcomeScreen({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [platform, setPlatform] = useState("");
   const [deployment, setDeployment] = useState("");
-  const [preferLocal, setPreferLocal] = useState(false);
   const [rememberChoice, setRememberChoice] = useState(false);
   const rememberChoiceRef = useRef(false);
   const clientGenAbortRef = useRef<AbortController | null>(null);
@@ -65,92 +64,45 @@ export function WelcomeScreen({
   const isValid = charCount >= MIN_LENGTH && charCount <= MAX_LENGTH;
   const canGenerate = isValid && flowState.state === "idle";
 
-  // Handle manifest generation when in generating state
+  const generateManifestRef = useRef(clientGen.generateManifest);
+  useEffect(() => {
+    generateManifestRef.current = clientGen.generateManifest;
+  }, [clientGen.generateManifest]);
+
   useEffect(() => {
     if (flowState.state !== "generating") return;
 
-    // Phase 7: Use client-side generation for local models
-    if (preferLocal) {
-      const controller = new AbortController();
-      clientGenAbortRef.current = controller;
-      clientGen.generateManifest(
-        description,
-        clientGenAbortRef.current?.signal,
-      );
-      return () => {
-        controller.abort();
-        clientGenAbortRef.current = null;
-      };
-    }
-
-    // Server-side generation path (cloud or server-side local)
     const controller = new AbortController();
-
-    const generateManifest = async () => {
-      try {
-        const response = await fetch("/api/manifest/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            description,
-            platform: platform || undefined,
-            deployment: deployment || undefined,
-            modelId: flowState.selectedModelId,
-          }),
-          signal: controller.signal,
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          actions.saveGenerationResult(data.manifest);
-        } else {
-          actions.setError(
-            data.error || "Failed to generate manifest",
-            "inference_failed",
-          );
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name !== "AbortError") {
-          actions.setError(
-            error.message || "Failed to generate manifest",
-            "network_failure",
-          );
-        }
-      }
+    clientGenAbortRef.current = controller;
+    generateManifestRef.current(description, clientGenAbortRef.current?.signal);
+    return () => {
+      controller.abort();
+      clientGenAbortRef.current = null;
     };
-
-    generateManifest();
-    return () => controller.abort();
-  }, [
-    flowState.state,
-    description,
-    platform,
-    deployment,
-    flowState.selectedModelId,
-    preferLocal,
-    actions,
-    clientGen.generateManifest,
-  ]);
+  }, [flowState.state, description]);
 
   // Phase 7: React to client-side generation results
   useEffect(() => {
-    if (flowState.state !== "generating" || !preferLocal) return;
+    if (flowState.state !== "generating") return;
     if (clientGen.generationError) {
       actions.setError(clientGen.generationError, "inference_failed");
     }
-  }, [clientGen.generationError, flowState.state, preferLocal, actions]);
+  }, [clientGen.generationError, flowState.state, actions]);
 
   useEffect(() => {
-    if (flowState.state !== "generating" || !preferLocal) return;
+    if (flowState.state !== "generating") return;
     if (clientGen.generatedManifest) {
       actions.saveGenerationResult(clientGen.generatedManifest);
     }
-  }, [clientGen.generatedManifest, flowState.state, preferLocal, actions]);
+  }, [clientGen.generatedManifest, flowState.state, actions]);
 
   const handleGenerate = () => {
     if (!canGenerate) return;
     const prefs = getModelPreferences();
-    if (prefs.rememberChoice && prefs.lastModelId) {
+    if (
+      llmContext.engineState.status === "ready" ||
+      (prefs.rememberChoice && prefs.lastModelId)
+    ) {
       actions.transitionTo("generating");
     } else {
       actions.transitionTo("model_selection");
@@ -268,12 +220,10 @@ export function WelcomeScreen({
           </p>
           <Button
             onClick={() => {
-              setPreferLocal(false);
-              setRememberChoice(false);
               actions.transitionTo("idle");
             }}
           >
-            Use Cloud Model Instead
+            Back to Description
           </Button>
         </div>
       </div>
@@ -480,23 +430,6 @@ export function WelcomeScreen({
                       placeholder="e.g., AWS, Docker, Kubernetes"
                       disabled={flowState.state !== "idle"}
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="preferLocal">Model Preference</Label>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="preferLocal"
-                        checked={preferLocal}
-                        onCheckedChange={(checked) => setPreferLocal(checked)}
-                        disabled={flowState.state !== "idle"}
-                      />
-                      <Label
-                        htmlFor="preferLocal"
-                        className="cursor-pointer text-sm font-normal"
-                      >
-                        Prefer local model (if available)
-                      </Label>
-                    </div>
                   </div>
                 </div>
               )}

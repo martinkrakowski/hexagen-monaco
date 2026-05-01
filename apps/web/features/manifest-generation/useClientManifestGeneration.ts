@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import { SYSTEM_PROMPT } from "@hexagen/agentic-interaction";
 import { compileUserPrompt } from "@hexagen/agentic-interaction";
@@ -26,45 +26,56 @@ export function useClientManifestGeneration(
     null,
   );
 
-  const messagesRef = useRef(llmContext.messages);
-  useEffect(() => {
-    messagesRef.current = llmContext.messages;
-  }, [llmContext.messages]);
+  const messageCountBeforeRef = useRef<number | null>(null);
 
   const generateManifest = useCallback(
     async (description: string, signal?: AbortSignal) => {
       if (signal?.aborted) return;
 
-      setIsGenerating(true);
       setGenerationError(null);
       setGeneratedManifest(null);
+      setIsGenerating(true);
+
+      const countBefore = llmContext.messages.length;
+      messageCountBeforeRef.current = countBefore;
 
       try {
         const userPrompt = compileUserPrompt({ userDescription: description });
-        const messageCountBefore = messagesRef.current.length;
         await llmContext.sendGovernanceMessage(userPrompt, SYSTEM_PROMPT);
 
-        if (signal?.aborted) return;
+        if (signal?.aborted) {
+          setIsGenerating(false);
+          return;
+        }
 
-        const newMessages = messagesRef.current.slice(messageCountBefore);
-        const lastAssistantMessage = newMessages
-          .filter((m) => m.role === "assistant")
-          .map((m) => m.content)
-          .join("\n");
+        // Streaming is complete, extract YAML from new messages
+        const messages = llmContext.messages;
+        const lastAssistantMessage = [...messages]
+          .reverse()
+          .find((m) => m.role === "assistant");
 
-        if (signal?.aborted) return;
+        const content = lastAssistantMessage?.content ?? "";
 
-        const accumulatedResponse = lastAssistantMessage || "";
-        const extractedYaml = extractManifestYaml(accumulatedResponse);
+        if (!content) {
+          setGenerationError(
+            "AI response did not contain a valid manifest YAML block",
+          );
+          setIsGenerating(false);
+          return;
+        }
+
+        const extractedYaml = extractManifestYaml(content);
 
         if (!extractedYaml) {
           setGenerationError(
             "AI response did not contain a valid manifest YAML block",
           );
+          setIsGenerating(false);
           return;
         }
 
         setGeneratedManifest(extractedYaml);
+        setIsGenerating(false);
       } catch (error) {
         if (signal?.aborted) return;
         const message =
@@ -72,11 +83,10 @@ export function useClientManifestGeneration(
             ? error.message
             : "Failed to generate manifest client-side";
         setGenerationError(message);
-      } finally {
         setIsGenerating(false);
       }
     },
-    [llmContext, messagesRef],
+    [llmContext],
   );
 
   const reset = useCallback(() => {

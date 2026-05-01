@@ -52,9 +52,9 @@ export function ManifestPreview({
     navigator.clipboard.writeText(manifest);
   };
 
-  const handleUseManifest = () => {
+  const handleUseManifest = async () => {
     if (onUseManifest) {
-      onUseManifest(manifest);
+      await onUseManifest(manifest);
     }
   };
 
