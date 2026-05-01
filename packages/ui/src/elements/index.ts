@@ -1,6 +1,9 @@
 export { Button, buttonVariants } from "./Button.js";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button.js";
 
+export { Checkbox } from "./Checkbox.js";
+export type { CheckboxProps } from "./Checkbox.js";
+
 export { Input } from "./Input.js";
 export type { InputProps } from "./Input.js";
 
