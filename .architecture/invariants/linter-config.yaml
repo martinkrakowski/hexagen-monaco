@@ -115,3 +115,9 @@ package_rules:
       - '@hexagen/messaging'
       - '@hexagen/project-configuration'
       - '@hexagen/sync'
+
+  - name: 'model-settings'
+    allowed_imports:
+      - '@hexagen/shared'
+      - '@hexagen/ui'
+      - '@hexagen/local-llm'
