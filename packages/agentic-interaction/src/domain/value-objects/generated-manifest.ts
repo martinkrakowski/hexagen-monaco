@@ -11,12 +11,12 @@ export interface GenerationMetadata {
   /**
    * Prompt template version
    */
-  promptVersion: string;
+  promptVersion?: string;
 
   /**
    * When manifest was generated
    */
-  generatedAt: Date;
+  generatedAt?: Date;
 
   /**
    * Processing time in milliseconds
@@ -27,6 +27,11 @@ export interface GenerationMetadata {
    * Number of tokens used
    */
   tokensUsed: number;
+  
+  /**
+   * The provider that generated the manifest (local, openai, anthropic, etc.)
+   */
+  provider?: string;
 }
 
 export interface GeneratedManifest {

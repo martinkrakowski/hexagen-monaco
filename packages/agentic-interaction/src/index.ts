@@ -89,6 +89,24 @@ export {
   CloudLLMPipelineAdapter,
   type CloudLLMPipelineAdapterConfig,
 } from "./infrastructure/adapters/cloud-llm-pipeline.adapter.js";
+export {
+  LLMProviderSelectorAdapter,
+  type LLMProviderSelectorAdapterConfig,
+} from "./infrastructure/adapters/llm-provider-selector.adapter.js";
 export { EnvironmentSecretVaultAdapter } from "./infrastructure/adapters/environment-secret-vault.adapter.js";
 
-// Made with Bob
+// Phase1: Manifest YAML extractor exports (from domain)
+export {
+  extractManifestYaml,
+  generateSuggestions,
+  detectWarnings,
+} from "./domain/index.js";
+
+// Phase2: Prompt exports (from domain)
+export {
+  SYSTEM_PROMPT,
+  compileUserPrompt,
+} from "./domain/index.js";
+export type {
+  PromptVariables,
+} from "./domain/index.js";

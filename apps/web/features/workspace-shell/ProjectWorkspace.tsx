@@ -13,6 +13,7 @@ import { useEditorSession } from "./hooks/useEditorSession";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import { ExportProvider } from "@/contexts/ExportContext";
+import { useLocalLLM } from "../llm-driver/useLocalLlm";
 
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
@@ -32,6 +33,7 @@ import { WelcomeManifestDialog } from "./WelcomeManifestDialog";
  */
 export function ProjectWorkspace() {
   const totalSteps = wizardSteps.length;
+  const llmContext = useLocalLLM();
 
   const { form, wizardData, canProceed } = useWizardForm();
   const ui = useWorkspaceShellUi();
@@ -152,6 +154,7 @@ export function ProjectWorkspace() {
           open={ui.dialog.kind === "welcome-manifest"}
           onClose={ui.closeDialog}
           onUseManifest={lifecycle.handleWelcomeManifestGenerated}
+          llmContext={llmContext}
         />
       </div>
     </ExportProvider>

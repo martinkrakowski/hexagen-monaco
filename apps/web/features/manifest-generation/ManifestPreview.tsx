@@ -17,6 +17,7 @@ interface GenerationMetadata {
   model: string;
   processingTime: number;
   tokensUsed: number;
+  provider?: string;
 }
 
 interface ManifestPreviewProps {
@@ -97,7 +98,7 @@ export function ManifestPreview({
             </div>
             <div className="mt-4 text-sm text-muted-foreground">
               <p>
-                Model: {metadata.model} • Processing: {metadata.processingTime}
+                Model: {metadata.model}{metadata.provider ? ` (${metadata.provider})` : ''} • Processing: {metadata.processingTime}
                 ms • Tokens: {metadata.tokensUsed}
               </p>
             </div>

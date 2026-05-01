@@ -9,6 +9,7 @@ interface GenerationMetadata {
   model: string;
   processingTime: number;
   tokensUsed: number;
+  provider?: string;
 }
 
 interface GeneratedManifest {
@@ -57,6 +58,8 @@ export function useManifestGeneration() {
         platform?: string;
         deployment?: string;
         additionalContext?: string;
+        preferLocal?: boolean;
+        modelId?: string; // Support for specific model ID selection
       },
       attempt = 0
     ) => {
@@ -78,7 +81,7 @@ export function useManifestGeneration() {
       abortControllerRef.current = new AbortController();
 
       try {
-        const fetchPromise = fetch("/api/manifest/generate", {
+        const fetchPromise = fetch(options?.preferLocal ? "/api/manifest/generate/local" : "/api/manifest/generate", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

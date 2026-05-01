@@ -33,3 +33,14 @@ export {
   resolveFallbackChain,
   createDefaultFallbackChain,
 } from "./provider-config.js";
+export {
+  extractYamlFromResponse as extractManifestYaml,
+  generateSuggestions,
+  detectWarnings,
+} from "./manifest-yaml-extractor.js";
+// Prompt exports
+export {
+  SYSTEM_PROMPT,
+  compileUserPrompt,
+  type PromptVariables,
+} from "./prompts/index.js";

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+export const dynamic = 'force-dynamic';
 import { ProjectWorkspace } from "../features/workspace-shell/ProjectWorkspace";
 
 export const metadata: Metadata = {

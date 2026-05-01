@@ -1,6 +1,6 @@
 /**
- * API endpoint for generating manifest.yaml from natural language descriptions
- * POST /api/manifest/generate
+ * API endpoint for generating manifest.yaml using local LLM models when available
+ * POST /api/manifest/generate/local
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -11,7 +11,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
-import { WebLLMAdapter } from "@hexagen/local-llm";
+import { WebLLMAdapter, type DomainModelId } from "@hexagen/local-llm";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -19,7 +19,7 @@ interface GenerateManifestRequestBody {
   platform?: string;
   deployment?: string;
   additionalContext?: string;
-  preferLocal?: boolean; // New option to control local/cloud preference
+  modelId?: string; // Added support for specific model ID selection
 }
 
 interface GenerateManifestSuccessResponse {
@@ -47,8 +47,9 @@ type GenerateManifestResponse =
   | GenerateManifestErrorResponse;
 
 /**
- * POST /api/manifest/generate
+ * POST /api/manifest/generate/local
  * Generate a manifest.yaml file from a natural language project description
+ * Using local LLM models when available with fallback to cloud
  */
 export async function POST(
   request: NextRequest,
@@ -99,8 +100,9 @@ export async function POST(
       // This will throw an error in a server-side environment where Worker is not available
       if (typeof Worker !== "undefined") {
         webLlmAdapter = new WebLLMAdapter({
-          // createWorker: () => new Worker(...),
-          // When deployed, provide the actual worker factory
+          // The worker factory cannot be used in server-side environment
+          // This should be created in client code
+          defaultModelId: body.modelId as DomainModelId || undefined
         });
       }
     } catch (error) {
@@ -109,42 +111,36 @@ export async function POST(
       console.warn("WebLLM adapter initialization failed:", error);
     }
 
-    // Configure the fallback chain for cloud providers
-    const fallbackChain = {
-      primary: {
-        providerId: "openai" as const,
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-4o",
-        apiKeyEnvVar: "OPENAI_API_KEY",
-        temperature: 0.3,
-        maxTokens: 4000,
-      },
-      fallbacks: [
-        {
-          providerId: "anthropic" as const,
-          baseUrl: "https://api.anthropic.com/v1",
-          model: "claude-3-5-sonnet-20241022",
-          apiKeyEnvVar: "ANTHROPIC_API_KEY",
+    // Configure the selector adapter with fallback chain
+    const selectorAdapter = new LLMProviderSelectorAdapter({
+      webLlmAdapter,
+      preferLocal: true,
+      validateLocalLLM: true,
+      fallbackChain: {
+        primary: {
+          providerId: "openai" as const,
+          baseUrl: "https://api.openai.com/v1",
+          model: "gpt-4o",
+          apiKeyEnvVar: "OPENAI_API_KEY",
           temperature: 0.3,
           maxTokens: 4000,
         },
-      ],
-    };
-
-    // Configure LLM provider selector with preference option from request
-    const preferLocal = body.preferLocal === undefined ? false : body.preferLocal;
-
-    // Create the selector adapter
-    const llmAdapter = new LLMProviderSelectorAdapter({
-      webLlmAdapter,
-      preferLocal, // Use cloud by default for backward compatibility
-      validateLocalLLM: true,
-      fallbackChain,
+        fallbacks: [
+          {
+            providerId: "anthropic" as const,
+            baseUrl: "https://api.anthropic.com/v1",
+            model: "claude-3-5-sonnet-20241022",
+            apiKeyEnvVar: "ANTHROPIC_API_KEY",
+            temperature: 0.3,
+            maxTokens: 4000,
+          },
+        ],
+      },
       secretVault,
     });
 
     // Create and execute use case
-    const useCase = new GenerateManifestFromDescriptionUseCase(llmAdapter);
+    const useCase = new GenerateManifestFromDescriptionUseCase(selectorAdapter);
     const result = await useCase.execute({
       description: projectDescription,
     });
@@ -200,7 +196,7 @@ export async function POST(
 }
 
 /**
- * OPTIONS /api/manifest/generate
+ * OPTIONS /api/manifest/generate/local
  * Handle CORS preflight requests
  */
 export async function OPTIONS() {
@@ -213,5 +209,3 @@ export async function OPTIONS() {
     },
   });
 }
-
-// Made with Bob

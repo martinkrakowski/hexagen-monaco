@@ -128,4 +128,43 @@ describe("useManifestGeneration", () => {
     assert.strictEqual(result.current.errorCategory, "TIMEOUT");
     assert.strictEqual(result.current.retryCount, 3);
   });
+
+  it("should use the local API endpoint when preferLocal is true", async () => {
+    global.fetch = mock.fn(async (url) => {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          manifest: "valid-yaml",
+          confidence: 0.9,
+          suggestions: [],
+          warnings: [],
+          metadata: { 
+            model: "test", 
+            processingTime: 100, 
+            tokensUsed: 100,
+            provider: url.toString().includes('/local') ? 'local' : 'cloud'
+          },
+        }),
+      } as unknown as Response;
+    });
+
+    const { result } = renderHook(() => useManifestGeneration());
+
+    // Call with preferLocal = true
+    act(() => {
+      result.current.generate("test description", { preferLocal: true });
+    });
+
+    await waitFor(() => {
+      assert.strictEqual(result.current.isGenerating, false);
+    });
+
+    const fetchCall = (global.fetch as Mock<typeof global.fetch>).mock.calls[0];
+    assert.strictEqual(fetchCall.arguments[0], "/api/manifest/generate/local");
+
+    // Verify provider is included in result
+    assert.strictEqual(result.current.result?.metadata.provider, "local");
+  });
 });

@@ -6,6 +6,7 @@ import {
   DialogDescription,
 } from "@hexagen/ui";
 import { WelcomeScreen } from "../manifest-generation/WelcomeScreen";
+import type { LocalLLMContext } from "../../lib/llm-interfaces";
 
 /**
  * Props for the WelcomeManifestDialog component.
@@ -17,6 +18,8 @@ interface WelcomeManifestDialogProps {
   onClose: () => void;
   /** Optional callback fired when a generated manifest is ready to be used */
   onUseManifest?: (manifest: string) => void;
+  /** LLM context for local model management */
+  llmContext: LocalLLMContext;
 }
 
 /**
@@ -30,6 +33,7 @@ export function WelcomeManifestDialog({
   open,
   onClose,
   onUseManifest,
+  llmContext,
 }: WelcomeManifestDialogProps) {
   return (
     <Dialog open={open} onClose={onClose}>
@@ -41,7 +45,7 @@ export function WelcomeManifestDialog({
             hexagonal architecture manifest
           </DialogDescription>
         </DialogHeader>
-        <WelcomeScreen onUseManifest={onUseManifest} />
+        <WelcomeScreen onUseManifest={onUseManifest} llmContext={llmContext} />
       </DialogContent>
     </Dialog>
   );

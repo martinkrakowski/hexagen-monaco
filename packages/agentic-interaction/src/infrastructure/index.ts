@@ -12,4 +12,8 @@ export {
   CloudLLMPipelineAdapter,
   type CloudLLMPipelineAdapterConfig,
 } from "./adapters/cloud-llm-pipeline.adapter.js";
+export {
+  LLMProviderSelectorAdapter,
+  type LLMProviderSelectorAdapterConfig,
+} from "./adapters/llm-provider-selector.adapter.js";
 export { EnvironmentSecretVaultAdapter } from "./adapters/environment-secret-vault.adapter.js";
