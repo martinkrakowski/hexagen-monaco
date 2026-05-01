@@ -86,39 +86,138 @@ export async function POST(
       );
     }
 
-    // Wire up dependencies
-    const secretVault = new EnvironmentSecretVaultAdapter();
+    // Check for development/mock mode
+    const isDevelopment = process.env.NODE_ENV !== "production";
+    const useMockLLM =
+      isDevelopment &&
+      !process.env.OPENAI_API_KEY &&
+      !process.env.ANTHROPIC_API_KEY;
 
-    // Configure LLM pipeline with fallback chain
-    const llmPipeline = new CloudLLMPipelineAdapter({
-      fallbackChain: {
-        primary: {
-          providerId: "openai",
-          baseUrl: "https://api.openai.com/v1",
-          model: "gpt-4o",
-          apiKeyEnvVar: "OPENAI_API_KEY",
-          temperature: 0.3,
-          maxTokens: 4000,
+    let result;
+
+    if (useMockLLM) {
+      // Use a pre-defined mock response for development
+      // Log statements are allowed in development for debugging
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Using mock LLM response for manifest generation");
+        console.log(
+          "For production usage, set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variables",
+        );
+      }
+
+      // Mock success response with a sample manifest
+      result = {
+        success: true,
+        manifest: {
+          manifest: `
+# This is a mock hexagonal architecture manifest generated for development
+manifest_version: "1.0"
+project:
+  name: "mockapp"
+  description: "${body.description}"
+contexts:
+  - name: "User"
+    type: "core"
+    description: "User management and authentication"
+    layers:
+      - domain:
+          - entity: "User"
+            attributes:
+              - name: "id"
+                type: "string"
+              - name: "email"
+                type: "string"
+              - name: "name"
+                type: "string"
+      - application:
+          - use_case: "RegisterUser"
+          - use_case: "AuthenticateUser" 
+      - infrastructure:
+          - adapter: "UserRepository"
+          - adapter: "JWTAuthProvider"
+  - name: "Project"
+    type: "core"
+    description: "Project management"
+    layers:
+      - domain:
+          - entity: "Project"
+            attributes:
+              - name: "id"
+                type: "string"
+              - name: "name"
+                type: "string"
+              - name: "description"
+                type: "string"
+      - application:
+          - use_case: "CreateProject"
+          - use_case: "ListProjects"
+      - infrastructure:
+          - adapter: "ProjectRepository"
+api_gateway:
+  routes:
+    - path: "/api/users"
+      operations:
+        - method: "POST"
+          use_case: "RegisterUser"
+    - path: "/api/auth"
+      operations:
+        - method: "POST"
+          use_case: "AuthenticateUser"
+    - path: "/api/projects"
+      operations:
+        - method: "GET"
+          use_case: "ListProjects"
+        - method: "POST"
+          use_case: "CreateProject"
+`,
+          confidence: 0.9,
+          suggestions: [
+            "Consider adding a Task context for task management",
+            "Add real-time collaboration features",
+          ],
+          warnings: [],
+          metadata: {
+            model: "mock-llm-model",
+            processingTime: 350,
+            tokensUsed: 1024,
+          },
         },
-        fallbacks: [
-          {
-            providerId: "anthropic",
-            baseUrl: "https://api.anthropic.com/v1",
-            model: "claude-3-5-sonnet-20241022",
-            apiKeyEnvVar: "ANTHROPIC_API_KEY",
+      };
+    } else {
+      // Wire up dependencies
+      const secretVault = new EnvironmentSecretVaultAdapter();
+
+      // Configure LLM pipeline with fallback chain
+      const llmPipeline = new CloudLLMPipelineAdapter({
+        fallbackChain: {
+          primary: {
+            providerId: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKeyEnvVar: "OPENAI_API_KEY",
             temperature: 0.3,
             maxTokens: 4000,
           },
-        ],
-      },
-      secretVault,
-    });
+          fallbacks: [
+            {
+              providerId: "anthropic",
+              baseUrl: "https://api.anthropic.com/v1",
+              model: "claude-3-5-sonnet-20241022",
+              apiKeyEnvVar: "ANTHROPIC_API_KEY",
+              temperature: 0.3,
+              maxTokens: 4000,
+            },
+          ],
+        },
+        secretVault,
+      });
 
-    // Create and execute use case
-    const useCase = new GenerateManifestFromDescriptionUseCase(llmPipeline);
-    const result = await useCase.execute({
-      description: projectDescription,
-    });
+      // Create and execute use case
+      const useCase = new GenerateManifestFromDescriptionUseCase(llmPipeline);
+      result = await useCase.execute({
+        description: projectDescription,
+      });
+    }
 
     // Handle use case result
     if (!result.success || !result.manifest) {
@@ -150,7 +249,10 @@ export async function POST(
       { status: 200 },
     );
   } catch (error) {
-    console.error("Error generating manifest:", error);
+    // Error logging (not for production)
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Error generating manifest:", error);
+    }
 
     return NextResponse.json(
       {
