@@ -228,10 +228,20 @@ export function useProjectLifecycle(
 
   const handleWelcomeManifestGenerated = useCallback(
     async (yamlContent: string) => {
+      console.log(
+        "[handleWelcomeManifestGenerated] called, uiState.kind:",
+        uiState.kind,
+      );
       if (uiState.kind === "edit") {
+        console.log(
+          "[handleWelcomeManifestGenerated] setting pending manifest, opening new-project dialog",
+        );
         setPendingWelcomeManifest(yamlContent);
         ui.openDialog({ kind: "new-project" });
       } else {
+        console.log(
+          "[handleWelcomeManifestGenerated] calling handleManifestLoaded",
+        );
         await handleManifestLoaded(yamlContent);
       }
     },
