@@ -14,9 +14,6 @@ export * from "./application/use-cases";
 export * from "./infrastructure/adapters";
 export * from "./infrastructure/constants";
 
-// Re-export ModelVerificationCacheAdapter
-export { ModelVerificationCacheAdapter } from "./infrastructure/adapters/model-verification-cache.adapter";
-
 // Factory that wires the entire web-driver bounded context
 import { LocalStoragePersistenceAdapter } from "./infrastructure/adapters/local-storage-persistence.adapter";
 

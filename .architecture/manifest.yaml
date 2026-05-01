@@ -1615,6 +1615,7 @@ apps:
       - agentic-interaction
       - local-llm
       - messaging
+      - model-settings
       - project-generation
       - prompt-compiler
       - ui-projection-compiler

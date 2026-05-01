@@ -28,6 +28,7 @@ interface ManifestPreviewProps {
   metadata: GenerationMetadata;
   onUseManifest?: (manifest: string) => void;
   onRegenerate?: () => void;
+  onReject?: () => void;
 }
 
 export function ManifestPreview({
@@ -38,6 +39,7 @@ export function ManifestPreview({
   metadata,
   onUseManifest,
   onRegenerate,
+  onReject,
 }: ManifestPreviewProps) {
   const confidenceColor =
     confidence >= 0.8
@@ -98,7 +100,9 @@ export function ManifestPreview({
             </div>
             <div className="mt-4 text-sm text-muted-foreground">
               <p>
-                Model: {metadata.model}{metadata.provider ? ` (${metadata.provider})` : ''} • Processing: {metadata.processingTime}
+                Model: {metadata.model}
+                {metadata.provider ? ` (${metadata.provider})` : ""} •
+                Processing: {metadata.processingTime}
                 ms • Tokens: {metadata.tokensUsed}
               </p>
             </div>
@@ -135,17 +139,12 @@ export function ManifestPreview({
             {warnings.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-warning">
-                    ⚠️ Warnings
-                  </CardTitle>
+                  <CardTitle className="text-warning">⚠️ Warnings</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
                     {warnings.map((warning, index) => (
-                      <li
-                        key={index}
-                        className="text-foreground"
-                      >
+                      <li key={index} className="text-foreground">
                         • {warning}
                       </li>
                     ))}
@@ -158,17 +157,12 @@ export function ManifestPreview({
             {suggestions.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-info">
-                    💡 Suggestions
-                  </CardTitle>
+                  <CardTitle className="text-info">💡 Suggestions</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
                     {suggestions.map((suggestion, index) => (
-                      <li
-                        key={index}
-                        className="text-foreground"
-                      >
+                      <li key={index} className="text-foreground">
                         • {suggestion}
                       </li>
                     ))}
@@ -181,6 +175,9 @@ export function ManifestPreview({
 
         {/* Action Buttons */}
         <div className="flex justify-end gap-4">
+          <Button variant="ghost" onClick={onReject}>
+            Start Over
+          </Button>
           <Button variant="outline" onClick={onRegenerate}>
             Regenerate
           </Button>

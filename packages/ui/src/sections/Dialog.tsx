@@ -38,9 +38,9 @@ function Dialog({ open, onClose, children }: DialogProps) {
         onClick={handleBackdropClick}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="backdrop:bg-[hsl(var(--overlay)/0.5)] backdrop:backdrop-blur-sm bg-transparent p-0 m-0 max-w-none max-h-none w-full h-full open:flex items-center justify-center"
+        className="bg-transparent p-0 m-0 max-w-none max-h-none w-full h-full open:flex items-center justify-center"
       >
-        {children}
+        {open && children}
       </dialog>
     </DialogIdContext.Provider>
   );

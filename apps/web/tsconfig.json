@@ -64,6 +64,9 @@
       "path": "../../packages/local-llm"
     },
     {
+      "path": "../../packages/model-settings"
+    },
+    {
       "path": "../../packages/shared"
     }
   ],

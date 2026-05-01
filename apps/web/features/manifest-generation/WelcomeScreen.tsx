@@ -13,10 +13,13 @@ import {
   CardTitle,
   CardContent,
   Label,
+  Input,
+  Checkbox,
 } from "@hexagen/ui";
 import { useWelcomeFlowState } from "./ModelSelectionFlow/useWelcomeFlowState";
 import { useClientManifestGeneration } from "./useClientManifestGeneration";
 import { WELCOME_FLOW_ERROR_MESSAGES } from "./ModelSelectionFlow/WelcomeFlowError";
+import { getModelPreferences } from "./ModelSelectionFlow/modelPreferencesStorage";
 import type { LocalLLMContext, DomainModelId } from "../../lib/llm-interfaces";
 import { ManifestPreview } from "./ManifestPreview";
 import { ModelSettingsView } from "@hexagen/model-settings";
@@ -70,7 +73,10 @@ export function WelcomeScreen({
     if (preferLocal) {
       const controller = new AbortController();
       clientGenAbortRef.current = controller;
-      clientGen.generateManifest(description);
+      clientGen.generateManifest(
+        description,
+        clientGenAbortRef.current?.signal,
+      );
       return () => {
         controller.abort();
         clientGenAbortRef.current = null;
@@ -143,11 +149,11 @@ export function WelcomeScreen({
 
   const handleGenerate = () => {
     if (!canGenerate) return;
-
-    if (preferLocal) {
-      actions.transitionTo("model_selection");
-    } else {
+    const prefs = getModelPreferences();
+    if (prefs.rememberChoice && prefs.lastModelId) {
       actions.transitionTo("generating");
+    } else {
+      actions.transitionTo("model_selection");
     }
   };
 
@@ -175,6 +181,7 @@ export function WelcomeScreen({
         metadata={{ model: "", processingTime: 0, tokensUsed: 0 }}
         onUseManifest={onUseManifest}
         onRegenerate={handleRegenerate}
+        onReject={actions.rejectManifest}
       />
     );
   }
@@ -317,16 +324,14 @@ export function WelcomeScreen({
               onSwitchModel={async (modelId) =>
                 actions.selectLocalModel(modelId, rememberChoiceRef.current)
               }
-              onDeleteModel={async () => {}}
-              hasModelInCache={async () => false}
+              onDeleteModel={(modelId) => llmContext.deleteCachedModel(modelId)}
+              hasModelInCache={(modelId) => llmContext.hasModelInCache(modelId)}
               onBack={() => actions.transitionTo("idle")}
               isLoading={
                 llmContext.engineState.status === "downloading" ||
                 llmContext.engineState.status === "loading_vram"
               }
-              onSwitchToCloud={() =>
-                actions.selectCloudProvider("openai", "", false)
-              }
+              onSwitchToCloud={undefined}
               requiresModelWarning={false}
             />
           </Card>
@@ -344,12 +349,10 @@ export function WelcomeScreen({
               htmlFor="remember-choice"
               className="flex items-center space-x-2 cursor-pointer"
             >
-              <input
+              <Checkbox
                 id="remember-choice"
-                type="checkbox"
                 checked={rememberChoice}
-                onChange={(e) => setRememberChoice(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
+                onCheckedChange={(checked) => setRememberChoice(checked)}
               />
               <span className="text-sm text-muted-foreground">
                 Remember my choice for future sessions
@@ -460,37 +463,31 @@ export function WelcomeScreen({
                 >
                   <div className="space-y-1">
                     <Label htmlFor="platform">Platform (optional)</Label>
-                    <input
+                    <Input
                       id="platform"
-                      type="text"
                       value={platform}
                       onChange={(e) => setPlatform(e.target.value)}
                       placeholder="e.g., Node.js, Python, Java"
-                      className="w-full px-3 py-2 border rounded-md"
                       disabled={flowState.state !== "idle"}
                     />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="deployment">Deployment (optional)</Label>
-                    <input
+                    <Input
                       id="deployment"
-                      type="text"
                       value={deployment}
                       onChange={(e) => setDeployment(e.target.value)}
                       placeholder="e.g., AWS, Docker, Kubernetes"
-                      className="w-full px-3 py-2 border rounded-md"
                       disabled={flowState.state !== "idle"}
                     />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="preferLocal">Model Preference</Label>
                     <div className="flex items-center space-x-2">
-                      <input
+                      <Checkbox
                         id="preferLocal"
-                        type="checkbox"
                         checked={preferLocal}
-                        onChange={(e) => setPreferLocal(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300"
+                        onCheckedChange={(checked) => setPreferLocal(checked)}
                         disabled={flowState.state !== "idle"}
                       />
                       <Label

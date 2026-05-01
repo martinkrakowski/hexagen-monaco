@@ -54,10 +54,31 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
-  try {
-    // Parse request body
-    const body: GenerateManifestRequestBody = await request.json();
+  if (typeof Worker === "undefined") {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Local generation is not available in the server runtime. Use client-side generation.",
+      },
+      { status: 501 },
+    );
+  }
 
+  let body: GenerateManifestRequestBody;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Invalid JSON in request body",
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
     // Validate required fields
     if (!body.description || typeof body.description !== "string") {
       return NextResponse.json(
@@ -93,21 +114,12 @@ export async function POST(
     // Wire up dependencies
     const secretVault = new EnvironmentSecretVaultAdapter();
 
-    // Create WebLLM adapter if in browser environment
     let webLlmAdapter = null;
     try {
-      // Only create WebLLM adapter if we're in a browser environment
-      // This will throw an error in a server-side environment where Worker is not available
-      if (typeof Worker !== "undefined") {
-        webLlmAdapter = new WebLLMAdapter({
-          // The worker factory cannot be used in server-side environment
-          // This should be created in client code
-          defaultModelId: body.modelId as DomainModelId || undefined
-        });
-      }
+      webLlmAdapter = new WebLLMAdapter({
+        defaultModelId: (body.modelId as DomainModelId) || undefined,
+      });
     } catch (error) {
-      // If we can't create the WebLLM adapter, we'll continue without it
-      // and fall back to cloud providers
       console.warn("WebLLM adapter initialization failed:", error);
     }
 

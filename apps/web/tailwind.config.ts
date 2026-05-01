@@ -11,6 +11,7 @@ const config: Config = {
     "./src/**/*.{ts,tsx}",
     "./features/**/*.{ts,tsx}",
     "../../packages/ui/src/**/*.{ts,tsx}",
+    "../../packages/model-settings/src/**/*.{ts,tsx}",
   ],
   prefix: "",
   theme: {

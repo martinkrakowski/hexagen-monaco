@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   LocalLLMContext,
   DomainModelId,
@@ -129,16 +129,10 @@ export function useWelcomeFlowState(
         },
       }));
 
-      // If WebGPU is not supported, transition to unsupported state
+      // hardwareCapabilities is already updated above — no state transition needed
+      // The UI can check hardwareCapabilities.isWebGPUSupported to disable local options
       if (!gpuDetection.isWebGPUSupported && !gpuDetection.isLoading) {
-        setFlowState((prev) => ({
-          ...prev,
-          state: prev.state === "idle" ? "unsupported" : prev.state,
-          errorCode:
-            prev.state === "idle"
-              ? ("webgpu_unavailable" as WelcomeFlowErrorCode)
-              : prev.errorCode,
-        }));
+        // intentionally empty: cloud path remains unblocked
       }
     }
 
@@ -594,25 +588,46 @@ export function useWelcomeFlowState(
     [initializeModel],
   );
 
-  const actions: WelcomeFlowActions = {
-    transitionTo,
-    selectLocalModel,
-    selectCloudProvider,
-    skipAiSetup,
-    cancelModelDownload,
-    setError,
-    clearError,
-    retryGeneration,
-    saveGenerationResult,
-    restartFromSelection,
-    proceedToWizard,
-    clearStoredApiKey,
-    validateApiKey,
-    loadSavedApiKey,
-    rejectManifest,
-    regenerateManifest,
-    repairModelDownload,
-  };
+  const actions: WelcomeFlowActions = useMemo(
+    () => ({
+      transitionTo,
+      selectLocalModel,
+      selectCloudProvider,
+      skipAiSetup,
+      cancelModelDownload,
+      setError,
+      clearError,
+      retryGeneration,
+      saveGenerationResult,
+      restartFromSelection,
+      proceedToWizard,
+      clearStoredApiKey,
+      validateApiKey,
+      loadSavedApiKey,
+      rejectManifest,
+      regenerateManifest,
+      repairModelDownload,
+    }),
+    [
+      transitionTo,
+      selectLocalModel,
+      selectCloudProvider,
+      skipAiSetup,
+      cancelModelDownload,
+      setError,
+      clearError,
+      retryGeneration,
+      saveGenerationResult,
+      restartFromSelection,
+      proceedToWizard,
+      clearStoredApiKey,
+      validateApiKey,
+      loadSavedApiKey,
+      rejectManifest,
+      regenerateManifest,
+      repairModelDownload,
+    ],
+  );
 
   return [flowState, actions];
 }

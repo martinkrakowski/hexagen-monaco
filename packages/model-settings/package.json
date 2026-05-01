@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@hexagen/local-llm": "workspace:*",
-    "@hexagen/ui": "workspace:*"
+    "@hexagen/ui": "workspace:*",
+    "lucide-react": "^1.11.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

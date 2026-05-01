@@ -195,6 +195,12 @@
   --overlay: 35 10% 8%;
 }
 
+/* ── Dialog backdrop ─────────────────────────────────────────────────────────── */
+dialog::backdrop {
+  background: hsl(var(--overlay) / 0.5);
+  backdrop-filter: blur(4px);
+}
+
 /* ── Base styles ────────────────────────────────────────────────────────────── */
 @layer base {
   body {

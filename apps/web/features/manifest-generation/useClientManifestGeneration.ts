@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import { SYSTEM_PROMPT } from "@hexagen/agentic-interaction";
 import { compileUserPrompt } from "@hexagen/agentic-interaction";
 import { extractManifestYaml } from "@hexagen/agentic-interaction";
 
 export interface UseClientManifestGenerationReturn {
-  generateManifest: (description: string, signal?: AbortSignal) => Promise<void>;
+  generateManifest: (
+    description: string,
+    signal?: AbortSignal,
+  ) => Promise<void>;
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
@@ -19,7 +22,14 @@ export function useClientManifestGeneration(
 ): UseClientManifestGenerationReturn {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [generatedManifest, setGeneratedManifest] = useState<string | null>(null);
+  const [generatedManifest, setGeneratedManifest] = useState<string | null>(
+    null,
+  );
+
+  const messagesRef = useRef(llmContext.messages);
+  useEffect(() => {
+    messagesRef.current = llmContext.messages;
+  }, [llmContext.messages]);
 
   const generateManifest = useCallback(
     async (description: string, signal?: AbortSignal) => {
@@ -31,12 +41,12 @@ export function useClientManifestGeneration(
 
       try {
         const userPrompt = compileUserPrompt({ userDescription: description });
-        const messageCountBefore = llmContext.messages.length;
+        const messageCountBefore = messagesRef.current.length;
         await llmContext.sendGovernanceMessage(userPrompt, SYSTEM_PROMPT);
 
         if (signal?.aborted) return;
 
-        const newMessages = llmContext.messages.slice(messageCountBefore);
+        const newMessages = messagesRef.current.slice(messageCountBefore);
         const lastAssistantMessage = newMessages
           .filter((m) => m.role === "assistant")
           .map((m) => m.content)
@@ -66,7 +76,7 @@ export function useClientManifestGeneration(
         setIsGenerating(false);
       }
     },
-    [llmContext],
+    [llmContext, messagesRef],
   );
 
   const reset = useCallback(() => {

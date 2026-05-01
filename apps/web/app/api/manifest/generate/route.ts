@@ -19,7 +19,8 @@ interface GenerateManifestRequestBody {
   platform?: string;
   deployment?: string;
   additionalContext?: string;
-  preferLocal?: boolean; // New option to control local/cloud preference
+  preferLocal?: boolean;
+  modelId?: string;
 }
 
 interface GenerateManifestSuccessResponse {
@@ -53,10 +54,20 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
+  let body: GenerateManifestRequestBody;
   try {
-    // Parse request body
-    const body: GenerateManifestRequestBody = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Invalid JSON in request body",
+      },
+      { status: 400 },
+    );
+  }
 
+  try {
     // Validate required fields
     if (!body.description || typeof body.description !== "string") {
       return NextResponse.json(
@@ -132,7 +143,8 @@ export async function POST(
     };
 
     // Configure LLM provider selector with preference option from request
-    const preferLocal = body.preferLocal === undefined ? false : body.preferLocal;
+    const preferLocal =
+      body.preferLocal === undefined ? false : body.preferLocal;
 
     // Create the selector adapter
     const llmAdapter = new LLMProviderSelectorAdapter({
