@@ -1589,6 +1589,12 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@hexagen/ModelVerificationUseCase@workspace:packages/ModelVerificationUseCase":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/ModelVerificationUseCase@workspace:packages/ModelVerificationUseCase"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/agentic-interaction@workspace:*, @hexagen/agentic-interaction@workspace:packages/agentic-interaction":
   version: 0.0.0-use.local
   resolution: "@hexagen/agentic-interaction@workspace:packages/agentic-interaction"
@@ -1867,6 +1873,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/model-verification-cache-adapter@workspace:packages/model-verification-cache-adapter":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/model-verification-cache-adapter@workspace:packages/model-verification-cache-adapter"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/monaco-orchestration@workspace:*, @hexagen/monaco-orchestration@workspace:packages/monaco-orchestration":
   version: 0.0.0-use.local
   resolution: "@hexagen/monaco-orchestration@workspace:packages/monaco-orchestration"
@@ -2094,6 +2106,18 @@ __metadata:
     typescript: "npm:^5.5.4"
   peerDependencies:
     react: ^18.0.0 || ^19.0.0
+  languageName: unknown
+  linkType: soft
+
+"@hexagen/verification-state-manager@workspace:packages/verification-state-manager":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/verification-state-manager@workspace:packages/verification-state-manager"
+  languageName: unknown
+  linkType: soft
+
+"@hexagen/verification-transactions@workspace:packages/verification-transactions":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/verification-transactions@workspace:packages/verification-transactions"
   languageName: unknown
   linkType: soft
 
