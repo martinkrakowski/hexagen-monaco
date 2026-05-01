@@ -17,7 +17,7 @@ import {
 import { useWelcomeFlowState } from "./ModelSelectionFlow/useWelcomeFlowState";
 import { useClientManifestGeneration } from "./useClientManifestGeneration";
 import { WELCOME_FLOW_ERROR_MESSAGES } from "./ModelSelectionFlow/WelcomeFlowError";
-import type { LocalLLMContext } from "../../lib/llm-interfaces";
+import type { LocalLLMContext, DomainModelId } from "../../lib/llm-interfaces";
 import { ManifestPreview } from "./ManifestPreview";
 import { ModelSettingsView } from "@hexagen/model-settings";
 
@@ -222,6 +222,19 @@ export function WelcomeScreen({
           <p className="text-lg text-muted-foreground">{errorMessage}</p>
           <div className="flex gap-2 justify-center">
             <Button onClick={actions.retryGeneration}>Retry</Button>
+            {flowState.errorCode === "model_corrupted" &&
+              flowState.selectedModelId && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    actions.repairModelDownload(
+                      flowState.selectedModelId as DomainModelId,
+                    )
+                  }
+                >
+                  Repair Download
+                </Button>
+              )}
             <Button
               variant="ghost"
               onClick={() => actions.transitionTo("idle")}

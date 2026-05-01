@@ -13,7 +13,7 @@ export const WELCOME_FLOW_ERROR_MESSAGES: Record<WelcomeFlowErrorCode, string> =
     network_failure:
       "Network connection failed. Please check your internet connection and try again.",
     model_corrupted:
-      "The model cache appears to be corrupted. Please delete and re-download the model.",
+      "The model cache appears to be corrupted. You can repair the download using the option below.",
     webgpu_unavailable:
       "Your browser does not support WebGPU, which is required for running local AI models. Please use Chrome 113+, Edge 113+, or switch to a cloud model.",
     key_invalid_format:
