@@ -31,11 +31,11 @@ bounded_contexts:
 
   it("should parse manifest successfully", async () => {
     const { result } = renderHook(() => useManifestParser());
-    
+
     await act(async () => {
       result.current.parseManifest(validManifestYaml);
     });
-    
+
     expect(result.current.status).toBe("success");
     expect(result.current.result).toBeDefined();
     expect(result.current.result?.boundedContexts).toHaveLength(1);
@@ -45,11 +45,11 @@ bounded_contexts:
 
   it("should handle parsing errors", async () => {
     const { result } = renderHook(() => useManifestParser());
-    
+
     await act(async () => {
       result.current.parseManifest("invalid: [unclosed bracket");
     });
-    
+
     expect(result.current.status).toBe("error");
     expect(result.current.result).toBeNull();
     expect(result.current.error).toContain("Failed to parse YAML");
@@ -57,17 +57,17 @@ bounded_contexts:
 
   it("should reset state correctly", async () => {
     const { result } = renderHook(() => useManifestParser());
-    
+
     await act(async () => {
       result.current.parseManifest(validManifestYaml);
     });
-    
+
     expect(result.current.status).toBe("success");
-    
+
     act(() => {
       result.current.reset();
     });
-    
+
     expect(result.current.status).toBe("idle");
     expect(result.current.result).toBeNull();
     expect(result.current.error).toBeNull();

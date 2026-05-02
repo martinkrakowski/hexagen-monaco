@@ -151,7 +151,10 @@ describe("modelPreferencesStorage", () => {
 
   describe("rememberChoice persistence", () => {
     it("should persist rememberChoice across get/save cycles", () => {
-      saveModelPreferences({ rememberChoice: true, lastModelId: "persisted-model" });
+      saveModelPreferences({
+        rememberChoice: true,
+        lastModelId: "persisted-model",
+      });
 
       const prefs = getModelPreferences();
       assert.strictEqual(prefs.rememberChoice, true);
@@ -191,30 +194,12 @@ describe("modelPreferencesStorage", () => {
 
       clearModelPreferences();
 
-      assert.strictEqual(
-        store.has(STORAGE_KEYS.LAST_MODEL_ID),
-        false,
-      );
-      assert.strictEqual(
-        store.has(STORAGE_KEYS.AUTO_LOAD_ENABLED),
-        false,
-      );
-      assert.strictEqual(
-        store.has(STORAGE_KEYS.CLOUD_PROVIDER),
-        false,
-      );
-      assert.strictEqual(
-        store.has(STORAGE_KEYS.REMEMBER_API_KEY),
-        false,
-      );
-      assert.strictEqual(
-        store.has(STORAGE_KEYS.SKIP_AI_SETUP),
-        false,
-      );
-      assert.strictEqual(
-        store.has(STORAGE_KEYS.REMEMBER_CHOICE),
-        false,
-      );
+      assert.strictEqual(store.has(STORAGE_KEYS.LAST_MODEL_ID), false);
+      assert.strictEqual(store.has(STORAGE_KEYS.AUTO_LOAD_ENABLED), false);
+      assert.strictEqual(store.has(STORAGE_KEYS.CLOUD_PROVIDER), false);
+      assert.strictEqual(store.has(STORAGE_KEYS.REMEMBER_API_KEY), false);
+      assert.strictEqual(store.has(STORAGE_KEYS.SKIP_AI_SETUP), false);
+      assert.strictEqual(store.has(STORAGE_KEYS.REMEMBER_CHOICE), false);
     });
 
     it("should not remove HAS_ENABLED_LOCAL_MODELS persistent flag", () => {

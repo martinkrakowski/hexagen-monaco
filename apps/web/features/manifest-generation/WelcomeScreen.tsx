@@ -255,14 +255,10 @@ export function WelcomeScreen({
   if (flowState.state === "preview" && flowState.manifestContent) {
     return (
       <ManifestPreview
-        manifest={flowState.manifestContent}
-        confidence={0}
-        suggestions={[]}
-        warnings={[]}
-        metadata={{ model: "", processingTime: 0, tokensUsed: 0 }}
-        onUseManifest={onUseManifest}
+        manifestYaml={flowState.manifestContent}
+        onApprove={(yaml) => onUseManifest?.(yaml)}
         onRegenerate={handleRegenerate}
-        onReject={actions.rejectManifest}
+        onStartOver={actions.rejectManifest}
       />
     );
   }

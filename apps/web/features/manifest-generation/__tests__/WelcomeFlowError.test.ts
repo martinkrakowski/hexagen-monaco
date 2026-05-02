@@ -67,7 +67,11 @@ describe("WelcomeFlowError", () => {
     it("should cover exactly 8 known error codes", () => {
       const codeCount = Object.keys(WELCOME_FLOW_ERROR_MESSAGES).length;
       assert.strictEqual(codeCount, 8, "Should have exactly 8 error codes");
-      assert.strictEqual(ALL_ERROR_CODES.length, 8, "Should have exactly 8 known codes");
+      assert.strictEqual(
+        ALL_ERROR_CODES.length,
+        8,
+        "Should have exactly 8 known codes",
+      );
     });
   });
 });

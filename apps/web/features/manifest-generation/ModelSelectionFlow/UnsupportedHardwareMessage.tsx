@@ -8,7 +8,9 @@ interface UnsupportedHardwareMessageProps {
   onCancel: () => void;
 }
 
-export function UnsupportedHardwareMessage({ onCancel }: UnsupportedHardwareMessageProps) {
+export function UnsupportedHardwareMessage({
+  onCancel,
+}: UnsupportedHardwareMessageProps) {
   const gpuDetection = useWebGPUDetection();
   const [browserName, setBrowserName] = useState<string>("your browser");
 
@@ -39,16 +41,19 @@ export function UnsupportedHardwareMessage({ onCancel }: UnsupportedHardwareMess
             <>
               <p>Chrome version 113 or newer is required for WebGPU support.</p>
               <p className="mt-2">
-                <a 
-                  href="chrome://flags/#enable-unsafe-webgpu" 
+                <a
+                  href="chrome://flags/#enable-unsafe-webgpu"
                   className="text-primary underline"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert('Please type "chrome://flags/#enable-unsafe-webgpu" in your address bar and enable WebGPU.');
+                    alert(
+                      'Please type "chrome://flags/#enable-unsafe-webgpu" in your address bar and enable WebGPU.',
+                    );
                   }}
                 >
                   Enable WebGPU flag
-                </a> in your browser settings.
+                </a>{" "}
+                in your browser settings.
               </p>
             </>
           );
@@ -72,46 +77,48 @@ export function UnsupportedHardwareMessage({ onCancel }: UnsupportedHardwareMess
       <div className="rounded-full bg-destructive/20 p-3 w-12 h-12 flex items-center justify-center">
         <Icon name="warning" className="h-6 w-6 text-destructive" />
       </div>
-      
+
       <div className="space-y-2">
         <h3 className="text-lg font-medium">WebGPU Support Required</h3>
         <p className="text-sm text-muted-foreground">
-          {!isBrowserSupported 
-            ? "Your browser doesn't fully support WebGPU, which is needed for local AI models." 
-            : !isHardwareAdequate 
-              ? "Your device doesn't meet the requirements for running local AI models." 
+          {!isBrowserSupported
+            ? "Your browser doesn't fully support WebGPU, which is needed for local AI models."
+            : !isHardwareAdequate
+              ? "Your device doesn't meet the requirements for running local AI models."
               : "WebGPU is required but not working on your device."}
         </p>
       </div>
-      
+
       <div className="w-full space-y-4">
         <div className="bg-muted/50 rounded-lg p-4 text-left">
           <h4 className="font-medium mb-2 flex items-center">
-            <Icon name="info" className="mr-2 h-4 w-4 text-info" /> 
+            <Icon name="info" className="mr-2 h-4 w-4 text-info" />
             Browser Information
           </h4>
           <div className="text-sm text-muted-foreground space-y-2">
             {getBrowserGuidance()}
           </div>
         </div>
-        
+
         <div className="bg-muted/50 rounded-lg p-4 text-left">
           <h4 className="font-medium mb-2">Hardware Requirements</h4>
           <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
             <li>A modern GPU with at least 2GB VRAM</li>
             <li>Updated graphics drivers</li>
-            <li>WebGPU-capable browser (Chrome 113+, Edge 113+, or Safari 16.4+)</li>
+            <li>
+              WebGPU-capable browser (Chrome 113+, Edge 113+, or Safari 16.4+)
+            </li>
           </ul>
         </div>
       </div>
-      
+
       <div className="w-full grid grid-cols-2 gap-3">
         <Button variant="outline" onClick={onCancel} className="w-full">
           Use Cloud Option Instead
         </Button>
-        <a 
-          href="https://developer.chrome.com/docs/web-platform/webgpu/" 
-          target="_blank" 
+        <a
+          href="https://developer.chrome.com/docs/web-platform/webgpu/"
+          target="_blank"
           rel="noopener noreferrer"
           className="w-full"
         >

@@ -21,25 +21,25 @@ export function CloudProviderForm({
   const [selectedProvider, setSelectedProvider] = useState(provider);
   const [keyInput, setKeyInput] = useState(apiKey);
   const [keyError, setKeyError] = useState("");
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (!keyInput.trim()) {
       setKeyError("API key is required");
       return;
     }
-    
+
     if (keyInput.length < 5) {
       setKeyError("API key appears to be invalid");
       return;
     }
-    
+
     setKeyError("");
     onSubmit(selectedProvider, keyInput);
   };
-  
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Tabs.Root
@@ -52,7 +52,7 @@ export function CloudProviderForm({
           <Tabs.Trigger value="anthropic">Anthropic</Tabs.Trigger>
           <Tabs.Trigger value="other">Other</Tabs.Trigger>
         </Tabs.List>
-        
+
         <Tabs.Content value="openai" className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Enter your OpenAI API key to use GPT models for manifest generation.
@@ -69,10 +69,11 @@ export function CloudProviderForm({
             />
           </div>
         </Tabs.Content>
-        
+
         <Tabs.Content value="anthropic" className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Enter your Anthropic API key to use Claude models for manifest generation.
+            Enter your Anthropic API key to use Claude models for manifest
+            generation.
           </p>
           <div className="space-y-2">
             <Label htmlFor="anthropic-key">Anthropic API Key</Label>
@@ -86,7 +87,7 @@ export function CloudProviderForm({
             />
           </div>
         </Tabs.Content>
-        
+
         <Tabs.Content value="other" className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Enter your API key for other compatible LLM providers.
@@ -104,26 +105,22 @@ export function CloudProviderForm({
           </div>
         </Tabs.Content>
       </Tabs.Root>
-      
-      {keyError && (
-        <div className="text-sm text-destructive">
-          {keyError}
-        </div>
-      )}
-      
+
+      {keyError && <div className="text-sm text-destructive">{keyError}</div>}
+
       <div className="flex justify-between space-x-2 pt-2">
         {onGoBack && (
-          <Button 
+          <Button
             type="button"
-            variant="outline" 
+            variant="outline"
             onClick={onGoBack}
             disabled={isValidating}
           >
             Back
           </Button>
         )}
-        
-        <Button 
+
+        <Button
           type="submit"
           disabled={isValidating || !keyInput.trim()}
           className={onGoBack ? "" : "ml-auto"}
@@ -131,9 +128,10 @@ export function CloudProviderForm({
           {isValidating ? "Validating..." : "Continue"}
         </Button>
       </div>
-      
+
       <div className="text-xs text-muted-foreground mt-2">
-        Your API key will be stored securely in your browser and only used for communication with the selected provider.
+        Your API key will be stored securely in your browser and only used for
+        communication with the selected provider.
       </div>
     </form>
   );

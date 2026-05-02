@@ -61,14 +61,14 @@ export function useManifestGeneration() {
         preferLocal?: boolean;
         modelId?: string; // Support for specific model ID selection
       },
-      attempt = 0
+      attempt = 0,
     ) => {
       // Clear any pending retry timeouts to prevent race conditions
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
-      
+
       setState((prev) => ({
         ...prev,
         status: "generating",
@@ -81,17 +81,22 @@ export function useManifestGeneration() {
       abortControllerRef.current = new AbortController();
 
       try {
-        const fetchPromise = fetch(options?.preferLocal ? "/api/manifest/generate/local" : "/api/manifest/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const fetchPromise = fetch(
+          options?.preferLocal
+            ? "/api/manifest/generate/local"
+            : "/api/manifest/generate",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              description,
+              ...options,
+            }),
+            signal: abortControllerRef.current.signal,
           },
-          body: JSON.stringify({
-            description,
-            ...options,
-          }),
-          signal: abortControllerRef.current.signal,
-        });
+        );
 
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutRef.current = setTimeout(() => {
@@ -101,7 +106,7 @@ export function useManifestGeneration() {
         });
 
         const response = await Promise.race([fetchPromise, timeoutPromise]);
-        
+
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
         let data;
@@ -114,10 +119,17 @@ export function useManifestGeneration() {
 
         if (!response.ok || !data?.success || parsingError) {
           const status = response.status;
-          const category = classifyError(parsingError ? new Error("json") : null, status);
-          
-          const isTransient = category === "NETWORK" || category === "TIMEOUT" || category === "RATE_LIMIT" || status >= 500;
-          
+          const category = classifyError(
+            parsingError ? new Error("json") : null,
+            status,
+          );
+
+          const isTransient =
+            category === "NETWORK" ||
+            category === "TIMEOUT" ||
+            category === "RATE_LIMIT" ||
+            status >= 500;
+
           if (isTransient && attempt < MAX_RETRIES) {
             const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt);
             timeoutRef.current = setTimeout(() => {
@@ -126,7 +138,8 @@ export function useManifestGeneration() {
             return;
           }
 
-          const errorMessage = data?.error || data?.details || ERROR_MESSAGES[category];
+          const errorMessage =
+            data?.error || data?.details || ERROR_MESSAGES[category];
           setState({
             status: "error",
             result: null,
@@ -152,7 +165,7 @@ export function useManifestGeneration() {
         });
       } catch (error) {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        
+
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
@@ -187,7 +200,13 @@ export function useManifestGeneration() {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    setState({ status: "idle", result: null, error: null, errorCategory: null, retryCount: 0 });
+    setState({
+      status: "idle",
+      result: null,
+      error: null,
+      errorCategory: null,
+      retryCount: 0,
+    });
   }, []);
 
   return {

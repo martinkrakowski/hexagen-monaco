@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { Button, CardContent } from "@hexagen/ui";
 import type { DomainModelId } from "@hexagen/local-llm";
-import type { WelcomeFlowState, WelcomeFlowActions } from "./useWelcomeFlowState";
+import type {
+  WelcomeFlowState,
+  WelcomeFlowActions,
+} from "./useWelcomeFlowState";
 
 interface SimpleModelSelectionProps {
   selectLocalModel: WelcomeFlowActions["selectLocalModel"];
@@ -19,7 +22,8 @@ export function SimpleModelSelection({
   flowState,
 }: SimpleModelSelectionProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const isWebGPUSupported = flowState.hardwareCapabilities?.isWebGPUSupported ?? null;
+  const isWebGPUSupported =
+    flowState.hardwareCapabilities?.isWebGPUSupported ?? null;
 
   const handleSelectCloud = async () => {
     setIsLoading(true);
@@ -30,7 +34,7 @@ export function SimpleModelSelection({
       setIsLoading(false);
     }
   };
-  
+
   const handleSelectLocalModel = async () => {
     setIsLoading(true);
     try {
@@ -51,16 +55,16 @@ export function SimpleModelSelection({
           Downloading local AI model, please wait...
         </p>
         <div className="w-full bg-muted rounded-full h-2.5">
-          <div 
-            className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+          <div
+            className="bg-primary h-2.5 rounded-full transition-all duration-300"
             style={{ width: `${flowState.generationProgress || 0}%` }}
           />
         </div>
         <p className="text-sm text-muted-foreground text-center">
           {Math.round(flowState.generationProgress || 0)}% complete
         </p>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={cancelModelDownload}
           className="w-full"
         >
@@ -88,9 +92,9 @@ export function SimpleModelSelection({
   return (
     <CardContent className="p-6 space-y-4">
       <h3 className="text-lg font-medium mb-2">Model Selection</h3>
-      
+
       <p className="text-sm text-muted-foreground mb-4">
-        Choose an AI model for generating your hexagonal architecture manifest. 
+        Choose an AI model for generating your hexagonal architecture manifest.
       </p>
 
       <div className="flex flex-col space-y-2">
@@ -99,7 +103,7 @@ export function SimpleModelSelection({
           <p className="text-sm text-muted-foreground mb-2">
             Uses a cloud API to generate manifests. Great for complex projects.
           </p>
-          <Button 
+          <Button
             onClick={handleSelectCloud}
             disabled={isLoading}
             className="w-full"
@@ -110,18 +114,20 @@ export function SimpleModelSelection({
 
         <div className="p-4 border rounded-md hover:bg-accent/10 transition-colors">
           <h4 className="font-medium">
-            Local Model {isWebGPUSupported === false ? "(Browser Not Supported)" : ""}
+            Local Model{" "}
+            {isWebGPUSupported === false ? "(Browser Not Supported)" : ""}
           </h4>
           <p className="text-sm text-muted-foreground mb-2">
             Run AI locally in your browser. Better privacy, works offline.
           </p>
           {isWebGPUSupported === false ? (
             <div className="text-xs text-amber-600 mb-2">
-              Your browser doesn't support WebGPU. Try Chrome or Edge browser for local AI.
+              Your browser doesn't support WebGPU. Try Chrome or Edge browser
+              for local AI.
             </div>
           ) : null}
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             disabled={isWebGPUSupported === false || isLoading}
             className="w-full"
             onClick={handleSelectLocalModel}
@@ -130,7 +136,7 @@ export function SimpleModelSelection({
           </Button>
         </div>
       </div>
-      
+
       <div className="flex justify-between mt-4 pt-4 border-t">
         <Button variant="outline" onClick={cancelModelDownload}>
           Cancel

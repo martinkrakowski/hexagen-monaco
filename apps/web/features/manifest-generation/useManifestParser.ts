@@ -27,27 +27,22 @@ export function useManifestParser(): UseManifestParserReturn {
     error: null,
   });
 
-  const parseManifest = useCallback(
-    async (yamlString: string) => {
-      setState({ status: "parsing", result: null, error: null });
+  const parseManifest = useCallback(async (yamlString: string) => {
+    setState({ status: "parsing", result: null, error: null });
 
-      try {
-        const wizardData = parseManifestToWizardData(yamlString);
-        setState({ status: "success", result: wizardData, error: null });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : "Failed to parse manifest";
-        setState({
-          status: "error",
-          result: null,
-          error: errorMessage,
-        });
-      }
-    },
-    [],
-  );
+    try {
+      const wizardData = parseManifestToWizardData(yamlString);
+      setState({ status: "success", result: wizardData, error: null });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to parse manifest";
+      setState({
+        status: "error",
+        result: null,
+        error: errorMessage,
+      });
+    }
+  }, []);
 
   const reset = useCallback(() => {
     setState({ status: "idle", result: null, error: null });

@@ -80,6 +80,13 @@ const config: Config = {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        manifest: {
+          "context-core": "hsl(var(--manifest-context-core) / <alpha-value>)",
+          "context-supporting":
+            "hsl(var(--manifest-context-supporting) / <alpha-value>)",
+          "context-driver":
+            "hsl(var(--manifest-context-driver) / <alpha-value>)",
+        },
         /* Color aliases for semantic mapping (replaces hardcoded Tailwind colors) */
         blue: "hsl(var(--info) / <alpha-value>)",
         emerald: "hsl(var(--success) / <alpha-value>)",

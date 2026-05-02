@@ -1,5 +1,7 @@
 import { JSDOM } from "jsdom";
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", { url: "http://localhost/" });
+const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
+  url: "http://localhost/",
+});
 global.window = dom.window as unknown as Window & typeof globalThis;
 global.document = dom.window.document as unknown as Document;
 
@@ -7,7 +9,11 @@ import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
-import type { LocalLLMContext, LocalLLMState, DomainModelId } from "../../../lib/llm-interfaces";
+import type {
+  LocalLLMContext,
+  LocalLLMState,
+  DomainModelId,
+} from "../../../lib/llm-interfaces";
 
 // Mock dependencies
 mock.module("../../../lib/llm-interfaces", () => ({
@@ -267,7 +273,10 @@ describe("useWelcomeFlowState", () => {
       });
 
       assert.strictEqual(result.current[0].state, "model_selection");
-      assert.strictEqual(result.current[0].lastRejectedManifest, "manifest: content");
+      assert.strictEqual(
+        result.current[0].lastRejectedManifest,
+        "manifest: content",
+      );
       assert.strictEqual(result.current[0].manifestContent, undefined);
       assert.strictEqual(result.current[0].error, null);
     });
@@ -312,7 +321,9 @@ describe("useWelcomeFlowState", () => {
       const { validateApiKey } = result.current[1];
 
       // Test OpenAI key format
-      let isValid = await act(async () => validateApiKey("openai", "sk-validkey12345678"));
+      let isValid = await act(async () =>
+        validateApiKey("openai", "sk-validkey12345678"),
+      );
       assert.strictEqual(isValid, true);
 
       // Test invalid OpenAI key
@@ -320,11 +331,15 @@ describe("useWelcomeFlowState", () => {
       assert.strictEqual(isValid, false);
 
       // Test Anthropic key format
-      isValid = await act(async () => validateApiKey("anthropic", "sk-ant-validkey12345678"));
+      isValid = await act(async () =>
+        validateApiKey("anthropic", "sk-ant-validkey12345678"),
+      );
       assert.strictEqual(isValid, true);
 
       // Test invalid Anthropic key
-      isValid = await act(async () => validateApiKey("anthropic", "invalid-key"));
+      isValid = await act(async () =>
+        validateApiKey("anthropic", "invalid-key"),
+      );
       assert.strictEqual(isValid, false);
 
       // Test short key
