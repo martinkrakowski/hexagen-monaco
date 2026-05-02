@@ -13,9 +13,9 @@ import type {
   ProjectDescription,
   GeneratedManifest,
   GenerationMetadata,
-} from "../../domain/value-objects";
-import { ProjectDescriptionValidator } from "../../domain/value-objects";
-import { createGeneratedManifest } from "../../domain/value-objects";
+} from "../../domain/value-objects/index.js";
+import { ProjectDescriptionValidator } from "../../domain/value-objects/index.js";
+import { createGeneratedManifest } from "../../domain/value-objects/index.js";
 import { compilePrompt } from "../../domain/prompts/generate-manifest.prompt";
 import {
   extractYamlFromResponse,
