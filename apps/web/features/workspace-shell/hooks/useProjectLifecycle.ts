@@ -159,7 +159,7 @@ export function useProjectLifecycle(
       // Auto-show welcome screen when no drafts, no saved projects, and in genesis mode
       ui.openDialog({ kind: "welcome-manifest" });
     }
-  }, [draftLoading, draft, projects.length, ui, uiState.kind]);
+  }, [draftLoading, draft, projects.length, ui.openDialog, uiState.kind]);
 
   // Wizard navigation
   const handleNext = useCallback(async () => {
