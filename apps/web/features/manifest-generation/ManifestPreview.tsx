@@ -53,19 +53,8 @@ export function ManifestPreview({
   };
 
   const handleUseManifest = async () => {
-    console.log(
-      "[ManifestPreview] handleUseManifest called, onUseManifest type:",
-      typeof onUseManifest,
-    );
-    if (!onUseManifest) {
-      console.log("[ManifestPreview] onUseManifest is undefined!");
-      return;
-    }
-    try {
+    if (onUseManifest) {
       await onUseManifest(manifest);
-      console.log("[ManifestPreview] onUseManifest completed");
-    } catch (err) {
-      console.error("[ManifestPreview] onUseManifest error:", err);
     }
   };
 
