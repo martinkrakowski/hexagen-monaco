@@ -5,6 +5,7 @@ import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import { SYSTEM_PROMPT } from "@hexagen/agentic-interaction";
 import { compileUserPrompt } from "@hexagen/agentic-interaction";
 import { extractManifestYaml } from "@hexagen/agentic-interaction";
+import yaml from "js-yaml";
 
 export interface UseClientManifestGenerationReturn {
   generateManifest: (
@@ -70,6 +71,19 @@ export function useClientManifestGeneration(
           setGenerationError(
             "AI response did not contain a valid manifest YAML block",
           );
+          setIsGenerating(false);
+          return;
+        }
+
+        // Validate the extracted YAML is actually parseable
+        try {
+          yaml.load(extractedYaml);
+        } catch (yamlError) {
+          const message =
+            yamlError instanceof Error
+              ? yamlError.message
+              : "Invalid YAML structure";
+          setGenerationError(`Generated manifest has invalid YAML: ${message}`);
           setIsGenerating(false);
           return;
         }
