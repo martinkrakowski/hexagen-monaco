@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/hexagen-monaco-logo.svg" width="350" alt="HexaGen Monaco Logo"></p>
+<p align="center"><img src="https://hexagen-monaco.cloud/images/hexagen-monaco-logo.svg" width="350" alt="HexaGen Monaco Logo"></p>
 
 <div align="center">
 
@@ -54,15 +54,15 @@ yarn format                  # Format all TypeScript and Markdown files
 The web application provides a visual architecture canvas for navigating bounded contexts, ports, adapters, and dependency flows. Built with Next.js and React Flow, it renders the manifest as an interactive graph where each node maps to a named element in `manifest.yaml`.
 
 <p align="center">
-  <img src="docs/assets/ui-canvas-01.png" alt="Architecture canvas — bounded context graph with hexagonal nodes and dependency edges" width="720" />
+  <img src="https://hexagen-monaco.cloud/images/ui-canvas-01.png" alt="Architecture canvas — bounded context graph with hexagonal nodes and dependency edges" width="720" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/ui-canvas-02.png" alt="Architecture canvas — expanded view showing port and adapter detail panels" width="720" />
+  <img src="https://hexagen-monaco.cloud/images/ui-canvas-02.png" alt="Architecture canvas — expanded view showing port and adapter detail panels" width="720" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/ui-canvas-03.png" alt="Architecture canvas — dependency flow visualization across module boundaries" width="720" />
+  <img src="https://hexagen-monaco.cloud/images/ui-canvas-03.png" alt="Architecture canvas — dependency flow visualization across module boundaries" width="720" />
 </p>
 
 ## Terminal UI (TUI)
@@ -72,7 +72,7 @@ HexaGen includes a full-featured terminal dashboard (`apps/tui`) built with [Ink
 The TUI presents a three-pane layout: a navigation tree for module and port browsing, a rule engine panel that shows active invariants and layer constraints, and a violation inspector that surfaces boundary breaches with contextual refactoring suggestions. Filesystem watching keeps all three panes live — the dashboard updates when the manifest or dependency graph changes, without requiring a manual refresh.
 
 <p align="center">
-  <img src="docs/assets/tui-violation-inspector.png" alt="TUI violation inspector — three-pane layout showing navigation tree, rule engine, and boundary violation details" width="720" />
+  <img src="https://hexagen-monaco.cloud/images/tui-violation-inspector.png" alt="TUI violation inspector — three-pane layout showing navigation tree, rule engine, and boundary violation details" width="720" />
 </p>
 
 AI-assisted refactoring is integrated through a local MCP server. When the linter detects a boundary violation, pressing `r` routes the context to the agent, which proposes a fix grounded in the manifest. The TUI is keyboard-driven throughout: `j/k` to navigate, `Tab` to switch panes, `r` to refactor with AI, `u` to refresh, `q` to quit.
