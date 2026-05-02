@@ -91,7 +91,10 @@ export function MermaidDiagramView({ mermaidCode }: MermaidDiagramViewProps) {
         )}
       </div>
 
-      <div className="relative h-48 border-t border-border bg-surface shrink-0">
+      <div
+        className="relative border-t border-border bg-surface shrink-0 overflow-hidden resize-y"
+        style={{ height: "12rem", minHeight: "4rem", maxHeight: "60%" }}
+      >
         <div className="absolute top-2 left-4 text-xs font-semibold text-muted-foreground font-mono tracking-wider">
           MERMAID SOURCE
         </div>

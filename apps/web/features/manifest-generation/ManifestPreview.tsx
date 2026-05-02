@@ -81,7 +81,7 @@ export function ManifestPreview({
         />
       </div>
 
-      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 px-5 py-3 border-b border-border bg-surface shrink-0">
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 pl-5 pr-14 py-3 border-b border-border bg-surface shrink-0">
         <div className="flex flex-wrap items-center gap-4">
           <Button variant="outline" size="sm" onClick={onStartOver}>
             <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Start Over
@@ -131,21 +131,18 @@ export function ManifestPreview({
           >
             <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Validation
           </button>
-
-          <div className="w-px h-6 bg-border mx-1 self-center" />
-
-          <button
-            onClick={() => setIsFullScreen(!isFullScreen)}
-            className="flex items-center px-3 py-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
-            title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
-          >
-            {isFullScreen ? (
-              <Minimize2 className="w-3.5 h-3.5" />
-            ) : (
-              <Maximize2 className="w-3.5 h-3.5" />
-            )}
-          </button>
         </div>
+        <button
+          onClick={() => setIsFullScreen(!isFullScreen)}
+          className="absolute right-3 top-3 flex items-center p-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
+          title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+        >
+          {isFullScreen ? (
+            <Minimize2 className="w-4 h-4" />
+          ) : (
+            <Maximize2 className="w-4 h-4" />
+          )}
+        </button>
       </header>
 
       <main className="relative z-10 flex flex-1 overflow-hidden">
@@ -168,6 +165,7 @@ export function ManifestPreview({
               <ContextMapView
                 viewData={viewData}
                 onSelectContext={handleSelectContext}
+                isFullScreen={isFullScreen}
               />
             </div>
           )}

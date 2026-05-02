@@ -10,11 +10,13 @@ import type { ManifestViewData } from "./manifest-view-data";
 interface ContextMapViewProps {
   viewData: ManifestViewData;
   onSelectContext: (name: string) => void;
+  isFullScreen?: boolean;
 }
 
 export function ContextMapView({
   viewData,
   onSelectContext,
+  isFullScreen,
 }: ContextMapViewProps) {
   return (
     <div className="max-w-5xl mx-auto p-6">
@@ -24,7 +26,9 @@ export function ContextMapView({
           {viewData.architecture || "MODULAR-MONOLITH"}
         </span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div
+        className={`grid gap-5 ${isFullScreen ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}
+      >
         {viewData.contexts.map((ctx, index) => {
           const isError = ctx.health === "error";
           const isWarn = ctx.health === "warning";

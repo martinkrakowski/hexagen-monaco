@@ -37,7 +37,10 @@ export function ManifestYamlSidebar({
   const activeRange = activeContext?.yamlLineRange;
 
   return (
-    <aside className="flex flex-col w-96 border-r border-border bg-sidebar shrink-0">
+    <aside
+      className="flex flex-col border-r border-border bg-sidebar shrink-0 overflow-hidden resize-x"
+      style={{ width: "24rem", minWidth: "16rem", maxWidth: "60%" }}
+    >
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
         <FileCode className="w-3.5 h-3.5 text-accent" />
         <span className="text-xs font-semibold text-muted-foreground font-mono">
