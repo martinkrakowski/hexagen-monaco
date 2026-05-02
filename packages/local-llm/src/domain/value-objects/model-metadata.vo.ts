@@ -95,6 +95,17 @@ export function getModelMetadata(modelId: DomainModelId): ModelMetadata {
   return MODEL_METADATA_MAP[modelId];
 }
 
+export const MANIFEST_CAPABLE_MODEL_IDS: ReadonlySet<DomainModelId> =
+  new Set<DomainModelId>([
+    DomainModelId.QWEN_CODER_3B,
+    DomainModelId.LLAMA_3_2_3B,
+    DomainModelId.PHI_3_5_MINI,
+  ]);
+
+export function isManifestCapableModel(modelId: DomainModelId): boolean {
+  return MANIFEST_CAPABLE_MODEL_IDS.has(modelId);
+}
+
 export const RECOMMENDED_TEMPERATURE = 0.6;
 
 export const DEFAULT_TUNING_CONFIG = {

@@ -27,6 +27,7 @@ import { useClientManifestGeneration } from "./useClientManifestGeneration";
 import { WELCOME_FLOW_ERROR_MESSAGES } from "./ModelSelectionFlow/WelcomeFlowError";
 import { getModelPreferences } from "./ModelSelectionFlow/modelPreferencesStorage";
 import type { LocalLLMContext, DomainModelId } from "../../lib/llm-interfaces";
+import { isManifestCapableModel, MODEL_METADATA_MAP } from "@hexagen/local-llm";
 import { ManifestPreview } from "./ManifestPreview";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
@@ -69,7 +70,11 @@ export function WelcomeScreen({
 
   const charCount = description.length;
   const isValid = charCount >= MIN_LENGTH && charCount <= MAX_LENGTH;
-  const canGenerate = isValid && flowState.state === "idle";
+
+  const loadedModelId = llmContext.engineState.loadedModelId;
+  const manifestCapable =
+    !loadedModelId || isManifestCapableModel(loadedModelId);
+  const canGenerate = isValid && flowState.state === "idle" && manifestCapable;
 
   const generateManifestRef = useRef(clientGen.generateManifest);
   useEffect(() => {
@@ -586,6 +591,21 @@ export function WelcomeScreen({
                 </div>
               )}
             </div>
+
+            {/* Model Capability Guard */}
+            {!manifestCapable && loadedModelId && (
+              <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+                <p className="font-medium text-amber-600 dark:text-amber-400">
+                  Manifest generation requires the 3B model
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  The{" "}
+                  {MODEL_METADATA_MAP[loadedModelId]?.parameterSize ?? "sub-3B"}{" "}
+                  model cannot reliably produce structured JSON. Switch to a 3B+
+                  model in model settings to enable generation.
+                </p>
+              </div>
+            )}
 
             {/* Generate Button */}
             <Button
