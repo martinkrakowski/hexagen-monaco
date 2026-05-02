@@ -7,6 +7,8 @@ import {
   ArrowRight,
   RotateCcw,
   RefreshCw,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import { ManifestYamlSidebar } from "./ManifestYamlSidebar";
@@ -36,6 +38,7 @@ export function ManifestPreview({
 }: ManifestPreviewProps) {
   const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
   const [activeContext, setActiveContext] = useState<string | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Local state for manifest to allow inline auto-fixes
   const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
@@ -62,9 +65,12 @@ export function ManifestPreview({
   };
 
   return (
-    <div className="flex flex-col w-screen h-screen bg-background text-foreground overflow-hidden fixed inset-0 z-50">
+    <div
+      className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : "relative w-full rounded-xl border border-border"}`}
+      style={!isFullScreen ? { height: "70vh", minHeight: "600px" } : undefined}
+    >
       {/* Decorative ambient background */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
         <div
           className="absolute -top-40 -left-20 rounded-full bg-accent/5"
           style={{ width: 600, height: 600, filter: "blur(120px)" }}
@@ -124,6 +130,20 @@ export function ManifestPreview({
             className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "validation" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
           >
             <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Validation
+          </button>
+
+          <div className="w-px h-6 bg-border mx-1 self-center" />
+
+          <button
+            onClick={() => setIsFullScreen(!isFullScreen)}
+            className="flex items-center px-3 py-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
+            title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+          >
+            {isFullScreen ? (
+              <Minimize2 className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5" />
+            )}
           </button>
         </div>
       </header>
