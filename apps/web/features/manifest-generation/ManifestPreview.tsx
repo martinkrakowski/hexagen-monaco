@@ -67,7 +67,7 @@ export function ManifestPreview({
   return (
     <div
       className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : "relative w-full rounded-xl border border-border"}`}
-      style={!isFullScreen ? { height: "70vh", minHeight: "600px" } : undefined}
+      style={!isFullScreen ? { height: "60vh", minHeight: "450px" } : undefined}
     >
       {/* Decorative ambient background */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
@@ -81,8 +81,8 @@ export function ManifestPreview({
         />
       </div>
 
-      <header className="relative z-10 flex items-center justify-between px-5 py-3 border-b border-border bg-surface shrink-0">
-        <div className="flex items-center gap-4">
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 px-5 py-3 border-b border-border bg-surface shrink-0">
+        <div className="flex flex-wrap items-center gap-4">
           <Button variant="outline" size="sm" onClick={onStartOver}>
             <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Start Over
           </Button>
@@ -103,7 +103,7 @@ export function ManifestPreview({
             </p>
           </div>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <button
             onClick={() => {
               setActiveTab("context-map");

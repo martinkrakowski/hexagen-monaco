@@ -42,7 +42,7 @@ export function WelcomeManifestDialog({
     <Dialog open={open} onClose={onClose}>
       <DialogContent
         className={[
-          "w-full max-w-3xl p-0 bg-cinematic-border-vivid rounded-lg",
+          "w-full max-w-5xl p-0 bg-cinematic-border-vivid rounded-lg",
           isGenerating ? "animate-spin-border" : "",
         ]
           .filter(Boolean)
