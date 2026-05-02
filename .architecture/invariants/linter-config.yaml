@@ -46,6 +46,7 @@ package_rules:
       - '@hexagen/visualization'
       - '@hexagen/report-governance'
       - '@hexagen/transaction-system'
+      - '@hexagen/agentic-interaction'
 
   - name: 'intent-compiler'
     allowed_imports:

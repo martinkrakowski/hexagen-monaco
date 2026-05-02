@@ -19,5 +19,11 @@ export type LocalLLMContext = {
     systemPrompt: string,
     history?: LLMRequest["messages"],
   ) => Promise<void>;
+  // NEW - dedicated method for structured generation, returns content directly
+  sendStructuredPrompt: (
+    userPrompt: string,
+    systemPrompt: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
   messages: LLMMessage[];
 };

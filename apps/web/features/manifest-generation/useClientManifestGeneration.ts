@@ -3,7 +3,8 @@
 import { useState, useCallback, useRef } from "react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import {
-  ManifestTopologyDraftSchema,
+  ContextListSchema,
+  PortsListSchema,
   normalizeDraft,
   normalizeTopologyDraft,
   validateDraft,
@@ -11,14 +12,20 @@ import {
   draftToManifest,
   renderDraft,
   parseJSON,
+  normalizePortName,
   type ManifestDraft,
   type ManifestTopologyDraft,
+  type ManifestTopologyDraftContext,
+  type ContextListEntry,
+  type PortsList,
   type ClarificationTrigger,
   type DraftDiagnostic,
 } from "@hexagen/agentic-interaction";
 import {
-  TOPOLOGY_SYSTEM_PROMPT,
-  compileTopologyUserPrompt,
+  CONTEXT_LIST_SYSTEM_PROMPT,
+  compileContextListPrompt,
+  PORTS_LIST_SYSTEM_PROMPT,
+  compilePortsPrompt,
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
 } from "@hexagen/agentic-interaction";
@@ -56,15 +63,180 @@ async function sendAndExtract(
   systemPrompt: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  await llmContext.sendGovernanceMessage(userPrompt, systemPrompt);
-  if (signal?.aborted) return "";
+  return llmContext.sendStructuredPrompt(userPrompt, systemPrompt, signal);
+}
 
-  const messages = llmContext.messages;
-  const lastAssistantMessage = [...messages]
-    .reverse()
-    .find((m) => m.role === "assistant");
+async function attemptContextList(
+  llmContext: LocalLLMContext,
+  description: string,
+  signal?: AbortSignal,
+): Promise<
+  { ok: true; contexts: ContextListEntry[] } | { ok: false; error: string }
+> {
+  const userPrompt = compileContextListPrompt(description);
 
-  return lastAssistantMessage?.content ?? "";
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (signal?.aborted) return { ok: false, error: "Aborted" };
+
+    try {
+      const content = await sendAndExtract(
+        llmContext,
+        userPrompt,
+        CONTEXT_LIST_SYSTEM_PROMPT,
+        signal,
+      );
+      if (!content) return { ok: false, error: "No response from LLM" };
+
+      const parsed = parseJSON<ContextListEntry[]>(content);
+      if (!parsed.ok) {
+        if (attempt === MAX_RETRIES) return { ok: false, error: parsed.error };
+        continue;
+      }
+
+      const result = ContextListSchema.safeParse(parsed.data);
+      if (!result.success) {
+        if (attempt === MAX_RETRIES) {
+          const errors = result.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          return { ok: false, error: `Context list validation: ${errors}` };
+        }
+        continue;
+      }
+
+      return { ok: true, contexts: result.data };
+    } catch (error) {
+      if (attempt === MAX_RETRIES) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+  }
+
+  return { ok: false, error: "Failed to generate context list" };
+}
+
+async function attemptPortsForContext(
+  llmContext: LocalLLMContext,
+  contextName: string,
+  contextDescription: string,
+  signal?: AbortSignal,
+): Promise<{ ok: true; ports: PortsList } | { ok: false; error: string }> {
+  const userPrompt = compilePortsPrompt(contextName, contextDescription);
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (signal?.aborted) return { ok: false, error: "Aborted" };
+
+    try {
+      const content = await sendAndExtract(
+        llmContext,
+        userPrompt,
+        PORTS_LIST_SYSTEM_PROMPT,
+        signal,
+      );
+      if (!content) return { ok: false, error: "No response from LLM" };
+
+      const parsed = parseJSON<PortsList>(content);
+      if (!parsed.ok) {
+        if (attempt === MAX_RETRIES) return { ok: false, error: parsed.error };
+        continue;
+      }
+
+      const result = PortsListSchema.safeParse(parsed.data);
+      if (!result.success) {
+        if (attempt === MAX_RETRIES) {
+          const errors = result.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          return {
+            ok: false,
+            error: `Ports validation for ${contextName}: ${errors}`,
+          };
+        }
+        continue;
+      }
+
+      return { ok: true, ports: result.data };
+    } catch (error) {
+      if (attempt === MAX_RETRIES) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+  }
+
+  return { ok: false, error: `Failed to generate ports for ${contextName}` };
+}
+
+async function buildTopologyViaMicroPasses(
+  llmContext: LocalLLMContext,
+  description: string,
+  signal?: AbortSignal,
+): Promise<
+  { ok: true; topology: ManifestTopologyDraft } | { ok: false; error: string }
+> {
+  const workspaceName = description
+    .slice(0, 60)
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  const workspace = {
+    name: workspaceName || "generated-project",
+    description: description.slice(0, 200),
+  };
+
+  const ctxResult = await attemptContextList(llmContext, description, signal);
+  if (!ctxResult.ok) return { ok: false, error: ctxResult.error };
+
+  const contexts: ManifestTopologyDraftContext[] = [];
+
+  for (const ctx of ctxResult.contexts) {
+    if (signal?.aborted) return { ok: false, error: "Aborted" };
+
+    const portsResult = await attemptPortsForContext(
+      llmContext,
+      ctx.name,
+      ctx.description,
+      signal,
+    );
+
+    if (!portsResult.ok) {
+      return { ok: false, error: portsResult.error };
+    }
+
+    const inPorts = portsResult.ports.in.map((name: string) => ({
+      name: normalizePortName(name),
+      type: "use-case",
+      description: `Inbound port ${normalizePortName(name)}`,
+    }));
+
+    const outPorts = portsResult.ports.out.map((name: string) => ({
+      name: normalizePortName(name),
+      type: "infrastructure",
+      description: `Outbound port ${normalizePortName(name)}`,
+    }));
+
+    contexts.push({
+      name: ctx.name,
+      type: ctx.type,
+      description: ctx.description,
+      ports: {
+        in: inPorts,
+        out: outPorts,
+      },
+    });
+  }
+
+  const topology: ManifestTopologyDraft = {
+    workspace,
+    boundedContexts: contexts,
+  };
+
+  return { ok: true, topology: normalizeTopologyDraft(topology) };
 }
 
 export function useClientManifestGeneration(
@@ -85,44 +257,6 @@ export function useClientManifestGeneration(
 
   const descriptionRef = useRef<string>("");
 
-  const attemptTopologyExtraction = useCallback(
-    async (
-      description: string,
-      validationErrors: string | undefined,
-      signal?: AbortSignal,
-    ): Promise<
-      | { ok: true; topology: ManifestTopologyDraft }
-      | { ok: false; error: string }
-    > => {
-      const userPrompt = compileTopologyUserPrompt({
-        userDescription: description,
-        validationErrors,
-      });
-
-      const content = await sendAndExtract(
-        llmContext,
-        userPrompt,
-        TOPOLOGY_SYSTEM_PROMPT,
-        signal,
-      );
-      if (!content) return { ok: false, error: "No response from LLM" };
-
-      const parsed = parseJSON<ManifestTopologyDraft>(content);
-      if (!parsed.ok) return { ok: false, error: parsed.error };
-
-      const result = ManifestTopologyDraftSchema.safeParse(parsed.data);
-      if (!result.success) {
-        const errors = result.error.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join("; ");
-        return { ok: false, error: `Schema validation: ${errors}` };
-      }
-
-      return { ok: true, topology: normalizeTopologyDraft(result.data) };
-    },
-    [llmContext],
-  );
-
   const attemptAdapterExtraction = useCallback(
     async (
       contextName: string,
@@ -142,21 +276,28 @@ export function useClientManifestGeneration(
         validationErrors,
       });
 
-      const content = await sendAndExtract(
-        llmContext,
-        userPrompt,
-        ADAPTER_SYSTEM_PROMPT,
-        signal,
-      );
-      if (!content) return { ok: false, error: "No response from LLM" };
-
-      const parsed =
-        parseJSON<ManifestDraft["boundedContexts"][number]["adapters"]>(
-          content,
+      try {
+        const content = await sendAndExtract(
+          llmContext,
+          userPrompt,
+          ADAPTER_SYSTEM_PROMPT,
+          signal,
         );
-      if (!parsed.ok) return { ok: false, error: parsed.error };
+        if (!content) return { ok: false, error: "No response from LLM" };
 
-      return { ok: true, adapters: parsed.data };
+        const parsed =
+          parseJSON<ManifestDraft["boundedContexts"][number]["adapters"]>(
+            content,
+          );
+        if (!parsed.ok) return { ok: false, error: parsed.error };
+
+        return { ok: true, adapters: parsed.data };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
     },
     [llmContext],
   );
@@ -172,42 +313,20 @@ export function useClientManifestGeneration(
       descriptionRef.current = description;
 
       try {
-        let topology: ManifestTopologyDraft | null = null;
+        const topologyResult = await buildTopologyViaMicroPasses(
+          llmContext,
+          description,
+          signal,
+        );
 
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          if (signal?.aborted) {
-            setIsGenerating(false);
-            setPhase("idle");
-            return;
-          }
-
-          const validationErrors =
-            attempt > 0 && topology === null ? undefined : undefined;
-          const result = await attemptTopologyExtraction(
-            description,
-            validationErrors,
-            signal,
-          );
-
-          if (result.ok) {
-            topology = result.topology;
-            break;
-          }
-
-          if (attempt === MAX_RETRIES) {
-            setGenerationError(result.error);
-            setPhase("failed");
-            setIsGenerating(false);
-            return;
-          }
-        }
-
-        if (!topology) {
-          setGenerationError("Failed to generate topology");
+        if (!topologyResult.ok) {
+          setGenerationError(topologyResult.error);
           setPhase("failed");
           setIsGenerating(false);
           return;
         }
+
+        const topology = topologyResult.topology;
 
         const triggers = checkClarificationTriggers(topology);
         if (triggers.length > 0) {
@@ -230,7 +349,7 @@ export function useClientManifestGeneration(
         setIsGenerating(false);
       }
     },
-    [attemptTopologyExtraction, llmContext],
+    [llmContext],
   );
 
   const finalizeGeneration = useCallback(

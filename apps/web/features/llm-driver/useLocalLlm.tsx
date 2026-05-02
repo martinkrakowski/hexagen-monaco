@@ -40,6 +40,11 @@ interface LocalLLMContextValue {
     systemPrompt: string,
     history?: LLMRequest["messages"],
   ) => Promise<void>;
+  sendStructuredPrompt: (
+    userPrompt: string,
+    systemPrompt: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
   clearError: () => void;
   switchModel: (modelId: DomainModelId) => Promise<void>;
   deleteCachedModel: (modelId: DomainModelId) => Promise<void>;
@@ -120,6 +125,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       enterRequiresModel: engine.enterRequiresModel,
       sendMessage: chat.sendMessage,
       sendGovernanceMessage: chat.sendGovernanceMessage,
+      sendStructuredPrompt: chat.sendStructuredPrompt,
       clearError: engine.clearError,
       switchModel: engine.switchModel,
       deleteCachedModel: engine.deleteCachedModel,
@@ -141,6 +147,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       chat.isStreaming,
       chat.sendMessage,
       chat.sendGovernanceMessage,
+      chat.sendStructuredPrompt,
       cache.hasModelInCache,
       cache.hasAnyCachedModel,
     ],
@@ -183,6 +190,9 @@ export function useLocalLLM(): LocalLLMContextValue {
       enterRequiresModel: () => {},
       sendMessage: async () => {},
       sendGovernanceMessage: async () => {},
+      sendStructuredPrompt: async () => {
+        throw new Error("Not mounted");
+      },
       clearError: () => {},
       switchModel: async () => {},
       deleteCachedModel: async () => {},

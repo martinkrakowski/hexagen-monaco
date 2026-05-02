@@ -8,6 +8,10 @@ import type {
   ModelLifecyclePort,
   SendStructuredRequestPort,
 } from "@hexagen/local-llm";
+import {
+  DEFAULT_TUNING_CONFIG,
+  FreeFormStringSchema,
+} from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
 
 import { getChatPersistence } from "@/lib/wire";
@@ -39,6 +43,11 @@ export interface UseChatMessagesReturn {
     systemPrompt: string,
     history?: LLMRequest["messages"],
   ) => Promise<void>;
+  sendStructuredPrompt: (
+    userPrompt: string,
+    systemPrompt: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
   clearMessages: () => void;
 }
 
@@ -206,8 +215,16 @@ export function useChatMessages({
       history?: LLMRequest["messages"],
     ) => {
       const adapter = adapterRef.current;
-      if (!adapter) return;
-      if (isStreamingRef.current) return;
+      if (!adapter) {
+        throw new Error(
+          "Engine not initialized. Call initializeModel() before sending messages.",
+        );
+      }
+      if (isStreamingRef.current) {
+        throw new Error(
+          "A stream is already in progress. Wait for it to complete.",
+        );
+      }
       isStreamingRef.current = true;
       setIsStreaming(true);
 
@@ -247,6 +264,57 @@ export function useChatMessages({
     [adapterRef, appendUserAndPlaceholder, writeErrorIntoPlaceholder],
   );
 
+  const sendStructuredPrompt = useCallback(
+    async (
+      userPrompt: string,
+      systemPrompt: string,
+      signal?: AbortSignal,
+    ): Promise<string> => {
+      const adapter = adapterRef.current;
+      if (!adapter) {
+        throw new Error("Engine not initialized.");
+      }
+      if (isStreamingRef.current) {
+        throw new Error("A stream is already in progress.");
+      }
+
+      const requestMessages: LLMRequest["messages"] = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ];
+
+      let collected = "";
+
+      const request: LLMRequest = {
+        id: `manifest-${Date.now()}`,
+        modelId:
+          adapter.getLoadedModel()?.modelId ??
+          ("qwen-coder-3b" as DomainModelId),
+        messages: requestMessages,
+        schema: FreeFormStringSchema,
+        temperature: DEFAULT_TUNING_CONFIG.temperature,
+        maxTokens: DEFAULT_TUNING_CONFIG.maxTokens,
+        topP: DEFAULT_TUNING_CONFIG.topP,
+        stream: true,
+      };
+
+      const stream = adapter.streamStructuredRequest(request);
+
+      for await (const result of stream) {
+        if (signal?.aborted) break;
+        if (result.success) {
+          collected += result.value;
+        } else {
+          throw result.error;
+        }
+      }
+
+      if (!collected) throw new Error("No response from model.");
+      return collected;
+    },
+    [adapterRef],
+  );
+
   const clearMessages = useCallback(() => {
     setMessages([]);
   }, []);
@@ -256,6 +324,7 @@ export function useChatMessages({
     isStreaming,
     sendMessage,
     sendGovernanceMessage,
+    sendStructuredPrompt,
     clearMessages,
   };
 }

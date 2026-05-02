@@ -103,10 +103,67 @@ export {
 } from "./domain/index.js";
 
 // Phase2: Prompt exports (from domain)
+export { SYSTEM_PROMPT, compileUserPrompt } from "./domain/index.js";
+export type { PromptVariables } from "./domain/index.js";
 export {
-  SYSTEM_PROMPT,
-  compileUserPrompt,
+  TOPOLOGY_SYSTEM_PROMPT,
+  compileTopologyUserPrompt,
+} from "./domain/index.js";
+export type { TopologyPromptVariables } from "./domain/index.js";
+export {
+  CONTEXT_LIST_SYSTEM_PROMPT,
+  compileContextListPrompt,
+  PORTS_LIST_SYSTEM_PROMPT,
+  compilePortsPrompt,
+} from "./domain/index.js";
+export {
+  ADAPTER_SYSTEM_PROMPT,
+  compileAdapterUserPrompt,
+} from "./domain/index.js";
+export type { AdapterPromptVariables } from "./domain/index.js";
+
+// Phase3: Manifest draft pipeline exports (from domain)
+export {
+  ManifestDraftSchema,
+  ManifestTopologyDraftSchema,
+  ManifestDraftContextSchema,
+  ManifestDraftPortSchema,
+  ManifestDraftAdapterSchema,
+  ManifestTopologyDraftContextSchema,
+  ContextListSchema,
+  PortsListSchema,
+  MAX_BOUNDED_CONTEXTS_DRAFT,
+  GENERIC_CONTEXT_NAMES,
 } from "./domain/index.js";
 export type {
-  PromptVariables,
+  ManifestDraft,
+  ManifestTopologyDraft,
+  ContextListEntry,
+  PortsList,
+  ManifestDraftContext,
+  ManifestDraftPort,
+  ManifestDraftAdapter,
+  ManifestTopologyDraftContext,
+  DraftDiagnostic,
+  DraftValidationResult,
+  ClarificationTrigger,
+  RenderedManifest,
+} from "./domain/index.js";
+export {
+  normalizeDraft,
+  normalizeTopologyDraft,
+  toPascalCase,
+  toKebabCase,
+  ensurePortSuffix,
+  normalizePortName,
+} from "./domain/index.js";
+export { validateDraft, checkClarificationTriggers } from "./domain/index.js";
+export { draftToManifest } from "./domain/index.js";
+export type { ManifestOutput, ManifestContextOutput } from "./domain/index.js";
+export {
+  renderManifestYaml,
+  renderDraft,
+  verifyToken,
+  extractJSON,
+  parseJSON,
 } from "./domain/index.js";

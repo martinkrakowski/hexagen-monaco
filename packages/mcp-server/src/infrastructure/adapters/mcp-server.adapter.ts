@@ -22,6 +22,9 @@ import type { GetTransactionToolUseCase } from "../../application/use-cases/get-
 import type { ListTransactionsToolUseCase } from "../../application/use-cases/list-transactions-tool.use-case.js";
 import type { AcceptTransactionToolUseCase } from "../../application/use-cases/accept-transaction-tool.use-case.js";
 import type { RejectTransactionToolUseCase } from "../../application/use-cases/reject-transaction-tool.use-case.js";
+import type { GenerateTopologyToolUseCase } from "../../application/use-cases/generate-topology-tool.use-case.js";
+import type { GenerateAdaptersToolUseCase } from "../../application/use-cases/generate-adapters-tool.use-case.js";
+import type { GenerateManifestPipelineToolUseCase } from "../../application/use-cases/generate-manifest-pipeline-tool.use-case.js";
 
 interface MCPServerAdapterDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
@@ -47,6 +50,9 @@ interface MCPServerAdapterDependencies {
   listTransactionsToolUseCase: ListTransactionsToolUseCase;
   acceptTransactionToolUseCase: AcceptTransactionToolUseCase;
   rejectTransactionToolUseCase: RejectTransactionToolUseCase;
+  generateTopologyToolUseCase: GenerateTopologyToolUseCase;
+  generateAdaptersToolUseCase: GenerateAdaptersToolUseCase;
+  generateManifestPipelineToolUseCase: GenerateManifestPipelineToolUseCase;
 }
 
 interface MCPServerRuntime {
@@ -544,6 +550,73 @@ export class MCPServerAdapter implements MCPServerPort {
               required: ["transaction_id"],
             },
           },
+          {
+            name: "hexagen_generate_topology",
+            description:
+              "Generate bounded context topology from a project description using LLM",
+            inputSchema: {
+              type: "object",
+              properties: {
+                description: {
+                  type: "string",
+                  description: "Natural language project description",
+                },
+                max_retries: {
+                  type: "number",
+                  description: "Maximum retry attempts (default: 2)",
+                },
+              },
+              required: ["description"],
+            },
+          },
+          {
+            name: "hexagen_generate_adapters",
+            description:
+              "Generate infrastructure adapters for a bounded context's ports using LLM",
+            inputSchema: {
+              type: "object",
+              properties: {
+                context_name: {
+                  type: "string",
+                  description: "Name of the bounded context",
+                },
+                port_names: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Valid port names to generate adapters for",
+                },
+                max_retries: {
+                  type: "number",
+                  description: "Maximum retry attempts (default: 2)",
+                },
+              },
+              required: ["context_name", "port_names"],
+            },
+          },
+          {
+            name: "hexagen_generate_manifest_pipeline",
+            description:
+              "Full pipeline: generate topology, enrich with adapters, validate, render YAML, and register contexts",
+            inputSchema: {
+              type: "object",
+              properties: {
+                description: {
+                  type: "string",
+                  description: "Natural language project description",
+                },
+                max_retries: {
+                  type: "number",
+                  description: "Maximum retry attempts per phase (default: 2)",
+                },
+                dry_run: {
+                  type: "boolean",
+                  description:
+                    "If true, validate and render without writing to manifest",
+                },
+              },
+              required: ["description"],
+            },
+          },
         ],
       };
     });
@@ -862,6 +935,58 @@ export class MCPServerAdapter implements MCPServerPort {
             return {
               content: [
                 { type: "text", text: JSON.stringify(result.value, null, 2) },
+              ],
+            };
+          }
+
+          if (name === "hexagen_generate_topology") {
+            const result =
+              await this.dependencies.generateTopologyToolUseCase.execute({
+                description: args.description as string,
+                maxRetries: args.max_retries as number | undefined,
+              });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result, null, 2),
+                },
+              ],
+            };
+          }
+
+          if (name === "hexagen_generate_adapters") {
+            const result =
+              await this.dependencies.generateAdaptersToolUseCase.execute({
+                contextName: args.context_name as string,
+                portNames: args.port_names as string[],
+                maxRetries: args.max_retries as number | undefined,
+              });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result, null, 2),
+                },
+              ],
+            };
+          }
+
+          if (name === "hexagen_generate_manifest_pipeline") {
+            const result =
+              await this.dependencies.generateManifestPipelineToolUseCase.execute(
+                {
+                  description: args.description as string,
+                  maxRetries: args.max_retries as number | undefined,
+                  dryRun: args.dry_run as boolean | undefined,
+                },
+              );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result, null, 2),
+                },
               ],
             };
           }

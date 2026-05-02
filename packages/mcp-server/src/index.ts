@@ -9,6 +9,9 @@ import { DiffManifestToolUseCase } from "./application/use-cases/diff-manifest-t
 import { CreateAdapterToolUseCase } from "./application/use-cases/create-adapter-tool.use-case.js";
 import { CreateContextToolUseCase } from "./application/use-cases/create-context-tool.use-case.js";
 import { CreatePortToolUseCase } from "./application/use-cases/create-port-tool.use-case.js";
+import { GenerateAdaptersToolUseCase } from "./application/use-cases/generate-adapters-tool.use-case.js";
+import { GenerateManifestPipelineToolUseCase } from "./application/use-cases/generate-manifest-pipeline-tool.use-case.js";
+import { GenerateTopologyToolUseCase } from "./application/use-cases/generate-topology-tool.use-case.js";
 import { GetGraphResourceUseCase } from "./application/use-cases/get-graph-resource.use-case.js";
 import { GetLinterReportResourceUseCase } from "./application/use-cases/get-linter-report-resource.use-case.js";
 import { GetDecisionsResourceUseCase } from "./application/use-cases/get-decisions-resource.use-case.js";
@@ -33,6 +36,7 @@ import type { ProjectConfigurationReadPort } from "./application/ports/out/proje
 import type { LinterPort } from "./application/ports/out/linter.port.js";
 import type { ScaffoldingPort } from "./application/ports/out/scaffolding.port.js";
 import type { ReportGovernancePort } from "./application/ports/out/report-governance.port.js";
+import type { ManifestGenerationPort } from "./application/ports/out/manifest-generation.port.js";
 import { GovernanceReadAdapter } from "./infrastructure/adapters/governance-read.adapter.js";
 import { LinterAdapter } from "./infrastructure/adapters/linter.adapter.js";
 import { ManifestDiffAdapter } from "./infrastructure/adapters/manifest-diff.adapter.js";
@@ -40,6 +44,7 @@ import { ManifestWriteAdapter } from "./infrastructure/adapters/manifest-write.a
 import { ProjectConfigurationReadAdapter } from "./infrastructure/adapters/project-configuration-read.adapter.js";
 import { SyncEngineAdapter } from "./infrastructure/adapters/sync-engine.adapter.js";
 import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-event-bus.adapter.js";
+import { OpenAIManifestGenerationAdapter } from "./infrastructure/adapters/manifest-generation.adapter.js";
 import { ReportGovernanceAdapter } from "./infrastructure/adapters/report-governance.adapter.js";
 
 export interface MCPCompositionRoot {
@@ -53,6 +58,7 @@ export interface MCPCompositionRoot {
   eventBusPort: EventBusPort;
   reportGovernancePort: ReportGovernancePort;
   transactionManagerPort: TransactionManagerPort;
+  manifestGenerationPort: ManifestGenerationPort;
 }
 
 export function createDefaultMCPCompositionRoot(
@@ -60,6 +66,17 @@ export function createDefaultMCPCompositionRoot(
 ): MCPCompositionRoot {
   const syncEngineAdapter = new SyncEngineAdapter(workspaceRoot);
   const manifestWritePort = new ManifestWriteAdapter(workspaceRoot);
+  const eventBusPort = new InMemoryEventBusAdapter();
+
+  const manifestGenerationPort = new OpenAIManifestGenerationAdapter(
+    {
+      apiKey: process.env.OPENAI_API_KEY ?? "",
+      baseUrl: process.env.OPENAI_BASE_URL,
+      model: process.env.OPENAI_MODEL,
+    },
+    manifestWritePort,
+    eventBusPort,
+  );
 
   return {
     projectConfigurationReadPort: new ProjectConfigurationReadAdapter(
@@ -71,9 +88,10 @@ export function createDefaultMCPCompositionRoot(
     manifestWritePort,
     linterPort: new LinterAdapter(syncEngineAdapter),
     manifestDiffPort: new ManifestDiffAdapter(workspaceRoot),
-    eventBusPort: new InMemoryEventBusAdapter(),
+    eventBusPort,
     reportGovernancePort: new ReportGovernanceAdapter(workspaceRoot),
     transactionManagerPort: new InMemoryTransactionManager(),
+    manifestGenerationPort,
   };
 }
 
@@ -152,6 +170,14 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
   const rejectTransactionToolUseCase = new RejectTransactionToolUseCase(
     root.transactionManagerPort,
   );
+  const generateTopologyToolUseCase = new GenerateTopologyToolUseCase(
+    root.manifestGenerationPort,
+  );
+  const generateAdaptersToolUseCase = new GenerateAdaptersToolUseCase(
+    root.manifestGenerationPort,
+  );
+  const generateManifestPipelineToolUseCase =
+    new GenerateManifestPipelineToolUseCase(root.manifestGenerationPort);
 
   return new MCPServerAdapter({
     getManifestResourceUseCase,
@@ -177,6 +203,9 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     listTransactionsToolUseCase,
     acceptTransactionToolUseCase,
     rejectTransactionToolUseCase,
+    generateTopologyToolUseCase,
+    generateAdaptersToolUseCase,
+    generateManifestPipelineToolUseCase,
   });
 }
 

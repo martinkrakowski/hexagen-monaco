@@ -1589,12 +1589,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hexagen/ModelVerificationUseCase@workspace:packages/ModelVerificationUseCase":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/ModelVerificationUseCase@workspace:packages/ModelVerificationUseCase"
-  languageName: unknown
-  linkType: soft
-
 "@hexagen/agentic-interaction@workspace:*, @hexagen/agentic-interaction@workspace:packages/agentic-interaction":
   version: 0.0.0-use.local
   resolution: "@hexagen/agentic-interaction@workspace:packages/agentic-interaction"
@@ -1825,6 +1819,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/mcp-server@workspace:packages/mcp-server"
   dependencies:
+    "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/governance": "workspace:*"
     "@hexagen/messaging": "workspace:*"
     "@hexagen/project-configuration": "workspace:*"
@@ -1866,16 +1861,11 @@ __metadata:
     "@hexagen/local-llm": "workspace:*"
     "@hexagen/ui": "workspace:*"
     "@types/react": "npm:^19.0.0"
+    lucide-react: "npm:^1.11.0"
     react: "npm:^19.0.0"
     typescript: "npm:^5.0.0"
   peerDependencies:
     react: ^19.0.0
-  languageName: unknown
-  linkType: soft
-
-"@hexagen/model-verification-cache-adapter@workspace:packages/model-verification-cache-adapter":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/model-verification-cache-adapter@workspace:packages/model-verification-cache-adapter"
   languageName: unknown
   linkType: soft
 
@@ -2106,18 +2096,6 @@ __metadata:
     typescript: "npm:^5.5.4"
   peerDependencies:
     react: ^18.0.0 || ^19.0.0
-  languageName: unknown
-  linkType: soft
-
-"@hexagen/verification-state-manager@workspace:packages/verification-state-manager":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/verification-state-manager@workspace:packages/verification-state-manager"
-  languageName: unknown
-  linkType: soft
-
-"@hexagen/verification-transactions@workspace:packages/verification-transactions":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/verification-transactions@workspace:packages/verification-transactions"
   languageName: unknown
   linkType: soft
 

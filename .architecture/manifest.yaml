@@ -1105,6 +1105,9 @@ bounded_contexts:
           - ListTransactionsToolUseCase
           - AcceptTransactionToolUseCase
           - RejectTransactionToolUseCase
+          - GenerateTopologyToolUseCase
+          - GenerateAdaptersToolUseCase
+          - GenerateManifestPipelineToolUseCase
         ports:
           in:
             - McpServerPort
@@ -1118,7 +1121,7 @@ bounded_contexts:
             - ManifestDiffPort
             - ReportGovernancePort
             - TransactionManagerPort
-      infrastructure:
+            - ManifestGenerationPortinfrastructure:
         adapters:
           - MCPServerAdapter
           - ProjectConfigurationReadAdapter
@@ -1129,6 +1132,7 @@ bounded_contexts:
           - GovernanceReadAdapter
           - ManifestDiffAdapter
           - ReportGovernanceAdapter
+          - OpenAIManifestGenerationAdapter
     depends_on:
       - shared
       - messaging
@@ -1138,6 +1142,7 @@ bounded_contexts:
       - sync
       - report-governance
       - transaction-system
+      - agentic-interaction
   - name: architectural-enforcement
     type: supporting
     status: frozen
