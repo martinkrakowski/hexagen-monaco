@@ -21,7 +21,7 @@ import {
   extractYamlFromResponse,
   generateSuggestions,
   detectWarnings,
-} from "../../domain/manifest-yaml-extractor";
+} from "../../domain/manifest-yaml-extractor.js";
 
 export interface GenerateManifestFromDescriptionRequest {
   description: ProjectDescription;
