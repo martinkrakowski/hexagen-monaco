@@ -11,11 +11,17 @@ import type { BoundedContextView } from "./manifest-view-data";
 interface HexagonalArchitectureViewProps {
   context: BoundedContextView;
   onBack: () => void;
+  onRequestFix?: (violation: {
+    title: string;
+    description: string;
+    contextName: string;
+  }) => void;
 }
 
 export function HexagonalArchitectureView({
   context,
   onBack,
+  onRequestFix,
 }: HexagonalArchitectureViewProps) {
   const isError = context.health === "error";
   const okPortsOut = context.portsOut.filter((p) => !p.hasIssue).length;
@@ -245,9 +251,24 @@ export function HexagonalArchitectureView({
                               No infrastructure adapter defined
                             </div>
                           </div>
-                          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-mono">
-                            MISSING
-                          </span>
+                          {onRequestFix ? (
+                            <button
+                              onClick={() =>
+                                onRequestFix({
+                                  title: "Missing Adapter",
+                                  description: `No infrastructure adapter defined for port: ${p.name}`,
+                                  contextName: context.name,
+                                })
+                              }
+                              className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold transition-colors"
+                            >
+                              ✨ Fix
+                            </button>
+                          ) : (
+                            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-mono">
+                              MISSING
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

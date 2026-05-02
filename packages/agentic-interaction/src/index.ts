@@ -63,6 +63,12 @@ export {
   GenerateManifestFromDescriptionUseCase,
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
+  FixManifestViolationUseCase,
+  type FixManifestViolationRequest,
+  type FixManifestViolationResponse,
+  HolisticManifestRepairUseCase,
+  type HolisticManifestRepairRequest,
+  type HolisticManifestRepairResponse,
 } from "./application/use-cases/index.js";
 export {
   serializeProjectContext,

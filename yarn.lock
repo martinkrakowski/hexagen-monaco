@@ -3885,6 +3885,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/diff@npm:^8.0.0":
+  version: 8.0.0
+  resolution: "@types/diff@npm:8.0.0"
+  dependencies:
+    diff: "npm:*"
+  checksum: 10c0/c6e3376abeac8bc77b33252afc239a3cfc2729ecf59abcf00fa0f0eca8c505fd3a375a99a64afecdbb97fbec77b9a6aa8a8918f4d53fd5b45638d609343717cc
+  languageName: node
+  linkType: hard
+
 "@types/esrecurse@npm:^4.3.1":
   version: 4.3.1
   resolution: "@types/esrecurse@npm:4.3.1"
@@ -6659,6 +6668,13 @@ __metadata:
   version: 29.6.3
   resolution: "diff-sequences@npm:29.6.3"
   checksum: 10c0/32e27ac7dbffdf2fb0eb5a84efd98a9ad084fbabd5ac9abb8757c6770d5320d2acd172830b28c4add29bb873d59420601dfc805ac4064330ce59b1adfd0593b2
+  languageName: node
+  linkType: hard
+
+"diff@npm:*, diff@npm:^9.0.0":
+  version: 9.0.0
+  resolution: "diff@npm:9.0.0"
+  checksum: 10c0/a971cc88f66071a33bd3942db2f51b57d484e9856265ae45cf44fb28ab2fde91f132d9c26d8be0fb6082d2be94d29e1295c1adb251b7461935d6a2dd304cd161
   languageName: node
   linkType: hard
 
@@ -15993,6 +16009,7 @@ __metadata:
     "@tailwindcss/typography": "npm:^0.5.19"
     "@testing-library/dom": "npm:^10.4.1"
     "@testing-library/react": "npm:^16.3.2"
+    "@types/diff": "npm:^8.0.0"
     "@types/file-saver": "npm:^2.0.7"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.14.10"
@@ -16007,6 +16024,7 @@ __metadata:
     baseline-browser-mapping: "npm:^2.10.0"
     class-variance-authority: "npm:^0.7.0"
     clsx: "npm:^2.1.1"
+    diff: "npm:^9.0.0"
     elkjs: "npm:^0.11.1"
     eslint: "npm:^10.1.0"
     eslint-config-next: "npm:^16.1.6"

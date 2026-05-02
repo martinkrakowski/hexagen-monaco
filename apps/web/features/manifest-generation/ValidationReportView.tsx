@@ -4,13 +4,17 @@ import {
   AlertTriangle,
   ShieldAlert,
 } from "lucide-react";
-import type { ManifestViewData } from "./manifest-view-data";
+import type { ManifestViewData, ValidationItem } from "./manifest-view-data";
 
 interface ValidationReportViewProps {
   viewData: ManifestViewData;
+  onRequestFix?: (violation: ValidationItem) => void;
 }
 
-export function ValidationReportView({ viewData }: ValidationReportViewProps) {
+export function ValidationReportView({
+  viewData,
+  onRequestFix,
+}: ValidationReportViewProps) {
   const p = viewData.validationItems.filter((v) => v.status === "pass").length;
   const w = viewData.validationItems.filter((v) => v.status === "warn").length;
   const f = viewData.validationItems.filter((v) => v.status === "fail").length;
@@ -115,6 +119,14 @@ export function ValidationReportView({ viewData }: ValidationReportViewProps) {
                     }}
                   />
                 </div>
+                {!isPass && onRequestFix && (
+                  <button
+                    onClick={() => onRequestFix(v)}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold transition-colors"
+                  >
+                    ✨ Fix
+                  </button>
+                )}
               </div>
             </div>
           );

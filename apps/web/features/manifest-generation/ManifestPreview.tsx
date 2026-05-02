@@ -14,6 +14,8 @@ import { ContextMapView } from "./ContextMapView";
 import { HexagonalArchitectureView } from "./HexagonalArchitectureView";
 import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
+import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
+import type { ValidationItem } from "./manifest-view-data";
 import { parseYamlToViewData } from "./parse-yaml-to-view-data";
 import { generateMermaidDiagram } from "./generate-mermaid-diagram";
 
@@ -35,9 +37,17 @@ export function ManifestPreview({
   const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
   const [activeContext, setActiveContext] = useState<string | null>(null);
 
+  // Local state for manifest to allow inline auto-fixes
+  const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
+  const [activeFixViolation, setActiveFixViolation] =
+    useState<ValidationItem | null>(null);
+
+  // Sync with prop if parent regenerates
+  useMemo(() => setLocalManifestYaml(manifestYaml), [manifestYaml]);
+
   const viewData = useMemo(
-    () => parseYamlToViewData(manifestYaml),
-    [manifestYaml],
+    () => parseYamlToViewData(localManifestYaml),
+    [localManifestYaml],
   );
   const mermaidCode = useMemo(
     () => generateMermaidDiagram(viewData),
@@ -120,7 +130,7 @@ export function ManifestPreview({
 
       <main className="relative z-10 flex flex-1 overflow-hidden">
         <ManifestYamlSidebar
-          yamlString={manifestYaml}
+          yamlString={localManifestYaml}
           viewData={viewData}
           activeContextName={activeTab === "hexagonal" ? activeContext : null}
         />
@@ -152,6 +162,9 @@ export function ManifestPreview({
                     setActiveTab("context-map");
                     setActiveContext(null);
                   }}
+                  onRequestFix={(v) =>
+                    setActiveFixViolation(v as ValidationItem)
+                  }
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -165,7 +178,10 @@ export function ManifestPreview({
           )}
           {activeTab === "validation" && (
             <div className="absolute inset-0 overflow-auto custom-scrollbar">
-              <ValidationReportView viewData={viewData} />
+              <ValidationReportView
+                viewData={viewData}
+                onRequestFix={(v) => setActiveFixViolation(v)}
+              />
             </div>
           )}
         </div>
@@ -178,7 +194,7 @@ export function ManifestPreview({
           </Button>
         </div>
         <Button
-          onClick={() => onApprove(manifestYaml)}
+          onClick={() => onApprove(localManifestYaml)}
           disabled={hasFailures}
           className={
             !hasFailures
@@ -189,6 +205,17 @@ export function ManifestPreview({
           Use This Manifest <ArrowRight className="w-4 h-4 ml-1.5" />
         </Button>
       </footer>
+
+      <ManifestAutoFixDrawer
+        isOpen={!!activeFixViolation}
+        onClose={() => setActiveFixViolation(null)}
+        violation={activeFixViolation}
+        currentYaml={localManifestYaml}
+        onApply={(patchedYaml) => {
+          setLocalManifestYaml(patchedYaml);
+          setActiveFixViolation(null);
+        }}
+      />
     </div>
   );
 }
