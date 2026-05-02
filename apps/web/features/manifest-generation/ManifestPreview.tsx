@@ -67,7 +67,9 @@ export function ManifestPreview({
   return (
     <div
       className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : "relative w-full rounded-xl border border-border"}`}
-      style={!isFullScreen ? { height: "60vh", minHeight: "450px" } : undefined}
+      style={
+        isFullScreen ? { marginTop: 0 } : { height: "60vh", minHeight: "450px" }
+      }
     >
       {/* Decorative ambient background */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
