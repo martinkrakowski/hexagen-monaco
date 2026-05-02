@@ -1,7 +1,12 @@
 /**
- * Welcome screen for manifest generation from natural language
+ * Welcome screen for manifest generation from natural language.
+ *
+ * Renders the two-pass generation flow:
+ * 1. Topology phase: LLM extracts bounded contexts + ports
+ * 2. Clarification check: If concerns detected, inline panel shows triggers
+ * 3. Adapters phase: LLM generates adapters for each context
+ * 4. Rendering phase: Normalize, validate, render YAML
  */
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -15,6 +20,7 @@ import {
   Label,
   Input,
   Checkbox,
+  Badge,
 } from "@hexagen/ui";
 import { useWelcomeFlowState } from "./ModelSelectionFlow/useWelcomeFlowState";
 import { useClientManifestGeneration } from "./useClientManifestGeneration";
@@ -23,6 +29,7 @@ import { getModelPreferences } from "./ModelSelectionFlow/modelPreferencesStorag
 import type { LocalLLMContext, DomainModelId } from "../../lib/llm-interfaces";
 import { ManifestPreview } from "./ManifestPreview";
 import { ModelSettingsView } from "@hexagen/model-settings";
+import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 2000;
@@ -112,6 +119,43 @@ export function WelcomeScreen({
     }
   }, [clientGen.generatedManifest, flowState.state, actions]);
 
+  // Sync clarification_needed from clientGen hook into flow state machine
+  useEffect(() => {
+    if (
+      clientGen.phase === "clarification_needed" &&
+      flowState.state === "generating" &&
+      clientGen.clarificationTriggers.length > 0
+    ) {
+      actions.setClarificationNeeded(clientGen.clarificationTriggers);
+    }
+  }, [
+    clientGen.phase,
+    clientGen.clarificationTriggers,
+    flowState.state,
+    actions,
+  ]);
+
+  // When user confirms, resume adapter generation via the clientGen hook
+  const confirmRef = useRef(clientGen.confirmTopologyAndContinue);
+  useEffect(() => {
+    confirmRef.current = clientGen.confirmTopologyAndContinue;
+  }, [clientGen.confirmTopologyAndContinue]);
+
+  const confirmAndContinueRef = useRef(actions.confirmAndContinue);
+  useEffect(() => {
+    confirmAndContinueRef.current = actions.confirmAndContinue;
+  }, [actions.confirmAndContinue]);
+
+  useEffect(() => {
+    if (
+      flowState.state === "generating" &&
+      clientGen.phase === "clarification_needed" &&
+      clientGen.partialTopology !== null
+    ) {
+      confirmRef.current(clientGenAbortRef.current?.signal);
+    }
+  }, [flowState.state, clientGen.phase, clientGen.partialTopology]);
+
   const handleGenerate = () => {
     if (!canGenerate) return;
     const prefs = getModelPreferences();
@@ -146,6 +190,79 @@ export function WelcomeScreen({
     clientGen.reset();
     actions.regenerateManifest();
   };
+
+  const handleConfirmAndContinue = () => {
+    actions.confirmAndContinue();
+  };
+
+  const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {
+    "no-inbound-ports": "No Inbound Ports",
+    "single-context-no-outbound": "Missing Outbound Ports",
+    "generic-context-name": "Generic Context Name",
+  };
+
+  // Clarification needed state
+  if (flowState.state === "clarification_needed") {
+    const triggers = flowState.clarificationTriggers ?? [];
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-background">
+        <div className="w-full max-w-3xl space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="text-4xl font-bold text-foreground">
+              Topology Review
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              The AI identified the following concerns about your project
+              topology. Review them and confirm to continue generating adapters.
+            </p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Clarification Items</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {triggers.map((trigger, index) => (
+                <div
+                  key={`${trigger.type}-${trigger.contextName ?? index}`}
+                  className="flex items-start gap-4 p-4 bg-secondary rounded-md"
+                >
+                  <Badge variant="outline">
+                    {TRIGGER_TYPE_LABELS[
+                      trigger.type as ClarificationTrigger["type"]
+                    ] ?? trigger.type}
+                  </Badge>
+                  <div className="flex-1 space-y-1">
+                    {trigger.contextName && (
+                      <p className="text-sm font-medium text-foreground">
+                        {trigger.contextName}
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {trigger.message}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex gap-2 justify-end pt-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => actions.transitionTo("idle")}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmAndContinue}>
+                  Continue Anyway
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // Preview state: show manifest preview
   if (flowState.state === "preview" && flowState.manifestContent) {
@@ -348,6 +465,16 @@ export function WelcomeScreen({
     );
   }
 
+  const PHASE_LABELS: Record<string, string> = {
+    topology: "Analyzing project topology...",
+    clarification_needed: "Reviewing topology...",
+    adapters: "Generating adapters...",
+    rendering: "Rendering manifest...",
+    complete: "Complete",
+    failed: "Failed",
+    idle: "",
+  };
+
   // Default welcome screen (idle state)
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-background">
@@ -472,8 +599,10 @@ export function WelcomeScreen({
                   <span className="animate-spin mr-2" aria-hidden="true">
                     ⏳
                   </span>
-                  <span className="sr-only">Generating manifest...</span>
-                  Generating Manifest...
+                  <span className="sr-only">
+                    {PHASE_LABELS[clientGen.phase] ?? "Generating manifest..."}
+                  </span>
+                  {PHASE_LABELS[clientGen.phase] ?? "Generating Manifest..."}
                 </>
               ) : (
                 "Generate Manifest"

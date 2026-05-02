@@ -7,4 +7,4 @@ export {
   GenerateManifestFromDescriptionUseCase,
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
-} from "./generate-manifest-from-description.use-case";
+} from "./generate-manifest-from-description.use-case.js";

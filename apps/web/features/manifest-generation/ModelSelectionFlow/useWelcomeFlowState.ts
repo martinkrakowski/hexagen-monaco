@@ -27,6 +27,7 @@ export type WelcomeScreenState =
   | "model_downloading" // Local model downloading
   | "key_validation" // Cloud API key validating
   | "generating" // Manifest being generated
+  | "clarification_needed" // Topology generated, awaiting user confirmation
   | "preview" // Showing generated manifest
   | "error" // Error state with retry options
   | "interrupted" // User cancelled download
@@ -46,6 +47,11 @@ export interface WelcomeFlowState {
   manifestContent?: string;
   lastRejectedManifest?: string | null;
   isModelReady?: boolean;
+  clarificationTriggers?: Array<{
+    type: string;
+    contextName?: string;
+    message: string;
+  }> | null;
   hardwareCapabilities?: {
     isWebGPUSupported: boolean;
     isBrowserSupported: boolean;
@@ -77,6 +83,14 @@ export interface WelcomeFlowActions {
   rejectManifest: () => void;
   regenerateManifest: () => void;
   repairModelDownload: (modelId: DomainModelId) => void;
+  setClarificationNeeded: (
+    triggers: Array<{
+      type: string;
+      contextName?: string;
+      message: string;
+    }>,
+  ) => void;
+  confirmAndContinue: () => void;
 }
 
 /**
@@ -561,10 +575,8 @@ export function useWelcomeFlowState(
 
   const repairModelDownload = useCallback(
     (modelId: DomainModelId) => {
-      // Clear cache metadata for this model
       clearModelCacheMetadata(modelId);
 
-      // Restart download with the same model
       const intentId = ++downloadIntentRef.current;
       setFlowState((prev) => ({
         ...prev,
@@ -574,7 +586,6 @@ export function useWelcomeFlowState(
         error: null,
       }));
 
-      // Initialize the model (will force re-download)
       initializeModel(modelId).catch((error) => {
         if (intentId !== downloadIntentRef.current) return;
         setFlowState((prev) => ({
@@ -586,6 +597,27 @@ export function useWelcomeFlowState(
     },
     [initializeModel],
   );
+
+  const setClarificationNeeded = useCallback(
+    (
+      triggers: Array<{ type: string; contextName?: string; message: string }>,
+    ) => {
+      setFlowState((prev) => ({
+        ...prev,
+        state: "clarification_needed",
+        clarificationTriggers: triggers,
+      }));
+    },
+    [],
+  );
+
+  const confirmAndContinue = useCallback(() => {
+    setFlowState((prev) => ({
+      ...prev,
+      state: "generating",
+      clarificationTriggers: null,
+    }));
+  }, []);
 
   const actions: WelcomeFlowActions = useMemo(
     () => ({
@@ -606,6 +638,8 @@ export function useWelcomeFlowState(
       rejectManifest,
       regenerateManifest,
       repairModelDownload,
+      setClarificationNeeded,
+      confirmAndContinue,
     }),
     [
       transitionTo,
@@ -625,6 +659,8 @@ export function useWelcomeFlowState(
       rejectManifest,
       regenerateManifest,
       repairModelDownload,
+      setClarificationNeeded,
+      confirmAndContinue,
     ],
   );
 
