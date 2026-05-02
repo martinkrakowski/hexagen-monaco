@@ -18,28 +18,49 @@ export interface UseClientManifestGenerationReturn {
   reset: () => void;
 }
 
-// Template to guide LLM YAML generation
-const TEMPLATE_YAML = `workspace:
-  name: # your workspace name
-  description: # brief 1-2 sentence description
+const RETRY_SYSTEM_PROMPT = `You are a YAML code generator. Generate ONLY valid YAML. Follow these rules strictly:
+- Every key must have a colon followed by a value on the SAME line
+- Never leave a key without a value (e.g. "description" alone on a line is invalid)
+- Use 2-space indentation consistently
+- Do not truncate any values — complete every field
+- Output ONLY the YAML, no markdown fences, no explanations`;
 
+const RETRY_USER_TEMPLATE = `Generate a minimal but valid manifest.yaml for this project. Use at most 2 bounded contexts, at most 3 ports per context (1-2 in, 1 out), and 1-2 adapters per context. Complete every single field — no truncation.
+
+Project: {description}
+
+Output ONLY valid YAML starting with "workspace:". Example of correct syntax:
+workspace:
+  name: MyApp
+  description: A sample application
 boundedContexts:
-  - name: # name of first bounded context
-    description: # brief 1-2 sentence description
+  - name: core
+    description: Core domain logic
     ports:
       in:
-        - name: # name of inbound port
-          type: # e.g. Repository, Service, Controller
-          description: # brief 1-2 sentence description
+        - name: CreateItemPort
+          type: Repository
+          description: Creates a new item
       out:
-        - name: # name of outbound port
-          type: # e.g. Repository, Service, Gateway
-          description: # brief 1-2 sentence description
+        - name: NotificationPort
+          type: Gateway
+          description: Sends notifications
     adapters:
-      - name: # name of adapter
+      - name: ItemRepositoryAdapter
         type: Adapter
-        implements: # name of port it implements
-`;
+        implements: CreateItemPort`;
+
+function repairYaml(raw: string): string {
+  let fixed = raw;
+  fixed = fixed.replace(/^(\s+description)\s*$/gm, '$1: ""');
+  fixed = fixed.replace(/^(\s+description):\s*$/gm, '$1: ""');
+  fixed = fixed.replace(/^(\s+name)\s*$/gm, '$1: ""');
+  fixed = fixed.replace(/^(\s+type)\s*$/gm, '$1: ""');
+  fixed = fixed.replace(/^(\s+implements)\s*$/gm, '$1: ""');
+  return fixed;
+}
+
+const MAX_RETRIES = 2;
 
 export function useClientManifestGeneration(
   llmContext: LocalLLMContext,
@@ -51,6 +72,62 @@ export function useClientManifestGeneration(
   );
 
   const messageCountBeforeRef = useRef<number | null>(null);
+
+  const attemptGeneration = async (
+    description: string,
+    isRetry: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ yaml: string } | { error: string }> => {
+    if (signal?.aborted) return { error: "Aborted" };
+
+    const systemPrompt = isRetry ? RETRY_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    const userPrompt = isRetry
+      ? RETRY_USER_TEMPLATE.replace("{description}", description)
+      : compileUserPrompt({ userDescription: description });
+
+    await llmContext.sendGovernanceMessage(userPrompt, systemPrompt);
+
+    if (signal?.aborted) return { error: "Aborted" };
+
+    const messages = llmContext.messages;
+    const lastAssistantMessage = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant");
+
+    const content = lastAssistantMessage?.content ?? "";
+
+    if (!content) {
+      return {
+        error: "AI response did not contain a valid manifest YAML block",
+      };
+    }
+
+    let extractedYaml = extractManifestYaml(content);
+
+    if (!extractedYaml) {
+      return {
+        error: "AI response did not contain a valid manifest YAML block",
+      };
+    }
+
+    try {
+      yaml.load(extractedYaml);
+    } catch {
+      const repaired = repairYaml(extractedYaml);
+      try {
+        yaml.load(repaired);
+        extractedYaml = repaired;
+      } catch (yamlError) {
+        const message =
+          yamlError instanceof Error
+            ? yamlError.message
+            : "Invalid YAML structure";
+        return { error: `Generated manifest has invalid YAML: ${message}` };
+      }
+    }
+
+    return { yaml: extractedYaml };
+  };
 
   const generateManifest = useCallback(
     async (description: string, signal?: AbortSignal) => {
@@ -64,59 +141,34 @@ export function useClientManifestGeneration(
       messageCountBeforeRef.current = countBefore;
 
       try {
-        // Add template to description to guide LLM
-        const enhancedDescription = `${description}\n\nPlease follow this exact YAML structure and ensure all entries have valid values:\n\n${TEMPLATE_YAML}`;
-        const userPrompt = compileUserPrompt({
-          userDescription: enhancedDescription,
-        });
-        await llmContext.sendGovernanceMessage(userPrompt, SYSTEM_PROMPT);
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          if (signal?.aborted) {
+            setIsGenerating(false);
+            return;
+          }
 
-        if (signal?.aborted) {
+          const isRetry = attempt > 0;
+          const result = await attemptGeneration(description, isRetry, signal);
+
+          if ("yaml" in result) {
+            setGeneratedManifest(result.yaml);
+            setIsGenerating(false);
+            return;
+          }
+
+          if (result.error === "Aborted") {
+            setIsGenerating(false);
+            return;
+          }
+
+          if (attempt < MAX_RETRIES) {
+            continue;
+          }
+
+          setGenerationError(result.error);
           setIsGenerating(false);
           return;
         }
-
-        // Streaming is complete, extract YAML from new messages
-        const messages = llmContext.messages;
-        const lastAssistantMessage = [...messages]
-          .reverse()
-          .find((m) => m.role === "assistant");
-
-        const content = lastAssistantMessage?.content ?? "";
-
-        if (!content) {
-          setGenerationError(
-            "AI response did not contain a valid manifest YAML block",
-          );
-          setIsGenerating(false);
-          return;
-        }
-
-        const extractedYaml = extractManifestYaml(content);
-
-        if (!extractedYaml) {
-          setGenerationError(
-            "AI response did not contain a valid manifest YAML block",
-          );
-          setIsGenerating(false);
-          return;
-        }
-
-        // Validate the extracted YAML is actually parseable
-        try {
-          yaml.load(extractedYaml);
-        } catch (yamlError) {
-          const message =
-            yamlError instanceof Error
-              ? yamlError.message
-              : "Invalid YAML structure";
-          setGenerationError(`Generated manifest has invalid YAML: ${message}`);
-          setIsGenerating(false);
-          return;
-        }
-
-        setGeneratedManifest(extractedYaml);
-        setIsGenerating(false);
       } catch (error) {
         if (signal?.aborted) return;
         const message =

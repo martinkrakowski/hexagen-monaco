@@ -86,17 +86,22 @@ export function WelcomeScreen({
     if (flowState.state !== "generating") return;
     if (clientGen.generationError) {
       const err = clientGen.generationError;
-      const code:
-        | "inference_failed"
-        | "yaml_validation_failed"
-        | "no_yaml_extracted" = err.startsWith(
+      const isYamlError = err.startsWith(
         "Generated manifest has invalid YAML:",
-      )
-        ? "yaml_validation_failed"
-        : err.includes("did not contain a valid manifest")
+      );
+      if (isYamlError) {
+        actions.setError(
+          "The AI produced malformed YAML. Please try again with a shorter description, or click Retry.",
+          "yaml_validation_failed",
+        );
+      } else {
+        const code: "inference_failed" | "no_yaml_extracted" = err.includes(
+          "did not contain a valid manifest",
+        )
           ? "no_yaml_extracted"
           : "inference_failed";
-      actions.setError(err, code);
+        actions.setError(err, code);
+      }
     }
   }, [clientGen.generationError, flowState.state, actions]);
 
@@ -125,11 +130,20 @@ export function WelcomeScreen({
   };
 
   const handleRegenerate = () => {
-    // Cancel any in-flight client generation
     if (clientGenAbortRef.current) {
       clientGenAbortRef.current.abort();
       clientGenAbortRef.current = null;
     }
+    clientGen.reset();
+    actions.regenerateManifest();
+  };
+
+  const handleRetryFromError = () => {
+    if (clientGenAbortRef.current) {
+      clientGenAbortRef.current.abort();
+      clientGenAbortRef.current = null;
+    }
+    clientGen.reset();
     actions.regenerateManifest();
   };
 
@@ -191,7 +205,7 @@ export function WelcomeScreen({
           <h1 className="text-4xl font-bold text-destructive">Error</h1>
           <p className="text-lg text-muted-foreground">{errorMessage}</p>
           <div className="flex gap-2 justify-center">
-            <Button onClick={actions.retryGeneration}>Retry</Button>
+            <Button onClick={handleRetryFromError}>Retry</Button>
             {flowState.errorCode === "model_corrupted" &&
               flowState.selectedModelId && (
                 <Button

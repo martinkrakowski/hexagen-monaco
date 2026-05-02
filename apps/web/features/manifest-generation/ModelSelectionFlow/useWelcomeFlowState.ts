@@ -499,13 +499,12 @@ export function useWelcomeFlowState(
   }, []);
 
   const retryGeneration = useCallback(() => {
-    // Determine which state to return to based on the error context
     if (flowState.selectedModelId) {
-      setFlowState((prev) => ({ ...prev, state: "model_selection" }));
+      setFlowState((prev) => ({ ...prev, state: "generating", error: null }));
     } else if (flowState.cloudApiKey) {
-      setFlowState((prev) => ({ ...prev, state: "key_validation" }));
+      setFlowState((prev) => ({ ...prev, state: "generating", error: null }));
     } else {
-      setFlowState((prev) => ({ ...prev, state: "idle" }));
+      setFlowState((prev) => ({ ...prev, state: "idle", error: null }));
     }
   }, [flowState.cloudApiKey, flowState.selectedModelId]);
 
