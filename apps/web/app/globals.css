@@ -247,6 +247,52 @@ dialog::backdrop {
   background: hsl(var(--card)) !important;
 }
 
+/* ── Entrance animations ─────────────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out both;
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
+.delay-200 {
+  animation-delay: 200ms;
+}
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+/* ── Ambient background glow ───────────────────────────────────────────────── */
+.bg-ambient::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 0%,
+    hsl(var(--primary) / 0.06) 0%,
+    transparent 70%
+  );
+  z-index: -1;
+}
+
+/* ── Example button active state ───────────────────────────────────────────── */
+.example-btn-active {
+  border-color: hsl(var(--primary)) !important;
+  background-color: hsl(var(--primary) / 0.08) !important;
+}
+
 /* ── Custom scrollbar for panels ───────────────────────────────────────────── */
 .custom-scrollbar {
   scrollbar-width: thin;
@@ -370,10 +416,27 @@ dialog::backdrop {
   );
 }
 
+/* .bg-cinematic-border-vivid — Vivid conic-gradient border with --info accent (for welcome panel) */
+.bg-cinematic-border-vivid {
+  padding: 1px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    transparent 20%,
+    hsl(var(--primary)) 40%,
+    hsl(var(--info)) 55%,
+    hsl(var(--primary)) 70%,
+    transparent 80%
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-spin-border,
   .animate-shimmer,
-  .animate-dot-pulse {
+  .animate-dot-pulse,
+  .animate-fade-in-up {
     animation: none;
+  }
+  .animate-fade-in-up {
+    opacity: 1;
   }
 }

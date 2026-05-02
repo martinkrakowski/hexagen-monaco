@@ -530,16 +530,19 @@ transition-colors
 
 The following custom CSS utility classes are defined in `globals.css` and are approved for use alongside Tailwind classes:
 
-| Class                  | Purpose                                                                       | Source        |
-| ---------------------- | ----------------------------------------------------------------------------- | ------------- |
-| `.focus-ring`          | Accessible focus ring using `--ring` token (2px background offset + 4px ring) | `globals.css` |
-| `.custom-scrollbar`    | Thin scrollbar styled with `--muted-foreground` token                         | `globals.css` |
-| `.animate-slide`       | Horizontal slide animation (2s infinite)                                      | `globals.css` |
-| `.animate-soft-pulse`  | Gentle opacity pulse (2.5s infinite)                                          | `globals.css` |
-| `.animate-spin-border` | Conic-gradient border rotation (6s infinite)                                  | `globals.css` |
-| `.animate-shimmer`     | Horizontal shimmer effect (1.4s infinite)                                     | `globals.css` |
-| `.animate-dot-pulse`   | Dot pulse with primary-color box-shadow (1.6s infinite)                       | `globals.css` |
-| `.bg-cinematic-border` | Conic-gradient border background for ModelProgressCard                        | `globals.css` |
+| Class                        | Purpose                                                                         | Source        |
+| ---------------------------- | ------------------------------------------------------------------------------- | ------------- |
+| `.focus-ring`                | Accessible focus ring using `--ring` token (2px background offset + 4px ring)   | `globals.css` |
+| `.custom-scrollbar`          | Thin scrollbar styled with `--muted-foreground` token                           | `globals.css` |
+| `.animate-slide`             | Horizontal slide animation (2s infinite)                                        | `globals.css` |
+| `.animate-soft-pulse`        | Gentle opacity pulse (2.5s infinite)                                            | `globals.css` |
+| `.animate-spin-border`       | Conic-gradient border rotation (6s infinite)                                    | `globals.css` |
+| `.animate-shimmer`           | Horizontal shimmer effect (1.4s infinite)                                       | `globals.css` |
+| `.animate-dot-pulse`         | Dot pulse with primary-color box-shadow (1.6s infinite)                         | `globals.css` |
+| `.animate-fade-in-up`        | Entrance animation (opacity 0→1, translateY 16px→0, 0.5s ease-out both)         | `globals.css` |
+| `.bg-cinematic-border`       | Conic-gradient border background for ModelProgressCard                          | `globals.css` |
+| `.bg-cinematic-border-vivid` | Vivid conic-gradient border with --info accent for welcome panel (padding: 1px) | `globals.css` |
+| `.bg-ambient`                | Subtle radial glow on page (fixed inset-0 pointer-events-none z-index-[-1])     | `globals.css` |
 
 **Motion preference compliance:** All animation utilities respect `prefers-reduced-motion: reduce` — animations are disabled automatically when the user has reduced motion enabled.
 

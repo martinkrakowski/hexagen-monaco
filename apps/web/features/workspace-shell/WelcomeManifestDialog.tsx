@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -35,17 +36,34 @@ export function WelcomeManifestDialog({
   onUseManifest,
   llmContext,
 }: WelcomeManifestDialogProps) {
+  const [isGenerating, setIsGenerating] = useState(false);
+
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent className="w-full max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>Generate Manifest from AI</DialogTitle>
-          <DialogDescription>
-            Describe your project in natural language to generate a complete
-            hexagonal architecture manifest
-          </DialogDescription>
-        </DialogHeader>
-        <WelcomeScreen onUseManifest={onUseManifest} llmContext={llmContext} />
+      <DialogContent
+        className={[
+          "w-full max-w-3xl p-0 bg-cinematic-border-vivid rounded-lg",
+          isGenerating ? "animate-spin-border" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div className="bg-card rounded-md p-2">
+          <div className="space-y-6 px-6 py-4 sm:py-6">
+            <DialogHeader>
+              <DialogTitle>Generate Manifest from AI</DialogTitle>
+              <DialogDescription>
+                Describe your project in natural language to generate a complete
+                hexagonal architecture manifest
+              </DialogDescription>
+            </DialogHeader>
+            <WelcomeScreen
+              onUseManifest={onUseManifest}
+              llmContext={llmContext}
+              onGeneratingStateChange={setIsGenerating}
+            />
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
