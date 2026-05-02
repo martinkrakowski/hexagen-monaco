@@ -16,7 +16,7 @@ import type {
 } from "../../domain/value-objects/index.js";
 import { ProjectDescriptionValidator } from "../../domain/value-objects/index.js";
 import { createGeneratedManifest } from "../../domain/value-objects/index.js";
-import { compilePrompt } from "../../domain/prompts/generate-manifest.prompt";
+import { compilePrompt } from "../../domain/prompts/generate-manifest.prompt.js";
 import {
   extractYamlFromResponse,
   generateSuggestions,
