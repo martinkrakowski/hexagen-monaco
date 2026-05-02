@@ -18,6 +18,29 @@ export interface UseClientManifestGenerationReturn {
   reset: () => void;
 }
 
+// Template to guide LLM YAML generation
+const TEMPLATE_YAML = `workspace:
+  name: # your workspace name
+  description: # brief 1-2 sentence description
+
+boundedContexts:
+  - name: # name of first bounded context
+    description: # brief 1-2 sentence description
+    ports:
+      in:
+        - name: # name of inbound port
+          type: # e.g. Repository, Service, Controller
+          description: # brief 1-2 sentence description
+      out:
+        - name: # name of outbound port
+          type: # e.g. Repository, Service, Gateway
+          description: # brief 1-2 sentence description
+    adapters:
+      - name: # name of adapter
+        type: Adapter
+        implements: # name of port it implements
+`;
+
 export function useClientManifestGeneration(
   llmContext: LocalLLMContext,
 ): UseClientManifestGenerationReturn {
@@ -41,7 +64,11 @@ export function useClientManifestGeneration(
       messageCountBeforeRef.current = countBefore;
 
       try {
-        const userPrompt = compileUserPrompt({ userDescription: description });
+        // Add template to description to guide LLM
+        const enhancedDescription = `${description}\n\nPlease follow this exact YAML structure and ensure all entries have valid values:\n\n${TEMPLATE_YAML}`;
+        const userPrompt = compileUserPrompt({
+          userDescription: enhancedDescription,
+        });
         await llmContext.sendGovernanceMessage(userPrompt, SYSTEM_PROMPT);
 
         if (signal?.aborted) {

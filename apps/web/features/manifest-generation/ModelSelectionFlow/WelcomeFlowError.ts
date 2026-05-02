@@ -6,7 +6,8 @@ export type WelcomeFlowErrorCode =
   | "key_rejected"
   | "inference_timeout"
   | "inference_failed"
-  | "no_yaml_extracted";
+  | "no_yaml_extracted"
+  | "yaml_validation_failed";
 
 export const WELCOME_FLOW_ERROR_MESSAGES: Record<WelcomeFlowErrorCode, string> =
   {
@@ -26,4 +27,6 @@ export const WELCOME_FLOW_ERROR_MESSAGES: Record<WelcomeFlowErrorCode, string> =
       "The AI model failed to generate a response. Please try again or switch to a different model.",
     no_yaml_extracted:
       "The AI response did not contain a valid manifest YAML block. Please refine your project description and try again.",
+    yaml_validation_failed:
+      "The generated manifest has invalid YAML structure. Please try regenerating with a simpler description.",
   };

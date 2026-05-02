@@ -85,7 +85,18 @@ export function WelcomeScreen({
   useEffect(() => {
     if (flowState.state !== "generating") return;
     if (clientGen.generationError) {
-      actions.setError(clientGen.generationError, "inference_failed");
+      const err = clientGen.generationError;
+      const code:
+        | "inference_failed"
+        | "yaml_validation_failed"
+        | "no_yaml_extracted" = err.startsWith(
+        "Generated manifest has invalid YAML:",
+      )
+        ? "yaml_validation_failed"
+        : err.includes("did not contain a valid manifest")
+          ? "no_yaml_extracted"
+          : "inference_failed";
+      actions.setError(err, code);
     }
   }, [clientGen.generationError, flowState.state, actions]);
 

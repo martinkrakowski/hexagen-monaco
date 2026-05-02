@@ -221,6 +221,14 @@ export function useProjectLifecycle(
         ui.enterEditMode("");
         ui.closeDialog();
         ui.setStep(completeness.firstIncompleteStepIndex);
+      } else {
+        ui.closeDialog(); // Close any existing dialog
+
+        // Show error using native dialog or alert
+        window.alert(
+          outcome.message ||
+            "Failed to parse the generated manifest. Please try regenerating.",
+        );
       }
     },
     [importManifest, form, ui],
