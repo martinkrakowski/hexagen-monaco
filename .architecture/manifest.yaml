@@ -316,6 +316,12 @@ monorepo:
               - '@hexagen/messaging'
               - '@hexagen/project-configuration'
               - '@hexagen/sync'
+
+          - name: 'model-settings'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/ui'
+              - '@hexagen/local-llm'
     generatorConfig:
       template: |
         generator:
@@ -653,20 +659,11 @@ mvk:
     - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
   package: packages/core-domain
 planes:
-  kernel:
-    - core-domain
-    - intent-compiler
-    - layout-engine
-    - ui-projection-compiler
-    - transaction-system
-    - prompt-compiler
-    - architectural-enforcement
-    - wizard-orchestration
-    - monaco-orchestration
   projection:
     - ui
     - visualization
     - web-driver
+    - model-settings
   probabilistic:
     - local-llm
     - agentic-interaction
@@ -1108,6 +1105,9 @@ bounded_contexts:
           - ListTransactionsToolUseCase
           - AcceptTransactionToolUseCase
           - RejectTransactionToolUseCase
+          - GenerateTopologyToolUseCase
+          - GenerateAdaptersToolUseCase
+          - GenerateManifestPipelineToolUseCase
         ports:
           in:
             - McpServerPort
@@ -1121,6 +1121,7 @@ bounded_contexts:
             - ManifestDiffPort
             - ReportGovernancePort
             - TransactionManagerPort
+            - ManifestGenerationPort
       infrastructure:
         adapters:
           - MCPServerAdapter
@@ -1132,6 +1133,7 @@ bounded_contexts:
           - GovernanceReadAdapter
           - ManifestDiffAdapter
           - ReportGovernanceAdapter
+          - OpenAIManifestGenerationAdapter
     depends_on:
       - shared
       - messaging
@@ -1141,6 +1143,7 @@ bounded_contexts:
       - sync
       - report-governance
       - transaction-system
+      - agentic-interaction
   - name: architectural-enforcement
     type: supporting
     status: frozen
@@ -1579,6 +1582,27 @@ bounded_contexts:
       binding, server-side proxy, key rotation and revocation
     depends_on:
       - shared
+  - name: model-settings
+    type: supporting
+    description: >-
+      Projection layer for local LLM model configuration — renders model
+      selection, hardware capability, download state, and provider switching
+      as UI components. Depends on local-llm domain types; consumes no
+      app-level state.
+    layers:
+      domain: {}
+      application: {}
+      infrastructure: {}
+      presentation:
+        components:
+          - ModelSettingsView
+          - ModelFooterIndicator
+        hooks:
+          - useHardwareDetection
+    depends_on:
+      - local-llm
+      - ui
+      - shared
 apps:
   - name: web
     driver: next.js
@@ -1597,6 +1621,7 @@ apps:
       - agentic-interaction
       - local-llm
       - messaging
+      - model-settings
       - project-generation
       - prompt-compiler
       - ui-projection-compiler

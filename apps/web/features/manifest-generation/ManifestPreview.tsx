@@ -1,195 +1,241 @@
-/**
- * Preview component for generated manifest with confidence score and suggestions
- */
-
-"use client";
-
+import { useState, useMemo } from "react";
 import {
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  Badge,
-} from "@hexagen/ui";
-
-interface GenerationMetadata {
-  model: string;
-  processingTime: number;
-  tokensUsed: number;
-}
+  Network,
+  Hexagon,
+  Component,
+  ShieldCheck,
+  ArrowRight,
+  RotateCcw,
+  RefreshCw,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
+import { Button } from "@hexagen/ui";
+import { ManifestYamlSidebar } from "./ManifestYamlSidebar";
+import { ContextMapView } from "./ContextMapView";
+import { HexagonalArchitectureView } from "./HexagonalArchitectureView";
+import { MermaidDiagramView } from "./MermaidDiagramView";
+import { ValidationReportView } from "./ValidationReportView";
+import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
+import type { ValidationItem } from "./manifest-view-data";
+import { parseYamlToViewData } from "./parse-yaml-to-view-data";
+import { generateMermaidDiagram } from "./generate-mermaid-diagram";
 
 interface ManifestPreviewProps {
-  manifest: string;
-  confidence: number;
-  suggestions: string[];
-  warnings: string[];
-  metadata: GenerationMetadata;
-  onUseManifest?: (manifest: string) => void;
-  onRegenerate?: () => void;
+  manifestYaml: string;
+  onApprove: (manifestYaml: string) => void;
+  onRegenerate: () => void;
+  onStartOver: () => void;
 }
 
+type ViewTab = "context-map" | "hexagonal" | "mermaid" | "validation";
+
 export function ManifestPreview({
-  manifest,
-  confidence,
-  suggestions,
-  warnings,
-  metadata,
-  onUseManifest,
+  manifestYaml,
+  onApprove,
   onRegenerate,
+  onStartOver,
 }: ManifestPreviewProps) {
-  const confidenceColor =
-    confidence >= 0.8
-      ? "bg-success/20 text-success"
-      : confidence >= 0.6
-        ? "bg-warning/20 text-warning"
-        : "bg-destructive/20 text-destructive";
+  const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
+  const [activeContext, setActiveContext] = useState<string | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
-  const handleCopyToClipboard = () => {
-    navigator.clipboard.writeText(manifest);
-  };
+  // Local state for manifest to allow inline auto-fixes
+  const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
+  const [activeFixViolation, setActiveFixViolation] =
+    useState<ValidationItem | null>(null);
 
-  const handleUseManifest = () => {
-    if (onUseManifest) {
-      onUseManifest(manifest);
-    }
+  // Sync with prop if parent regenerates
+  useMemo(() => setLocalManifestYaml(manifestYaml), [manifestYaml]);
+
+  const viewData = useMemo(
+    () => parseYamlToViewData(localManifestYaml),
+    [localManifestYaml],
+  );
+  const mermaidCode = useMemo(
+    () => generateMermaidDiagram(viewData),
+    [viewData],
+  );
+
+  const hasFailures = viewData.validationItems.some((v) => v.status === "fail");
+
+  const handleSelectContext = (name: string) => {
+    setActiveContext(name);
+    setActiveTab("hexagonal");
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-8 bg-background">
-      <div className="w-full max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div
+      className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : "relative w-full rounded-xl border border-border"}`}
+      style={
+        isFullScreen ? { marginTop: 0 } : { height: "60vh", minHeight: "450px" }
+      }
+    >
+      {/* Decorative ambient background */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+        <div
+          className="absolute -top-40 -left-20 rounded-full bg-accent/5"
+          style={{ width: 600, height: 600, filter: "blur(120px)" }}
+        />
+        <div
+          className="absolute -bottom-40 -right-20 rounded-full bg-primary/5"
+          style={{ width: 500, height: 500, filter: "blur(100px)" }}
+        />
+      </div>
+
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 pl-5 pr-14 py-3 border-b border-border bg-surface shrink-0">
+        <div className="flex flex-wrap items-center gap-4">
+          <Button variant="outline" size="sm" onClick={onStartOver}>
+            <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Start Over
+          </Button>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              Generated Manifest
-            </h1>
-            <p className="text-muted-foreground">
-              Review your manifest and proceed to the project wizard
+            <div className="flex items-center gap-3">
+              <h1 className="text-base font-bold tracking-wide">
+                Generated Manifest
+              </h1>
+              <span
+                className={`text-xs px-2 py-0.5 rounded font-mono ${viewData.overallScore >= 80 ? "bg-success/10 text-success border-success/20" : viewData.overallScore >= 50 ? "bg-warning/10 text-warning border-warning/20" : "bg-destructive/10 text-destructive border-destructive/20"} border`}
+              >
+                {viewData.overallScore}% Score
+              </span>
+            </div>
+            <p className="text-xs mt-0.5 text-muted-foreground font-mono">
+              {viewData.system} &middot; {viewData.architecture} &middot;{" "}
+              {viewData.contexts.length} contexts
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onRegenerate}>
-              ← Back
-            </Button>
-          </div>
         </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            onClick={() => {
+              setActiveTab("context-map");
+              setActiveContext(null);
+            }}
+            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "context-map" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+          >
+            <Network className="w-3.5 h-3.5 mr-1.5" /> Context Map
+          </button>
+          <button
+            onClick={() => setActiveTab("hexagonal")}
+            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "hexagonal" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+          >
+            <Hexagon className="w-3.5 h-3.5 mr-1.5" /> Hexagonal
+          </button>
+          <button
+            onClick={() => setActiveTab("mermaid")}
+            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "mermaid" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+          >
+            <Component className="w-3.5 h-3.5 mr-1.5" /> Mermaid
+          </button>
+          <button
+            onClick={() => setActiveTab("validation")}
+            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "validation" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Validation
+          </button>
+        </div>
+        <button
+          onClick={() => setIsFullScreen(!isFullScreen)}
+          className="absolute right-3 top-3 flex items-center p-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
+          title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+        >
+          {isFullScreen ? (
+            <Minimize2 className="w-4 h-4" />
+          ) : (
+            <Maximize2 className="w-4 h-4" />
+          )}
+        </button>
+      </header>
 
-        {/* Confidence Score */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Confidence Score
-                </h3>
-                <p className="text-2xl font-bold text-foreground">
-                  {(confidence * 100).toFixed(0)}%
-                </p>
-              </div>
-              <Badge className={confidenceColor}>
-                {confidence >= 0.8
-                  ? "High"
-                  : confidence >= 0.6
-                    ? "Medium"
-                    : "Low"}
-              </Badge>
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground">
-              <p>
-                Model: {metadata.model} • Processing: {metadata.processingTime}
-                ms • Tokens: {metadata.tokensUsed}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <main className="relative z-10 flex flex-1 overflow-hidden">
+        <ManifestYamlSidebar
+          yamlString={localManifestYaml}
+          viewData={viewData}
+          activeContextName={activeTab === "hexagonal" ? activeContext : null}
+        />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Manifest Preview */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Manifest YAML</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopyToClipboard}
-                  >
-                    Copy
-                  </Button>
+        <div
+          className="flex-1 relative bg-background overflow-hidden"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)",
+            backgroundSize: "20px 20px",
+          }}
+        >
+          {activeTab === "context-map" && (
+            <div className="absolute inset-0 overflow-auto custom-scrollbar">
+              <ContextMapView
+                viewData={viewData}
+                onSelectContext={handleSelectContext}
+                isFullScreen={isFullScreen}
+              />
+            </div>
+          )}
+          {activeTab === "hexagonal" && (
+            <div className="absolute inset-0 overflow-auto custom-scrollbar">
+              {activeContext ? (
+                <HexagonalArchitectureView
+                  context={
+                    viewData.contexts.find((c) => c.name === activeContext)!
+                  }
+                  onBack={() => {
+                    setActiveTab("context-map");
+                    setActiveContext(null);
+                  }}
+                  onRequestFix={(v) =>
+                    setActiveFixViolation(v as ValidationItem)
+                  }
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Select a context from the map
                 </div>
-              </CardHeader>
-              <CardContent>
-                <pre className="p-4 bg-muted text-foreground rounded-md overflow-x-auto text-sm font-mono max-h-96 overflow-y-auto">
-                  {manifest}
-                </pre>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Suggestions and Warnings */}
-          <div className="space-y-4">
-            {/* Warnings */}
-            {warnings.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-warning">
-                    ⚠️ Warnings
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm">
-                    {warnings.map((warning, index) => (
-                      <li
-                        key={index}
-                        className="text-foreground"
-                      >
-                        • {warning}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Suggestions */}
-            {suggestions.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-info">
-                    💡 Suggestions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2 text-sm">
-                    {suggestions.map((suggestion, index) => (
-                      <li
-                        key={index}
-                        className="text-foreground"
-                      >
-                        • {suggestion}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+          {activeTab === "mermaid" && (
+            <MermaidDiagramView mermaidCode={mermaidCode} />
+          )}
+          {activeTab === "validation" && (
+            <div className="absolute inset-0 overflow-auto custom-scrollbar">
+              <ValidationReportView
+                viewData={viewData}
+                onRequestFix={(v) => setActiveFixViolation(v)}
+              />
+            </div>
+          )}
         </div>
+      </main>
 
-        {/* Action Buttons */}
-        <div className="flex justify-end gap-4">
+      <footer className="relative z-10 flex items-center justify-between px-5 py-3 border-t border-border bg-surface shrink-0">
+        <div className="flex gap-3">
           <Button variant="outline" onClick={onRegenerate}>
-            Regenerate
-          </Button>
-          <Button onClick={handleUseManifest} size="lg">
-            Use This Manifest →
+            <RefreshCw className="w-4 h-4 mr-1.5" /> Regenerate
           </Button>
         </div>
-      </div>
+        <Button
+          onClick={() => onApprove(localManifestYaml)}
+          disabled={hasFailures}
+          className={
+            !hasFailures
+              ? "bg-gradient-to-br from-accent to-amber-600 text-black hover:shadow-lg hover:shadow-accent/30 transition-all"
+              : ""
+          }
+        >
+          Use This Manifest <ArrowRight className="w-4 h-4 ml-1.5" />
+        </Button>
+      </footer>
+
+      <ManifestAutoFixDrawer
+        isOpen={!!activeFixViolation}
+        onClose={() => setActiveFixViolation(null)}
+        violation={activeFixViolation}
+        currentYaml={localManifestYaml}
+        onApply={(patchedYaml) => {
+          setLocalManifestYaml(patchedYaml);
+          setActiveFixViolation(null);
+        }}
+      />
     </div>
   );
 }
-
-// Made with Bob

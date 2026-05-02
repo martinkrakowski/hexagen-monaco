@@ -9,6 +9,7 @@ import { useCloudLLM } from "./hooks/useCloudLlm";
 import { useCloudConnection } from "./hooks/useCloudConnection";
 import { useSecretVault } from "@/lib/vault-context";
 import { getClientProviders } from "@hexagen/local-llm";
+
 import {
   type Violation,
   type AISuggestion,
@@ -17,7 +18,7 @@ import {
 
 import { WakingUpCard } from "./WakingUpCard";
 import { ModelProgressCard } from "./ModelProgressCard";
-import { ModelSettingsView } from "./ModelSettingsView";
+import { ModelSettingsView } from "@hexagen/model-settings";
 import { UnavailableCard } from "./UnavailableCard";
 import { CloudModelSettingsView } from "./CloudModelSettingsView";
 import { CloudChatInterface } from "./CloudChatInterface";
@@ -129,7 +130,7 @@ export function GovernanceAssistantPanel({
   const cloudLLM = useCloudLLM();
   const cloudConnection = useCloudConnection();
   const vault = useSecretVault();
-  
+
   // Set vault on cloudLLM when it changes
   useEffect(() => {
     cloudLLM.setVault(vault);

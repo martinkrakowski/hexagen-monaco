@@ -46,6 +46,7 @@ package_rules:
       - '@hexagen/visualization'
       - '@hexagen/report-governance'
       - '@hexagen/transaction-system'
+      - '@hexagen/agentic-interaction'
 
   - name: 'intent-compiler'
     allowed_imports:
@@ -115,3 +116,9 @@ package_rules:
       - '@hexagen/messaging'
       - '@hexagen/project-configuration'
       - '@hexagen/sync'
+
+  - name: 'model-settings'
+    allowed_imports:
+      - '@hexagen/shared'
+      - '@hexagen/ui'
+      - '@hexagen/local-llm'

@@ -7,6 +7,7 @@ export * from "./in-memory-event-bus.adapter.js";
 export * from "./linter-report-resource.adapter.js";
 export * from "./linter.adapter.js";
 export * from "./manifest-diff.adapter.js";
+export * from "./manifest-generation.adapter.js";
 export * from "./manifest-io.js";
 export * from "./manifest-resource.adapter.js";
 export * from "./manifest-write.adapter.js";

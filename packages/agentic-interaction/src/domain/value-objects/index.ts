@@ -6,17 +6,17 @@ export type {
   ProjectDescription,
   ValidationError,
   ValidationResult,
-} from "./project-description";
+} from "./project-description.js";
 export {
   ProjectDescriptionValidator,
   createProjectDescription,
-} from "./project-description";
+} from "./project-description.js";
 
 export type {
   GeneratedManifest,
   GenerationMetadata,
-} from "./generated-manifest";
+} from "./generated-manifest.js";
 export {
   GeneratedManifestValidator,
   createGeneratedManifest,
-} from "./generated-manifest";
+} from "./generated-manifest.js";

@@ -3,6 +3,7 @@
 export * from "./governance-read.port.js";
 export * from "./linter.port.js";
 export * from "./manifest-diff.port.js";
+export * from "./manifest-generation.port.js";
 export * from "./manifest-write.port.js";
 export * from "./project-configuration-read.port.js";
 export * from "./report-governance.port.js";

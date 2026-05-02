@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Github } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 
 import { SummarySection } from "./SummarySection";
 
@@ -44,7 +44,7 @@ export function ExportActions({
           disabled={isExporting}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Github className="w-4 h-4" />
+          <Upload className="w-4 h-4" />
           {isAuthenticated ? "Push to GitHub" : "Sign in to GitHub"}
         </button>
       </div>

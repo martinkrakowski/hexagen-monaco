@@ -11,6 +11,7 @@ const config: Config = {
     "./src/**/*.{ts,tsx}",
     "./features/**/*.{ts,tsx}",
     "../../packages/ui/src/**/*.{ts,tsx}",
+    "../../packages/model-settings/src/**/*.{ts,tsx}",
   ],
   prefix: "",
   theme: {
@@ -78,6 +79,13 @@ const config: Config = {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
+        },
+        manifest: {
+          "context-core": "hsl(var(--manifest-context-core) / <alpha-value>)",
+          "context-supporting":
+            "hsl(var(--manifest-context-supporting) / <alpha-value>)",
+          "context-driver":
+            "hsl(var(--manifest-context-driver) / <alpha-value>)",
         },
         /* Color aliases for semantic mapping (replaces hardcoded Tailwind colors) */
         blue: "hsl(var(--info) / <alpha-value>)",

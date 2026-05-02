@@ -49,6 +49,7 @@ packages/*/src/**/*.js
 # ───────────────────────────────────────────────
 # Logs and debug files
 # ───────────────────────────────────────────────
+docs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

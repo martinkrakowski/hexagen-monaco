@@ -9,8 +9,9 @@ import {
   createProjectDescription,
   type ProjectDescription,
 } from "@hexagen/agentic-interaction";
-import { CloudLLMPipelineAdapter } from "@hexagen/agentic-interaction";
+import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
+import { WebLLMAdapter } from "@hexagen/local-llm";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -18,6 +19,8 @@ interface GenerateManifestRequestBody {
   platform?: string;
   deployment?: string;
   additionalContext?: string;
+  preferLocal?: boolean;
+  modelId?: string;
 }
 
 interface GenerateManifestSuccessResponse {
@@ -30,6 +33,7 @@ interface GenerateManifestSuccessResponse {
     model: string;
     processingTime: number;
     tokensUsed: number;
+    provider: string;
   };
 }
 
@@ -50,10 +54,20 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
+  let body: GenerateManifestRequestBody;
   try {
-    // Parse request body
-    const body: GenerateManifestRequestBody = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Invalid JSON in request body",
+      },
+      { status: 400 },
+    );
+  }
 
+  try {
     // Validate required fields
     if (!body.description || typeof body.description !== "string") {
       return NextResponse.json(
@@ -89,33 +103,60 @@ export async function POST(
     // Wire up dependencies
     const secretVault = new EnvironmentSecretVaultAdapter();
 
-    // Configure LLM pipeline with fallback chain
-    const llmPipeline = new CloudLLMPipelineAdapter({
-      fallbackChain: {
-        primary: {
-          providerId: "openai",
-          baseUrl: "https://api.openai.com/v1",
-          model: "gpt-4o",
-          apiKeyEnvVar: "OPENAI_API_KEY",
+    // Create WebLLM adapter if in browser environment
+    let webLlmAdapter = null;
+    try {
+      // Only create WebLLM adapter if we're in a browser environment
+      // This will throw an error in a server-side environment where Worker is not available
+      if (typeof Worker !== "undefined") {
+        webLlmAdapter = new WebLLMAdapter({
+          // createWorker: () => new Worker(...),
+          // When deployed, provide the actual worker factory
+        });
+      }
+    } catch (error) {
+      // If we can't create the WebLLM adapter, we'll continue without it
+      // and fall back to cloud providers
+      console.warn("WebLLM adapter initialization failed:", error);
+    }
+
+    // Configure the fallback chain for cloud providers
+    const fallbackChain = {
+      primary: {
+        providerId: "openai" as const,
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4o",
+        apiKeyEnvVar: "OPENAI_API_KEY",
+        temperature: 0.3,
+        maxTokens: 4000,
+      },
+      fallbacks: [
+        {
+          providerId: "anthropic" as const,
+          baseUrl: "https://api.anthropic.com/v1",
+          model: "claude-3-5-sonnet-20241022",
+          apiKeyEnvVar: "ANTHROPIC_API_KEY",
           temperature: 0.3,
           maxTokens: 4000,
         },
-        fallbacks: [
-          {
-            providerId: "anthropic",
-            baseUrl: "https://api.anthropic.com/v1",
-            model: "claude-3-5-sonnet-20241022",
-            apiKeyEnvVar: "ANTHROPIC_API_KEY",
-            temperature: 0.3,
-            maxTokens: 4000,
-          },
-        ],
-      },
+      ],
+    };
+
+    // Configure LLM provider selector with preference option from request
+    const preferLocal =
+      body.preferLocal === undefined ? false : body.preferLocal;
+
+    // Create the selector adapter
+    const llmAdapter = new LLMProviderSelectorAdapter({
+      webLlmAdapter,
+      preferLocal, // Use cloud by default for backward compatibility
+      validateLocalLLM: true,
+      fallbackChain,
       secretVault,
     });
 
     // Create and execute use case
-    const useCase = new GenerateManifestFromDescriptionUseCase(llmPipeline);
+    const useCase = new GenerateManifestFromDescriptionUseCase(llmAdapter);
     const result = await useCase.execute({
       description: projectDescription,
     });
@@ -145,12 +186,16 @@ export async function POST(
           model: result.manifest.metadata.model,
           processingTime: result.manifest.metadata.processingTime,
           tokensUsed: result.manifest.metadata.tokensUsed,
+          provider: result.manifest.metadata.provider || "unknown",
         },
       },
       { status: 200 },
     );
   } catch (error) {
-    console.error("Error generating manifest:", error);
+    // Error logging (not for production)
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Error generating manifest:", error);
+    }
 
     return NextResponse.json(
       {
