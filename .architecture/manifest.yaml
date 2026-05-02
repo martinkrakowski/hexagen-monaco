@@ -1121,7 +1121,8 @@ bounded_contexts:
             - ManifestDiffPort
             - ReportGovernancePort
             - TransactionManagerPort
-            - ManifestGenerationPortinfrastructure:
+            - ManifestGenerationPort
+      infrastructure:
         adapters:
           - MCPServerAdapter
           - ProjectConfigurationReadAdapter
