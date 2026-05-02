@@ -6,7 +6,6 @@ import {
   Download,
   Upload,
   ChevronRight,
-  Github,
   FileText,
   PlusCircle,
 } from "lucide-react";
@@ -185,7 +184,7 @@ export function ProjectMenu({
               isExporting ? "opacity-50 cursor-not-allowed" : "hover:bg-muted"
             }`}
           >
-            <Github className="w-4 h-4" />
+            <Upload className="w-4 h-4" />
             {isAuthenticated ? "Push to GitHub" : "Sign in to GitHub"}
           </button>
         </div>
