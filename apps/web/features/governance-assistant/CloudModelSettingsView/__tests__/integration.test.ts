@@ -1,4 +1,5 @@
-import { describe, it, assert } from "node:test";
+import { describe, it } from "node:test";
+import assert from "node:assert";
 
 /**
  * Integration tests for CloudModelSettingsView vault integration

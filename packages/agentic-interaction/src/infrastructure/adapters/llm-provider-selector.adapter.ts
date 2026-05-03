@@ -91,7 +91,7 @@ export class LLMProviderSelectorAdapter implements SendStructuredRequestPort {
     if (this.config.localModelId) {
       try {
         return await webLlmAdapter.hasModelInCache(this.config.localModelId);
-      } catch (_error) {
+      } catch {
         // If there's an error checking cache, assume the local LLM is not available
         return false;
       }
@@ -158,7 +158,7 @@ export class LLMProviderSelectorAdapter implements SendStructuredRequestPort {
           if (!hasError) return;
 
           // Otherwise, we'll fall back to cloud processing
-        } catch (_error) {
+        } catch {
           // Local processing error, fall back to cloud
           // We continue to the next section to use cloud providers
         }
