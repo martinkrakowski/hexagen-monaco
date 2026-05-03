@@ -2,7 +2,7 @@ import { Button, Badge } from "@hexagen/ui";
 import { ManifestPreview } from "../ManifestPreview";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
-import { WELCOME_FLOW_ERROR_MESSAGES } from "../ModelSelectionFlow/WelcomeFlowError";
+import { WELCOME_FLOW_ERROR_MESSAGES } from "./WelcomeFlowError";
 import type { StateViewProps } from "./types";
 
 const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {

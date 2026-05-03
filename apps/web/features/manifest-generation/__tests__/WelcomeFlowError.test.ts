@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   WELCOME_FLOW_ERROR_MESSAGES,
   type WelcomeFlowErrorCode,
-} from "../ModelSelectionFlow/WelcomeFlowError";
+} from "../WelcomeScreen/WelcomeFlowError";
 
 const ALL_ERROR_CODES: WelcomeFlowErrorCode[] = [
   "network_failure",
