@@ -94,7 +94,11 @@ export function repairJSON(raw: string): string | null {
     c === "\n" || c === "\r" || c === "\t" ? c : "",
   );
 
-  // 3. Truncate to last complete JSON structure (skip braces inside strings)
+  // 3. Fix unterminated strings
+  s = fixUnterminatedStrings(s);
+  s = fixMultilineUnterminatedString(s);
+
+  // 4. Truncate to last complete JSON structure (skip braces inside strings)
   let depth = 0;
   let lastValidClose = -1;
   let started = false;
@@ -131,17 +135,88 @@ export function repairJSON(raw: string): string | null {
     s = s.slice(startIdx, lastValidClose + 1);
   } else if (startIdx !== -1) {
     s = s.slice(startIdx);
-    // 4. Balance incomplete JSON (add missing closing braces/brackets)
+    // 5. Balance incomplete JSON (add missing closing braces/brackets)
+    s = balanceJSON(s);
+  } else if (lastValidClose > 0) {
+    s = s.slice(0, lastValidClose + 1);
     s = balanceJSON(s);
   }
 
-  // 5. Try parse
+  // 6. Try parse
   try {
     JSON.parse(s);
     return s;
   } catch {
     return null;
   }
+}
+
+function fixUnterminatedStrings(json: string): string {
+  const lines = json.split("\n");
+  const fixedLines: string[] = [];
+
+  for (const line of lines) {
+    const quotes = (line.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) {
+      const firstOpenQuote = line.indexOf('"');
+      if (firstOpenQuote > 0) {
+        fixedLines.push(line.substring(0, firstOpenQuote));
+      }
+    } else {
+      fixedLines.push(line);
+    }
+  }
+
+  const result = fixedLines.join("\n");
+
+  if (result !== json) {
+    return balanceJSON(result);
+  }
+
+  return json;
+}
+
+function fixMultilineUnterminatedString(json: string): string {
+  let inString = false;
+  let escaped = false;
+  const chars: string[] = [];
+
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+
+    if (escaped) {
+      chars.push(ch);
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\" && inString) {
+      escaped = true;
+      chars.push(ch);
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      chars.push(ch);
+      continue;
+    }
+
+    if (inString) {
+      chars.push(ch);
+      continue;
+    }
+
+    chars.push(ch);
+  }
+
+  let result = chars.join("");
+
+  if (inString) {
+    result = balanceJSON(result);
+  }
+
+  return result;
 }
 
 export function parseJSON<T>(

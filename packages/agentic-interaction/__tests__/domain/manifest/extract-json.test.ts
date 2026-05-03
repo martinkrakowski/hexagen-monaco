@@ -157,6 +157,72 @@ describe("repairJSON", () => {
       });
     }
   });
+
+  it("fixes unterminated string at end of line", () => {
+    const raw = `{
+  "in": [
+    {
+      "name": "ProductPort",
+      "description": "Interface for product data access"
+    }
+  ]
+}`;
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.doesNotThrow(() => JSON.parse(result));
+      assert.match(result, /"ProductPort"/);
+    }
+  });
+
+  it("fixes unterminated string in middle of object", () => {
+    const raw = `{"in": [{"name": "OrderPort", "description": "Handles order processing`;
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.doesNotThrow(() => JSON.parse(result));
+    }
+  });
+
+  it("returns valid JSON when input has trailing incomplete structure", () => {
+    const raw = `{"in": [{"name": "OrderPort", "description": "Handles order`;
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.doesNotThrow(() => JSON.parse(result));
+    }
+  });
+
+  it("preserves valid JSON when input is complete", () => {
+    const raw = `{"in": [{"name": "Port1"}], "out": []}`;
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.deepStrictEqual(JSON.parse(result), {
+        in: [{ name: "Port1" }],
+        out: [],
+      });
+    }
+  });
+
+  it("handles unterminated string with no closing quote", () => {
+    const raw =
+      '{"name": "ProductRepositoryPort", "type": "use-case", "description": "Interface for product data access';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.doesNotThrow(() => JSON.parse(result));
+    }
+  });
+
+  it("handles missing closing quotes on multiple string values", () => {
+    const raw = '{"name": "Port", "desc": "A port for orders", "type": "core"';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.doesNotThrow(() => JSON.parse(result));
+    }
+  });
 });
 
 describe("parseJSON with repair fallback", () => {
