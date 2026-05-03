@@ -17,6 +17,12 @@ export interface RawContext {
   adapters?: Array<{ name: string; type: string; implements: string }>;
 }
 
+export type BoundedContextType =
+  | "core"
+  | "supporting"
+  | "driver"
+  | "shared-kernel";
+
 function toKebabCase(input: string): string {
   return input
     .replace(/([a-z])([A-Z])/g, "$1-$2")
@@ -31,6 +37,27 @@ function ensurePortSuffix(name: string): string {
   const trimmed = name.trim();
   if (trimmed.endsWith("Port")) return trimmed;
   return `${trimmed}Port`;
+}
+
+/**
+ * Coerce a context type string to a valid BoundedContextType.
+ * Defaults to 'core' if the type is empty or invalid.
+ */
+export function coerceContextType(type: string): BoundedContextType {
+  const validTypes: BoundedContextType[] = [
+    "core",
+    "supporting",
+    "driver",
+    "shared-kernel",
+  ];
+  const trimmed = (type ?? "").trim().toLowerCase();
+
+  if (validTypes.includes(trimmed as BoundedContextType)) {
+    return trimmed as BoundedContextType;
+  }
+
+  // Default to core for empty or invalid types
+  return "core";
 }
 
 export function coercePortName(name: string): string {
@@ -69,6 +96,7 @@ export function coerceRawTopology(contexts: RawContext[]): RawContext[] {
   return contexts.map((ctx) => ({
     ...ctx,
     name: coerceContextName(ctx.name),
+    type: coerceContextType(ctx.type), // Apply type coercion here
     ports: ctx.ports ? coerceRawPorts(ctx.ports) : ctx.ports,
   }));
 }

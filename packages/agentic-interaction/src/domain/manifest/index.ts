@@ -45,11 +45,14 @@ export type {
 
 export { renderManifestYaml, renderDraft, verifyToken } from "./render-yaml.js";
 
-export { extractJSON, parseJSON } from "./extract-json.js";
+export { extractJSON, parseJSON, balanceJSON } from "./extract-json.js";
 
 export {
   coerceRawTopology,
   coerceRawPorts,
   coerceContextName,
   coercePortName,
+  coerceContextType,
 } from "./coerce-raw-topology.js";
+
+export type { BoundedContextType } from "./coerce-raw-topology.js";

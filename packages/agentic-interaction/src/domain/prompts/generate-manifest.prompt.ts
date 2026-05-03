@@ -23,16 +23,20 @@ export const CONTEXT_LIST_SYSTEM_PROMPT = `You are a JSON generator. You output 
 No explanations. No markdown. No code blocks. Raw JSON only.
 
 Output a JSON array of objects. Each object represents a bounded context and must have:
-- "name": string (kebab-case)
-- "type": "core" | "supporting" | "driver" | "shared-kernel"
-- "description": string (brief summary)
+- "name": string (kebab-case, lowercase with hyphens only)
+- "type": MUST be one of: "core", "supporting", "driver", "shared-kernel"
+- "description": string (brief one-sentence summary)
+
+CRITICAL: The "type" field MUST be one of the 4 exact values above. Never output an empty string or any other value.
 
 Maximum 5 contexts. Minimum 1.
 Context names: lowercase kebab-case with hyphens only (e.g. "order-management", not "OrderManagement").
 
 Decompose multi-domain descriptions into separate contexts. A description mentioning distinct concerns (e.g. "products, orders, users, payments") should produce multiple contexts, not one monolithic context.
 
-CORRECT output: [{"name": "content-management", "type": "core", "description": "Manages articles"}]
+CORRECT output: [{"name": "content-management", "type": "core", "description": "Manages articles"}, {"name": "payment-processing", "type": "supporting", "description": "Handles payment transactions"}]
+
+INCORRECT output: [{"name": "content", "type": "", "description": "..."}, {"name": "ContentManagement", "type": "core", ...}]
 
 Output:`;
 
@@ -43,10 +47,17 @@ Output a JSON object with two arrays: "in" and "out". These represent the ports 
 - "in": array of objects with "name" (PascalCase ending in Port), "type" (string), "description" (string)
 - "out": array of objects with "name" (PascalCase ending in Port), "type" (string), "description" (string)
 
+CRITICAL: Each port object MUST have exactly 3 fields with valid strings:
+  - "name": string, must end with "Port" (e.g. "CreateOrderPort", not "CreateOrder")
+  - "type": string (e.g. "UseCase", "Repository", "Service")
+  - "description": string, non-empty (e.g. "Creates a new order")
+
 Each context must have at least 1 inbound port.
 Outbound ports represent infrastructure dependencies: repositories, external APIs, message queues, email services. Most contexts need at least 1 outbound port.
 
 CORRECT output: {"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Creates a new order"}], "out": [{"name": "OrderRepositoryPort", "type": "Repository", "description": "Persists orders to storage"}]}
+
+INCORRECT output: {in: [CreateOrderPort], out: []}, {in: [{"name": "CreateOrder", ...}], ...}
 
 Output:`;
 
@@ -54,12 +65,16 @@ export const ADAPTERS_LIST_SYSTEM_PROMPT = `You are a JSON generator. You output
 No explanations. No markdown. No code blocks. Raw JSON only.
 
 Output a JSON array of objects representing infrastructure adapters for the given ports.
-Each adapter must have:
-- "name": string (PascalCase ending in Adapter)
-- "type": string (e.g. "Repository", "Controller")
-- "implements": string (the exact name of a port from the provided list)
+Each adapter must have exactly 3 fields:
+- "name": string (PascalCase ending in Adapter, e.g. "PostgresOrderAdapter")
+- "type": string (e.g. "Repository", "Controller", "Gateway")
+- "implements": string (the EXACT name of a port from the provided list, e.g. "OrderRepositoryPort")
 
-CORRECT output: [{"name": "PostgresOrderAdapter", "type": "Repository", "implements": "OrderRepositoryPort"}]
+CRITICAL: The "implements" field must match a port name exactly. Only output adapters for ports provided.
+
+CORRECT output: [{"name": "PostgresOrderAdapter", "type": "Repository", "implements": "OrderRepositoryPort"}, {"name": "OrderControllerAdapter", "type": "Controller", "implements": "CreateOrderPort"}]
+
+INCORRECT output: [{name: "PostgresAdapter", type: "Repo", implements: "OrderPort"}, ...]
 
 Output:`;
 

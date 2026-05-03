@@ -31,6 +31,27 @@ import {
 } from "@hexagen/agentic-interaction";
 import { logger } from "../../lib/structured-logger";
 
+// Coerce context type locally to handle empty strings and invalid types
+const coerceContextType = (
+  type: string,
+): "core" | "supporting" | "driver" | "shared-kernel" => {
+  const validTypes: readonly (
+    | "core"
+    | "supporting"
+    | "driver"
+    | "shared-kernel"
+  )[] = ["core", "supporting", "driver", "shared-kernel"];
+  const trimmed = (type ?? "").trim().toLowerCase();
+  if (
+    validTypes.includes(
+      trimmed as "core" | "supporting" | "driver" | "shared-kernel",
+    )
+  ) {
+    return trimmed as "core" | "supporting" | "driver" | "shared-kernel";
+  }
+  return "core";
+};
+
 const MAX_RETRIES = 2;
 
 export type Port = {
@@ -139,7 +160,10 @@ async function attemptContextList(
         continue;
       }
 
-      const parsed = parseJSON<ContextListEntry[]>(content);
+      const parsed =
+        parseJSON<Array<{ name: string; type: string; description: string }>>(
+          content,
+        );
       if (!parsed.ok) {
         const errorMsg = "error" in parsed ? parsed.error : "Unknown error";
         logger.error(
@@ -154,7 +178,16 @@ async function attemptContextList(
         continue;
       }
 
-      const result = ContextListSchema.safeParse(parsed.data);
+      // Apply runtime coercion: normalize types and fields
+      const coercedContexts = parsed.data.map(
+        (ctx: { name?: string; type?: string; description?: string }) => ({
+          name: String(ctx.name || "unnamed-context").trim(),
+          type: coerceContextType(String(ctx.type || "")),
+          description: String(ctx.description || ctx.name || "").trim(),
+        }),
+      );
+
+      const result = ContextListSchema.safeParse(coercedContexts);
       if (!result.success) {
         const errors = result.error.issues
           .map((i) => `${i.path.join(".")}: ${i.message}`)

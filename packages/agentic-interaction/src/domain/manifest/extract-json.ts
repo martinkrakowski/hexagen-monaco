@@ -10,6 +10,78 @@ export function extractJSON(raw: string): string {
   return raw.trim();
 }
 
+function countBraces(str: string): { open: number; close: number } {
+  let open = 0;
+  let close = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of str) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "{") open++;
+    if (char === "}") close++;
+  }
+
+  return { open, close };
+}
+
+function countBrackets(str: string): { open: number; close: number } {
+  let open = 0;
+  let close = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of str) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "[") open++;
+    if (char === "]") close++;
+  }
+
+  return { open, close };
+}
+
+export function balanceJSON(json: string): string {
+  let result = json;
+
+  // Balance braces
+  const braces = countBraces(json);
+  if (braces.open > braces.close) {
+    result += "}".repeat(braces.open - braces.close);
+  }
+
+  // Balance brackets
+  const brackets = countBrackets(result);
+  if (brackets.open > brackets.close) {
+    result += "]".repeat(brackets.open - brackets.close);
+  }
+
+  return result;
+}
+
 export function repairJSON(raw: string): string | null {
   let s = raw.trim();
 
@@ -59,9 +131,11 @@ export function repairJSON(raw: string): string | null {
     s = s.slice(startIdx, lastValidClose + 1);
   } else if (startIdx !== -1) {
     s = s.slice(startIdx);
+    // 4. Balance incomplete JSON (add missing closing braces/brackets)
+    s = balanceJSON(s);
   }
 
-  // 4. Try parse
+  // 5. Try parse
   try {
     JSON.parse(s);
     return s;

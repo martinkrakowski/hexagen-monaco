@@ -30,9 +30,9 @@ import {
   renderManifestYaml,
   normalizeDraft,
   draftToManifest,
-  coerceRawTopology,
   coerceRawPorts,
 } from "../../domain/index.js";
+import { coerceContextType } from "../../domain/manifest/coerce-raw-topology.js";
 import type { ManifestDraft } from "../../domain/index.js";
 
 export enum ManifestWarningCategory {
@@ -133,6 +133,13 @@ export class GenerateManifestFromDescriptionUseCase {
       tokens += result.value.usage?.totalTokens || 0;
       model = result.value.modelId || model;
 
+      if (!result.value.content) {
+        console.log(
+          `[manifest-gen] phase=${phase}, attempt=${attempt}, emptyResponse=true`,
+        );
+        continue;
+      }
+
       const parsed = parseJSON<T>(result.value.content);
       if (parsed.ok) {
         if (parsed.repairApplied) repairApplied = true;
@@ -207,7 +214,7 @@ export class GenerateManifestFromDescriptionUseCase {
         const contextResult = await this.callWithRetries<
           Array<{
             name: string;
-            type: "core" | "supporting" | "driver" | "shared-kernel";
+            type: string;
             description: string;
           }>
         >(
@@ -220,7 +227,15 @@ export class GenerateManifestFromDescriptionUseCase {
               : RETRY_PROMPTS.contextList.attempt2(request.description.text),
           150,
         );
-        contexts = coerceRawTopology(contextResult.data) as Array<{
+
+        // Apply runtime coercion: normalize types and names
+        const coercedContexts = contextResult.data.map((ctx) => ({
+          name: String(ctx.name || "unnamed-context").trim(),
+          type: coerceContextType(String(ctx.type || "")),
+          description: String(ctx.description || ctx.name || "").trim(),
+        }));
+
+        contexts = coercedContexts as Array<{
           name: string;
           type: "core" | "supporting" | "driver" | "shared-kernel";
           description: string;
