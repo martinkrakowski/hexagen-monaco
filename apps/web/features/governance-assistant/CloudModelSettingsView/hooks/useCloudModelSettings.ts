@@ -1,4 +1,5 @@
-import { useReducer, useCallback } from "react";
+import { useReducer, useCallback, useEffect } from "react";
+import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import type { CloudSettings } from "../types";
 
 interface CloudFormState {
@@ -7,6 +8,7 @@ interface CloudFormState {
   apiKey: string;
   rememberKey: boolean;
   isStoring: boolean;
+  loadingSettings: boolean;
 }
 
 type CloudFormAction =
@@ -15,7 +17,9 @@ type CloudFormAction =
   | { type: "SET_API_KEY"; payload: string }
   | { type: "SET_REMEMBER_KEY"; payload: boolean }
   | { type: "SET_STORING"; payload: boolean }
-  | { type: "RESET_FORM" };
+  | { type: "SET_LOADING_SETTINGS"; payload: boolean }
+  | { type: "RESET_FORM" }
+  | { type: "LOAD_SETTINGS"; payload: CloudSettings };
 
 const initialState: CloudFormState = {
   selectedProvider: "",
@@ -23,6 +27,7 @@ const initialState: CloudFormState = {
   apiKey: "",
   rememberKey: false,
   isStoring: false,
+  loadingSettings: false,
 };
 
 function cloudFormReducer(
@@ -40,6 +45,16 @@ function cloudFormReducer(
       return { ...state, rememberKey: action.payload };
     case "SET_STORING":
       return { ...state, isStoring: action.payload };
+    case "SET_LOADING_SETTINGS":
+      return { ...state, loadingSettings: action.payload };
+    case "LOAD_SETTINGS":
+      return {
+        ...state,
+        selectedProvider: action.payload.providerId,
+        selectedModel: action.payload.modelId,
+        apiKey: action.payload.apiKey,
+        loadingSettings: false,
+      };
     case "RESET_FORM":
       return {
         ...initialState,
@@ -51,7 +66,11 @@ function cloudFormReducer(
   }
 }
 
-export function useCloudModelSettings() {
+interface UseCloudModelSettingsProps {
+  vault?: UserSecretVaultPort;
+}
+
+export function useCloudModelSettings(props?: UseCloudModelSettingsProps) {
   const [state, dispatch] = useReducer(cloudFormReducer, initialState);
 
   const setProvider = useCallback((provider: string) => {
@@ -89,6 +108,72 @@ export function useCloudModelSettings() {
     };
   }, [state.apiKey, state.selectedModel, state.selectedProvider]);
 
+  /**
+   * Load settings from vault on mount
+   */
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!props?.vault) return;
+
+      dispatch({ type: "SET_LOADING_SETTINGS", payload: true });
+      try {
+        const result = await props.vault.retrieve();
+        if (result.success && result.value) {
+          // Parse the stored settings (should be JSON string)
+          try {
+            const settings = JSON.parse(result.value) as CloudSettings;
+            dispatch({ type: "LOAD_SETTINGS", payload: settings });
+          } catch {
+            // If JSON parse fails, just ignore and continue with empty form
+            dispatch({ type: "SET_LOADING_SETTINGS", payload: false });
+          }
+        } else {
+          dispatch({ type: "SET_LOADING_SETTINGS", payload: false });
+        }
+      } catch (error) {
+        console.error("[CloudModelSettings] Failed to load settings:", error);
+        dispatch({ type: "SET_LOADING_SETTINGS", payload: false });
+      }
+    };
+
+    loadSettings();
+  }, [props?.vault]);
+
+  /**
+   * Save settings to vault
+   */
+  const saveSettings = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
+    if (!props?.vault) {
+      return { ok: false, error: "Vault not available" };
+    }
+
+    const settings = getSettings();
+    try {
+      const result = await props.vault.store(
+        JSON.stringify(settings),
+        state.rememberKey,
+      );
+
+      if (result.success) {
+        return { ok: true };
+      } else {
+        const errorMsg =
+          result.error?.message || "Failed to save settings to vault";
+        return { ok: false, error: errorMsg };
+      }
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error
+          ? error.message
+          : "Unknown error saving settings";
+      console.error("[CloudModelSettings] Save error:", errorMsg);
+      return { ok: false, error: errorMsg };
+    }
+  }, [props?.vault, getSettings, state.rememberKey]);
+
   return {
     state,
     setProvider,
@@ -98,5 +183,6 @@ export function useCloudModelSettings() {
     setStoring,
     resetForm,
     getSettings,
+    saveSettings,
   };
 }

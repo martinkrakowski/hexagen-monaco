@@ -1,10 +1,6 @@
 import { ok, err } from "@hexagen/shared";
 import type { Result } from "@hexagen/shared";
-import type {
-  VaultState,
-  VaultStatus,
-  VaultError,
-} from "@hexagen/agentic-interaction";
+import type { VaultStatus, VaultError } from "@hexagen/agentic-interaction";
 import type { UserSecretVaultPort } from "../../application/ports/user-secret-vault.port.js";
 
 /**
@@ -39,7 +35,7 @@ export class EphemeralSecretVaultAdapter implements UserSecretVaultPort {
 
   async store(
     apiKey: string,
-    persistOrPassword?: boolean | string,
+    _persistOrPassword?: boolean | string,
   ): Promise<Result<void, VaultError>> {
     // Validate the key is not empty
     if (!apiKey || apiKey.trim().length === 0) {

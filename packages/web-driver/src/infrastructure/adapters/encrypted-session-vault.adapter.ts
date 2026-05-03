@@ -1,10 +1,6 @@
 import { ok, err } from "@hexagen/shared";
 import type { Result } from "@hexagen/shared";
-import type {
-  VaultState,
-  VaultStatus,
-  VaultError,
-} from "@hexagen/agentic-interaction";
+import type { VaultStatus, VaultError } from "@hexagen/agentic-interaction";
 import type { UserSecretVaultPort } from "../../application/ports/user-secret-vault.port.js";
 
 const VAULT_STORAGE_KEY = "hexagen:vault:encrypted-payload";
@@ -199,7 +195,7 @@ export class EncryptedSessionVaultAdapter implements UserSecretVaultPort {
       throw new Error("Invalid encrypted payload format");
     }
 
-    const iv = this.base64ToBuffer(payload.iv);
+    const _iv = this.base64ToBuffer(payload.iv);
     const ciphertext = this.base64ToBuffer(payload.ciphertext);
 
     // Derive the same key used for encryption

@@ -9,11 +9,7 @@ import type {
   LLMProgressCallback,
   ModelMetadata,
 } from "../../domain/value-objects/index";
-import type {
-  LLMRequest,
-  LLMResponse,
-  SchemaValidationResult,
-} from "../../domain/value-objects/index";
+import type { LLMRequest, LLMResponse } from "../../domain/value-objects/index";
 import type {
   LLMCompletionRequest,
   LLMCompletionResponse,
@@ -25,11 +21,11 @@ import { validateStructuredOutput } from "@hexagen/prompt-compiler";
 
 /**
  * WebLLMAdapter
- * 
+ *
  * This adapter implements the interface for running LLMs directly in the browser
  * using WebGPU and the MLC WebLLM framework. It supports various local models
  * including Phi-3, Llama-3, Gemma-2, and Qwen.
- * 
+ *
  * Important implementation notes:
  * 1. This adapter requires a Worker factory function to be provided through config
  * 2. In Next.js (webpack 5), use: new Worker(new URL(..., import.meta.url), { type: 'module' })

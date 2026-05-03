@@ -1,6 +1,5 @@
 import type { WizardData } from "@hexagen/project-configuration";
-import type { Manifest } from "@hexagen/sync";
-import { ManifestSchema, BoundedContextSchema, PortConfigurationSchema } from "@hexagen/project-configuration";
+import { ManifestSchema, BoundedContextSchema } from "@hexagen/project-configuration";
 import yaml from "js-yaml";
 
 /**

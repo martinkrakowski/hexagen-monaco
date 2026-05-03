@@ -5,6 +5,21 @@
 import type { IValidateSpecPort } from "@hexagen/project-configuration";
 
 /**
+ * Type for validate spec request
+ */
+export interface ValidateSpecRequest {
+  spec: Record<string, unknown>;
+}
+
+/**
+ * Type for validate spec response
+ */
+export interface ValidateSpecResponse {
+  success: boolean;
+  errors?: string[];
+}
+
+/**
  * Fake implementation of `IValidateSpecPort`.
  *
  * Provides a `setBehavior` method so tests can inject a custom async
@@ -12,23 +27,25 @@ import type { IValidateSpecPort } from "@hexagen/project-configuration";
  * simply returns the input unchanged (echo).
  */
 export class FakeValidateSpecPort implements IValidateSpecPort {
-  private behavior: ((input: any) => Promise<any>) | null = null;
+  private behavior:
+    | ((input: ValidateSpecRequest) => Promise<ValidateSpecResponse>)
+    | null = null;
 
   /**
    * Register a custom implementation for the `execute` method.
    *
    * @param fn - Async function that receives the input and returns a result.
    */
-  setBehavior(fn: (input: any) => Promise<any>) {
+  setBehavior(fn: (input: ValidateSpecRequest) => Promise<ValidateSpecResponse>) {
     this.behavior = fn;
   }
 
   /** Execute the port – either the custom behavior or a default echo. */
-  async execute(input: any): Promise<any> {
+  async execute(input: ValidateSpecRequest): Promise<ValidateSpecResponse> {
     if (this.behavior) {
       return this.behavior(input);
     }
-    // Default happy‑path – echo the input.
-    return Promise.resolve(input);
+    // Default happy‑path – validation success.
+    return Promise.resolve({ success: true });
   }
 }

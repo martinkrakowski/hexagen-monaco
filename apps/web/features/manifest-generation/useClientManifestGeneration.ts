@@ -33,6 +33,12 @@ import { logger } from "../../lib/structured-logger";
 
 const MAX_RETRIES = 2;
 
+export type Port = {
+  name: string;
+  type: string;
+  description: string;
+};
+
 export type GenerationPhase =
   | "idle"
   | "topology"
@@ -67,6 +73,42 @@ async function sendAndExtract(
   return llmContext.sendStructuredPrompt(userPrompt, systemPrompt, signal);
 }
 
+/**
+ * Normalizes a port from string or object format to a typed Port object.
+ * Handles both direct string references and full object definitions.
+ */
+function normalizePort(input: unknown, defaultType: string): Port {
+  if (typeof input === "string") {
+    // String format: just a name
+    return {
+      name: input,
+      type: defaultType,
+      description: `Port ${input}`,
+    };
+  }
+
+  if (typeof input === "object" && input !== null) {
+    const obj = input as Record<string, unknown>;
+    if (typeof obj.name !== "string") {
+      throw new Error(
+        `Invalid port: missing or non-string name. Got: ${JSON.stringify(input)}`,
+      );
+    }
+    return {
+      name: obj.name,
+      type: typeof obj.type === "string" ? obj.type : defaultType,
+      description:
+        typeof obj.description === "string"
+          ? obj.description
+          : `Port ${obj.name}`,
+    };
+  }
+
+  throw new Error(
+    `Invalid port format: expected string or object, got ${typeof input}. Full value: ${JSON.stringify(input)}`,
+  );
+}
+
 async function attemptContextList(
   llmContext: LocalLLMContext,
   description: string,
@@ -87,37 +129,65 @@ async function attemptContextList(
         CONTEXT_LIST_SYSTEM_PROMPT,
         signal,
       );
-      if (!content) return { ok: false, error: "No response from LLM" };
+      if (!content) {
+        logger.error(`[manifest-gen] context-list: no response from LLM`);
+        if (attempt === MAX_RETRIES)
+          return { ok: false, error: "No response from LLM" };
+        logger.info(
+          `[manifest-gen] context-list: retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
+        continue;
+      }
 
       const parsed = parseJSON<ContextListEntry[]>(content);
       if (!parsed.ok) {
-        if (attempt === MAX_RETRIES) return { ok: false, error: parsed.error };
+        const errorMsg = "error" in parsed ? parsed.error : "Unknown error";
+        logger.error(
+          `[manifest-gen] context-list: JSON parse error: ${errorMsg}`,
+        );
+        if (attempt === MAX_RETRIES) {
+          return { ok: false, error: errorMsg };
+        }
+        logger.info(
+          `[manifest-gen] context-list: retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
         continue;
       }
 
       const result = ContextListSchema.safeParse(parsed.data);
       if (!result.success) {
+        const errors = result.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ");
+        logger.error(
+          `[manifest-gen] context-list: validation error: ${errors}`,
+        );
         if (attempt === MAX_RETRIES) {
-          const errors = result.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
           return { ok: false, error: `Context list validation: ${errors}` };
         }
+        logger.info(
+          `[manifest-gen] context-list: retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
         continue;
       }
 
+      logger.info(
+        `[manifest-gen] context-list: successful, got ${result.data.length} contexts`,
+      );
       return { ok: true, contexts: result.data };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(`[manifest-gen] context-list: exception: ${errorMsg}`);
       if (attempt === MAX_RETRIES) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+        return { ok: false, error: errorMsg };
       }
+      logger.info(
+        `[manifest-gen] context-list: retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+      );
     }
   }
 
-  return { ok: false, error: "Failed to generate context list" };
+  return { ok: false, error: "Failed to generate context list after retries" };
 }
 
 async function attemptPortsForContext(
@@ -146,40 +216,75 @@ async function attemptPortsForContext(
         PORTS_LIST_SYSTEM_PROMPT,
         signal,
       );
-      if (!content) return { ok: false, error: "No response from LLM" };
+      if (!content) {
+        logger.error(
+          `[manifest-gen] ports (${contextName}): no response from LLM`,
+        );
+        if (attempt === MAX_RETRIES)
+          return { ok: false, error: "No response from LLM" };
+        logger.info(
+          `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
+        continue;
+      }
 
       const parsed = parseJSON<PortsList>(content);
       if (!parsed.ok) {
-        if (attempt === MAX_RETRIES) return { ok: false, error: parsed.error };
+        const errorMsg = "error" in parsed ? parsed.error : "Unknown error";
+        logger.error(
+          `[manifest-gen] ports (${contextName}): JSON parse error: ${errorMsg}`,
+        );
+        if (attempt === MAX_RETRIES) {
+          return { ok: false, error: errorMsg };
+        }
+        logger.info(
+          `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
         continue;
       }
 
       const result = PortsListSchema.safeParse(parsed.data);
       if (!result.success) {
+        const errors = result.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ");
+        logger.error(
+          `[manifest-gen] ports (${contextName}): validation error: ${errors}`,
+        );
         if (attempt === MAX_RETRIES) {
-          const errors = result.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
           return {
             ok: false,
             error: `Ports validation for ${contextName}: ${errors}`,
           };
         }
+        logger.info(
+          `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
         continue;
       }
 
+      logger.info(
+        `[manifest-gen] ports (${contextName}): successful, got ${result.data.in.length} in, ${result.data.out.length} out`,
+      );
       return { ok: true, ports: result.data };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(
+        `[manifest-gen] ports (${contextName}): exception: ${errorMsg}`,
+      );
       if (attempt === MAX_RETRIES) {
-        return {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+        return { ok: false, error: errorMsg };
       }
+      logger.info(
+        `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+      );
     }
   }
 
-  return { ok: false, error: `Failed to generate ports for ${contextName}` };
+  return {
+    ok: false,
+    error: `Failed to generate ports for ${contextName} after retries`,
+  };
 }
 
 async function buildTopologyViaMicroPasses(
@@ -200,7 +305,10 @@ async function buildTopologyViaMicroPasses(
   };
 
   const ctxResult = await attemptContextList(llmContext, description, signal);
-  if (!ctxResult.ok) return { ok: false, error: ctxResult.error };
+  if (!ctxResult.ok) {
+    const errorMsg = "error" in ctxResult ? ctxResult.error : "Unknown error";
+    return { ok: false, error: errorMsg };
+  }
 
   const contexts: ManifestTopologyDraftContext[] = [];
 
@@ -219,25 +327,60 @@ async function buildTopologyViaMicroPasses(
     );
 
     if (!portsResult.ok) {
-      return { ok: false, error: portsResult.error };
+      const errorMsg =
+        "error" in portsResult ? portsResult.error : "Unknown error";
+      return { ok: false, error: errorMsg };
     }
 
-    const inPorts = portsResult.ports.in.map(
-      (p: { name: string; type: string; description: string }) => ({
-        name: normalizePortName(p.name),
-        type: p.type || "use-case",
-        description:
-          p.description || `Inbound port ${normalizePortName(p.name)}`,
-      }),
-    );
+    let inPorts: Port[];
+    let outPorts: Port[];
 
-    const outPorts = portsResult.ports.out.map(
-      (p: { name: string; type: string; description: string }) => ({
-        name: normalizePortName(p.name),
-        type: p.type || "infrastructure",
-        description:
-          p.description || `Outbound port ${normalizePortName(p.name)}`,
-      }),
+    try {
+      logger.info(`[manifest-gen] Normalizing inbound ports for ${ctx.name}`);
+      inPorts = portsResult.ports.in.map((p: unknown) => {
+        const normalized = normalizePort(p, "use-case");
+        return {
+          ...normalized,
+          name: normalizePortName(normalized.name),
+        };
+      });
+      logger.info(`[manifest-gen] Normalized ${inPorts.length} inbound ports`);
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error
+          ? error.message
+          : `Unknown error normalizing ports: ${String(error)}`;
+      logger.error(
+        `[manifest-gen] Failed to normalize inbound ports: ${errorMsg}`,
+      );
+      return { ok: false, error: errorMsg };
+    }
+
+    try {
+      logger.info(`[manifest-gen] Normalizing outbound ports for ${ctx.name}`);
+      outPorts = portsResult.ports.out.map((p: unknown) => {
+        const normalized = normalizePort(p, "infrastructure");
+        return {
+          ...normalized,
+          name: normalizePortName(normalized.name),
+        };
+      });
+      logger.info(
+        `[manifest-gen] Normalized ${outPorts.length} outbound ports`,
+      );
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error
+          ? error.message
+          : `Unknown error normalizing ports: ${String(error)}`;
+      logger.error(
+        `[manifest-gen] Failed to normalize outbound ports: ${errorMsg}`,
+      );
+      return { ok: false, error: errorMsg };
+    }
+
+    logger.info(
+      `[manifest-gen] Context ${ctx.name}: ${inPorts.length} in, ${outPorts.length} out ports`,
     );
 
     contexts.push({
@@ -256,7 +399,21 @@ async function buildTopologyViaMicroPasses(
     boundedContexts: contexts,
   };
 
-  return { ok: true, topology: normalizeTopologyDraft(topology) };
+  try {
+    logger.info(
+      `[manifest-gen] Finalizing topology with ${contexts.length} contexts`,
+    );
+    const normalizedTopology = normalizeTopologyDraft(topology);
+    logger.info("[manifest-gen] Topology normalization successful");
+    return { ok: true, topology: normalizedTopology };
+  } catch (error) {
+    const errorMsg =
+      error instanceof Error
+        ? error.message
+        : `Unknown error normalizing topology: ${String(error)}`;
+    logger.error(`[manifest-gen] Topology normalization failed: ${errorMsg}`);
+    return { ok: false, error: errorMsg };
+  }
 }
 
 export function useClientManifestGeneration(
@@ -309,7 +466,10 @@ export function useClientManifestGeneration(
           parseJSON<ManifestDraft["boundedContexts"][number]["adapters"]>(
             content,
           );
-        if (!parsed.ok) return { ok: false, error: parsed.error };
+        if (!parsed.ok) {
+          const errorMsg = "error" in parsed ? parsed.error : "Unknown error";
+          return { ok: false, error: errorMsg };
+        }
 
         return { ok: true, adapters: parsed.data };
       } catch (error) {
@@ -324,8 +484,12 @@ export function useClientManifestGeneration(
 
   const generateManifest = useCallback(
     async (description: string, signal?: AbortSignal) => {
-      if (signal?.aborted) return;
+      if (signal?.aborted) {
+        logger.info("[manifest-gen] Generation aborted before start");
+        return;
+      }
 
+      logger.info(`[manifest-gen] Starting manifest generation`);
       setGenerationError(null);
       setGeneratedManifest(null);
       setPhase("topology");
@@ -333,6 +497,9 @@ export function useClientManifestGeneration(
       descriptionRef.current = description;
 
       try {
+        logger.info(
+          `[manifest-gen] Building topology from description: "${description.slice(0, 100)}..."`,
+        );
         const topologyResult = await buildTopologyViaMicroPasses(
           llmContext,
           description,
@@ -340,7 +507,10 @@ export function useClientManifestGeneration(
         );
 
         if (!topologyResult.ok) {
-          setGenerationError(topologyResult.error);
+          const errorMsg =
+            "error" in topologyResult ? topologyResult.error : "Unknown error";
+          logger.error(`[manifest-gen] Topology build failed: ${errorMsg}`);
+          setGenerationError(errorMsg);
           setPhase("failed");
           setIsGenerating(false);
           return;
@@ -350,6 +520,9 @@ export function useClientManifestGeneration(
 
         const triggers = checkClarificationTriggers(topology);
         if (triggers.length > 0) {
+          logger.info(
+            `[manifest-gen] Clarification needed for ${triggers.length} issue(s)`,
+          );
           setClarificationTriggers(triggers);
           setPartialTopology(topology);
           setPhase("clarification_needed");
@@ -357,13 +530,20 @@ export function useClientManifestGeneration(
           return;
         }
 
+        logger.info(
+          `[manifest-gen] Topology generation successful, proceeding to finalize`,
+        );
         await finalizeGeneration(topology, signal);
       } catch (error) {
-        if (signal?.aborted) return;
+        if (signal?.aborted) {
+          logger.info("[manifest-gen] Generation aborted");
+          return;
+        }
         const message =
           error instanceof Error
             ? error.message
             : "Failed to generate manifest";
+        logger.error(`[manifest-gen] Manifest generation failed: ${message}`);
         setGenerationError(message);
         setPhase("failed");
         setIsGenerating(false);
@@ -374,16 +554,24 @@ export function useClientManifestGeneration(
 
   const finalizeGeneration = useCallback(
     async (topology: ManifestTopologyDraft, signal?: AbortSignal) => {
+      logger.info(
+        `[manifest-gen] Finalizing generation for ${topology.boundedContexts.length} contexts`,
+      );
       setPhase("adapters");
 
       const draftContexts: ManifestDraft["boundedContexts"] = [];
 
       for (const ctx of topology.boundedContexts) {
         if (signal?.aborted) {
+          logger.info("[manifest-gen] Finalization aborted");
           setIsGenerating(false);
           setPhase("idle");
           return;
         }
+
+        logger.info(
+          `[manifest-gen] Processing adapters for context: ${ctx.name}`,
+        );
 
         const allPortNames = [
           ...ctx.ports.in.map((p: { name: string }) => p.name),
@@ -393,8 +581,12 @@ export function useClientManifestGeneration(
         let adapters: ManifestDraft["boundedContexts"][number]["adapters"] = [];
 
         if (allPortNames.length > 0) {
+          logger.info(
+            `[manifest-gen] Extracting adapters for ${allPortNames.length} ports`,
+          );
           for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             if (signal?.aborted) {
+              logger.info("[manifest-gen] Finalization aborted");
               setIsGenerating(false);
               setPhase("idle");
               return;
@@ -408,13 +600,23 @@ export function useClientManifestGeneration(
             );
             if (result.ok) {
               adapters = result.adapters;
+              logger.info(
+                `[manifest-gen] Got ${adapters.length} adapters for ${ctx.name}`,
+              );
               break;
             }
 
             if (attempt === MAX_RETRIES) {
+              logger.warn(
+                `[manifest-gen] Failed to extract adapters after ${MAX_RETRIES + 1} attempts, continuing with empty adapters`,
+              );
               adapters = [];
               break;
             }
+
+            logger.info(
+              `[manifest-gen] Adapter extraction retry ${attempt + 1}/${MAX_RETRIES}`,
+            );
           }
         }
 
@@ -429,6 +631,7 @@ export function useClientManifestGeneration(
       }
 
       setPhase("rendering");
+      logger.info("[manifest-gen] Rendering manifest to YAML");
 
       const draft: ManifestDraft = {
         workspace: topology.workspace,
@@ -441,6 +644,9 @@ export function useClientManifestGeneration(
       const manifest = draftToManifest(normalized);
       const rendered = await renderDraft(manifest, validation.diagnostics);
 
+      logger.info(
+        `[manifest-gen] Manifest rendering complete, ${rendered.diagnostics.length} diagnostic(s)`,
+      );
       setGeneratedManifest(rendered.yaml);
       setDiagnostics(rendered.diagnostics);
       setPhase("complete");

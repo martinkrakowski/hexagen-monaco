@@ -124,9 +124,9 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
       );
 
       // Attempt 1: Generator timeout
-      let result: any = null;
+      let result: Record<string, unknown> | null = null;
       try {
-        result = await (timeoutAdapter as any).execute();
+        result = await (timeoutAdapter as Record<string, unknown>).execute();
       } catch {
         // Expected: timeout
       }

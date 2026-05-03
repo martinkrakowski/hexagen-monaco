@@ -1,9 +1,7 @@
-import type { Identifier } from "@hexagen/shared";
 import { z } from "zod";
 import type { StructuredOutputSchema } from "../../domain/structured-output-schema";
 import type {
   GenerateZodSchemaPort,
-  CompiledSchemaContract,
   GenerateZodSchemaRequest,
 } from "../../application/ports/in/generate-zod-schema.port";
 

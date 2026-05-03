@@ -113,9 +113,8 @@ describe("Governance Assistant — Happy Path", () => {
     // Verify bounded contexts were parsed
     if ("bounded_contexts" in parsed) {
       expect(Array.isArray(parsed.bounded_contexts)).toBe(true);
-      expect((parsed.bounded_contexts as any[]).length).toBeGreaterThanOrEqual(
-        5,
-      );
+      const contexts = parsed.bounded_contexts as Array<{ name: string }>;
+      expect(contexts.length).toBeGreaterThanOrEqual(5);
     }
   });
 
@@ -176,10 +175,11 @@ describe("Governance Assistant — Happy Path", () => {
     expect(parsed).toHaveProperty("generator");
 
     // Verify bounded contexts have proper structure
-    const boundedContexts = (parsed as any).bounded_contexts;
+    const boundedContexts = (parsed as Record<string, unknown>)
+      .bounded_contexts as Array<Record<string, unknown>>;
     expect(Array.isArray(boundedContexts)).toBe(true);
 
-    boundedContexts.forEach((bc: any) => {
+    boundedContexts.forEach((bc: Record<string, unknown>) => {
       expect(bc).toHaveProperty("name");
       expect(bc).toHaveProperty("type");
       expect(bc).toHaveProperty("description");
