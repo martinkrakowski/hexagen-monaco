@@ -151,9 +151,9 @@ export function ContextMapView({
                     {ctx.adapters.length})
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {ctx.adapters.map((a) => (
+                    {ctx.adapters.map((a, i) => (
                       <span
-                        key={a.name}
+                        key={`${a.name}-${a.implements}-${i}`}
                         className="text-xs px-2 py-0.5 rounded border bg-card border-border font-mono text-muted-foreground"
                       >
                         {a.name}

@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
-import { Button } from "@hexagen/ui";
+import { Loader2 } from "lucide-react";
 import type { GenerationPhase } from "../useClientManifestGeneration";
 
 const STEP_ORDER: GenerationPhase[] = ["topology", "adapters", "rendering"];
@@ -21,10 +20,9 @@ function usePrevious<T>(value: T): T | undefined {
   return ref.current;
 }
 
-interface ManifestThinkingViewProps {
+interface ThinkingBlockProps {
   phase: GenerationPhase;
   stepDetail: string;
-  onCancel: () => void;
 }
 
 function StepDot({ state }: { state: "completed" | "active" | "pending" }) {
@@ -79,18 +77,14 @@ function DetailLine({ text }: { text: string }) {
   );
 }
 
-export function ManifestThinkingView({
-  phase,
-  stepDetail,
-  onCancel,
-}: ManifestThinkingViewProps) {
+export function ThinkingBlock({ phase, stepDetail }: ThinkingBlockProps) {
   const label = STEP_LABELS[phase];
   if (!label) return null;
 
   const currentStepIndex = STEP_ORDER.indexOf(phase);
 
   return (
-    <div className="flex flex-col items-center gap-6 py-4">
+    <div className="flex flex-col items-center gap-4 py-3">
       <div className="flex items-center gap-3">
         {STEP_ORDER.map((step, index) => {
           let dotState: "completed" | "active" | "pending";
@@ -109,7 +103,7 @@ export function ManifestThinkingView({
         })}
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-2 py-4">
+      <div className="flex flex-col items-center justify-center gap-1.5">
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 text-accent animate-spin" />
           <span className="text-base font-semibold text-foreground">
@@ -117,13 +111,6 @@ export function ManifestThinkingView({
           </span>
         </div>
         <DetailLine text={stepDetail} />
-      </div>
-
-      <div className="flex justify-center pt-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          <X className="w-3.5 h-3.5 mr-1.5" />
-          Cancel
-        </Button>
       </div>
     </div>
   );

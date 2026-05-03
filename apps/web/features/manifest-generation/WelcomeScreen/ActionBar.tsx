@@ -1,23 +1,33 @@
 import { Button } from "@hexagen/ui";
 import type { ActionBarProps } from "./types";
 
-const PHASE_LABELS: Record<string, string> = {
-  topology: "Analyzing project topology...",
-  clarification_needed: "Reviewing topology...",
-  adapters: "Generating adapters...",
-  rendering: "Rendering manifest...",
-  complete: "Complete",
-  failed: "Failed",
-  idle: "",
-};
-
 export function ActionBar({
   canGenerate,
   isGenerating,
-  phase,
+  onCancel,
   onGenerate,
 }: ActionBarProps) {
-  const phaseLabel = PHASE_LABELS[phase] ?? "Generating manifest...";
+  if (isGenerating) {
+    return (
+      <div className="space-y-4">
+        <div className="mt-6">
+          <Button
+            onClick={onCancel}
+            variant="ghost"
+            className="w-full h-10 font-medium rounded-md"
+            size="lg"
+          >
+            Cancel
+          </Button>
+        </div>
+
+        <p className="text-xs text-muted-foreground text-center mt-4">
+          AI is analyzing your description to identify domain structures, ports,
+          and adapters.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -25,19 +35,10 @@ export function ActionBar({
         <Button
           onClick={onGenerate}
           disabled={!canGenerate}
-          className={`w-full h-10 bg-primary text-primary-foreground font-bold rounded-md transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98] active:opacity-90 ${isGenerating ? "animate-pulse" : ""}`}
+          className="w-full h-10 bg-primary text-primary-foreground font-bold rounded-md transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:opacity-90"
           size="lg"
         >
-          {isGenerating ? (
-            <>
-              <span className="animate-spin mr-2" aria-hidden="true">
-                ⏳
-              </span>
-              {phaseLabel}
-            </>
-          ) : (
-            "Generate Manifest"
-          )}
+          Generate Manifest
         </Button>
       </div>
 

@@ -15,6 +15,7 @@ import { FormSection } from "./FormSection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
 import { StateView } from "./StateView";
+import { ThinkingBlock } from "./ThinkingBlock";
 import { ModelSelectionView } from "./ModelSelectionView";
 import { WelcomeScreenLayout } from "./WelcomeScreenLayout";
 import { useWelcomeScreenForm } from "./hooks/useWelcomeScreenForm";
@@ -182,8 +183,12 @@ export function WelcomeScreen({
     actions.confirmAndContinue();
   };
 
-  // Conditional state views
-  if (flowState.state !== "idle" && flowState.state !== "model_selection") {
+  // Conditional state views (non-idle, non-generating, non-model_selection)
+  if (
+    flowState.state !== "idle" &&
+    flowState.state !== "generating" &&
+    flowState.state !== "model_selection"
+  ) {
     return (
       <StateView
         flowState={flowState}
@@ -192,7 +197,6 @@ export function WelcomeScreen({
         onConfirmAndContinue={handleConfirmAndContinue}
         onRegenerate={handleRegenerate}
         onRetryFromError={handleRetryFromError}
-        clientGen={clientGen}
       />
     );
   }
@@ -217,7 +221,8 @@ export function WelcomeScreen({
     );
   }
 
-  // Default welcome screen (idle state)
+  const isGenerating = flowState.state === "generating";
+
   return (
     <WelcomeScreenLayout>
       <HeaderSection
@@ -242,7 +247,7 @@ export function WelcomeScreen({
           formHandlers.setValue("selectedExample", index);
         }}
         charCount={formHandlers.charCount}
-        isDisabled={flowState.state !== "idle"}
+        isDisabled={isGenerating}
       />
 
       <ModelCapabilityCheck
@@ -254,11 +259,18 @@ export function WelcomeScreen({
         onSwitchModel={() => actions.transitionTo("model_selection")}
       />
 
+      {isGenerating && (
+        <ThinkingBlock
+          phase={clientGen.phase}
+          stepDetail={clientGen.stepDetail}
+        />
+      )}
+
       <ActionBar
         canGenerate={canGenerate}
-        isGenerating={false}
-        phase={clientGen.phase}
+        isGenerating={isGenerating}
         onGenerate={handleGenerate}
+        onCancel={() => actions.transitionTo("idle")}
       />
     </WelcomeScreenLayout>
   );

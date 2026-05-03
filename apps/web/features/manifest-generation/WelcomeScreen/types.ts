@@ -3,7 +3,6 @@ import type {
   WelcomeFlowState,
   WelcomeFlowActions,
 } from "../ModelSelectionFlow/useWelcomeFlowState";
-import type { UseClientManifestGenerationReturn } from "../useClientManifestGeneration";
 
 export type { WelcomeFlowState };
 
@@ -43,8 +42,8 @@ export interface ModelCapabilityCheckProps {
 export interface ActionBarProps {
   canGenerate: boolean;
   isGenerating: boolean;
-  phase: string;
   onGenerate: () => void;
+  onCancel?: () => void;
 }
 
 export interface ClientManifestGenerationResult {
@@ -63,5 +62,4 @@ export interface StateViewProps {
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;
   onRetryFromError: () => void;
-  clientGen: UseClientManifestGenerationReturn;
 }

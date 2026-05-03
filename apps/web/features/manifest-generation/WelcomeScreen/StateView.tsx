@@ -3,7 +3,6 @@ import { ManifestPreview } from "../ManifestPreview";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { WELCOME_FLOW_ERROR_MESSAGES } from "../ModelSelectionFlow/WelcomeFlowError";
-import { ManifestThinkingView } from "./ManifestThinkingView";
 import type { StateViewProps } from "./types";
 
 const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {
@@ -19,19 +18,7 @@ export function StateView({
   onConfirmAndContinue,
   onRegenerate,
   onRetryFromError,
-  clientGen,
 }: StateViewProps) {
-  // Generating state — show thinking display with rolodex animation
-  if (flowState.state === "generating") {
-    return (
-      <ManifestThinkingView
-        phase={clientGen.phase}
-        stepDetail={clientGen.stepDetail}
-        onCancel={() => actions.transitionTo("idle")}
-      />
-    );
-  }
-
   // Clarification needed
   if (flowState.state === "clarification_needed") {
     const triggers = flowState.clarificationTriggers ?? [];
