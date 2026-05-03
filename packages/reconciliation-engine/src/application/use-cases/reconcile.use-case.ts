@@ -70,12 +70,12 @@ export class ReconcileUseCase {
   ): Verdict[] {
     return patches.map((patch) => {
       if (this.hasErrorViolation(patch, linterReport)) {
+        // When lintFilterPort rejects, there may not be a specific violation
         const violation = this.findErrorViolation(patch, linterReport!);
-        return createVerdict(
-          patch.id,
-          false,
-          `Blocked by lint: ${violation!.file}`,
-        );
+        const reason = violation
+          ? `Blocked by lint: ${violation.file}`
+          : `Blocked by lint filter for patch ${patch.id}`;
+        return createVerdict(patch.id, false, reason);
       }
       return createVerdict(patch.id, true, `Auto-accepted patch ${patch.id}`);
     });

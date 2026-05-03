@@ -81,6 +81,15 @@ export async function POST(request: NextRequest) {
         restoreResult.error,
         "[api/architecture/modify/reject] Defensive git restore failed",
       );
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Failed to restore manifest from git. Manual intervention may be required.",
+          details: restoreResult.error,
+        },
+        { status: 500 },
+      );
     }
 
     transactionManager.rollback(transactionId, reason ?? "User rejected");

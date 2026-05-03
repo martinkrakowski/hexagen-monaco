@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 import { ProjectWorkspace } from "../features/workspace-shell/ProjectWorkspace";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: "HexaGen Monaco — Project Workspace",
@@ -9,5 +10,9 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return <ProjectWorkspace />;
+  return (
+    <ErrorBoundary>
+      <ProjectWorkspace />
+    </ErrorBoundary>
+  );
 }
