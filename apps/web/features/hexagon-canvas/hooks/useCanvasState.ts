@@ -151,7 +151,6 @@ export function useCanvasState(
           return position ? { ...node, position } : node;
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error("ELK layout calculation failed:", err);
         // Fallback to original positions
         return nodes;

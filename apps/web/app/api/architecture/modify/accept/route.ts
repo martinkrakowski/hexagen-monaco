@@ -37,7 +37,14 @@ export async function POST(request: NextRequest) {
     if (!transactionId) {
       return NextResponse.json(
         { success: false, error: "transactionId is required" },
-        { status: 400 },
+        {
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
       );
     }
 
@@ -46,7 +53,14 @@ export async function POST(request: NextRequest) {
     if (!tx) {
       return NextResponse.json(
         { success: false, error: "Transaction not found" },
-        { status: 404 },
+        {
+          status: 404,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
       );
     }
 
@@ -56,7 +70,14 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Transaction is in '${tx.status}' state, expected 'speculative'`,
         },
-        { status: 409 },
+        {
+          status: 409,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
       );
     }
 
@@ -71,7 +92,14 @@ export async function POST(request: NextRequest) {
           success: false,
           error: err instanceof Error ? err.message : "Invalid manifest path",
         },
-        { status: 400 },
+        {
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
       );
     }
 
@@ -89,7 +117,14 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Patch application failed: ${applyResult.error.message}`,
         },
-        { status: 500 },
+        {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
       );
     }
 
@@ -120,18 +155,34 @@ export async function POST(request: NextRequest) {
               "Lint validation failed and git restore failed. Manual intervention required.",
             lintErrors,
           },
-          { status: 500 },
+          {
+            status: 500,
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "POST, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type",
+            },
+          },
         );
       }
 
       transactionManager.rollback(transactionId);
 
-      return NextResponse.json({
-        success: false,
-        error: "Lint validation failed. Patches reverted.",
-        lintPassed: false,
-        lintErrors,
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Lint validation failed. Patches reverted.",
+          lintPassed: false,
+          lintErrors,
+        },
+        {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
+      );
     }
 
     transactionManager.commit(transactionId);
@@ -146,13 +197,22 @@ export async function POST(request: NextRequest) {
       },
     );
 
-    return NextResponse.json({
-      success: true,
-      transactionId,
-      status: "committed",
-      patchesApplied: patches.length,
-      lintPassed,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        transactionId,
+        status: "committed",
+        patchesApplied: patches.length,
+        lintPassed,
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
+    );
   } catch (error) {
     const logger = getLogger();
     logger.errorWithException(
@@ -165,7 +225,29 @@ export async function POST(request: NextRequest) {
         : "Accept failed: unexpected error";
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 },
+      {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
     );
   }
+}
+
+/**
+ * OPTIONS /api/architecture/modify/accept
+ * Handle CORS preflight requests
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 }

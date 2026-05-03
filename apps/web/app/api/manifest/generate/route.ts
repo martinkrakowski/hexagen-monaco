@@ -12,6 +12,7 @@ import {
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
 import { WebLLMAdapter } from "@hexagen/local-llm";
+import { logger } from "../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -130,7 +131,7 @@ export async function POST(
     } catch (error) {
       // If we can't create the WebLLM adapter, we'll continue without it
       // and fall back to cloud providers
-      console.warn("WebLLM adapter initialization failed:", error);
+      logger.warn("WebLLM adapter initialization failed:", { error });
     }
 
     // Configure the fallback chain for cloud providers
@@ -214,7 +215,7 @@ export async function POST(
   } catch (error) {
     // Error logging (not for production)
     if (process.env.NODE_ENV !== "production") {
-      console.error("Error generating manifest:", error);
+      logger.error("Error generating manifest:", { error });
     }
 
     return NextResponse.json(

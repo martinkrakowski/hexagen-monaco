@@ -12,6 +12,7 @@ import {
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
 import { WebLLMAdapter, type DomainModelId } from "@hexagen/local-llm";
+import { logger } from "../../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -133,7 +134,7 @@ export async function POST(
         defaultModelId: (body.modelId as DomainModelId) || undefined,
       });
     } catch (error) {
-      console.warn("WebLLM adapter initialization failed:", error);
+      logger.warn("WebLLM adapter initialization failed:", { error });
     }
 
     // Configure the selector adapter with fallback chain
@@ -165,9 +166,8 @@ export async function POST(
     });
 
     // Create and execute use case
-    console.log(
-      "[manifest-gen] API route: executing use case with model",
-      body.modelId || "default",
+    logger.info(
+      `[manifest-gen] API route: executing use case with model ${body.modelId || "default"}`,
     );
     const useCase = new GenerateManifestFromDescriptionUseCase(selectorAdapter);
     const result = await useCase.execute({
@@ -214,7 +214,7 @@ export async function POST(
   } catch (error) {
     // Error logging (not for production)
     if (process.env.NODE_ENV !== "production") {
-      console.error("Error generating manifest:", error);
+      logger.error("Error generating manifest:", { error });
     }
 
     return NextResponse.json(
