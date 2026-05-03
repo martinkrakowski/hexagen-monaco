@@ -73,6 +73,47 @@ describe("coerceRawPorts", () => {
     const result = coerceRawPorts(input);
     assert.strictEqual(result.in[0].name, "CreateOrderPort");
   });
+
+  it("defaults missing type to use-case for inbound ports", () => {
+    const input = {
+      in: [{ name: "CreateOrder", type: "", description: "Creates" }],
+      out: [],
+    };
+    const result = coerceRawPorts(input);
+    assert.strictEqual(result.in[0].type, "use-case");
+  });
+
+  it("defaults missing type to infrastructure for outbound ports", () => {
+    const input = {
+      in: [],
+      out: [{ name: "OrderRepo", type: "", description: "Persists" }],
+    };
+    const result = coerceRawPorts(input);
+    assert.strictEqual(result.out[0].type, "infrastructure");
+  });
+
+  it("defaults missing description to generated text", () => {
+    const input = {
+      in: [{ name: "CreateOrder", type: "UseCase", description: "" }],
+      out: [],
+    };
+    const result = coerceRawPorts(input);
+    assert.strictEqual(result.in[0].description, "CreateOrder port");
+  });
+
+  it("handles model output with missing fields", () => {
+    const input = {
+      in: [{ name: "CreateOrder" } as Record<string, unknown>],
+      out: [
+        { name: "OrderRepo", type: "Repository" } as Record<string, unknown>,
+      ],
+    };
+    const result = coerceRawPorts(input as unknown);
+    assert.strictEqual(result.in[0].type, "use-case");
+    assert.strictEqual(result.in[0].description, "CreateOrder port");
+    assert.strictEqual(result.out[0].type, "Repository"); // provided type is kept
+    assert.strictEqual(result.out[0].description, "OrderRepo port");
+  });
 });
 
 describe("coerceRawTopology", () => {

@@ -130,8 +130,9 @@ export function compileContextListPrompt(variables: PromptVariables): string {
 export function compilePortsPrompt(
   contextName: string,
   contextDescription: string,
+  contextType: string,
 ): string {
-  return `Bounded Context: "${contextName}"\nDescription: ${contextDescription}\n\nOutput:`;
+  return `Bounded Context: "${contextName}" (type: ${contextType})\nDescription: ${contextDescription}\n\nThink step-by-step:\n1. What use cases does this context handle? (inbound ports)\n2. What infrastructure does it need? (outbound: repositories, external APIs, queues)\n\nOutput:`;
 }
 
 export function compileAdaptersPrompt(

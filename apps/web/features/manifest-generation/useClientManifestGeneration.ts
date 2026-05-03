@@ -122,9 +122,14 @@ async function attemptPortsForContext(
   llmContext: LocalLLMContext,
   contextName: string,
   contextDescription: string,
+  contextType: string,
   signal?: AbortSignal,
 ): Promise<{ ok: true; ports: PortsList } | { ok: false; error: string }> {
-  const userPrompt = compilePortsPrompt(contextName, contextDescription);
+  const userPrompt = compilePortsPrompt(
+    contextName,
+    contextDescription,
+    contextType,
+  );
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (signal?.aborted) return { ok: false, error: "Aborted" };
@@ -201,6 +206,7 @@ async function buildTopologyViaMicroPasses(
       llmContext,
       ctx.name,
       ctx.description,
+      ctx.type,
       signal,
     );
 

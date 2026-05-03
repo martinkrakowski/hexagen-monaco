@@ -246,7 +246,11 @@ export class GenerateManifestFromDescriptionUseCase {
 
       for (const ctx of contexts) {
         // 3. Ports Pass
-        const portsPrompt = compilePortsPrompt(ctx.name, ctx.description);
+        const portsPrompt = compilePortsPrompt(
+          ctx.name,
+          ctx.description,
+          ctx.type,
+        );
         let ports: { in: ManifestDraftPort[]; out: ManifestDraftPort[] } = {
           in: [],
           out: [],

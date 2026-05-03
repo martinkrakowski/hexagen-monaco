@@ -37,14 +37,31 @@ export function coercePortName(name: string): string {
   return ensurePortSuffix(name.trim());
 }
 
+export function coercePort(
+  port: Record<string, unknown>,
+  direction: "in" | "out",
+): RawPort {
+  const name = coercePortName(String(port.name ?? ""));
+  const defaultType = direction === "in" ? "use-case" : "infrastructure";
+  const rawType = String(port.type ?? "").trim();
+  const type = rawType || defaultType;
+  const rawDesc = String(port.description ?? "").trim();
+  const descBase = name.replace(/Port$/, "");
+  const description = rawDesc || `${descBase} port`;
+  return { name, type, description };
+}
+
 export function coerceContextName(name: string): string {
   return toKebabCase(name);
 }
 
-export function coerceRawPorts(ports: RawPortsObject): RawPortsObject {
+export function coerceRawPorts(ports: unknown): RawPortsObject {
+  const raw = ports as { in?: unknown[]; out?: unknown[] };
+  const inPorts = Array.isArray(raw?.in) ? raw.in : [];
+  const outPorts = Array.isArray(raw?.out) ? raw.out : [];
   return {
-    in: ports.in.map((p) => ({ ...p, name: coercePortName(p.name) })),
-    out: ports.out.map((p) => ({ ...p, name: coercePortName(p.name) })),
+    in: inPorts.map((p) => coercePort(p as Record<string, unknown>, "in")),
+    out: outPorts.map((p) => coercePort(p as Record<string, unknown>, "out")),
   };
 }
 
