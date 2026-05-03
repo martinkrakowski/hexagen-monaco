@@ -213,8 +213,8 @@ describe("ManifestTopologyDraftSchema", () => {
 });
 
 describe("Named constants", () => {
-  it("MAX_BOUNDED_CONTEXTS_DRAFT is 10", () => {
-    assert.strictEqual(MAX_BOUNDED_CONTEXTS_DRAFT, 10);
+  it("MAX_BOUNDED_CONTEXTS_DRAFT is 5", () => {
+    assert.strictEqual(MAX_BOUNDED_CONTEXTS_DRAFT, 5);
   });
 
   it("GENERIC_CONTEXT_NAMES contains expected values", () => {

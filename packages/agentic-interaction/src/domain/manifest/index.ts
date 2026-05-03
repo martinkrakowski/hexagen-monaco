@@ -46,3 +46,10 @@ export type {
 export { renderManifestYaml, renderDraft, verifyToken } from "./render-yaml.js";
 
 export { extractJSON, parseJSON } from "./extract-json.js";
+
+export {
+  coerceRawTopology,
+  coerceRawPorts,
+  coerceContextName,
+  coercePortName,
+} from "./coerce-raw-topology.js";

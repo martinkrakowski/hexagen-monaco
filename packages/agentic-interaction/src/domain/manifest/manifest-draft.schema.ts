@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MAX_BOUNDED_CONTEXTS_DRAFT = 10;
+export const MAX_BOUNDED_CONTEXTS_DRAFT = 5;
 
 export const GENERIC_CONTEXT_NAMES = [
   "core",
@@ -88,7 +88,13 @@ export const ContextListSchema = z
   .min(1)
   .max(MAX_BOUNDED_CONTEXTS_DRAFT);
 
+export const PortsListEntrySchema = z.object({
+  name: z.string().min(1),
+  type: z.string().min(1),
+  description: z.string().min(1),
+});
+
 export const PortsListSchema = z.object({
-  in: z.array(z.string().min(1)),
-  out: z.array(z.string().min(1)),
+  in: z.array(PortsListEntrySchema),
+  out: z.array(PortsListEntrySchema),
 });

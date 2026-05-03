@@ -38,22 +38,23 @@ export {
   generateSuggestions,
   detectWarnings,
 } from "./manifest-yaml-extractor.js";
-// Prompt exports
 export {
-  SYSTEM_PROMPT,
-  compileUserPrompt,
+  WORKSPACE_SYSTEM_PROMPT,
+  compileWorkspacePrompt,
+  CONTEXT_LIST_SYSTEM_PROMPT,
+  compileContextListPrompt,
+  PORTS_LIST_SYSTEM_PROMPT,
+  compilePortsPrompt,
+  ADAPTERS_LIST_SYSTEM_PROMPT,
+  compileAdaptersPrompt,
+  RETRY_PROMPTS,
   type PromptVariables,
+  type RetryResult,
 } from "./prompts/index.js";
 export {
   TOPOLOGY_SYSTEM_PROMPT,
   compileTopologyUserPrompt,
   type TopologyPromptVariables,
-} from "./prompts/index.js";
-export {
-  CONTEXT_LIST_SYSTEM_PROMPT,
-  compileContextListPrompt,
-  PORTS_LIST_SYSTEM_PROMPT,
-  compilePortsPrompt,
 } from "./prompts/index.js";
 export {
   ADAPTER_SYSTEM_PROMPT,
@@ -108,3 +109,10 @@ export {
   verifyToken,
 } from "./manifest/index.js";
 export { extractJSON, parseJSON } from "./manifest/index.js";
+
+export {
+  coerceRawTopology,
+  coerceRawPorts,
+  coerceContextName,
+  coercePortName,
+} from "./manifest/index.js";

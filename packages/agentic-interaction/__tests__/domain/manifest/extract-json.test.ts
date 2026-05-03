@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   extractJSON,
+  repairJSON,
   parseJSON,
 } from "../../../src/domain/manifest/extract-json.js";
 
@@ -57,5 +58,125 @@ describe("parseJSON", () => {
     const result = parseJSON<string[]>('["a", "b"]');
     assert.strictEqual(result.ok, true);
     if (result.ok) assert.deepStrictEqual(result.data, ["a", "b"]);
+  });
+});
+
+describe("repairJSON", () => {
+  it("strips markdown fences and parses valid JSON", () => {
+    const raw = '```json\n{"name": "orders"}\n```';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) assert.deepStrictEqual(JSON.parse(result), { name: "orders" });
+  });
+
+  it("removes control characters except newline/tab/cr", () => {
+    const raw = '{"name":\x07"orders"}';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) assert.deepStrictEqual(JSON.parse(result), { name: "orders" });
+  });
+
+  it("repairs mid-token substitution corruption (in:g [)", () => {
+    const raw = '{"in":g ["CreateOrderPort"], "out": []}';
+    const result = repairJSON(raw);
+    assert.strictEqual(result, null);
+  });
+
+  it("truncates to last complete JSON structure when trailing garbage exists", () => {
+    const raw =
+      '{"name":"order","type":"core"}\n\n### Here is some extra output';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.deepStrictEqual(JSON.parse(result), {
+        name: "order",
+        type: "core",
+      });
+    }
+  });
+
+  it("repairs truncated array with trailing garbage", () => {
+    const raw = '[{"name":"orders","type":"core"}] extra text here';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      const parsed = JSON.parse(result);
+      assert.strictEqual(Array.isArray(parsed), true);
+    }
+  });
+
+  it("handles mixed markdown fence with malformed JSON", () => {
+    const raw = '```json\n{"bad": [1,2,3\n```';
+    const result = repairJSON(raw);
+    assert.strictEqual(result, null);
+  });
+
+  it("returns null for completely unparseable input", () => {
+    const raw = "this is not json at all no braces";
+    const result = repairJSON(raw);
+    assert.strictEqual(result, null);
+  });
+
+  it("handles empty string", () => {
+    const result = repairJSON("");
+    assert.strictEqual(result, null);
+  });
+
+  it("ignores braces inside string values", () => {
+    const raw = '{"name": "foo{bar}", "type": "core"} trailing';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.deepStrictEqual(JSON.parse(result), {
+        name: "foo{bar}",
+        type: "core",
+      });
+    }
+  });
+
+  it("ignores brackets inside string values", () => {
+    const raw = '{"desc": "array [1,2]", "ok": true} garbage';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.deepStrictEqual(JSON.parse(result), {
+        desc: "array [1,2]",
+        ok: true,
+      });
+    }
+  });
+
+  it("handles escaped quotes inside strings", () => {
+    const raw = '{"name": "say \\"hello\\"", "type": "core"} trailing';
+    const result = repairJSON(raw);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.deepStrictEqual(JSON.parse(result), {
+        name: 'say "hello"',
+        type: "core",
+      });
+    }
+  });
+});
+
+describe("parseJSON with repair fallback", () => {
+  it("parses JSON with control characters via repair", () => {
+    const raw = '{"name":\x07"orders","type":"core"}';
+    const result = parseJSON<{ name: string }>(raw);
+    assert.strictEqual(result.ok, true);
+    if (result.ok) assert.strictEqual(result.data.name, "orders");
+  });
+
+  it("parses JSON with trailing garbage via repair", () => {
+    const raw = '{"name":"orders","type":"core"}###garbage';
+    const result = parseJSON<{ name: string }>(raw);
+    assert.strictEqual(result.ok, true);
+    if (result.ok) assert.strictEqual(result.data.name, "orders");
+  });
+
+  it("returns error when repair cannot fix the input", () => {
+    const raw = '{"in":g [broken';
+    const result = parseJSON(raw);
+    assert.strictEqual(result.ok, false);
   });
 });

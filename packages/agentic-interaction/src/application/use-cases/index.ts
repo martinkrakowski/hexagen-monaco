@@ -7,6 +7,9 @@ export {
   GenerateManifestFromDescriptionUseCase,
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
+  ManifestWarningCategory,
+  type ManifestWarning,
+  type GenerationDiagnostics,
 } from "./generate-manifest-from-description.use-case.js";
 
 // Auto-fix use cases

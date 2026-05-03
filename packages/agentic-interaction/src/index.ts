@@ -109,19 +109,23 @@ export {
 } from "./domain/index.js";
 
 // Phase2: Prompt exports (from domain)
-export { SYSTEM_PROMPT, compileUserPrompt } from "./domain/index.js";
+export {
+  WORKSPACE_SYSTEM_PROMPT,
+  compileWorkspacePrompt,
+  CONTEXT_LIST_SYSTEM_PROMPT,
+  compileContextListPrompt,
+  PORTS_LIST_SYSTEM_PROMPT,
+  compilePortsPrompt,
+  ADAPTERS_LIST_SYSTEM_PROMPT,
+  compileAdaptersPrompt,
+  RETRY_PROMPTS,
+} from "./domain/index.js";
 export type { PromptVariables } from "./domain/index.js";
 export {
   TOPOLOGY_SYSTEM_PROMPT,
   compileTopologyUserPrompt,
 } from "./domain/index.js";
 export type { TopologyPromptVariables } from "./domain/index.js";
-export {
-  CONTEXT_LIST_SYSTEM_PROMPT,
-  compileContextListPrompt,
-  PORTS_LIST_SYSTEM_PROMPT,
-  compilePortsPrompt,
-} from "./domain/index.js";
 export {
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
