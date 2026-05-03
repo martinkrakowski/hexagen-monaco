@@ -30,6 +30,8 @@ Output a JSON array of objects. Each object represents a bounded context and mus
 Maximum 5 contexts. Minimum 1.
 Context names: lowercase kebab-case with hyphens only (e.g. "order-management", not "OrderManagement").
 
+Decompose multi-domain descriptions into separate contexts. A description mentioning distinct concerns (e.g. "products, orders, users, payments") should produce multiple contexts, not one monolithic context.
+
 CORRECT output: [{"name": "content-management", "type": "core", "description": "Manages articles"}]
 
 Output:`;
@@ -42,8 +44,9 @@ Output a JSON object with two arrays: "in" and "out". These represent the ports 
 - "out": array of objects with "name" (PascalCase ending in Port), "type" (string), "description" (string)
 
 Each context must have at least 1 inbound port.
+Outbound ports represent infrastructure dependencies: repositories, external APIs, message queues, email services. Most contexts need at least 1 outbound port.
 
-CORRECT output: {"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Creates an order"}], "out": []}
+CORRECT output: {"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Creates a new order"}], "out": [{"name": "OrderRepositoryPort", "type": "Repository", "description": "Persists orders to storage"}]}
 
 Output:`;
 
