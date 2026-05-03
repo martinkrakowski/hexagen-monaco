@@ -196,7 +196,7 @@ export class GenerateManifestFromDescriptionUseCase {
           attempt === 1
             ? RETRY_PROMPTS.workspace.attempt1(request.description.text)
             : RETRY_PROMPTS.workspace.attempt2(request.description.text),
-        150,
+        800, // Context list: supports ~5 contexts with name/type/description (~700 tokens)
       );
       totalTokens += workspaceResult.tokens;
       totalAttempts += workspaceResult.attempts;
@@ -225,7 +225,7 @@ export class GenerateManifestFromDescriptionUseCase {
             attempt === 1
               ? RETRY_PROMPTS.contextList.attempt1(request.description.text)
               : RETRY_PROMPTS.contextList.attempt2(request.description.text),
-          150,
+          800, // Context list: supports ~5 contexts with name/type/description (~700 tokens)
         );
 
         // Apply runtime coercion: normalize types and names
@@ -282,7 +282,7 @@ export class GenerateManifestFromDescriptionUseCase {
               attempt === 1
                 ? RETRY_PROMPTS.ports.attempt1(ctx.name, ctx.description)
                 : RETRY_PROMPTS.ports.attempt2(ctx.name, ctx.description),
-            200,
+            300, // Ports: supports ~5 in + ~5 out ports per context (~250 tokens)
           );
           ports = coerceRawPorts(portsResult.data) as {
             in: ManifestDraftPort[];
@@ -326,7 +326,7 @@ export class GenerateManifestFromDescriptionUseCase {
                       ctx.name,
                       allPorts.map((p) => p.name),
                     ),
-              200,
+              300, // Adapters: supports ~10 adapters for ~10 ports (~250 tokens)
             );
             adapters = adaptersResult.data;
             totalTokens += adaptersResult.tokens;

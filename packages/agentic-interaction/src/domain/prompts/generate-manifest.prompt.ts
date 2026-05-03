@@ -19,47 +19,105 @@ CORRECT output: {"name": "e-commerce-platform", "description": "A modern online 
 
 Output:`;
 
-export const CONTEXT_LIST_SYSTEM_PROMPT = `You are a JSON generator. You output ONLY valid JSON, nothing else.
-No explanations. No markdown. No code blocks. Raw JSON only.
+export const CONTEXT_LIST_SYSTEM_PROMPT = `You are a system architect assistant that analyzes descriptions and identifies bounded contexts.
 
-Output a JSON array of objects. Each object represents a bounded context and must have:
-- "name": string (kebab-case, lowercase with hyphens only)
-- "type": MUST be one of: "core", "supporting", "driver", "shared-kernel"
-- "description": string (brief one-sentence summary)
+CRITICAL OUTPUT FORMAT - JSON ONLY, NO MARKDOWN OR EXPLANATION:
+{
+  "contexts": [
+    {
+      "name": "ContextName",           // REQUIRED: lowercase-kebab-case
+      "type": "core",                   // REQUIRED: Must be exactly one of: 'core', 'supporting', 'driver', 'shared-kernel'
+      "description": "What this context does"  // REQUIRED: Brief description
+    }
+  ]
+}
 
-CRITICAL: The "type" field MUST be one of the 4 exact values above. Never output an empty string or any other value.
+VALIDATION RULES:
+- The "type" field MUST be one of: 'core', 'supporting', 'driver', 'shared-kernel' - NOT empty, NOT other values
+- All property names MUST be in double quotes: "name" NOT name
+- All string values MUST be in double quotes: "value" NOT 'value' NOT value
+- Always include ALL three fields for each context
+- Always close all brackets and braces
 
-Maximum 5 contexts. Minimum 1.
-Context names: lowercase kebab-case with hyphens only (e.g. "order-management", not "OrderManagement").
+SAFETY CHECK BEFORE OUTPUT:
+1. Count opening and closing braces { } - they must match
+2. Count opening and closing brackets [ ] - they must match
+3. Count quotes " " - they must be even number
+4. If any count is off, DO NOT output - instead output valid empty structure: {"contexts": []}
 
-Decompose multi-domain descriptions into separate contexts. A description mentioning distinct concerns (e.g. "products, orders, users, payments") should produce multiple contexts, not one monolithic context.
+EXAMPLE OF CORRECT OUTPUT:
+{
+  "contexts": [
+    {"name": "user-authentication", "type": "core", "description": "Handles user login, registration, and session management"},
+    {"name": "payment-processing", "type": "supporting", "description": "Processes payments and invoices"}
+  ]
+}
 
-CORRECT output: [{"name": "content-management", "type": "core", "description": "Manages articles"}, {"name": "payment-processing", "type": "supporting", "description": "Handles payment transactions"}]
+EXAMPLE OF INCORRECT OUTPUT (DO NOT USE):
+{"name": AuthContext}                   // ❌ Missing quotes on name value
+{"name": "Auth", "type": ""}            // ❌ Empty type is invalid
+{"name": "Auth", type: "core"}          // ❌ Missing quotes on type property name
+{name:"Auth",type:"core"}               // ❌ Missing quotes everywhere
 
-INCORRECT output: [{"name": "content", "type": "", "description": "..."}, {"name": "ContentManagement", "type": "core", ...}]
+Output JSON only:`;
 
-Output:`;
+export const PORTS_LIST_SYSTEM_PROMPT = `You are a ports and adapters architect that identifies interfaces for a bounded context.
 
-export const PORTS_LIST_SYSTEM_PROMPT = `You are a JSON generator. You output ONLY valid JSON, nothing else.
-No explanations. No markdown. No code blocks. Raw JSON only.
+CRITICAL OUTPUT FORMAT - STRICT JSON ONLY:
+{
+  "in": [                    // REQUIRED: Array of inbound ports (use-cases)
+    {
+      "name": "PortName",   // REQUIRED: PortName port format
+      "type": "use-case",   // REQUIRED: Must be exactly "use-case"
+      "description": "What this port does"  // REQUIRED: Brief description
+    }
+  ],
+  "out": [                  // REQUIRED: Array of outbound ports (infrastructure)
+    {
+      "name": "PortName",   // REQUIRED: PortName port format
+      "type": "infrastructure",  // REQUIRED: Must be exactly "infrastructure"
+      "description": "What this port does"  // REQUIRED: Brief description
+    }
+  ]
+}
 
-Output a JSON object with two arrays: "in" and "out". These represent the ports for a specific bounded context.
-- "in": array of objects with "name" (PascalCase ending in Port), "type" (string), "description" (string)
-- "out": array of objects with "name" (PascalCase ending in Port), "type" (string), "description" (string)
+VALIDATION RULES:
+- BOTH "in" AND "out" arrays MUST be present (even if empty)
+- Every port MUST have: "name", "type", "description"
+- "type" MUST be exactly "use-case" for inbound, "infrastructure" for outbound
+- String values MUST be properly closed with matching quotes
+- Descriptions should be 1-2 sentences, COMPLETE (not cut off mid-sentence)
 
-CRITICAL: Each port object MUST have exactly 3 fields with valid strings:
-  - "name": string, must end with "Port" (e.g. "CreateOrderPort", not "CreateOrder")
-  - "type": string (e.g. "UseCase", "Repository", "Service")
-  - "description": string, non-empty (e.g. "Creates a new order")
+SAFETY CHECK BEFORE OUTPUT:
+1. Count opening and closing braces { } - they must match
+2. Count opening and closing brackets [ ] - they must match
+3. Count quotes " " - they must be even number
+4. If any count is off, DO NOT output - instead output valid empty structure: {"in":[],"out":[]}
 
-Each context must have at least 1 inbound port.
-Outbound ports represent infrastructure dependencies: repositories, external APIs, message queues, email services. Most contexts need at least 1 outbound port.
+EXAMPLE OF CORRECT OUTPUT:
+{
+  "in": [
+    {"name": "CreateOrderPort", "type": "use-case", "description": "Creates new orders in the system"},
+    {"name": "CancelOrderPort", "type": "use-case", "description": "Cancels existing orders"}
+  ],
+  "out": [
+    {"name": "PaymentGateway", "type": "infrastructure", "description": "Integrates with Stripe payment API"}
+  ]
+}
 
-CORRECT output: {"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Creates a new order"}], "out": [{"name": "OrderRepositoryPort", "type": "Repository", "description": "Persists orders to storage"}]}
+EXAMPLE OF INCORRECT OUTPUT (DO NOT USE):
+{"in": []}                           // ❌ Missing "out" array
+{"in": [{"name": "Port1"}], "out": []}  // ❌ Port missing type and description
+{"in": [{"name": "Port1", "type": "use-case", "description": "Does stuff}  // ❌ Unterminated string
+{"in": [], "out": [{"name": "Repo", "type": "infrastructure"}]}  // ❌ Port missing description
 
-INCORRECT output: {in: [CreateOrderPort], out: []}, {in: [{"name": "CreateOrder", ...}], ...}
+STRICT RULES:
+1. ALWAYS include both "in" and "out" arrays
+2. ALWAYS include all three fields per port
+3. ALWAYS close strings with matching quotes
+4. NEVER cut off descriptions mid-word or mid-sentence
 
-Output:`;
+Output JSON only:`;
 
 export const ADAPTERS_LIST_SYSTEM_PROMPT = `You are a JSON generator. You output ONLY valid JSON, nothing else.
 No explanations. No markdown. No code blocks. Raw JSON only.

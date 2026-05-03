@@ -60,6 +60,13 @@ export type Port = {
   description: string;
 };
 
+export interface ManifestWarning {
+  code: string;
+  context?: string;
+  message: string;
+  severity: "warning";
+}
+
 export type GenerationPhase =
   | "idle"
   | "topology"
@@ -229,7 +236,10 @@ async function attemptPortsForContext(
   contextDescription: string,
   contextType: string,
   signal?: AbortSignal,
-): Promise<{ ok: true; ports: PortsList } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; ports: PortsList; degraded?: boolean }
+  | { ok: false; error: string }
+> {
   const userPrompt = compilePortsPrompt(
     contextName,
     contextDescription,
@@ -253,8 +263,7 @@ async function attemptPortsForContext(
         logger.error(
           `[manifest-gen] ports (${contextName}): no response from LLM`,
         );
-        if (attempt === MAX_RETRIES)
-          return { ok: false, error: "No response from LLM" };
+        if (attempt === MAX_RETRIES) break;
         logger.info(
           `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
         );
@@ -268,7 +277,7 @@ async function attemptPortsForContext(
           `[manifest-gen] ports (${contextName}): JSON parse error: ${errorMsg}`,
         );
         if (attempt === MAX_RETRIES) {
-          return { ok: false, error: errorMsg };
+          break;
         }
         logger.info(
           `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
@@ -285,10 +294,7 @@ async function attemptPortsForContext(
           `[manifest-gen] ports (${contextName}): validation error: ${errors}`,
         );
         if (attempt === MAX_RETRIES) {
-          return {
-            ok: false,
-            error: `Ports validation for ${contextName}: ${errors}`,
-          };
+          break;
         }
         logger.info(
           `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
@@ -306,7 +312,7 @@ async function attemptPortsForContext(
         `[manifest-gen] ports (${contextName}): exception: ${errorMsg}`,
       );
       if (attempt === MAX_RETRIES) {
-        return { ok: false, error: errorMsg };
+        break;
       }
       logger.info(
         `[manifest-gen] ports (${contextName}): retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
@@ -314,9 +320,13 @@ async function attemptPortsForContext(
     }
   }
 
+  logger.warn(
+    `[manifest-gen] ports (${contextName}): all retries failed, using empty ports`,
+  );
   return {
-    ok: false,
-    error: `Failed to generate ports for ${contextName} after retries`,
+    ok: true,
+    ports: { in: [], out: [] },
+    degraded: true,
   };
 }
 
@@ -325,7 +335,8 @@ async function buildTopologyViaMicroPasses(
   description: string,
   signal?: AbortSignal,
 ): Promise<
-  { ok: true; topology: ManifestTopologyDraft } | { ok: false; error: string }
+  | { ok: true; topology: ManifestTopologyDraft; warnings: ManifestWarning[] }
+  | { ok: false; error: string }
 > {
   const workspaceName = description
     .slice(0, 60)
@@ -344,6 +355,7 @@ async function buildTopologyViaMicroPasses(
   }
 
   const contexts: ManifestTopologyDraftContext[] = [];
+  const warnings: ManifestWarning[] = [];
 
   for (const ctx of ctxResult.contexts) {
     if (signal?.aborted) return { ok: false, error: "Aborted" };
@@ -359,10 +371,13 @@ async function buildTopologyViaMicroPasses(
       signal,
     );
 
-    if (!portsResult.ok) {
-      const errorMsg =
-        "error" in portsResult ? portsResult.error : "Unknown error";
-      return { ok: false, error: errorMsg };
+    if (portsResult.ok && portsResult.degraded) {
+      warnings.push({
+        code: "PORTS_EXTRACTION_FAILED",
+        context: ctx.name,
+        message: `Port extraction failed for ${ctx.name}, using empty ports`,
+        severity: "warning",
+      });
     }
 
     let inPorts: Port[];
@@ -370,13 +385,15 @@ async function buildTopologyViaMicroPasses(
 
     try {
       logger.info(`[manifest-gen] Normalizing inbound ports for ${ctx.name}`);
-      inPorts = portsResult.ports.in.map((p: unknown) => {
-        const normalized = normalizePort(p, "use-case");
-        return {
-          ...normalized,
-          name: normalizePortName(normalized.name),
-        };
-      });
+      inPorts = portsResult.ok
+        ? portsResult.ports.in.map((p: unknown) => {
+            const normalized = normalizePort(p, "use-case");
+            return {
+              ...normalized,
+              name: normalizePortName(normalized.name),
+            };
+          })
+        : [];
       logger.info(`[manifest-gen] Normalized ${inPorts.length} inbound ports`);
     } catch (error) {
       const errorMsg =
@@ -391,13 +408,15 @@ async function buildTopologyViaMicroPasses(
 
     try {
       logger.info(`[manifest-gen] Normalizing outbound ports for ${ctx.name}`);
-      outPorts = portsResult.ports.out.map((p: unknown) => {
-        const normalized = normalizePort(p, "infrastructure");
-        return {
-          ...normalized,
-          name: normalizePortName(normalized.name),
-        };
-      });
+      outPorts = portsResult.ok
+        ? portsResult.ports.out.map((p: unknown) => {
+            const normalized = normalizePort(p, "infrastructure");
+            return {
+              ...normalized,
+              name: normalizePortName(normalized.name),
+            };
+          })
+        : [];
       logger.info(
         `[manifest-gen] Normalized ${outPorts.length} outbound ports`,
       );
@@ -438,7 +457,7 @@ async function buildTopologyViaMicroPasses(
     );
     const normalizedTopology = normalizeTopologyDraft(topology);
     logger.info("[manifest-gen] Topology normalization successful");
-    return { ok: true, topology: normalizedTopology };
+    return { ok: true, topology: normalizedTopology, warnings };
   } catch (error) {
     const errorMsg =
       error instanceof Error
@@ -563,10 +582,16 @@ export function useClientManifestGeneration(
           return;
         }
 
+        if (topologyResult.warnings.length > 0) {
+          logger.warn(
+            `[manifest-gen] Topology generation completed with ${topologyResult.warnings.length} warning(s)`,
+          );
+        }
+
         logger.info(
           `[manifest-gen] Topology generation successful, proceeding to finalize`,
         );
-        await finalizeGeneration(topology, signal);
+        await finalizeGeneration(topology, signal, topologyResult.warnings);
       } catch (error) {
         if (signal?.aborted) {
           logger.info("[manifest-gen] Generation aborted");
@@ -586,7 +611,11 @@ export function useClientManifestGeneration(
   );
 
   const finalizeGeneration = useCallback(
-    async (topology: ManifestTopologyDraft, signal?: AbortSignal) => {
+    async (
+      topology: ManifestTopologyDraft,
+      signal?: AbortSignal,
+      warnings: ManifestWarning[] = [],
+    ) => {
       logger.info(
         `[manifest-gen] Finalizing generation for ${topology.boundedContexts.length} contexts`,
       );
@@ -681,7 +710,15 @@ export function useClientManifestGeneration(
         `[manifest-gen] Manifest rendering complete, ${rendered.diagnostics.length} diagnostic(s)`,
       );
       setGeneratedManifest(rendered.yaml);
-      setDiagnostics(rendered.diagnostics);
+      setDiagnostics([
+        ...rendered.diagnostics,
+        ...warnings.map((w) => ({
+          code: w.code,
+          message: w.message,
+          severity: "warning" as const,
+          context: w.context,
+        })),
+      ]);
       setPhase("complete");
       setIsGenerating(false);
     },
