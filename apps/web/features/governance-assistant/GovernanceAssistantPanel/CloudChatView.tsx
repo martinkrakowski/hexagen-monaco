@@ -2,10 +2,11 @@
 
 import { CloudChatInterface } from "../CloudChatInterface";
 import { PanelFooter } from "../governance";
+import type { CloudChatMessage } from "../hooks/useCloudLlm";
 
 interface CloudChatViewProps {
   onModeChange: (mode: "local" | "cloud") => void;
-  cloudMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  cloudMessages: CloudChatMessage[];
   cloudLLMStatus: string;
   cloudLLMError: string | null;
   onSendMessage: (content: string) => void;
@@ -45,7 +46,7 @@ export function CloudChatView({
       </div>
       <div className="flex-1 min-h-0">
         <CloudChatInterface
-          messages={cloudMessages as any}
+          messages={cloudMessages}
           isStreaming={cloudLLMStatus === "streaming"}
           error={cloudLLMError}
           onSendMessage={onSendMessage}

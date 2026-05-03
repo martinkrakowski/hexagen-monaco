@@ -1,6 +1,5 @@
-import { Button, Badge, Checkbox, Label } from "@hexagen/ui";
+import { Button, Badge } from "@hexagen/ui";
 import { ManifestPreview } from "../ManifestPreview";
-import { ModelSettingsView } from "@hexagen/model-settings";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { WELCOME_FLOW_ERROR_MESSAGES } from "../ModelSelectionFlow/WelcomeFlowError";
@@ -14,7 +13,6 @@ const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {
 
 export function StateView({
   flowState,
-  clientGen,
   actions,
   onUseManifest,
   onConfirmAndContinue,
@@ -36,24 +34,29 @@ export function StateView({
           </p>
         </div>
 
-        {triggers.map((trigger: ClarificationTrigger, index: number) => (
-          <div
-            key={`${trigger.type}-${trigger.contextName ?? index}`}
-            className="flex items-start gap-4 p-4 bg-secondary rounded-md"
-          >
-            <Badge variant="outline">
-              {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
-            </Badge>
-            <div className="flex-1 space-y-1">
-              {trigger.contextName && (
-                <p className="text-sm font-medium text-foreground">
-                  {trigger.contextName}
+        {triggers.map((trigger, index: number) => {
+          const triggerType = trigger.type as ClarificationTrigger["type"];
+          return (
+            <div
+              key={`${trigger.type}-${trigger.contextName ?? index}`}
+              className="flex items-start gap-4 p-4 bg-secondary rounded-md"
+            >
+              <Badge variant="outline">
+                {TRIGGER_TYPE_LABELS[triggerType] ?? trigger.type}
+              </Badge>
+              <div className="flex-1 space-y-1">
+                {trigger.contextName && (
+                  <p className="text-sm font-medium text-foreground">
+                    {trigger.contextName}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  {trigger.message}
                 </p>
-              )}
-              <p className="text-sm text-muted-foreground">{trigger.message}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <div className="flex gap-2 justify-end pt-4">
           <Button variant="ghost" onClick={() => actions.transitionTo("idle")}>

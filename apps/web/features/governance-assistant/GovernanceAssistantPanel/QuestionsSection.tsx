@@ -8,6 +8,7 @@ import {
   FollowUpTag,
 } from "../governance";
 import type { QuestionsSectionProps } from "./types";
+import type { GovernanceEntry } from "@hexagen/local-llm";
 
 export function QuestionsSection({
   displayQuestions,
@@ -49,14 +50,14 @@ export function QuestionsSection({
                   {conversationThread.length > 0 && (
                     <div className="space-y-4 mb-4">
                       {conversationThread.map((entry, i) => {
-                        const entryWithQuestion = {
+                        const entryWithQuestion: GovernanceEntry = {
                           ...entry,
                           questionLabel: entry.questionLabel || "",
-                        };
+                        } as GovernanceEntry;
                         return (
                           <ThreadEntry
                             key={entry.id}
-                            entry={entryWithQuestion as any}
+                            entry={entryWithQuestion}
                             isCurrentlyStreaming={
                               isCurrentlyStreaming &&
                               i === conversationThread.length - 1

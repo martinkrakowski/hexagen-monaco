@@ -3,6 +3,7 @@
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { PanelFooter } from "../governance";
 import type { ModeWrapperProps } from "./types";
+import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 
 type LocalModeSettingsViewProps = Pick<
   ModeWrapperProps,
@@ -41,12 +42,18 @@ export function LocalModeSettingsView({
     <div className="flex flex-col h-full">
       <ModelSettingsView
         key={llmEngineState.loadedModelId ?? "none"}
-        currentModelId={llmEngineState.loadedModelId as any}
-        loadedModel={loadedModel as any}
+        currentModelId={llmEngineState.loadedModelId as DomainModelId | null}
+        loadedModel={loadedModel as ModelMetadata | null}
         messagesLength={messagesLength}
-        onSwitchModel={onSwitchModel as any}
-        onDeleteModel={onDeleteModel as any}
-        hasModelInCache={hasModelInCache as any}
+        onSwitchModel={
+          onSwitchModel as (modelId: DomainModelId) => Promise<void>
+        }
+        onDeleteModel={
+          onDeleteModel as (modelId: DomainModelId) => Promise<void>
+        }
+        hasModelInCache={
+          hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
+        }
         onBack={onBackFromSettings}
         isLoading={
           llmEngineState.status === "downloading" ||

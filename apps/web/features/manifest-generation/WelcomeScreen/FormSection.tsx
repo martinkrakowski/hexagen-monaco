@@ -13,7 +13,6 @@ export function FormSection({
   selectedExample,
   onUseExample,
   charCount,
-  isValid,
   isDisabled,
 }: FormSectionProps) {
   return (

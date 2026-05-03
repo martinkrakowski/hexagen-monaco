@@ -1,6 +1,11 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useCallback } from "react";
 import { getModelPreferences } from "../../ModelSelectionFlow/modelPreferencesStorage";
 import type { LocalLLMContext } from "../../../../lib/llm-interfaces";
+import type {
+  WelcomeFlowState,
+  WelcomeFlowActions,
+} from "../../ModelSelectionFlow/useWelcomeFlowState";
+import type { ClientManifestGenerationResult } from "../types";
 
 export interface NavigationHandlers {
   handleGenerate: (isValid: boolean) => void;
@@ -14,11 +19,11 @@ export interface NavigationHandlers {
 
 export function useWelcomeScreenNavigation(
   llmContext: LocalLLMContext,
-  flowState: any,
-  actions: any,
+  flowState: WelcomeFlowState,
+  actions: WelcomeFlowActions,
   onSetDescription: (desc: string) => void,
   onSetSelectedExample: (idx: number | null) => void,
-  clientGen: any,
+  clientGen: ClientManifestGenerationResult,
 ) {
   const rememberChoiceRef = useRef(false);
   const clientGenAbortRef = useRef<AbortController | null>(null);

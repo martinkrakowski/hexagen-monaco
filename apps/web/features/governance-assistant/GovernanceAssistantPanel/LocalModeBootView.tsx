@@ -38,10 +38,13 @@ export function LocalModeBootView({
   }
 
   if (showUnavailable) {
+    const unavailableStatus = llmEngineState.status as
+      | "no_webgpu"
+      | "unsupported_browser";
     return (
       <div className="h-full">
         <LifecycleCard>
-          <UnavailableCard status={llmEngineState.status as any} />
+          <UnavailableCard status={unavailableStatus} />
         </LifecycleCard>
       </div>
     );

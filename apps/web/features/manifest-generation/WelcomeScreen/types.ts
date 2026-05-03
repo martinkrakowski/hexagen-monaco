@@ -1,4 +1,10 @@
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import type {
+  WelcomeFlowState,
+  WelcomeFlowActions,
+} from "../ModelSelectionFlow/useWelcomeFlowState";
+
+export type { WelcomeFlowState };
 
 export interface WelcomeScreenProps {
   onUseManifest?: (manifest: string) => void;
@@ -21,7 +27,6 @@ export interface FormSectionProps {
   selectedExample: number | null;
   onUseExample: (example: string, index: number) => void;
   charCount: number;
-  isValid: boolean;
   isDisabled: boolean;
 }
 
@@ -41,10 +46,18 @@ export interface ActionBarProps {
   onGenerate: () => void;
 }
 
+export interface ClientManifestGenerationResult {
+  phase: string;
+  generateManifest: (
+    description: string,
+    signal: AbortSignal,
+  ) => Promise<{ manifest: string; clarifications?: unknown[] }>;
+  reset: () => void;
+}
+
 export interface StateViewProps {
-  flowState: any;
-  clientGen: any;
-  actions: any;
+  flowState: WelcomeFlowState;
+  actions: WelcomeFlowActions;
   onUseManifest?: (manifest: string) => void;
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;

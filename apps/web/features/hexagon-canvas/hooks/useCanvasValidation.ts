@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { type Connection, type IsValidConnection } from "@xyflow/react";
+import { type IsValidConnection } from "@xyflow/react";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonNodeWithLayout,

@@ -2,6 +2,11 @@
 
 import { ModelProgressCard } from "../ModelProgressCard/ModelProgressCard";
 import type { ModeWrapperProps } from "./types";
+import type {
+  LLMEngineStatus,
+  DomainModelId,
+  ModelMetadata,
+} from "@hexagen/local-llm";
 
 function LifecycleCard({ children }: { children: React.ReactNode }) {
   return (
@@ -37,13 +42,13 @@ export function LocalModeProgressView({
     <div className="h-full">
       <LifecycleCard>
         <ModelProgressCard
-          status={llmEngineState.status as any}
+          status={llmEngineState.status as LLMEngineStatus}
           progress={llmEngineState.progress}
-          errorMessage={llmEngineState.errorMessage ?? ""}
+          errorMessage={llmEngineState.errorMessage}
           onCancel={onOpenSettings}
           onRetry={onInitModel}
-          model={loadedModel as any}
-          modelId={llmEngineState.loadedModelId as any}
+          model={loadedModel as ModelMetadata | null}
+          modelId={llmEngineState.loadedModelId as DomainModelId | undefined}
         />
       </LifecycleCard>
     </div>

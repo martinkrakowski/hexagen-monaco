@@ -2,6 +2,7 @@
 
 import { CloudModelSettingsView } from "../CloudModelSettingsView";
 import { PanelFooter } from "../governance";
+import { useSecretVault } from "@/lib/vault-context";
 
 interface CloudConnectingViewProps {
   onModeChange: (mode: "local" | "cloud") => void;
@@ -18,6 +19,8 @@ export function CloudConnectingView({
   connectionError,
   onRetryConnection,
 }: CloudConnectingViewProps) {
+  const vault = useSecretVault();
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex border-b border-border shrink-0">
@@ -37,7 +40,7 @@ export function CloudConnectingView({
       </div>
       <div className="flex-1 min-h-0">
         <CloudModelSettingsView
-          vault={undefined as any}
+          vault={vault}
           onConnect={onCloudConnect}
           isConnecting={isConnecting}
           connectionError={connectionError?.message ?? null}

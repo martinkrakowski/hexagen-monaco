@@ -5,8 +5,8 @@ import type { ModelCapabilityCheckProps } from "./types";
 function getParameterSize(modelId: string | null): string {
   if (!modelId) return "sub-3B";
   return (
-    (MODEL_METADATA_MAP as Record<string, any>)[modelId]?.parameterSize ??
-    "sub-3B"
+    MODEL_METADATA_MAP[modelId as keyof typeof MODEL_METADATA_MAP]
+      ?.parameterSize ?? "sub-3B"
   );
 }
 

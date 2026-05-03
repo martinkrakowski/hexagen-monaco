@@ -9,7 +9,7 @@ import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
 import { useClientManifestGeneration } from "../useClientManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { isManifestCapableModel } from "@hexagen/local-llm";
-import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { HeaderSection } from "./HeaderSection";
 import { FormSection } from "./FormSection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
@@ -154,9 +154,9 @@ export function WelcomeScreen({
       llmContext.engineState.status === "ready" ||
       (prefs.rememberChoice && prefs.lastModelId)
     ) {
-      actions.transitionTo("generating" as any);
+      actions.transitionTo("generating");
     } else {
-      actions.transitionTo("model_selection" as any);
+      actions.transitionTo("model_selection");
     }
   };
 
@@ -187,7 +187,6 @@ export function WelcomeScreen({
     return (
       <StateView
         flowState={flowState}
-        clientGen={clientGen}
         actions={actions}
         onUseManifest={onUseManifest}
         onConfirmAndContinue={handleConfirmAndContinue}
@@ -206,7 +205,10 @@ export function WelcomeScreen({
         rememberChoice={rememberChoice}
         onRememberChoiceChange={setRememberChoice}
         onSelectModel={(modelId) =>
-          actions.selectLocalModel(modelId as any, rememberChoiceRef.current)
+          actions.selectLocalModel(
+            modelId as DomainModelId,
+            rememberChoiceRef.current,
+          )
         }
         onBack={() => actions.transitionTo("idle")}
         onModelReady={() => actions.transitionTo("generating")}
@@ -239,7 +241,6 @@ export function WelcomeScreen({
           formHandlers.setValue("selectedExample", index);
         }}
         charCount={formHandlers.charCount}
-        isValid={formHandlers.isValid}
         isDisabled={flowState.state !== "idle"}
       />
 
@@ -254,7 +255,7 @@ export function WelcomeScreen({
 
       <ActionBar
         canGenerate={canGenerate}
-        isGenerating={flowState.state === ("generating" as any)}
+        isGenerating={false}
         phase={clientGen.phase}
         onGenerate={handleGenerate}
       />

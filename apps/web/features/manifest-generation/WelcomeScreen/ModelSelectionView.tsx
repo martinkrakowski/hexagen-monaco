@@ -1,9 +1,10 @@
-import { Button, Checkbox, Label } from "@hexagen/ui";
+import { Button, Checkbox } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import type { WelcomeFlowState } from "./types";
 
 interface ModelSelectionViewProps {
-  flowState: any;
+  flowState: WelcomeFlowState;
   llmContext: LocalLLMContext;
   rememberChoice: boolean;
   onRememberChoiceChange: (value: boolean) => void;

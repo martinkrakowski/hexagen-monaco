@@ -3,6 +3,13 @@ import type {
   AISuggestion,
   PrebakedQuestion,
 } from "@hexagen/prompt-compiler";
+import type {
+  LLMEngineState,
+  DomainModelId,
+  ModelMetadata,
+} from "@hexagen/local-llm";
+import type { CloudChatMessage } from "../hooks/useCloudLlm";
+import type { ConnectionState } from "../hooks/useCloudConnection";
 
 export interface GovernanceAssistantPanelProps {
   wizardData: unknown;
@@ -60,25 +67,19 @@ export interface ModeWrapperProps {
   mode: LLMMode;
   panelView: PanelView;
   onModeChange: (mode: LLMMode) => void;
-  cloudConnectionState: "disconnected" | "connecting" | "connected";
+  cloudConnectionState: ConnectionState;
   cloudConnectionError: { message: string; retryable: boolean } | null;
   onCloudConnect: (provider: string, model: string) => Promise<void>;
   onCloudDisconnect: () => void;
   onRetryConnection: () => void;
-  cloudMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  cloudMessages: CloudChatMessage[];
   cloudLLMStatus: string;
   cloudLLMError: string | null;
   onSendMessage: (content: string) => void;
   onAbort: () => void;
   onClear: () => void;
   modelName: string;
-  llmEngineState: {
-    status: string;
-    progress: number;
-    errorMessage: string | null;
-    autoLoading: boolean;
-    loadedModelId?: string;
-  };
+  llmEngineState: LLMEngineState;
   showBootSpinner: boolean;
   showUnavailable: boolean;
   showWakingUp: boolean;
@@ -91,10 +92,10 @@ export interface ModeWrapperProps {
   onOpenSettings: () => void;
   onBackFromSettings: () => void;
   onSwitchToCloud: () => void;
-  loadedModel: unknown;
+  loadedModel: ModelMetadata | null;
   messagesLength: number;
-  onSwitchModel: (modelId: unknown) => Promise<void>;
-  onDeleteModel: (modelId: unknown) => Promise<void>;
-  hasModelInCache: (modelId: unknown) => Promise<boolean>;
+  onSwitchModel: (modelId: DomainModelId) => Promise<void>;
+  onDeleteModel: (modelId: DomainModelId) => Promise<void>;
+  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   onInitModel: () => void;
 }

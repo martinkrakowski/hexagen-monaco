@@ -8,7 +8,12 @@ import { useCloudConnection } from "../hooks/useCloudConnection";
 import { useSecretVault } from "@/lib/vault-context";
 import { getClientProviders } from "@hexagen/local-llm";
 import type { PrebakedQuestion } from "@hexagen/prompt-compiler";
-
+import type { WizardData } from "@hexagen/project-configuration";
+import type {
+  ClientProviderInfo,
+  CloudModelConfig,
+  DomainModelId,
+} from "@hexagen/local-llm";
 import { StepPills, PanelFooter } from "../governance";
 
 import { StatusSection } from "./StatusSection";
@@ -21,6 +26,8 @@ import type {
   PanelView,
   LLMMode,
 } from "./types";
+import type { CloudChatMessage } from "../hooks/useCloudLlm";
+import type { ConnectionState } from "../hooks/useCloudConnection";
 
 export function GovernanceAssistantPanel({
   wizardData,
@@ -45,7 +52,7 @@ export function GovernanceAssistantPanel({
     regeneratingEntryId,
     regenerateAnswer,
     threadLoaded,
-  } = useGovernanceAssistant(wizardData as any, currentStepIndex);
+  } = useGovernanceAssistant(wizardData as WizardData, currentStepIndex);
 
   const {
     messages,
@@ -194,9 +201,12 @@ export function GovernanceAssistantPanel({
     const providers = getClientProviders();
     const modelName =
       providers
-        .find((p: any) => p.id === cloudConnection.config?.provider)
-        ?.models.find((m: any) => m.id === cloudConnection.config?.model)
-        ?.displayName ??
+        .find(
+          (p: ClientProviderInfo) => p.id === cloudConnection.config?.provider,
+        )
+        ?.models.find(
+          (m: CloudModelConfig) => m.id === cloudConnection.config?.model,
+        )?.displayName ??
       cloudConnection.config?.model ??
       "Unknown Model";
 
@@ -205,12 +215,12 @@ export function GovernanceAssistantPanel({
         mode={mode}
         panelView={panelView}
         onModeChange={setMode}
-        cloudConnectionState={cloudConnection.state as any}
+        cloudConnectionState={cloudConnection.state as ConnectionState}
         cloudConnectionError={cloudConnection.error}
         onCloudConnect={handleCloudConnect}
         onCloudDisconnect={handleCloudDisconnect}
         onRetryConnection={handleRetryConnection}
-        cloudMessages={cloudLLM.messages as any}
+        cloudMessages={cloudLLM.messages as CloudChatMessage[]}
         cloudLLMStatus={cloudLLM.status}
         cloudLLMError={cloudLLM.errorMessage}
         onSendMessage={(content) => {
@@ -221,7 +231,7 @@ export function GovernanceAssistantPanel({
         onAbort={cloudLLM.abort}
         onClear={cloudLLM.clearMessages}
         modelName={modelName}
-        llmEngineState={llmEngineState as any}
+        llmEngineState={llmEngineState}
         showBootSpinner={showBootSpinner}
         showUnavailable={showUnavailable}
         showWakingUp={showWakingUp}
@@ -239,9 +249,13 @@ export function GovernanceAssistantPanel({
         }}
         loadedModel={loadedModel}
         messagesLength={messages.length}
-        onSwitchModel={switchModel as any}
-        onDeleteModel={deleteCachedModel as any}
-        hasModelInCache={hasModelInCache as any}
+        onSwitchModel={switchModel as (modelId: DomainModelId) => Promise<void>}
+        onDeleteModel={
+          deleteCachedModel as (modelId: DomainModelId) => Promise<void>
+        }
+        hasModelInCache={
+          hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
+        }
         onInitModel={initializeModel}
       />
     );
