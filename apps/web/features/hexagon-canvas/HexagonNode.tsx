@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { UnifiedBoundedContext } from "./BoundedContext";
+import { UnifiedBoundedContext } from "./BoundedContext/BoundedContext";
 import type { NodeProps } from "@xyflow/react";
 import type { Node } from "@xyflow/react";
 

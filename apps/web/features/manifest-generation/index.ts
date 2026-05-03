@@ -2,7 +2,7 @@
  * Manifest generation feature exports
  */
 
-export { WelcomeScreen } from "./WelcomeScreen";
+export { WelcomeScreen } from "./WelcomeScreen/WelcomeScreen";
 export { ManifestPreview } from "./ManifestPreview";
 export { ExampleCard } from "./ExampleCard";
 export { useManifestGeneration } from "./useManifestGeneration";
