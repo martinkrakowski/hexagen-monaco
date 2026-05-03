@@ -29,6 +29,19 @@ interface GenerateManifestSuccessResponse {
   confidence: number;
   suggestions: string[];
   warnings: string[];
+  generationWarnings?: Array<{
+    category: string;
+    context?: string;
+    message: string;
+    suggestedAction: string;
+  }>;
+  diagnostics?: {
+    totalAttempts: number;
+    tokensUsed: number;
+    processingTime: number;
+    repairApplied: boolean;
+    model: string;
+  };
   metadata: {
     model: string;
     processingTime: number;
@@ -182,6 +195,13 @@ export async function POST(
         confidence: result.manifest.confidence,
         suggestions: result.manifest.suggestions,
         warnings: result.manifest.warnings,
+        generationWarnings: result.warnings?.map((w) => ({
+          category: w.category,
+          context: w.context,
+          message: w.message,
+          suggestedAction: w.suggestedAction,
+        })),
+        diagnostics: result.diagnostics,
         metadata: {
           model: result.manifest.metadata.model,
           processingTime: result.manifest.metadata.processingTime,

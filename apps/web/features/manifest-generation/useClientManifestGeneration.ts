@@ -73,7 +73,7 @@ async function attemptContextList(
 ): Promise<
   { ok: true; contexts: ContextListEntry[] } | { ok: false; error: string }
 > {
-  const userPrompt = compileContextListPrompt(description);
+  const userPrompt = compileContextListPrompt({ userDescription: description });
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (signal?.aborted) return { ok: false, error: "Aborted" };
@@ -208,17 +208,23 @@ async function buildTopologyViaMicroPasses(
       return { ok: false, error: portsResult.error };
     }
 
-    const inPorts = portsResult.ports.in.map((name: string) => ({
-      name: normalizePortName(name),
-      type: "use-case",
-      description: `Inbound port ${normalizePortName(name)}`,
-    }));
+    const inPorts = portsResult.ports.in.map(
+      (p: { name: string; type: string; description: string }) => ({
+        name: normalizePortName(p.name),
+        type: p.type || "use-case",
+        description:
+          p.description || `Inbound port ${normalizePortName(p.name)}`,
+      }),
+    );
 
-    const outPorts = portsResult.ports.out.map((name: string) => ({
-      name: normalizePortName(name),
-      type: "infrastructure",
-      description: `Outbound port ${normalizePortName(name)}`,
-    }));
+    const outPorts = portsResult.ports.out.map(
+      (p: { name: string; type: string; description: string }) => ({
+        name: normalizePortName(p.name),
+        type: p.type || "infrastructure",
+        description:
+          p.description || `Outbound port ${normalizePortName(p.name)}`,
+      }),
+    );
 
     contexts.push({
       name: ctx.name,
