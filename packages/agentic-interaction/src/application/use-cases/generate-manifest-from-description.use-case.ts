@@ -95,7 +95,7 @@ export class GenerateManifestFromDescriptionUseCase {
       } else {
         const retryResult = retryFactory(attempt);
         if (retryResult.kind === "clarify") {
-          console.debug(
+          console.log(
             `[manifest-gen] phase=${phase}, attempt=${attempt}, action=clarify`,
           );
           throw new Error(
@@ -105,7 +105,7 @@ export class GenerateManifestFromDescriptionUseCase {
         userPrompt = retryResult.content;
       }
 
-      console.debug(
+      console.log(
         `[manifest-gen] phase=${phase}, attempt=${attempt}, maxTokens=${maxTokens}`,
       );
 
@@ -124,7 +124,7 @@ export class GenerateManifestFromDescriptionUseCase {
 
       const result = await this.llmPipeline.sendRequest(llmRequest);
       if (!result.success) {
-        console.debug(
+        console.log(
           `[manifest-gen] phase=${phase}, attempt=${attempt}, llmFailed=true`,
         );
         continue;
@@ -136,7 +136,7 @@ export class GenerateManifestFromDescriptionUseCase {
       const parsed = parseJSON<T>(result.value.content);
       if (parsed.ok) {
         if (parsed.repairApplied) repairApplied = true;
-        console.debug(
+        console.log(
           `[manifest-gen] phase=${phase}, attempt=${attempt}, success=true, repairApplied=${parsed.repairApplied}`,
         );
         return {
@@ -148,7 +148,7 @@ export class GenerateManifestFromDescriptionUseCase {
         };
       }
 
-      console.debug(
+      console.log(
         `[manifest-gen] phase=${phase}, attempt=${attempt}, parseFailed=true, repairAttempted=${parsed.repairApplied}`,
       );
     }

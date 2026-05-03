@@ -132,7 +132,26 @@ export function compilePortsPrompt(
   contextDescription: string,
   contextType: string,
 ): string {
-  return `Bounded Context: "${contextName}" (type: ${contextType})\nDescription: ${contextDescription}\n\nThink step-by-step:\n1. What use cases does this context handle? (inbound ports)\n2. What infrastructure does it need? (outbound: repositories, external APIs, queues)\n\nOutput:`;
+  const typeHints: Record<string, string> = {
+    core: "inbound: CreateXPort, GetXPort, UpdateXPort; outbound: XRepositoryPort, XGatewayPort, XQueuePort",
+    supporting:
+      "inbound: ProcessXPort, ValidateXPort; outbound: NotificationPort, ExternalServicePort",
+    driver:
+      "inbound: AcceptXPort, ReceiveXPort; outbound: StoragePort, CachePort",
+    "shared-kernel": "inbound: QueryXPort; outbound: SharedDataPort",
+  };
+  const hint = typeHints[contextType] || typeHints["core"];
+  return `Bounded Context: "${contextName}" (type: ${contextType})
+Description: ${contextDescription}
+
+Think step-by-step:
+1. Inbound ports = use cases this context handles (something the user can DO with this context)
+2. Outbound ports = infrastructure this context needs (something this context USES)
+
+Examples for ${contextType} contexts:
+${hint}
+
+Output:`;
 }
 
 export function compileAdaptersPrompt(

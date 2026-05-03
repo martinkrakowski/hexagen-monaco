@@ -165,6 +165,10 @@ export async function POST(
     });
 
     // Create and execute use case
+    console.log(
+      "[manifest-gen] API route: executing use case with model",
+      body.modelId || "default",
+    );
     const useCase = new GenerateManifestFromDescriptionUseCase(selectorAdapter);
     const result = await useCase.execute({
       description: projectDescription,

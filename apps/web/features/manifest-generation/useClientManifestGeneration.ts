@@ -79,10 +79,13 @@ async function attemptContextList(
     if (signal?.aborted) return { ok: false, error: "Aborted" };
 
     try {
+      console.log(
+        `[manifest-gen] PORTS phase, attempt=${attempt}, context=${contextName}`,
+      );
       const content = await sendAndExtract(
         llmContext,
         userPrompt,
-        CONTEXT_LIST_SYSTEM_PROMPT,
+        PORTS_LIST_SYSTEM_PROMPT,
         signal,
       );
       if (!content) return { ok: false, error: "No response from LLM" };
@@ -135,6 +138,9 @@ async function attemptPortsForContext(
     if (signal?.aborted) return { ok: false, error: "Aborted" };
 
     try {
+      console.log(
+        `[manifest-gen] ports phase, attempt=${attempt}, context=${contextName}`,
+      );
       const content = await sendAndExtract(
         llmContext,
         userPrompt,
@@ -202,6 +208,9 @@ async function buildTopologyViaMicroPasses(
   for (const ctx of ctxResult.contexts) {
     if (signal?.aborted) return { ok: false, error: "Aborted" };
 
+    console.log(
+      `[manifest-gen] Processing context: ${ctx.name}, type=${ctx.type}`,
+    );
     const portsResult = await attemptPortsForContext(
       llmContext,
       ctx.name,
