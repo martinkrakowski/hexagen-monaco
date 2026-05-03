@@ -12,8 +12,9 @@ function toPascalCase(input: string): string {
     .replace(/^(.)/, (_, c) => c.toUpperCase());
 }
 
-function toKebabCase(input: string): string {
-  return input
+function toKebabCase(input: unknown): string {
+  const str = typeof input === "string" ? input : String(input ?? "");
+  return str
     .trim()
     .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
@@ -21,13 +22,15 @@ function toKebabCase(input: string): string {
 }
 
 function ensurePortSuffix(name: string): string {
-  const trimmed = name.trim();
+  const trimmed = safeTrim(name);
+  if (!trimmed) return "UnnamedPort";
   if (trimmed.endsWith("Port")) return trimmed;
   return `${trimmed}Port`;
 }
 
 function normalizePortName(name: string): string {
-  const trimmed = name.trim();
+  const trimmed = safeTrim(name);
+  if (!trimmed) return "UnnamedPort";
   return ensurePortSuffix(toPascalCase(trimmed));
 }
 
@@ -35,27 +38,31 @@ function normalizeContextName(name: string): string {
   return toKebabCase(name);
 }
 
+function safeTrim(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function normalizePort(port: ManifestDraftPort): ManifestDraftPort {
   return {
-    name: normalizePortName(port.name),
-    type: port.type.trim(),
-    description: port.description.trim(),
+    name: normalizePortName(safeTrim(port.name)),
+    type: safeTrim(port.type),
+    description: safeTrim(port.description),
   };
 }
 
 function normalizeContext(context: ManifestDraftContext): ManifestDraftContext {
   return {
-    name: normalizeContextName(context.name),
+    name: normalizeContextName(safeTrim(context.name)),
     type: context.type,
-    description: context.description.trim(),
+    description: safeTrim(context.description),
     ports: {
       in: context.ports.in.map(normalizePort),
       out: context.ports.out.map(normalizePort),
     },
     adapters: context.adapters.map((a) => ({
-      name: a.name.trim(),
-      type: a.type.trim(),
-      implements: normalizePortName(a.implements),
+      name: safeTrim(a.name),
+      type: safeTrim(a.type),
+      implements: normalizePortName(safeTrim(a.implements)),
     })),
     dependsOn: context.dependsOn?.map(toKebabCase),
   };
@@ -65,9 +72,9 @@ function normalizeTopologyContext(
   context: ManifestTopologyDraftContext,
 ): ManifestTopologyDraftContext {
   return {
-    name: normalizeContextName(context.name),
+    name: normalizeContextName(safeTrim(context.name)),
     type: context.type,
-    description: context.description.trim(),
+    description: safeTrim(context.description),
     ports: {
       in: context.ports.in.map(normalizePort),
       out: context.ports.out.map(normalizePort),
@@ -79,8 +86,8 @@ function normalizeTopologyContext(
 export function normalizeDraft(draft: ManifestDraft): ManifestDraft {
   return {
     workspace: {
-      name: draft.workspace.name.trim(),
-      description: draft.workspace.description.trim(),
+      name: safeTrim(draft.workspace.name),
+      description: safeTrim(draft.workspace.description),
     },
     boundedContexts: draft.boundedContexts.map(normalizeContext),
   };
@@ -91,8 +98,8 @@ export function normalizeTopologyDraft(
 ): ManifestTopologyDraft {
   return {
     workspace: {
-      name: draft.workspace.name.trim(),
-      description: draft.workspace.description.trim(),
+      name: safeTrim(draft.workspace.name),
+      description: safeTrim(draft.workspace.description),
     },
     boundedContexts: draft.boundedContexts.map(normalizeTopologyContext),
   };

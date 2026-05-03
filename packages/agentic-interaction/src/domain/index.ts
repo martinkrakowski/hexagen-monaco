@@ -108,7 +108,12 @@ export {
   renderDraft,
   verifyToken,
 } from "./manifest/index.js";
-export { extractJSON, parseJSON } from "./manifest/index.js";
+export {
+  extractJSON,
+  parseJSON,
+  extractArrayFromWrapper,
+  extractObjectFromWrapper,
+} from "./manifest/index.js";
 
 export {
   coerceRawTopology,

@@ -3,6 +3,7 @@ import type {
   WelcomeFlowState,
   WelcomeFlowActions,
 } from "../ModelSelectionFlow/useWelcomeFlowState";
+import type { UseClientManifestGenerationReturn } from "../useClientManifestGeneration";
 
 export type { WelcomeFlowState };
 
@@ -62,4 +63,5 @@ export interface StateViewProps {
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;
   onRetryFromError: () => void;
+  clientGen: UseClientManifestGenerationReturn;
 }

@@ -45,7 +45,13 @@ export type {
 
 export { renderManifestYaml, renderDraft, verifyToken } from "./render-yaml.js";
 
-export { extractJSON, parseJSON, balanceJSON } from "./extract-json.js";
+export {
+  extractJSON,
+  parseJSON,
+  balanceJSON,
+  extractArrayFromWrapper,
+  extractObjectFromWrapper,
+} from "./extract-json.js";
 
 export {
   coerceRawTopology,

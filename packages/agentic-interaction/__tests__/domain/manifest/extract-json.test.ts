@@ -4,6 +4,8 @@ import {
   extractJSON,
   repairJSON,
   parseJSON,
+  extractArrayFromWrapper,
+  extractObjectFromWrapper,
 } from "../../../src/domain/manifest/extract-json.js";
 
 describe("extractJSON", () => {
@@ -244,5 +246,92 @@ describe("parseJSON with repair fallback", () => {
     const raw = '{"in":g [broken';
     const result = parseJSON(raw);
     assert.strictEqual(result.ok, false);
+  });
+});
+
+describe("extractArrayFromWrapper", () => {
+  it("returns array directly when data is already an array", () => {
+    const data = [{ name: "a" }, { name: "b" }];
+    const result = extractArrayFromWrapper(data);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].name, "a");
+  });
+
+  it("extracts array from known key 'contexts'", () => {
+    const data = {
+      contexts: [
+        { name: "auth", type: "core", description: "Authentication" },
+        { name: "orders", type: "core", description: "Order management" },
+      ],
+    };
+    const result = extractArrayFromWrapper(data);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].name, "auth");
+  });
+
+  it("extracts array from known key 'data'", () => {
+    const data = { data: [{ name: "x" }] };
+    const result = extractArrayFromWrapper(data);
+    assert.strictEqual(result.length, 1);
+  });
+
+  it("extracts array from first array value when no known key matches", () => {
+    const data = { items: [{ name: "a" }], count: 1 };
+    const result = extractArrayFromWrapper(data);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].name, "a");
+  });
+
+  it("returns empty array for non-object non-array input", () => {
+    assert.strictEqual(extractArrayFromWrapper("hello").length, 0);
+    assert.strictEqual(extractArrayFromWrapper(42).length, 0);
+    assert.strictEqual(extractArrayFromWrapper(null).length, 0);
+  });
+
+  it("returns empty array when object has no array values", () => {
+    const data = { name: "test", count: 5 };
+    assert.strictEqual(extractArrayFromWrapper(data).length, 0);
+  });
+
+  it("respects custom known keys", () => {
+    const data = { myCustomKey: [{ id: 1 }] };
+    const result = extractArrayFromWrapper(data, ["myCustomKey"]);
+    assert.strictEqual(result.length, 1);
+  });
+});
+
+describe("extractObjectFromWrapper", () => {
+  it("returns object directly when data is a non-array object", () => {
+    const data = { in: [], out: [] };
+    const result = extractObjectFromWrapper(data);
+    assert.ok(result);
+    assert.ok("in" in result);
+    assert.ok("out" in result);
+  });
+
+  it("extracts object from wrapper with known key 'ports'", () => {
+    const data = { ports: { in: [], out: [] } };
+    const result = extractObjectFromWrapper(data, ["ports"]);
+    assert.ok(result);
+    assert.ok("in" in result);
+    assert.ok("out" in result);
+  });
+
+  it("extracts object from single-element array", () => {
+    const data = [{ in: [], out: [] }];
+    const result = extractObjectFromWrapper(data);
+    assert.ok(result);
+    assert.ok("in" in result);
+  });
+
+  it("returns null for empty array", () => {
+    const result = extractObjectFromWrapper([]);
+    assert.strictEqual(result, null);
+  });
+
+  it("returns null for primitive input", () => {
+    assert.strictEqual(extractObjectFromWrapper("hello"), null);
+    assert.strictEqual(extractObjectFromWrapper(42), null);
+    assert.strictEqual(extractObjectFromWrapper(null), null);
   });
 });

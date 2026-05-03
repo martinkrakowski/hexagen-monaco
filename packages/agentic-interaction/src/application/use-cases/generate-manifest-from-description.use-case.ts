@@ -27,6 +27,7 @@ import {
 } from "../../domain/manifest-yaml-extractor.js";
 import {
   parseJSON,
+  extractArrayFromWrapper,
   renderManifestYaml,
   normalizeDraft,
   draftToManifest,
@@ -228,8 +229,19 @@ export class GenerateManifestFromDescriptionUseCase {
           800, // Context list: supports ~5 contexts with name/type/description (~700 tokens)
         );
 
-        // Apply runtime coercion: normalize types and names
-        const coercedContexts = contextResult.data.map((ctx) => ({
+        const rawContexts = extractArrayFromWrapper<{
+          name?: string;
+          type?: string;
+          description?: string;
+        }>(contextResult.data, [
+          "contexts",
+          "data",
+          "items",
+          "results",
+          "list",
+        ]);
+
+        const coercedContexts = rawContexts.map((ctx) => ({
           name: String(ctx.name || "unnamed-context").trim(),
           type: coerceContextType(String(ctx.type || "")),
           description: String(ctx.description || ctx.name || "").trim(),

@@ -12,6 +12,8 @@ import {
   draftToManifest,
   renderDraft,
   parseJSON,
+  extractArrayFromWrapper,
+  extractObjectFromWrapper,
   normalizePortName,
   type ManifestDraft,
   type ManifestTopologyDraft,
@@ -30,6 +32,8 @@ import {
   compileAdapterUserPrompt,
 } from "@hexagen/agentic-interaction";
 import { logger } from "../../lib/structured-logger";
+
+type StepDetailCallback = (detail: string) => void;
 
 // Coerce context type locally to handle empty strings and invalid types
 const coerceContextType = (
@@ -85,6 +89,7 @@ export interface UseClientManifestGenerationReturn {
   generationError: string | null;
   generatedManifest: string | null;
   phase: GenerationPhase;
+  stepDetail: string;
   clarificationTriggers: ClarificationTrigger[];
   partialTopology: ManifestTopologyDraft | null;
   confirmTopologyAndContinue: (signal?: AbortSignal) => Promise<void>;
@@ -141,6 +146,7 @@ async function attemptContextList(
   llmContext: LocalLLMContext,
   description: string,
   signal?: AbortSignal,
+  onStepDetail?: StepDetailCallback,
 ): Promise<
   { ok: true; contexts: ContextListEntry[] } | { ok: false; error: string }
 > {
@@ -151,6 +157,9 @@ async function attemptContextList(
 
     try {
       logger.info(`[manifest-gen] context-list phase, attempt=${attempt}`);
+      onStepDetail?.(
+        `Identifying bounded contexts${attempt > 0 ? ` (attempt ${attempt + 1})` : ""}...`,
+      );
       const content = await sendAndExtract(
         llmContext,
         userPrompt,
@@ -185,8 +194,29 @@ async function attemptContextList(
         continue;
       }
 
-      // Apply runtime coercion: normalize types and fields
-      const coercedContexts = parsed.data.map(
+      const rawContexts = extractArrayFromWrapper<{
+        name?: string;
+        type?: string;
+        description?: string;
+      }>(parsed.data, ["contexts", "data", "items", "results", "list"]);
+
+      if (rawContexts.length === 0 && !Array.isArray(parsed.data)) {
+        logger.error(
+          `[manifest-gen] context-list: parsed data is not an array and no known wrapper key found. Got keys: ${Object.keys(parsed.data as object).join(", ")}`,
+        );
+        if (attempt === MAX_RETRIES) {
+          return {
+            ok: false,
+            error: `Context list: expected array but got object with keys: ${Object.keys(parsed.data as object).join(", ")}`,
+          };
+        }
+        logger.info(
+          `[manifest-gen] context-list: retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        );
+        continue;
+      }
+
+      const coercedContexts = rawContexts.map(
         (ctx: { name?: string; type?: string; description?: string }) => ({
           name: String(ctx.name || "unnamed-context").trim(),
           type: coerceContextType(String(ctx.type || "")),
@@ -214,6 +244,7 @@ async function attemptContextList(
       logger.info(
         `[manifest-gen] context-list: successful, got ${result.data.length} contexts`,
       );
+      onStepDetail?.(`Found ${result.data.length} bounded contexts`);
       return { ok: true, contexts: result.data };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -223,6 +254,9 @@ async function attemptContextList(
       }
       logger.info(
         `[manifest-gen] context-list: retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+      );
+      onStepDetail?.(
+        `Retrying context identification (${attempt + 1}/${MAX_RETRIES})...`,
       );
     }
   }
@@ -236,6 +270,7 @@ async function attemptPortsForContext(
   contextDescription: string,
   contextType: string,
   signal?: AbortSignal,
+  onStepDetail?: StepDetailCallback,
 ): Promise<
   | { ok: true; ports: PortsList; degraded?: boolean }
   | { ok: false; error: string }
@@ -252,6 +287,9 @@ async function attemptPortsForContext(
     try {
       logger.info(
         `[manifest-gen] ports phase, attempt=${attempt}, context=${contextName}`,
+      );
+      onStepDetail?.(
+        `Extracting ports for ${contextName}${attempt > 0 ? ` (attempt ${attempt + 1})` : ""}...`,
       );
       const content = await sendAndExtract(
         llmContext,
@@ -285,7 +323,28 @@ async function attemptPortsForContext(
         continue;
       }
 
-      const result = PortsListSchema.safeParse(parsed.data);
+      let portsData = parsed.data;
+      if (
+        !Array.isArray(portsData) &&
+        typeof portsData === "object" &&
+        portsData !== null
+      ) {
+        const obj = portsData as Record<string, unknown>;
+        if (typeof obj.in === "undefined" && typeof obj.out === "undefined") {
+          const unwrapped = extractObjectFromWrapper<Record<string, unknown>>(
+            portsData,
+            ["ports", "data", "result"],
+          );
+          if (unwrapped) {
+            logger.info(
+              `[manifest-gen] ports (${contextName}): unwrapped ports from wrapper object`,
+            );
+            portsData = unwrapped as PortsList;
+          }
+        }
+      }
+
+      const result = PortsListSchema.safeParse(portsData);
       if (!result.success) {
         const errors = result.error.issues
           .map((i) => `${i.path.join(".")}: ${i.message}`)
@@ -304,6 +363,9 @@ async function attemptPortsForContext(
 
       logger.info(
         `[manifest-gen] ports (${contextName}): successful, got ${result.data.in.length} in, ${result.data.out.length} out`,
+      );
+      onStepDetail?.(
+        `${contextName}: ${result.data.in.length} inbound, ${result.data.out.length} outbound ports`,
       );
       return { ok: true, ports: result.data };
     } catch (error) {
@@ -334,6 +396,7 @@ async function buildTopologyViaMicroPasses(
   llmContext: LocalLLMContext,
   description: string,
   signal?: AbortSignal,
+  onStepDetail?: StepDetailCallback,
 ): Promise<
   | { ok: true; topology: ManifestTopologyDraft; warnings: ManifestWarning[] }
   | { ok: false; error: string }
@@ -348,7 +411,12 @@ async function buildTopologyViaMicroPasses(
     description: description.slice(0, 200),
   };
 
-  const ctxResult = await attemptContextList(llmContext, description, signal);
+  const ctxResult = await attemptContextList(
+    llmContext,
+    description,
+    signal,
+    onStepDetail,
+  );
   if (!ctxResult.ok) {
     const errorMsg = "error" in ctxResult ? ctxResult.error : "Unknown error";
     return { ok: false, error: errorMsg };
@@ -363,12 +431,14 @@ async function buildTopologyViaMicroPasses(
     logger.info(
       `[manifest-gen] Processing context: ${ctx.name}, type=${ctx.type}`,
     );
+    onStepDetail?.(`Processing ${ctx.name} (${ctx.type})...`);
     const portsResult = await attemptPortsForContext(
       llmContext,
       ctx.name,
       ctx.description,
       ctx.type,
       signal,
+      onStepDetail,
     );
 
     if (portsResult.ok && portsResult.degraded) {
@@ -385,6 +455,7 @@ async function buildTopologyViaMicroPasses(
 
     try {
       logger.info(`[manifest-gen] Normalizing inbound ports for ${ctx.name}`);
+      onStepDetail?.(`Normalizing inbound ports for ${ctx.name}...`);
       inPorts = portsResult.ok
         ? portsResult.ports.in.map((p: unknown) => {
             const normalized = normalizePort(p, "use-case");
@@ -395,6 +466,9 @@ async function buildTopologyViaMicroPasses(
           })
         : [];
       logger.info(`[manifest-gen] Normalized ${inPorts.length} inbound ports`);
+      onStepDetail?.(
+        `Normalized ${inPorts.length} inbound ports for ${ctx.name}`,
+      );
     } catch (error) {
       const errorMsg =
         error instanceof Error
@@ -408,6 +482,7 @@ async function buildTopologyViaMicroPasses(
 
     try {
       logger.info(`[manifest-gen] Normalizing outbound ports for ${ctx.name}`);
+      onStepDetail?.(`Normalizing outbound ports for ${ctx.name}...`);
       outPorts = portsResult.ok
         ? portsResult.ports.out.map((p: unknown) => {
             const normalized = normalizePort(p, "infrastructure");
@@ -419,6 +494,9 @@ async function buildTopologyViaMicroPasses(
         : [];
       logger.info(
         `[manifest-gen] Normalized ${outPorts.length} outbound ports`,
+      );
+      onStepDetail?.(
+        `Normalized ${outPorts.length} outbound ports for ${ctx.name}`,
       );
     } catch (error) {
       const errorMsg =
@@ -433,6 +511,9 @@ async function buildTopologyViaMicroPasses(
 
     logger.info(
       `[manifest-gen] Context ${ctx.name}: ${inPorts.length} in, ${outPorts.length} out ports`,
+    );
+    onStepDetail?.(
+      `${ctx.name}: ${inPorts.length} inbound, ${outPorts.length} outbound ports`,
     );
 
     contexts.push({
@@ -455,8 +536,10 @@ async function buildTopologyViaMicroPasses(
     logger.info(
       `[manifest-gen] Finalizing topology with ${contexts.length} contexts`,
     );
+    onStepDetail?.(`Finalizing topology with ${contexts.length} contexts...`);
     const normalizedTopology = normalizeTopologyDraft(topology);
     logger.info("[manifest-gen] Topology normalization successful");
+    onStepDetail?.("Topology normalization complete");
     return { ok: true, topology: normalizedTopology, warnings };
   } catch (error) {
     const errorMsg =
@@ -477,6 +560,7 @@ export function useClientManifestGeneration(
     null,
   );
   const [phase, setPhase] = useState<GenerationPhase>("idle");
+  const [stepDetail, setStepDetail] = useState<string>("");
   const [clarificationTriggers, setClarificationTriggers] = useState<
     ClarificationTrigger[]
   >([]);
@@ -545,6 +629,7 @@ export function useClientManifestGeneration(
       setGenerationError(null);
       setGeneratedManifest(null);
       setPhase("topology");
+      setStepDetail("Analyzing project structure...");
       setIsGenerating(true);
       descriptionRef.current = description;
 
@@ -556,6 +641,7 @@ export function useClientManifestGeneration(
           llmContext,
           description,
           signal,
+          setStepDetail,
         );
 
         if (!topologyResult.ok) {
@@ -620,6 +706,9 @@ export function useClientManifestGeneration(
         `[manifest-gen] Finalizing generation for ${topology.boundedContexts.length} contexts`,
       );
       setPhase("adapters");
+      setStepDetail(
+        `Extracting adapters for ${topology.boundedContexts.length} contexts...`,
+      );
 
       const draftContexts: ManifestDraft["boundedContexts"] = [];
 
@@ -634,6 +723,7 @@ export function useClientManifestGeneration(
         logger.info(
           `[manifest-gen] Processing adapters for context: ${ctx.name}`,
         );
+        setStepDetail(`Extracting adapters for ${ctx.name}...`);
 
         const allPortNames = [
           ...ctx.ports.in.map((p: { name: string }) => p.name),
@@ -645,6 +735,9 @@ export function useClientManifestGeneration(
         if (allPortNames.length > 0) {
           logger.info(
             `[manifest-gen] Extracting adapters for ${allPortNames.length} ports`,
+          );
+          setStepDetail(
+            `Extracting ${allPortNames.length} adapters for ${ctx.name}...`,
           );
           for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             if (signal?.aborted) {
@@ -665,6 +758,9 @@ export function useClientManifestGeneration(
               logger.info(
                 `[manifest-gen] Got ${adapters.length} adapters for ${ctx.name}`,
               );
+              setStepDetail(
+                `${ctx.name}: ${adapters.length} adapters extracted`,
+              );
               break;
             }
 
@@ -678,6 +774,9 @@ export function useClientManifestGeneration(
 
             logger.info(
               `[manifest-gen] Adapter extraction retry ${attempt + 1}/${MAX_RETRIES}`,
+            );
+            setStepDetail(
+              `Retrying adapter extraction for ${ctx.name} (${attempt + 1}/${MAX_RETRIES})...`,
             );
           }
         }
@@ -693,6 +792,7 @@ export function useClientManifestGeneration(
       }
 
       setPhase("rendering");
+      setStepDetail("Rendering manifest to YAML...");
       logger.info("[manifest-gen] Rendering manifest to YAML");
 
       const draft: ManifestDraft = {
@@ -709,6 +809,7 @@ export function useClientManifestGeneration(
       logger.info(
         `[manifest-gen] Manifest rendering complete, ${rendered.diagnostics.length} diagnostic(s)`,
       );
+      setStepDetail("Manifest generation complete");
       setGeneratedManifest(rendered.yaml);
       setDiagnostics([
         ...rendered.diagnostics,
@@ -750,6 +851,7 @@ export function useClientManifestGeneration(
     setGenerationError(null);
     setGeneratedManifest(null);
     setPhase("idle");
+    setStepDetail("");
     setClarificationTriggers([]);
     setPartialTopology(null);
     setDiagnostics([]);
@@ -761,6 +863,7 @@ export function useClientManifestGeneration(
     generationError,
     generatedManifest,
     phase,
+    stepDetail,
     clarificationTriggers,
     partialTopology,
     confirmTopologyAndContinue,

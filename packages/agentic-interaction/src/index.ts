@@ -176,4 +176,6 @@ export {
   verifyToken,
   extractJSON,
   parseJSON,
+  extractArrayFromWrapper,
+  extractObjectFromWrapper,
 } from "./domain/index.js";

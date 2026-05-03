@@ -219,6 +219,38 @@ function fixMultilineUnterminatedString(json: string): string {
   return result;
 }
 
+export function extractArrayFromWrapper<T>(
+  data: unknown,
+  knownKeys: string[] = ["contexts", "data", "items", "results", "list"],
+): T[] {
+  if (Array.isArray(data)) return data as T[];
+
+  if (typeof data === "object" && data !== null) {
+    const obj = data as Record<string, unknown>;
+    for (const key of knownKeys) {
+      if (Array.isArray(obj[key])) return obj[key] as T[];
+    }
+    for (const value of Object.values(obj)) {
+      if (Array.isArray(value)) return value as T[];
+    }
+  }
+
+  return [];
+}
+
+export function extractObjectFromWrapper<T extends Record<string, unknown>>(
+  data: unknown,
+  _knownKeys: string[] = ["ports", "data", "result"], // eslint-disable-line @typescript-eslint/no-unused-vars
+): T | null {
+  if (typeof data === "object" && data !== null && !Array.isArray(data))
+    return data as T;
+
+  if (Array.isArray(data) && data.length === 1 && typeof data[0] === "object")
+    return data[0] as T;
+
+  return null;
+}
+
 export function parseJSON<T>(
   raw: string,
 ):

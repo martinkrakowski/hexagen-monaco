@@ -192,6 +192,7 @@ export function WelcomeScreen({
         onConfirmAndContinue={handleConfirmAndContinue}
         onRegenerate={handleRegenerate}
         onRetryFromError={handleRetryFromError}
+        clientGen={clientGen}
       />
     );
   }

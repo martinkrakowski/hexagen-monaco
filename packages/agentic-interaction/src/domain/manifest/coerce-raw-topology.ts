@@ -83,7 +83,28 @@ export function coerceContextName(name: string): string {
 }
 
 export function coerceRawPorts(ports: unknown): RawPortsObject {
-  const raw = ports as { in?: unknown[]; out?: unknown[] };
+  let raw = ports as { in?: unknown[]; out?: unknown[] };
+
+  if (
+    typeof raw === "object" &&
+    raw !== null &&
+    !Array.isArray(raw) &&
+    !("in" in raw) &&
+    !("out" in raw)
+  ) {
+    const obj = raw as Record<string, unknown>;
+    for (const key of ["ports", "data", "result"]) {
+      if (
+        typeof obj[key] === "object" &&
+        obj[key] !== null &&
+        !Array.isArray(obj[key])
+      ) {
+        raw = obj[key] as { in?: unknown[]; out?: unknown[] };
+        break;
+      }
+    }
+  }
+
   const inPorts = Array.isArray(raw?.in) ? raw.in : [];
   const outPorts = Array.isArray(raw?.out) ? raw.out : [];
   return {
