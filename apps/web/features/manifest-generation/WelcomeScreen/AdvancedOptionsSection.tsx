@@ -1,10 +1,13 @@
 import { Label, Input } from "@hexagen/ui";
+import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "@hexagen/agentic-interaction";
 
 interface AdvancedOptionsSectionProps {
   platform: string;
   onPlatformChange: (value: string) => void;
   deployment: string;
   onDeploymentChange: (value: string) => void;
+  maxContexts: number;
+  onMaxContextsChange: (value: number) => void;
   isDisabled: boolean;
 }
 
@@ -13,6 +16,8 @@ export function AdvancedOptionsSection({
   onPlatformChange,
   deployment,
   onDeploymentChange,
+  maxContexts,
+  onMaxContextsChange,
   isDisabled,
 }: AdvancedOptionsSectionProps) {
   return (
@@ -53,6 +58,23 @@ export function AdvancedOptionsSection({
               value={deployment}
               onChange={(e) => onDeploymentChange(e.target.value)}
               placeholder="e.g., AWS, Docker, Kubernetes"
+              disabled={isDisabled}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="maxContexts">
+              Max Bounded Contexts (default: {DEFAULT_MAX_BOUNDED_CONTEXTS})
+            </Label>
+            <Input
+              id="maxContexts"
+              type="number"
+              min={1}
+              max={25}
+              value={maxContexts}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1 && v <= 25) onMaxContextsChange(v);
+              }}
               disabled={isDisabled}
             />
           </div>

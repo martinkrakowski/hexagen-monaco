@@ -71,8 +71,10 @@ export {
   ManifestDraftAdapterSchema,
   ManifestTopologyDraftContextSchema,
   ContextListSchema,
+  createContextListSchema,
   PortsListSchema,
   MAX_BOUNDED_CONTEXTS_DRAFT,
+  DEFAULT_MAX_BOUNDED_CONTEXTS,
   GENERIC_CONTEXT_NAMES,
 } from "./manifest/index.js";
 export type {

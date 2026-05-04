@@ -10,6 +10,8 @@ export function FormSection({
   onPlatformChange,
   deployment,
   onDeploymentChange,
+  maxContexts,
+  onMaxContextsChange,
   selectedExample,
   onUseExample,
   charCount,
@@ -35,6 +37,8 @@ export function FormSection({
         onPlatformChange={onPlatformChange}
         deployment={deployment}
         onDeploymentChange={onDeploymentChange}
+        maxContexts={maxContexts}
+        onMaxContextsChange={onMaxContextsChange}
         isDisabled={isDisabled}
       />
     </div>

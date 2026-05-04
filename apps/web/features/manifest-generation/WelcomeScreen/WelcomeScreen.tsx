@@ -59,12 +59,13 @@ export function WelcomeScreen({
     generateManifestRef.current(
       formState.description,
       clientGenAbortRef.current?.signal,
+      formState.maxContexts,
     );
     return () => {
       controller.abort();
       clientGenAbortRef.current = null;
     };
-  }, [flowState.state, formState.description]);
+  }, [flowState.state, formState.description, formState.maxContexts]);
 
   // React to generation results
   useEffect(() => {
@@ -240,6 +241,10 @@ export function WelcomeScreen({
         deployment={formState.deployment}
         onDeploymentChange={(value) =>
           formHandlers.setValue("deployment", value)
+        }
+        maxContexts={formState.maxContexts}
+        onMaxContextsChange={(value) =>
+          formHandlers.setValue("maxContexts", value)
         }
         selectedExample={formState.selectedExample}
         onUseExample={(example, index) => {

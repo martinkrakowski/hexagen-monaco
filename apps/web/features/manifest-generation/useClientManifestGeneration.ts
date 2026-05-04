@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import {
-  ContextListSchema,
+  createContextListSchema,
   PortsListSchema,
   normalizeDraft,
   normalizeTopologyDraft,
@@ -85,6 +85,7 @@ export interface UseClientManifestGenerationReturn {
   generateManifest: (
     description: string,
     signal?: AbortSignal,
+    maxContexts?: number,
   ) => Promise<void>;
   isGenerating: boolean;
   generationError: string | null;
@@ -148,6 +149,7 @@ async function attemptContextList(
   description: string,
   signal?: AbortSignal,
   onStepDetail?: StepDetailCallback,
+  maxContexts?: number,
 ): Promise<
   { ok: true; contexts: ContextListEntry[] } | { ok: false; error: string }
 > {
@@ -228,7 +230,8 @@ async function attemptContextList(
         }),
       );
 
-      const result = ContextListSchema.safeParse(coercedContexts);
+      const result =
+        createContextListSchema(maxContexts).safeParse(coercedContexts);
       if (!result.success) {
         const errors = result.error.issues
           .map((i) => `${i.path.join(".")}: ${i.message}`)
@@ -404,6 +407,7 @@ async function buildTopologyViaMicroPasses(
   description: string,
   signal?: AbortSignal,
   onStepDetail?: StepDetailCallback,
+  maxContexts?: number,
 ): Promise<
   | { ok: true; topology: ManifestTopologyDraft; warnings: ManifestWarning[] }
   | { ok: false; error: string }
@@ -423,6 +427,7 @@ async function buildTopologyViaMicroPasses(
     description,
     signal,
     onStepDetail,
+    maxContexts,
   );
   if (!ctxResult.ok) {
     const errorMsg = "error" in ctxResult ? ctxResult.error : "Unknown error";
@@ -666,7 +671,7 @@ export function useClientManifestGeneration(
   );
 
   const generateManifest = useCallback(
-    async (description: string, signal?: AbortSignal) => {
+    async (description: string, signal?: AbortSignal, maxContexts?: number) => {
       if (signal?.aborted) {
         logger.info("[manifest-gen] Generation aborted before start");
         return;
@@ -689,6 +694,7 @@ export function useClientManifestGeneration(
           description,
           signal,
           setStepDetail,
+          maxContexts,
         );
 
         if (!topologyResult.ok) {

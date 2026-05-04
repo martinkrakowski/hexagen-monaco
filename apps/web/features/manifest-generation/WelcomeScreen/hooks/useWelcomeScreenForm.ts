@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "@hexagen/agentic-interaction";
 
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 2000;
@@ -7,6 +8,7 @@ export interface FormState {
   description: string;
   platform: string;
   deployment: string;
+  maxContexts: number;
   selectedExample: number | null;
 }
 
@@ -21,6 +23,7 @@ const initialState: FormState = {
   description: "",
   platform: "",
   deployment: "",
+  maxContexts: DEFAULT_MAX_BOUNDED_CONTEXTS,
   selectedExample: null,
 };
 

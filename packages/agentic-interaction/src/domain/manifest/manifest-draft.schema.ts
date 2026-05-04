@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const MAX_BOUNDED_CONTEXTS_DRAFT = 5;
+export const MAX_BOUNDED_CONTEXTS_DRAFT = 10;
+export const DEFAULT_MAX_BOUNDED_CONTEXTS = MAX_BOUNDED_CONTEXTS_DRAFT;
 
 export const GENERIC_CONTEXT_NAMES = [
   "core",
@@ -55,38 +56,53 @@ export const ManifestTopologyDraftContextSchema = z
   })
   .strict();
 
-export const ManifestDraftSchema = z.object({
-  workspace: z.object({
-    name: z.string().min(1),
-    description: z.string().min(1),
-  }),
-  boundedContexts: z
-    .array(ManifestDraftContextSchema)
-    .min(1)
-    .max(MAX_BOUNDED_CONTEXTS_DRAFT),
-});
-
-export const ManifestTopologyDraftSchema = z.object({
-  workspace: z.object({
-    name: z.string().min(1),
-    description: z.string().min(1),
-  }),
-  boundedContexts: z
-    .array(ManifestTopologyDraftContextSchema)
-    .min(1)
-    .max(MAX_BOUNDED_CONTEXTS_DRAFT),
-});
-
-export const ContextListSchema = z
-  .array(
-    z.object({
+export function createManifestDraftSchema(
+  max: number = MAX_BOUNDED_CONTEXTS_DRAFT,
+) {
+  return z.object({
+    workspace: z.object({
       name: z.string().min(1),
-      type: z.enum(["core", "supporting", "driver", "shared-kernel"]),
       description: z.string().min(1),
     }),
-  )
-  .min(1)
-  .max(MAX_BOUNDED_CONTEXTS_DRAFT);
+    boundedContexts: z.array(ManifestDraftContextSchema).min(1).max(max),
+  });
+}
+
+export const ManifestDraftSchema = createManifestDraftSchema();
+
+export function createManifestTopologyDraftSchema(
+  max: number = MAX_BOUNDED_CONTEXTS_DRAFT,
+) {
+  return z.object({
+    workspace: z.object({
+      name: z.string().min(1),
+      description: z.string().min(1),
+    }),
+    boundedContexts: z
+      .array(ManifestTopologyDraftContextSchema)
+      .min(1)
+      .max(max),
+  });
+}
+
+export const ManifestTopologyDraftSchema = createManifestTopologyDraftSchema();
+
+export function createContextListSchema(
+  max: number = MAX_BOUNDED_CONTEXTS_DRAFT,
+) {
+  return z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        type: z.enum(["core", "supporting", "driver", "shared-kernel"]),
+        description: z.string().min(1),
+      }),
+    )
+    .min(1)
+    .max(max);
+}
+
+export const ContextListSchema = createContextListSchema();
 
 export const PortsListEntrySchema = z.object({
   name: z.string().min(1),

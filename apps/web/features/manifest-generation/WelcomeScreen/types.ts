@@ -24,6 +24,8 @@ export interface FormSectionProps {
   onPlatformChange: (value: string) => void;
   deployment: string;
   onDeploymentChange: (value: string) => void;
+  maxContexts: number;
+  onMaxContextsChange: (value: number) => void;
   selectedExample: number | null;
   onUseExample: (example: string, index: number) => void;
   charCount: number;

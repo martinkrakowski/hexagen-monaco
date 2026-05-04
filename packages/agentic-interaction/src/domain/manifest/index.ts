@@ -8,7 +8,11 @@ export {
   ContextListSchema,
   PortsListSchema,
   MAX_BOUNDED_CONTEXTS_DRAFT,
+  DEFAULT_MAX_BOUNDED_CONTEXTS,
   GENERIC_CONTEXT_NAMES,
+  createContextListSchema,
+  createManifestDraftSchema,
+  createManifestTopologyDraftSchema,
 } from "./manifest-draft.schema.js";
 
 export type {
