@@ -10,6 +10,7 @@ export async function listCommand(): Promise<void> {
   if (!result.success) {
     console.error(`Failed to load manifest: ${result.error.message}`);
     process.exit(1);
+    return;
   }
 
   const manifest: Manifest = result.value;

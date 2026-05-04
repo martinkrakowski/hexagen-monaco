@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { NLToDomainCommandParserAdapter } from "../../infrastructure/adapters/nl-to-domain-command.adapter.js";
 import { NodeKind, EdgeKind } from "@hexagen/core-domain";
 
@@ -271,8 +272,6 @@ describe("NLToDomainCommandParserAdapter", () => {
       if (result.success) {
         const cmd = result.value[0];
         if (cmd.type === "CreateNode") {
-          // Note: Current pattern uses [a-zA-Z0-9_]* which doesn't support hyphens yet
-          // This test documents the limitation
           assert.ok(cmd.payload.attributes.name !== undefined);
         }
       }

@@ -9,9 +9,9 @@ import { LockFile } from "../../src/lock.js";
 import { createSpyLogger, messagesAt } from "../helpers/spy-logger.js";
 import {
   removeFixture,
-  pathExists,
   makeValidManifest,
 } from "../helpers/fixture-factory.js";
+import { pathExists } from "../helpers/fs-helpers.js";
 import { makeSelfRegenFlags } from "../helpers/test-config.js";
 
 function locateHostRepoRoot(): string {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { NodeKind } from "@hexagen/core-domain";
 import type { DomainAST } from "@hexagen/core-domain";
 import { InMemorySpeculativeStateMachine } from "../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";

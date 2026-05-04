@@ -16,13 +16,13 @@ describe("assessModelCapability", () => {
   });
 
   it("returns not capable when model lacks capability and no override", () => {
-    const incapableModel = DomainModelId.LLAMA_3_8B;
+    const incapableModel = DomainModelId.GEMMA_2_2B;
     const result = assessModelCapability(incapableModel, false);
     assert.equal(result.isCapable, false);
   });
 
   it("allows override for incapable model", () => {
-    const incapableModel = DomainModelId.LLAMA_3_8B;
+    const incapableModel = DomainModelId.GEMMA_2_2B;
     const result = assessModelCapability(incapableModel, true);
     assert.equal(result.isCapable, true);
   });
@@ -38,7 +38,7 @@ describe("assessModelCapability", () => {
   });
 
   it("provides meaningful reason for override", () => {
-    const result = assessModelCapability(DomainModelId.LLAMA_3_8B, true);
+    const result = assessModelCapability(DomainModelId.GEMMA_2_2B, true);
     assert.match(result.reason, /Override enabled/);
   });
 });

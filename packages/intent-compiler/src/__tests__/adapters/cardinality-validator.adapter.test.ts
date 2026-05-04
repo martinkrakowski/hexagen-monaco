@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { CardinalityValidatorAdapter } from "../../infrastructure/adapters/cardinality-validator.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";
 

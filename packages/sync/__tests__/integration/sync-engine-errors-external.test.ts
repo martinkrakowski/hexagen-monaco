@@ -7,9 +7,9 @@ import { createSpyLogger, messagesAt } from "../helpers/spy-logger.js";
 import {
   createFixture,
   removeFixture,
-  pathExists,
   makeValidManifest,
 } from "../helpers/fixture-factory.js";
+import { pathExists } from "../helpers/fs-helpers.js";
 import { makeExternalDryRunFlags } from "../helpers/test-config.js";
 
 describe("SyncEngine — git-check branch logging (external mode)", () => {

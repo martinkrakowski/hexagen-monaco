@@ -1,6 +1,5 @@
 import type { Manifest } from "../../types/manifest.js";
-
-export type ArchitecturalImpact = "SAFE" | "BOUNDARY_VIOLATION" | "UNKNOWN";
+import type { ArchitecturalImpact } from "./impact-analysis.types.js";
 
 export interface BoundaryCheckInput {
   layer: string;
@@ -13,7 +12,9 @@ export function isDomainLayerViolation(imports: string[]): boolean {
 
 export function isApplicationLayerViolation(imports: string[]): boolean {
   return imports.some(
-    (imp) => imp.includes("/infrastructure/") && !imp.includes("/infrastructure/adapters/"),
+    (imp) =>
+      imp.includes("/infrastructure/") &&
+      !imp.includes("/infrastructure/adapters/"),
   );
 }
 
@@ -22,8 +23,12 @@ export function checkManifestDependency(
   toPackage: string,
   manifest: Manifest,
 ): boolean {
-  const fromContext = manifest.bounded_contexts?.find((c) => c.name === fromPackage);
-  const toContext = manifest.bounded_contexts?.find((c) => c.name === toPackage);
+  const fromContext = manifest.bounded_contexts?.find(
+    (c) => c.name === fromPackage,
+  );
+  const toContext = manifest.bounded_contexts?.find(
+    (c) => c.name === toPackage,
+  );
 
   if (!fromContext || !toContext) {
     return true;

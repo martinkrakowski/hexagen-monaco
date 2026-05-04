@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { Gesture } from "../../domain/gesture.js";
 import { ManifestAwareGestureParserAdapter } from "../../infrastructure/adapters/manifest-aware-gesture-parser.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";

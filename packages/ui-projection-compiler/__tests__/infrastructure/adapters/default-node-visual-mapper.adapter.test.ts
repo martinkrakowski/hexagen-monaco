@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { DefaultNodeVisualMapperAdapter } from "../../../src/infrastructure/adapters/default-node-visual-mapper.adapter.js";
 import { CvaVariantResolverAdapter } from "../../../src/infrastructure/adapters/cva-variant-resolver.adapter.js";
 import type { NodeVisualSpec } from "@hexagen/core-domain";

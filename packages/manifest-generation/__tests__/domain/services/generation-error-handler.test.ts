@@ -8,10 +8,7 @@ describe("classifyGenerationError", () => {
       "Generated manifest has invalid YAML: mapping values are not allowed here",
     );
     assert.equal(result.code, "yaml_validation_failed");
-    assert.match(
-      result.message,
-      /malformed YAML|shorten description|Retry/,
-    );
+    assert.match(result.message, /malformed YAML|shorten description|Retry/);
   });
 
   it("classifies no_yaml_extracted when manifest not valid", () => {
@@ -39,8 +36,8 @@ describe("classifyGenerationError", () => {
     assert.notEqual(result.message, "Generated manifest has invalid YAML:");
   });
 
-  it("returns unknown for empty error", () => {
+  it("returns inference_failed for empty error", () => {
     const result = classifyGenerationError("");
-    assert.equal(result.code, "unknown");
+    assert.equal(result.code, "inference_failed");
   });
 });

@@ -1,4 +1,4 @@
-export type Layer = "domain" | "application" | "infrastructure" | "test" | "manifest" | "config" | "unknown";
+import type { Layer } from "./impact-analysis.types.js";
 
 export function determineLayer(relativePath: string): Layer {
   if (relativePath.includes("/__tests__/")) {
@@ -16,7 +16,10 @@ export function determineLayer(relativePath: string): Layer {
   if (relativePath.includes(".architecture/manifest.yaml")) {
     return "manifest";
   }
-  if (relativePath.includes("tsconfig") || relativePath.includes("package.json")) {
+  if (
+    relativePath.includes("tsconfig") ||
+    relativePath.includes("package.json")
+  ) {
     return "config";
   }
   return "unknown";

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { InMemorySemanticCache } from "../../../src/infrastructure/adapters/in-memory-semantic-cache.adapter.js";
 
 describe("InMemorySemanticCache", () => {
