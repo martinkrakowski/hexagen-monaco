@@ -17,7 +17,7 @@ export { RefactoringEngine } from "./refactoring-engine.js";
 export {
   SafeRefactoringOrchestrator,
   type SafeRefactoringConfig,
-  type ValidationResult,
+  type ValidationResult as RefactoringValidationResult,
   type SafeRefactoringResult,
 } from "./safe-refactoring-orchestrator.js";
 
@@ -31,5 +31,3 @@ export {
   RenameUseCasePattern,
   RenameEntityPattern,
 } from "./refactoring-patterns/index.js";
-
-// Made with Bob

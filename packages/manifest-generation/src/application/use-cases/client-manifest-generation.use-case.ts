@@ -1,16 +1,11 @@
-import type { ZodSchema } from "zod";
 import type {
   ManifestTopologyDraft,
   ManifestDraft,
   ClarificationTrigger,
   DraftDiagnostic,
-  ContextListEntry,
-  PortsList,
   ManifestDraftContext,
 } from "@hexagen/agentic-interaction";
 import {
-  createContextListSchema,
-  PortsListSchema,
   normalizeDraft,
   normalizeTopologyDraft,
   validateDraft,
@@ -19,15 +14,7 @@ import {
   renderDraft,
   parseJSON,
   extractArrayFromWrapper,
-  extractObjectFromWrapper,
-  coerceRawPorts,
-  coerceContextType,
-  coercePort,
   normalizePortName,
-  CONTEXT_LIST_SYSTEM_PROMPT,
-  compileContextListPrompt,
-  PORTS_LIST_SYSTEM_PROMPT,
-  compilePortsPrompt,
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
 } from "@hexagen/agentic-interaction";
@@ -39,221 +26,12 @@ import type {
 } from "../ports/in/client-manifest-generation.port.js";
 import type { LocalLlmMessagingPort } from "../ports/out/local-llm-messaging.port.js";
 import { deriveWorkspaceName } from "../../domain/value-objects/workspace-name-deriver.js";
-
-const MAX_RETRIES = 2;
-
-interface Port {
-  name: string;
-  type: string;
-  description: string;
-}
-
-function normalizePort(input: unknown, defaultType: string): Port {
-  if (typeof input === "string") {
-    return {
-      name: input,
-      type: defaultType,
-      description: `Port ${input}`,
-    };
-  }
-
-  if (typeof input === "object" && input !== null) {
-    const obj = input as Record<string, unknown>;
-    if (typeof obj.name !== "string") {
-      throw new Error(
-        `Invalid port: missing or non-string name. Got: ${JSON.stringify(input)}`,
-      );
-    }
-    return {
-      name: obj.name,
-      type: typeof obj.type === "string" ? obj.type : defaultType,
-      description:
-        typeof obj.description === "string"
-          ? obj.description
-          : `Port ${obj.name}`,
-    };
-  }
-
-  throw new Error(
-    `Invalid port format: expected string or object, got ${typeof input}. Full value: ${JSON.stringify(input)}`,
-  );
-}
-
-async function attemptContextList(
-  messagingPort: LocalLlmMessagingPort,
-  description: string,
-  signal?: AbortSignal,
-  onStepDetail?: (detail: string) => void,
-  maxContexts?: number,
-): Promise<
-  { ok: true; contexts: ContextListEntry[] } | { ok: false; error: string }
-> {
-  const userPrompt = compileContextListPrompt({ userDescription: description });
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (signal?.aborted) return { ok: false, error: "Aborted" };
-
-    try {
-      onStepDetail?.(
-        `Identifying bounded contexts${attempt > 0 ? ` (attempt ${attempt + 1})` : ""}...`,
-      );
-      const content = await messagingPort.sendStructuredPrompt(
-        userPrompt,
-        CONTEXT_LIST_SYSTEM_PROMPT,
-        signal,
-      );
-      if (!content) {
-        if (attempt === MAX_RETRIES)
-          return { ok: false, error: "No response from LLM" };
-        continue;
-      }
-
-      const parsed =
-        parseJSON<Array<{ name: string; type: string; description: string }>>(
-          content,
-        );
-      if (!parsed.ok) {
-        const errorMsg = "error" in parsed ? parsed.error : "Unknown error";
-        if (attempt === MAX_RETRIES) {
-          return { ok: false, error: errorMsg };
-        }
-        continue;
-      }
-
-      const rawContexts = extractArrayFromWrapper<{
-        name?: string;
-        type?: string;
-        description?: string;
-      }>(parsed.data, ["contexts", "data", "items", "results", "list"]);
-
-      if (rawContexts.length === 0 && !Array.isArray(parsed.data)) {
-        const errorMsg = `Context list: expected array but got object with keys: ${Object.keys(parsed.data as object).join(", ")}`;
-        if (attempt === MAX_RETRIES) {
-          return { ok: false, error: errorMsg };
-        }
-        continue;
-      }
-
-      const coercedContexts = rawContexts.map(
-        (ctx: { name?: string; type?: string; description?: string }) => ({
-          name: String(ctx.name || "unnamed-context").trim(),
-          type: coerceContextType(String(ctx.type || "")),
-          description: String(ctx.description || ctx.name || "").trim(),
-        }),
-      );
-
-      const result =
-        createContextListSchema(maxContexts).safeParse(coercedContexts);
-      if (!result.success) {
-        const errors = result.error.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join("; ");
-        if (attempt === MAX_RETRIES) {
-          return { ok: false, error: `Context list validation: ${errors}` };
-        }
-        continue;
-      }
-
-      onStepDetail?.(`Found ${result.data.length} bounded contexts`);
-      return { ok: true, contexts: result.data };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      if (attempt === MAX_RETRIES) {
-        return { ok: false, error: errorMsg };
-      }
-    }
-  }
-
-  return { ok: false, error: "Failed to generate context list after retries" };
-}
-
-async function attemptPortsForContext(
-  messagingPort: LocalLlmMessagingPort,
-  contextName: string,
-  contextDescription: string,
-  contextType: string,
-  signal?: AbortSignal,
-  onStepDetail?: (detail: string) => void,
-): Promise<
-  | { ok: true; ports: PortsList; degraded?: boolean }
-  | { ok: false; error: string }
-> {
-  const userPrompt = compilePortsPrompt(
-    contextName,
-    contextDescription,
-    contextType,
-  );
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (signal?.aborted) return { ok: false, error: "Aborted" };
-
-    try {
-      onStepDetail?.(
-        `Extracting ports for ${contextName}${attempt > 0 ? ` (attempt ${attempt + 1})` : ""}...`,
-      );
-      const content = await messagingPort.sendStructuredPrompt(
-        userPrompt,
-        PORTS_LIST_SYSTEM_PROMPT,
-        signal,
-      );
-      if (!content) {
-        if (attempt === MAX_RETRIES) break;
-        continue;
-      }
-
-      const parsed = parseJSON<PortsList>(content);
-      if (!parsed.ok) {
-        if (attempt === MAX_RETRIES) break;
-        continue;
-      }
-
-      let portsData = parsed.data;
-      if (
-        !Array.isArray(portsData) &&
-        typeof portsData === "object" &&
-        portsData !== null
-      ) {
-        const obj = portsData as Record<string, unknown>;
-        if (typeof obj.in === "undefined" && typeof obj.out === "undefined") {
-          const unwrapped = extractObjectFromWrapper<Record<string, unknown>>(
-            portsData,
-            ["ports", "data", "result"],
-          );
-          if (unwrapped) {
-            portsData = unwrapped as PortsList;
-          }
-        }
-      }
-
-      const coerced = coerceRawPorts(portsData);
-      portsData = { in: coerced.in, out: coerced.out };
-
-      const result = PortsListSchema.safeParse(portsData);
-      if (!result.success) {
-        if (attempt === MAX_RETRIES) break;
-        continue;
-      }
-
-      onStepDetail?.(
-        `${contextName}: ${result.data.in.length} inbound, ${result.data.out.length} outbound ports`,
-      );
-      return { ok: true, ports: result.data };
-    } catch (error) {
-      if (attempt === MAX_RETRIES) break;
-    }
-  }
-
-  return {
-    ok: true,
-    ports: { in: [], out: [] },
-    degraded: true,
-  };
-}
+import { attemptContextList, MAX_RETRIES } from "./context-list-extractor.js";
+import { attemptPortsForContext, normalizePort } from "./ports-extractor.js";
+import type { Port } from "./ports-extractor.js";
 
 export class ClientManifestGenerationUseCase implements ClientManifestGenerationPort {
-  constructor(
-    private readonly messagingPort: LocalLlmMessagingPort,
-  ) {}
+  constructor(private readonly messagingPort: LocalLlmMessagingPort) {}
 
   async generateTopology(
     input: ClientManifestGenerationInput,
@@ -407,7 +185,10 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
 
             if (Array.isArray(parsed.data)) {
               extracted = parsed.data;
-            } else if (typeof parsed.data === "object" && parsed.data !== null) {
+            } else if (
+              typeof parsed.data === "object" &&
+              parsed.data !== null
+            ) {
               extracted = extractArrayFromWrapper(parsed.data, [
                 "adapters",
                 "data",
@@ -464,7 +245,9 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
     };
   }
 
-  checkClarificationTriggers(topology: ManifestTopologyDraft): ClarificationTrigger[] {
+  checkClarificationTriggers(
+    topology: ManifestTopologyDraft,
+  ): ClarificationTrigger[] {
     return checkClarificationTriggers(topology);
   }
 

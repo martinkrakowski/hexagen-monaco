@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { HexagonNode } from "@hexagen/visualization";
 import type { Patch } from "@hexagen/reconciliation-engine";
+import { useModificationStreaming } from "./useModificationStreaming";
 
 export type NodeModificationStatus =
   | "idle"
@@ -31,9 +32,6 @@ export interface CanvasChange {
   timestamp: number;
 }
 
-const STREAM_ENDPOINT = "/api/architecture/modify/stream";
-const DEBOUNCE_MS = 1000;
-
 export function useNodeModification() {
   const [state, setState] = useState<NodeModificationState>({
     status: "idle",
@@ -43,8 +41,26 @@ export function useNodeModification() {
     pendingChanges: [],
   });
 
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { startStreaming, abort: abortStreaming } = useModificationStreaming({
+    onPipelineComplete: (data) => {
+      const patches = data.patches as Patch[];
+      const transactionId = data.transactionId;
+      setState({
+        status: "review",
+        transactionId,
+        patches,
+        error: null,
+        pendingChanges: [],
+      });
+    },
+    onPipelineError: (error) => {
+      setState((prev) => ({
+        ...prev,
+        status: "failed",
+        error,
+      }));
+    },
+  });
 
   const recordChange = useCallback(
     (change: Omit<CanvasChange, "timestamp">) => {
@@ -99,17 +115,12 @@ export function useNodeModification() {
     [recordChange],
   );
 
-  const debouncedGenerateModification = useCallback(async (intent: string) => {
-    if (!intent.trim()) return;
+  const submitPendingChanges = useCallback(
+    (nodes: HexagonNode[]) => {
+      const changes = state.pendingChanges;
+      if (changes.length === 0) return;
 
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    debounceTimerRef.current = setTimeout(async () => {
-      abortControllerRef.current?.abort();
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
+      const intent = buildIntentFromChanges(changes, nodes);
 
       setState((prev) => ({
         ...prev,
@@ -119,116 +130,9 @@ export function useNodeModification() {
         error: null,
       }));
 
-      try {
-        const response = await fetch(STREAM_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intent }),
-          signal: abortController.signal,
-        });
-
-        if (!response.ok) {
-          let errorMsg = `HTTP ${response.status}`;
-          try {
-            const errorBody = await response.json();
-            errorMsg = (errorBody as { error?: string }).error ?? errorMsg;
-          } catch {
-            // Ignore JSON parse errors on error responses.
-          }
-          setState((prev) => ({
-            ...prev,
-            status: "failed",
-            error: errorMsg,
-          }));
-          return;
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-          setState((prev) => ({
-            ...prev,
-            status: "failed",
-            error: "No response body",
-          }));
-          return;
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let streamDone = false;
-
-        while (!streamDone) {
-          const { done, value } = await reader.read();
-          if (done) {
-            streamDone = true;
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          let currentEvent = "";
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith("event: ")) {
-              currentEvent = trimmed.slice(7);
-            } else if (trimmed.startsWith("data: ") && currentEvent) {
-              const data = trimmed.slice(6);
-              let parsed: Record<string, unknown>;
-              try {
-                parsed = JSON.parse(data) as Record<string, unknown>;
-              } catch {
-                continue;
-              }
-
-              if (currentEvent === "pipeline_complete") {
-                const patches = (parsed.patches ?? []) as Patch[];
-                const transactionId = (parsed.transactionId as string) ?? "";
-                setState({
-                  status: "review",
-                  transactionId,
-                  patches,
-                  error: null,
-                  pendingChanges: [],
-                });
-              } else if (currentEvent === "pipeline_error") {
-                setState((prev) => ({
-                  ...prev,
-                  status: "failed",
-                  error: (parsed.error as string) ?? "Pipeline error",
-                }));
-              }
-
-              currentEvent = "";
-            }
-          }
-        }
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        setState((prev) => ({
-          ...prev,
-          status: "failed",
-          error: errorMsg,
-        }));
-      } finally {
-        abortControllerRef.current = null;
-      }
-    }, DEBOUNCE_MS);
-  }, []);
-
-  const submitPendingChanges = useCallback(
-    (nodes: HexagonNode[]) => {
-      const changes = state.pendingChanges;
-      if (changes.length === 0) return;
-
-      const intent = buildIntentFromChanges(changes, nodes);
-      debouncedGenerateModification(intent);
+      startStreaming(intent);
     },
-    [state.pendingChanges, debouncedGenerateModification],
+    [state.pendingChanges, startStreaming],
   );
 
   const acceptModification = useCallback(async () => {
@@ -323,11 +227,7 @@ export function useNodeModification() {
   );
 
   const reset = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
+    abortStreaming();
     setState({
       status: "idle",
       transactionId: null,
@@ -335,7 +235,7 @@ export function useNodeModification() {
       error: null,
       pendingChanges: [],
     });
-  }, []);
+  }, [abortStreaming]);
 
   return {
     ...state,

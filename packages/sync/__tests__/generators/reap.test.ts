@@ -1,156 +1,25 @@
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { reapLegacyFolders } from "../../src/generators/reap.js";
 import type { Manifest } from "../../src/types/manifest.js";
-import type { SyncConfig, LoggerPort } from "../../src/config.js";
+import { makeCapturingLogger } from "../helpers/spy-logger.js";
+import { withTempWorkspace, exists } from "../helpers/fs-helpers.js";
+import { makeConfig, makeReportSpy } from "../helpers/test-config.js";
 
-/**
- * Unit tests for `packages/sync/src/generators/reap.ts`.
- *
- * Contract under test (verified against reap.ts):
- *   - Public function: reapLegacyFolders(moduleDir, config, report?) => Promise<void>
- *   - Iterates the fixed legacy layer list ["domain", "application", "infrastructure"].
- *     For each <moduleDir>/<layer>:
- *       · ENOENT  → silently skipped
- *       · empty   → deleted via fs.rm({ recursive: true, force: true })
- *       · non-empty → preserved (guards against delete-recreate cycle —
- *                     folders holding only index.ts are also preserved)
- *   - Dry-run: logs "[DRY-RUN] would delete empty folder <rel>" and does nothing.
- *   - Non-dry-run deletion: logs "deleted empty folder <rel>" and calls
- *     report.record("deleted", layerPath) — NO message argument.
- *   - Non-ENOENT errors propagate.
- *   - No manifest opt-in flag; mode gating lives at the caller in sync-engine.ts.
- *
- * Scaffolding conventions mirror the sibling tests (tsconfig.test.ts, stubs.test.ts):
- *   - disposable temp workspace per test (mkdtemp / rm recursive in finally)
- *   - capturing logger for assertions on log output
- *   - report spy: records {type, target, message} for record() assertions
- *   - host repo is never mutated — everything happens under os.tmpdir().
- */
-
-// -----------------------------------------------------------------------------
-// Test helpers
-// -----------------------------------------------------------------------------
-
-interface CapturedLog {
-  level: "error" | "warn" | "info" | "debug";
-  message: string;
-}
-
-/** Logger that records every call so we can assert on emitted messages. */
-function makeCapturingLogger(): {
-  logger: LoggerPort;
-  logs: CapturedLog[];
-} {
-  const logs: CapturedLog[] = [];
-  const logger: LoggerPort = {
-    error: (msg) => {
-      logs.push({ level: "error", message: msg });
-    },
-    warn: (msg) => {
-      logs.push({ level: "warn", message: msg });
-    },
-    info: (msg) => {
-      logs.push({ level: "info", message: msg });
-    },
-    debug: (msg) => {
-      logs.push({ level: "debug", message: msg });
-    },
-    errorWithException: (_err, msg) => {
-      logs.push({ level: "error", message: msg ?? "" });
-    },
-  };
-  return { logger, logs };
-}
-
-interface RecordCall {
-  type: string;
-  target: string;
-  message: string | undefined;
-}
-
-/** Spy matching the optional `report` parameter of reapLegacyFolders. */
-function makeReportSpy(): {
-  report: { record: (type: string, target: string, message?: string) => void };
-  calls: RecordCall[];
-} {
-  const calls: RecordCall[] = [];
-  return {
-    report: {
-      record: (type, target, message) => {
-        calls.push({ type, target, message });
-      },
-    },
-    calls,
-  };
-}
-
-/** Empty manifest suffices — reap.ts ignores its contents. */
 const EMPTY_MANIFEST: Manifest = { bounded_contexts: [] };
-
-function makeConfig(
-  workspaceRoot: string,
-  logger: LoggerPort,
-  opts: { dryRun?: boolean } = {},
-): SyncConfig {
-  return {
-    dryRun: opts.dryRun ?? false,
-    force: false,
-    forceRoot: false,
-    allowDirty: false,
-    strict: false,
-    mode: "external",
-    logger,
-    manifest: EMPTY_MANIFEST,
-    workspaceRoot,
-  };
-}
-
-/**
- * Temp-workspace helper matching the convention used in tsconfig.test.ts.
- * Guarantees cleanup even if the test body throws.
- */
-async function withTempWorkspace(
-  fn: (ctx: { workspaceRoot: string; modulePath: string }) => Promise<void>,
-): Promise<void> {
-  const workspaceRoot = await fs.mkdtemp(
-    path.join(os.tmpdir(), "hexagen-reap-test-"),
-  );
-  const modulePath = path.join(workspaceRoot, "packages", "reap-target");
-  await fs.mkdir(modulePath, { recursive: true });
-  try {
-    await fn({ workspaceRoot, modulePath });
-  } finally {
-    await fs.rm(workspaceRoot, { recursive: true, force: true });
-  }
-}
-
-/** Returns true iff `p` exists (any file type); false on ENOENT; rethrows others. */
-async function exists(p: string): Promise<boolean> {
-  try {
-    await fs.stat(p);
-    return true;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw e;
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Suite 1 — happy path
-// -----------------------------------------------------------------------------
 
 describe("reapLegacyFolders – happy path", () => {
   it("deletes an empty legacy 'domain' folder", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       await fs.mkdir(domainDir, { recursive: true });
 
       const { logger } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config);
 
@@ -163,7 +32,9 @@ describe("reapLegacyFolders – happy path", () => {
   });
 
   it("deletes all three empty legacy layer folders in a single run", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const layers = ["domain", "application", "infrastructure"];
       for (const layer of layers) {
         await fs.mkdir(path.join(modulePath, layer), { recursive: true });
@@ -171,7 +42,7 @@ describe("reapLegacyFolders – happy path", () => {
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 
@@ -191,7 +62,9 @@ describe("reapLegacyFolders – happy path", () => {
   });
 
   it("preserves a legacy folder that contains a barrel (index.ts)", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       await fs.mkdir(domainDir, { recursive: true });
       const barrel = path.join(domainDir, "index.ts");
@@ -199,12 +72,10 @@ describe("reapLegacyFolders – happy path", () => {
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 
-      // Guard against delete-recreate cycle: the barrel-holding folder must
-      // survive intact, and no "deleted" record must be emitted for it.
       assert.equal(await exists(domainDir), true, "domain folder must remain");
       assert.equal(
         await exists(barrel),
@@ -220,14 +91,16 @@ describe("reapLegacyFolders – happy path", () => {
   });
 
   it("preserves a legacy folder that contains a nested sub-directory", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       const nested = path.join(domainDir, "entities");
       await fs.mkdir(nested, { recursive: true });
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 
@@ -246,16 +119,15 @@ describe("reapLegacyFolders – happy path", () => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// Suite 2 — no-op
-// -----------------------------------------------------------------------------
-
 describe("reapLegacyFolders – no-op", () => {
   it("does nothing when no legacy folders exist (all ENOENT)", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
+
       const { logger, logs } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 
@@ -272,15 +144,16 @@ describe("reapLegacyFolders – no-op", () => {
   });
 
   it("is idempotent: a second run is a clean no-op", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       await fs.mkdir(domainDir, { recursive: true });
 
       const { logger } = makeCapturingLogger();
       const { report: report1 } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
-      // First run: deletes the empty folder.
       await reapLegacyFolders(modulePath, config, report1);
       assert.equal(
         await exists(domainDir),
@@ -288,7 +161,6 @@ describe("reapLegacyFolders – no-op", () => {
         "domain folder should be deleted by the first run",
       );
 
-      // Second run on now-missing folder must not throw and must record nothing.
       const { report: report2, calls: calls2 } = makeReportSpy();
       await reapLegacyFolders(modulePath, config, report2);
       assert.equal(
@@ -300,14 +172,15 @@ describe("reapLegacyFolders – no-op", () => {
   });
 
   it("works without a report argument (undefined, no throw)", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       await fs.mkdir(domainDir, { recursive: true });
 
       const { logger } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
-      // Deliberately omit the third argument.
       await reapLegacyFolders(modulePath, config);
 
       assert.equal(
@@ -319,20 +192,21 @@ describe("reapLegacyFolders – no-op", () => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// Suite 3 — dry-run
-// -----------------------------------------------------------------------------
-
 describe("reapLegacyFolders – dry-run", () => {
   it("does not delete anything when dryRun=true", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const layers = ["domain", "application", "infrastructure"];
       for (const layer of layers) {
         await fs.mkdir(path.join(modulePath, layer), { recursive: true });
       }
 
       const { logger } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger, { dryRun: true });
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, {
+        logger,
+        dryRun: true,
+      });
 
       await reapLegacyFolders(modulePath, config);
 
@@ -347,14 +221,19 @@ describe("reapLegacyFolders – dry-run", () => {
   });
 
   it("logs '[DRY-RUN] would delete empty folder …' for each empty layer", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const layers = ["domain", "application", "infrastructure"];
       for (const layer of layers) {
         await fs.mkdir(path.join(modulePath, layer), { recursive: true });
       }
 
       const { logger, logs } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger, { dryRun: true });
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, {
+        logger,
+        dryRun: true,
+      });
 
       await reapLegacyFolders(modulePath, config);
 
@@ -383,12 +262,17 @@ describe("reapLegacyFolders – dry-run", () => {
   });
 
   it("does not call report.record under dry-run", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       await fs.mkdir(path.join(modulePath, "domain"), { recursive: true });
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger, { dryRun: true });
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, {
+        logger,
+        dryRun: true,
+      });
 
       await reapLegacyFolders(modulePath, config, report);
 
@@ -401,20 +285,18 @@ describe("reapLegacyFolders – dry-run", () => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// Suite 4 — logging
-// -----------------------------------------------------------------------------
-
 describe("reapLegacyFolders – logging", () => {
   it("emits 'deleted empty folder …' info log per deletion", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const layers = ["domain", "application"];
       for (const layer of layers) {
         await fs.mkdir(path.join(modulePath, layer), { recursive: true });
       }
 
       const { logger, logs } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config);
 
@@ -452,14 +334,9 @@ describe("reapLegacyFolders – logging", () => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// Suite 5 — error handling
-// -----------------------------------------------------------------------------
-
 describe("reapLegacyFolders – error handling", () => {
   it("swallows ENOENT gracefully (moduleDir itself doesn't exist)", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
-      // moduleDir path points into the temp workspace but was never created.
       const missingModuleDir = path.join(
         workspaceRoot,
         "packages",
@@ -468,9 +345,8 @@ describe("reapLegacyFolders – error handling", () => {
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
-      // Must not throw — every readdir hits ENOENT and is swallowed.
       await reapLegacyFolders(missingModuleDir, config, report);
 
       assert.equal(
@@ -482,14 +358,14 @@ describe("reapLegacyFolders – error handling", () => {
   });
 
   it("propagates non-ENOENT errors (e.g. ENOTDIR when a layer path is a file)", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
-      // Create a FILE named "domain" — readdir will fail with ENOTDIR,
-      // which is not ENOENT and must therefore propagate.
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainAsFile = path.join(modulePath, "domain");
       await fs.writeFile(domainAsFile, "not a directory\n", "utf8");
 
       const { logger } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       let caught: unknown;
       try {
@@ -509,18 +385,12 @@ describe("reapLegacyFolders – error handling", () => {
   });
 });
 
-// -----------------------------------------------------------------------------
-// Suite 6 — scope safety
-// -----------------------------------------------------------------------------
-
 describe("reapLegacyFolders – scope safety", () => {
   it("never deletes siblings or workspace-root-level same-named folders", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
-      // Layout:
-      //   <workspaceRoot>/domain                         <-- outside modulePath, MUST survive
-      //   <workspaceRoot>/packages/reap-target/domain    <-- empty, must be deleted
-      //   <workspaceRoot>/packages/reap-target-sibling/  <-- sibling, MUST survive
-      //   <workspaceRoot>/packages/reap-target-sibling/domain <-- MUST survive
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
+
       const outsideDomain = path.join(workspaceRoot, "domain");
       await fs.mkdir(outsideDomain, { recursive: true });
       await fs.writeFile(
@@ -546,7 +416,7 @@ describe("reapLegacyFolders – scope safety", () => {
       );
 
       const { logger } = makeCapturingLogger();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config);
 
@@ -579,21 +449,21 @@ describe("reapLegacyFolders – scope safety", () => {
   });
 
   it("does not traverse non-legacy directories under moduleDir", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
-      // An empty, non-legacy directory alongside the three layers.
-      // reap.ts iterates a fixed allow-list; anything else must be ignored.
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
+
       const srcDir = path.join(modulePath, "src");
       await fs.mkdir(srcDir, { recursive: true });
       const miscDir = path.join(modulePath, "scripts");
       await fs.mkdir(miscDir, { recursive: true });
 
-      // Also include one empty legacy folder to prove the reaper is active.
       const domainDir = path.join(modulePath, "domain");
       await fs.mkdir(domainDir, { recursive: true });
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 
@@ -613,26 +483,23 @@ describe("reapLegacyFolders – scope safety", () => {
         "non-legacy 'scripts' folder must be left untouched, even when empty",
       );
 
-      // Exactly one deletion record expected — the domain folder.
       assert.equal(calls.length, 1, "only one deletion record expected");
       assert.equal(calls[0]?.target, domainDir);
     });
   });
 });
 
-// -----------------------------------------------------------------------------
-// Suite 7 — report contract
-// -----------------------------------------------------------------------------
-
 describe("reapLegacyFolders – report contract", () => {
   it("records { type: 'deleted', target: <absolute path>, message: undefined }", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       await fs.mkdir(domainDir, { recursive: true });
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 
@@ -657,9 +524,9 @@ describe("reapLegacyFolders – report contract", () => {
   });
 
   it("record counts match on-disk deletions (2 empty deleted, 1 non-empty preserved)", async () => {
-    await withTempWorkspace(async ({ workspaceRoot, modulePath }) => {
-      // domain + application are empty → should be deleted (2 records).
-      // infrastructure is non-empty → must be preserved (0 records).
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
       const domainDir = path.join(modulePath, "domain");
       const appDir = path.join(modulePath, "application");
       const infraDir = path.join(modulePath, "infrastructure");
@@ -674,7 +541,7 @@ describe("reapLegacyFolders – report contract", () => {
 
       const { logger } = makeCapturingLogger();
       const { report, calls } = makeReportSpy();
-      const config = makeConfig(workspaceRoot, logger);
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
 
       await reapLegacyFolders(modulePath, config, report);
 

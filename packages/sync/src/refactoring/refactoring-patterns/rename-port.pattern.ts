@@ -11,15 +11,18 @@
 
 import { Project } from "ts-morph";
 import path from "node:path";
-import fs from "node:fs/promises";
-import yaml from "js-yaml";
 import { ok, err, type Result } from "../../domain/result.js";
 import type {
   ImpactAnalysisRequest,
   ImpactAnalysisResult,
 } from "../impact-analyzer.js";
 import type { RefactoringPattern, RefactoringResult } from "./base-pattern.js";
-import type { Manifest } from "../../types/manifest.js";
+import {
+  toKebabCase,
+  updateImports as sharedUpdateImports,
+  updateBarrelExport as sharedUpdateBarrelExport,
+  updateManifestEntry,
+} from "./refactoring-utils.js";
 
 /**
  * Pattern for renaming port interfaces
@@ -264,8 +267,8 @@ export class RenamePortPattern implements RefactoringPattern {
       // Rename the file itself
       const oldFileName = path.basename(relativePath);
       const newFileName = oldFileName.replace(
-        this.toKebabCase(oldName),
-        this.toKebabCase(newName),
+        toKebabCase(oldName),
+        toKebabCase(newName),
       );
 
       if (oldFileName !== newFileName) {
@@ -296,36 +299,10 @@ export class RenamePortPattern implements RefactoringPattern {
       const sourceFile = this.project.getSourceFile(filePath);
 
       if (!sourceFile) {
-        return ok([]); // File might not be TypeScript
+        return ok([]);
       }
 
-      let modified = false;
-
-      // Update named imports
-      const imports = sourceFile.getImportDeclarations();
-      for (const importDecl of imports) {
-        const namedImports = importDecl.getNamedImports();
-        for (const namedImport of namedImports) {
-          if (namedImport.getName() === oldName) {
-            namedImport.setName(newName);
-            modified = true;
-          }
-        }
-
-        // Update module specifier if it references the old file name
-        const moduleSpecifier = importDecl.getModuleSpecifierValue();
-        const oldKebab = this.toKebabCase(oldName);
-        const newKebab = this.toKebabCase(newName);
-        if (moduleSpecifier.includes(oldKebab)) {
-          const newModuleSpecifier = moduleSpecifier.replace(
-            oldKebab,
-            newKebab,
-          );
-          importDecl.setModuleSpecifier(newModuleSpecifier);
-          modified = true;
-        }
-      }
-
+      const modified = await sharedUpdateImports(sourceFile, oldName, newName);
       return ok(modified ? [relativePath] : []);
     } catch (error) {
       return err(error as Error);
@@ -348,36 +325,11 @@ export class RenamePortPattern implements RefactoringPattern {
         return ok([]);
       }
 
-      let modified = false;
-
-      // Update export declarations
-      const exports = sourceFile.getExportDeclarations();
-      for (const exportDecl of exports) {
-        // Update module specifier
-        const moduleSpecifier = exportDecl.getModuleSpecifierValue();
-        if (moduleSpecifier) {
-          const oldKebab = this.toKebabCase(oldName);
-          const newKebab = this.toKebabCase(newName);
-          if (moduleSpecifier.includes(oldKebab)) {
-            const newModuleSpecifier = moduleSpecifier.replace(
-              oldKebab,
-              newKebab,
-            );
-            exportDecl.setModuleSpecifier(newModuleSpecifier);
-            modified = true;
-          }
-        }
-
-        // Update named exports
-        const namedExports = exportDecl.getNamedExports();
-        for (const namedExport of namedExports) {
-          if (namedExport.getName() === oldName) {
-            namedExport.setName(newName);
-            modified = true;
-          }
-        }
-      }
-
+      const modified = await sharedUpdateBarrelExport(
+        sourceFile,
+        oldName,
+        newName,
+      );
       return ok(modified ? [relativePath] : []);
     } catch (error) {
       return err(error as Error);
@@ -391,15 +343,7 @@ export class RenamePortPattern implements RefactoringPattern {
     oldName: string,
     newName: string,
   ): Promise<Result<void, Error>> {
-    try {
-      const manifestPath = path.join(
-        this.workspaceRoot,
-        ".architecture/manifest.yaml",
-      );
-      const content = await fs.readFile(manifestPath, "utf-8");
-      const manifest = yaml.load(content) as Manifest;
-
-      // Update port declarations in bounded contexts
+    return updateManifestEntry(this.workspaceRoot, (manifest) => {
       if (manifest.bounded_contexts) {
         for (const context of manifest.bounded_contexts) {
           if (context.layers?.application?.ports?.out) {
@@ -416,15 +360,7 @@ export class RenamePortPattern implements RefactoringPattern {
           }
         }
       }
-
-      // Write updated manifest
-      const updatedContent = yaml.dump(manifest, { indent: 2 });
-      await fs.writeFile(manifestPath, updatedContent, "utf-8");
-
-      return ok(undefined);
-    } catch (error) {
-      return err(error as Error);
-    }
+    });
   }
 
   /**
@@ -445,7 +381,6 @@ export class RenamePortPattern implements RefactoringPattern {
 
       let modified = false;
 
-      // Find and rename the fake class
       const oldFakeName = oldName.replace(/Port$/, "Fake");
       const newFakeName = newName.replace(/Port$/, "Fake");
 
@@ -456,7 +391,6 @@ export class RenamePortPattern implements RefactoringPattern {
           modified = true;
         }
 
-        // Update implements clause
         const implementsClauses = cls.getImplements();
         for (const implementsClause of implementsClauses) {
           if (implementsClause.getText().includes(oldName)) {
@@ -469,37 +403,18 @@ export class RenamePortPattern implements RefactoringPattern {
         }
       }
 
-      // Update imports
-      const imports = sourceFile.getImportDeclarations();
-      for (const importDecl of imports) {
-        const namedImports = importDecl.getNamedImports();
-        for (const namedImport of namedImports) {
-          if (namedImport.getName() === oldName) {
-            namedImport.setName(newName);
-            modified = true;
-          }
-        }
+      const importsModified = await sharedUpdateImports(
+        sourceFile,
+        oldName,
+        newName,
+      );
+      modified = modified || importsModified;
 
-        // Update module specifier
-        const moduleSpecifier = importDecl.getModuleSpecifierValue();
-        const oldKebab = this.toKebabCase(oldName);
-        const newKebab = this.toKebabCase(newName);
-        if (moduleSpecifier.includes(oldKebab)) {
-          const newModuleSpecifier = moduleSpecifier.replace(
-            oldKebab,
-            newKebab,
-          );
-          importDecl.setModuleSpecifier(newModuleSpecifier);
-          modified = true;
-        }
-      }
-
-      // Rename the file itself if needed
       if (modified) {
         const oldFileName = path.basename(relativePath);
         const newFileName = oldFileName.replace(
-          this.toKebabCase(oldName),
-          this.toKebabCase(newName),
+          toKebabCase(oldName),
+          toKebabCase(newName),
         );
 
         if (oldFileName !== newFileName) {
@@ -516,16 +431,6 @@ export class RenamePortPattern implements RefactoringPattern {
     } catch (error) {
       return err(error as Error);
     }
-  }
-
-  /**
-   * Convert PascalCase to kebab-case
-   */
-  private toKebabCase(str: string): string {
-    return str
-      .replace(/([a-z])([A-Z])/g, "$1-$2")
-      .replace(/([A-Z])([A-Z][a-z])/g, "$1-$2")
-      .toLowerCase();
   }
 }
 
