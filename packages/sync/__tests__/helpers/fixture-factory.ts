@@ -87,15 +87,6 @@ export async function removeFixture(root: string | null): Promise<void> {
   await fs.rm(root, { recursive: true, force: true });
 }
 
-export async function pathExists(p: string): Promise<boolean> {
-  try {
-    await fs.access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function makeValidManifest(
   contexts: Manifest["bounded_contexts"],
 ): Manifest {

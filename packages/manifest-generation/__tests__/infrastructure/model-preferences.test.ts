@@ -1,10 +1,18 @@
-import { describe, it, expect, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createModelPreferencesAdapter,
   createLocalStorageVerificationAdapter,
 } from "../../src/infrastructure/adapters/model-preferences.adapter";
 
-type DomainModelId = "qwen-coder-3b" | "llama-3.2-3b" | "phi-3.5-mini" | "gemma-2-2b" | "qwen-coder-1.5b" | "llama-3.2-1b" | "qwen-coder-0.5b";
+type DomainModelId =
+  | "qwen-coder-3b"
+  | "llama-3.2-3b"
+  | "phi-3.5-mini"
+  | "gemma-2-2b"
+  | "qwen-coder-1.5b"
+  | "llama-3.2-1b"
+  | "qwen-coder-0.5b";
 
 const QWEN_CODER_3B: DomainModelId = "qwen-coder-3b";
 
@@ -43,10 +51,10 @@ describe("ModelPreferencesAdapter", () => {
       const adapter = createModelPreferencesAdapter(storage);
       const prefs = adapter.getPreferences();
 
-      expect(prefs.hasEnabledLocalModels).toBe(false);
-      expect(prefs.lastModelId).toBeNull();
-      expect(prefs.autoLoadEnabled).toBe(false);
-      expect(prefs.cloudProvider).toBeNull();
+      assert.strictEqual(prefs.hasEnabledLocalModels, false);
+      assert.strictEqual(prefs.lastModelId, null);
+      assert.strictEqual(prefs.autoLoadEnabled, false);
+      assert.strictEqual(prefs.cloudProvider, null);
     });
 
     it("should return stored preferences", () => {
@@ -57,9 +65,9 @@ describe("ModelPreferencesAdapter", () => {
       const adapter = createModelPreferencesAdapter(storage);
       const prefs = adapter.getPreferences();
 
-      expect(prefs.lastModelId).toBe("qwen-coder-3b");
-      expect(prefs.autoLoadEnabled).toBe(true);
-      expect(prefs.skipAiSetup).toBe(true);
+      assert.strictEqual(prefs.lastModelId, "qwen-coder-3b");
+      assert.strictEqual(prefs.autoLoadEnabled, true);
+      assert.strictEqual(prefs.skipAiSetup, true);
     });
   });
 
@@ -68,7 +76,10 @@ describe("ModelPreferencesAdapter", () => {
       const adapter = createModelPreferencesAdapter(storage);
       adapter.setPreferences({ lastModelId: QWEN_CODER_3B });
 
-      expect(storage.getItem("hexagen:local-llm:last-model")).toBe(QWEN_CODER_3B);
+      assert.strictEqual(
+        storage.getItem("hexagen:local-llm:last-model"),
+        QWEN_CODER_3B,
+      );
     });
 
     it("should remove lastModelId when set to null", () => {
@@ -76,7 +87,7 @@ describe("ModelPreferencesAdapter", () => {
       const adapter = createModelPreferencesAdapter(storage);
       adapter.setPreferences({ lastModelId: null });
 
-      expect(storage.getItem("hexagen:local-llm:last-model")).toBeNull();
+      assert.strictEqual(storage.getItem("hexagen:local-llm:last-model"), null);
     });
 
     it("should store boolean values correctly", () => {
@@ -86,8 +97,14 @@ describe("ModelPreferencesAdapter", () => {
         rememberChoice: true,
       });
 
-      expect(storage.getItem("hexagen:local-llm:auto-load")).toBe("true");
-      expect(storage.getItem("hexagen:manifest-flow:remember-choice")).toBe("true");
+      assert.strictEqual(
+        storage.getItem("hexagen:local-llm:auto-load"),
+        "true",
+      );
+      assert.strictEqual(
+        storage.getItem("hexagen:manifest-flow:remember-choice"),
+        "true",
+      );
     });
   });
 });
@@ -102,7 +119,7 @@ describe("LocalStorageVerificationAdapter", () => {
   describe("isModelVerified", () => {
     it("should return false when no cache metadata exists", () => {
       const adapter = createLocalStorageVerificationAdapter(storage);
-      expect(adapter.isModelVerified(QWEN_CODER_3B)).toBe(false);
+      assert.strictEqual(adapter.isModelVerified(QWEN_CODER_3B), false);
     });
 
     it("should return true when verified within max age", () => {
@@ -113,7 +130,7 @@ describe("LocalStorageVerificationAdapter", () => {
       );
 
       const adapter = createLocalStorageVerificationAdapter(storage);
-      expect(adapter.isModelVerified(QWEN_CODER_3B, 24)).toBe(true);
+      assert.strictEqual(adapter.isModelVerified(QWEN_CODER_3B, 24), true);
     });
 
     it("should return false when verification is stale", () => {
@@ -124,7 +141,7 @@ describe("LocalStorageVerificationAdapter", () => {
       );
 
       const adapter = createLocalStorageVerificationAdapter(storage);
-      expect(adapter.isModelVerified(QWEN_CODER_3B, 24)).toBe(false);
+      assert.strictEqual(adapter.isModelVerified(QWEN_CODER_3B, 24), false);
     });
   });
 
@@ -144,8 +161,8 @@ describe("LocalStorageVerificationAdapter", () => {
       const stored = JSON.parse(
         storage.getItem(`hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`)!,
       );
-      expect(stored.verifiedAt).toBeDefined();
-      expect(stored.downloadCompleted).toBe(true);
+      assert.ok(stored.verifiedAt != null);
+      assert.strictEqual(stored.downloadCompleted, true);
     });
   });
 
@@ -159,7 +176,10 @@ describe("LocalStorageVerificationAdapter", () => {
       const adapter = createLocalStorageVerificationAdapter(storage);
       adapter.clearModelCacheMetadata(QWEN_CODER_3B);
 
-      expect(storage.getItem(`hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`)).toBeNull();
+      assert.strictEqual(
+        storage.getItem(`hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`),
+        null,
+      );
     });
   });
 });

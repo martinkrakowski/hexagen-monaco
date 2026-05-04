@@ -1,7 +1,15 @@
-import { describe, it, expect } from "node:test";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import { createModelDownloadOrchestrator } from "../../src/application/use-cases/model-download-orchestrator.use-case";
 
-type DomainModelId = "qwen-coder-3b" | "llama-3.2-3b" | "phi-3.5-mini" | "gemma-2-2b" | "qwen-coder-1.5b" | "llama-3.2-1b" | "qwen-coder-0.5b";
+type DomainModelId =
+  | "qwen-coder-3b"
+  | "llama-3.2-3b"
+  | "phi-3.5-mini"
+  | "gemma-2-2b"
+  | "qwen-coder-1.5b"
+  | "llama-3.2-1b"
+  | "qwen-coder-0.5b";
 
 const QWEN_CODER_3B: DomainModelId = "qwen-coder-3b";
 
@@ -25,9 +33,13 @@ describe("ModelDownloadOrchestrator", () => {
     clearModelCacheMetadata: () => {},
   };
 
-  const orchestrator = createModelDownloadOrchestrator({
-    preferencesPort: mockPreferencesPort,
-    verificationPort: mockVerificationPort,
+  let orchestrator: ReturnType<typeof createModelDownloadOrchestrator>;
+
+  beforeEach(() => {
+    orchestrator = createModelDownloadOrchestrator({
+      preferencesPort: mockPreferencesPort,
+      verificationPort: mockVerificationPort,
+    });
   });
 
   describe("selectLocalModel", () => {
@@ -36,8 +48,8 @@ describe("ModelDownloadOrchestrator", () => {
         modelId: QWEN_CODER_3B,
         remember: false,
       });
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("model_downloading");
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "model_downloading");
     });
 
     it("should save preferences when remember is true", () => {
@@ -56,10 +68,10 @@ describe("ModelDownloadOrchestrator", () => {
 
       orch.selectLocalModel({ modelId: QWEN_CODER_3B, remember: true });
 
-      expect(savedPreferences.lastModelId).toBe(QWEN_CODER_3B);
-      expect(savedPreferences.autoLoadEnabled).toBe(true);
-      expect(savedPreferences.hasEnabledLocalModels).toBe(true);
-      expect(savedPreferences.rememberChoice).toBe(true);
+      assert.strictEqual(savedPreferences.lastModelId, QWEN_CODER_3B);
+      assert.strictEqual(savedPreferences.autoLoadEnabled, true);
+      assert.strictEqual(savedPreferences.hasEnabledLocalModels, true);
+      assert.strictEqual(savedPreferences.rememberChoice, true);
     });
   });
 
@@ -69,7 +81,10 @@ describe("ModelDownloadOrchestrator", () => {
       const portWithSpy = {
         ...mockPreferencesPort,
         setPreferences: (prefs: any) => {
-          if (prefs.autoLoadEnabled === false && prefs.rememberChoice === false) {
+          if (
+            prefs.autoLoadEnabled === false &&
+            prefs.rememberChoice === false
+          ) {
             clearedPreferences = true;
           }
         },
@@ -81,9 +96,9 @@ describe("ModelDownloadOrchestrator", () => {
       });
 
       const result = orch.cancelDownload();
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("interrupted");
-      expect(clearedPreferences).toBe(true);
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "interrupted");
+      assert.strictEqual(clearedPreferences, true);
     });
   });
 
@@ -95,9 +110,9 @@ describe("ModelDownloadOrchestrator", () => {
         remember: false,
       });
 
-      expect(result.success).toBe(false);
-      expect(result.nextState).toBe("error");
-      expect(result.errorCode).toBe("key_invalid_format");
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.nextState, "error");
+      assert.strictEqual(result.errorCode, "key_invalid_format");
     });
 
     it("should validate API key format for anthropic", () => {
@@ -107,9 +122,9 @@ describe("ModelDownloadOrchestrator", () => {
         remember: false,
       });
 
-      expect(result.success).toBe(false);
-      expect(result.nextState).toBe("error");
-      expect(result.errorCode).toBe("key_invalid_format");
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.nextState, "error");
+      assert.strictEqual(result.errorCode, "key_invalid_format");
     });
 
     it("should accept valid openai key", () => {
@@ -119,8 +134,8 @@ describe("ModelDownloadOrchestrator", () => {
         remember: false,
       });
 
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("generating");
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "generating");
     });
 
     it("should accept valid anthropic key", () => {
@@ -130,8 +145,8 @@ describe("ModelDownloadOrchestrator", () => {
         remember: false,
       });
 
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("generating");
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "generating");
     });
   });
 
@@ -151,9 +166,9 @@ describe("ModelDownloadOrchestrator", () => {
       });
 
       const result = orch.skipAiSetup();
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("idle");
-      expect(savedPrefs).toBe(true);
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "idle");
+      assert.strictEqual(savedPrefs, true);
     });
   });
 
@@ -173,11 +188,11 @@ describe("ModelDownloadOrchestrator", () => {
       });
 
       const result = orch.markModelReady(QWEN_CODER_3B);
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("generating");
-      expect(updatedMetadata.modelId).toBe(QWEN_CODER_3B);
-      expect(updatedMetadata.updates.verifiedAt).toBeDefined();
-      expect(updatedMetadata.updates.downloadCompleted).toBe(true);
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "generating");
+      assert.strictEqual(updatedMetadata.modelId, QWEN_CODER_3B);
+      assert.ok(updatedMetadata.updates.verifiedAt != null);
+      assert.strictEqual(updatedMetadata.updates.downloadCompleted, true);
     });
   });
 
@@ -197,9 +212,9 @@ describe("ModelDownloadOrchestrator", () => {
       });
 
       const result = orch.repairModelDownload(QWEN_CODER_3B);
-      expect(result.success).toBe(true);
-      expect(result.nextState).toBe("model_downloading");
-      expect(clearedModelId).toBe(QWEN_CODER_3B);
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.nextState, "model_downloading");
+      assert.strictEqual(clearedModelId, QWEN_CODER_3B);
     });
   });
 
@@ -219,11 +234,11 @@ describe("ModelDownloadOrchestrator", () => {
       });
 
       const result = orch.handleModelError(QWEN_CODER_3B, "test error");
-      expect(result.success).toBe(false);
-      expect(result.nextState).toBe("error");
-      expect(result.error).toBe("test error");
-      expect(result.errorCode).toBe("network_failure");
-      expect(updatedMetadata.updates.downloadCompleted).toBe(false);
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.nextState, "error");
+      assert.strictEqual(result.error, "test error");
+      assert.strictEqual(result.errorCode, "network_failure");
+      assert.strictEqual(updatedMetadata.updates.downloadCompleted, false);
     });
   });
 });

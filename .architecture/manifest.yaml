@@ -1633,7 +1633,6 @@ bounded_contexts:
       - local-llm
       - byok
       - agentic-interaction
-      - web-driver
 apps:
   - name: web
     driver: next.js
