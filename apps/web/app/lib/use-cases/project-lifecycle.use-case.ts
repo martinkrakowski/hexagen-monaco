@@ -49,7 +49,11 @@ export interface UpdateProjectParams {
 
 export function updateProject(params: UpdateProjectParams): void {
   const wizardData = buildWizardDataFromConfig(params.formData);
-  params.updateProject(params.projectId, params.formData, JSON.stringify(wizardData));
+  params.updateProject(
+    params.projectId,
+    params.formData,
+    JSON.stringify(wizardData),
+  );
 }
 
 export interface DiscardProjectParams {
@@ -74,7 +78,11 @@ export async function discardProject(
   });
 
   const chatPersistence = getChatPersistence();
-  await chatPersistence.purgeProjectData(params.projectId);
+  try {
+    await chatPersistence.purgeProjectData(params.projectId);
+  } catch (err) {
+    console.error("Failed to purge chat persistence data:", err);
+  }
 
   if (params.pendingWelcomeManifest) {
     await params.onSuccess(params.pendingWelcomeManifest);

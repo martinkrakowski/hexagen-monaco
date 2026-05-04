@@ -8,10 +8,7 @@ import {
   generateDataBuilder,
   generateEnhancedTestDouble,
 } from "./test-templates/index.js";
-
-type ReportRecorder = {
-  record: (level: string, file: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 interface TestConfig {
   enabled?: boolean;

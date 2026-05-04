@@ -24,16 +24,31 @@ export const generateAdaptersTool: ToolDefinition = {
     required: ["context_name", "port_names"],
   },
   handler: async (args, deps) => {
-    const a = args as Record<string, unknown>;
-    const result = await deps.generateAdaptersToolUseCase.execute({
-      contextName: a.context_name as string,
-      portNames: a.port_names as string[],
-      maxRetries: a.max_retries as number | undefined,
-    });
-    return {
-      content: [
-        { type: "text" as const, text: JSON.stringify(result, null, 2) },
-      ],
-    };
+    try {
+      const a = args as Record<string, unknown>;
+      const result = await deps.generateAdaptersToolUseCase.execute({
+        contextName: a.context_name as string,
+        portNames: a.port_names as string[],
+        maxRetries: a.max_retries as number | undefined,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
   },
 };

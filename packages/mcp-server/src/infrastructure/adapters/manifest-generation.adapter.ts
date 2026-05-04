@@ -36,6 +36,7 @@ async function callLLM(
   config: LLMApiConfig,
   systemPrompt: string,
   userPrompt: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const baseUrl = config.baseUrl ?? "https://api.openai.com/v1";
   const model = config.model ?? "gpt-4o";
@@ -54,6 +55,7 @@ async function callLLM(
       ],
       temperature: 0.3,
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -77,11 +79,14 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
 
   async generateTopology(
     request: TopologyGenerationRequest,
+    signal?: AbortSignal,
   ): Promise<TopologyGenerationResponse> {
     const maxRetries = request.maxRetries ?? 2;
     let lastError = "";
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (signal?.aborted) throw new Error("Request aborted");
+
       const userPrompt = compileTopologyUserPrompt({
         userDescription: request.description,
         validationErrors: attempt > 0 ? lastError : undefined,
@@ -91,6 +96,7 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
         this.config,
         TOPOLOGY_SYSTEM_PROMPT,
         userPrompt,
+        signal,
       );
 
       const parsed = parseJSON<ManifestTopologyDraft>(content);
@@ -125,11 +131,14 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
 
   async generateAdapters(
     request: AdapterGenerationRequest,
+    signal?: AbortSignal,
   ): Promise<AdapterGenerationResponse> {
     const maxRetries = request.maxRetries ?? 2;
     let lastError = "";
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (signal?.aborted) throw new Error("Request aborted");
+
       const userPrompt = compileAdapterUserPrompt({
         validatedPortInventory: request.portNames,
         contextName: request.contextName,
@@ -140,6 +149,7 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
         this.config,
         ADAPTER_SYSTEM_PROMPT,
         userPrompt,
+        signal,
       );
 
       type AdapterArray = ManifestDraft["boundedContexts"][number]["adapters"];
@@ -171,14 +181,18 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
   async generateManifestPipeline(
     request: PipelineGenerationRequest,
   ): Promise<PipelineGenerationResponse> {
-    const topologyResult = await this.generateTopology({
-      description: request.description,
-      maxRetries: request.maxRetries,
-    });
+    const topologyResult = await this.generateTopology(
+      {
+        description: request.description,
+        maxRetries: request.maxRetries,
+      },
+      request.signal,
+    );
 
     const draft = await this.enrichWithAdapters(
       topologyResult,
       request.maxRetries,
+      request.signal,
     );
 
     const normalized = normalizeDraft(draft);
@@ -259,6 +273,7 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
   private async enrichWithAdapters(
     topologyResult: TopologyGenerationResponse,
     maxRetries?: number,
+    signal?: AbortSignal,
   ): Promise<ManifestDraft> {
     const draftContexts: ManifestDraft["boundedContexts"] = [];
 
@@ -272,11 +287,14 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
 
       if (allPortNames.length > 0) {
         try {
-          const result = await this.generateAdapters({
-            contextName: ctx.name,
-            portNames: allPortNames,
-            maxRetries,
-          });
+          const result = await this.generateAdapters(
+            {
+              contextName: ctx.name,
+              portNames: allPortNames,
+              maxRetries,
+            },
+            signal,
+          );
           adapters =
             result.adapters as unknown as ManifestDraft["boundedContexts"][number]["adapters"];
         } catch {

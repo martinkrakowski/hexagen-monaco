@@ -26,7 +26,7 @@ export const submitArchitecturalSpecTool: ToolDefinition = {
         content: [
           {
             type: "text" as const,
-            text: String(result.error ?? "Unknown error"),
+            text: result.error ?? "Unknown error",
           },
         ],
       };

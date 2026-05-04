@@ -19,15 +19,30 @@ export const generateTopologyTool: ToolDefinition = {
     required: ["description"],
   },
   handler: async (args, deps) => {
-    const a = args as Record<string, unknown>;
-    const result = await deps.generateTopologyToolUseCase.execute({
-      description: a.description as string,
-      maxRetries: a.max_retries as number | undefined,
-    });
-    return {
-      content: [
-        { type: "text" as const, text: JSON.stringify(result, null, 2) },
-      ],
-    };
+    try {
+      const a = args as Record<string, unknown>;
+      const result = await deps.generateTopologyToolUseCase.execute({
+        description: a.description as string,
+        maxRetries: a.max_retries as number | undefined,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
   },
 };

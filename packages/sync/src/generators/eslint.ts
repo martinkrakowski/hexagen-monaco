@@ -4,10 +4,7 @@ import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import type { EslintConfig, Manifest } from "../types/manifest.js";
-
-type ReportRecorder = {
-  record: (type: string, target: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 /**
  * Marker inserted as the first line of the emitted `eslint.config.js` so that

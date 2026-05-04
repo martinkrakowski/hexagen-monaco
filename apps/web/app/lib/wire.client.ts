@@ -180,7 +180,11 @@ export const wireDependencies = () => {
     "ProjectDiscarded",
     (event: DomainEvent<ProjectDiscardedEvent>) => {
       // Clear IndexedDB persistence
-      void chatPersistence.purgeProjectData(event.payload.projectId);
+      void chatPersistence
+        .purgeProjectData(event.payload.projectId)
+        .catch((err) =>
+          console.error("Failed to purge chat persistence data:", err),
+        );
 
       // Clear Zustand thread store
       useGovernanceThreadStore.getState().clearAllThreads();

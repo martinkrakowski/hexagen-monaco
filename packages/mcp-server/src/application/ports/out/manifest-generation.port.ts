@@ -13,6 +13,7 @@ export interface PipelineGenerationRequest {
   description: string;
   maxRetries?: number;
   dryRun?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface TopologyGenerationResponse {
@@ -53,9 +54,11 @@ export interface PipelineGenerationResponse {
 export interface ManifestGenerationPort {
   generateTopology(
     request: TopologyGenerationRequest,
+    signal?: AbortSignal,
   ): Promise<TopologyGenerationResponse>;
   generateAdapters(
     request: AdapterGenerationRequest,
+    signal?: AbortSignal,
   ): Promise<AdapterGenerationResponse>;
   generateManifestPipeline(
     request: PipelineGenerationRequest,

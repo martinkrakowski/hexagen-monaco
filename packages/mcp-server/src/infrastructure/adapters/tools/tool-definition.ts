@@ -7,6 +7,7 @@ export interface ToolDefinition {
   handler: (
     args: unknown,
     deps: MCPServerAdapterDependencies,
+    signal?: AbortSignal,
   ) => Promise<{
     content: Array<{ type: "text"; text: string }>;
     isError?: boolean;

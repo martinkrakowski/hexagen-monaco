@@ -22,17 +22,33 @@ export const generateManifestPipelineTool: ToolDefinition = {
     },
     required: ["description"],
   },
-  handler: async (args, deps) => {
-    const a = args as Record<string, unknown>;
-    const result = await deps.generateManifestPipelineToolUseCase.execute({
-      description: a.description as string,
-      maxRetries: a.max_retries as number | undefined,
-      dryRun: a.dry_run as boolean | undefined,
-    });
-    return {
-      content: [
-        { type: "text" as const, text: JSON.stringify(result, null, 2) },
-      ],
-    };
+  handler: async (args, deps, signal) => {
+    try {
+      const a = args as Record<string, unknown>;
+      const result = await deps.generateManifestPipelineToolUseCase.execute({
+        description: a.description as string,
+        maxRetries: a.max_retries as number | undefined,
+        dryRun: a.dry_run as boolean | undefined,
+        signal,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
   },
 };

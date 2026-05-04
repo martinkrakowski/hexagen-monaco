@@ -112,7 +112,7 @@ export class MCPServerAdapter implements MCPServerPort {
 
     server.setRequestHandler(
       schemas.CallToolRequestSchema,
-      async (request: unknown) => {
+      async (request: unknown, extra: { signal: AbortSignal }) => {
         try {
           const req = request as {
             params: {
@@ -126,7 +126,7 @@ export class MCPServerAdapter implements MCPServerPort {
           if (!tool) {
             throw new Error(`Unknown tool: ${name}`);
           }
-          return await tool.handler(args, this.dependencies);
+          return await tool.handler(args, this.dependencies, extra.signal);
         } catch (error) {
           return {
             isError: true,

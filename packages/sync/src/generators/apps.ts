@@ -6,10 +6,7 @@ import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import type { AppFramework, AppFrameworkConfig } from "../types/manifest.js";
 import { BUILTIN_FRAMEWORK_TEMPLATES } from "./apps-framework-templates.js";
-
-type ReportRecorder = {
-  record: (type: string, target: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 type WriteStatus = Awaited<ReturnType<typeof safeWriteFileAtomic>>;
 

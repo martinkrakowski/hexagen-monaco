@@ -6,9 +6,13 @@ import { NextRequest } from "next/server";
 import path from "path";
 import { getModifyArchitectureUseCase } from "@/lib/wire.server";
 import { getLogger } from "@/lib/wire";
+import {
+  createSSEResponse,
+  formatSSEComment,
+  formatSSEEvent,
+  SSE_HEARTBEAT_INTERVAL_MS,
+} from "@/lib/sse-helpers";
 import type { IntentLineage } from "@hexagen/core-domain";
-
-const SSE_HEARTBEAT_INTERVAL_MS = 5_000;
 
 function validateManifestPath(rawPath: string): string {
   const cwd = process.cwd();
@@ -73,162 +77,144 @@ export async function POST(request: NextRequest) {
   };
 
   const abortSignal = request.signal;
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
-      let llmAbortController: AbortController | undefined;
-      let isAborted = false;
 
-      const send = (event: string, data: unknown) => {
-        try {
-          const serialized = JSON.stringify(data);
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${serialized}\n\n`),
-          );
-        } catch (err) {
-          const logger = getLogger();
-          logger.errorWithException(
-            err,
-            `[api/architecture/modify/stream] Failed to serialize SSE event: ${event}`,
-          );
+  return createSSEResponse(async (ctx) => {
+    let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+    let llmAbortController: AbortController | undefined;
+    let isAborted = false;
 
-          try {
-            controller.enqueue(
-              encoder.encode(
-                `event: pipeline_error\ndata: ${JSON.stringify({
-                  success: false,
-                  error: "Internal serialization failure",
-                })}\n\n`,
-              ),
-            );
-          } catch {
-            clearInterval(heartbeatTimer);
-            controller.close();
-          }
-        }
-      };
-
-      const startHeartbeat = () => {
-        heartbeatTimer = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode(": heartbeat\n\n"));
-          } catch {
-            clearInterval(heartbeatTimer);
-          }
-        }, SSE_HEARTBEAT_INTERVAL_MS);
-      };
-
-      const stopLlmInference = () => {
-        if (llmAbortController && !isAborted) {
-          isAborted = true;
-          llmAbortController.abort();
-        }
-      };
-
-      const cleanup = () => {
-        stopLlmInference();
-        if (heartbeatTimer) {
-          clearInterval(heartbeatTimer);
-          heartbeatTimer = undefined;
-        }
-      };
-
+    const send = (event: string, data: unknown) => {
       try {
-        startHeartbeat();
-
-        const abortHandler = () => {
-          cleanup();
-          try {
-            controller.close();
-          } catch {
-            // Stream already closed by client disconnect
-          }
-        };
-        abortSignal.addEventListener("abort", abortHandler, { once: true });
-
-        send("pipeline_start", { intent: body.intent });
-
-        llmAbortController = new AbortController();
-
-        let useCase;
-        try {
-          useCase = getModifyArchitectureUseCase(
-            "in-memory",
-            llmAbortController.signal,
-            {
-              onStepRunning: (name) => send("step_running", { name }),
-              onStepComplete: (name, status, durationMs) =>
-                send("step_complete", { name, status, durationMs }),
-            },
-          );
-        } catch (err) {
-          const logger = getLogger();
-          logger.errorWithException(
-            err,
-            "[api/architecture/modify/stream] Use case wiring failed",
-          );
-
-          const message =
-            err instanceof Error
-              ? err.message
-              : "Failed to initialize pipeline";
-          send("pipeline_error", { success: false, error: message });
-          cleanup();
-          abortSignal.removeEventListener("abort", abortHandler);
-          controller.close();
-          return;
-        }
-
-        const result = await useCase.execute(
-          body.intent,
-          manifestPath,
-          lineage,
-        );
-
-        if (result.success) {
-          send("pipeline_complete", {
-            success: true,
-            pipelineRunId: result.value.pipelineRunId,
-            patchesApplied: result.value.patchesApplied,
-            lintPassed: result.value.lintPassed,
-            transactionId: result.value.transactionId,
-            patches: result.value.patches ?? [],
-          });
-        } else {
-          send("pipeline_error", {
-            success: false,
-            error: result.error.message,
-          });
-        }
-
-        abortSignal.removeEventListener("abort", abortHandler);
+        ctx.controller.enqueue(ctx.encoder.encode(formatSSEEvent(event, data)));
       } catch (err) {
         const logger = getLogger();
         logger.errorWithException(
           err,
-          "[api/architecture/modify/stream] Pipeline execution failed",
+          `[api/architecture/modify/stream] Failed to serialize SSE event: ${event}`,
         );
-        const message =
-          err instanceof Error ? err.message : "Internal server error";
-        send("pipeline_error", { success: false, error: message });
-      } finally {
-        cleanup();
+
         try {
-          controller.close();
+          ctx.controller.enqueue(
+            ctx.encoder.encode(
+              formatSSEEvent("pipeline_error", {
+                success: false,
+                error: "Internal serialization failure",
+              }),
+            ),
+          );
         } catch {
-          // Stream already closed
+          clearInterval(heartbeatTimer);
+          ctx.controller.close();
         }
       }
-    },
-  });
+    };
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
+    const startHeartbeat = () => {
+      heartbeatTimer = setInterval(() => {
+        try {
+          ctx.controller.enqueue(
+            ctx.encoder.encode(formatSSEComment("heartbeat")),
+          );
+        } catch {
+          clearInterval(heartbeatTimer);
+        }
+      }, SSE_HEARTBEAT_INTERVAL_MS);
+    };
+
+    const stopLlmInference = () => {
+      if (llmAbortController && !isAborted) {
+        isAborted = true;
+        llmAbortController.abort();
+      }
+    };
+
+    const cleanup = () => {
+      stopLlmInference();
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = undefined;
+      }
+    };
+
+    try {
+      startHeartbeat();
+
+      const abortHandler = () => {
+        cleanup();
+        try {
+          ctx.controller.close();
+        } catch {
+          // Stream already closed by client disconnect
+        }
+      };
+      abortSignal.addEventListener("abort", abortHandler, { once: true });
+
+      send("pipeline_start", { intent: body.intent });
+
+      llmAbortController = new AbortController();
+
+      let useCase;
+      try {
+        useCase = getModifyArchitectureUseCase(
+          "in-memory",
+          llmAbortController.signal,
+          {
+            onStepRunning: (name) => send("step_running", { name }),
+            onStepComplete: (name, status, durationMs) =>
+              send("step_complete", { name, status, durationMs }),
+          },
+        );
+      } catch (err) {
+        const logger = getLogger();
+        logger.errorWithException(
+          err,
+          "[api/architecture/modify/stream] Use case wiring failed",
+        );
+
+        const message =
+          err instanceof Error ? err.message : "Failed to initialize pipeline";
+        send("pipeline_error", { success: false, error: message });
+        cleanup();
+        abortSignal.removeEventListener("abort", abortHandler);
+        ctx.controller.close();
+        return;
+      }
+
+      const result = await useCase.execute(body.intent, manifestPath, lineage);
+
+      if (result.success) {
+        send("pipeline_complete", {
+          success: true,
+          pipelineRunId: result.value.pipelineRunId,
+          patchesApplied: result.value.patchesApplied,
+          lintPassed: result.value.lintPassed,
+          transactionId: result.value.transactionId,
+          patches: result.value.patches ?? [],
+        });
+      } else {
+        send("pipeline_error", {
+          success: false,
+          error: result.error.message,
+        });
+      }
+
+      abortSignal.removeEventListener("abort", abortHandler);
+    } catch (err) {
+      const logger = getLogger();
+      logger.errorWithException(
+        err,
+        "[api/architecture/modify/stream] Pipeline execution failed",
+      );
+      const message =
+        err instanceof Error ? err.message : "Internal server error";
+      send("pipeline_error", { success: false, error: message });
+    } finally {
+      cleanup();
+      try {
+        ctx.controller.close();
+      } catch {
+        // Stream already closed
+      }
+    }
   });
 }

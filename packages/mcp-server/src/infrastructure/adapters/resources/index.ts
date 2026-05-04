@@ -5,9 +5,7 @@ export interface ResourceDefinition {
   name: string;
   description: string;
   mimeType: string;
-  read: (
-    deps: MCPServerAdapterDependencies,
-  ) => Promise<{
+  read: (deps: MCPServerAdapterDependencies) => Promise<{
     contents: Array<{ uri: string; mimeType: string; text: string }>;
   }>;
 }
@@ -20,7 +18,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getManifestResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://manifest",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {
@@ -39,7 +52,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getGraphResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://graph",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {
@@ -58,7 +86,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getLinterReportResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://linter-report",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {
@@ -77,7 +120,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getDecisionsResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://decisions",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {
@@ -96,7 +154,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getInvariantsResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://invariants",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {
@@ -115,7 +188,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getLinterConfigResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://linter-config",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {
@@ -134,7 +222,22 @@ const resources: ResourceDefinition[] = [
     mimeType: "application/json",
     read: async (deps) => {
       const result = await deps.getWorkspaceContextResourceUseCase.execute();
-      if (!result.success) throw result.error;
+      if (!result.success) {
+        return {
+          contents: [
+            {
+              uri: "architecture://workspace-context",
+              mimeType: "application/json",
+              text: JSON.stringify({
+                error:
+                  result.error instanceof Error
+                    ? result.error.message
+                    : String(result.error ?? "Unknown error"),
+              }),
+            },
+          ],
+        };
+      }
       return {
         contents: [
           {

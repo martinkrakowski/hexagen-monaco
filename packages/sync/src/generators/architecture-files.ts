@@ -18,10 +18,7 @@ import {
   LINTER_CONFIG_DEFAULT,
   GENERATOR_CONFIG_TEMPLATE,
 } from "./architecture-file-templates.js";
-
-type ReportRecorder = {
-  record: (type: string, target: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 function resolveWorkspaceTemplate(manifest: Manifest): string {
   const legacy = (manifest as { workspaceTemplate?: unknown })

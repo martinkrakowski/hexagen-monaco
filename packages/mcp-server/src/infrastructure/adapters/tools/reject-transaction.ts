@@ -29,7 +29,10 @@ export const rejectTransactionTool: ToolDefinition = {
         content: [
           {
             type: "text" as const,
-            text: String(result.error ?? "Unknown error"),
+            text:
+              result.error instanceof Error
+                ? result.error.message
+                : String(result.error ?? "Unknown error"),
           },
         ],
       };

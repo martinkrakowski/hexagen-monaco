@@ -9,10 +9,7 @@ import {
   BUILTIN_TSCONFIG_BASE_TEMPLATE,
   BUILTIN_TURBO_TEMPLATE,
 } from "./root-file-templates.js";
-
-type ReportRecorder = {
-  record: (type: string, target: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 function buildVars(manifest: Manifest): Record<string, string> {
   const system =

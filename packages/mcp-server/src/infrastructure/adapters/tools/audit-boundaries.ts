@@ -10,14 +10,29 @@ export const auditBoundariesTool: ToolDefinition = {
     },
   },
   handler: async (args, deps) => {
-    const a = args as Record<string, unknown>;
-    const result = await deps.auditBoundariesToolUseCase.execute({
-      dry_run: (a.dry_run as boolean | undefined) ?? true,
-    });
-    return {
-      content: [
-        { type: "text" as const, text: JSON.stringify(result, null, 2) },
-      ],
-    };
+    try {
+      const a = args as Record<string, unknown>;
+      const result = await deps.auditBoundariesToolUseCase.execute({
+        dry_run: (a.dry_run as boolean | undefined) ?? true,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
   },
 };

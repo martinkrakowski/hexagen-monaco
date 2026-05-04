@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
-
-type ReportRecorder = {
-  record: (level: string, file: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 interface PackageAudit {
   packageName: string;
@@ -221,4 +218,5 @@ function hasIssues(audit: PackageAudit): boolean {
 }
 
 export { auditPackages, generateMigrationReport, hasIssues };
-export type { PackageAudit, MigrationConfig, ReportRecorder };
+export type { PackageAudit, MigrationConfig };
+export type { ReportRecorder } from "../domain/types.js";

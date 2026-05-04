@@ -58,7 +58,10 @@ export interface MCPServerRuntime {
   connect(transport: unknown): Promise<void>;
   setRequestHandler(
     schema: unknown,
-    handler: (request: unknown) => Promise<unknown>,
+    handler: (
+      request: unknown,
+      extra: { signal: AbortSignal },
+    ) => Promise<unknown>,
   ): void;
   close?: () => Promise<void> | void;
 }

@@ -9,10 +9,7 @@ import {
   type Manifest,
   type TsConfigTemplate,
 } from "../types/manifest.js";
-
-type ReportRecorder = {
-  record: (type: string, target: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 /**
  * Minimal built-in fallback template, used only when the manifest declares
