@@ -16,7 +16,8 @@ import {
   generateUseCaseFromPort,
 } from "./port-analyzer.js";
 import { DEFAULT_TEMPLATES, DEFAULT_NAMING } from "./stubs/stub-templates.js";
-import type { StubKind, EmissionSite } from "./stubs/stub-templates.js";
+import type { StubKind } from "./stubs/stub-templates.js";
+import { buildEmissionPlan } from "../domain/services/emission-plan-builder.js";
 
 type ReportRecorder = {
   record: (type: string, target: string, message: string) => void;
@@ -83,96 +84,6 @@ async function writeStubFile(
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   return safeWriteFileAtomic(filePath, content, config, report, false);
-}
-
-interface EmissionPlan {
-  kind: StubKind;
-  subdir: EmissionSite;
-  names: string[];
-}
-
-function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
-  const layers = context.layers;
-  if (!layers) return [];
-
-  const plan: EmissionPlan[] = [];
-
-  const domain = layers.domain;
-  if (domain) {
-    if (domain.entities?.length) {
-      plan.push({
-        kind: "entity",
-        subdir: "domain/entities",
-        names: domain.entities,
-      });
-    }
-    if (domain.value_objects?.length) {
-      plan.push({
-        kind: "valueObject",
-        subdir: "domain/value-objects",
-        names: domain.value_objects,
-      });
-    }
-    const domainServices = (domain as unknown as { domain_services?: string[] })
-      .domain_services;
-    if (domainServices?.length) {
-      plan.push({
-        kind: "domainService",
-        subdir: "domain/services",
-        names: domainServices,
-      });
-    }
-    if (domain.ports?.in?.length) {
-      plan.push({
-        kind: "inPort",
-        subdir: "domain/ports/in",
-        names: domain.ports.in,
-      });
-    }
-    if (domain.ports?.out?.length) {
-      plan.push({
-        kind: "outPort",
-        subdir: "domain/ports/out",
-        names: domain.ports.out,
-      });
-    }
-  }
-
-  const application = layers.application;
-  if (application) {
-    if (application.use_cases?.length) {
-      plan.push({
-        kind: "useCase",
-        subdir: "application/use-cases",
-        names: application.use_cases,
-      });
-    }
-    if (application.ports?.in?.length) {
-      plan.push({
-        kind: "inPort",
-        subdir: "application/ports/in",
-        names: application.ports.in,
-      });
-    }
-    if (application.ports?.out?.length) {
-      plan.push({
-        kind: "outPort",
-        subdir: "application/ports/out",
-        names: application.ports.out,
-      });
-    }
-  }
-
-  const infrastructure = layers.infrastructure;
-  if (infrastructure?.adapters?.length) {
-    plan.push({
-      kind: "adapter",
-      subdir: "infrastructure/adapters",
-      names: infrastructure.adapters,
-    });
-  }
-
-  return plan;
 }
 
 async function tryAnalyzeRelatedPort(

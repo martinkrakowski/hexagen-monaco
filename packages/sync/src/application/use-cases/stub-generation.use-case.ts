@@ -7,7 +7,12 @@
  */
 
 import path from "node:path";
-import type { BoundedContext, StubsConfig, StubNaming, StubTemplates } from "../../types/manifest.js";
+import type {
+  BoundedContext,
+  StubsConfig,
+  StubNaming,
+  StubTemplates,
+} from "../../types/manifest.js";
 import type { SyncConfig } from "../../config.js";
 import { createEmptyResult, type GeneratorResult } from "../../results.js";
 import type { FileSystemPort } from "../ports/out/file-system.port.js";
@@ -22,7 +27,6 @@ import {
   resolveTemplate,
   resolveNaming,
   interpolateWithLog,
-  type StubKind as ResolvedStubKind,
 } from "../../domain/services/stub-template-resolver.js";
 
 export interface StubGenerationOptions {
@@ -37,8 +41,8 @@ export interface StubGenerationResult {
   skippedCount: number;
 }
 
-function getStubKind(kind: string): ResolvedStubKind | null {
-  const kindMap: Record<string, ResolvedStubKind> = {
+function getStubKind(kind: string): StubKind | null {
+  const kindMap: Record<string, StubKind> = {
     entity: "entity",
     valueObject: "valueObject",
     domainService: "domainService",
@@ -90,7 +94,7 @@ export async function generateStubs(
   for (const { kind, subdir, names } of plan) {
     const resolvedKind = getStubKind(kind);
     const resolvedSubdir = getEmissionSite(subdir);
-    
+
     if (!resolvedKind || !resolvedSubdir) {
       continue;
     }
@@ -107,14 +111,22 @@ export async function generateStubs(
         namingTemplate,
         name,
         `stubs.naming.${kind}`,
-        { logger, workspaceRoot: "", manifest: { generator: {} } } as SyncConfig,
+        {
+          logger,
+          workspaceRoot: "",
+          manifest: { generator: {} },
+        } as SyncConfig,
       );
 
       const content = interpolateWithLog(
         contentTemplate,
         name,
         `stubs.templates.${kind}`,
-        { logger, workspaceRoot: "", manifest: { generator: {} } } as SyncConfig,
+        {
+          logger,
+          workspaceRoot: "",
+          manifest: { generator: {} },
+        } as SyncConfig,
       );
 
       const filePath = path.join(moduleDir, "src", subdir, filename);

@@ -11,15 +11,9 @@ import type { StubTemplates, StubNaming } from "../../types/manifest.js";
 import type { SyncConfig } from "../../config.js";
 import { interpolate } from "../../template-engine.js";
 import { DEFAULT_TEMPLATES, DEFAULT_NAMING } from "../stub-templates.js";
+import type { StubKind } from "./emission-plan-builder.js";
 
-export type StubKind =
-  | "inPort"
-  | "outPort"
-  | "adapter"
-  | "useCase"
-  | "entity"
-  | "valueObject"
-  | "domainService";
+export type { StubKind };
 
 export function resolveTemplate(
   kind: StubKind,

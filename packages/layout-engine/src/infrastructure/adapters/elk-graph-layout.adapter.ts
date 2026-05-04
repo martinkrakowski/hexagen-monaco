@@ -1,29 +1,19 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import type {
+  GraphLayoutPort,
   GraphLayoutNode,
   GraphLayoutEdge,
+  GraphLayoutResult,
 } from "../../application/ports/in/graph-layout.port.js";
 
 const elk = new ELK();
 
-export class ElkGraphLayoutAdapter {
+export class ElkGraphLayoutAdapter implements GraphLayoutPort {
   async layout(
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     direction: "TB" | "LR",
-  ): Promise<{ positions: ReadonlyArray<{ nodeId: string; x: number; y: number }> }> {
-    const layoutNodes = nodes.map((n) => ({
-      id: n.id,
-      width: n.width,
-      height: n.height,
-    }));
-
-    const layoutEdges = edges.map((e) => ({
-      id: `${e.source}-${e.target}`,
-      source: e.source,
-      target: e.target,
-    }));
-
+  ): Promise<GraphLayoutResult> {
     const elkDirection = direction === "TB" ? "DOWN" : "RIGHT";
 
     const elkGraph = {
@@ -32,13 +22,14 @@ export class ElkGraphLayoutAdapter {
         "elk.direction": elkDirection,
         "elk.algorithm": "layered",
       },
-      children: layoutNodes.map((n) => ({
+      children: nodes.map((n) => ({
         id: n.id,
         width: n.width,
         height: n.height,
       })),
-      edges: layoutEdges.map((e) => ({
-        id: e.id,
+      // NOTE: ${source}-${target} edge IDs may collide in multi-edge graphs
+      edges: edges.map((e) => ({
+        id: `${e.source}-${e.target}`,
         sources: [e.source],
         targets: [e.target],
       })),

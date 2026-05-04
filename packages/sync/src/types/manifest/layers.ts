@@ -1,6 +1,7 @@
 export interface DomainLayer {
   entities?: string[];
   value_objects?: string[];
+  domain_services?: string[];
   ports?: {
     in?: string[];
     out?: string[];

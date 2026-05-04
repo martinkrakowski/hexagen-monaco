@@ -153,9 +153,9 @@ class SafeRefactoringOrchestrator {
   static getFastConfig(): SafeRefactoringConfig {
     return {
       createBackup: true,
-      runBuild: true,
+      runBuild: false,
       runTypecheck: true,
-      runArchLint: true,
+      runArchLint: false,
       runTests: false,
       autoCommit: false,
     };

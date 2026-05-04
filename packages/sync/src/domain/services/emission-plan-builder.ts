@@ -34,32 +34,8 @@ export interface EmissionPlan {
   names: string[];
 }
 
-interface DomainLayerWithServices {
-  entities?: string[];
-  value_objects?: string[];
-  ports?: {
-    in?: string[];
-    out?: string[];
-  };
-  domain_services?: string[];
-}
-
-interface LayersWithDomainServices {
-  domain?: DomainLayerWithServices;
-  application?: {
-    use_cases?: string[];
-    ports?: {
-      in?: string[];
-      out?: string[];
-    };
-  };
-  infrastructure?: {
-    adapters?: string[];
-  };
-}
-
 export function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
-  const layers = context.layers as LayersWithDomainServices | undefined;
+  const layers = context.layers;
   if (!layers) return [];
 
   const plan: EmissionPlan[] = [];
