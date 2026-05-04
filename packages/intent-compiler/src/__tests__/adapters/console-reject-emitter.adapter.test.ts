@@ -1,18 +1,19 @@
+import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { ConsoleRejectEmitterAdapter } from "../../infrastructure/adapters/console-reject-emitter.adapter.js";
 import { Rejection } from "../../domain/rejection.js";
 
 describe("ConsoleRejectEmitterAdapter", () => {
   let adapter: ConsoleRejectEmitterAdapter;
-  let errorSpy: jest.SpyInstance;
+  let errorSpy: ReturnType<typeof mock.method>;
 
   beforeEach(() => {
     adapter = new ConsoleRejectEmitterAdapter();
-    errorSpy = jest.spyOn(console, "error").mockImplementation();
+    errorSpy = mock.method(console, "error", () => {});
   });
 
   afterEach(() => {
-    errorSpy.mockRestore();
+    errorSpy.mock.restore();
   });
 
   describe("emit", () => {
@@ -22,7 +23,7 @@ describe("ConsoleRejectEmitterAdapter", () => {
       adapter.emit(rejection);
 
       assert.ok(errorSpy.mock.calls.length > 0);
-      const message = errorSpy.mock.calls[0][0] as string;
+      const message = errorSpy.mock.calls[0].arguments[0] as string;
       assert.ok(message.includes("Intent Compiler Rejection"));
       assert.ok(message.includes("Test rejection reason"));
     });
@@ -32,7 +33,7 @@ describe("ConsoleRejectEmitterAdapter", () => {
 
       adapter.emit(rejection);
 
-      const message = errorSpy.mock.calls[0][0] as string;
+      const message = errorSpy.mock.calls[0].arguments[0] as string;
       assert.match(message, /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
 
@@ -42,7 +43,7 @@ describe("ConsoleRejectEmitterAdapter", () => {
 
       adapter.emit(rejection);
 
-      const message = errorSpy.mock.calls[0][0] as string;
+      const message = errorSpy.mock.calls[0].arguments[0] as string;
       assert.ok(message.includes(reason));
     });
 
@@ -53,8 +54,8 @@ describe("ConsoleRejectEmitterAdapter", () => {
       adapter.emit(rejection);
 
       assert.strictEqual(errorSpy.mock.calls.length, 2);
-      assert.strictEqual(errorSpy.mock.calls[1][0], "Stack trace:");
-      assert.strictEqual(errorSpy.mock.calls[1][1], rejection.stack);
+      assert.strictEqual(errorSpy.mock.calls[1].arguments[0], "Stack trace:");
+      assert.strictEqual(errorSpy.mock.calls[1].arguments[1], rejection.stack);
     });
 
     it("should emit without error when stack trace is unavailable", () => {
@@ -65,7 +66,7 @@ describe("ConsoleRejectEmitterAdapter", () => {
       });
 
       assert.ok(errorSpy.mock.calls.length >= 1);
-      const message = errorSpy.mock.calls[0][0] as string;
+      const message = errorSpy.mock.calls[0].arguments[0] as string;
       assert.ok(message.includes("Test reason"));
     });
 
@@ -77,9 +78,13 @@ describe("ConsoleRejectEmitterAdapter", () => {
       adapter.emit(rejection2);
 
       assert.ok(errorSpy.mock.calls.length >= 2);
-      assert.ok((errorSpy.mock.calls[0][0] as string).includes("First reason"));
+      assert.ok(
+        (errorSpy.mock.calls[0].arguments[0] as string).includes(
+          "First reason",
+        ),
+      );
       const secondCallIndex = errorSpy.mock.calls.findIndex((call) =>
-        (call[0] as string).includes("Second reason"),
+        (call.arguments[0] as string).includes("Second reason"),
       );
       assert.ok(secondCallIndex > 0);
     });

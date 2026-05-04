@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, mock } from "node:test";
 import assert from "node:assert/strict";
 import { RRPZodSchemaGeneratorAdapter } from "../../../src/infrastructure/adapters/rrp-zod-schema-generator.adapter.js";
 import type { GenerateZodSchemaRequest } from "../../../src/application/ports/in/generate-zod-schema.port.js";
@@ -36,7 +37,7 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
     });
 
     it("should validate example data against contract", async () => {
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+      const consoleSpy = mock.method(console, "warn", () => {});
 
       const request: GenerateZodSchemaRequest = {
         name: "TestSchema",
@@ -56,12 +57,14 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
 
       await adapter.generate(request);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
+      assert.ok(consoleSpy.mock.calls.length > 0);
+      const warnMessage = consoleSpy.mock.calls[0].arguments[0] as string;
+      assert.ok(
+        warnMessage.includes(
           "[Zod] Example data failed validation against contract",
         ),
       );
-      consoleSpy.mockRestore();
+      consoleSpy.mock.restore();
     });
 
     it("should fall back to type inference when no contract provided", async () => {

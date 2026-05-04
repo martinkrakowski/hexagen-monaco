@@ -3,16 +3,30 @@ import { promisify } from "node:util";
 import type { LintValidationPort } from "../../application/ports/out/lint-validation.port.js";
 import type { Result } from "../../application/result.js";
 
-const execFileAsync = promisify(execFile);
+const defaultExecFileAsync = promisify(execFile);
+
+type ExecFileAsyncFn = (
+  file: string,
+  args: readonly string[],
+  options?: { cwd?: string; timeout?: number },
+) => Promise<{ stdout: string; stderr: string }>;
 
 export class CliLintValidationAdapter implements LintValidationPort {
-  constructor(private readonly workspaceRoot: string) {}
+  private readonly execFileAsync: ExecFileAsyncFn;
+
+  constructor(
+    private readonly workspaceRoot: string,
+    execFileAsync?: ExecFileAsyncFn,
+  ) {
+    this.execFileAsync =
+      execFileAsync ?? (defaultExecFileAsync as ExecFileAsyncFn);
+  }
 
   async validateManifest(
     _manifestPath: string,
   ): Promise<Result<{ valid: boolean; errors: string[] }, Error>> {
     try {
-      const { stderr } = await execFileAsync("yarn", ["lint:arch"], {
+      const { stderr } = await this.execFileAsync("yarn", ["lint:arch"], {
         cwd: this.workspaceRoot,
         timeout: 60_000,
       });

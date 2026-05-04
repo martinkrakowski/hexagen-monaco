@@ -32,14 +32,26 @@ async function retryWithBackoff<T>(
 }
 
 export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPort {
-  constructor(private readonly workspaceRoot: string) {}
+  private readonly loadManifestFn: typeof loadManifest;
+  private readonly saveManifestFn: typeof saveManifest;
+
+  constructor(
+    private readonly workspaceRoot: string,
+    deps: {
+      loadManifest?: typeof loadManifest;
+      saveManifest?: typeof saveManifest;
+    } = {},
+  ) {
+    this.loadManifestFn = deps?.loadManifest ?? loadManifest;
+    this.saveManifestFn = deps?.saveManifest ?? saveManifest;
+  }
 
   async applyPatches(
     patches: Patch[],
     _manifestPath: string,
   ): Promise<Result<void, Error>> {
     try {
-      const loadResult = await loadManifest(this.workspaceRoot);
+      const loadResult = await this.loadManifestFn(this.workspaceRoot);
       if (!loadResult.success) {
         return { success: false, error: loadResult.error };
       }
@@ -47,7 +59,7 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
       const manifest = loadResult.value as Manifest;
       const patched = this.applyPatchesToManifest(manifest, patches);
 
-      const saveResult = await saveManifest(this.workspaceRoot, patched);
+      const saveResult = await this.saveManifestFn(this.workspaceRoot, patched);
       if (!saveResult.success) {
         return { success: false, error: saveResult.error };
       }
@@ -114,7 +126,6 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
     const contexts = manifest.bounded_contexts ?? [];
     const ctxId = patch.targetId;
 
-    // Check for duplicate context
     if (contexts.some((c) => c.name === ctxId)) {
       throw new Error(`Bounded context '${ctxId}' already exists`);
     }
@@ -154,9 +165,7 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
     }
   }
 
-  private applyUpdateEdge(_manifest: Manifest, _patch: Patch): void {
-    // Edge updates modify depends_on entries on contexts
-  }
+  private applyUpdateEdge(_manifest: Manifest, _patch: Patch): void {}
 
   private applyRemoveEdge(manifest: Manifest, patch: Patch): void {
     const source = patch.payload.source as string | undefined;

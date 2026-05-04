@@ -1,29 +1,33 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 import assert from "node:assert/strict";
+import { describe, it, beforeEach, mock } from "node:test";
 import type { Patch } from "@hexagen/core-domain";
 import type { ManifestMutationPort } from "../../src/application/ports/out/manifest-mutation.port.js";
+import type { Manifest } from "@hexagen/sync";
+import { SyncDelegatingManifestMutationAdapter } from "../../src/infrastructure/adapters/sync-delegating-manifest-mutation.adapter.js";
 
 const createMockSync = () => {
   const saved: Array<{ workspaceRoot: string; manifest: unknown }> = [];
   let currentManifest: Record<string, unknown> = { bounded_contexts: [] };
 
+  const loadManifest = mock.fn(async (_workspaceRoot: string) => ({
+    success: true,
+    value: JSON.parse(JSON.stringify(currentManifest)) as Manifest,
+  }));
+
+  const saveManifest = mock.fn(
+    async (workspaceRoot: string, manifest: unknown) => {
+      saved.push({ workspaceRoot, manifest });
+      currentManifest = JSON.parse(JSON.stringify(manifest)) as Record<
+        string,
+        unknown
+      >;
+      return { success: true, value: undefined };
+    },
+  );
+
   return {
-    loadManifest: jest
-      .fn()
-      .mockImplementation(async (_workspaceRoot: string) => ({
-        success: true,
-        value: JSON.parse(JSON.stringify(currentManifest)),
-      })),
-    saveManifest: jest
-      .fn()
-      .mockImplementation(async (workspaceRoot: string, manifest: unknown) => {
-        saved.push({ workspaceRoot, manifest });
-        currentManifest = JSON.parse(JSON.stringify(manifest)) as Record<
-          string,
-          unknown
-        >;
-        return { success: true, value: undefined };
-      }),
+    loadManifest,
+    saveManifest,
     getSavedManifests: () => saved,
     setCurrentManifest: (m: Record<string, unknown>) => {
       currentManifest = m;
@@ -32,42 +36,20 @@ const createMockSync = () => {
   };
 };
 
-jest.mock("@hexagen/sync", () => {
-  const mockSync = createMockSync();
-  return {
-    __esModule: true,
-    loadManifest: mockSync.loadManifest,
-    saveManifest: mockSync.saveManifest,
-    _mockSync: mockSync,
-  };
-});
-
-import { SyncDelegatingManifestMutationAdapter } from "../../src/infrastructure/adapters/sync-delegating-manifest-mutation.adapter.js";
-
 describe("Manifest Write-Through - Integration Tests", () => {
   let adapter: SyncDelegatingManifestMutationAdapter;
+  let mockSync: ReturnType<typeof createMockSync>;
 
   beforeEach(() => {
-    const mockSync = createMockSync();
-    (jest.requireMock("@hexagen/sync") as Record<string, unknown>)._mockSync =
-      mockSync;
-    jest
-      .mocked(require("@hexagen/sync").loadManifest)
-      .mockImplementation(mockSync.loadManifest);
-    jest
-      .mocked(require("@hexagen/sync").saveManifest)
-      .mockImplementation(mockSync.saveManifest);
-    adapter = new SyncDelegatingManifestMutationAdapter("/tmp/test-workspace");
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
+    mockSync = createMockSync();
+    adapter = new SyncDelegatingManifestMutationAdapter("/tmp/test-workspace", {
+      loadManifest: mockSync.loadManifest,
+      saveManifest: mockSync.saveManifest,
+    });
   });
 
   describe("Disk Write Verification (via @hexagen/sync delegation)", () => {
     it("should call loadManifest and saveManifest when applying patches", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
       const patches: Patch[] = [
         {
           id: "patch-1",
@@ -84,17 +66,15 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       assert.strictEqual(result.success, true);
       assert.strictEqual(
-        (loadManifest as jest.Mock).mock.calls[0][0],
+        mockSync.loadManifest.mock.calls[0].arguments[0],
         "/tmp/test-workspace",
       );
       assert.strictEqual(
-        (saveManifest as jest.Mock).mock.calls[0][0],
+        mockSync.saveManifest.mock.calls[0].arguments[0],
         "/tmp/test-workspace",
       );
-      const savedArg = (saveManifest as jest.Mock).mock.calls[0][1] as Record<
-        string,
-        unknown
-      >;
+      const savedArg = mockSync.saveManifest.mock.calls[0]
+        .arguments[1] as Record<string, unknown>;
       const boundedContexts = savedArg.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -102,8 +82,6 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should persist add_node patch through load → transform → save cycle", async () => {
-      const { saveManifest } = require("@hexagen/sync");
-
       const patches: Patch[] = [
         {
           id: "patch-1",
@@ -115,8 +93,8 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = (saveManifest as jest.Mock).mock
-        .calls[0][1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0]
+        .arguments[1] as Record<string, unknown>;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -127,8 +105,6 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should persist multiple patches in a single load/save cycle", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
       const patches: Patch[] = [
         {
           id: "patch-1",
@@ -146,11 +122,11 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      assert.strictEqual((loadManifest as jest.Mock).mock.calls.length, 1);
-      assert.strictEqual((saveManifest as jest.Mock).mock.calls.length, 1);
+      assert.strictEqual(mockSync.loadManifest.mock.calls.length, 1);
+      assert.strictEqual(mockSync.saveManifest.mock.calls.length, 1);
 
-      const savedManifest = (saveManifest as jest.Mock).mock
-        .calls[0][1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0]
+        .arguments[1] as Record<string, unknown>;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -160,16 +136,14 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should reject duplicate bounded context names without calling saveManifest", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
-      (loadManifest as jest.Mock).mockResolvedValueOnce({
+      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
             { name: "existing", type: "core", description: "Existing" },
           ],
         },
-      });
+      }));
 
       const patches: Patch[] = [
         {
@@ -187,16 +161,14 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       assert.strictEqual(result.success, false);
       assert.ok(result.error?.message?.includes("already exists"));
-      assert.strictEqual((saveManifest as jest.Mock).mock.calls.length, 0);
+      assert.strictEqual(mockSync.saveManifest.mock.calls.length, 0);
     });
 
     it("should propagate loadManifest failure without calling saveManifest", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
-      (loadManifest as jest.Mock).mockResolvedValueOnce({
+      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
         success: false,
         error: new Error(".architecture/manifest.yaml not found"),
-      });
+      }));
 
       const patches: Patch[] = [
         {
@@ -214,15 +186,13 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       assert.strictEqual(result.success, false);
       assert.ok(result.error?.message?.includes("not found"));
-      assert.strictEqual((saveManifest as jest.Mock).mock.calls.length, 0);
+      assert.strictEqual(mockSync.saveManifest.mock.calls.length, 0);
     });
   });
 
   describe("Patch Type Coverage", () => {
     it("should apply remove_node patch through save cycle", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
-      (loadManifest as jest.Mock).mockResolvedValueOnce({
+      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
@@ -230,7 +200,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
             { name: "remove-me", type: "supporting", description: "Remove" },
           ],
         },
-      });
+      }));
 
       const patches: Patch[] = [
         {
@@ -243,8 +213,8 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = (saveManifest as jest.Mock).mock
-        .calls[0][1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0]
+        .arguments[1] as Record<string, unknown>;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -253,16 +223,14 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should apply update_node patch through save cycle", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
-      (loadManifest as jest.Mock).mockResolvedValueOnce({
+      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
             { name: "update-me", type: "core", description: "Original" },
           ],
         },
-      });
+      }));
 
       const patches: Patch[] = [
         {
@@ -275,8 +243,8 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = (saveManifest as jest.Mock).mock
-        .calls[0][1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0]
+        .arguments[1] as Record<string, unknown>;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -284,17 +252,19 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should apply add_edge patch through save cycle", async () => {
-      const { loadManifest, saveManifest } = require("@hexagen/sync");
-
-      (loadManifest as jest.Mock).mockResolvedValueOnce({
+      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
             { name: "source-ctx", type: "core", description: "Source" },
-            { name: "target-ctx", type: "supporting", description: "Target" },
+            {
+              name: "target-ctx",
+              type: "supporting",
+              description: "Target",
+            },
           ],
         },
-      });
+      }));
 
       const patches: Patch[] = [
         {
@@ -307,8 +277,8 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = (saveManifest as jest.Mock).mock
-        .calls[0][1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0]
+        .arguments[1] as Record<string, unknown>;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -351,12 +321,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
   describe("Error Propagation", () => {
     it("should propagate saveManifest failure as error result", async () => {
-      const { saveManifest } = require("@hexagen/sync");
-
-      (saveManifest as jest.Mock).mockResolvedValueOnce({
+      mockSync.saveManifest.mock.mockImplementationOnce(async () => ({
         success: false,
         error: new Error("disk full"),
-      });
+      }));
 
       const patches: Patch[] = [
         {
@@ -377,11 +345,9 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should catch unexpected exceptions and return error result", async () => {
-      const { loadManifest } = require("@hexagen/sync");
-
-      (loadManifest as jest.Mock).mockRejectedValueOnce(
-        new Error("unexpected crash"),
-      );
+      mockSync.loadManifest.mock.mockImplementationOnce(async () => {
+        throw new Error("unexpected crash");
+      });
 
       const patches: Patch[] = [
         {

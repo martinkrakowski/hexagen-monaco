@@ -14,7 +14,7 @@
     "build": "tsc",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "node --import tsx/esm --test \"src/__tests__/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -25,6 +25,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "ts-jest": "^29.4.9",
+    "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   },
   "dependencies": {

@@ -15,13 +15,14 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node --import tsx/esm --test \"src/__tests__/**/*.test.ts\""
   },
   "dependencies": {
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   }

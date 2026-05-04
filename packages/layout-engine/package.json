@@ -14,7 +14,7 @@
     "build": "tsc",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests"
+    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\""
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4",
@@ -29,6 +29,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "ts-jest": "^29.4.9",
+    "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   },
   "private": true,

@@ -22,10 +22,13 @@
     "./infrastructure/adapters/model-preferences.adapter": "./src/infrastructure/adapters/model-preferences.adapter.ts"
   },
   "scripts": {
-    "test": "node --test __tests__/**/*.test.ts"
+    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\""
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
     "@hexagen/local-llm": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }

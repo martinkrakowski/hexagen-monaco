@@ -1,3 +1,4 @@
+import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { ReconcileUseCase } from "../../src/application/use-cases/reconcile.use-case.js";
 import type {
@@ -8,13 +9,13 @@ import { createVerdict } from "../../src/domain/verdict.js";
 
 function createMockReconciliationPort(result: ReconciliationResult) {
   return {
-    reconcile: jest.fn().mockResolvedValue(result),
+    reconcile: mock.fn(() => Promise.resolve(result)),
   };
 }
 
 function createMockCompareVerdictsPort() {
   return {
-    compareVerdicts: jest.fn().mockImplementation((a, b) => {
+    compareVerdicts: mock.fn((a: any, b: any) => {
       if (a.accepted && !b.accepted) return -1;
       if (!a.accepted && b.accepted) return 1;
       return 0;
@@ -24,20 +25,22 @@ function createMockCompareVerdictsPort() {
 
 function createMockResolveConflictPort() {
   return {
-    resolve: jest.fn(),
+    resolve: mock.fn(),
   };
 }
 
 function createMockManifestPatchPort() {
   return {
-    validatePatches: jest.fn().mockResolvedValue({ success: true, value: [] }),
-    applyPatches: jest.fn().mockResolvedValue({ success: true }),
+    validatePatches: mock.fn(() =>
+      Promise.resolve({ success: true, value: [] }),
+    ),
+    applyPatches: mock.fn(() => Promise.resolve({ success: true })),
   };
 }
 
-function createMockLintFilterPort() {
+function createMockLintFilterPort(shouldAccept = true) {
   return {
-    shouldAccept: jest.fn().mockReturnValue(true),
+    shouldAccept: mock.fn(() => shouldAccept),
   };
 }
 
@@ -98,7 +101,7 @@ describe("ReconcileUseCase", () => {
       const result = await useCase.execute(
         { currentManifest: "", patches: [patch1, patch2] },
         "manifest.yaml",
-        createLintReport(patch1),
+        createLintReport(),
       );
 
       assert.strictEqual(result.success, true);
@@ -133,8 +136,7 @@ describe("ReconcileUseCase", () => {
       const diffResult = { success: true, patches: [patch1] };
 
       const reconciliationPort = createMockReconciliationPort(diffResult);
-      const lintFilterPort = createMockLintFilterPort();
-      lintFilterPort.shouldAccept.mockReturnValue(false);
+      const lintFilterPort = createMockLintFilterPort(false);
 
       const useCase = new ReconcileUseCase(
         reconciliationPort,
@@ -147,7 +149,7 @@ describe("ReconcileUseCase", () => {
       const result = await useCase.execute(
         { currentManifest: "", patches: [patch1] },
         undefined,
-        createLintReport(patch1),
+        createLintReport(),
       );
 
       assert.ok(lintFilterPort.shouldAccept.mock.calls.length > 0);
@@ -174,8 +176,7 @@ describe("ReconcileUseCase", () => {
 
     it("should create rejected verdict when lintFilterPort rejects", () => {
       const patch = createPatch("p1", "file1");
-      const lintFilterPort = createMockLintFilterPort();
-      lintFilterPort.shouldAccept.mockReturnValue(false);
+      const lintFilterPort = createMockLintFilterPort(false);
 
       const useCase = new ReconcileUseCase(
         createMockReconciliationPort({ success: true, patches: [] }),

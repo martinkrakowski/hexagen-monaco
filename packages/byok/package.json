@@ -17,10 +17,11 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx --test __tests__/**/*.test.ts",
+    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\"",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   },
   "dependencies": {
