@@ -87,7 +87,7 @@ export class LocalStoragePersistenceAdapter
   }
 
   async clearProjectSessions(
-    projectId: string,
+    _projectId: string,
   ): Promise<Result<void, PersistenceError>> {
     // MVP stub — localStorage does not support prefix delete
     return { success: true, value: undefined };

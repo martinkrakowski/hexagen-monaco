@@ -136,7 +136,7 @@ export class InMemoryLLMSenderAdapter implements SendStructuredRequestPort {
 }
 
 export class InMemoryReconciliationAdapter implements ReconciliationPort {
-  async reconcile(request: ReconcileRequest): Promise<ReconciliationResult> {
+  async reconcile(_request: ReconcileRequest): Promise<ReconciliationResult> {
     return createReconciliationResult(
       true,
       [],

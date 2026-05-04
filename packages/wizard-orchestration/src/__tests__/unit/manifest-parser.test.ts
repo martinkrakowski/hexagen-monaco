@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { parseManifestToWizardData } from "../../application/manifest-parser";
-import type { WizardData } from "@hexagen/project-configuration";
 
 describe("parseManifestToWizardData", () => {
   const validManifestYaml = `

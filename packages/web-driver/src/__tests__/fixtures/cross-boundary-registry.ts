@@ -319,8 +319,10 @@ export function cloneRegistry(
  * @param registry The MockPortRegistry to query
  * @returns The persistence adapter
  */
-export function getPersistenceAdapter(registry: MockPortRegistry): any {
-  return registry.get<any>(PORT_NAMES.WIZARD_PERSISTENCE);
+export function getPersistenceAdapter(
+  registry: MockPortRegistry,
+): Record<string, unknown> {
+  return registry.get<Record<string, unknown>>(PORT_NAMES.WIZARD_PERSISTENCE);
 }
 
 /**
@@ -330,8 +332,10 @@ export function getPersistenceAdapter(registry: MockPortRegistry): any {
  * @param registry The MockPortRegistry to query
  * @returns The linter adapter
  */
-export function getLinterAdapter(registry: MockPortRegistry): any {
-  return registry.get<any>(PORT_NAMES.LINTER);
+export function getLinterAdapter(
+  registry: MockPortRegistry,
+): Record<string, unknown> {
+  return registry.get<Record<string, unknown>>(PORT_NAMES.LINTER);
 }
 
 /**
@@ -341,6 +345,8 @@ export function getLinterAdapter(registry: MockPortRegistry): any {
  * @param registry The MockPortRegistry to query
  * @returns The transaction manager adapter
  */
-export function getTransactionManager(registry: MockPortRegistry): any {
-  return registry.get<any>(PORT_NAMES.TRANSACTION_MANAGER);
+export function getTransactionManager(
+  registry: MockPortRegistry,
+): Record<string, unknown> {
+  return registry.get<Record<string, unknown>>(PORT_NAMES.TRANSACTION_MANAGER);
 }

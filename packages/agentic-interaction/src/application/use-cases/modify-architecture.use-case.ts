@@ -138,7 +138,8 @@ export class ModifyArchitectureUseCase {
 
     try {
       run = this.advanceStep(run, STEP_PARSE, startStep);
-      const commands = await this.parseNL(intent);
+      // Parse natural language intent into commands
+      await this.parseNL(intent);
       run = this.advanceStep(run, STEP_PARSE, completeStep);
 
       run = this.advanceStep(run, STEP_COMPILE_PROMPT, startStep);

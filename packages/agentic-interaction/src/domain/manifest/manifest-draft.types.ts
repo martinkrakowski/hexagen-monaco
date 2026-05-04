@@ -8,12 +8,14 @@ import type {
   ManifestTopologyDraftContextSchema,
   ContextListSchema,
   PortsListSchema,
+  PortsListEntrySchema,
 } from "./manifest-draft.schema.js";
 
 export type ManifestDraft = z.infer<typeof ManifestDraftSchema>;
 export type ManifestTopologyDraft = z.infer<typeof ManifestTopologyDraftSchema>;
 export type ContextListEntry = z.infer<typeof ContextListSchema>[number];
 export type PortsList = z.infer<typeof PortsListSchema>;
+export type PortsListEntry = z.infer<typeof PortsListEntrySchema>;
 export type ManifestDraftContext = z.infer<typeof ManifestDraftContextSchema>;
 export type ManifestDraftPort = z.infer<typeof ManifestDraftPortSchema>;
 export type ManifestDraftAdapter = z.infer<typeof ManifestDraftAdapterSchema>;

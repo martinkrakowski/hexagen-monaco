@@ -16,7 +16,7 @@ import {
   updateModelCacheMetadata,
   clearModelCacheMetadata,
 } from "./modelPreferencesStorage";
-import type { WelcomeFlowErrorCode } from "./WelcomeFlowError";
+import type { WelcomeFlowErrorCode } from "../WelcomeScreen/WelcomeFlowError";
 
 /**
  * State machine for the welcome modal flow

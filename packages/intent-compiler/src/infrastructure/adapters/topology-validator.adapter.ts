@@ -177,7 +177,6 @@ export class TopologyValidatorAdapter implements TopologyCheckerPort {
   ): string[] {
     const violations: string[] = [];
     const applicableNodeKinds = new Set(payload.appliesTo);
-    const nodeKindMap = new Map(ast.nodes.map((n) => [n.id, n.kind]));
 
     // Count incident edges per node
     const edgeCounts = new Map<string, number>();

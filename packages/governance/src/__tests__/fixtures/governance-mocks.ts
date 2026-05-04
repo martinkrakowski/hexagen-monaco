@@ -7,6 +7,16 @@
  */
 
 /**
+ * Type for bounded context in manifest (simplified for testing).
+ */
+export interface BoundedContextFixture {
+  name: string;
+  type: string;
+  description?: string;
+  layers?: Record<string, unknown>;
+}
+
+/**
  * Type for architecture graph (simplified for testing).
  */
 export interface ArchitectureGraph {
@@ -45,10 +55,11 @@ export class MockArchitectureGraphProviderAdapter {
     manifest: Record<string, unknown>,
   ): Promise<ArchitectureGraph> {
     // Extract bounded contexts from manifest if available
-    const boundedContexts = (manifest.bounded_contexts as any[]) || [];
+    const boundedContexts =
+      (manifest.bounded_contexts as BoundedContextFixture[]) || [];
 
     return {
-      nodes: boundedContexts.map((bc: any, idx: number) => ({
+      nodes: boundedContexts.map((bc: BoundedContextFixture, idx: number) => ({
         id: `bc-${idx}`,
         name: bc.name || `bounded-context-${idx}`,
         type: bc.type || "core",

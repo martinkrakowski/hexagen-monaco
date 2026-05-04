@@ -10,15 +10,380 @@ export function extractJSON(raw: string): string {
   return raw.trim();
 }
 
+function countBraces(str: string): { open: number; close: number } {
+  let open = 0;
+  let close = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of str) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "{") open++;
+    if (char === "}") close++;
+  }
+
+  return { open, close };
+}
+
+function countBrackets(str: string): { open: number; close: number } {
+  let open = 0;
+  let close = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of str) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "[") open++;
+    if (char === "]") close++;
+  }
+
+  return { open, close };
+}
+
+export function balanceJSON(json: string): string {
+  let result = json;
+
+  // Balance braces
+  const braces = countBraces(json);
+  if (braces.open > braces.close) {
+    result += "}".repeat(braces.open - braces.close);
+  }
+
+  // Balance brackets
+  const brackets = countBrackets(result);
+  if (brackets.open > brackets.close) {
+    result += "]".repeat(brackets.open - brackets.close);
+  }
+
+  return result;
+}
+
+export function repairJSON(raw: string): string | null {
+  let s = raw.trim();
+
+  // 1. Strip markdown fences
+  s = s.replace(/^```(?:json)?\s*/m, "").replace(/```\s*$/m, "");
+
+  // 2. Remove control characters
+  // eslint-disable-next-line no-control-regex
+  s = s.replace(/[\x00-\x1F\x7F]/g, (c) =>
+    c === "\n" || c === "\r" || c === "\t" ? c : "",
+  );
+
+  // 3. Fix unterminated strings
+  s = fixUnterminatedStrings(s);
+  s = fixMultilineUnterminatedString(s);
+
+  // 4. Truncate to last complete JSON structure (skip braces inside strings)
+  let depth = 0;
+  let lastValidClose = -1;
+  let started = false;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{" || ch === "[") {
+      depth++;
+      started = true;
+    }
+    if (ch === "}" || ch === "]") {
+      depth--;
+      if (started && depth === 0) lastValidClose = i;
+    }
+  }
+
+  const startIdx = s.search(/[{[]/);
+  if (startIdx !== -1 && lastValidClose > 0 && lastValidClose >= startIdx) {
+    s = s.slice(startIdx, lastValidClose + 1);
+  } else if (startIdx !== -1) {
+    s = s.slice(startIdx);
+    // 5. Balance incomplete JSON (add missing closing braces/brackets)
+    s = balanceJSON(s);
+  } else if (lastValidClose > 0) {
+    s = s.slice(0, lastValidClose + 1);
+    s = balanceJSON(s);
+  }
+
+  // 6. Try parse
+  try {
+    JSON.parse(s);
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function fixUnterminatedStrings(json: string): string {
+  const lines = json.split("\n");
+  const fixedLines: string[] = [];
+
+  for (const line of lines) {
+    const quotes = (line.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) {
+      const firstOpenQuote = line.indexOf('"');
+      if (firstOpenQuote > 0) {
+        fixedLines.push(line.substring(0, firstOpenQuote));
+      }
+    } else {
+      fixedLines.push(line);
+    }
+  }
+
+  const result = fixedLines.join("\n");
+
+  if (result !== json) {
+    return balanceJSON(result);
+  }
+
+  return json;
+}
+
+function fixMultilineUnterminatedString(json: string): string {
+  let inString = false;
+  let escaped = false;
+  const chars: string[] = [];
+
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+
+    if (escaped) {
+      chars.push(ch);
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\" && inString) {
+      escaped = true;
+      chars.push(ch);
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      chars.push(ch);
+      continue;
+    }
+
+    if (inString) {
+      chars.push(ch);
+      continue;
+    }
+
+    chars.push(ch);
+  }
+
+  let result = chars.join("");
+
+  if (inString) {
+    result = balanceJSON(result);
+  }
+
+  return result;
+}
+
+export function extractArrayFromWrapper<T>(
+  data: unknown,
+  knownKeys: string[] = ["contexts", "data", "items", "results", "list"],
+): T[] {
+  if (Array.isArray(data)) return data as T[];
+
+  if (typeof data === "object" && data !== null) {
+    const obj = data as Record<string, unknown>;
+    for (const key of knownKeys) {
+      if (Array.isArray(obj[key])) return obj[key] as T[];
+    }
+    for (const value of Object.values(obj)) {
+      if (Array.isArray(value)) return value as T[];
+    }
+  }
+
+  return [];
+}
+
+export function extractObjectFromWrapper<T extends Record<string, unknown>>(
+  data: unknown,
+  _knownKeys: string[] = ["ports", "data", "result"], // eslint-disable-line @typescript-eslint/no-unused-vars
+): T | null {
+  if (typeof data === "object" && data !== null && !Array.isArray(data))
+    return data as T;
+
+  if (Array.isArray(data) && data.length === 1 && typeof data[0] === "object")
+    return data[0] as T;
+
+  return null;
+}
+
+function extractFirstJSONBlock(s: string): string | null {
+  const start = s.search(/[{[]/);
+  if (start === -1) return null;
+
+  const openChar = s[start];
+  const closeChar = openChar === "{" ? "}" : "]";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{" || ch === "[") depth++;
+    if (ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0 && ch === closeChar) return s.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
 export function parseJSON<T>(
   raw: string,
-): { ok: true; data: T } | { ok: false; error: string } {
+):
+  | { ok: true; data: T; repairApplied: boolean }
+  | { ok: false; error: string; repairApplied: boolean } {
   const jsonStr = extractJSON(raw);
   try {
     const data = JSON.parse(jsonStr) as T;
-    return { ok: true, data };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Invalid JSON";
-    return { ok: false, error: `JSON parse error: ${message}` };
+    return { ok: true, data, repairApplied: false };
+  } catch {
+    // fallback 1: repair the extracted JSON
+    try {
+      const repaired = repairJSON(jsonStr);
+      if (repaired !== null) {
+        const data = JSON.parse(repaired) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 2: extract first JSON block then repair it
+    try {
+      const extracted = extractFirstJSONBlock(jsonStr);
+      if (extracted) {
+        const data = JSON.parse(extracted) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 3: extract first block + repair it
+    try {
+      const extracted = extractFirstJSONBlock(jsonStr);
+      if (extracted) {
+        const repaired = repairJSON(extracted);
+        if (repaired !== null) {
+          const data = JSON.parse(repaired) as T;
+          return { ok: true, data, repairApplied: true };
+        }
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 4: try repairJSON on the full raw input
+    try {
+      const repaired = repairJSON(raw);
+      if (repaired !== null) {
+        const data = JSON.parse(repaired) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 5: aggressive — find first { or [ and balance it
+    try {
+      const startIdx = jsonStr.search(/[{[]/);
+      if (startIdx !== -1) {
+        const subset = jsonStr.slice(startIdx);
+        const balanced = balanceJSON(subset);
+        const data = JSON.parse(balanced) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // all fallbacks failed
+    }
+    // fallback 6: strip trailing commas and JS-style comments, then try again
+    try {
+      let stripped = jsonStr;
+      stripped = stripped.replace(/\/\/[^\n]*/g, "");
+      stripped = stripped.replace(/\/\*[\s\S]*?\*\//g, "");
+      stripped = stripped.replace(/,\s*([}\]])/g, "$1");
+      stripped = stripped.trim();
+      if (stripped !== jsonStr) {
+        const data = JSON.parse(stripped) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 7: try repairJSON on the stripped version
+    try {
+      let stripped = jsonStr;
+      stripped = stripped.replace(/\/\/[^\n]*/g, "");
+      stripped = stripped.replace(/\/\*[\s\S]*?\*\//g, "");
+      stripped = stripped.replace(/,\s*([}\]])/g, "$1");
+      const repaired = repairJSON(stripped);
+      if (repaired !== null) {
+        const data = JSON.parse(repaired) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // all fallbacks failed
+    }
+    return {
+      ok: false,
+      error: `JSON parse error: unable to parse or repair LLM output`,
+      repairApplied: false,
+    };
   }
 }

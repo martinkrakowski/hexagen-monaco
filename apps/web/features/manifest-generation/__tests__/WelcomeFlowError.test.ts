@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   WELCOME_FLOW_ERROR_MESSAGES,
   type WelcomeFlowErrorCode,
-} from "../ModelSelectionFlow/WelcomeFlowError";
+} from "../WelcomeScreen/WelcomeFlowError";
 
 const ALL_ERROR_CODES: WelcomeFlowErrorCode[] = [
   "network_failure",
@@ -14,6 +14,7 @@ const ALL_ERROR_CODES: WelcomeFlowErrorCode[] = [
   "inference_timeout",
   "inference_failed",
   "no_yaml_extracted",
+  "yaml_validation_failed",
 ];
 
 describe("WelcomeFlowError", () => {
@@ -64,13 +65,13 @@ describe("WelcomeFlowError", () => {
   });
 
   describe("WelcomeFlowErrorCode type", () => {
-    it("should cover exactly 8 known error codes", () => {
+    it("should cover exactly 9 known error codes", () => {
       const codeCount = Object.keys(WELCOME_FLOW_ERROR_MESSAGES).length;
-      assert.strictEqual(codeCount, 8, "Should have exactly 8 error codes");
+      assert.strictEqual(codeCount, 9, "Should have exactly 9 error codes");
       assert.strictEqual(
         ALL_ERROR_CODES.length,
-        8,
-        "Should have exactly 8 known codes",
+        9,
+        "Should have exactly 9 known codes",
       );
     });
   });

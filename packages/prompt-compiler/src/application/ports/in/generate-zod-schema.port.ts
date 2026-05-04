@@ -1,4 +1,4 @@
-import type { Identifier } from "@hexagen/shared";
+
 import type { StructuredOutputSchema } from "../../../domain/index.js";
 
 /**

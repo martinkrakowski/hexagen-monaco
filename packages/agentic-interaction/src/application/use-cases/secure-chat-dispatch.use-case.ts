@@ -1,4 +1,4 @@
-import { ok, err } from "@hexagen/shared";
+import { err } from "@hexagen/shared";
 import type { Result } from "@hexagen/shared";
 import type {
   CloudLLMProviderPort,
@@ -54,17 +54,18 @@ export class SecureChatDispatchUseCase {
       return {
         success: false,
         error: {
-          kind: "storage_unavailable",
+          kind: "storage_unavailable" as const,
           message: "Cloud LLM provider request failed",
         },
-      } as any;
+      } as Result<CloudLLMCompletionResponse, VaultError>;
     }
 
+    // Type cast needed: response.value may not match CloudLLMCompletionResponse exactly
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return {
       success: true,
-      value: response.value,
-    } as any;
+      value: response.value as CloudLLMCompletionResponse,
+    } as Result<CloudLLMCompletionResponse, VaultError>;
   }
 
   /**

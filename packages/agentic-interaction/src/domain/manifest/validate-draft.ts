@@ -143,10 +143,11 @@ export function checkClarificationTriggers(
   if (draft.boundedContexts.length === 1) {
     const ctx = draft.boundedContexts[0];
     if (ctx.ports.out.length === 0) {
+      // Advisory only — surface as warning, do not block the pipeline
       triggers.push({
         type: "single-context-no-outbound",
         contextName: ctx.name,
-        message: `The only context "${ctx.name}" has no outbound ports. This may indicate missing infrastructure dependencies.`,
+        message: `The only context "${ctx.name}" has no outbound ports. This may indicate missing infrastructure dependencies. Consider adding outbound ports for repositories, external APIs, or queues.`,
       });
     }
   }

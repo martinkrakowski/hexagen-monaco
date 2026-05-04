@@ -42,14 +42,28 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json(
       { error: "Invalid JSON in request body" },
-      { status: 400 },
+      {
+        status: 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
     );
   }
 
   if (!body.intent || typeof body.intent !== "string") {
     return NextResponse.json(
       { error: "'intent' must be a non-empty string." },
-      { status: 400 },
+      {
+        status: 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
     );
   }
 
@@ -61,7 +75,17 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message },
+      {
+        status: 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
+    );
   }
   const lineage: IntentLineage = body.lineage ?? {
     intentId: `intent-${Date.now()}_v1`,
@@ -78,29 +102,70 @@ export async function POST(request: NextRequest) {
     if (!result.success) {
       return NextResponse.json(
         { error: result.error.message },
-        { status: 500 },
+        {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      pipelineRunId: result.value.pipelineRunId,
-      patchesApplied: result.value.patchesApplied,
-      lintPassed: result.value.lintPassed,
-      transactionId: result.value.transactionId,
-      patches: result.value.patches ?? [],
-      steps: result.value.steps.map((s) => ({
-        name: s.name,
-        status: s.status,
-        durationMs: s.endTime ? s.endTime - s.startTime : null,
-        error: s.error ?? null,
-      })),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        pipelineRunId: result.value.pipelineRunId,
+        patchesApplied: result.value.patchesApplied,
+        lintPassed: result.value.lintPassed,
+        transactionId: result.value.transactionId,
+        patches: result.value.patches ?? [],
+        steps: result.value.steps.map((s) => ({
+          name: s.name,
+          status: s.status,
+          durationMs: s.endTime ? s.endTime - s.startTime : null,
+          error: s.error ?? null,
+        })),
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
+    );
   } catch (err) {
     const logger = getLogger();
     logger.errorWithException(err, "[api/architecture/modify] Failed");
     const message =
       err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
+    );
   }
+}
+
+/**
+ * OPTIONS /api/architecture/modify
+ * Handle CORS preflight requests
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 }

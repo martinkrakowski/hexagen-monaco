@@ -16,6 +16,23 @@ import { cloneRegistry } from "./cross-boundary-registry";
 import type { CrossBoundaryManifest } from "./cross-boundary-registry";
 
 /**
+ * Result type for governance scan operations
+ */
+export interface GovernanceScanResult {
+  isCompliant: boolean;
+  violations: Array<{ code: string; message: string }>;
+}
+
+/**
+ * Result type for export operations
+ */
+export interface ExportResult {
+  projectId: string;
+  exportedAt: number;
+  success: boolean;
+}
+
+/**
  * Result of a concurrent operation.
  */
 export interface ConcurrentOperationResult<T> {
@@ -60,10 +77,12 @@ export async function runConcurrentWizardSessions(
   N: number,
   registryFactory: () => MockPortRegistry,
 ): Promise<{
-  results: ConcurrentOperationResult<any>[];
+  results: ConcurrentOperationResult<CrossBoundaryManifest>[];
   stats: LoadTestStats;
 }> {
-  const sessionPromises: Promise<ConcurrentOperationResult<any>>[] = [];
+  const sessionPromises: Promise<
+    ConcurrentOperationResult<CrossBoundaryManifest>
+  >[] = [];
 
   for (let i = 0; i < N; i++) {
     const promise = (async () => {
@@ -76,20 +95,19 @@ export async function runConcurrentWizardSessions(
         // Simulate wizard operation - always succeeds
         await new Promise((resolve) => setTimeout(resolve, Math.random() * 50));
 
-        const result = {
-          success: true,
-          manifest: {
-            system: `project-${i}`,
-            scope: "hexagen",
-            description: `Concurrent project ${i}`,
-          },
+        const manifest: CrossBoundaryManifest = {
+          _version: `v-${i}`,
+          _generatedAt: Date.now(),
+          system: `project-${i}`,
+          scope: "hexagen",
+          description: `Concurrent project ${i}`,
         };
 
         const endTime = Date.now();
         return {
           operationId,
           success: true,
-          result,
+          result: manifest,
           latencyMs: endTime - startTime,
           startTime,
           endTime,
@@ -133,10 +151,12 @@ export async function runConcurrentGovernanceScans(
   manifestSize: "small" | "medium" | "large" = "medium",
   registryFactory: () => MockPortRegistry,
 ): Promise<{
-  results: ConcurrentOperationResult<any>[];
+  results: ConcurrentOperationResult<GovernanceScanResult>[];
   stats: LoadTestStats;
 }> {
-  const scanPromises: Promise<ConcurrentOperationResult<any>>[] = [];
+  const scanPromises: Promise<
+    ConcurrentOperationResult<GovernanceScanResult>
+  >[] = [];
 
   for (let i = 0; i < N; i++) {
     const promise = (async () => {
@@ -208,10 +228,10 @@ export async function runConcurrentExports(
   N: number,
   registryFactory: () => MockPortRegistry,
 ): Promise<{
-  results: ConcurrentOperationResult<any>[];
+  results: ConcurrentOperationResult<ExportResult>[];
   stats: LoadTestStats;
 }> {
-  const exportPromises: Promise<ConcurrentOperationResult<any>>[] = [];
+  const exportPromises: Promise<ConcurrentOperationResult<ExportResult>>[] = [];
   const projectNames: Set<string> = new Set();
 
   for (let i = 0; i < N; i++) {
@@ -237,13 +257,17 @@ export async function runConcurrentExports(
           scope: "hexagen",
         };
 
-        const result = { success: true };
+        const exportResult: ExportResult = {
+          projectId: projectName,
+          exportedAt: Date.now(),
+          success: true,
+        };
 
         const endTime = Date.now();
         return {
           operationId,
           success: true,
-          result,
+          result: exportResult,
           latencyMs: endTime - startTime,
           startTime,
           endTime,
@@ -280,8 +304,8 @@ export async function runConcurrentExports(
  * @param results Array of operation results
  * @returns Statistics summary
  */
-function computeLoadTestStats(
-  results: ConcurrentOperationResult<any>[],
+function computeLoadTestStats<T>(
+  results: ConcurrentOperationResult<T>[],
 ): LoadTestStats {
   const latencies = results.map((r) => r.latencyMs).sort((a, b) => a - b);
 
@@ -362,12 +386,18 @@ export async function runFullLoadTest(
   exportCount: number,
   registryFactory: () => MockPortRegistry,
 ): Promise<{
-  wizard: { results: ConcurrentOperationResult<any>[]; stats: LoadTestStats };
-  governance: {
-    results: ConcurrentOperationResult<any>[];
+  wizard: {
+    results: ConcurrentOperationResult<CrossBoundaryManifest>[];
     stats: LoadTestStats;
   };
-  export: { results: ConcurrentOperationResult<any>[]; stats: LoadTestStats };
+  governance: {
+    results: ConcurrentOperationResult<GovernanceScanResult>[];
+    stats: LoadTestStats;
+  };
+  export: {
+    results: ConcurrentOperationResult<ExportResult>[];
+    stats: LoadTestStats;
+  };
   totalOperations: number;
   overallP95Latency: number;
   overallP99Latency: number;

@@ -273,6 +273,50 @@ dialog::backdrop {
   animation: fadeInUp 0.5s ease-out both;
 }
 
+/* ── Rolodex detail-line animations ───────────────────────────────────────── */
+@keyframes detailRolodexOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes detailRolodexIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dotPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--accent) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px hsl(var(--accent) / 0.1);
+  }
+}
+
+.detail-rolodex-exit {
+  animation: detailRolodexOut 300ms ease-in forwards;
+}
+
+.detail-rolodex-enter {
+  animation: detailRolodexIn 300ms ease-out forwards;
+}
+
+.step-dot-active {
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
 .delay-100 {
   animation-delay: 100ms;
 }
@@ -443,10 +487,14 @@ dialog::backdrop {
   .animate-spin-border,
   .animate-shimmer,
   .animate-dot-pulse,
-  .animate-fade-in-up {
+  .animate-fade-in-up,
+  .detail-rolodex-exit,
+  .detail-rolodex-enter,
+  .step-dot-active {
     animation: none;
   }
-  .animate-fade-in-up {
+  .animate-fade-in-up,
+  .detail-rolodex-enter {
     opacity: 1;
   }
 }

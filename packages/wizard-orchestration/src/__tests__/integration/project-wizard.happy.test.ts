@@ -94,7 +94,11 @@ describe("Project Wizard — Happy Path", () => {
       );
 
       // Verify each bounded context has required fields
-      (manifest.bounded_contexts as any[]).forEach((bc) => {
+      const contexts = manifest.bounded_contexts as Array<{
+        name: string;
+        type: string;
+      }>;
+      contexts.forEach((bc) => {
         expect(bc).toHaveProperty("name");
         expect(bc).toHaveProperty("type");
         expect(typeof bc.name).toBe("string");
@@ -188,12 +192,13 @@ describe("Project Wizard — Happy Path", () => {
     expect(fixture.system).toEqual("test-hexagen");
 
     // Verify bounded contexts
-    const boundedContexts = (fixture as any).bounded_contexts;
+    const boundedContexts = (fixture as Record<string, unknown>)
+      .bounded_contexts as Array<{ name: string }>;
     expect(Array.isArray(boundedContexts)).toBe(true);
     expect(boundedContexts.length).toBeGreaterThanOrEqual(5);
 
     // Verify expected contexts exist
-    const contextNames = boundedContexts.map((bc: any) => bc.name);
+    const contextNames = boundedContexts.map((bc) => bc.name);
     expect(contextNames).toContain("core-domain");
     expect(contextNames).toContain("shared");
     expect(contextNames).toContain("wizard-orchestration");

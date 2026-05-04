@@ -1,6 +1,5 @@
 import type {
   SendStructuredRequestPort,
-  LLMRequest,
   DomainModelId,
 } from "@hexagen/local-llm";
 import { createLLMRequest } from "@hexagen/local-llm";

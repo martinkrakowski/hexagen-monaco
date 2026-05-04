@@ -25,7 +25,7 @@ import { registerMockPort } from "../../../../web-driver/src/__tests__/fixtures/
 import { MockLinterAdapter } from "../fixtures/governance-mocks";
 
 describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
-  let registry: any;
+  let registry: MockPortRegistry;
 
   beforeEach(() => {
     registry = createCrossBoundaryRegistry();
@@ -128,24 +128,28 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       wireGovernanceToManifestReader(registry);
 
       // Create linter that tracks version tags
+      interface CacheEntry {
+        isCompliant: boolean;
+        violations: Array<{ code: string; message: string }>;
+      }
+
       class VersionTrackingLinterAdapter {
-        private reportCache = new Map<
-          string,
-          { isCompliant: boolean; violations: any[] }
-        >();
+        private reportCache = new Map<string, CacheEntry>();
 
         async lint(manifest: CrossBoundaryManifest): Promise<{
           _versionTag: string;
           isCompliant: boolean;
-          violations: any[];
+          violations: Array<{ code: string; message: string }>;
         }> {
           const versionTag = manifest._version || "unknown";
 
           // Check cache
           if (this.reportCache.has(versionTag)) {
+            const cached = this.reportCache.get(versionTag)!;
             return {
               _versionTag: versionTag,
-              ...(this.reportCache.get(versionTag) as any),
+              isCompliant: cached.isCompliant,
+              violations: cached.violations,
             };
           }
 
@@ -202,20 +206,25 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       wireGovernanceToManifestReader(registry);
 
       // Create graph provider that tracks cache
-      class CachingGraphProviderAdapter {
-        private graphCache = new Map<string, any>();
+      interface GraphCache {
+        nodes: Array<{ id: string; name: string; type: string }>;
+        edges: Array<{ source: string; target: string; type: string }>;
+      }
 
-        async buildGraph(manifest: CrossBoundaryManifest): Promise<{
-          nodes: Array<{ id: string; name: string; type: string }>;
-          edges: any[];
-          _cacheKey: string;
-        }> {
+      class CachingGraphProviderAdapter {
+        private graphCache = new Map<string, GraphCache>();
+
+        async buildGraph(
+          manifest: CrossBoundaryManifest,
+        ): Promise<GraphCache & { _cacheKey: string }> {
           const cacheKey = manifest._version || "default";
 
           // Check cache
           if (this.graphCache.has(cacheKey)) {
+            const cached = this.graphCache.get(cacheKey)!;
             return {
-              ...(this.graphCache.get(cacheKey) as any),
+              nodes: cached.nodes,
+              edges: cached.edges,
               _cacheKey: cacheKey,
             };
           }

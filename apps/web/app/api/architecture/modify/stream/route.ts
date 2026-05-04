@@ -39,14 +39,14 @@ export async function POST(request: NextRequest) {
     body = await request.json();
   } catch {
     return new Response(
-      `data: ${JSON.stringify({ type: "error", message: "Invalid JSON" })}\n\n`,
+      `data: ${JSON.stringify({ type: "error", success: false, error: "Invalid JSON" })}\n\n`,
       { status: 400, headers: { "Content-Type": "text/event-stream" } },
     );
   }
 
   if (!body.intent || typeof body.intent !== "string") {
     return new Response(
-      `data: ${JSON.stringify({ type: "error", message: "'intent' must be a non-empty string." })}\n\n`,
+      `data: ${JSON.stringify({ type: "error", success: false, error: "'intent' must be a non-empty string." })}\n\n`,
       { status: 400, headers: { "Content-Type": "text/event-stream" } },
     );
   }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
     return new Response(
-      `data: ${JSON.stringify({ type: "error", message })}\n\n`,
+      `data: ${JSON.stringify({ type: "error", success: false, error: message })}\n\n`,
       { status: 400, headers: { "Content-Type": "text/event-stream" } },
     );
   }
@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
             controller.enqueue(
               encoder.encode(
                 `event: pipeline_error\ndata: ${JSON.stringify({
+                  success: false,
                   error: "Internal serialization failure",
                 })}\n\n`,
               ),
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
             err instanceof Error
               ? err.message
               : "Failed to initialize pipeline";
-          send("pipeline_error", { error: message });
+          send("pipeline_error", { success: false, error: message });
           cleanup();
           abortSignal.removeEventListener("abort", abortHandler);
           controller.close();
@@ -187,6 +188,7 @@ export async function POST(request: NextRequest) {
 
         if (result.success) {
           send("pipeline_complete", {
+            success: true,
             pipelineRunId: result.value.pipelineRunId,
             patchesApplied: result.value.patchesApplied,
             lintPassed: result.value.lintPassed,
@@ -195,6 +197,7 @@ export async function POST(request: NextRequest) {
           });
         } else {
           send("pipeline_error", {
+            success: false,
             error: result.error.message,
           });
         }
@@ -208,7 +211,7 @@ export async function POST(request: NextRequest) {
         );
         const message =
           err instanceof Error ? err.message : "Internal server error";
-        send("pipeline_error", { error: message });
+        send("pipeline_error", { success: false, error: message });
       } finally {
         cleanup();
         try {

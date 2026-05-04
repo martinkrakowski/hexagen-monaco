@@ -1,4 +1,4 @@
-import type { Identifier, LinterReportLike } from "@hexagen/core-domain";
+import type { LinterReportLike } from "@hexagen/core-domain";
 import type {
   ProjectSpecLike,
   ArchitectureGraphLike,

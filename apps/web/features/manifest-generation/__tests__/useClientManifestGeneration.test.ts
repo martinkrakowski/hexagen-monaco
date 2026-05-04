@@ -55,9 +55,35 @@ mock.module("@hexagen/agentic-interaction", () => {
   };
 
   return {
-    SYSTEM_PROMPT: "You are a helpful assistant.",
-    compileUserPrompt: (vars: { userDescription: string }) =>
+    WORKSPACE_SYSTEM_PROMPT: "You are a helpful assistant.",
+    compileWorkspacePrompt: (vars: { userDescription: string }) =>
       `Generate a manifest for: ${vars.userDescription}`,
+    CONTEXT_LIST_SYSTEM_PROMPT: "Return context list.",
+    compileContextListPrompt: (vars: { userDescription: string }) =>
+      `Contexts for: ${vars.userDescription}`,
+    PORTS_LIST_SYSTEM_PROMPT: "Return ports list.",
+    compilePortsPrompt: (contextName: string) => `Ports for: ${contextName}`,
+    ADAPTER_SYSTEM_PROMPT: "Return adapters.",
+    compileAdapterUserPrompt: (vars: {
+      validatedPortInventory: string[];
+      contextName: string;
+    }) => `Adapters for: ${vars.contextName}`,
+    ContextListSchema: { parse: (v: unknown) => v },
+    PortsListSchema: { parse: (v: unknown) => v },
+    normalizeDraft: () => ({}),
+    normalizeTopologyDraft: () => ({}),
+    validateDraft: () => ({ valid: true, diagnostics: [] }),
+    checkClarificationTriggers: () => [],
+    draftToManifest: () => ({}),
+    renderDraft: () => ({ yaml: "", diagnostics: [], token: "t" }),
+    parseJSON: (v: string) => {
+      try {
+        return { ok: true as const, data: JSON.parse(v) };
+      } catch {
+        return { ok: false as const, error: "parse error" };
+      }
+    },
+    normalizePortName: (n: string) => (n.endsWith("Port") ? n : `${n}Port`),
     extractManifestYaml: realExtractYaml,
   };
 });

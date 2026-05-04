@@ -1,4 +1,3 @@
-import type { Identifier } from "@hexagen/shared";
 import type { SystemInstruction } from "../../domain/system-instruction";
 import type {
   BuildSystemInstructionPort,
@@ -11,11 +10,11 @@ import type {
 export class GroundedPromptAdapter implements BuildSystemInstructionPort {
   /**
    * Build a grounded system prompt from governance payload and editor state
-   * @param request Contains domain AST and governance rules (adapted from the original interface)
+   * @param _request Contains domain AST and governance rules (adapted from the original interface)
    * @returns System instruction string
    */
   async build(
-    request: BuildSystemInstructionRequest,
+    _request: BuildSystemInstructionRequest,
   ): Promise<SystemInstruction> {
     // Extract the relevant information from the request to match the original functionality
     // We'll construct a governance object and editor state from what we have available

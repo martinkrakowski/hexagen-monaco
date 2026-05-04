@@ -1,10 +1,6 @@
 import { ok, err } from "@hexagen/shared";
 import type { Result } from "@hexagen/shared";
-import type {
-  VaultState,
-  VaultStatus,
-  VaultError,
-} from "@hexagen/agentic-interaction";
+import type { VaultStatus, VaultError } from "@hexagen/agentic-interaction";
 import type { UserSecretVaultPort } from "../../application/ports/user-secret-vault.port.js";
 
 const VAULT_STORAGE_KEY = "hexagen:vault:encrypted-payload";
@@ -176,8 +172,12 @@ export class EncryptedSessionVaultAdapter implements UserSecretVaultPort {
     // Derive a key for AES-GCM (hardcoded, browser-derived)
     const key = await this.getDerivedKey();
 
-    // Encrypt
-    const ciphertext = await crypto.subtle.encrypt("AES-GCM", key, data);
+    // Encrypt with IV in algorithm parameters
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      data,
+    );
 
     // Package IV + ciphertext as base64 JSON
     const payload = {
@@ -205,10 +205,11 @@ export class EncryptedSessionVaultAdapter implements UserSecretVaultPort {
     // Derive the same key used for encryption
     const key = await this.getDerivedKey();
 
-    // Decrypt
+    // Decrypt with IV in algorithm parameters
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const plaindata = await crypto.subtle.decrypt(
-      "AES-GCM",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { name: "AES-GCM", iv: iv.buffer } as any,
       key,
       ciphertext.buffer as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     );
