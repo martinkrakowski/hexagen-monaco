@@ -1,4 +1,4 @@
-import type { DomainModelId } from "../value-objects/model-id.vo";
+import type { DomainModelId } from "@hexagen/local-llm";
 
 export interface ModelVerificationResult {
   isValid: boolean;
@@ -28,9 +28,10 @@ export function createSmokeTestPredicate(
   };
 }
 
-export function formatVerificationFailure(
-  error: unknown,
-): { message: string; isTimeout: boolean } {
+export function formatVerificationFailure(error: unknown): {
+  message: string;
+  isTimeout: boolean;
+} {
   const errorMessage = error instanceof Error ? error.message : "Unknown error";
   const isTimeout = errorMessage.includes("timed out");
   return {

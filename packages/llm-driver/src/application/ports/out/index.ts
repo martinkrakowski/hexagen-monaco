@@ -1,1 +1,1 @@
-export type { SecretVaultPort } from "./secret-vault.port.js";
+export type { CloudKeyRetrievalPort } from "./cloud-key-retrieval.port.js";

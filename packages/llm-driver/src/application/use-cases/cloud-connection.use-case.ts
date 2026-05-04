@@ -1,5 +1,5 @@
 import type { Result } from "@hexagen/shared";
-import type { SecretVaultPort } from "../ports/out/secret-vault.port.js";
+import type { CloudKeyRetrievalPort } from "../ports/out/cloud-key-retrieval.port.js";
 import {
   CloudConnectionMachineState,
   ConnectionError,
@@ -40,14 +40,11 @@ function withTimeout<T>(
 }
 
 export interface CloudConnectionUseCaseDependencies {
-  vault: SecretVaultPort;
+  vault: CloudKeyRetrievalPort;
 }
 
 export interface CloudConnectionUseCase {
-  (
-    config: CloudLLMConfig,
-    retryCount?: number,
-  ): Promise<CloudConnectionResult>;
+  (config: CloudLLMConfig, retryCount?: number): Promise<CloudConnectionResult>;
 }
 
 export function createCloudConnectionUseCase(

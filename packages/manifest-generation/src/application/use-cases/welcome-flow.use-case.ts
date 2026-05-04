@@ -1,6 +1,9 @@
 import type { WelcomeScreenState } from "../../domain/services/model-selection-state-machine.js";
-import type { ManifestTopologyDraft, ClarificationTrigger } from "@hexagen/agentic-interaction";
-import type { ClientManifestGenerationUseCase } from "./client-manifest-generation.use-case.js";
+import type {
+  ManifestTopologyDraft,
+  ClarificationTrigger,
+} from "@hexagen/agentic-interaction";
+import type { ClientManifestGenerationPort } from "../ports/in/client-manifest-generation.port.js";
 import { classifyGenerationError } from "../../domain/services/generation-error-handler.js";
 
 export interface WelcomeFlowCallbacks {
@@ -18,13 +21,21 @@ export interface WelcomeFlowInput {
 
 export type WelcomeFlowResult =
   | { kind: "complete"; manifest: string }
-  | { kind: "clarification_needed"; triggers: ClarificationTrigger[]; partialTopology: ManifestTopologyDraft }
+  | {
+      kind: "clarification_needed";
+      triggers: ClarificationTrigger[];
+      partialTopology: ManifestTopologyDraft;
+    }
   | { kind: "error"; code: string; message: string };
 
 export class WelcomeFlowUseCase {
-  constructor(private readonly manifestUseCase: ClientManifestGenerationUseCase) {}
+  constructor(private readonly manifestUseCase: ClientManifestGenerationPort) {}
 
-  async execute(input: WelcomeFlowInput, signal: AbortSignal, callbacks: WelcomeFlowCallbacks): Promise<WelcomeFlowResult> {
+  async execute(
+    input: WelcomeFlowInput,
+    signal: AbortSignal,
+    callbacks: WelcomeFlowCallbacks,
+  ): Promise<WelcomeFlowResult> {
     callbacks.onStepDetail("Analyzing project structure...");
 
     const topologyResult = await this.manifestUseCase.generateTopology(
@@ -55,7 +66,11 @@ export class WelcomeFlowUseCase {
     }
 
     callbacks.onStepDetail("Extracting adapters...");
-    const adaptersResult = await this.manifestUseCase.extractAdapters(topology, signal, callbacks.onStepDetail);
+    const adaptersResult = await this.manifestUseCase.extractAdapters(
+      topology,
+      signal,
+      callbacks.onStepDetail,
+    );
 
     if (!adaptersResult.ok) {
       const classified = classifyGenerationError(adaptersResult.error);
@@ -67,15 +82,26 @@ export class WelcomeFlowUseCase {
     }
 
     callbacks.onStepDetail("Rendering manifest...");
-    const rendered = await this.manifestUseCase.renderManifest(adaptersResult.draft, signal);
+    const rendered = await this.manifestUseCase.renderManifest(
+      adaptersResult.draft,
+      signal,
+    );
 
     callbacks.onSaveGenerationResult(rendered.yaml);
     return { kind: "complete", manifest: rendered.yaml };
   }
 
-  async confirmClarification(partialTopology: ManifestTopologyDraft, signal: AbortSignal, callbacks: WelcomeFlowCallbacks): Promise<WelcomeFlowResult> {
+  async confirmClarification(
+    partialTopology: ManifestTopologyDraft,
+    signal: AbortSignal,
+    callbacks: WelcomeFlowCallbacks,
+  ): Promise<WelcomeFlowResult> {
     callbacks.onStepDetail("Extracting adapters...");
-    const adaptersResult = await this.manifestUseCase.extractAdapters(partialTopology, signal, callbacks.onStepDetail);
+    const adaptersResult = await this.manifestUseCase.extractAdapters(
+      partialTopology,
+      signal,
+      callbacks.onStepDetail,
+    );
 
     if (!adaptersResult.ok) {
       const classified = classifyGenerationError(adaptersResult.error);
@@ -87,7 +113,10 @@ export class WelcomeFlowUseCase {
     }
 
     callbacks.onStepDetail("Rendering manifest...");
-    const rendered = await this.manifestUseCase.renderManifest(adaptersResult.draft, signal);
+    const rendered = await this.manifestUseCase.renderManifest(
+      adaptersResult.draft,
+      signal,
+    );
 
     callbacks.onSaveGenerationResult(rendered.yaml);
     return { kind: "complete", manifest: rendered.yaml };

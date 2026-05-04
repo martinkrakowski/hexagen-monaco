@@ -1,10 +1,8 @@
-import type { DomainModelId } from "../../domain/value-objects/model-id.vo";
+import type { DomainModelId } from "@hexagen/local-llm";
 import type { WelcomeScreenState } from "../../domain/services/model-selection-state-machine";
 import type { ModelPreferencesPort } from "../ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../ports/out/model-verification.port";
 import { validateApiKeyFormat } from "../../domain/services/api-key-validation-service";
-
-export { DomainModelId };
 
 export interface ModelDownloadOrchestratorDeps {
   preferencesPort: ModelPreferencesPort;
@@ -29,7 +27,9 @@ export interface OrchestratorResult {
   errorCode?: string;
 }
 
-export function createModelDownloadOrchestrator(deps: ModelDownloadOrchestratorDeps) {
+export function createModelDownloadOrchestrator(
+  deps: ModelDownloadOrchestratorDeps,
+) {
   const { preferencesPort, verificationPort } = deps;
 
   return {
@@ -78,7 +78,8 @@ export function createModelDownloadOrchestrator(deps: ModelDownloadOrchestratorD
         return {
           success: false,
           nextState: "error",
-          error: "The API key format appears invalid. Please check your key and try again.",
+          error:
+            "The API key format appears invalid. Please check your key and try again.",
           errorCode: "key_invalid_format",
         };
       }
@@ -98,7 +99,10 @@ export function createModelDownloadOrchestrator(deps: ModelDownloadOrchestratorD
       return { success: true, nextState: "idle" };
     },
 
-    handleModelError(modelId: DomainModelId, errorMessage?: string): OrchestratorResult {
+    handleModelError(
+      modelId: DomainModelId,
+      errorMessage?: string,
+    ): OrchestratorResult {
       verificationPort.updateModelCacheMetadata(modelId, {
         downloadCompleted: false,
       });
@@ -113,4 +117,6 @@ export function createModelDownloadOrchestrator(deps: ModelDownloadOrchestratorD
   };
 }
 
-export type ModelDownloadOrchestrator = ReturnType<typeof createModelDownloadOrchestrator>;
+export type ModelDownloadOrchestrator = ReturnType<
+  typeof createModelDownloadOrchestrator
+>;

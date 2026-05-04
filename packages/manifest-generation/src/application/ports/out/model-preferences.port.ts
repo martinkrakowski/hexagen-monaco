@@ -1,6 +1,4 @@
-import type { DomainModelId } from "../../../domain/value-objects/model-id.vo";
-
-export { DomainModelId };
+import type { DomainModelId } from "@hexagen/local-llm";
 
 export interface ModelPreferences {
   hasEnabledLocalModels: boolean;

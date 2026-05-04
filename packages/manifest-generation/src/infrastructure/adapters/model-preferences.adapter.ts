@@ -1,8 +1,6 @@
-import type { DomainModelId } from "../../application/ports/out/model-preferences.port";
+import type { DomainModelId } from "@hexagen/local-llm";
 import type { ModelPreferencesPort } from "../../application/ports/out/model-preferences.port";
-import type { DomainModelId as DomainModelIdVO } from "../../domain/value-objects/model-id.vo";
-
-export { DomainModelId, DomainModelIdVO };
+import type { ModelVerificationPort } from "../../application/ports/out/model-verification.port";
 
 interface StorageLike {
   getItem(key: string): string | null;
@@ -39,7 +37,7 @@ export function createModelPreferencesAdapter(
   return {
     getPreferences(): {
       hasEnabledLocalModels: boolean;
-      lastModelId: DomainModelIdVO | null;
+      lastModelId: DomainModelId | null;
       autoLoadEnabled: boolean;
       cloudProvider: string | null;
       rememberApiKey: boolean;
@@ -47,25 +45,33 @@ export function createModelPreferencesAdapter(
       rememberChoice: boolean;
     } {
       return {
-        hasEnabledLocalModels: storage.getItem(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS) === "true",
-        lastModelId: storage.getItem(STORAGE_KEYS.LAST_MODEL_ID) as DomainModelIdVO | null,
-        autoLoadEnabled: storage.getItem(STORAGE_KEYS.AUTO_LOAD_ENABLED) === "true",
+        hasEnabledLocalModels:
+          storage.getItem(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS) === "true",
+        lastModelId: storage.getItem(
+          STORAGE_KEYS.LAST_MODEL_ID,
+        ) as DomainModelId | null,
+        autoLoadEnabled:
+          storage.getItem(STORAGE_KEYS.AUTO_LOAD_ENABLED) === "true",
         cloudProvider: storage.getItem(STORAGE_KEYS.CLOUD_PROVIDER),
-        rememberApiKey: storage.getItem(STORAGE_KEYS.REMEMBER_API_KEY) === "true",
+        rememberApiKey:
+          storage.getItem(STORAGE_KEYS.REMEMBER_API_KEY) === "true",
         skipAiSetup: storage.getItem(STORAGE_KEYS.SKIP_AI_SETUP) === "true",
-        rememberChoice: storage.getItem(STORAGE_KEYS.REMEMBER_CHOICE) === "true",
+        rememberChoice:
+          storage.getItem(STORAGE_KEYS.REMEMBER_CHOICE) === "true",
       };
     },
 
-    setPreferences(preferences: Partial<{
-      hasEnabledLocalModels: boolean;
-      lastModelId: DomainModelIdVO | null;
-      autoLoadEnabled: boolean;
-      cloudProvider: string | null;
-      rememberApiKey: boolean;
-      skipAiSetup: boolean;
-      rememberChoice: boolean;
-    }>): void {
+    setPreferences(
+      preferences: Partial<{
+        hasEnabledLocalModels: boolean;
+        lastModelId: DomainModelId | null;
+        autoLoadEnabled: boolean;
+        cloudProvider: string | null;
+        rememberApiKey: boolean;
+        skipAiSetup: boolean;
+        rememberChoice: boolean;
+      }>,
+    ): void {
       if (preferences.hasEnabledLocalModels !== undefined) {
         storage.setItem(
           STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS,
@@ -90,7 +96,10 @@ export function createModelPreferencesAdapter(
 
       if (preferences.cloudProvider !== undefined) {
         if (preferences.cloudProvider) {
-          storage.setItem(STORAGE_KEYS.CLOUD_PROVIDER, preferences.cloudProvider);
+          storage.setItem(
+            STORAGE_KEYS.CLOUD_PROVIDER,
+            preferences.cloudProvider,
+          );
         } else {
           storage.removeItem(STORAGE_KEYS.CLOUD_PROVIDER);
         }
@@ -129,7 +138,10 @@ interface CacheMetadata {
   downloadCompleted: boolean;
 }
 
-function getCacheMetadata(storage: StorageLike, modelId: string): CacheMetadata {
+function getCacheMetadata(
+  storage: StorageLike,
+  modelId: string,
+): CacheMetadata {
   const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
   const stored = storage.getItem(key);
 
@@ -144,20 +156,11 @@ function getCacheMetadata(storage: StorageLike, modelId: string): CacheMetadata 
   }
 }
 
-export interface LocalStorageVerificationPort {
-  isModelVerified(modelId: DomainModelIdVO, maxAgeHours?: number): boolean;
-  updateModelCacheMetadata(
-    modelId: DomainModelIdVO,
-    updates: { verifiedAt?: number; downloadCompleted?: boolean },
-  ): void;
-  clearModelCacheMetadata(modelId: DomainModelIdVO): void;
-}
-
 export function createLocalStorageVerificationAdapter(
   storage: StorageLike,
-): LocalStorageVerificationPort {
+): ModelVerificationPort {
   return {
-    isModelVerified(modelId: DomainModelIdVO, maxAgeHours: number = 24): boolean {
+    isModelVerified(modelId: DomainModelId, maxAgeHours: number = 24): boolean {
       const metadata = getCacheMetadata(storage, modelId);
       if (metadata.verifiedAt === null) return false;
 
@@ -167,7 +170,7 @@ export function createLocalStorageVerificationAdapter(
     },
 
     updateModelCacheMetadata(
-      modelId: DomainModelIdVO,
+      modelId: DomainModelId,
       updates: { verifiedAt?: number; downloadCompleted?: boolean },
     ): void {
       const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
@@ -176,13 +179,13 @@ export function createLocalStorageVerificationAdapter(
       storage.setItem(key, JSON.stringify(updated));
     },
 
-    clearModelCacheMetadata(modelId: DomainModelIdVO): void {
+    clearModelCacheMetadata(modelId: DomainModelId): void {
       const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
       storage.removeItem(key);
     },
   };
 }
 
-export function createBrowserVerificationAdapter(): LocalStorageVerificationPort {
+export function createBrowserVerificationAdapter(): ModelVerificationPort {
   return createLocalStorageVerificationAdapter(localStorage);
 }

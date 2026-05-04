@@ -1625,7 +1625,8 @@ bounded_contexts:
         use_cases: []
         ports:
           in: []
-          out: []
+          out:
+            - CloudKeyRetrievalPort
       infrastructure:
         adapters: []
     depends_on:

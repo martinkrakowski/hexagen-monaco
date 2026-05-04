@@ -1,5 +1,4 @@
-export * from "../value-objects/model-id.vo";
-import type { DomainModelId } from "../value-objects/model-id.vo";
+import type { DomainModelId } from "@hexagen/local-llm";
 
 export type WelcomeScreenState =
   | "idle"
@@ -16,7 +15,12 @@ export type WelcomeScreenState =
 
 export type ModelSelectionEvent =
   | { type: "SELECT_LOCAL_MODEL"; modelId: DomainModelId; remember: boolean }
-  | { type: "SELECT_CLOUD_PROVIDER"; provider: string; apiKey: string; remember: boolean }
+  | {
+      type: "SELECT_CLOUD_PROVIDER";
+      provider: string;
+      apiKey: string;
+      remember: boolean;
+    }
   | { type: "SKIP_AI_SETUP" }
   | { type: "CANCEL_DOWNLOAD" }
   | { type: "MODEL_READY" }
@@ -30,7 +34,10 @@ export type ModelSelectionEvent =
   | { type: "RESTART_FROM_SELECTION" }
   | { type: "PROCEED_TO_WIZARD" }
   | { type: "REPAIR_MODEL_DOWNLOAD"; modelId: DomainModelId }
-  | { type: "SET_CLARIFICATION_NEEDED"; triggers: Array<{ type: string; contextName?: string; message: string }> }
+  | {
+      type: "SET_CLARIFICATION_NEEDED";
+      triggers: Array<{ type: string; contextName?: string; message: string }>;
+    }
   | { type: "CONFIRM_AND_CONTINUE" }
   | { type: "SET_ERROR"; message: string; errorCode?: string };
 
@@ -51,7 +58,13 @@ function getValidTransitions(state: WelcomeScreenState): WelcomeScreenState[] {
     case "preview":
       return ["model_selection", "wizard_hydration"];
     case "error":
-      return ["model_downloading", "key_validation", "idle", "model_selection", "generating"];
+      return [
+        "model_downloading",
+        "key_validation",
+        "idle",
+        "model_selection",
+        "generating",
+      ];
     case "interrupted":
       return ["model_selection", "idle"];
     case "unsupported":
@@ -63,7 +76,10 @@ function getValidTransitions(state: WelcomeScreenState): WelcomeScreenState[] {
   }
 }
 
-export function canTransition(currentState: WelcomeScreenState, nextState: WelcomeScreenState): boolean {
+export function canTransition(
+  currentState: WelcomeScreenState,
+  nextState: WelcomeScreenState,
+): boolean {
   return getValidTransitions(currentState).includes(nextState);
 }
 
@@ -130,8 +146,14 @@ export function isBlockingState(state: WelcomeScreenState): boolean {
 }
 
 export interface ModelSelectionStateMachine {
-  transition(currentState: WelcomeScreenState, event: ModelSelectionEvent): WelcomeScreenState;
-  canTransition(currentState: WelcomeScreenState, nextState: WelcomeScreenState): boolean;
+  transition(
+    currentState: WelcomeScreenState,
+    event: ModelSelectionEvent,
+  ): WelcomeScreenState;
+  canTransition(
+    currentState: WelcomeScreenState,
+    nextState: WelcomeScreenState,
+  ): boolean;
   getInitialState(): WelcomeScreenState;
   isTerminalState(state: WelcomeScreenState): boolean;
   isBlockingState(state: WelcomeScreenState): boolean;

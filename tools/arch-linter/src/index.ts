@@ -289,8 +289,22 @@ function getLayerAllowedImports(filePath: string): string[] {
   if (!layers) return ["domain", SCOPE];
 
   for (const [layerName, layerDef] of Object.entries(layers)) {
-    if (filePath.includes(`/${layerName}/`)) {
-      return layerDef.allowed_imports ?? ["domain", `${SCOPE}/shared`];
+    if (layerName.includes("/")) {
+      const [pkgName, layerPath] = layerName.split("/");
+      if (
+        filePath.includes(`/${pkgName}/`) &&
+        filePath.includes(`/${layerPath}/`)
+      ) {
+        return layerDef.allowed_imports ?? ["domain", `${SCOPE}/shared`];
+      }
+    }
+  }
+
+  for (const [layerName, layerDef] of Object.entries(layers)) {
+    if (!layerName.includes("/")) {
+      if (filePath.includes(`/${layerName}/`)) {
+        return layerDef.allowed_imports ?? ["domain", `${SCOPE}/shared`];
+      }
     }
   }
 

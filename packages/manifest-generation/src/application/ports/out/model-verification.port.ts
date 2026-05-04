@@ -1,6 +1,4 @@
-import type { DomainModelId } from "../../../domain/value-objects/model-id.vo";
-
-export { DomainModelId };
+import type { DomainModelId } from "@hexagen/local-llm";
 
 export interface ModelVerificationPort {
   isModelVerified(modelId: DomainModelId, maxAgeHours?: number): boolean;
