@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { Transaction } from "../../../src/domain/transaction.js";
 import type { TransactionManagerPort } from "../../../src/application/ports/in/transaction-manager.port.js";
 import type { ManifestMutationPort } from "../../../src/application/ports/out/manifest-mutation.port.js";
@@ -91,27 +92,37 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
-        expect(result.value.status).toBe("committed");
+        assert.strictEqual(result.value.status, "committed");
       }
 
-      expect(transactionManager.begin).toHaveBeenCalledWith(
+      assert.strictEqual(transactionManager.begin.mock.calls[0][0], "intent-1");
+      assert.strictEqual(
+        (transactionManager.begin.mock.calls[0][1] as { intentId: string })
+          .intentId,
         "intent-1",
-        expect.objectContaining({ intentId: "intent-1" }),
       );
-      expect(transactionManager.transition).toHaveBeenCalledWith(
+      assert.strictEqual(
+        transactionManager.transition.mock.calls[0][0],
         "txn-test-1",
+      );
+      assert.strictEqual(
+        transactionManager.transition.mock.calls[0][1],
         "speculative",
       );
-      expect(manifestMutation.applyPatches).toHaveBeenCalledWith(
+      assert.deepStrictEqual(manifestMutation.applyPatches.mock.calls[0], [
         patches,
         "/path/to/manifest.yaml",
-      );
-      expect(lintValidation.validateManifest).toHaveBeenCalledWith(
+      ]);
+      assert.strictEqual(
+        lintValidation.validateManifest.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.commit).toHaveBeenCalledWith("txn-test-1");
+      assert.strictEqual(
+        transactionManager.commit.mock.calls[0][0],
+        "txn-test-1",
+      );
     });
   });
 
@@ -128,19 +139,25 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("disk full");
+        assert.ok(result.error.message.includes("disk full"));
       }
 
-      expect(manifestMutation.restoreFromGit).toHaveBeenCalledWith(
+      assert.strictEqual(
+        manifestMutation.restoreFromGit.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.rollback).toHaveBeenCalledWith(
+      assert.strictEqual(
+        transactionManager.rollback.mock.calls[0][0],
         "txn-test-1",
-        expect.stringContaining("Patch application failed"),
       );
-      expect(transactionManager.commit).not.toHaveBeenCalled();
+      assert.ok(
+        (transactionManager.rollback.mock.calls[0][1] as string).includes(
+          "Patch application failed",
+        ),
+      );
+      assert.strictEqual(transactionManager.commit.mock.calls.length, 0);
     });
   });
 
@@ -160,19 +177,25 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("port in >1 context");
+        assert.ok(result.error.message.includes("port in >1 context"));
       }
 
-      expect(manifestMutation.restoreFromGit).toHaveBeenCalledWith(
+      assert.strictEqual(
+        manifestMutation.restoreFromGit.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.rollback).toHaveBeenCalledWith(
+      assert.strictEqual(
+        transactionManager.rollback.mock.calls[0][0],
         "txn-test-1",
-        expect.stringContaining("Lint validation failed"),
       );
-      expect(transactionManager.commit).not.toHaveBeenCalled();
+      assert.ok(
+        (transactionManager.rollback.mock.calls[0][1] as string).includes(
+          "Lint validation failed",
+        ),
+      );
+      assert.strictEqual(transactionManager.commit.mock.calls.length, 0);
     });
   });
 
@@ -189,15 +212,16 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("linter crashed");
+        assert.ok(result.error.message.includes("linter crashed"));
       }
 
-      expect(manifestMutation.restoreFromGit).toHaveBeenCalledWith(
+      assert.strictEqual(
+        manifestMutation.restoreFromGit.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.rollback).toHaveBeenCalled();
+      assert.ok(transactionManager.rollback.mock.calls.length > 0);
     });
   });
 
@@ -213,9 +237,9 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("Failed to begin transaction");
+        assert.ok(result.error.message.includes("Failed to begin transaction"));
       }
     });
   });
@@ -232,9 +256,11 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("Failed to commit transaction");
+        assert.ok(
+          result.error.message.includes("Failed to commit transaction"),
+        );
       }
     });
   });

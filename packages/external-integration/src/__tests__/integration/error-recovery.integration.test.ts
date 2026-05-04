@@ -10,7 +10,8 @@
  */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createCrossBoundaryRegistry,
   wireWizardToPersistence,
@@ -34,16 +35,13 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
 
   describe("Scenario 1: Timeout Recovery with Exponential Backoff", () => {
     it("integration: first attempt timeout → exponential backoff → success on retry", async () => {
-      // Setup
       wireWizardToPersistence(registry);
 
-      // Track retry attempts
       const retryState = {
         attempts: 0,
         backoffs: [] as number[],
       };
 
-      // Create flaky adapter (fails 2 times, succeeds on 3rd)
       const flakyWizard = {
         async generateProject(input: {
           projectName: string;
@@ -51,14 +49,12 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
           retryState.attempts++;
 
           if (retryState.attempts <= 2) {
-            // Simulate timeout
             await new Promise((resolve) =>
               setTimeout(resolve, 50 + retryState.attempts * 50),
             );
             throw new Error("ETIMEDOUT: Connection timeout");
           }
 
-          // Succeed on 3rd attempt
           return {
             success: true,
             manifest: {
@@ -71,7 +67,6 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
 
       registerMockPort(registry, PORT_NAMES.PROJECT_GENERATOR, flakyWizard);
 
-      // Implement retry logic with exponential backoff
       const retryWithBackoff = async <T>(
         fn: () => Promise<T>,
         maxRetries: number = 3,
@@ -87,7 +82,6 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
             retryState.backoffs.push(backoffs[i] || 500);
 
             if (i < maxRetries - 1) {
-              // Wait before retry
               await new Promise((resolve) => setTimeout(resolve, backoffs[i]));
             }
           }
@@ -96,7 +90,6 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         throw lastError;
       };
 
-      // Act: Retry with exponential backoff
       const wizard = getMockPort<any>(registry, PORT_NAMES.PROJECT_GENERATOR);
       const result = await retryWithBackoff(
         () => wizard.generateProject({ projectName: "recovery-project" }),
@@ -104,29 +97,24 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         [100, 200, 400],
       );
 
-      // Assert: Success after retries
-      expect(result.success).toBe(true);
-      expect(result.manifest.system).toBe("recovery-project");
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.manifest.system, "recovery-project");
 
-      // Assert: Retries tracked correctly
-      expect(retryState.attempts).toBe(3);
-      expect(retryState.backoffs).toEqual([100, 200]); // 2 retries before success
+      assert.strictEqual(retryState.attempts, 3);
+      assert.deepStrictEqual(retryState.backoffs, [100, 200]);
     });
   });
 
   describe("Scenario 2: Cascading Error Handling", () => {
     it("integration: wizard error → governance skip → export refuse", async () => {
-      // Setup: Wire all boundaries
       wireWizardToPersistence(registry);
       wireGovernanceToManifestReader(registry);
       wireExportToGovernance(registry);
 
-      // Track error propagation
       const errorLog = {
         steps: [] as string[],
       };
 
-      // Create failing wizard adapter
       const failingWizard = {
         async generateProject(): Promise<{
           success: boolean;
@@ -144,7 +132,6 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         },
       };
 
-      // Create governance that skips on null manifest
       const gracefulGovernance = {
         async scan(manifest: any): Promise<{
           success: boolean;
@@ -165,7 +152,6 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         },
       };
 
-      // Create export that validates manifest
       const defensiveExport = {
         async validateManifest(
           manifest: any,
@@ -188,30 +174,26 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.LINTER, gracefulGovernance);
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, defensiveExport);
 
-      // Act: Step 1 - Wizard fails
       const wizard = getMockPort<any>(registry, PORT_NAMES.PROJECT_GENERATOR);
       const wizResult = await wizard.generateProject({
         projectName: "test",
       });
 
-      expect(wizResult.success).toBe(false);
+      assert.strictEqual(wizResult.success, false);
 
-      // Act: Step 2 - Governance receives null manifest
       const governance = getMockPort<any>(registry, PORT_NAMES.LINTER);
       const govResult = await governance.scan(null);
 
-      expect(govResult.success).toBe(false);
-      expect(govResult.error?.code).toBe("INVALID_MANIFEST");
+      assert.strictEqual(govResult.success, false);
+      assert.strictEqual(govResult.error?.code, "INVALID_MANIFEST");
 
-      // Act: Step 3 - Export receives null manifest
       const exporter = getMockPort<any>(registry, PORT_NAMES.SSE_STREAM);
       const expResult = await exporter.validateManifest(null);
 
-      expect(expResult.success).toBe(false);
-      expect(expResult.error?.code).toBe("INVALID_MANIFEST");
+      assert.strictEqual(expResult.success, false);
+      assert.strictEqual(expResult.error?.code, "INVALID_MANIFEST");
 
-      // Assert: Error cascaded through all boundaries
-      expect(errorLog.steps).toEqual([
+      assert.deepStrictEqual(errorLog.steps, [
         "wizard-error",
         "governance-skip",
         "export-refuse",
@@ -219,12 +201,10 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
     });
 
     it("integration: partial pipeline failure recovers gracefully", async () => {
-      // Setup
       wireWizardToPersistence(registry);
       wireGovernanceToManifestReader(registry);
       wireExportToGovernance(registry);
 
-      // Create working wizard
       const workingWizard = {
         async generateProject(input: { projectName: string }): Promise<{
           success: boolean;
@@ -240,7 +220,6 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         },
       };
 
-      // Create failing governance
       const failingGovernance = {
         async scan(): Promise<{ success: boolean; error?: any }> {
           return {
@@ -253,13 +232,11 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         },
       };
 
-      // Create recovery export (doesn't require governance)
       const recoveryExport = {
         async streamExport(request: {
           manifest: CrossBoundaryManifest;
           target: string;
         }): Promise<{ success: boolean }> {
-          // Export proceeds with uncompliant manifest (warning, not error)
           return { success: true };
         },
       };
@@ -268,31 +245,27 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.LINTER, failingGovernance);
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, recoveryExport);
 
-      // Act: Wizard succeeds
       const wizard = getMockPort<any>(registry, PORT_NAMES.PROJECT_GENERATOR);
       const wizResult = await wizard.generateProject({
         projectName: "resilient-project",
       });
-      expect(wizResult.success).toBe(true);
+      assert.strictEqual(wizResult.success, true);
 
-      // Act: Governance fails (but we continue)
       const governance = getMockPort<any>(registry, PORT_NAMES.LINTER);
       const govResult = await governance.scan(wizResult.manifest);
-      expect(govResult.success).toBe(false);
+      assert.strictEqual(govResult.success, false);
 
-      // Act: Export still proceeds (graceful degradation)
       const exporter = getMockPort<any>(registry, PORT_NAMES.SSE_STREAM);
       const expResult = await exporter.streamExport({
         manifest: wizResult.manifest,
         target: "zip",
       });
-      expect(expResult.success).toBe(true);
+      assert.strictEqual(expResult.success, true);
     });
   });
 
   describe("State Isolation", () => {
     it("integration: error state isolated per test registry", async () => {
-      // Test 1: Registry with failures
       const registry1 = createCrossBoundaryRegistry();
       wireWizardToPersistence(registry1);
 
@@ -309,11 +282,10 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       try {
         await wizard1.generateProject({});
       } catch {
-        // Expected
+        // expected
       }
-      expect(failingWizard1.callCount).toBe(1);
+      assert.strictEqual(failingWizard1.callCount, 1);
 
-      // Test 2: Fresh registry (no errors from test 1)
       const registry2 = createCrossBoundaryRegistry();
       wireWizardToPersistence(registry2);
 
@@ -329,10 +301,9 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       const wizard2 = getMockPort<any>(registry2, PORT_NAMES.PROJECT_GENERATOR);
       const result = await wizard2.generateProject({});
 
-      // Assert: Test 2 starts fresh
-      expect(result.success).toBe(true);
-      expect(workingWizard2.callCount).toBe(1);
-      expect(failingWizard1.callCount).toBe(1); // Unchanged
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(workingWizard2.callCount, 1);
+      assert.strictEqual(failingWizard1.callCount, 1);
     });
   });
 });

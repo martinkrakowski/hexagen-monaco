@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { ConsoleRejectEmitterAdapter } from "../../infrastructure/adapters/console-reject-emitter.adapter.js";
 import { Rejection } from "../../domain/rejection.js";
 
@@ -20,10 +21,10 @@ describe("ConsoleRejectEmitterAdapter", () => {
 
       adapter.emit(rejection);
 
-      expect(errorSpy).toHaveBeenCalled();
+      assert.ok(errorSpy.mock.calls.length > 0);
       const message = errorSpy.mock.calls[0][0] as string;
-      expect(message).toContain("Intent Compiler Rejection");
-      expect(message).toContain("Test rejection reason");
+      assert.ok(message.includes("Intent Compiler Rejection"));
+      assert.ok(message.includes("Test rejection reason"));
     });
 
     it("should include timestamp in emitted message", () => {
@@ -32,7 +33,7 @@ describe("ConsoleRejectEmitterAdapter", () => {
       adapter.emit(rejection);
 
       const message = errorSpy.mock.calls[0][0] as string;
-      expect(message).toMatch(/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      assert.match(message, /\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
 
     it("should preserve rejection reason exactly", () => {
@@ -42,7 +43,7 @@ describe("ConsoleRejectEmitterAdapter", () => {
       adapter.emit(rejection);
 
       const message = errorSpy.mock.calls[0][0] as string;
-      expect(message).toContain(reason);
+      assert.ok(message.includes(reason));
     });
 
     it("should log stack trace if available", () => {
@@ -51,22 +52,21 @@ describe("ConsoleRejectEmitterAdapter", () => {
 
       adapter.emit(rejection);
 
-      expect(errorSpy).toHaveBeenCalledTimes(2);
-      expect(errorSpy.mock.calls[1][0]).toBe("Stack trace:");
-      expect(errorSpy.mock.calls[1][1]).toBe(rejection.stack);
+      assert.strictEqual(errorSpy.mock.calls.length, 2);
+      assert.strictEqual(errorSpy.mock.calls[1][0], "Stack trace:");
+      assert.strictEqual(errorSpy.mock.calls[1][1], rejection.stack);
     });
 
     it("should emit without error when stack trace is unavailable", () => {
       const rejection = new Rejection("Test reason");
 
-      expect(() => {
+      assert.doesNotThrow(() => {
         adapter.emit(rejection);
-      }).not.toThrow();
+      });
 
-      // Verify the message was logged
-      expect(errorSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+      assert.ok(errorSpy.mock.calls.length >= 1);
       const message = errorSpy.mock.calls[0][0] as string;
-      expect(message).toContain("Test reason");
+      assert.ok(message.includes("Test reason"));
     });
 
     it("should handle multiple rejections independently", () => {
@@ -76,12 +76,12 @@ describe("ConsoleRejectEmitterAdapter", () => {
       adapter.emit(rejection1);
       adapter.emit(rejection2);
 
-      expect(errorSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
-      expect(errorSpy.mock.calls[0][0]).toContain("First reason");
+      assert.ok(errorSpy.mock.calls.length >= 2);
+      assert.ok((errorSpy.mock.calls[0][0] as string).includes("First reason"));
       const secondCallIndex = errorSpy.mock.calls.findIndex((call) =>
         (call[0] as string).includes("Second reason"),
       );
-      expect(secondCallIndex).toBeGreaterThan(0);
+      assert.ok(secondCallIndex > 0);
     });
   });
 });

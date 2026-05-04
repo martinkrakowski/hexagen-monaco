@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { InMemoryTransactionManager } from "../../src/infrastructure/adapters/in-memory-transaction-manager.adapter.js";
 import { InMemoryBackpressureController } from "../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
 import { InMemorySpeculativeStateMachine } from "../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
@@ -27,14 +28,14 @@ describe("transaction flow with simulated backpressure", () => {
       });
 
       const tx = manager.begin("intent-1");
-      expect(tx.status).toBe("pending");
+      assert.strictEqual(tx.status, "pending");
 
       const speculative = manager.transition(tx.id, "speculative");
-      expect(speculative?.status).toBe("speculative");
+      assert.strictEqual(speculative?.status, "speculative");
 
       const committed = manager.commit(tx.id);
-      expect(committed?.status).toBe("committed");
-      expect(backpressure.canAccept()).toBe(true);
+      assert.strictEqual(committed?.status, "committed");
+      assert.strictEqual(backpressure.canAccept(), true);
     });
   });
 
@@ -51,17 +52,17 @@ describe("transaction flow with simulated backpressure", () => {
       });
 
       const tx = manager.begin("intent-rollback");
-      expect(tx.status).toBe("pending");
+      assert.strictEqual(tx.status, "pending");
 
       const speculative = manager.transition(tx.id, "speculative");
-      expect(speculative?.status).toBe("speculative");
+      assert.strictEqual(speculative?.status, "speculative");
 
       const rolledBack = manager.rollback(
         tx.id,
         "intentional rollback for test",
       );
-      expect(rolledBack?.status).toBe("rolled_back");
-      expect(backpressure.canAccept()).toBe(true);
+      assert.strictEqual(rolledBack?.status, "rolled_back");
+      assert.strictEqual(backpressure.canAccept(), true);
     });
   });
 
@@ -78,16 +79,14 @@ describe("transaction flow with simulated backpressure", () => {
       });
 
       const tx1 = manager.begin("intent-bp-1");
-      expect(tx1.status).toBe("pending");
+      assert.strictEqual(tx1.status, "pending");
 
-      expect(() => manager.begin("intent-bp-2")).toThrow(
-        "Transaction rejected",
-      );
+      assert.throws(() => manager.begin("intent-bp-2"), /Transaction rejected/);
 
       manager.commit(tx1.id);
 
       const tx2 = manager.begin("intent-bp-2");
-      expect(tx2.status).toBe("pending");
+      assert.strictEqual(tx2.status, "pending");
     });
   });
 
@@ -108,16 +107,16 @@ describe("transaction flow with simulated backpressure", () => {
         mutation: "add-order",
       });
       const speculativeState = stateMachine.getSpeculativeState(snapshotId);
-      expect(speculativeState).not.toBeNull();
+      assert.ok(speculativeState !== null);
 
       const tx = manager.begin("intent-spec-1", { snapshotId });
-      expect(tx.status).toBe("pending");
+      assert.strictEqual(tx.status, "pending");
 
       manager.transition(tx.id, "speculative");
 
       const committed = manager.commit(tx.id);
-      expect(committed?.status).toBe("committed");
-      expect(stateMachine.getSpeculativeState(snapshotId)).not.toBeNull();
+      assert.strictEqual(committed?.status, "committed");
+      assert.ok(stateMachine.getSpeculativeState(snapshotId) !== null);
 
       const ast2 = makeAst();
       const snapshotId2 = stateMachine.applySpeculative(ast2, {
@@ -128,8 +127,8 @@ describe("transaction flow with simulated backpressure", () => {
       manager.transition(tx2.id, "speculative");
 
       const rolledBack = manager.rollback(tx2.id, "invoice rejected");
-      expect(rolledBack?.status).toBe("rolled_back");
-      expect(stateMachine.getSpeculativeState(snapshotId2)).toBeNull();
+      assert.strictEqual(rolledBack?.status, "rolled_back");
+      assert.strictEqual(stateMachine.getSpeculativeState(snapshotId2), null);
     });
   });
 
@@ -139,10 +138,10 @@ describe("transaction flow with simulated backpressure", () => {
 
       cache.set("key-1", { result: "compiled-ast" }, 60000);
       const entry = cache.get("key-1");
-      expect(entry).not.toBeNull();
-      expect(entry?.value).toEqual({ result: "compiled-ast" });
+      assert.ok(entry !== null);
+      assert.deepStrictEqual(entry?.value, { result: "compiled-ast" });
 
-      expect(cache.has("key-1")).toBe(true);
+      assert.strictEqual(cache.has("key-1"), true);
 
       cache.get("key-1");
       cache.get("key-missing");
@@ -151,13 +150,13 @@ describe("transaction flow with simulated backpressure", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      expect(cache.get("key-ttl")).toBeNull();
-      expect(cache.has("key-ttl")).toBe(false);
+      assert.strictEqual(cache.get("key-ttl"), null);
+      assert.strictEqual(cache.has("key-ttl"), false);
 
       const stats = cache.stats();
-      expect(stats.size).toBe(1);
-      expect(stats.hits).toBeGreaterThanOrEqual(2);
-      expect(stats.misses).toBeGreaterThanOrEqual(2);
+      assert.strictEqual(stats.size, 1);
+      assert.ok(stats.hits >= 2);
+      assert.ok(stats.misses >= 2);
     });
   });
 });

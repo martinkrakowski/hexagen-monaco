@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { GovernanceAwareConflictResolverAdapter } from "../infrastructure/adapters/governance-aware-conflict-resolver.adapter.js";
 import { createPatch } from "../domain/llm-response.js";
 
@@ -13,7 +14,7 @@ describe("GovernanceAwareConflictResolverAdapter", () => {
     const removePatch = createPatch("remove_node", "bc-2", { name: "Old" });
 
     const result = resolver.resolveConflict(addPatch, removePatch);
-    expect(result.type).toBe("add_node");
+    assert.strictEqual(result.type, "add_node");
   });
 
   it("should prefer patch targeting governance-critical ID", () => {
@@ -25,7 +26,7 @@ describe("GovernanceAwareConflictResolverAdapter", () => {
     });
 
     const result = resolver.resolveConflict(governancePatch, normalPatch);
-    expect(result.targetId).toBe("shared-kernel");
+    assert.strictEqual(result.targetId, "shared-kernel");
   });
 
   it("should prefer invariant-preserving patch when types differ", () => {
@@ -39,7 +40,7 @@ describe("GovernanceAwareConflictResolverAdapter", () => {
     });
 
     const result = resolver.resolveConflict(addPatch, removePatch);
-    expect(result.type).toBe("add_edge");
+    assert.strictEqual(result.type, "add_edge");
   });
 
   it("should prefer first patch when both are equally prioritized", () => {
@@ -47,7 +48,7 @@ describe("GovernanceAwareConflictResolverAdapter", () => {
     const patchB = createPatch("add_node", "bc-2", { name: "B" });
 
     const result = resolver.resolveConflict(patchA, patchB);
-    expect(result.id).toBe(patchA.id);
+    assert.strictEqual(result.id, patchA.id);
   });
 
   it("should protect governance target over non-governance destructive patch", () => {
@@ -62,6 +63,6 @@ describe("GovernanceAwareConflictResolverAdapter", () => {
       destructiveGovernance,
       destructiveNormal,
     );
-    expect(result.targetId).toBe("governance");
+    assert.strictEqual(result.targetId, "governance");
   });
 });

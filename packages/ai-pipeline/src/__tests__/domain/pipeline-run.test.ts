@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import {
   createPipelineRun,
   startRun,
@@ -20,12 +21,12 @@ describe("PipelineRun", () => {
     it("should create a run with pending status", () => {
       const run = createPipelineRun("run-1", "test intent");
 
-      expect(run.id).toBe("run-1");
-      expect(run.intent).toBe("test intent");
-      expect(run.status).toBe("pending");
-      expect(run.steps).toEqual([]);
-      expect(run.createdAt).toBeDefined();
-      expect(run.completedAt).toBeUndefined();
+      assert.strictEqual(run.id, "run-1");
+      assert.strictEqual(run.intent, "test intent");
+      assert.strictEqual(run.status, "pending");
+      assert.deepStrictEqual(run.steps, []);
+      assert.ok(run.createdAt !== undefined);
+      assert.strictEqual(run.completedAt, undefined);
     });
 
     it("should create a run with provided steps", () => {
@@ -35,9 +36,9 @@ describe("PipelineRun", () => {
       ];
       const run = createPipelineRun("run-2", "intent", steps);
 
-      expect(run.steps).toHaveLength(2);
-      expect(run.steps[0].name).toBe("step-a");
-      expect(run.steps[1].name).toBe("step-b");
+      assert.strictEqual(run.steps.length, 2);
+      assert.strictEqual(run.steps[0].name, "step-a");
+      assert.strictEqual(run.steps[1].name, "step-b");
     });
   });
 
@@ -46,8 +47,8 @@ describe("PipelineRun", () => {
       const run = createPipelineRun("run-1", "intent");
       const started = startRun(run);
 
-      expect(started.status).toBe("running");
-      expect(started.completedAt).toBeUndefined();
+      assert.strictEqual(started.status, "running");
+      assert.strictEqual(started.completedAt, undefined);
     });
   });
 
@@ -56,9 +57,9 @@ describe("PipelineRun", () => {
       const run = startRun(createPipelineRun("run-1", "intent"));
       const completed = completeRun(run);
 
-      expect(completed.status).toBe("completed");
-      expect(completed.completedAt).toBeDefined();
-      expect(typeof completed.completedAt).toBe("number");
+      assert.strictEqual(completed.status, "completed");
+      assert.ok(completed.completedAt !== undefined);
+      assert.strictEqual(typeof completed.completedAt, "number");
     });
   });
 
@@ -67,8 +68,8 @@ describe("PipelineRun", () => {
       const run = startRun(createPipelineRun("run-1", "intent"));
       const failed = failRun(run);
 
-      expect(failed.status).toBe("failed");
-      expect(failed.completedAt).toBeDefined();
+      assert.strictEqual(failed.status, "failed");
+      assert.ok(failed.completedAt !== undefined);
     });
   });
 
@@ -81,8 +82,8 @@ describe("PipelineRun", () => {
       const run = startRun(createPipelineRun("run-1", "intent", steps));
       const updated = updateRunStep(run, "parse", startStep);
 
-      expect(updated.steps[0].status).toBe("running");
-      expect(updated.steps[1].status).toBe("pending");
+      assert.strictEqual(updated.steps[0].status, "running");
+      assert.strictEqual(updated.steps[1].status, "pending");
     });
 
     it("should not mutate steps that don't match", () => {
@@ -95,9 +96,9 @@ describe("PipelineRun", () => {
         failStep(s, "error"),
       );
 
-      expect(updated.steps[0].status).toBe("pending");
-      expect(updated.steps[1].status).toBe("failed");
-      expect(updated.steps[1].error).toBe("error");
+      assert.strictEqual(updated.steps[0].status, "pending");
+      assert.strictEqual(updated.steps[1].status, "failed");
+      assert.strictEqual(updated.steps[1].error, "error");
     });
   });
 
@@ -109,9 +110,9 @@ describe("PipelineRun", () => {
       const newStep = createPipelineStep("b", { key: "value" });
       const updated = addRunStep(run, newStep);
 
-      expect(updated.steps).toHaveLength(2);
-      expect(updated.steps[1].name).toBe("b");
-      expect(updated.steps[1].metadata).toEqual({ key: "value" });
+      assert.strictEqual(updated.steps.length, 2);
+      assert.strictEqual(updated.steps[1].name, "b");
+      assert.deepStrictEqual(updated.steps[1].metadata, { key: "value" });
     });
   });
 });
@@ -121,18 +122,18 @@ describe("PipelineStep", () => {
     it("should create a step with pending status", () => {
       const step = createPipelineStep("parse-nl");
 
-      expect(step.name).toBe("parse-nl");
-      expect(step.status).toBe("pending");
-      expect(step.startTime).toBeDefined();
-      expect(step.endTime).toBeUndefined();
-      expect(step.error).toBeUndefined();
-      expect(step.metadata).toEqual({});
+      assert.strictEqual(step.name, "parse-nl");
+      assert.strictEqual(step.status, "pending");
+      assert.ok(step.startTime !== undefined);
+      assert.strictEqual(step.endTime, undefined);
+      assert.strictEqual(step.error, undefined);
+      assert.deepStrictEqual(step.metadata, {});
     });
 
     it("should accept initial metadata", () => {
       const step = createPipelineStep("parse-nl", { intent: "add context" });
 
-      expect(step.metadata).toEqual({ intent: "add context" });
+      assert.deepStrictEqual(step.metadata, { intent: "add context" });
     });
   });
 
@@ -141,8 +142,8 @@ describe("PipelineStep", () => {
       const step = createPipelineStep("step");
       const started = startStep(step);
 
-      expect(started.status).toBe("running");
-      expect(started.startTime).toBeDefined();
+      assert.strictEqual(started.status, "running");
+      assert.ok(started.startTime !== undefined);
     });
   });
 
@@ -151,8 +152,8 @@ describe("PipelineStep", () => {
       const step = startStep(createPipelineStep("step"));
       const completed = completeStep(step);
 
-      expect(completed.status).toBe("completed");
-      expect(completed.endTime).toBeDefined();
+      assert.strictEqual(completed.status, "completed");
+      assert.ok(completed.endTime !== undefined);
     });
   });
 
@@ -161,9 +162,9 @@ describe("PipelineStep", () => {
       const step = startStep(createPipelineStep("step"));
       const failed = failStep(step, "something went wrong");
 
-      expect(failed.status).toBe("failed");
-      expect(failed.error).toBe("something went wrong");
-      expect(failed.endTime).toBeDefined();
+      assert.strictEqual(failed.status, "failed");
+      assert.strictEqual(failed.error, "something went wrong");
+      assert.ok(failed.endTime !== undefined);
     });
   });
 
@@ -172,47 +173,47 @@ describe("PipelineStep", () => {
       const step = createPipelineStep("step");
       const skipped = skipStep(step, "not needed");
 
-      expect(skipped.status).toBe("skipped");
-      expect(skipped.endTime).toBeDefined();
-      expect(skipped.metadata.skipReason).toBe("not needed");
+      assert.strictEqual(skipped.status, "skipped");
+      assert.ok(skipped.endTime !== undefined);
+      assert.strictEqual(skipped.metadata.skipReason, "not needed");
     });
 
     it("should skip without a reason", () => {
       const step = createPipelineStep("step");
       const skipped = skipStep(step);
 
-      expect(skipped.status).toBe("skipped");
-      expect(skipped.metadata.skipReason).toBeUndefined();
+      assert.strictEqual(skipped.status, "skipped");
+      assert.strictEqual(skipped.metadata.skipReason, undefined);
     });
   });
 
   describe("stepDurationMs", () => {
     it("should return undefined when step has no endTime", () => {
       const step = createPipelineStep("step");
-      expect(stepDurationMs(step)).toBeUndefined();
+      assert.strictEqual(stepDurationMs(step), undefined);
     });
 
     it("should return duration in milliseconds when step has endTime", () => {
       const step = completeStep(startStep(createPipelineStep("step")));
       const duration = stepDurationMs(step);
 
-      expect(typeof duration).toBe("number");
-      expect(duration!).toBeGreaterThanOrEqual(0);
+      assert.strictEqual(typeof duration, "number");
+      assert.ok(duration! >= 0);
     });
   });
 
   describe("lifecycle: pending → running → completed", () => {
     it("should track the full lifecycle of a step", () => {
       let step = createPipelineStep("parse", { intent: "test" });
-      expect(step.status).toBe("pending");
+      assert.strictEqual(step.status, "pending");
 
       step = startStep(step);
-      expect(step.status).toBe("running");
+      assert.strictEqual(step.status, "running");
 
       step = completeStep(step);
-      expect(step.status).toBe("completed");
-      expect(step.endTime).toBeDefined();
-      expect(step.error).toBeUndefined();
+      assert.strictEqual(step.status, "completed");
+      assert.ok(step.endTime !== undefined);
+      assert.strictEqual(step.error, undefined);
     });
   });
 
@@ -222,9 +223,9 @@ describe("PipelineStep", () => {
       step = startStep(step);
       step = failStep(step, "timeout");
 
-      expect(step.status).toBe("failed");
-      expect(step.error).toBe("timeout");
-      expect(step.endTime).toBeDefined();
+      assert.strictEqual(step.status, "failed");
+      assert.strictEqual(step.error, "timeout");
+      assert.ok(step.endTime !== undefined);
     });
   });
 });

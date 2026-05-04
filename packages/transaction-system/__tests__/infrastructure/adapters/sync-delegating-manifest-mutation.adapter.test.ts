@@ -1,6 +1,6 @@
+import assert from "node:assert/strict";
 import type { Patch } from "@hexagen/core-domain";
 
-// Mock types to avoid importing from @hexagen/sync which has Jest ESM issues
 interface BoundedContext {
   name: string;
   type: string;
@@ -10,16 +10,11 @@ interface Manifest {
   bounded_contexts?: BoundedContext[];
 }
 
-// We'll test the applyAddNode logic directly without importing the full adapter
-// This avoids the Jest ESM parsing issues with @hexagen/sync
-
 describe("SyncDelegatingManifestMutationAdapter - applyAddNode", () => {
-  // Helper function that mirrors the applyAddNode implementation
   const applyAddNode = (manifest: Manifest, patch: Patch): void => {
     const contexts = manifest.bounded_contexts ?? [];
     const ctxId = patch.targetId;
 
-    // Check for duplicate context
     if (contexts.some((c) => c.name === ctxId)) {
       throw new Error(`Bounded context '${ctxId}' already exists`);
     }
@@ -54,9 +49,9 @@ describe("SyncDelegatingManifestMutationAdapter - applyAddNode", () => {
         },
       };
 
-      expect(() => {
+      assert.throws(() => {
         applyAddNode(manifest, patch);
-      }).toThrow("Bounded context 'existing-context' already exists");
+      }, /Bounded context 'existing-context' already exists/);
     });
 
     it("should successfully add a new bounded context", () => {
@@ -74,12 +69,11 @@ describe("SyncDelegatingManifestMutationAdapter - applyAddNode", () => {
         },
       };
 
-      // Should not throw
       applyAddNode(manifest, patch);
 
-      expect(manifest.bounded_contexts).toHaveLength(1);
-      expect(manifest.bounded_contexts?.[0]?.name).toBe("new-context");
-      expect(manifest.bounded_contexts?.[0]?.type).toBe("core");
+      assert.strictEqual(manifest.bounded_contexts!.length, 1);
+      assert.strictEqual(manifest.bounded_contexts?.[0]?.name, "new-context");
+      assert.strictEqual(manifest.bounded_contexts?.[0]?.type, "core");
     });
 
     it("should add context to empty manifest", () => {
@@ -96,8 +90,8 @@ describe("SyncDelegatingManifestMutationAdapter - applyAddNode", () => {
 
       applyAddNode(manifest, patch);
 
-      expect(manifest.bounded_contexts).toHaveLength(1);
-      expect(manifest.bounded_contexts?.[0]?.name).toBe("first-context");
+      assert.strictEqual(manifest.bounded_contexts!.length, 1);
+      assert.strictEqual(manifest.bounded_contexts?.[0]?.name, "first-context");
     });
 
     it("should not throw when adding different context to manifest with existing contexts", () => {
@@ -119,12 +113,12 @@ describe("SyncDelegatingManifestMutationAdapter - applyAddNode", () => {
         },
       };
 
-      expect(() => {
+      assert.doesNotThrow(() => {
         applyAddNode(manifest, patch);
-      }).not.toThrow();
+      });
 
-      expect(manifest.bounded_contexts).toHaveLength(2);
-      expect(manifest.bounded_contexts?.[1]?.name).toBe("context-b");
+      assert.strictEqual(manifest.bounded_contexts!.length, 2);
+      assert.strictEqual(manifest.bounded_contexts?.[1]?.name, "context-b");
     });
 
     it("should preserve existing context properties when adding new context", () => {
@@ -149,13 +143,13 @@ describe("SyncDelegatingManifestMutationAdapter - applyAddNode", () => {
 
       applyAddNode(manifest, patch);
 
-      expect(manifest.bounded_contexts).toHaveLength(2);
-      expect(manifest.bounded_contexts?.[0]).toEqual({
+      assert.strictEqual(manifest.bounded_contexts!.length, 2);
+      assert.deepStrictEqual(manifest.bounded_contexts?.[0], {
         name: "existing-context",
         type: "core",
       });
-      expect(manifest.bounded_contexts?.[1]?.name).toBe("new-context");
-      expect(manifest.bounded_contexts?.[1]?.type).toBe("supporting");
+      assert.strictEqual(manifest.bounded_contexts?.[1]?.name, "new-context");
+      assert.strictEqual(manifest.bounded_contexts?.[1]?.type, "supporting");
     });
   });
 });

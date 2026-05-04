@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { CacheEntry } from "../../src/domain/value-objects/cache-entry.js";
 import { InMemorySemanticCache } from "../../src/infrastructure/adapters/in-memory-semantic-cache.adapter.js";
 import { InMemoryBackpressureController } from "../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
@@ -38,8 +39,8 @@ describe("Property: Cache key excludes transient/spatial data", () => {
       cache.set(key, value2);
 
       const entry: CacheEntry | null = cache.get(key);
-      expect(entry).not.toBeNull();
-      expect((entry as CacheEntry).value).toBe(value2);
+      assert.ok(entry !== null);
+      assert.strictEqual((entry as CacheEntry).value, value2);
     }
   });
 
@@ -54,11 +55,11 @@ describe("Property: Cache key excludes transient/spatial data", () => {
 
       await new Promise((r) => setTimeout(r, 5));
 
-      expect(cache.get(key)).toBeNull();
-      expect(cache.has(key)).toBe(false);
+      assert.strictEqual(cache.get(key), null);
+      assert.strictEqual(cache.has(key), false);
       checked++;
     }
-    expect(checked).toBeGreaterThan(0);
+    assert.ok(checked > 0);
   });
 
   it("non-expired entries remain accessible", () => {
@@ -69,10 +70,10 @@ describe("Property: Cache key excludes transient/spatial data", () => {
 
       cache.set(key, value, 60000);
 
-      expect(cache.has(key)).toBe(true);
+      assert.strictEqual(cache.has(key), true);
       const entry = cache.get(key);
-      expect(entry).not.toBeNull();
-      expect((entry as CacheEntry).value).toBe(value);
+      assert.ok(entry !== null);
+      assert.strictEqual((entry as CacheEntry).value, value);
     }
   });
 });
@@ -90,8 +91,8 @@ describe("Property: Intent coalescing does not drop semantically distinct intent
       const signal1 = controller.accept(id1);
       const signal2 = controller.accept(id2);
 
-      expect(signal1.tag).not.toBe("coalesce");
-      expect(signal2.tag).not.toBe("coalesce");
+      assert.notStrictEqual(signal1.tag, "coalesce");
+      assert.notStrictEqual(signal2.tag, "coalesce");
     }
   });
 
@@ -103,7 +104,7 @@ describe("Property: Intent coalescing does not drop semantically distinct intent
       controller.accept(intentId);
       const signal = controller.accept(intentId);
 
-      expect(signal.tag).toBe("coalesce");
+      assert.strictEqual(signal.tag, "coalesce");
     }
   });
 });

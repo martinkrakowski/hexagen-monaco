@@ -11,7 +11,8 @@
  */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createCrossBoundaryRegistry,
   wireWizardToPersistence,
@@ -44,11 +45,9 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
 
   describe("Scenario 1: Wizard → Persistence → Governance", () => {
     it("integration: wizard generates manifest → persistence persists → governance validates", async () => {
-      // Setup: Wire boundaries
       wireWizardToPersistence(registry);
       wireGovernanceToManifestReader(registry);
 
-      // Setup: Create mock adapters
       const persistenceAdapter = new MockWizardPersistenceAdapter();
       const generatorAdapter = new MockProjectGeneratorAdapter();
 
@@ -63,7 +62,6 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         generatorAdapter,
       );
 
-      // Step 1: Wizard generates manifest
       const projectInput = {
         projectName: "integration-test-project",
         description: "Cross-boundary integration test",
@@ -71,12 +69,11 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
       };
 
       const wizardResult = await generatorAdapter.generateProject(projectInput);
-      expect(wizardResult.success).toBe(true);
-      expect(wizardResult.manifest).toBeDefined();
+      assert.strictEqual(wizardResult.success, true);
+      assert.ok(wizardResult.manifest !== undefined);
 
       const generatedManifest = wizardResult.manifest as CrossBoundaryManifest;
 
-      // Step 2: Manifest persisted via persistence adapter
       const sessionId = "session-" + Date.now();
       await persistenceAdapter.saveSession(sessionId, {
         sessionId,
@@ -87,34 +84,31 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      // Verify persistence
       const persistedSession = await persistenceAdapter.getSession(sessionId);
-      expect(persistedSession).toBeDefined();
-      expect(persistedSession?.projectName).toBe(generatedManifest.system);
+      assert.ok(persistedSession !== undefined);
+      assert.strictEqual(
+        persistedSession?.projectName,
+        generatedManifest.system,
+      );
 
-      // Step 3: Governance validates persisted manifest
       const linter = getLinterAdapter(registry);
       const lintResult = await linter.lint(generatedManifest);
 
-      // Assert: Full journey success
-      expect(lintResult.isCompliant).toBe(true);
-      expect(lintResult.violations).toHaveLength(0);
+      assert.strictEqual(lintResult.isCompliant, true);
+      assert.strictEqual(lintResult.violations.length, 0);
 
-      // Assert: Manifest integrity preserved across boundaries
-      expect(generatedManifest.system).toBe("integration-test-project");
-      expect(generatedManifest.bounded_contexts?.length).toBeGreaterThan(0);
+      assert.strictEqual(generatedManifest.system, "integration-test-project");
+      assert.ok((generatedManifest.bounded_contexts?.length ?? 0) > 0);
     });
   });
 
   describe("Scenario 2: Session Recovery (Timeout → Retry)", () => {
     it("integration: session timeout (first attempt) → recovery succeeds", async () => {
-      // Setup: Wire persistence
       wireWizardToPersistence(registry);
 
       const generatorAdapter = new MockProjectGeneratorAdapter();
       const persistenceAdapter = new MockWizardPersistenceAdapter();
 
-      // First attempt: Use timeout adapter
       const timeoutAdapter = createTimeoutAdapter(100);
       registerMockPort(registry, PORT_NAMES.PROJECT_GENERATOR, timeoutAdapter);
       registerMockPort(
@@ -123,25 +117,21 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         persistenceAdapter,
       );
 
-      // Attempt 1: Generator timeout
       let result: Record<string, unknown> | null = null;
       try {
         result = await (timeoutAdapter as Record<string, unknown>).execute();
       } catch {
-        // Expected: timeout
+        void 0;
       }
 
-      // Expect timeout or failure
-      expect(result?.success || result?.error).toBeDefined();
+      assert.ok((result?.success || result?.error) !== undefined);
 
-      // Recovery: Replace timeout adapter with working generator
       registerMockPort(
         registry,
         PORT_NAMES.PROJECT_GENERATOR,
         generatorAdapter,
       );
 
-      // Attempt 2: Recovery succeeds
       const recoveryInput = {
         projectName: "recovery-project",
         description: "After recovery",
@@ -149,10 +139,9 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
 
       const recoveredResult =
         await generatorAdapter.generateProject(recoveryInput);
-      expect(recoveredResult.success).toBe(true);
-      expect(recoveredResult.manifest).toBeDefined();
+      assert.strictEqual(recoveredResult.success, true);
+      assert.ok(recoveredResult.manifest !== undefined);
 
-      // Persist recovery result
       const sessionId = "recovery-session";
       const recovered = recoveredResult.manifest as CrossBoundaryManifest;
       await persistenceAdapter.saveSession(sessionId, {
@@ -164,17 +153,15 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      // Verify recovery session saved
       const savedSession = await persistenceAdapter.getSession(sessionId);
-      expect(savedSession).toBeDefined();
-      expect(savedSession?.projectName).toBe("recovery-project");
-      expect(savedSession?.currentStep).toBe("recovered");
+      assert.ok(savedSession !== undefined);
+      assert.strictEqual(savedSession?.projectName, "recovery-project");
+      assert.strictEqual(savedSession?.currentStep, "recovered");
     });
   });
 
   describe("Scenario 3: Refinement Loop (v1 → violations → v2 → compliant)", () => {
     it("integration: manifest v1 (violations) → governance feedback → v2 (compliant)", async () => {
-      // Setup: Wire boundaries
       wireWizardToPersistence(registry);
       wireGovernanceToManifestReader(registry);
 
@@ -192,8 +179,6 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         generatorAdapter,
       );
 
-      // Scenario: v1 manifest has violations
-      // For testing, we'll simulate v1 with non-compliant structure
       const v1ManifestNonCompliant: CrossBoundaryManifest = {
         _version: "v1-" + Date.now(),
         _generatedAt: Date.now(),
@@ -202,14 +187,13 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         description: "V1 with issues",
         bounded_contexts: [
           {
-            name: "invalid_port_name", // Violation pattern
-            type: "unknown-type", // Violation pattern
+            name: "invalid_port_name",
+            type: "unknown-type",
             description: "Problematic",
           },
         ],
       };
 
-      // Step 1: Persist v1
       const sessionId = "refinement-session";
       await persistenceAdapter.saveSession(sessionId, {
         sessionId,
@@ -220,14 +204,11 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      // Step 2: Governance scans v1 → would report violations
       const linter = getLinterAdapter(registry);
       const v1LintResult = await linter.lint(v1ManifestNonCompliant);
 
-      // For fixture linter, both pass; in real scenario v1 would have violations
-      expect(v1LintResult.isCompliant).toBeDefined();
+      assert.ok(v1LintResult.isCompliant !== undefined);
 
-      // Step 3: Wizard generates v2 (refined)
       const v2Input = {
         projectName: "project-v2-refined",
         description: "V2 after refinement",
@@ -235,12 +216,11 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
       };
 
       const v2Result = await generatorAdapter.generateProject(v2Input);
-      expect(v2Result.success).toBe(true);
+      assert.strictEqual(v2Result.success, true);
 
       const v2Manifest = v2Result.manifest as CrossBoundaryManifest;
       v2Manifest._version = "v2-" + Date.now();
 
-      // Step 4: Persist v2
       await persistenceAdapter.saveSession(sessionId, {
         sessionId,
         projectName: v2Manifest.system,
@@ -250,30 +230,28 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      // Step 5: Governance validates v2 → should be compliant
       const v2LintResult = await linter.lint(v2Manifest);
-      expect(v2LintResult.isCompliant).toBe(true);
-      expect(v2LintResult.violations).toHaveLength(0);
+      assert.strictEqual(v2LintResult.isCompliant, true);
+      assert.strictEqual(v2LintResult.violations.length, 0);
 
-      // Assert: State machine tracked version progression
       const finalSession = await persistenceAdapter.getSession(sessionId);
-      expect(finalSession).toBeDefined();
-      expect(finalSession?.currentStep).toBe("v2-refined");
-      expect(finalSession?.projectName).toBe("project-v2-refined");
+      assert.ok(finalSession !== undefined);
+      assert.strictEqual(finalSession?.currentStep, "v2-refined");
+      assert.strictEqual(finalSession?.projectName, "project-v2-refined");
 
-      // Assert: Versions are distinct
-      expect(v1ManifestNonCompliant._version).not.toBe(v2Manifest._version);
+      assert.notStrictEqual(
+        v1ManifestNonCompliant._version,
+        v2Manifest._version,
+      );
     });
   });
 
   describe("State Isolation", () => {
     it("integration: each test gets fresh registry (no cross-test pollution)", async () => {
-      // Arrange: First test session
       const registry1 = createCrossBoundaryRegistry();
       const persistence1 = new MockWizardPersistenceAdapter();
       registerMockPort(registry1, PORT_NAMES.WIZARD_PERSISTENCE, persistence1);
 
-      // Act: Save session in registry1
       const sessionId = "test-session-1";
       await persistence1.saveSession(sessionId, {
         sessionId,
@@ -284,18 +262,15 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      // Assert: Registry1 has session
       const session1 = await persistence1.getSession(sessionId);
-      expect(session1?.projectName).toBe("project-1");
+      assert.strictEqual(session1?.projectName, "project-1");
 
-      // New test: Fresh registry
       const registry2 = createCrossBoundaryRegistry();
       const persistence2 = new MockWizardPersistenceAdapter();
       registerMockPort(registry2, PORT_NAMES.WIZARD_PERSISTENCE, persistence2);
 
-      // Assert: Registry2 is clean (no session from registry1)
       const session2 = await persistence2.getSession(sessionId);
-      expect(session2).toBeNull();
+      assert.strictEqual(session2, null);
     });
   });
 });

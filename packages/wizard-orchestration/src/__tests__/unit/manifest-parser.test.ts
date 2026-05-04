@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { parseManifestToWizardData } from "../../application/manifest-parser";
 
 describe("parseManifestToWizardData", () => {
@@ -25,19 +26,23 @@ bounded_contexts:
 
   it("should parse a valid manifest YAML string", () => {
     const result = parseManifestToWizardData(validManifestYaml);
-    expect(result).toBeDefined();
-    expect(result.boundedContexts).toHaveLength(1);
-    expect(result.boundedContexts[0].name).toBe("UserContext");
-    expect(result.governance.workspaceName).toBe("test-system");
+    assert.ok(result !== undefined);
+    assert.strictEqual(result.boundedContexts.length, 1);
+    assert.strictEqual(result.boundedContexts[0].name, "UserContext");
+    assert.strictEqual(result.governance.workspaceName, "test-system");
   });
 
   it("should throw an error for empty YAML string", () => {
-    expect(() => parseManifestToWizardData("")).toThrow("Manifest string is empty");
+    assert.throws(
+      () => parseManifestToWizardData(""),
+      /Manifest string is empty/,
+    );
   });
 
   it("should throw an error for invalid YAML", () => {
-    expect(() => parseManifestToWizardData("invalid: [unclosed bracket")).toThrow(
-      "Failed to parse YAML"
+    assert.throws(
+      () => parseManifestToWizardData("invalid: [unclosed bracket"),
+      /Failed to parse YAML/,
     );
   });
 
@@ -53,10 +58,10 @@ bounded_contexts:
     layers: {}
 `;
     const result = parseManifestToWizardData(minimalManifestYaml);
-    expect(result).toBeDefined();
-    expect(result.boundedContexts[0].name).toBe("MinimalContext");
-    expect(result.boundedContexts[0].coreDomainEntities).toEqual([]);
-    expect(result.boundedContexts[0].useCases).toEqual([]);
+    assert.ok(result !== undefined);
+    assert.strictEqual(result.boundedContexts[0].name, "MinimalContext");
+    assert.deepStrictEqual(result.boundedContexts[0].coreDomainEntities, []);
+    assert.deepStrictEqual(result.boundedContexts[0].useCases, []);
   });
 
   it("should map infrastructure adapters correctly", () => {
@@ -73,8 +78,8 @@ bounded_contexts:
         adapters: ["Prisma", "BullMQ"]
 `;
     const result = parseManifestToWizardData(manifestWithAdapters);
-    expect(result.boundedContexts[0].persistenceAdapter).toBe("Prisma");
-    expect(result.boundedContexts[0].messagingAdapter).toBe("BullMQ");
+    assert.strictEqual(result.boundedContexts[0].persistenceAdapter, "Prisma");
+    assert.strictEqual(result.boundedContexts[0].messagingAdapter, "BullMQ");
   });
 
   it("should handle single adapter correctly", () => {
@@ -91,7 +96,7 @@ bounded_contexts:
         adapters: ["Prisma"]
 `;
     const result = parseManifestToWizardData(manifestWithSingleAdapter);
-    expect(result.boundedContexts[0].persistenceAdapter).toBe("Prisma");
-    expect(result.boundedContexts[0].messagingAdapter).toBe("");
+    assert.strictEqual(result.boundedContexts[0].persistenceAdapter, "Prisma");
+    assert.strictEqual(result.boundedContexts[0].messagingAdapter, "");
   });
 });

@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import type {
   NoSemanticState,
   ForbiddenPropKeys,
@@ -26,8 +27,8 @@ describe("NoSemanticState<T> type-level firewall (Layer 1)", () => {
     const checkRemoved: AssertForbiddenRemoved = true as AssertForbiddenRemoved;
     const checkPresent: AssertLabelPresent = true as AssertLabelPresent;
 
-    expect(checkRemoved).toBe(true);
-    expect(checkPresent).toBe(true);
+    assert.strictEqual(checkRemoved, true);
+    assert.strictEqual(checkPresent, true);
   });
 
   it("forbids all 11 information-state tokens", () => {
@@ -44,6 +45,6 @@ describe("NoSemanticState<T> type-level firewall (Layer 1)", () => {
       "isSuccess",
       "isError",
     ];
-    expect(forbidden).toHaveLength(11);
+    assert.strictEqual(forbidden.length, 11);
   });
 });

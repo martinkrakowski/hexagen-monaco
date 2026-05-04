@@ -1,14 +1,6 @@
-/**
- * Integration test: State Machine Phase Transitions
- *
- * Tests the monotonic state machine ensuring phase transitions follow valid paths:
- * pending → diffing → verdict → approved (forward only)
- * Prevents regressions: approved → pending or rejected → approved
- */
-
+import assert from "node:assert/strict";
 import { createInitialState } from "../../domain/reconciliation-state.js";
 
-// Mock implementation of state transition logic
 const phaseOrder = {
   pending: 0,
   diffing: 1,
@@ -18,16 +10,13 @@ const phaseOrder = {
 };
 
 function isValidPhaseTransition(fromPhase: string, toPhase: string): boolean {
-  // Allow transitions to same phase
   if (fromPhase === toPhase) return true;
 
-  // Terminal states: approved and rejected cannot transition to anything except themselves
   const terminalStates = ["approved", "rejected"];
   if (terminalStates.includes(fromPhase)) {
     return false;
   }
 
-  // Allow forward transitions (only if from is not terminal)
   if (
     phaseOrder[fromPhase as keyof typeof phaseOrder] <
     phaseOrder[toPhase as keyof typeof phaseOrder]
@@ -35,7 +24,6 @@ function isValidPhaseTransition(fromPhase: string, toPhase: string): boolean {
     return true;
   }
 
-  // Disallow backward transitions (regressions)
   return false;
 }
 
@@ -47,27 +35,27 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
   describe("Valid Forward Transitions", () => {
     it("should allow pending → diffing transition", () => {
       const canTransition = isValidPhaseTransition("pending", "diffing");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow diffing → verdict transition", () => {
       const canTransition = isValidPhaseTransition("diffing", "verdict");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow verdict → approved transition", () => {
       const canTransition = isValidPhaseTransition("verdict", "approved");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow pending → approved (skip diffing) transition", () => {
       const canTransition = isValidPhaseTransition("pending", "approved");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow multi-phase jump pending → verdict", () => {
       const canTransition = isValidPhaseTransition("pending", "verdict");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow full sequence: pending → diffing → verdict → approved", () => {
@@ -75,63 +63,63 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
       const t2 = isValidPhaseTransition("diffing", "verdict");
       const t3 = isValidPhaseTransition("verdict", "approved");
 
-      expect(t1).toBe(true);
-      expect(t2).toBe(true);
-      expect(t3).toBe(true);
+      assert.strictEqual(t1, true);
+      assert.strictEqual(t2, true);
+      assert.strictEqual(t3, true);
     });
   });
 
   describe("Invalid Backward Transitions (Regression Prevention)", () => {
     it("should BLOCK approved → pending regression", () => {
       const canTransition = isValidPhaseTransition("approved", "pending");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK approved → diffing regression", () => {
       const canTransition = isValidPhaseTransition("approved", "diffing");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK approved → verdict regression", () => {
       const canTransition = isValidPhaseTransition("approved", "verdict");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK rejected → pending regression", () => {
       const canTransition = isValidPhaseTransition("rejected", "pending");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK rejected → approved regression", () => {
       const canTransition = isValidPhaseTransition("rejected", "approved");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK verdict → diffing regression", () => {
       const canTransition = isValidPhaseTransition("verdict", "diffing");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK diffing → pending regression", () => {
       const canTransition = isValidPhaseTransition("diffing", "pending");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
   });
 
   describe("Idempotent Transitions (Same Phase)", () => {
     it("should allow pending → pending idempotent transition", () => {
       const canTransition = isValidPhaseTransition("pending", "pending");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow approved → approved idempotent transition", () => {
       const canTransition = isValidPhaseTransition("approved", "approved");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow rejected → rejected idempotent transition", () => {
       const canTransition = isValidPhaseTransition("rejected", "rejected");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
   });
 
@@ -142,14 +130,14 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
       for (let i = 0; i < phases.length; i++) {
         for (let j = i + 1; j < phases.length; j++) {
           const canForward = isValidPhaseTransition(phases[i], phases[j]);
-          expect(canForward).toBe(true);
+          assert.strictEqual(canForward, true);
         }
       }
 
       for (let i = 1; i < phases.length; i++) {
         for (let j = 0; j < i; j++) {
           const canBackward = isValidPhaseTransition(phases[i], phases[j]);
-          expect(canBackward).toBe(false);
+          assert.strictEqual(canBackward, false);
         }
       }
     });
@@ -169,7 +157,7 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
       ];
 
       validTransitions.forEach(([from, to]) => {
-        expect(isValidPhaseTransition(from, to)).toBe(true);
+        assert.strictEqual(isValidPhaseTransition(from, to), true);
       });
     });
   });
@@ -177,27 +165,27 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
   describe("Rejection Phase Handling", () => {
     it("should allow pending → rejected transition", () => {
       const canTransition = isValidPhaseTransition("pending", "rejected");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow diffing → rejected transition", () => {
       const canTransition = isValidPhaseTransition("diffing", "rejected");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should allow verdict → rejected transition", () => {
       const canTransition = isValidPhaseTransition("verdict", "rejected");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should BLOCK approved → rejected regression", () => {
       const canTransition = isValidPhaseTransition("approved", "rejected");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
 
     it("should BLOCK rejected → verdict transition", () => {
       const canTransition = isValidPhaseTransition("rejected", "verdict");
-      expect(canTransition).toBe(false);
+      assert.strictEqual(canTransition, false);
     });
   });
 
@@ -208,7 +196,7 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
 
       state = { ...state, version: state.version + 1 };
 
-      expect(state.version).toBe(initialVersion + 1);
+      assert.strictEqual(state.version, initialVersion + 1);
     });
 
     it("should update lastUpdated timestamp on transition", () => {
@@ -217,48 +205,46 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
 
       state = { ...state, lastUpdated: Date.now() };
 
-      expect(state.lastUpdated).toBeGreaterThanOrEqual(initialTime);
+      assert.ok(state.lastUpdated >= initialTime);
     });
 
     it("should maintain phase history across transitions", () => {
       createInitialState();
       const history: string[] = [];
 
-      // Simulate transitions
       history.push("pending");
       history.push("diffing");
       history.push("approved");
 
-      expect(history).toHaveLength(3);
-      expect(history[0]).toBe("pending");
-      expect(history[1]).toBe("diffing");
-      expect(history[2]).toBe("approved");
+      assert.strictEqual(history.length, 3);
+      assert.strictEqual(history[0], "pending");
+      assert.strictEqual(history[1], "diffing");
+      assert.strictEqual(history[2], "approved");
     });
   });
 
   describe("Edge Cases & Boundary Conditions", () => {
     it("should handle transition from initial state", () => {
       const canTransition = isValidPhaseTransition("pending", "diffing");
-      expect(canTransition).toBe(true);
+      assert.strictEqual(canTransition, true);
     });
 
     it("should handle rapid successive transitions", () => {
       let currentPhase = "pending";
 
       currentPhase = "diffing";
-      expect(isValidPhaseTransition("pending", currentPhase)).toBe(true);
+      assert.strictEqual(isValidPhaseTransition("pending", currentPhase), true);
 
       currentPhase = "verdict";
-      expect(isValidPhaseTransition("diffing", currentPhase)).toBe(true);
+      assert.strictEqual(isValidPhaseTransition("diffing", currentPhase), true);
 
       currentPhase = "approved";
-      expect(isValidPhaseTransition("verdict", currentPhase)).toBe(true);
+      assert.strictEqual(isValidPhaseTransition("verdict", currentPhase), true);
     });
 
     it("should handle unknown phase names gracefully", () => {
       const result = isValidPhaseTransition("unknown", "pending");
-      // Should either throw or return false - just verify consistent behavior
-      expect(typeof result).toBe("boolean");
+      assert.strictEqual(typeof result, "boolean");
     });
   });
 
@@ -267,20 +253,20 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
       const phase = "approved";
 
       const tryRevert = isValidPhaseTransition(phase, "pending");
-      expect(tryRevert).toBe(false);
+      assert.strictEqual(tryRevert, false);
 
       const tryIdempotent = isValidPhaseTransition(phase, phase);
-      expect(tryIdempotent).toBe(true);
+      assert.strictEqual(tryIdempotent, true);
     });
 
     it("should lock phase once rejected", () => {
       const phase = "rejected";
 
       const tryAdvance = isValidPhaseTransition(phase, "approved");
-      expect(tryAdvance).toBe(false);
+      assert.strictEqual(tryAdvance, false);
 
       const tryIdempotent = isValidPhaseTransition(phase, phase);
-      expect(tryIdempotent).toBe(true);
+      assert.strictEqual(tryIdempotent, true);
     });
   });
 
@@ -293,7 +279,7 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
           sequence[i],
           sequence[i + 1],
         );
-        expect(canTransition).toBe(true);
+        assert.strictEqual(canTransition, true);
       }
     });
 
@@ -305,7 +291,7 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
       ];
 
       skipSequences.forEach(([from, to]) => {
-        expect(isValidPhaseTransition(from, to)).toBe(true);
+        assert.strictEqual(isValidPhaseTransition(from, to), true);
       });
     });
 
@@ -318,7 +304,7 @@ describe("State Machine Phase Transitions - Integration Tests", () => {
       ];
 
       backwardSequences.forEach(([from, to]) => {
-        expect(isValidPhaseTransition(from, to)).toBe(false);
+        assert.strictEqual(isValidPhaseTransition(from, to), false);
       });
     });
   });

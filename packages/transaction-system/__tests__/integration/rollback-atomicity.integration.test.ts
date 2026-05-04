@@ -1,10 +1,4 @@
-/**
- * Integration test: Transaction Rollback Atomicity
- *
- * Tests that rollback operations restore manifest and transaction state atomically.
- * Validates git restore operations and manifest state consistency.
- */
-
+import assert from "node:assert/strict";
 import { InMemoryTransactionManager } from "../../src/infrastructure/adapters/in-memory-transaction-manager.adapter.js";
 import { InMemoryBackpressureController } from "../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
 import { InMemorySpeculativeStateMachine } from "../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
@@ -74,7 +68,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const rolledBack = transactionManager.rollback(tx.id, "lint-failed");
 
-      expect(rolledBack?.status).toBe("rolled_back");
+      assert.strictEqual(rolledBack?.status, "rolled_back");
     });
 
     it("should accept rollback reason parameter", () => {
@@ -83,7 +77,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const rolledBack = transactionManager.rollback(tx.id, "validation-error");
 
-      expect(rolledBack?.status).toBe("rolled_back");
+      assert.strictEqual(rolledBack?.status, "rolled_back");
     });
 
     it("should mark transaction as rolled_back atomically", () => {
@@ -92,8 +86,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const result = transactionManager.rollback(tx.id, "test-reason");
 
-      expect(result).toBeDefined();
-      expect(result?.status).toBe("rolled_back");
+      assert.ok(result !== undefined && result !== null);
+      assert.strictEqual(result?.status, "rolled_back");
     });
   });
 
@@ -106,7 +100,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       );
 
       if (!snapshotId) {
-        expect(true).toBe(true);
+        assert.ok(true);
         return;
       }
 
@@ -115,18 +109,16 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       transactionManager.rollback(tx.id, "cleanup-test");
 
-      // Speculative state should be cleared
       const speculativeState =
         transactionManager["stateMachine"]?.getSpeculativeState?.(snapshotId);
-      expect(speculativeState).toBeNull();
+      assert.strictEqual(speculativeState, null);
     });
 
     it("should preserve original manifest after rollback", () => {
       const originalManifest = makeManifest();
       const modifiedManifest = makeModifiedManifest();
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const originalAst = makeAst();
+      const _originalAst = makeAst();
       const modifiedAst = makeModifiedAst();
 
       const snapshotId = transactionManager["stateMachine"]?.applySpeculative?.(
@@ -135,7 +127,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       );
 
       if (!snapshotId) {
-        expect(true).toBe(true);
+        assert.ok(true);
         return;
       }
 
@@ -147,8 +139,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       transactionManager.transition(tx.id, "speculative");
       transactionManager.rollback(tx.id, "manifest-preserved");
 
-      expect(originalManifest.boundedContexts).toHaveLength(1);
-      expect(modifiedManifest.boundedContexts).toHaveLength(2);
+      assert.strictEqual(originalManifest.boundedContexts!.length, 1);
+      assert.strictEqual(modifiedManifest.boundedContexts!.length, 2);
     });
   });
 
@@ -162,7 +154,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
         "git-restore-simulated",
       );
 
-      expect(rolledBack?.status).toBe("rolled_back");
+      assert.strictEqual(rolledBack?.status, "rolled_back");
     });
 
     it("should track that git restore was executed", () => {
@@ -171,8 +163,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const rolledBack = transactionManager.rollback(tx.id, "tracked");
 
-      expect(rolledBack?.status).toBe("rolled_back");
-      expect(rolledBack).toBeDefined();
+      assert.strictEqual(rolledBack?.status, "rolled_back");
+      assert.ok(rolledBack !== undefined && rolledBack !== null);
     });
 
     it("should maintain transaction log during git restore", () => {
@@ -184,8 +176,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       transactionManager.transition(tx2.id, "speculative");
       const rb2 = transactionManager.rollback(tx2.id, "second-rollback");
 
-      expect(rb1?.status).toBe("rolled_back");
-      expect(rb2?.status).toBe("rolled_back");
+      assert.strictEqual(rb1?.status, "rolled_back");
+      assert.strictEqual(rb2?.status, "rolled_back");
     });
   });
 
@@ -201,8 +193,11 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       transactionManager.transition(tx.id, "speculative");
       const rolledBack = transactionManager.rollback(tx.id, "manifest-restore");
 
-      expect(rolledBack?.status).toBe("rolled_back");
-      expect(originalManifest.boundedContexts).toHaveLength(originalBcCount);
+      assert.strictEqual(rolledBack?.status, "rolled_back");
+      assert.strictEqual(
+        originalManifest.boundedContexts!.length,
+        originalBcCount,
+      );
     });
 
     it("should not modify original manifest during rollback", () => {
@@ -218,7 +213,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const afterRollback = JSON.stringify(originalManifest);
 
-      expect(beforeRollback).toBe(afterRollback);
+      assert.strictEqual(beforeRollback, afterRollback);
     });
 
     it("should verify manifest consistency post-rollback", () => {
@@ -234,9 +229,9 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
         "verify-consistency",
       );
 
-      expect(rolledBack?.status).toBe("rolled_back");
-      expect(manifest.boundedContexts).toBeDefined();
-      expect(Array.isArray(manifest.boundedContexts)).toBe(true);
+      assert.strictEqual(rolledBack?.status, "rolled_back");
+      assert.ok(manifest.boundedContexts !== undefined);
+      assert.strictEqual(Array.isArray(manifest.boundedContexts), true);
     });
   });
 
@@ -245,11 +240,11 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       const tx = transactionManager.begin("intent-transition");
       const speculative = transactionManager.transition(tx.id, "speculative");
 
-      expect(speculative?.status).toBe("speculative");
+      assert.strictEqual(speculative?.status, "speculative");
 
       const rolledBack = transactionManager.rollback(tx.id, "transition-test");
 
-      expect(rolledBack?.status).toBe("rolled_back");
+      assert.strictEqual(rolledBack?.status, "rolled_back");
     });
 
     it("should prevent further state changes after rollback", () => {
@@ -257,11 +252,10 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       transactionManager.transition(tx.id, "speculative");
       const rb = transactionManager.rollback(tx.id, "lock-test");
 
-      expect(rb?.status).toBe("rolled_back");
+      assert.strictEqual(rb?.status, "rolled_back");
 
-      // Further transition attempts will create new transaction
       const attempt2 = transactionManager.begin("intent-attempt-2");
-      expect(attempt2.status).toBe("pending");
+      assert.strictEqual(attempt2.status, "pending");
     });
 
     it("should record rollback state", () => {
@@ -270,8 +264,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const rolledBack = transactionManager.rollback(tx.id, "timestamp-test");
 
-      expect(rolledBack?.status).toBe("rolled_back");
-      expect(rolledBack).toBeDefined();
+      assert.strictEqual(rolledBack?.status, "rolled_back");
+      assert.ok(rolledBack !== undefined && rolledBack !== null);
     });
   });
 
@@ -285,10 +279,10 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       });
 
       const tx = manager.begin("intent-bp-1");
-      expect(backpressure.canAccept()).toBe(false);
+      assert.strictEqual(backpressure.canAccept(), false);
 
       manager.rollback(tx.id, "release-bp");
-      expect(backpressure.canAccept()).toBe(true);
+      assert.strictEqual(backpressure.canAccept(), true);
     });
 
     it("should allow new transactions after rollback", () => {
@@ -303,7 +297,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       manager.rollback(tx1.id, "release");
 
       const tx2 = manager.begin("intent-bp-2");
-      expect(tx2.status).toBe("pending");
+      assert.strictEqual(tx2.status, "pending");
     });
   });
 
@@ -317,8 +311,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       transactionManager.transition(tx2.id, "speculative");
       const rb2 = transactionManager.rollback(tx2.id, "seq-2");
 
-      expect(rb1?.status).toBe("rolled_back");
-      expect(rb2?.status).toBe("rolled_back");
+      assert.strictEqual(rb1?.status, "rolled_back");
+      assert.strictEqual(rb2?.status, "rolled_back");
     });
 
     it("should preserve isolation during rollbacks", () => {
@@ -331,8 +325,8 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       const rb1 = transactionManager.rollback(tx1.id, "rollback-1");
       const rb2 = transactionManager.rollback(tx2.id, "rollback-2");
 
-      expect(rb1?.status).toBe("rolled_back");
-      expect(rb2?.status).toBe("rolled_back");
+      assert.strictEqual(rb1?.status, "rolled_back");
+      assert.strictEqual(rb2?.status, "rolled_back");
     });
   });
 
@@ -343,7 +337,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
         "test-reason",
       );
 
-      expect(result).toBeNull();
+      assert.strictEqual(result, null);
     });
 
     it("should handle rollback with empty reason", () => {
@@ -352,7 +346,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       const rolledBack = transactionManager.rollback(tx.id, "");
 
-      expect(rolledBack?.status).toBe("rolled_back");
+      assert.strictEqual(rolledBack?.status, "rolled_back");
     });
   });
 });

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { NodeKind, EdgeKind } from "../../src/mvk/v1/index.js";
 import type {
   DomainAST,
@@ -117,7 +118,7 @@ describe("RRP Determinism Property Tests", () => {
         const hash2 = deterministicHash(rrp2);
         if (hash1 !== hash2) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
 
     it("should produce identical topological order for same AST", () => {
@@ -133,7 +134,7 @@ describe("RRP Determinism Property Tests", () => {
           failures++;
         }
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
 
     it("should produce identical node count for same AST", () => {
@@ -144,7 +145,7 @@ describe("RRP Determinism Property Tests", () => {
         const rrp2 = resolveRRPDeterministically(ast, "ctx", "rs");
         if (rrp1.nodes.length !== rrp2.nodes.length) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 
@@ -159,7 +160,7 @@ describe("RRP Determinism Property Tests", () => {
         const hash2 = deterministicHash(rrp2);
         if (hash1 === hash2) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
 
     it("should produce different hashes for different ruleSetHash", () => {
@@ -172,7 +173,7 @@ describe("RRP Determinism Property Tests", () => {
         const hash2 = deterministicHash(rrp2);
         if (hash1 === hash2) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 
@@ -191,7 +192,7 @@ describe("RRP Determinism Property Tests", () => {
           failures++;
         }
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
 
     it("should preserve edge source/target references", () => {
@@ -207,7 +208,7 @@ describe("RRP Determinism Property Tests", () => {
           }
         }
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 });

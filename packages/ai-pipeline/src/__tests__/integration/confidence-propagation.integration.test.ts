@@ -1,13 +1,6 @@
-/**
- * Integration test: Confidence Score Propagation
- *
- * Tests that confidence scores flow from parser → UseCase → SSE pipeline → UI.
- * Validates that low confidence triggers filtering and high confidence allows acceptance.
- */
-
+import assert from "node:assert/strict";
 import type { ParsedIntent } from "@hexagen/ai-pipeline";
 
-// Mock types
 interface ParseResult {
   success: boolean;
   value?: ParsedIntent;
@@ -31,10 +24,8 @@ interface SSEEvent {
   data?: unknown;
 }
 
-// Mock Parser
 class MockParser {
   parse(intent: string): ParseResult {
-    // Simulate confidence scoring
     const intentLength = intent.length;
     const confidence = Math.min(intentLength / 100, 1);
 
@@ -51,7 +42,6 @@ class MockParser {
   }
 }
 
-// Mock UseCase
 class MockModifyArchitectureUseCase {
   async execute(
     request: ArchitectureModificationRequest,
@@ -67,7 +57,6 @@ class MockModifyArchitectureUseCase {
   }
 }
 
-// Mock SSE Pipeline
 class MockSSEPipeline {
   private events: SSEEvent[] = [];
 
@@ -99,20 +88,20 @@ describe("Confidence Score Propagation - Integration Tests", () => {
     it("should generate confidence score from parser", () => {
       const result = parser.parse("Add a bounded context named Service");
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success && result.value) {
-        expect(result.value.confidence).toBeDefined();
-        expect(typeof result.value.confidence).toBe("number");
+        assert.ok(result.value.confidence !== undefined);
+        assert.strictEqual(typeof result.value.confidence, "number");
       }
     });
 
     it("should generate confidence between 0.0 and 1.0", () => {
       const result = parser.parse("Add a bounded context");
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success && result.value) {
-        expect(result.value.confidence).toBeGreaterThanOrEqual(0);
-        expect(result.value.confidence).toBeLessThanOrEqual(1);
+        assert.ok(result.value.confidence >= 0);
+        assert.ok(result.value.confidence <= 1);
       }
     });
 
@@ -124,14 +113,14 @@ describe("Confidence Score Propagation - Integration Tests", () => {
       const shortResult = parser.parse(shortIntent);
       const longResult = parser.parse(longIntent);
 
-      expect(shortResult.success).toBe(true);
-      expect(longResult.success).toBe(true);
+      assert.strictEqual(shortResult.success, true);
+      assert.strictEqual(longResult.success, true);
 
       if (shortResult.success && longResult.success) {
         const shortConf = shortResult.value?.confidence ?? 0;
         const longConf = longResult.value?.confidence ?? 0;
 
-        expect(longConf).toBeGreaterThan(shortConf);
+        assert.ok(longConf > shortConf);
       }
     });
 
@@ -139,10 +128,10 @@ describe("Confidence Score Propagation - Integration Tests", () => {
       const intent = "Add a bounded context named PaymentService";
       const result = parser.parse(intent);
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success && result.value) {
-        expect(result.value.originalText).toBe(intent);
-        expect(result.value.confidence).toBeDefined();
+        assert.strictEqual(result.value.originalText, intent);
+        assert.ok(result.value.confidence !== undefined);
       }
     });
   });
@@ -151,7 +140,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
     it("should pass confidence to ModifyArchitectureUseCase", async () => {
       const parseResult = parser.parse("Add a bounded context named Service1");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         const request: ArchitectureModificationRequest = {
           intent: parseResult.value.originalText,
@@ -160,14 +149,17 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
         const useCaseResult = await useCase.execute(request);
 
-        expect(useCaseResult.confidence).toBe(parseResult.value.confidence);
+        assert.strictEqual(
+          useCaseResult.confidence,
+          parseResult.value.confidence,
+        );
       }
     });
 
     it("should maintain confidence through UseCase pipeline", async () => {
       const parseResult = parser.parse("Add an entity named Order");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         const request: ArchitectureModificationRequest = {
           intent: parseResult.value.originalText,
@@ -177,14 +169,14 @@ describe("Confidence Score Propagation - Integration Tests", () => {
         const beforeUseCase = request.confidence;
         const useCaseResult = await useCase.execute(request);
 
-        expect(useCaseResult.confidence).toBe(beforeUseCase);
+        assert.strictEqual(useCaseResult.confidence, beforeUseCase);
       }
     });
 
     it("should use confidence to determine filtering", async () => {
       const parseResult = parser.parse("Add a");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         const request: ArchitectureModificationRequest = {
           intent: parseResult.value.originalText,
@@ -194,7 +186,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
         const useCaseResult = await useCase.execute(request);
 
         if ((request.confidence ?? 0) < 0.7) {
-          expect(useCaseResult.filtered).toBe(true);
+          assert.strictEqual(useCaseResult.filtered, true);
         }
       }
     });
@@ -209,7 +201,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.filtered).toBe(true);
+      assert.strictEqual(result.filtered, true);
     });
 
     it("should mark patches as filtered when confidence is low", async () => {
@@ -220,8 +212,8 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.confidence).toBeLessThan(0.7);
-      expect(result.filtered).toBe(true);
+      assert.ok(result.confidence < 0.7);
+      assert.strictEqual(result.filtered, true);
     });
 
     it("should provide confidence reason in filter response", async () => {
@@ -232,8 +224,8 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.filtered).toBe(true);
-      expect(result.confidence).toBeLessThan(0.7);
+      assert.strictEqual(result.filtered, true);
+      assert.ok(result.confidence < 0.7);
     });
   });
 
@@ -246,7 +238,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.filtered).toBe(false);
+      assert.strictEqual(result.filtered, false);
     });
 
     it("should not filter patches when confidence is high", async () => {
@@ -259,8 +251,8 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.filtered).toBe(false);
-      expect(result.confidence).toBeGreaterThanOrEqual(0.7);
+      assert.strictEqual(result.filtered, false);
+      assert.ok(result.confidence >= 0.7);
     });
   });
 
@@ -268,7 +260,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
     it("should emit confidence in SSE progress events", async () => {
       const parseResult = parser.parse("Add a bounded context named Service");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         pipeline.emit({
           type: "progress",
@@ -277,15 +269,15 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
         const event = pipeline.getLastEvent();
 
-        expect(event?.type).toBe("progress");
-        expect(event?.confidence).toBeDefined();
+        assert.strictEqual(event?.type, "progress");
+        assert.ok(event?.confidence !== undefined);
       }
     });
 
     it("should include confidence in SSE completion events", async () => {
       const parseResult = parser.parse("Add a bounded context");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         pipeline.emit({
           type: "complete",
@@ -295,8 +287,8 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
         const event = pipeline.getLastEvent();
 
-        expect(event?.type).toBe("complete");
-        expect(event?.confidence).toBeDefined();
+        assert.strictEqual(event?.type, "complete");
+        assert.ok(event?.confidence !== undefined);
       }
     });
 
@@ -309,9 +301,9 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const events = pipeline.getEvents();
 
-      expect(events).toHaveLength(3);
+      assert.strictEqual(events.length, 3);
       events.forEach((event) => {
-        expect(event.confidence).toBe(confidence);
+        assert.strictEqual(event.confidence, confidence);
       });
     });
   });
@@ -320,16 +312,16 @@ describe("Confidence Score Propagation - Integration Tests", () => {
     it("should provide confidence for UI rendering", async () => {
       const parseResult = parser.parse("Add a bounded context named Service1");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         const uiData = {
           confidence: parseResult.value.confidence,
           confidencePercentage: Math.round(parseResult.value.confidence * 100),
         };
 
-        expect(uiData.confidence).toBeGreaterThanOrEqual(0);
-        expect(uiData.confidencePercentage).toBeGreaterThanOrEqual(0);
-        expect(uiData.confidencePercentage).toBeLessThanOrEqual(100);
+        assert.ok(uiData.confidence >= 0);
+        assert.ok(uiData.confidencePercentage >= 0);
+        assert.ok(uiData.confidencePercentage <= 100);
       }
     });
 
@@ -338,22 +330,22 @@ describe("Confidence Score Propagation - Integration Tests", () => {
         "Add a bounded context named OrderManagementService with entities Order, OrderItem, Invoice";
       const parseResult = parser.parse(intent);
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         const isHighConfidence = parseResult.value.confidence >= 0.8;
 
-        expect(isHighConfidence).toBe(true);
+        assert.strictEqual(isHighConfidence, true);
       }
     });
 
     it("should indicate low confidence to user", () => {
       const parseResult = parser.parse("Add");
 
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
       if (parseResult.success && parseResult.value) {
         const isLowConfidence = parseResult.value.confidence < 0.5;
 
-        expect(isLowConfidence).toBe(true);
+        assert.strictEqual(isLowConfidence, true);
       }
     });
   });
@@ -370,7 +362,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const canAutoAccept = result.confidence >= 0.9 && !result.filtered;
 
-      expect(canAutoAccept).toBe(true);
+      assert.strictEqual(canAutoAccept, true);
     });
 
     it("should require user review for low confidence patches", async () => {
@@ -384,7 +376,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const requiresReview = result.confidence < 0.7 || result.filtered;
 
-      expect(requiresReview).toBe(true);
+      assert.strictEqual(requiresReview, true);
     });
 
     it("should provide manual review option for medium confidence", async () => {
@@ -398,8 +390,8 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
       const allowsManualReview = true;
 
-      expect(allowsManualReview).toBe(true);
-      expect(result.confidence).toBeGreaterThanOrEqual(0.7);
+      assert.strictEqual(allowsManualReview, true);
+      assert.ok(result.confidence >= 0.7);
     });
   });
 
@@ -419,7 +411,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
         const result = await useCase.execute(request);
 
-        expect(result.filtered).toBe(testCase.filtered);
+        assert.strictEqual(result.filtered, testCase.filtered);
       }
     });
 
@@ -434,7 +426,7 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
         const result = await useCase.execute(request);
 
-        expect(result.confidence).toBe(conf);
+        assert.strictEqual(result.confidence, conf);
       }
     });
   });
@@ -443,14 +435,12 @@ describe("Confidence Score Propagation - Integration Tests", () => {
     it("should flow confidence: Parser → UseCase → SSE → UI", async () => {
       const intent = "Add a bounded context named OrderService";
 
-      // 1. Parser generates confidence
       const parseResult = parser.parse(intent);
-      expect(parseResult.success).toBe(true);
+      assert.strictEqual(parseResult.success, true);
 
       if (parseResult.success && parseResult.value) {
         const parserConfidence = parseResult.value.confidence;
 
-        // 2. Pass to UseCase
         const request: ArchitectureModificationRequest = {
           intent,
           confidence: parserConfidence,
@@ -458,17 +448,15 @@ describe("Confidence Score Propagation - Integration Tests", () => {
 
         const useCaseResult = await useCase.execute(request);
 
-        // 3. Emit via SSE
         pipeline.emit({
           type: "complete",
           confidence: useCaseResult.confidence,
         });
 
-        // 4. UI receives it
         const sseEvent = pipeline.getLastEvent();
 
-        expect(sseEvent?.confidence).toBe(parserConfidence);
-        expect(sseEvent?.confidence).toBe(useCaseResult.confidence);
+        assert.strictEqual(sseEvent?.confidence, parserConfidence);
+        assert.strictEqual(sseEvent?.confidence, useCaseResult.confidence);
       }
     });
   });

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { CliLintValidationAdapter } from "../../../src/infrastructure/adapters/cli-lint-validation.adapter.js";
 
 jest.mock("node:child_process", () => ({
@@ -32,18 +33,19 @@ describe("CliLintValidationAdapter", () => {
       "/workspace/.architecture/manifest.yaml",
     );
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      expect(result.value.valid).toBe(true);
-      expect(result.value.errors).toHaveLength(0);
+      assert.strictEqual(result.value.valid, true);
+      assert.strictEqual(result.value.errors.length, 0);
     }
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "yarn",
-      ["lint:arch"],
-      expect.objectContaining({ cwd: "/workspace" }),
-      expect.any(Function),
+    assert.strictEqual(mockExecFile.mock.calls[0][0], "yarn");
+    assert.deepStrictEqual(mockExecFile.mock.calls[0][1], ["lint:arch"]);
+    assert.strictEqual(
+      (mockExecFile.mock.calls[0][2] as Record<string, unknown>).cwd,
+      "/workspace",
     );
+    assert.strictEqual(typeof mockExecFile.mock.calls[0][3], "function");
   });
 
   it("should return invalid with errors when lint:arch fails", async () => {
@@ -67,10 +69,10 @@ describe("CliLintValidationAdapter", () => {
       "/workspace/.architecture/manifest.yaml",
     );
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      expect(result.value.valid).toBe(false);
-      expect(result.value.errors.length).toBeGreaterThan(0);
+      assert.strictEqual(result.value.valid, false);
+      assert.ok(result.value.errors.length > 0);
     }
   });
 
@@ -90,9 +92,9 @@ describe("CliLintValidationAdapter", () => {
       "/workspace/.architecture/manifest.yaml",
     );
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      expect(result.value.valid).toBe(false);
+      assert.strictEqual(result.value.valid, false);
     }
   });
 });

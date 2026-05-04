@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { InMemorySpeculativeStateMachine } from "../../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";
 
@@ -24,8 +25,8 @@ describe("InMemorySpeculativeStateMachine", () => {
       const mutation = { type: "add_node" };
       const snapshotId = stateMachine.applySpeculative(ast, mutation);
 
-      expect(snapshotId).toBeDefined();
-      expect(typeof snapshotId).toBe("string");
+      assert.ok(snapshotId !== undefined);
+      assert.strictEqual(typeof snapshotId, "string");
     });
 
     it("should generate unique snapshot ids", () => {
@@ -33,7 +34,7 @@ describe("InMemorySpeculativeStateMachine", () => {
       const id1 = stateMachine.applySpeculative(ast, {});
       const id2 = stateMachine.applySpeculative(ast, {});
 
-      expect(id1).not.toBe(id2);
+      assert.notStrictEqual(id1, id2);
     });
   });
 
@@ -44,13 +45,13 @@ describe("InMemorySpeculativeStateMachine", () => {
 
       const result = stateMachine.commitSpeculative(snapshotId);
 
-      expect(result).toBe(true);
+      assert.strictEqual(result, true);
     });
 
     it("should return false for non-existent snapshot", () => {
       const result = stateMachine.commitSpeculative("non-existent");
 
-      expect(result).toBe(false);
+      assert.strictEqual(result, false);
     });
   });
 
@@ -61,14 +62,14 @@ describe("InMemorySpeculativeStateMachine", () => {
 
       const result = stateMachine.rollbackSpeculative(snapshotId);
 
-      expect(result).toBe(true);
-      expect(stateMachine.getSpeculativeState(snapshotId)).toBeNull();
+      assert.strictEqual(result, true);
+      assert.strictEqual(stateMachine.getSpeculativeState(snapshotId), null);
     });
 
     it("should return false for non-existent snapshot", () => {
       const result = stateMachine.rollbackSpeculative("non-existent");
 
-      expect(result).toBe(false);
+      assert.strictEqual(result, false);
     });
   });
 
@@ -80,14 +81,14 @@ describe("InMemorySpeculativeStateMachine", () => {
 
       const state = stateMachine.getSpeculativeState(snapshotId);
 
-      expect(state).toBeDefined();
-      expect(state!.nodes[0].id).toBe("node-1");
+      assert.ok(state !== undefined);
+      assert.strictEqual(state!.nodes[0].id, "node-1");
     });
 
     it("should return null for non-existent snapshot", () => {
       const state = stateMachine.getSpeculativeState("non-existent");
 
-      expect(state).toBeNull();
+      assert.strictEqual(state, null);
     });
 
     it("should not mutate the original AST", () => {
@@ -95,7 +96,7 @@ describe("InMemorySpeculativeStateMachine", () => {
       const originalNodeCount = ast.nodes.length;
       stateMachine.applySpeculative(ast, { type: "add_node" });
 
-      expect(ast.nodes.length).toBe(originalNodeCount);
+      assert.strictEqual(ast.nodes.length, originalNodeCount);
     });
   });
 });

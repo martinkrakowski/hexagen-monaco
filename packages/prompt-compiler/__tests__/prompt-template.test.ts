@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import {
   createPromptTemplate,
   renderPrompt,
@@ -58,14 +59,14 @@ describe("createPromptTemplate", () => {
     const t1 = createPromptTemplate("test", "sys", "user {{x}}", ctx);
     const t2 = createPromptTemplate("test", "sys", "user {{x}}", ctx);
 
-    expect(t1.id).not.toBe(t2.id);
+    assert.notStrictEqual(t1.id, t2.id);
   });
 
   it("should create a template with version 1", () => {
     const ctx = makeContext();
     const template = createPromptTemplate("test", "sys", "user {{x}}", ctx);
 
-    expect(template.version).toBe(1);
+    assert.strictEqual(template.version, 1);
   });
 
   it("should include provided variables", () => {
@@ -74,8 +75,8 @@ describe("createPromptTemplate", () => {
       { name: "x", description: "test var", defaultValue: "val" },
     ]);
 
-    expect(template.variables).toHaveLength(1);
-    expect(template.variables[0].name).toBe("x");
+    assert.strictEqual(template.variables.length, 1);
+    assert.strictEqual(template.variables[0].name, "x");
   });
 });
 
@@ -99,7 +100,7 @@ describe("renderPrompt", () => {
 
     const result = renderPrompt(template);
 
-    expect(result.userPrompt).toBe("Please add the entity.");
+    assert.strictEqual(result.userPrompt, "Please add the entity.");
   });
 
   it("should override default values with provided overrides", () => {
@@ -121,7 +122,7 @@ describe("renderPrompt", () => {
 
     const result = renderPrompt(template, { action: "remove" });
 
-    expect(result.userPrompt).toBe("Please remove the entity.");
+    assert.strictEqual(result.userPrompt, "Please remove the entity.");
   });
 
   it("should return system prompt unchanged", () => {
@@ -135,7 +136,7 @@ describe("renderPrompt", () => {
 
     const result = renderPrompt(template);
 
-    expect(result.systemPrompt).toBe("You are an architect.");
+    assert.strictEqual(result.systemPrompt, "You are an architect.");
   });
 
   it("should return empty string for variables without defaults or overrides", () => {
@@ -150,6 +151,6 @@ describe("renderPrompt", () => {
 
     const result = renderPrompt(template);
 
-    expect(result.userPrompt).toBe("Hello !");
+    assert.strictEqual(result.userPrompt, "Hello !");
   });
 });

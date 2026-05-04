@@ -11,7 +11,8 @@
  */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createCrossBoundaryRegistry,
   wireGovernanceToManifestReader,
@@ -93,15 +94,15 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       const report = await linter.lint(nonCompliant);
 
       // Assert: Violations reported with details
-      expect(report.isCompliant).toBe(false);
-      expect(report.violations.length).toBeGreaterThan(0);
+      assert.strictEqual(report.isCompliant, false);
+      assert.ok(report.violations.length > 0);
 
       // Verify violation details are present for field location
       const namingViolation = report.violations.find(
         (v) => v.code === "INVALID_PORT_NAMING",
       );
-      expect(namingViolation).toBeDefined();
-      expect(namingViolation?.details).toContain("invalid_port_name");
+      assert.ok(namingViolation !== undefined);
+      assert.ok(namingViolation?.details?.includes("invalid_port_name"));
 
       // Act: Wizard refines based on feedback
       const refinedManifest: CrossBoundaryManifest = {
@@ -117,8 +118,8 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       const refinedReport = await linter.lint(refinedManifest);
 
       // Assert: Violations cleared after refinement
-      expect(refinedReport.isCompliant).toBe(true);
-      expect(refinedReport.violations).toHaveLength(0);
+      assert.strictEqual(refinedReport.isCompliant, true);
+      assert.strictEqual(refinedReport.violations.length, 0);
     });
   });
 
@@ -182,7 +183,7 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       const v1Report = await versionTracker.lint(v1);
 
       // Assert: v1 tagged with version
-      expect(v1Report._versionTag).toBe("abc123");
+      assert.strictEqual(v1Report._versionTag, "abc123");
 
       // Act: Scan v2 (same content, different version)
       const v2 = { ...v1 };
@@ -190,13 +191,13 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       const v2Report = await versionTracker.lint(v2);
 
       // Assert: v2 has different version tag
-      expect(v2Report._versionTag).toBe("xyz789");
-      expect(v1Report._versionTag).not.toBe(v2Report._versionTag);
+      assert.strictEqual(v2Report._versionTag, "xyz789");
+      assert.notStrictEqual(v1Report._versionTag, v2Report._versionTag);
 
       // Assert: Cache has separate entries for each version
       const cache = versionTracker.getCache();
-      expect(cache.has("abc123")).toBe(true);
-      expect(cache.has("xyz789")).toBe(true);
+      assert.strictEqual(cache.has("abc123"), true);
+      assert.strictEqual(cache.has("xyz789"), true);
     });
   });
 
@@ -272,7 +273,7 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       const v1NodeCount = v1Graph.nodes.length;
 
       // Assert: v1 graph cached
-      expect(graphProvider.getCache().has(v1._version)).toBe(true);
+      assert.strictEqual(graphProvider.getCache().has(v1._version), true);
 
       // Act: Create v2 with additional context
       const v2: CrossBoundaryManifest = {
@@ -293,17 +294,18 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       const v2NodeCount = v2Graph.nodes.length;
 
       // Assert: v2 graph is different (more nodes)
-      expect(v2NodeCount).toBeGreaterThan(v1NodeCount);
+      assert.ok(v2NodeCount > v1NodeCount);
 
       // Assert: v2 has separate cache entry
-      expect(graphProvider.getCache().has(v2._version)).toBe(true);
-      expect(graphProvider.getCache().get(v1._version)).not.toBe(
+      assert.strictEqual(graphProvider.getCache().has(v2._version), true);
+      assert.notStrictEqual(
+        graphProvider.getCache().get(v1._version),
         graphProvider.getCache().get(v2._version),
       );
 
       // Assert: v1 cache entry still exists (not overwritten)
       const cachedV1Graph = graphProvider.getCache().get(v1._version);
-      expect(cachedV1Graph.nodes.length).toBe(v1NodeCount);
+      assert.strictEqual(cachedV1Graph.nodes.length, v1NodeCount);
     });
   });
 
@@ -323,14 +325,14 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       registerMockPort(registry2, PORT_NAMES.LINTER, linter2);
 
       // Linter2 should be independent
-      expect(linter1).not.toBe(linter2);
+      assert.notStrictEqual(linter1, linter2);
 
       // Both should work independently
       const result1 = await linter1.lint(manifest1);
       const result2 = await linter2.lint(manifest1);
 
-      expect(result1.isCompliant).toBe(true);
-      expect(result2.isCompliant).toBe(true);
+      assert.strictEqual(result1.isCompliant, true);
+      assert.strictEqual(result2.isCompliant, true);
     });
   });
 });

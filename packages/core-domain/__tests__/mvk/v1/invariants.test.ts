@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import {
   NodeKind,
   EdgeKind,
@@ -93,25 +94,25 @@ describe("Topology type guards", () => {
   };
 
   it("isAcyclicInvariant narrows Acyclic type", () => {
-    expect(isAcyclicInvariant(acyclic)).toBe(true);
-    expect(isAcyclicInvariant(connected)).toBe(false);
-    expect(isAcyclicInvariant(containment)).toBe(false);
-    expect(isAcyclicInvariant(degree)).toBe(false);
+    assert.strictEqual(isAcyclicInvariant(acyclic), true);
+    assert.strictEqual(isAcyclicInvariant(connected), false);
+    assert.strictEqual(isAcyclicInvariant(containment), false);
+    assert.strictEqual(isAcyclicInvariant(degree), false);
   });
 
   it("isConnectedInvariant narrows Connected type", () => {
-    expect(isConnectedInvariant(connected)).toBe(true);
-    expect(isConnectedInvariant(acyclic)).toBe(false);
+    assert.strictEqual(isConnectedInvariant(connected), true);
+    assert.strictEqual(isConnectedInvariant(acyclic), false);
   });
 
   it("isContainmentInvariant narrows Containment type", () => {
-    expect(isContainmentInvariant(containment)).toBe(true);
-    expect(isContainmentInvariant(acyclic)).toBe(false);
+    assert.strictEqual(isContainmentInvariant(containment), true);
+    assert.strictEqual(isContainmentInvariant(acyclic), false);
   });
 
   it("isDegreeConstraintInvariant narrows DegreeConstraint type", () => {
-    expect(isDegreeConstraintInvariant(degree)).toBe(true);
-    expect(isDegreeConstraintInvariant(acyclic)).toBe(false);
+    assert.strictEqual(isDegreeConstraintInvariant(degree), true);
+    assert.strictEqual(isDegreeConstraintInvariant(acyclic), false);
   });
 
   it("exactly one type guard returns true for each topology invariant", () => {
@@ -124,7 +125,7 @@ describe("Topology type guards", () => {
         isDegreeConstraintInvariant(inv),
       ];
       const trueCount = guards.filter(Boolean).length;
-      expect(trueCount).toBe(1);
+      assert.strictEqual(trueCount, 1);
     }
   });
 
@@ -135,7 +136,7 @@ describe("Topology type guards", () => {
       containment.type,
       degree.type,
     ];
-    expect(invariantTypes.sort()).toEqual(ALL_TOPOLOGY_TYPES.sort());
+    assert.deepStrictEqual(invariantTypes.sort(), ALL_TOPOLOGY_TYPES.sort());
   });
 });
 
@@ -158,23 +159,23 @@ describe("Cardinality type guards", () => {
   };
 
   it("isExactlyInvariant narrows Exactly type", () => {
-    expect(isExactlyInvariant(exactly)).toBe(true);
-    expect(isExactlyInvariant(atLeast)).toBe(false);
+    assert.strictEqual(isExactlyInvariant(exactly), true);
+    assert.strictEqual(isExactlyInvariant(atLeast), false);
   });
 
   it("isAtLeastInvariant narrows AtLeast type", () => {
-    expect(isAtLeastInvariant(atLeast)).toBe(true);
-    expect(isExactlyInvariant(atLeast)).toBe(false);
+    assert.strictEqual(isAtLeastInvariant(atLeast), true);
+    assert.strictEqual(isExactlyInvariant(atLeast), false);
   });
 
   it("isAtMostInvariant narrows AtMost type", () => {
-    expect(isAtMostInvariant(atMost)).toBe(true);
-    expect(isAtLeastInvariant(atMost)).toBe(false);
+    assert.strictEqual(isAtMostInvariant(atMost), true);
+    assert.strictEqual(isAtLeastInvariant(atMost), false);
   });
 
   it("isBetweenInvariant narrows Between type", () => {
-    expect(isBetweenInvariant(between)).toBe(true);
-    expect(isExactlyInvariant(between)).toBe(false);
+    assert.strictEqual(isBetweenInvariant(between), true);
+    assert.strictEqual(isExactlyInvariant(between), false);
   });
 
   it("exactly one type guard returns true for each cardinality invariant", () => {
@@ -187,7 +188,7 @@ describe("Cardinality type guards", () => {
         isBetweenInvariant(inv),
       ];
       const trueCount = guards.filter(Boolean).length;
-      expect(trueCount).toBe(1);
+      assert.strictEqual(trueCount, 1);
     }
   });
 
@@ -198,42 +199,42 @@ describe("Cardinality type guards", () => {
       atMost.type,
       between.type,
     ];
-    expect(invariantTypes.sort()).toEqual(ALL_CARDINALITY_TYPES.sort());
+    assert.deepStrictEqual(invariantTypes.sort(), ALL_CARDINALITY_TYPES.sort());
   });
 });
 
 describe("NodeKind enum exhaustiveness", () => {
   it("has expected number of values", () => {
-    expect(Object.values(NodeKind).length).toBeGreaterThan(0);
+    assert.ok(Object.values(NodeKind).length > 0);
   });
 
   it("all NodeKind values are strings", () => {
     for (const kind of Object.values(NodeKind)) {
-      expect(typeof kind).toBe("string");
+      assert.strictEqual(typeof kind, "string");
     }
   });
 
   it("NodeKind keys match values", () => {
     for (const [key, value] of Object.entries(NodeKind)) {
-      expect(key).toBe(value);
+      assert.strictEqual(key, value);
     }
   });
 });
 
 describe("EdgeKind enum exhaustiveness", () => {
   it("has expected number of values", () => {
-    expect(Object.values(EdgeKind).length).toBeGreaterThan(0);
+    assert.ok(Object.values(EdgeKind).length > 0);
   });
 
   it("all EdgeKind values are strings", () => {
     for (const kind of Object.values(EdgeKind)) {
-      expect(typeof kind).toBe("string");
+      assert.strictEqual(typeof kind, "string");
     }
   });
 
   it("EdgeKind keys match values", () => {
     for (const [key, value] of Object.entries(EdgeKind)) {
-      expect(key).toBe(value);
+      assert.strictEqual(key, value);
     }
   });
 });
@@ -245,8 +246,8 @@ describe("TopologyInvariant exhaustiveness with all EdgeKinds", () => {
         type: "Acyclic",
         payload: { appliesTo: [edgeKind] },
       };
-      expect(isAcyclicInvariant(inv)).toBe(true);
-      expect(inv.payload.appliesTo).toContain(edgeKind);
+      assert.strictEqual(isAcyclicInvariant(inv), true);
+      assert.ok(inv.payload.appliesTo.includes(edgeKind));
     }
   });
 
@@ -256,7 +257,7 @@ describe("TopologyInvariant exhaustiveness with all EdgeKinds", () => {
         type: "Connected",
         payload: { edgeKinds: [edgeKind] },
       };
-      expect(isConnectedInvariant(inv)).toBe(true);
+      assert.strictEqual(isConnectedInvariant(inv), true);
     }
   });
 
@@ -267,9 +268,9 @@ describe("TopologyInvariant exhaustiveness with all EdgeKinds", () => {
           type: "Containment",
           payload: { source, edgeKind: EdgeKind.Composition, target },
         };
-        expect(isContainmentInvariant(inv)).toBe(true);
-        expect(inv.payload.source).toBe(source);
-        expect(inv.payload.target).toBe(target);
+        assert.strictEqual(isContainmentInvariant(inv), true);
+        assert.strictEqual(inv.payload.source, source);
+        assert.strictEqual(inv.payload.target, target);
       }
     }
   });
@@ -282,8 +283,8 @@ describe("CardinalityInvariant exhaustiveness with all NodeKinds", () => {
         type: "Exactly",
         payload: { nodeKind, count: 1 },
       };
-      expect(isExactlyInvariant(inv)).toBe(true);
-      expect(inv.payload.nodeKind).toBe(nodeKind);
+      assert.strictEqual(isExactlyInvariant(inv), true);
+      assert.strictEqual(inv.payload.nodeKind, nodeKind);
     }
   });
 
@@ -299,8 +300,8 @@ describe("CardinalityInvariant exhaustiveness with all NodeKinds", () => {
           type: "Between",
           payload: { nodeKind, min, max },
         };
-        expect(isBetweenInvariant(inv)).toBe(true);
-        expect(inv.payload.min).toBeLessThanOrEqual(inv.payload.max);
+        assert.strictEqual(isBetweenInvariant(inv), true);
+        assert.ok(inv.payload.min <= inv.payload.max);
       }
     }
   });

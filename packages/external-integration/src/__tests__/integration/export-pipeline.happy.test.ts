@@ -6,7 +6,8 @@
  * Verifies that export can end-to-end process and emit events correctly.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createMockRegistry,
   registerMockPort,
@@ -31,16 +32,13 @@ describe("Export Pipeline — Happy Path", () => {
   let transactionAdapter: MockTransactionManagerAdapter;
 
   beforeEach(() => {
-    // Create fresh registry for each test
     registry = createMockRegistry();
 
-    // Create mock adapters (fresh instances per test)
     githubAdapter = new MockGitHubProviderAdapter();
     cloudStorageAdapter = new MockCloudStorageAdapter();
     streamAdapter = new MockSSEStreamAdapter();
     transactionAdapter = new MockTransactionManagerAdapter();
 
-    // Register mocks in registry with compile-time type safety
     registerMockPort(registry, PORT_NAMES.GITHUB_PROVIDER, githubAdapter);
     registerMockPort(registry, PORT_NAMES.CLOUD_STORAGE, cloudStorageAdapter);
     registerMockPort(registry, PORT_NAMES.SSE_STREAM, streamAdapter);
@@ -52,32 +50,25 @@ describe("Export Pipeline — Happy Path", () => {
   });
 
   it("happy path: exports to ZIP successfully", async () => {
-    // Arrange: Prepare export manifest and stream setup
     const manifest = createExportFixtureManifest();
 
-    // Simulate export pipeline events
     streamAdapter.emitEvent({ type: "step_running", step: "prepare" });
     streamAdapter.emitEvent({ type: "step_complete", status: "completed" });
     streamAdapter.emitEvent({ type: "step_running", step: "package" });
     streamAdapter.emitEvent({ type: "step_complete", status: "completed" });
 
-    // Act: Collect events from stream
     const events = await collectSSEEvents(streamAdapter.streamEvents());
 
-    // Assert: Verify export completed successfully
-    expect(events.length).toBeGreaterThan(0);
+    assert.ok(events.length > 0);
 
-    // Verify final event indicates completion
     const lastEvent = events[events.length - 1];
-    expect(lastEvent.type).toEqual("step_complete");
-    expect(lastEvent.status).toEqual("completed");
+    assert.deepStrictEqual(lastEvent.type, "step_complete");
+    assert.deepStrictEqual(lastEvent.status, "completed");
 
-    // Verify manifest was used
-    expect(manifest).toBeDefined();
+    assert.ok(manifest !== undefined);
   });
 
   it("happy path: emits events in correct order (no duplicates)", async () => {
-    // Arrange: Create a sequence of export events (no consecutive duplicates)
     const eventSequence = [
       { type: "step_running", step: "prepare" },
       { type: "step_complete", status: "completed" },
@@ -87,102 +78,80 @@ describe("Export Pipeline — Happy Path", () => {
       { type: "step_complete", status: "completed" },
     ];
 
-    // Act: Emit all events
     eventSequence.forEach((event) => streamAdapter.emitEvent(event));
 
-    // Collect events
     const events = await collectSSEEvents(streamAdapter.streamEvents());
 
-    // Assert: Verify event count
-    expect(events.length).toBe(eventSequence.length);
+    assert.strictEqual(events.length, eventSequence.length);
 
-    // Verify event types match sequence
     const eventTypes = events.map((e) => e.type);
     const expectedTypes = eventSequence.map((e) => e.type);
-    expect(eventTypes).toEqual(expectedTypes);
+    assert.deepStrictEqual(eventTypes, expectedTypes);
 
-    // Verify no consecutive duplicates
-    expect(streamAdapter.hasConsecutiveDuplicates()).toBe(false);
+    assert.strictEqual(streamAdapter.hasConsecutiveDuplicates(), false);
   });
 
   it("happy path: cloud storage uploads succeed", async () => {
-    // Arrange: Prepare upload payload
-    const zipContent = Buffer.from("PK\x03\x04"); // ZIP file header
+    const zipContent = Buffer.from("PK\x03\x04");
     const uploadOptions = {
       bucket: "test-bucket",
       key: "exports/project.zip",
       body: zipContent,
     };
 
-    // Act: Upload to cloud storage
     const uploadResult = await cloudStorageAdapter.uploadObject(uploadOptions);
 
-    // Assert: Verify upload succeeded
-    expect(uploadResult.success).toBe(true);
-    expect(uploadResult.url).toBeDefined();
-    expect(uploadResult.url).toContain("test-bucket");
-    expect(uploadResult.url).toContain("project.zip");
+    assert.strictEqual(uploadResult.success, true);
+    assert.ok(uploadResult.url !== undefined);
+    assert.ok(uploadResult.url.includes("test-bucket"));
+    assert.ok(uploadResult.url.includes("project.zip"));
   });
 
   it("happy path: presigned URLs are generated", async () => {
-    // Arrange: Request presigned URL
     const urlOptions = {
       bucket: "test-bucket",
       key: "exports/project.zip",
     };
 
-    // Act: Generate presigned URL
     const urlResult =
       await cloudStorageAdapter.generatePresignedUrl(urlOptions);
 
-    // Assert: Verify URL generation succeeded
-    expect(urlResult.success).toBe(true);
-    expect(urlResult.url).toBeDefined();
-    expect(urlResult.url).toContain("token=");
+    assert.strictEqual(urlResult.success, true);
+    assert.ok(urlResult.url !== undefined);
+    assert.ok(urlResult.url.includes("token="));
   });
 
   it("happy path: GitHub authentication and repository creation succeed", async () => {
-    // Arrange: Prepare GitHub provider
     const token = "fake-github-token";
 
-    // Act: Authenticate and create repository
     const authResult = await githubAdapter.authenticate(token);
     const repoResult = await githubAdapter.createRepository({
       name: "test-project",
       description: "Generated project",
     });
 
-    // Assert: Verify GitHub operations succeeded
-    expect(authResult.success).toBe(true);
-    expect(repoResult.success).toBe(true);
-    expect(repoResult.url).toBeDefined();
-    expect(repoResult.url).toContain("test-project");
+    assert.strictEqual(authResult.success, true);
+    assert.strictEqual(repoResult.success, true);
+    assert.ok(repoResult.url !== undefined);
+    assert.ok(repoResult.url.includes("test-project"));
   });
 
   it("happy path: transaction management tracks commits", async () => {
-    // Arrange: Create a transaction
     const txnId = "export-txn-001";
 
-    // Act: Begin, commit transaction
     await transactionAdapter.beginTransaction(txnId);
     const commitResult = await transactionAdapter.commit(txnId);
 
-    // Assert: Verify transaction was committed
-    expect(commitResult.success).toBe(true);
+    assert.strictEqual(commitResult.success, true);
 
-    // Verify commit was recorded
     const commits = transactionAdapter.getCommits();
-    expect(commits.length).toBe(1);
-    expect(commits[0].id).toEqual(txnId);
+    assert.strictEqual(commits.length, 1);
+    assert.deepStrictEqual(commits[0].id, txnId);
 
-    // Verify no active transactions remain
-    expect(transactionAdapter.getActiveTransactions()).toHaveLength(0);
+    assert.strictEqual(transactionAdapter.getActiveTransactions().length, 0);
   });
 
   it("happy path: registry provides export mocks", async () => {
-    // Arrange: All mocks are registered above
-
-    // Act: Retrieve mocks from registry using type-safe constants
     const github = getMockPort<MockGitHubProviderAdapter>(
       registry,
       PORT_NAMES.GITHUB_PROVIDER,
@@ -200,57 +169,45 @@ describe("Export Pipeline — Happy Path", () => {
       PORT_NAMES.TRANSACTION_MANAGER,
     );
 
-    // Assert: All mocks are available
-    expect(github).toBeDefined();
-    expect(cloudStorage).toBeDefined();
-    expect(stream).toBeDefined();
-    expect(transactionManager).toBeDefined();
+    assert.ok(github !== undefined);
+    assert.ok(cloudStorage !== undefined);
+    assert.ok(stream !== undefined);
+    assert.ok(transactionManager !== undefined);
 
-    // Verify they're the right types
-    expect(typeof github.authenticate).toBe("function");
-    expect(typeof cloudStorage.uploadObject).toBe("function");
-    expect(typeof transactionManager.commit).toBe("function");
+    assert.strictEqual(typeof github.authenticate, "function");
+    assert.strictEqual(typeof cloudStorage.uploadObject, "function");
+    assert.strictEqual(typeof transactionManager.commit, "function");
   });
 
   it("happy path: fixture manifest is valid", async () => {
-    // Arrange: Load fixture manifest
     const fixture = createExportFixtureManifest();
 
-    // Assert: Verify fixture structure
-    expect(fixture).toHaveProperty("system");
-    expect(fixture).toHaveProperty("bounded_contexts");
-    expect(fixture.system).toEqual("test-hexagen-export");
+    assert.ok("system" in fixture);
+    assert.ok("bounded_contexts" in fixture);
+    assert.deepStrictEqual(fixture.system, "test-hexagen-export");
 
-    // Verify bounded contexts include external-integration
     const boundedContexts = (fixture as any).bounded_contexts;
-    expect(Array.isArray(boundedContexts)).toBe(true);
+    assert.strictEqual(Array.isArray(boundedContexts), true);
 
     const contextNames = boundedContexts.map((bc: any) => bc.name);
-    expect(contextNames).toContain("external-integration");
+    assert.ok(contextNames.includes("external-integration"));
   });
 
   it("happy path: stream events maintain timestamp ordering", async () => {
-    // Arrange: Create events (no artificial delays — test behavior, not timing)
     streamAdapter.emitEvent({ type: "step_running", step: "export" });
     streamAdapter.emitEvent({ type: "step_complete", status: "completed" });
 
-    // Act: Collect events
     const events = await collectSSEEvents(streamAdapter.streamEvents());
 
-    // Assert: Verify events exist and timestamps are valid
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    assert.ok(events.length >= 2);
 
-    // Verify each event has a valid timestamp (non-zero, number type)
     for (const event of events) {
-      expect(event.timestamp).toBeGreaterThan(0);
-      expect(typeof event.timestamp).toBe("number");
+      assert.ok(event.timestamp > 0);
+      assert.strictEqual(typeof event.timestamp, "number");
     }
 
-    // ✅ Verify timestamp ordering (behavior check, not timing window)
     for (let i = 1; i < events.length; i++) {
-      expect(events[i].timestamp).toBeGreaterThanOrEqual(
-        events[i - 1].timestamp,
-      );
+      assert.ok(events[i].timestamp >= events[i - 1].timestamp);
     }
   });
 });

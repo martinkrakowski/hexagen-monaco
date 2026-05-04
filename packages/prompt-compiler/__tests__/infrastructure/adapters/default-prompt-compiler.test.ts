@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { DefaultPromptCompilerAdapter } from "../../../src/infrastructure/adapters/default-prompt-compiler.adapter";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import type { ArchitectureGraph } from "@hexagen/visualization";
@@ -69,18 +70,18 @@ describe("DefaultPromptCompilerAdapter", () => {
         makeRequest({ name: "add-entity" }),
       );
 
-      expect(template.name).toBe("add-entity");
-      expect(template.systemPrompt).toBeDefined();
-      expect(template.systemPrompt.length).toBeGreaterThan(0);
-      expect(template.userPromptTemplate).toBeDefined();
-      expect(template.variables.length).toBeGreaterThan(0);
+      assert.strictEqual(template.name, "add-entity");
+      assert.ok(template.systemPrompt !== undefined);
+      assert.ok(template.systemPrompt.length > 0);
+      assert.ok(template.userPromptTemplate !== undefined);
+      assert.ok(template.variables.length > 0);
     });
 
     it("should include manifest as a variable", async () => {
       const template = await adapter.compile(makeRequest());
 
       const manifestVar = template.variables.find((v) => v.name === "manifest");
-      expect(manifestVar).toBeDefined();
+      assert.ok(manifestVar !== undefined);
     });
 
     it("should include architectureGraph as a variable", async () => {
@@ -89,7 +90,7 @@ describe("DefaultPromptCompilerAdapter", () => {
       const graphVar = template.variables.find(
         (v) => v.name === "architectureGraph",
       );
-      expect(graphVar).toBeDefined();
+      assert.ok(graphVar !== undefined);
     });
 
     it("should include linterReport as a variable", async () => {
@@ -98,7 +99,7 @@ describe("DefaultPromptCompilerAdapter", () => {
       const reportVar = template.variables.find(
         (v) => v.name === "linterReport",
       );
-      expect(reportVar).toBeDefined();
+      assert.ok(reportVar !== undefined);
     });
   });
 
@@ -108,9 +109,9 @@ describe("DefaultPromptCompilerAdapter", () => {
 
       const rendered = adapter.render(template);
 
-      expect(rendered.systemPrompt).toBeDefined();
-      expect(rendered.userPrompt).toBeDefined();
-      expect(rendered.variables).toBeDefined();
+      assert.ok(rendered.systemPrompt !== undefined);
+      assert.ok(rendered.userPrompt !== undefined);
+      assert.ok(rendered.variables !== undefined);
     });
   });
 });

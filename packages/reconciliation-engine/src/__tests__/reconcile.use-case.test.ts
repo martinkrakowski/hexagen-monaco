@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { ReconcileUseCase } from "../application/use-cases/reconcile.use-case.js";
 import { StructuredDiffReconciliationAdapter } from "../infrastructure/adapters/structured-diff-reconciliation.adapter.js";
 import { VerdictComparatorAdapter } from "../infrastructure/adapters/verdict-comparator.adapter.js";
@@ -56,9 +57,9 @@ describe("ReconcileUseCase", () => {
 
     const result = await useCase.execute(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
-    expect(result.patches.some((p) => p.type === "add_node")).toBe(true);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 1);
+    assert.ok(result.patches.some((p) => p.type === "add_node"));
   });
 
   it("should reconcile removed bounded contexts", async () => {
@@ -70,8 +71,8 @@ describe("ReconcileUseCase", () => {
 
     const result = await useCase.execute(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 1);
   });
 
   it("should return empty patches when no changes", async () => {
@@ -83,8 +84,8 @@ describe("ReconcileUseCase", () => {
 
     const result = await useCase.execute(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(0);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 0);
   });
 
   it("should propagate diff errors from failing adapter", async () => {
@@ -102,8 +103,8 @@ describe("ReconcileUseCase", () => {
 
     const result = await failingUseCase.execute(request);
 
-    expect(result.success).toBe(false);
-    expect(result.errors).toContain("Diff failed");
+    assert.strictEqual(result.success, false);
+    assert.ok(result.errors.includes("Diff failed"));
   });
 
   it("should handle mixed changes across contexts and graph", async () => {
@@ -123,8 +124,8 @@ describe("ReconcileUseCase", () => {
 
     const result = await useCase.execute(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(3);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 3);
   });
 });
 
@@ -176,9 +177,9 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request, undefined, report);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(0);
-    expect(result.summary).toContain("1 rejected");
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 0);
+    assert.ok(result.summary.includes("1 rejected"));
   });
 
   it("should not filter patches when lint report is compliant", async () => {
@@ -198,8 +199,8 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request, undefined, report);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 1);
   });
 
   it("should pass through patches when no lint report is provided", async () => {
@@ -217,8 +218,8 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 1);
   });
 
   it("should reject patch when lint report has error on target file", async () => {
@@ -245,9 +246,9 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request, undefined, report);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(0);
-    expect(result.summary).toContain("rejected");
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 0);
+    assert.ok(result.summary.includes("rejected"));
   });
 
   it("should accept patch when lint report is clean", async () => {
@@ -267,8 +268,8 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request, undefined, report);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 1);
   });
 
   it("should accept all patches when no linter report provided", async () => {
@@ -286,8 +287,8 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches.length).toBeGreaterThanOrEqual(1);
+    assert.strictEqual(result.success, true);
+    assert.ok(result.patches.length >= 1);
   });
 
   it("should reject patches when lint report has errors even without LintFilterPort", async () => {
@@ -314,8 +315,8 @@ describe("ReconcileUseCase with LintFilterPort", () => {
 
     const result = await useCase.execute(request, undefined, report);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(0);
-    expect(result.summary).toContain("rejected");
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 0);
+    assert.ok(result.summary.includes("rejected"));
   });
 });

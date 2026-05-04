@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { DefaultNodeVisualMapperAdapter } from "../../../src/infrastructure/adapters/default-node-visual-mapper.adapter.js";
 import { CvaVariantResolverAdapter } from "../../../src/infrastructure/adapters/cva-variant-resolver.adapter.js";
 import type { NodeVisualSpec } from "@hexagen/core-domain";
@@ -14,8 +15,8 @@ describe("DefaultNodeVisualMapperAdapter", () => {
       label: "User",
     };
     const projection = adapter.map(spec);
-    expect(projection.category).toBe("entity");
-    expect(projection.variant.category).toBe("entity");
+    assert.strictEqual(projection.category, "entity");
+    assert.strictEqual(projection.variant.category, "entity");
   });
 
   it("honors explicit category hint over kind", () => {
@@ -26,7 +27,7 @@ describe("DefaultNodeVisualMapperAdapter", () => {
       category: "port",
     };
     const projection = adapter.map(spec);
-    expect(projection.category).toBe("port");
+    assert.strictEqual(projection.category, "port");
   });
 
   it("maps a Controller kind to presentation", () => {
@@ -36,7 +37,7 @@ describe("DefaultNodeVisualMapperAdapter", () => {
       label: "UsersController",
     };
     const projection = adapter.map(spec);
-    expect(projection.category).toBe("presentation");
+    assert.strictEqual(projection.category, "presentation");
   });
 
   it("falls back to default for unknown kind", () => {
@@ -46,7 +47,7 @@ describe("DefaultNodeVisualMapperAdapter", () => {
       label: "MysteriousThing",
     };
     const projection = adapter.map(spec);
-    expect(projection.category).toBe("default");
+    assert.strictEqual(projection.category, "default");
   });
 
   it("produces a hash-stable NodeVisualProjection for the same inputs", () => {
@@ -57,7 +58,7 @@ describe("DefaultNodeVisualMapperAdapter", () => {
     };
     const a = adapter.map(spec);
     const b = adapter.map(spec);
-    expect(a).toEqual(b);
+    assert.deepStrictEqual(a, b);
   });
 
   it("carries the spec label through to the projection", () => {
@@ -67,6 +68,6 @@ describe("DefaultNodeVisualMapperAdapter", () => {
       label: "User",
     };
     const projection = adapter.map(spec);
-    expect(projection.label).toBe("User");
+    assert.strictEqual(projection.label, "User");
   });
 });

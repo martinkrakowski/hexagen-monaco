@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -21,8 +22,8 @@ async function withTempWorkspace<T>(
   }
 }
 
-(async () => {
-  {
+describe("manifest write adapter", () => {
+  it("should return valid when both contexts exist for validateDependency", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [{ name: "foo" }, { name: "bar" }],
@@ -38,12 +39,9 @@ async function withTempWorkspace<T>(
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.valid, true);
     assert.deepStrictEqual(result.value.errors, []);
-  }
-  console.log(
-    "  ✅ validateDependency: returns valid when both contexts exist",
-  );
+  });
 
-  {
+  it("should return error when source does not exist for validateDependency", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "bar" }] },
       async (workspaceRoot) => {
@@ -57,12 +55,9 @@ async function withTempWorkspace<T>(
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.valid, false);
     assert.ok(result.value.errors.some((e) => e.includes("foo")));
-  }
-  console.log(
-    "  ✅ validateDependency: returns error when source does not exist",
-  );
+  });
 
-  {
+  it("should return error when target does not exist for validateDependency", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "foo" }] },
       async (workspaceRoot) => {
@@ -76,12 +71,9 @@ async function withTempWorkspace<T>(
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.valid, false);
     assert.ok(result.value.errors.some((e) => e.includes("bar")));
-  }
-  console.log(
-    "  ✅ validateDependency: returns error when target does not exist",
-  );
+  });
 
-  {
+  it("should return error when source equals target for validateDependency", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "foo" }] },
       async (workspaceRoot) => {
@@ -95,12 +87,9 @@ async function withTempWorkspace<T>(
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.valid, false);
     assert.ok(result.value.errors.some((e) => e.includes("same")));
-  }
-  console.log(
-    "  ✅ validateDependency: returns error when source equals target",
-  );
+  });
 
-  {
+  it("should add target to source depends_on for addDependency", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [{ name: "foo" }, { name: "bar" }],
@@ -115,10 +104,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.updated, true);
-  }
-  console.log("  ✅ addDependency: adds target to source depends_on");
+  });
 
-  {
+  it("should return error when source does not exist for addDependency", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [{ name: "bar" }],
@@ -133,10 +121,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, false);
     assert.ok((result.error as Error).message.includes("foo"));
-  }
-  console.log("  ✅ addDependency: returns error when source does not exist");
+  });
 
-  {
+  it("should register new context with registerBoundedContext", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "existing" }] },
       async (workspaceRoot) => {
@@ -147,10 +134,9 @@ async function withTempWorkspace<T>(
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.registered, true);
     assert.strictEqual(result.value.alreadyExisted, false);
-  }
-  console.log("  ✅ registerBoundedContext: registers new context");
+  });
 
-  {
+  it("should return alreadyExisted when context exists for registerBoundedContext", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "foo" }] },
       async (workspaceRoot) => {
@@ -161,12 +147,9 @@ async function withTempWorkspace<T>(
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.registered, false);
     assert.strictEqual(result.value.alreadyExisted, true);
-  }
-  console.log(
-    "  ✅ registerBoundedContext: returns alreadyExisted when context exists",
-  );
+  });
 
-  {
+  it("should register inbound port with registerPort", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [
@@ -189,10 +172,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.registered, true);
-  }
-  console.log("  ✅ registerPort: registers inbound port");
+  });
 
-  {
+  it("should return registered=false when port already present for registerPort", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [
@@ -215,12 +197,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.registered, false);
-  }
-  console.log(
-    "  ✅ registerPort: returns registered=false when already present",
-  );
+  });
 
-  {
+  it("should return error when context not found for registerPort", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "billing" }] },
       async (workspaceRoot) => {
@@ -234,10 +213,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, false);
     assert.ok((result.error as Error).message.includes("nonexistent"));
-  }
-  console.log("  ✅ registerPort: returns error when context not found");
+  });
 
-  {
+  it("should register adapter with registerAdapter", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [
@@ -260,10 +238,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.registered, true);
-  }
-  console.log("  ✅ registerAdapter: registers adapter");
+  });
 
-  {
+  it("should return error when context not found for registerAdapter", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "billing" }] },
       async (workspaceRoot) => {
@@ -277,10 +254,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, false);
     assert.ok((result.error as Error).message.includes("nonexistent"));
-  }
-  console.log("  ✅ registerAdapter: returns error when context not found");
+  });
 
-  {
+  it("should remove existing port with removePort", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [
@@ -303,10 +279,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.removed, true);
-  }
-  console.log("  ✅ removePort: removes existing port");
+  });
 
-  {
+  it("should return removed=false when port not found for removePort", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [
@@ -329,10 +304,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.removed, false);
-  }
-  console.log("  ✅ removePort: returns removed=false when port not found");
+  });
 
-  {
+  it("should return error when context not found for removePort", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "billing" }] },
       async (workspaceRoot) => {
@@ -346,10 +320,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, false);
     assert.ok((result.error as Error).message.includes("nonexistent"));
-  }
-  console.log("  ✅ removePort: returns error when context not found");
+  });
 
-  {
+  it("should remove existing context with removeContext", async () => {
     const result = await withTempWorkspace(
       {
         bounded_contexts: [{ name: "billing" }, { name: "shipping" }],
@@ -361,10 +334,9 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.removed, true);
-  }
-  console.log("  ✅ removeContext: removes existing context");
+  });
 
-  {
+  it("should return removed=false when context not found for removeContext", async () => {
     const result = await withTempWorkspace(
       { bounded_contexts: [{ name: "billing" }] },
       async (workspaceRoot) => {
@@ -374,10 +346,5 @@ async function withTempWorkspace<T>(
     );
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.value.removed, false);
-  }
-  console.log(
-    "  ✅ removeContext: returns removed=false when context not found",
-  );
-
-  console.log("✅ manifest-write.adapter tests passed");
-})();
+  });
+});
