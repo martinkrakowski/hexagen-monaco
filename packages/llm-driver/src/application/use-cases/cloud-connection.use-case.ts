@@ -56,7 +56,7 @@ export function createCloudConnectionUseCase(
   ): Promise<CloudConnectionResult> => {
     let state: CloudConnectionMachineState = createInitialMachineState();
 
-    state = transitionToConnecting(state);
+    state = transitionToConnecting();
 
     try {
       const vaultResult = await withTimeout(
@@ -77,7 +77,7 @@ export function createCloudConnectionUseCase(
         };
       }
 
-      state = transitionToConnected(state);
+      state = transitionToConnected();
       return {
         success: true,
         config,
