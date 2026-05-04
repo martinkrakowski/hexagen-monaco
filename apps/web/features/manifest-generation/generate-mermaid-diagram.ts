@@ -1,4 +1,4 @@
-import type { ManifestViewData } from "./manifest-view-data";
+import type { ManifestViewData } from "@hexagen/manifest-generation";
 
 export function generateMermaidDiagram(viewData: ManifestViewData): string {
   let c = `%%{init:{"theme":"dark","themeVariables":{"primaryColor":"#111c30","primaryTextColor":"#f1f5f9","primaryBorderColor":"#1a2744","lineColor":"#334155","secondaryColor":"#0c1322","tertiaryColor":"#060b14","background":"#060b14","mainBkg":"#111c30","nodeBorder":"#334155","clusterBkg":"#0c1322","clusterBorder":"#1a2744","edgeLabelBackground":"#111c30","fontFamily":"Outfit","fontSize":"12px"}}}%%\nclassDiagram\n\n`;

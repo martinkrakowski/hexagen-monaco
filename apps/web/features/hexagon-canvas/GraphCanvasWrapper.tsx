@@ -1,33 +1,28 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import { ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { ReactFlowProvider } from "@xyflow/react";
 import { useCanvasState } from "./hooks/useCanvasState";
-import { useCanvasHistory } from "./hooks/useCanvasHistory";
+import { useCanvasViewportManager } from "./hooks/use-canvas-viewport-manager";
+import { useCanvasHistoryController } from "./hooks/use-canvas-history-controller";
 import { HexagonCanvas } from "./HexagonCanvas";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { NodeEditorDialog } from "./NodeEditorDialog";
 import type { WizardData } from "@hexagen/project-configuration";
 import type { Result } from "@hexagen/shared";
+import { useState, useCallback } from "react";
 
 interface GraphCanvasWrapperProps {
   projectId?: string;
   wizardData?: WizardData;
 }
 
-/**
- * Inner component that has access to React Flow instance for viewport control
- */
 function GraphCanvasInner({ projectId, wizardData }: GraphCanvasWrapperProps) {
   const state = useCanvasState(projectId, wizardData);
-  const { undo, redo, canUndo, canRedo } = useCanvasHistory();
-  const reactFlowInstance = useReactFlow();
+  const { undo, redo, canUndo, canRedo } = useCanvasHistoryController();
+  const { shouldFitViewRef } = useCanvasViewportManager({ state });
   const [exportHandler, setExportHandler] = useState<
     (() => Promise<Result<Blob, Error>>) | null
   >(null);
-
-  // Track if we should fit view after next render
-  const shouldFitViewRef = useRef(false);
 
   const handleExportClick = useCallback(
     (handler: () => Promise<Result<Blob, Error>>) => {
@@ -36,7 +31,7 @@ function GraphCanvasInner({ projectId, wizardData }: GraphCanvasWrapperProps) {
     [],
   );
 
-  const handleExport = useCallback(async () => {
+  const onExport = useCallback(async () => {
     if (!exportHandler) {
       alert("Export is not available in this context");
       return;
@@ -57,63 +52,21 @@ function GraphCanvasInner({ projectId, wizardData }: GraphCanvasWrapperProps) {
     URL.revokeObjectURL(url);
   }, [exportHandler]);
 
-  /**
-   * Fit view with smooth animation
-   */
-  const fitView = useCallback(() => {
-    if (reactFlowInstance) {
-      reactFlowInstance.fitView({
-        padding: 0.2,
-        duration: 800,
-      });
-    }
-  }, [reactFlowInstance]);
-
-  /**
-   * Handle undo with viewport orchestration
-   */
   const handleUndo = useCallback(() => {
     undo();
     shouldFitViewRef.current = true;
-  }, [undo]);
+  }, [undo, shouldFitViewRef]);
 
-  /**
-   * Handle redo with viewport orchestration
-   */
   const handleRedo = useCallback(() => {
     redo();
     shouldFitViewRef.current = true;
-  }, [redo]);
+  }, [redo, shouldFitViewRef]);
 
-  /**
-   * Handle clean-up (recalculate layout)
-   * Clears localStorage positions first to force fresh ELK layout calculation
-   */
   const handleCleanup = useCallback(async () => {
     if ("error" in state) return;
-
-    // Clear localStorage positions to force fresh layout calculation
     await state.clearCanvasLayout();
     shouldFitViewRef.current = true;
-  }, [state]);
-
-  /**
-   * Fit view after state changes if requested
-   */
-  useEffect(() => {
-    if (
-      shouldFitViewRef.current &&
-      !("error" in state) &&
-      !state.isLayoutCalculating
-    ) {
-      // Small delay to ensure nodes are rendered
-      const timer = setTimeout(() => {
-        fitView();
-        shouldFitViewRef.current = false;
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [state, fitView]);
+  }, [state, shouldFitViewRef]);
 
   if ("error" in state) {
     return (
@@ -146,7 +99,7 @@ function GraphCanvasInner({ projectId, wizardData }: GraphCanvasWrapperProps) {
     <div className="w-full h-full min-h-96 flex flex-col">
       <CanvasToolbar
         onAddNode={state.onAddNode}
-        onExport={handleExport}
+        onExport={onExport}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onCleanup={handleCleanup}
@@ -174,9 +127,6 @@ function GraphCanvasInner({ projectId, wizardData }: GraphCanvasWrapperProps) {
   );
 }
 
-/**
- * Main wrapper component with React Flow Provider
- */
 export function GraphCanvasWrapper({
   projectId,
   wizardData,
@@ -187,5 +137,3 @@ export function GraphCanvasWrapper({
     </ReactFlowProvider>
   );
 }
-
-// Made with Bob

@@ -1,213 +1,196 @@
 /**
- * Hook for managing manifest generation from natural language
+ * Unified hook for manifest generation from natural language.
+ * Supports both local (WebLLM) and server (API) generation modes.
  */
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import { classifyError, ERROR_MESSAGES, ErrorCategory } from "./errorMessages";
-
-interface GenerationMetadata {
-  model: string;
-  processingTime: number;
-  tokensUsed: number;
-  provider?: string;
-}
-
-interface GeneratedManifest {
-  manifest: string;
-  confidence: number;
-  suggestions: string[];
-  warnings: string[];
-  metadata: GenerationMetadata;
-}
+import { useState, useCallback, useEffect } from "react";
+import type { GeneratedManifest } from "@hexagen/agentic-interaction";
+import { getClientManifestGenerationUseCase } from "../../app/lib/wire";
+import { getServerManifestGenerationUseCase } from "../../app/lib/wire";
 
 interface GenerationState {
   status: "idle" | "generating" | "success" | "error";
   result: GeneratedManifest | null;
   error: string | null;
-  errorCategory: ErrorCategory | null;
   retryCount: number;
 }
 
-const MAX_RETRIES = 3;
-const BASE_BACKOFF_MS = 1000;
+export type ManifestGenerationMode = "local" | "server";
+
+export interface UseManifestGenerationOptions {
+  mode?: ManifestGenerationMode;
+  modelId?: string;
+}
 
 export function useManifestGeneration() {
   const [state, setState] = useState<GenerationState>({
     status: "idle",
     result: null,
     error: null,
-    errorCategory: null,
     retryCount: 0,
   });
 
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortController?.abort();
     };
-  }, []);
+  }, [abortController]);
 
   const generate = useCallback(
-    async (
-      description: string,
-      options?: {
-        language?: string;
-        platform?: string;
-        deployment?: string;
-        additionalContext?: string;
-        preferLocal?: boolean;
-        modelId?: string; // Support for specific model ID selection
-      },
-      attempt = 0,
-    ) => {
-      // Clear any pending retry timeouts to prevent race conditions
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
+    async (description: string, options?: UseManifestGenerationOptions) => {
+      const controller = new AbortController();
+      setAbortController(controller);
 
-      setState((prev) => ({
-        ...prev,
+      setState({
         status: "generating",
-        retryCount: attempt,
-      }));
+        result: null,
+        error: null,
+        retryCount: 0,
+      });
 
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      abortControllerRef.current = new AbortController();
+      const mode = options?.mode ?? "server";
 
-      try {
-        const fetchPromise = fetch(
-          options?.preferLocal
-            ? "/api/manifest/generate/local"
-            : "/api/manifest/generate",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              description,
-              ...options,
-            }),
-            signal: abortControllerRef.current.signal,
-          },
-        );
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutRef.current = setTimeout(() => {
-            abortControllerRef.current?.abort();
-            reject(new Error("Request timeout"));
-          }, 30000);
-        });
-
-        const response = await Promise.race([fetchPromise, timeoutPromise]);
-
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-        let data;
-        let parsingError = false;
+      if (mode === "local") {
+        const useCase = getClientManifestGenerationUseCase();
         try {
-          data = await response.json();
-        } catch {
-          parsingError = true;
-        }
-
-        if (!response.ok || !data?.success || parsingError) {
-          const status = response.status;
-          const category = classifyError(
-            parsingError ? new Error("json") : null,
-            status,
+          const topologyResult = await useCase.generateTopology(
+            { description },
+            controller.signal,
           );
 
-          const isTransient =
-            category === "NETWORK" ||
-            category === "TIMEOUT" ||
-            category === "RATE_LIMIT" ||
-            status >= 500;
-
-          if (isTransient && attempt < MAX_RETRIES) {
-            const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt);
-            timeoutRef.current = setTimeout(() => {
-              generate(description, options, attempt + 1).catch(() => {});
-            }, backoff);
+          if (!topologyResult.ok) {
+            setState({
+              status: "error",
+              result: null,
+              error: topologyResult.error,
+              retryCount: 0,
+            });
             return;
           }
 
-          const errorMessage =
-            data?.error || data?.details || ERROR_MESSAGES[category];
+          const triggers = useCase.checkClarificationTriggers(topologyResult.topology);
+          if (triggers.length > 0) {
+            setState({
+              status: "error",
+              result: null,
+              error: `Clarification needed: ${triggers.map(t => t.message).join(", ")}`,
+              retryCount: 0,
+            });
+            return;
+          }
+
+          const adaptersResult = await useCase.extractAdapters(
+            topologyResult.topology,
+            controller.signal,
+          );
+
+          if (!adaptersResult.ok) {
+            setState({
+              status: "error",
+              result: null,
+              error: adaptersResult.error,
+              retryCount: 0,
+            });
+            return;
+          }
+
+          const { yaml, diagnostics } = await useCase.renderManifest(
+            adaptersResult.draft,
+            controller.signal,
+          );
+
+          const generatedManifest: GeneratedManifest = {
+            manifest: yaml,
+            confidence: 0.8,
+            suggestions: [],
+            warnings: diagnostics.map(d => d.message),
+            metadata: {
+              model: options?.modelId ?? "local",
+              processingTime: 0,
+              tokensUsed: 0,
+              provider: "local",
+            },
+          };
+
+          setState({
+            status: "success",
+            result: generatedManifest,
+            error: null,
+            retryCount: 0,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === "AbortError") {
+            setState({
+              status: "idle",
+              result: null,
+              error: null,
+              retryCount: 0,
+            });
+            return;
+          }
           setState({
             status: "error",
             result: null,
-            error: errorMessage,
-            errorCategory: category,
-            retryCount: attempt,
+            error: error instanceof Error ? error.message : "Unknown error",
+            retryCount: 0,
           });
-          return;
         }
+      } else {
+        const useCase = getServerManifestGenerationUseCase();
+        try {
+          const response = await useCase.execute(description, {
+            mode,
+            modelId: options?.modelId,
+          });
 
-        setState({
-          status: "success",
-          result: {
-            manifest: data.manifest,
-            confidence: data.confidence,
-            suggestions: data.suggestions,
-            warnings: data.warnings,
-            metadata: data.metadata,
-          },
-          error: null,
-          errorCategory: null,
-          retryCount: attempt,
-        });
-      } catch (error) {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
+          if (response.ok) {
+            setState({
+              status: "success",
+              result: response.result,
+              error: null,
+              retryCount: 0,
+            });
+          } else {
+            setState({
+              status: "error",
+              result: null,
+              error: response.error,
+              retryCount: 0,
+            });
+          }
+        } catch (error) {
+          if (error instanceof Error && error.name === "AbortError") {
+            setState({
+              status: "idle",
+              result: null,
+              error: null,
+              retryCount: 0,
+            });
+            return;
+          }
+          setState({
+            status: "error",
+            result: null,
+            error: error instanceof Error ? error.message : "Unknown error",
+            retryCount: 0,
+          });
         }
-
-        const category = classifyError(error);
-        const isTransient = category === "NETWORK" || category === "TIMEOUT";
-
-        if (isTransient && attempt < MAX_RETRIES) {
-          const backoff = BASE_BACKOFF_MS * Math.pow(2, attempt);
-          timeoutRef.current = setTimeout(() => {
-            generate(description, options, attempt + 1).catch(() => {});
-          }, backoff);
-          return;
-        }
-
-        setState({
-          status: "error",
-          result: null,
-          error: ERROR_MESSAGES[category],
-          errorCategory: category,
-          retryCount: attempt,
-        });
       }
     },
     [],
   );
 
   const reset = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
+    abortController?.abort();
     setState({
       status: "idle",
       result: null,
       error: null,
-      errorCategory: null,
       retryCount: 0,
     });
-  }, []);
+  }, [abortController]);
 
   return {
     ...state,
@@ -218,5 +201,3 @@ export function useManifestGeneration() {
     isError: state.status === "error",
   };
 }
-
-// Made with Bob

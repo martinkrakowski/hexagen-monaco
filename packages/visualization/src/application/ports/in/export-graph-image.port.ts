@@ -1,11 +1,10 @@
 import type { Result } from "../../result.js";
 
-export type ImageFormat = "png" | "jpg" | "svg";
+export type ImageFormat = "png" | "jpg" | "jpeg" | "svg";
 
 export interface ExportGraphImageInput {
   format: ImageFormat;
-  width: number;
-  height: number;
+  viewportSelector: string;
   backgroundColor?: string;
 }
 

@@ -24,5 +24,5 @@ export interface GraphLayoutPort {
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     direction: "TB" | "LR",
-  ): GraphLayoutResult;
+  ): GraphLayoutResult | Promise<GraphLayoutResult>;
 }

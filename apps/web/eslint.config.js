@@ -23,7 +23,7 @@ export default [
     rules: {
       "@next/next/no-html-link-for-pages": "off",
       "no-console": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: '^_' }],
     },
     settings: {
       next: {

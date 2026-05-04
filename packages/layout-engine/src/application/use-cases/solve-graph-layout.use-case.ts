@@ -12,7 +12,11 @@ export class SolveGraphLayoutUseCase {
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     direction: "TB" | "LR" = "TB",
-  ): GraphLayoutResult {
-    return this.layoutPort.layout(nodes, edges, direction);
+  ): Promise<GraphLayoutResult> {
+    const result = this.layoutPort.layout(nodes, edges, direction);
+    if (result instanceof Promise) {
+      return result;
+    }
+    return Promise.resolve(result);
   }
 }

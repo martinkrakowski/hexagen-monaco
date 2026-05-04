@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import type { ValidationItem } from "./manifest-view-data";
+import type { ValidationItem } from "../model/manifest-view-data.js";
 
 interface ManifestOutput {
   system?: string;

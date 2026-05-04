@@ -18,21 +18,14 @@ import {
 } from "./modelPreferencesStorage";
 import type { WelcomeFlowErrorCode } from "../WelcomeScreen/WelcomeFlowError";
 
-/**
- * State machine for the welcome modal flow
- */
-export type WelcomeScreenState =
-  | "idle" // Initial state, showing description field
-  | "model_selection" // User choosing local/cloud
-  | "model_downloading" // Local model downloading
-  | "key_validation" // Cloud API key validating
-  | "generating" // Manifest being generated
-  | "clarification_needed" // Topology generated, awaiting user confirmation
-  | "preview" // Showing generated manifest
-  | "error" // Error state with retry options
-  | "interrupted" // User cancelled download
-  | "unsupported" // Device doesn't support WebGPU
-  | "wizard_hydration"; // Transitioning to project wizard
+import {
+  transitionState,
+  type WelcomeScreenState,
+  type ModelSelectionEvent,
+} from "@hexagen/manifest-generation";
+import { validateApiKeyFormat } from "@hexagen/manifest-generation";
+
+export type { WelcomeScreenState };
 
 export interface WelcomeFlowState {
   state: WelcomeScreenState;
@@ -93,10 +86,13 @@ export interface WelcomeFlowActions {
   confirmAndContinue: () => void;
 }
 
-/**
- * State machine hook for the welcome flow.
- * Manages transitions and integrates with the LLM context.
- */
+function deriveStateFromEvent(
+  currentState: WelcomeScreenState,
+  event: ModelSelectionEvent,
+): WelcomeScreenState {
+  return transitionState(currentState, event);
+}
+
 export function useWelcomeFlowState(
   llmContext: LocalLLMContext,
 ): [WelcomeFlowState, WelcomeFlowActions] {
@@ -121,16 +117,13 @@ export function useWelcomeFlowState(
   const preferences = useRef(getModelPreferences());
   const downloadIntentRef = useRef(0);
 
-  // Initialize the API key manager
   useEffect(() => {
     createApiKeyManager(getSecretVault()).then((manager) => {
       setApiKeyManager(manager);
     });
   }, []);
 
-  // Initialize hardware capabilities detection and load preferences
   useEffect(() => {
-    // Check hardware capabilities
     if (!gpuDetection.isLoading) {
       setFlowState((prev) => ({
         ...prev,
@@ -143,17 +136,13 @@ export function useWelcomeFlowState(
         },
       }));
 
-      // hardwareCapabilities is already updated above — no state transition needed
-      // The UI can check hardwareCapabilities.isWebGPUSupported to disable local options
       if (!gpuDetection.isWebGPUSupported && !gpuDetection.isLoading) {
-        // intentionally empty: cloud path remains unblocked
+        // GPU not supported - user will need cloud LLM
       }
     }
 
-    // Load model preferences
     preferences.current = getModelPreferences();
 
-    // If AI setup was previously skipped, reflect that in state
     if (preferences.current.skipAiSetup) {
       setFlowState((prev) => ({ ...prev, aiSetupSkipped: true }));
     }
@@ -166,11 +155,9 @@ export function useWelcomeFlowState(
     gpuDetection.isRecommended,
   ]);
 
-  // When engineState changes, reflect it in our flow state
   useEffect(() => {
     if (flowState.state !== "model_downloading") return;
 
-    // Update progress
     if (engineState.progress !== undefined) {
       setFlowState((prev) => ({
         ...prev,
@@ -178,14 +165,11 @@ export function useWelcomeFlowState(
       }));
     }
 
-    // Transition based on engine state changes
     if (engineState.status === "ready") {
-      // Phase 13: Smoke test before transitioning
       const runSmokeTest = async () => {
         const modelId = flowState.selectedModelId;
         if (!modelId) return;
 
-        // Skip smoke test if model was recently verified
         if (isModelVerified(modelId)) {
           setFlowState((prev) => ({
             ...prev,
@@ -196,12 +180,10 @@ export function useWelcomeFlowState(
         }
 
         try {
-          // Create a timeout promise
           const timeoutPromise = new Promise<never>((_, reject) => {
             setTimeout(() => reject(new Error("Smoke test timed out")), 5000);
           });
 
-          // Run the smoke test with timeout
           await Promise.race([
             llmContext.sendGovernanceMessage(
               "Respond with 'OK'",
@@ -210,7 +192,6 @@ export function useWelcomeFlowState(
             timeoutPromise,
           ]);
 
-          // Update model cache metadata with successful verification
           updateModelCacheMetadata(modelId, {
             verifiedAt: Date.now(),
             downloadCompleted: true,
@@ -236,7 +217,6 @@ export function useWelcomeFlowState(
             isModelReady: false,
           }));
 
-          // Mark the download as incomplete
           updateModelCacheMetadata(modelId, { downloadCompleted: false });
         }
       };
@@ -252,7 +232,6 @@ export function useWelcomeFlowState(
     }
   }, [engineState, flowState.state, llmContext]);
 
-  // Sync isModelReady with engine status
   useEffect(() => {
     setFlowState((prev) => ({
       ...prev,
@@ -260,7 +239,6 @@ export function useWelcomeFlowState(
     }));
   }, [engineState.status]);
 
-  // Check for cached models on first render
   useEffect(() => {
     if (!hasCheckedCache.current) {
       hasCheckedCache.current = true;
@@ -282,7 +260,6 @@ export function useWelcomeFlowState(
             }));
             if (engineState.status !== "ready") {
               initializeModel(lastModelId).catch(() => {
-                // Silent failure for auto-load attempt
               });
             }
           } else {
@@ -292,7 +269,6 @@ export function useWelcomeFlowState(
               generationProgress: 0,
             }));
             initializeModel(lastModelId).catch(() => {
-              // Silent failure for auto-download attempt
             });
           }
         });
@@ -307,22 +283,18 @@ export function useWelcomeFlowState(
               selectedModelId: lastModelId,
             }));
 
-            // Auto-load if enabled in preferences
             if (
               preferences.current.autoLoadEnabled &&
               engineState.status !== "ready"
             ) {
               initializeModel(lastModelId).catch(() => {
-                // Silent failure for auto-load attempt
               });
             }
           }
         });
       } else {
-        // Check if any model is cached
         hasAnyCachedModel().then((hasCached) => {
           if (hasCached && engineState.status === "ready") {
-            // If we have a model cached and it's ready, use it
             setFlowState((prev) => ({
               ...prev,
               selectedModelId: engineState.loadedModelId,
@@ -346,15 +318,20 @@ export function useWelcomeFlowState(
   const selectLocalModel = useCallback(
     (modelId: DomainModelId, remember: boolean) => {
       const intentId = ++downloadIntentRef.current;
+      const nextState = deriveStateFromEvent("model_selection", {
+        type: "SELECT_LOCAL_MODEL",
+        modelId,
+        remember,
+      });
+
       setFlowState((prev) => ({
         ...prev,
-        state: "model_downloading",
+        state: nextState,
         selectedModelId: modelId,
         rememberedChoice: remember,
         generationProgress: 0,
       }));
 
-      // Save preferences if remembering this choice
       if (remember) {
         saveModelPreferences({
           lastModelId: modelId,
@@ -364,7 +341,6 @@ export function useWelcomeFlowState(
         });
       }
 
-      // Initialize the model
       initializeModel(modelId).catch((error) => {
         if (intentId !== downloadIntentRef.current) return;
         setFlowState((prev) => ({
@@ -373,7 +349,6 @@ export function useWelcomeFlowState(
           error: error?.message || "Failed to initialize model",
         }));
 
-        // Clear auto-load on error
         if (remember) {
           saveModelPreferences({ autoLoadEnabled: false });
         }
@@ -384,22 +359,10 @@ export function useWelcomeFlowState(
 
   const validateApiKey = useCallback(
     async (provider: string, key: string): Promise<boolean> => {
-      // In a real implementation, this would validate the key with the provider's API
-      // For now, we'll simulate validation with basic checks
-      if (!key || key.length < 8) {
+      if (!validateApiKeyFormat(provider, key)) {
         return false;
       }
 
-      // Different validation rules per provider
-      if (provider === "openai" && !key.startsWith("sk-")) {
-        return false;
-      }
-
-      if (provider === "anthropic" && !key.startsWith("sk-ant-")) {
-        return false;
-      }
-
-      // Simulate API validation delay
       await new Promise((resolve) => setTimeout(resolve, 500));
       return true;
     },
@@ -408,29 +371,38 @@ export function useWelcomeFlowState(
 
   const selectCloudProvider = useCallback(
     async (provider: string, apiKey: string, remember: boolean) => {
+      const nextState = deriveStateFromEvent("model_selection", {
+        type: "SELECT_CLOUD_PROVIDER",
+        provider,
+        apiKey,
+        remember,
+      });
+
       setFlowState((prev) => ({
         ...prev,
-        state: "key_validation",
+        state: nextState,
         cloudProvider: provider as "openai" | "anthropic" | "azure" | "other",
         cloudApiKey: apiKey,
         rememberedChoice: remember,
       }));
 
       try {
-        // Save the API key if remember is true
         if (apiKeyManager && remember) {
           await apiKeyManager.saveApiKey(provider, apiKey, remember);
         }
 
-        // Validate the API key
         const isValid = await validateApiKey(provider, apiKey);
 
         if (isValid) {
-          setFlowState((prev) => ({ ...prev, state: "generating" }));
+          const transitionEvent: ModelSelectionEvent = { type: "API_KEY_VALID" };
+          const finalState = deriveStateFromEvent(nextState, transitionEvent);
+          setFlowState((prev) => ({ ...prev, state: finalState }));
         } else {
+          const transitionEvent: ModelSelectionEvent = { type: "API_KEY_INVALID" };
+          const errorState = deriveStateFromEvent(nextState, transitionEvent);
           setFlowState((prev) => ({
             ...prev,
-            state: "error",
+            state: errorState,
             error:
               "The API key format appears invalid. Please check your key and try again.",
             errorCode: "key_invalid_format" as WelcomeFlowErrorCode,
@@ -465,29 +437,31 @@ export function useWelcomeFlowState(
   }, [apiKeyManager]);
 
   const skipAiSetup = useCallback(() => {
-    // Save preference
     saveModelPreferences({ skipAiSetup: true });
+
+    const nextState = deriveStateFromEvent("idle", { type: "SKIP_AI_SETUP" });
 
     setFlowState((prev) => ({
       ...prev,
-      state: "idle",
+      state: nextState,
       aiSetupSkipped: true,
     }));
   }, []);
 
   const cancelModelDownload = useCallback(() => {
-    // Cancel download via LocalLLM context
     cancelDownload();
 
-    // Invalidate the download intent so stale completions are ignored
     ++downloadIntentRef.current;
 
-    // Clear auto-load and remember choice preferences
     saveModelPreferences({ autoLoadEnabled: false, rememberChoice: false });
+
+    const nextState = deriveStateFromEvent("model_downloading", {
+      type: "CANCEL_DOWNLOAD",
+    });
 
     setFlowState((prev) => ({
       ...prev,
-      state: "interrupted",
+      state: nextState,
       isModelReady: false,
     }));
   }, [cancelDownload]);
@@ -523,16 +497,11 @@ export function useWelcomeFlowState(
   }, [flowState.cloudApiKey, flowState.selectedModelId]);
 
   const saveGenerationResult = useCallback((manifestContent: string) => {
-    // Store the generation result (implementation would depend on app requirements)
-    // For now, just transition to preview state
     setFlowState((prev) => ({
       ...prev,
       state: "preview",
-      // Store the manifest content in the state so it can be used in the UI
       manifestContent,
     }));
-
-    // Here you would store the manifest content in app state or backend
   }, []);
 
   const rejectManifest = useCallback(() => {
@@ -551,8 +520,6 @@ export function useWelcomeFlowState(
       state: "generating",
       manifestContent: undefined,
       error: null,
-      // Preserve description context: description lives in WelcomeScreen
-      // component state and won't be cleared by this action
     }));
   }, []);
 
@@ -569,8 +536,6 @@ export function useWelcomeFlowState(
       ...prev,
       state: "wizard_hydration",
     }));
-
-    // This would typically trigger some app-level event or routing
   }, []);
 
   const repairModelDownload = useCallback(
@@ -578,9 +543,14 @@ export function useWelcomeFlowState(
       clearModelCacheMetadata(modelId);
 
       const intentId = ++downloadIntentRef.current;
+      const nextState = deriveStateFromEvent("error", {
+        type: "REPAIR_MODEL_DOWNLOAD",
+        modelId,
+      });
+
       setFlowState((prev) => ({
         ...prev,
-        state: "model_downloading",
+        state: nextState,
         selectedModelId: modelId,
         generationProgress: 0,
         error: null,
@@ -667,5 +637,4 @@ export function useWelcomeFlowState(
   return [flowState, actions];
 }
 
-// Export common types and utilities
 export type { DomainModelId };

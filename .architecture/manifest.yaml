@@ -289,6 +289,12 @@ monorepo:
               - '@hexagen/visualization'
               - '@hexagen/governance'
 
+          - name: 'manifest-generation'
+            allowed_imports:
+              - '@hexagen/shared'
+              - '@hexagen/agentic-interaction'
+              - '@hexagen/local-llm'
+
           - name: 'reconciliation-engine'
             allowed_imports:
               - '@hexagen/shared'
@@ -769,8 +775,9 @@ bounded_contexts:
           - SyncReport
       application:
         use_cases:
-          - RunSyncUseCase
-          - AggregateGeneratorResultsUseCase
+          - GetArchitectureGraphUseCase
+          - GetLinterReportUseCase
+          - GetManifestResourceUseCase
         ports:
           in:
             - GeneratorPort
@@ -1058,19 +1065,6 @@ bounded_contexts:
       consumption
     layers:
       domain: {}
-      application:
-        use_cases:
-          - GetDecisionsResourceUseCase
-          - GetInvariantsResourceUseCase
-          - GetLinterConfigResourceUseCase
-          - GetWorkspaceContextResourceUseCase
-        ports:
-          in: []
-          out:
-            - GovernanceReadPort
-      infrastructure:
-        adapters:
-          - GovernanceReadAdapter
     depends_on:
       - shared
   - name: mcp-server
@@ -1603,6 +1597,42 @@ bounded_contexts:
       - local-llm
       - ui
       - shared
+  - name: manifest-generation
+    type: core
+    description: >-
+      Client-side manifest generation orchestration, topology building, and
+      view-data parsing
+    layers:
+      domain:
+        value_objects: []
+        services: []
+      application:
+        use_cases: []
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - agentic-interaction
+      - local-llm
+  - name: llm-driver
+    type: driver
+    description: LLM driver abstraction for cloud and local LLM providers
+    layers:
+      domain: {}
+      application:
+        use_cases: []
+        ports:
+          in: []
+          out: []
+      infrastructure:
+        adapters: []
+    depends_on:
+      - local-llm
+      - byok
+      - agentic-interaction
+      - web-driver
 apps:
   - name: web
     driver: next.js

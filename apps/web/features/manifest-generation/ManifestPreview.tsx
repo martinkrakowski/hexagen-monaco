@@ -17,8 +17,8 @@ import { HexagonalArchitectureView } from "./HexagonalArchitectureView";
 import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
 import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
-import type { ValidationItem } from "./manifest-view-data";
-import { parseYamlToViewData } from "./parse-yaml-to-view-data";
+import type { ValidationItem } from "@hexagen/manifest-generation";
+import { parseYamlToViewData } from "@hexagen/manifest-generation";
 import { generateMermaidDiagram } from "./generate-mermaid-diagram";
 
 interface ManifestPreviewProps {
@@ -59,7 +59,7 @@ export function ManifestPreview({
 
   const hasFailures = viewData.validationItems.some((v) => v.status === "fail");
 
-  const handleSelectContext = (name: string) => {
+const handleSelectContext = (name: string) => {
     setActiveContext(name);
     setActiveTab("hexagonal");
   };

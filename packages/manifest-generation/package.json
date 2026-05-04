@@ -1,0 +1,31 @@
+{
+  "name": "@hexagen/manifest-generation",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./domain/services/model-selection-state-machine": "./src/domain/services/model-selection-state-machine.ts",
+    "./domain/services/api-key-validation-service": "./src/domain/services/api-key-validation-service.ts",
+    "./domain/services/model-verification-service": "./src/domain/services/model-verification-service.ts",
+    "./domain/services/generation-error-handler": "./src/domain/services/generation-error-handler.ts",
+    "./domain/value-objects/workspace-name-deriver": "./src/domain/value-objects/workspace-name-deriver.ts",
+    "./application/services/manifest-capability-assessor.service": "./src/application/services/manifest-capability-assessor.service.ts",
+    "./application/ports/in/client-manifest-generation.port": "./src/application/ports/in/client-manifest-generation.port.ts",
+    "./application/ports/out/local-llm-messaging.port": "./src/application/ports/out/local-llm-messaging.port.ts",
+    "./application/ports/out/model-preferences.port": "./src/application/ports/out/model-preferences.port.ts",
+    "./application/ports/out/model-verification.port": "./src/application/ports/out/model-verification.port.ts",
+    "./application/use-cases/client-manifest-generation.use-case": "./src/application/use-cases/client-manifest-generation.use-case.ts",
+    "./application/use-cases/welcome-flow.use-case": "./src/application/use-cases/welcome-flow.use-case.ts",
+    "./application/use-cases/model-download-orchestrator.use-case": "./src/application/use-cases/model-download-orchestrator.use-case.ts",
+    "./infrastructure/adapters/local-llm-generation.adapter": "./src/infrastructure/adapters/local-llm-generation.adapter.ts",
+    "./infrastructure/adapters/model-preferences.adapter": "./src/infrastructure/adapters/model-preferences.adapter.ts"
+  },
+  "scripts": {
+    "test": "node --test __tests__/**/*.test.ts"
+  },
+  "dependencies": {
+    "@hexagen/agentic-interaction": "workspace:*",
+    "@hexagen/local-llm": "workspace:*"
+  }
+}

@@ -33,6 +33,7 @@ import type {
   HardwareProfilerPort,
   ChatPersistencePort,
 } from "@hexagen/local-llm";
+import type { LocalLlmMessagingPort } from "@hexagen/manifest-generation";
 import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
 import {
   CvaVariantResolverAdapter,
@@ -41,7 +42,7 @@ import {
 } from "@hexagen/ui-projection-compiler";
 import type { MapNodeVisualPort } from "@hexagen/ui-projection-compiler";
 import {
-  DagreGraphLayoutAdapter,
+  ElkGraphLayoutAdapter,
   SolveGraphLayoutUseCase,
 } from "@hexagen/layout-engine";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
@@ -57,6 +58,11 @@ import {
   BrowserHardwareProfilerAdapter,
   IDBChatPersistenceAdapter,
 } from "@hexagen/local-llm";
+import {
+  LocalLlmGenerationAdapter,
+  ClientManifestGenerationUseCase,
+  ServerManifestGenerationUseCase,
+} from "@hexagen/manifest-generation";
 
 import {
   createWebLogger,
@@ -194,10 +200,10 @@ export const wireDependencies = () => {
   const mapNodeVisualUseCase = new MapNodeVisualUseCase(mapNodeVisualPort);
   registry.set(PORT_NAMES.MAP_NODE_VISUAL_USE_CASE, mapNodeVisualUseCase);
 
-  // Graph layout → dagre-based auto-layout
-  const dagreGraphLayoutAdapter = new DagreGraphLayoutAdapter();
+  // Graph layout → ELK-based auto-layout
+  const elkGraphLayoutAdapter = new ElkGraphLayoutAdapter();
   const solveGraphLayoutUseCase = new SolveGraphLayoutUseCase(
-    dagreGraphLayoutAdapter,
+    elkGraphLayoutAdapter,
   );
   registry.set(PORT_NAMES.SOLVE_GRAPH_LAYOUT_USE_CASE, solveGraphLayoutUseCase);
 
@@ -209,6 +215,32 @@ export const wireDependencies = () => {
       registry.get(PORT_NAMES.LLM_PROVIDER) as LLMProviderPort,
       defaultModel,
     ) satisfies ServerLLMRequestPort,
+  );
+
+  // Client Manifest Generation → Local LLM adapter wired to use case
+  const localLlmAdapter = new WebLLMAdapter({
+    createWorker: () =>
+      new Worker(new URL("../workers/webllm.worker.ts", import.meta.url), {
+        type: "module",
+      }),
+  });
+  const localLlmMessagingAdapter = new LocalLlmGenerationAdapter(
+    localLlmAdapter as unknown as LocalLlmMessagingPort,
+  );
+  const clientManifestGenerationUseCase = new ClientManifestGenerationUseCase(
+    localLlmMessagingAdapter,
+  );
+  registry.set(
+    PORT_NAMES.CLIENT_MANIFEST_GENERATION,
+    clientManifestGenerationUseCase,
+  );
+
+  // Server Manifest Generation → API-based use case
+  const serverManifestGenerationUseCase =
+    new ServerManifestGenerationUseCase();
+  registry.set(
+    PORT_NAMES.SERVER_MANIFEST_GENERATION,
+    serverManifestGenerationUseCase,
   );
 
   // TODO: Wire REM context when app-level intent tracking available (Phase 3)
@@ -304,4 +336,14 @@ export const getGenerateHexagonalMapUseCase = () =>
 export const getSolveGraphLayoutUseCase = () =>
   dependencies.get<SolveGraphLayoutUseCase>(
     PORT_NAMES.SOLVE_GRAPH_LAYOUT_USE_CASE,
+  );
+
+export const getClientManifestGenerationUseCase = () =>
+  dependencies.get<ClientManifestGenerationUseCase>(
+    PORT_NAMES.CLIENT_MANIFEST_GENERATION,
+  );
+
+export const getServerManifestGenerationUseCase = () =>
+  dependencies.get<ServerManifestGenerationUseCase>(
+    PORT_NAMES.SERVER_MANIFEST_GENERATION,
   );

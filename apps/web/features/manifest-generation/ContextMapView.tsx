@@ -5,7 +5,7 @@ import {
   Plug,
   AlertTriangle,
 } from "lucide-react";
-import type { ManifestViewData } from "./manifest-view-data";
+import type { ManifestViewData } from "@hexagen/manifest-generation";
 
 interface ContextMapViewProps {
   viewData: ManifestViewData;

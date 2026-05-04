@@ -1,4 +1,6 @@
 // Domain exports
+export type { BoundedContextType } from "./domain/manifest/coerce-raw-topology.js";
+export { coerceContextType, coercePort } from "./domain/manifest/coerce-raw-topology.js";
 export type {
   LLMProviderPort,
   LLMMessage,

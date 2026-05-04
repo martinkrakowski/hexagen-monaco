@@ -6,7 +6,7 @@ import {
   HelpCircle,
   Cuboid,
 } from "lucide-react";
-import type { BoundedContextView } from "./manifest-view-data";
+import type { BoundedContextView } from "@hexagen/manifest-generation";
 
 interface HexagonalArchitectureViewProps {
   context: BoundedContextView;

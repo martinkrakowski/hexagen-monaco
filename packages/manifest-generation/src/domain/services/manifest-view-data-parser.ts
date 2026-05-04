@@ -5,7 +5,7 @@ import type {
   PortEntry,
   AdapterEntry,
   ValidationItem,
-} from "./manifest-view-data";
+} from "../model/manifest-view-data.js";
 
 interface ManifestOutput {
   system?: string;
@@ -48,7 +48,6 @@ function findLineRanges(
         ranges.set(currentContext, { start: currentStart, end: i - 1 });
       }
       currentContext = match[1];
-      // Handle the case where the exact name has a leading hyphen (e.g. "-project-boards")
       if (currentContext.startsWith("-") && match[1].startsWith("-")) {
         currentContext = match[1];
       }
@@ -283,7 +282,6 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
     }
   }
 
-  // Deduplicate validation items to prevent overlapping warnings from both in/out checking
   const uniqueValidation = Array.from(
     new Map(
       validationItems.map((item) => [item.title + item.description, item]),

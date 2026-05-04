@@ -2,3 +2,4 @@
 
 export * from "./export-graph-image.js";
 export * from "./render-hexagon-canvas.js";
+export * from "./canvas-graph-load.use-case.js";
