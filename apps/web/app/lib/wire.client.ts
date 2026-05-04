@@ -33,8 +33,8 @@ import type {
   HardwareProfilerPort,
   ChatPersistencePort,
 } from "@hexagen/local-llm";
-import type { LocalLlmMessagingPort } from "@hexagen/manifest-generation";
 import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
+import { WebLlmMessagingAdapter } from "./adapters/web-llm-messaging.adapter";
 import {
   CvaVariantResolverAdapter,
   DefaultNodeVisualMapperAdapter,
@@ -218,14 +218,9 @@ export const wireDependencies = () => {
   );
 
   // Client Manifest Generation → Local LLM adapter wired to use case
-  const localLlmAdapter = new WebLLMAdapter({
-    createWorker: () =>
-      new Worker(new URL("../workers/webllm.worker.ts", import.meta.url), {
-        type: "module",
-      }),
-  });
+  const webLlmMessagingAdapter = new WebLlmMessagingAdapter(localLLMAdapter);
   const localLlmMessagingAdapter = new LocalLlmGenerationAdapter(
-    localLlmAdapter as unknown as LocalLlmMessagingPort,
+    webLlmMessagingAdapter,
   );
   const clientManifestGenerationUseCase = new ClientManifestGenerationUseCase(
     localLlmMessagingAdapter,
@@ -236,8 +231,7 @@ export const wireDependencies = () => {
   );
 
   // Server Manifest Generation → API-based use case
-  const serverManifestGenerationUseCase =
-    new ServerManifestGenerationUseCase();
+  const serverManifestGenerationUseCase = new ServerManifestGenerationUseCase();
   registry.set(
     PORT_NAMES.SERVER_MANIFEST_GENERATION,
     serverManifestGenerationUseCase,
