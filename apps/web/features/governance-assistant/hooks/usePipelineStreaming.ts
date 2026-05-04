@@ -144,8 +144,9 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
                 const stepName = parsed.name as string;
                 const stepStatus = parsed.status as PipelineStepStatus;
                 const durationMs = parsed.durationMs as number | null;
+                let updatedSteps: StepProgress[] = [];
                 setStreamingState((prev) => {
-                  const updatedSteps = prev.steps.map((s) =>
+                  updatedSteps = prev.steps.map((s) =>
                     s.name === stepName
                       ? { ...s, status: stepStatus, durationMs }
                       : {
@@ -156,19 +157,21 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
                               : s.status,
                         },
                   );
-                  onStepComplete?.(
-                    stepName,
-                    stepStatus,
-                    durationMs,
-                    updatedSteps,
-                  );
                   return { ...prev, steps: updatedSteps };
                 });
+                onStepComplete?.(
+                  stepName,
+                  stepStatus,
+                  durationMs,
+                  updatedSteps,
+                );
               } else if (currentEvent === "pipeline_complete") {
+                let currentSteps: StepProgress[] = [];
                 setStreamingState((prev) => {
-                  onPipelineComplete?.(parsed, prev.steps);
+                  currentSteps = prev.steps;
                   return prev;
                 });
+                onPipelineComplete?.(parsed, currentSteps);
               } else if (currentEvent === "pipeline_error") {
                 const errorMsg = (parsed.error as string) ?? "Pipeline error";
                 setStreamingState((prev) => ({

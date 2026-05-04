@@ -225,10 +225,6 @@ export function useProjectLifecycle(
     });
 
     if (pendingWelcomeManifest) {
-      const yamlContent = pendingWelcomeManifest;
-      editor.clearSession();
-      editor.clearActiveWorkspace();
-      await handleManifestLoaded(yamlContent);
       return;
     }
 
