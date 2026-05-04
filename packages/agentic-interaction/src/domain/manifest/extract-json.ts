@@ -352,6 +352,34 @@ export function parseJSON<T>(
     } catch {
       // all fallbacks failed
     }
+    // fallback 6: strip trailing commas and JS-style comments, then try again
+    try {
+      let stripped = jsonStr;
+      stripped = stripped.replace(/\/\/[^\n]*/g, "");
+      stripped = stripped.replace(/\/\*[\s\S]*?\*\//g, "");
+      stripped = stripped.replace(/,\s*([}\]])/g, "$1");
+      stripped = stripped.trim();
+      if (stripped !== jsonStr) {
+        const data = JSON.parse(stripped) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 7: try repairJSON on the stripped version
+    try {
+      let stripped = jsonStr;
+      stripped = stripped.replace(/\/\/[^\n]*/g, "");
+      stripped = stripped.replace(/\/\*[\s\S]*?\*\//g, "");
+      stripped = stripped.replace(/,\s*([}\]])/g, "$1");
+      const repaired = repairJSON(stripped);
+      if (repaired !== null) {
+        const data = JSON.parse(repaired) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // all fallbacks failed
+    }
     return {
       ok: false,
       error: `JSON parse error: unable to parse or repair LLM output`,

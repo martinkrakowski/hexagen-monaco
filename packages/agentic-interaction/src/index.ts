@@ -179,4 +179,5 @@ export {
   extractArrayFromWrapper,
   extractObjectFromWrapper,
   coerceRawPorts,
+  extractYamlFromResponse,
 } from "./domain/index.js";

@@ -186,6 +186,9 @@ async function attemptContextList(
         logger.error(
           `[manifest-gen] context-list: JSON parse error: ${errorMsg}`,
         );
+        logger.error(
+          `[manifest-gen] context-list: raw LLM output (first 500 chars): ${content.slice(0, 500)}`,
+        );
         if (attempt === MAX_RETRIES) {
           return { ok: false, error: errorMsg };
         }

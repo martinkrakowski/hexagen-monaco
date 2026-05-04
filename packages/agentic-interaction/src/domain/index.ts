@@ -120,4 +120,5 @@ export {
   coerceRawPorts,
   coerceContextName,
   coercePortName,
+  extractYamlFromResponse,
 } from "./manifest/index.js";

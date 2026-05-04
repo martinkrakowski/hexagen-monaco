@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { X, Check, ArrowRight, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { X, Check, ArrowRight, AlertTriangle } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import { diffLines, type Change } from "diff";
+import { applyDeterministicFix, canAutoFix } from "./fix-manifest-violations";
 import type { ValidationItem } from "./manifest-view-data";
 
 export interface ManifestAutoFixDrawerProps {
@@ -19,89 +20,17 @@ export function ManifestAutoFixDrawer({
   violation,
   currentYaml,
 }: ManifestAutoFixDrawerProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [patchedYaml, setPatchedYaml] = useState<string | null>(null);
-  const [diffChanges, setDiffChanges] = useState<Change[]>([]);
+  const isFixable = violation ? canAutoFix(violation) : false;
 
-  useEffect(() => {
-    if (!isOpen || !violation) {
-      setPatchedYaml(null);
-      setError(null);
-      setDiffChanges([]);
-      return;
-    }
+  const patchedYaml = useMemo(() => {
+    if (!isOpen || !violation || !isFixable) return null;
+    return applyDeterministicFix(currentYaml, violation);
+  }, [isOpen, violation, currentYaml, isFixable]);
 
-    let isMounted = true;
-    setIsLoading(true);
-    setError(null);
-
-    async function fetchFix() {
-      try {
-        const isCrossContext = !violation?.contextName;
-
-        let contextYaml = "";
-        if (!isCrossContext && violation?.contextName) {
-          const lines = currentYaml.split("\n");
-          const startIndex = lines.findIndex(
-            (l) =>
-              l.startsWith("  - name: ") && l.includes(violation!.contextName!),
-          );
-          if (startIndex !== -1) {
-            let endIndex = startIndex + 1;
-            while (
-              endIndex < lines.length &&
-              (lines[endIndex].startsWith("    ") ||
-                lines[endIndex].trim() === "")
-            ) {
-              endIndex++;
-            }
-            contextYaml = lines.slice(startIndex, endIndex).join("\n");
-          }
-        }
-
-        const response = await fetch("/api/manifest/fix", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            manifestYaml: currentYaml,
-            contextYaml,
-            violationMessage: violation?.description,
-            isCrossContext,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!isMounted) return;
-
-        if (data.success && data.patchedYaml) {
-          let fullPatchedYaml = data.patchedYaml;
-          if (!isCrossContext && contextYaml) {
-            fullPatchedYaml = currentYaml.replace(
-              contextYaml,
-              data.patchedYaml,
-            );
-          }
-          setPatchedYaml(fullPatchedYaml);
-          setDiffChanges(diffLines(currentYaml, fullPatchedYaml));
-        } else {
-          setError(data.error || "Failed to generate fix");
-        }
-      } catch (e) {
-        if (!isMounted) return;
-        setError(e instanceof Error ? e.message : "Unknown error");
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-
-    fetchFix();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isOpen, violation, currentYaml]);
+  const diffChanges: Change[] = useMemo(() => {
+    if (!patchedYaml) return [];
+    return diffLines(currentYaml, patchedYaml);
+  }, [currentYaml, patchedYaml]);
 
   if (!isOpen) return null;
 
@@ -125,16 +54,20 @@ export function ManifestAutoFixDrawer({
       </div>
 
       <div className="flex-1 overflow-auto p-6 bg-background">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin text-accent" />
-            <p className="text-sm font-mono animate-pulse">
-              Generating patch...
+        {!isFixable ? (
+          <div className="p-4 rounded-lg bg-warning/10 border border-warning/20 text-warning text-sm space-y-2">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="w-4 h-4" />
+              Manual Edit Required
+            </div>
+            <p>
+              This violation cannot be auto-fixed. Please edit the YAML directly
+              in the sidebar.
             </p>
           </div>
-        ) : error ? (
+        ) : !patchedYaml ? (
           <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-mono">
-            {error}
+            Fix could not be applied. The violation may already be resolved.
           </div>
         ) : (
           <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -164,12 +97,12 @@ export function ManifestAutoFixDrawer({
       </div>
 
       <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-surface shrink-0">
-        <Button variant="ghost" onClick={onClose} disabled={isLoading}>
+        <Button variant="ghost" onClick={onClose}>
           Discard
         </Button>
         <Button
           onClick={() => patchedYaml && onApply(patchedYaml)}
-          disabled={isLoading || !patchedYaml}
+          disabled={!patchedYaml}
           className="bg-accent text-accent-foreground hover:bg-accent/90"
         >
           <Check className="w-4 h-4 mr-2" /> Apply Fix
