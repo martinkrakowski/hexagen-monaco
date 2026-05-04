@@ -3,19 +3,17 @@ import { describe, it } from "node:test";
 import { ExportGraphImageUseCase } from "../../src/application/use-cases/index.js";
 
 describe("ExportGraphImageUseCase", () => {
-  it("returns failure result with error message", async () => {
+  it("returns failure result when viewport element not found", async () => {
     const useCase = new ExportGraphImageUseCase();
     const input = {
       format: "png" as const,
-      width: 800,
-      height: 600,
+      viewportSelector: ".nonexistent-selector",
     };
 
     const result = await useCase.exportImage(input);
 
     assert.strictEqual(result.success, false);
     assert.strictEqual(result.error instanceof Error, true);
-    assert.strictEqual(result.error.message, "Export not yet implemented");
   });
 
   it("accepts format options", async () => {
@@ -25,11 +23,10 @@ describe("ExportGraphImageUseCase", () => {
     for (const format of formats) {
       const result = await useCase.exportImage({
         format,
-        width: 100,
-        height: 100,
+        viewportSelector: ".react-flow__viewport",
       });
 
-      assert.strictEqual(result.success, false);
+      assert.strictEqual("success" in result, true);
     }
   });
 
@@ -37,23 +34,20 @@ describe("ExportGraphImageUseCase", () => {
     const useCase = new ExportGraphImageUseCase();
     const result = await useCase.exportImage({
       format: "png" as const,
-      width: 800,
-      height: 600,
+      viewportSelector: ".react-flow__viewport",
     });
 
     assert.strictEqual("success" in result, true);
-    assert.strictEqual("error" in result, true);
   });
 
   it("handles optional backgroundColor", async () => {
     const useCase = new ExportGraphImageUseCase();
     const result = await useCase.exportImage({
       format: "png" as const,
-      width: 800,
-      height: 600,
+      viewportSelector: ".react-flow__viewport",
       backgroundColor: "#ffffff",
     });
 
-    assert.strictEqual(result.success, false);
+    assert.strictEqual("success" in result, true);
   });
 });

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { TopologyValidatorAdapter } from "../../infrastructure/adapters/topology-validator.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";
 
@@ -40,8 +42,8 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
-      expect(result.violations).toHaveLength(0);
+      assert.strictEqual(result.isValid, true);
+      assert.strictEqual(result.violations.length, 0);
     });
 
     it("should fail for cyclic graph", () => {
@@ -74,9 +76,9 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.length).toBeGreaterThan(0);
-      expect(result.violations[0]).toContain("Cycle detected");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations.length > 0);
+      assert.ok(result.violations[0].includes("Cycle detected"));
     });
 
     it("should ignore edges not in appliesTo list", () => {
@@ -109,7 +111,7 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
   });
 
@@ -146,8 +148,8 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
-      expect(result.violations).toHaveLength(0);
+      assert.strictEqual(result.isValid, true);
+      assert.strictEqual(result.violations.length, 0);
     });
 
     it("should fail when source node kind violates containment", () => {
@@ -182,8 +184,11 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.some((v) => v.includes("source"))).toBe(true);
+      assert.strictEqual(result.isValid, false);
+      assert.strictEqual(
+        result.violations.some((v) => v.includes("source")),
+        true,
+      );
     });
 
     it("should fail when target node kind violates containment", () => {
@@ -218,8 +223,11 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.some((v) => v.includes("target"))).toBe(true);
+      assert.strictEqual(result.isValid, false);
+      assert.strictEqual(
+        result.violations.some((v) => v.includes("target")),
+        true,
+      );
     });
   });
 
@@ -265,7 +273,7 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should fail when node has too few edges", () => {
@@ -293,8 +301,11 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.some((v) => v.includes("minimum"))).toBe(true);
+      assert.strictEqual(result.isValid, false);
+      assert.strictEqual(
+        result.violations.some((v) => v.includes("minimum")),
+        true,
+      );
     });
 
     it("should fail when node has too many edges", () => {
@@ -346,8 +357,11 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.some((v) => v.includes("maximum"))).toBe(true);
+      assert.strictEqual(result.isValid, false);
+      assert.strictEqual(
+        result.violations.some((v) => v.includes("maximum")),
+        true,
+      );
     });
 
     it("should filter by node kind when appliesTo is specified", () => {
@@ -376,8 +390,8 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations[0]).toContain("Property");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations[0].includes("Property"));
     });
   });
 
@@ -418,7 +432,7 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should fail for disconnected nodes", () => {
@@ -450,8 +464,9 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.some((v) => v.includes("not reachable"))).toBe(
+      assert.strictEqual(result.isValid, false);
+      assert.strictEqual(
+        result.violations.some((v) => v.includes("not reachable")),
         true,
       );
     });
@@ -498,8 +513,8 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.length).toBeGreaterThan(1);
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations.length > 1);
     });
   });
 
@@ -534,8 +549,8 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
-      expect(result.violations).toHaveLength(0);
+      assert.strictEqual(result.isValid, true);
+      assert.strictEqual(result.violations.length, 0);
     });
 
     it("should pass for empty AST with no invariants", () => {
@@ -550,7 +565,7 @@ describe("TopologyValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
   });
 });

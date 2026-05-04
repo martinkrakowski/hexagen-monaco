@@ -7,8 +7,8 @@ import type { ArchitectureGraphProviderPort } from "../ports/out/architecture-gr
 export class GetArchitectureGraphUseCase {
   constructor(private readonly provider: ArchitectureGraphProviderPort) {}
 
-  async execute(): Promise<ArchitectureGraph> {
-    const result = await this.provider.getArchitectureGraph();
+  async execute(projectId: string): Promise<ArchitectureGraph> {
+    const result = await this.provider.getArchitectureGraph(projectId);
     if (!result.success) {
       throw result.error;
     }

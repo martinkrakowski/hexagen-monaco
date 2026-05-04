@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +22,10 @@ bounded_contexts:
     description: Governance core
     depends_on:
       - shared
+    layers:
+      domain:
+        entities:
+          - ProjectConfig
 apps:
   - name: web
     driver: next.js
@@ -31,102 +37,69 @@ bounded_contexts: []
 apps: []
 `;
 
-function assertOk(value: boolean, message?: string) {
-  if (!value) throw new Error(message || "Assertion failed");
-}
+describe("listCommand", () => {
+  it("should print contexts and apps from valid manifest", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-test-"));
+    const archDir1 = path.join(tempDir, ".architecture");
+    await fs.mkdir(archDir1, { recursive: true });
+    await fs.writeFile(
+      path.join(archDir1, "manifest.yaml"),
+      validManifestYaml,
+      "utf8",
+    );
 
-const testResults: string[] = [];
+    const originalCwd = process.cwd;
+    const originalExit = process.exit;
+    const originalConsoleLog = console.log;
+    const logs: string[] = [];
+    console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+    (process.exit as () => void) = () => {};
+    (process.cwd as () => string) = () => tempDir;
 
-async function runTests() {
-  console.log("Running listCommand tests...\n");
+    await listCommand();
+    const output1 = logs.join("\n");
 
-  let tempDir: string;
-  let originalCwd: () => string;
-  let originalExit: (code?: number) => void;
-  let originalConsoleLog: typeof console.log;
-  let logs: string[] = [];
+    process.cwd = originalCwd;
+    process.exit = originalExit;
+    console.log = originalConsoleLog;
+    await fs.rm(tempDir, { recursive: true, force: true });
 
-  // Test 1: Valid manifest with contexts and apps
-  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-test-"));
-  const archDir1 = path.join(tempDir, ".architecture");
-  await fs.mkdir(archDir1, { recursive: true });
-  await fs.writeFile(
-    path.join(archDir1, "manifest.yaml"),
-    validManifestYaml,
-    "utf8",
-  );
+    assert.ok(output1.includes("Bounded Contexts"));
+    assert.ok(output1.includes("shared"));
+    assert.ok(output1.includes("project-configuration"));
+    assert.ok(output1.includes("type: shared-kernel"));
+    assert.ok(output1.includes("layers: domain"));
+    assert.ok(output1.includes("Applications"));
+    assert.ok(output1.includes("web"));
+    assert.ok(output1.includes("driver: next.js"));
+  });
 
-  originalCwd = process.cwd;
-  originalExit = process.exit;
-  originalConsoleLog = console.log;
-  logs = [];
-  console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
-  (process.exit as () => void) = () => {};
-  (process.cwd as () => string) = () => tempDir;
+  it("should handle empty manifest", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-test-"));
+    const archDir2 = path.join(tempDir, ".architecture");
+    await fs.mkdir(archDir2, { recursive: true });
+    await fs.writeFile(
+      path.join(archDir2, "manifest.yaml"),
+      emptyManifestYaml,
+      "utf8",
+    );
 
-  await listCommand();
-  const output1 = logs.join("\n");
+    const originalCwd = process.cwd;
+    const originalExit = process.exit;
+    const originalConsoleLog = console.log;
+    const logs: string[] = [];
+    console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+    (process.exit as () => void) = () => {};
+    (process.cwd as () => string) = () => tempDir;
 
-  process.cwd = originalCwd;
-  process.exit = originalExit;
-  console.log = originalConsoleLog;
-  await fs.rm(tempDir, { recursive: true, force: true });
+    await listCommand();
+    const output2 = logs.join("\n");
 
-  assertOk(
-    output1.includes("📦 Bounded Contexts"),
-    "Should output Bounded Contexts header",
-  );
-  assertOk(output1.includes("shared"), "Should list shared context");
-  assertOk(
-    output1.includes("project-configuration"),
-    "Should list project-configuration context",
-  );
-  assertOk(output1.includes("type: shared-kernel"), "Should show type");
-  assertOk(output1.includes("layers: domain"), "Should show layers");
-  assertOk(
-    output1.includes("📱 Applications"),
-    "Should output Applications header",
-  );
-  assertOk(output1.includes("web"), "Should list web app");
-  assertOk(output1.includes("driver: next.js"), "Should show driver");
-  console.log("✅ listCommand: prints contexts and apps");
+    process.cwd = originalCwd;
+    process.exit = originalExit;
+    console.log = originalConsoleLog;
+    await fs.rm(tempDir, { recursive: true, force: true });
 
-  // Test 2: Empty manifest
-  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-test-"));
-  const archDir2 = path.join(tempDir, ".architecture");
-  await fs.mkdir(archDir2, { recursive: true });
-  await fs.writeFile(
-    path.join(archDir2, "manifest.yaml"),
-    emptyManifestYaml,
-    "utf8",
-  );
-
-  originalCwd = process.cwd;
-  originalExit = process.exit;
-  originalConsoleLog = console.log;
-  logs = [];
-  console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
-  (process.exit as () => void) = () => {};
-  (process.cwd as () => string) = () => tempDir;
-
-  await listCommand();
-  const output2 = logs.join("\n");
-
-  process.cwd = originalCwd;
-  process.exit = originalExit;
-  console.log = originalConsoleLog;
-  await fs.rm(tempDir, { recursive: true, force: true });
-
-  assertOk(
-    output2.includes("no bounded contexts defined"),
-    "Should show empty message",
-  );
-  console.log("✅ listCommand: handles empty manifest");
-
-  console.log("\n✅ All listCommand tests passed!");
-}
-
-runTests().catch((err) => {
-  console.error("Test failed:", err);
-  process.exit(1);
+    assert.ok(output2.includes("no bounded contexts defined"));
+  });
 });

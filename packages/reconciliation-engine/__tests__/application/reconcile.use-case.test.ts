@@ -1,3 +1,5 @@
+import { describe, it, mock } from "node:test";
+import assert from "node:assert/strict";
 import { ReconcileUseCase } from "../../src/application/use-cases/reconcile.use-case.js";
 import type {
   Patch,
@@ -5,17 +7,15 @@ import type {
 } from "../../src/domain/llm-response.js";
 import { createVerdict } from "../../src/domain/verdict.js";
 
-// ─── Mocks ───────────────────────────────────────────────────────────────
-
 function createMockReconciliationPort(result: ReconciliationResult) {
   return {
-    reconcile: jest.fn().mockResolvedValue(result),
+    reconcile: mock.fn(() => Promise.resolve(result)),
   };
 }
 
 function createMockCompareVerdictsPort() {
   return {
-    compareVerdicts: jest.fn().mockImplementation((a, b) => {
+    compareVerdicts: mock.fn((a: any, b: any) => {
       if (a.accepted && !b.accepted) return -1;
       if (!a.accepted && b.accepted) return 1;
       return 0;
@@ -25,24 +25,24 @@ function createMockCompareVerdictsPort() {
 
 function createMockResolveConflictPort() {
   return {
-    resolve: jest.fn(),
+    resolve: mock.fn(),
   };
 }
 
 function createMockManifestPatchPort() {
   return {
-    validatePatches: jest.fn().mockResolvedValue({ success: true, value: [] }),
-    applyPatches: jest.fn().mockResolvedValue({ success: true }),
+    validatePatches: mock.fn(() =>
+      Promise.resolve({ success: true, value: [] }),
+    ),
+    applyPatches: mock.fn(() => Promise.resolve({ success: true })),
   };
 }
 
-function createMockLintFilterPort() {
+function createMockLintFilterPort(shouldAccept = true) {
   return {
-    shouldAccept: jest.fn().mockReturnValue(true),
+    shouldAccept: mock.fn(() => shouldAccept),
   };
 }
-
-// ─── Test Data ─────────────────────────────────────────────────────────────
 
 function createPatch(id: string, targetId: string): Patch {
   return {
@@ -60,8 +60,6 @@ function createLintReport() {
     warnings: [],
   };
 }
-
-// ─── Tests ────────────────────────────────────────────────────────────────
 
 describe("ReconcileUseCase", () => {
   describe("execute()", () => {
@@ -83,8 +81,8 @@ describe("ReconcileUseCase", () => {
         patches: [],
       });
 
-      expect(result.success).toBe(false);
-      expect(result.errors).toContain("reconciliation failed");
+      assert.strictEqual(result.success, false);
+      assert.ok(result.errors.includes("reconciliation failed"));
     });
 
     it("should generate verdicts and filter accepted patches", async () => {
@@ -103,12 +101,12 @@ describe("ReconcileUseCase", () => {
       const result = await useCase.execute(
         { currentManifest: "", patches: [patch1, patch2] },
         "manifest.yaml",
-        createLintReport(patch1),
+        createLintReport(),
       );
 
-      expect(result.success).toBe(true);
-      expect(result.patches).toHaveLength(2);
-      expect(result.summary).toContain("2 patches applied");
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.patches.length, 2);
+      assert.ok(result.summary.includes("2 patches applied"));
     });
 
     it("should apply patches when manifestPatchPort is provided", async () => {
@@ -129,8 +127,8 @@ describe("ReconcileUseCase", () => {
         "manifest.yaml",
       );
 
-      expect(manifestPatchPort.validatePatches).toHaveBeenCalled();
-      expect(manifestPatchPort.applyPatches).toHaveBeenCalled();
+      assert.ok(manifestPatchPort.validatePatches.mock.calls.length > 0);
+      assert.ok(manifestPatchPort.applyPatches.mock.calls.length > 0);
     });
 
     it("should use lintFilterPort when provided", async () => {
@@ -138,8 +136,7 @@ describe("ReconcileUseCase", () => {
       const diffResult = { success: true, patches: [patch1] };
 
       const reconciliationPort = createMockReconciliationPort(diffResult);
-      const lintFilterPort = createMockLintFilterPort();
-      lintFilterPort.shouldAccept.mockReturnValue(false); // Reject all patches
+      const lintFilterPort = createMockLintFilterPort(false);
 
       const useCase = new ReconcileUseCase(
         reconciliationPort,
@@ -152,12 +149,12 @@ describe("ReconcileUseCase", () => {
       const result = await useCase.execute(
         { currentManifest: "", patches: [patch1] },
         undefined,
-        createLintReport(patch1),
+        createLintReport(),
       );
 
-      expect(lintFilterPort.shouldAccept).toHaveBeenCalled();
-      expect(result.patches).toHaveLength(0); // All rejected
-      expect(result.summary).toContain("0 patches applied");
+      assert.ok(lintFilterPort.shouldAccept.mock.calls.length > 0);
+      assert.strictEqual(result.patches.length, 0);
+      assert.ok(result.summary.includes("0 patches applied"));
     });
   });
 
@@ -172,15 +169,14 @@ describe("ReconcileUseCase", () => {
 
       const verdicts = useCase["generateVerdicts"]([patch], undefined);
 
-      expect(verdicts).toHaveLength(1);
-      expect(verdicts[0].accepted).toBe(true);
-      expect(verdicts[0].reason).toContain("Auto-accepted");
+      assert.strictEqual(verdicts.length, 1);
+      assert.strictEqual(verdicts[0].accepted, true);
+      assert.ok(verdicts[0].reason.includes("Auto-accepted"));
     });
 
     it("should create rejected verdict when lintFilterPort rejects", () => {
       const patch = createPatch("p1", "file1");
-      const lintFilterPort = createMockLintFilterPort();
-      lintFilterPort.shouldAccept.mockReturnValue(false);
+      const lintFilterPort = createMockLintFilterPort(false);
 
       const useCase = new ReconcileUseCase(
         createMockReconciliationPort({ success: true, patches: [] }),
@@ -195,7 +191,7 @@ describe("ReconcileUseCase", () => {
         warnings: [],
       });
 
-      expect(verdicts[0].accepted).toBe(false);
+      assert.strictEqual(verdicts[0].accepted, false);
     });
   });
 
@@ -215,9 +211,9 @@ describe("ReconcileUseCase", () => {
 
       const resolved = useCase["resolvePatchConflicts"](verdicts);
 
-      expect(resolved).toHaveLength(2);
-      expect(resolved[0].patchId).toBe("p1");
-      expect(resolved[1].patchId).toBe("p3");
+      assert.strictEqual(resolved.length, 2);
+      assert.strictEqual(resolved[0].patchId, "p1");
+      assert.strictEqual(resolved[1].patchId, "p3");
     });
   });
 
@@ -244,9 +240,9 @@ describe("ReconcileUseCase", () => {
         acceptedVerdicts,
       );
 
-      expect(extracted).toHaveLength(2);
-      expect(extracted[0].id).toBe("p1");
-      expect(extracted[1].id).toBe("p3");
+      assert.strictEqual(extracted.length, 2);
+      assert.strictEqual(extracted[0].id, "p1");
+      assert.strictEqual(extracted[1].id, "p3");
     });
   });
 });

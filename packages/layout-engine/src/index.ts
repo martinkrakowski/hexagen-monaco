@@ -7,3 +7,4 @@ export type {
 } from "./application/ports/in/graph-layout.port.js";
 export { SolveGraphLayoutUseCase } from "./application/use-cases/solve-graph-layout.use-case.js";
 export { DagreGraphLayoutAdapter } from "./infrastructure/adapters/dagre-graph-layout.adapter.js";
+export { ElkGraphLayoutAdapter } from "./infrastructure/adapters/elk-graph-layout.adapter.js";

@@ -1,98 +1,82 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach, mock } from "node:test";
 import { CliLintValidationAdapter } from "../../../src/infrastructure/adapters/cli-lint-validation.adapter.js";
 
-jest.mock("node:child_process", () => ({
-  execFile: jest.fn(),
-}));
-
-import { execFile } from "node:child_process";
-
-const mockExecFile = execFile as jest.Mock;
+type ExecFileAsyncFn = (
+  file: string,
+  args: readonly string[],
+  options?: { cwd?: string; timeout?: number },
+) => Promise<{ stdout: string; stderr: string }>;
 
 describe("CliLintValidationAdapter", () => {
   let adapter: CliLintValidationAdapter;
+  let mockExecFileAsync: ReturnType<typeof mock.fn<ExecFileAsyncFn>>;
 
   beforeEach(() => {
-    adapter = new CliLintValidationAdapter("/workspace");
-    mockExecFile.mockReset();
+    mockExecFileAsync = mock.fn<ExecFileAsyncFn>(async () => ({
+      stdout: "",
+      stderr: "",
+    }));
+    adapter = new CliLintValidationAdapter("/workspace", mockExecFileAsync);
   });
 
   it("should return valid when lint:arch succeeds", async () => {
-    mockExecFile.mockImplementation(
-      (
-        _cmd: string,
-        _args: string[],
-        _opts: unknown,
-        callback: (err: null, stdout: string, stderr: string) => void,
-      ) => {
-        callback(null, "", "");
-      },
-    );
-
     const result = await adapter.validateManifest(
       "/workspace/.architecture/manifest.yaml",
     );
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      expect(result.value.valid).toBe(true);
-      expect(result.value.errors).toHaveLength(0);
+      assert.strictEqual(result.value.valid, true);
+      assert.strictEqual(result.value.errors.length, 0);
     }
 
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "yarn",
-      ["lint:arch"],
-      expect.objectContaining({ cwd: "/workspace" }),
-      expect.any(Function),
+    assert.strictEqual(mockExecFileAsync.mock.calls[0].arguments[0], "yarn");
+    assert.deepStrictEqual(mockExecFileAsync.mock.calls[0].arguments[1], [
+      "lint:arch",
+    ]);
+    assert.strictEqual(
+      (mockExecFileAsync.mock.calls[0].arguments[2] as Record<string, unknown>)
+        .cwd,
+      "/workspace",
     );
   });
 
   it("should return invalid with errors when lint:arch fails", async () => {
     const errorOutput =
       "port 'FooPort' declared in 2 contexts\nmissing adapter for 'BarAdapter'";
-    const err = new Error("Command failed") as Error & { stderr: string };
-    err.stderr = errorOutput;
 
-    mockExecFile.mockImplementation(
-      (
-        _cmd: string,
-        _args: string[],
-        _opts: unknown,
-        callback: (err: Error | null, stdout: string, stderr: string) => void,
-      ) => {
-        callback(err, "", errorOutput);
-      },
-    );
+    mockExecFileAsync = mock.fn<ExecFileAsyncFn>(async () => {
+      const err = new Error("Command failed") as Error & { stderr: string };
+      err.stderr = errorOutput;
+      throw err;
+    });
+    adapter = new CliLintValidationAdapter("/workspace", mockExecFileAsync);
 
     const result = await adapter.validateManifest(
       "/workspace/.architecture/manifest.yaml",
     );
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      expect(result.value.valid).toBe(false);
-      expect(result.value.errors.length).toBeGreaterThan(0);
+      assert.strictEqual(result.value.valid, false);
+      assert.ok(result.value.errors.length > 0);
     }
   });
 
   it("should handle error without stderr", async () => {
-    mockExecFile.mockImplementation(
-      (
-        _cmd: string,
-        _args: string[],
-        _opts: unknown,
-        callback: (err: Error | null, stdout: string, stderr: string) => void,
-      ) => {
-        callback(new Error("timeout exceeded"), "", "");
-      },
-    );
+    mockExecFileAsync = mock.fn<ExecFileAsyncFn>(async () => {
+      throw new Error("timeout exceeded");
+    });
+    adapter = new CliLintValidationAdapter("/workspace", mockExecFileAsync);
 
     const result = await adapter.validateManifest(
       "/workspace/.architecture/manifest.yaml",
     );
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      expect(result.value.valid).toBe(false);
+      assert.strictEqual(result.value.valid, false);
     }
   });
 });

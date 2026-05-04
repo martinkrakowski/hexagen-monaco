@@ -1,3 +1,5 @@
+import { describe, it, beforeEach, mock } from "node:test";
+import assert from "node:assert/strict";
 import { RRPZodSchemaGeneratorAdapter } from "../../../src/infrastructure/adapters/rrp-zod-schema-generator.adapter.js";
 import type { GenerateZodSchemaRequest } from "../../../src/application/ports/in/generate-zod-schema.port.js";
 
@@ -29,18 +31,18 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
 
       const result = await adapter.generate(request);
 
-      expect(result.schema).toBeDefined();
-      expect(result.id).toMatch(/^rrp-zod-schema-/);
-      expect(result.version).toBe(1);
+      assert.ok(result.schema !== undefined);
+      assert.match(result.id, /^rrp-zod-schema-/);
+      assert.strictEqual(result.version, 1);
     });
 
     it("should validate example data against contract", async () => {
-      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+      const consoleSpy = mock.method(console, "warn", () => {});
 
       const request: GenerateZodSchemaRequest = {
         name: "TestSchema",
         description: "Test schema",
-        exampleData: { name: "John", age: "not-a-number" }, // Invalid: age should be number
+        exampleData: { name: "John", age: "not-a-number" },
         compiledContract: {
           name: "TestSchema",
           description: "Test schema",
@@ -55,12 +57,14 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
 
       await adapter.generate(request);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
+      assert.ok(consoleSpy.mock.calls.length > 0);
+      const warnMessage = consoleSpy.mock.calls[0].arguments[0] as string;
+      assert.ok(
+        warnMessage.includes(
           "[Zod] Example data failed validation against contract",
         ),
       );
-      consoleSpy.mockRestore();
+      consoleSpy.mock.restore();
     });
 
     it("should fall back to type inference when no contract provided", async () => {
@@ -72,8 +76,8 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
 
       const result = await adapter.generate(request);
 
-      expect(result.schema).toBeDefined();
-      expect(result.id).toMatch(/^rrp-zod-schema-/);
+      assert.ok(result.schema !== undefined);
+      assert.match(result.id, /^rrp-zod-schema-/);
     });
 
     it("should be backward compatible with example data only", async () => {
@@ -85,9 +89,9 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
 
       const result = await adapter.generate(request);
 
-      expect(result.schema).toBeDefined();
-      expect(result.version).toBe(1);
-      expect(result.updatedAt).toBeDefined();
+      assert.ok(result.schema !== undefined);
+      assert.strictEqual(result.version, 1);
+      assert.ok(result.updatedAt !== undefined);
     });
 
     it("should handle optional fields in contract", async () => {
@@ -109,16 +113,14 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
 
       const result = await adapter.generate(request);
 
-      // Schema should parse example with only required field
       const validation = result.schema.safeParse({ required: "value" });
-      expect(validation.success).toBe(true);
+      assert.strictEqual(validation.success, true);
 
-      // Schema should also allow optional field
       const validationWithOptional = result.schema.safeParse({
         required: "value",
         optional: "also value",
       });
-      expect(validationWithOptional.success).toBe(true);
+      assert.strictEqual(validationWithOptional.success, true);
     });
 
     it("should handle multiple field types in contract", async () => {
@@ -148,7 +150,7 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
       const result = await adapter.generate(request);
       const validation = result.schema.safeParse(request.exampleData);
 
-      expect(validation.success).toBe(true);
+      assert.strictEqual(validation.success, true);
     });
 
     it("should infer string type from example", async () => {
@@ -161,7 +163,7 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
       const result = await adapter.generate(request);
       const validation = result.schema.safeParse("another string");
 
-      expect(validation.success).toBe(true);
+      assert.strictEqual(validation.success, true);
     });
 
     it("should infer number type from example", async () => {
@@ -174,7 +176,7 @@ describe("RRPZodSchemaGeneratorAdapter", () => {
       const result = await adapter.generate(request);
       const validation = result.schema.safeParse(100);
 
-      expect(validation.success).toBe(true);
+      assert.strictEqual(validation.success, true);
     });
   });
 });

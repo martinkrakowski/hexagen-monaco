@@ -31,6 +31,23 @@ layers:
     allowed_imports:
       ["domain", "application", "@hexagen/shared", "@hexagen/core-domain"]
 
+  "manifest-generation/domain":
+    access_rule: "internal-only"
+    allowed_imports:
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/agentic-interaction"
+      - "@hexagen/local-llm"
+
+  "manifest-generation/application":
+    access_rule: "ports-only"
+    allowed_imports:
+      - "domain"
+      - "@hexagen/shared"
+      - "@hexagen/core-domain"
+      - "@hexagen/agentic-interaction"
+      - "@hexagen/local-llm"
+
 # Cross-Package Boundaries
 cross_package_rules:
   - package: "web-driver"

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { InMemoryBackpressureController } from "../../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
 
 describe("InMemoryBackpressureController", () => {
@@ -9,7 +11,7 @@ describe("InMemoryBackpressureController", () => {
 
   describe("canAccept()", () => {
     it("should return true when under capacity", () => {
-      expect(controller.canAccept()).toBe(true);
+      assert.strictEqual(controller.canAccept(), true);
     });
 
     it("should return false when at capacity", () => {
@@ -17,7 +19,7 @@ describe("InMemoryBackpressureController", () => {
       controller.accept("intent-2");
       controller.accept("intent-3");
 
-      expect(controller.canAccept()).toBe(false);
+      assert.strictEqual(controller.canAccept(), false);
     });
 
     it("should return true again after completing work", () => {
@@ -26,14 +28,14 @@ describe("InMemoryBackpressureController", () => {
       controller.accept("intent-3");
       controller.complete("intent-1");
 
-      expect(controller.canAccept()).toBe(true);
+      assert.strictEqual(controller.canAccept(), true);
     });
   });
 
   describe("accept()", () => {
     it("should return none signal when under capacity", () => {
       const signal = controller.accept("intent-1");
-      expect(signal.tag).toBe("none");
+      assert.strictEqual(signal.tag, "none");
     });
 
     it("should drop work when at capacity", () => {
@@ -42,20 +44,17 @@ describe("InMemoryBackpressureController", () => {
       controller.accept("intent-3");
       const signal = controller.accept("intent-4");
 
-      // Should drop since we're at capacity
-      expect(signal.tag).toBe("drop");
-      // Queue depth might be 0 or greater depending on implementation
-      expect(controller.queueDepth()).toBeGreaterThanOrEqual(0);
+      assert.strictEqual(signal.tag, "drop");
+      assert.ok(controller.queueDepth() >= 0);
     });
 
     it("should coalesce identical intents within window", () => {
       controller.accept("intent-1");
-      const signal = controller.accept("intent-1"); // Same intent ID
+      const signal = controller.accept("intent-1");
 
-      // Should coalesce
-      expect(signal.tag).toBe("coalesce");
+      assert.strictEqual(signal.tag, "coalesce");
       if (signal.tag === "coalesce") {
-        expect(signal.intentIds).toContain("intent-1");
+        assert.ok(signal.intentIds.includes("intent-1"));
       }
     });
   });
@@ -65,8 +64,7 @@ describe("InMemoryBackpressureController", () => {
       controller.accept("intent-1");
       controller.complete("intent-1");
 
-      // Should be able to accept again
-      expect(controller.canAccept()).toBe(true);
+      assert.strictEqual(controller.canAccept(), true);
     });
 
     it("should process queued items when capacity is available", () => {
@@ -79,34 +77,31 @@ describe("InMemoryBackpressureController", () => {
       controller.complete("intent-1");
 
       const signal2 = controller.accept("intent-5");
-      expect(signal2).toBeDefined();
+      assert.ok(signal2 !== undefined);
     });
 
     it("should handle complete with no active work gracefully", () => {
       controller.complete("non-existent");
-      expect(controller.canAccept()).toBe(true);
+      assert.strictEqual(controller.canAccept(), true);
     });
   });
 
   describe("queueDepth()", () => {
     it("should return 0 when no work is queued", () => {
-      expect(controller.queueDepth()).toBe(0);
+      assert.strictEqual(controller.queueDepth(), 0);
     });
 
     it("should return the number of queued items", () => {
-      // Add some items
       controller.accept("intent-1");
       controller.accept("intent-2");
       controller.accept("intent-3");
 
-      // Queue is full, next items will be queued or signaled
       controller.accept("intent-4");
       controller.accept("intent-5");
 
-      // Just verify queue depth returns a number
       const depth = controller.queueDepth();
-      expect(typeof depth).toBe("number");
-      expect(depth).toBeGreaterThanOrEqual(0);
+      assert.strictEqual(typeof depth, "number");
+      assert.ok(depth >= 0);
     });
   });
 
@@ -116,11 +111,11 @@ describe("InMemoryBackpressureController", () => {
       controller.accept("intent-2");
       controller.accept("intent-3");
 
-      expect(controller.canAccept()).toBe(false);
+      assert.strictEqual(controller.canAccept(), false);
 
       controller.setMaxConcurrency(5);
 
-      expect(controller.canAccept()).toBe(true);
+      assert.strictEqual(controller.canAccept(), true);
     });
   });
 });

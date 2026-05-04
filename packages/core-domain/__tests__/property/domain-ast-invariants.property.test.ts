@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { NodeKind, EdgeKind } from "../../src/mvk/v1/index.js";
 import type {
   DomainAST,
@@ -182,7 +184,7 @@ describe("DomainAST Invariants Property Tests", () => {
           attributes: {},
         },
       ];
-      expect(checkAcyclic(nodes, edges)).toBe(false);
+      assert.strictEqual(checkAcyclic(nodes, edges), false);
     });
 
     it("should pass for acyclic graphs", () => {
@@ -195,7 +197,7 @@ describe("DomainAST Invariants Property Tests", () => {
           if (acyclic) failures++;
         }
       }
-      expect(failures).toBeGreaterThan(0);
+      assert.ok(failures > 0);
     });
 
     it("should correctly identify connected graphs", () => {
@@ -219,7 +221,7 @@ describe("DomainAST Invariants Property Tests", () => {
         const connected = checkConnected(nodes, edges);
         if (!connected) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 
@@ -232,7 +234,7 @@ describe("DomainAST Invariants Property Tests", () => {
         const valid = checkDegreeConstraint(ast.nodes, ast.edges);
         if (!valid) violationsFound++;
       }
-      expect(violationsFound).toBeGreaterThanOrEqual(0);
+      assert.ok(violationsFound >= 0);
     });
 
     it("should pass for sparse graphs with few edges", () => {
@@ -262,7 +264,7 @@ describe("DomainAST Invariants Property Tests", () => {
         const valid = checkDegreeConstraint(ast.nodes, ast.edges);
         if (!valid) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 
@@ -279,7 +281,7 @@ describe("DomainAST Invariants Property Tests", () => {
           }
         }
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 
@@ -293,7 +295,7 @@ describe("DomainAST Invariants Property Tests", () => {
         const uniqueIds = new Set(ids);
         if (ids.length !== uniqueIds.size) failures++;
       }
-      expect(failures).toBe(0);
+      assert.strictEqual(failures, 0);
     });
   });
 });

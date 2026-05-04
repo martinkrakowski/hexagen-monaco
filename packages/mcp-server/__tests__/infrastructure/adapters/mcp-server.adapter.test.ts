@@ -1,4 +1,5 @@
-import assert from "node:assert";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import type { EventBusPort } from "@hexagen/messaging";
 import { MCPServerAdapter } from "../../../src/infrastructure/adapters/mcp-server.adapter.js";
 import { AddDependencyToolUseCase } from "../../../src/application/use-cases/add-dependency-tool.use-case.js";
@@ -105,31 +106,35 @@ class EventBusFake implements EventBusPort {
   clear(): void {}
 }
 
-(() => {
-  const eventBus = new EventBusFake();
-  const adapter = new MCPServerAdapter({
-    getManifestResourceUseCase: new GetManifestResourceUseCase(projectRead),
-    getGraphResourceUseCase: new GetGraphResourceUseCase(sync),
-    getLinterReportResourceUseCase: new GetLinterReportResourceUseCase(sync),
-    auditBoundariesToolUseCase: new AuditBoundariesToolUseCase(linter),
-    scaffoldModuleToolUseCase: new ScaffoldModuleToolUseCase(
-      sync,
-      manifestWrite,
-      eventBus,
-    ),
-    addDependencyToolUseCase: new AddDependencyToolUseCase(
-      manifestWrite,
-      eventBus,
-    ),
-    createPortToolUseCase: new CreatePortToolUseCase(sync, manifestWrite),
-    createAdapterToolUseCase: new CreateAdapterToolUseCase(sync, manifestWrite),
-    removePortToolUseCase: new RemovePortToolUseCase(manifestWrite, eventBus),
-    removeContextToolUseCase: new RemoveContextToolUseCase(
-      manifestWrite,
-      eventBus,
-    ),
-  });
+describe("MCPServerAdapter", () => {
+  it("should be constructible with all dependencies", () => {
+    const eventBus = new EventBusFake();
+    const adapter = new MCPServerAdapter({
+      getManifestResourceUseCase: new GetManifestResourceUseCase(projectRead),
+      getGraphResourceUseCase: new GetGraphResourceUseCase(sync),
+      getLinterReportResourceUseCase: new GetLinterReportResourceUseCase(sync),
+      auditBoundariesToolUseCase: new AuditBoundariesToolUseCase(linter),
+      scaffoldModuleToolUseCase: new ScaffoldModuleToolUseCase(
+        sync,
+        manifestWrite,
+        eventBus,
+      ),
+      addDependencyToolUseCase: new AddDependencyToolUseCase(
+        manifestWrite,
+        eventBus,
+      ),
+      createPortToolUseCase: new CreatePortToolUseCase(sync, manifestWrite),
+      createAdapterToolUseCase: new CreateAdapterToolUseCase(
+        sync,
+        manifestWrite,
+      ),
+      removePortToolUseCase: new RemovePortToolUseCase(manifestWrite, eventBus),
+      removeContextToolUseCase: new RemoveContextToolUseCase(
+        manifestWrite,
+        eventBus,
+      ),
+    });
 
-  assert.ok(adapter, "adapter should be constructible with all dependencies");
-  console.log("✅ mcp-server adapter construction test passed");
-})();
+    assert.ok(adapter);
+  });
+});

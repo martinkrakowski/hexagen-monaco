@@ -1,7 +1,5 @@
-/**
- * ParseNLIntentUseCase unit tests
- */
-
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { ParseNLIntentUseCase } from "../../application/use-cases/parse-nl-intent.use-case.js";
 import { NLToDomainCommandParserAdapter } from "../../infrastructure/adapters/nl-to-domain-command.adapter.js";
 
@@ -20,14 +18,17 @@ describe("ParseNLIntentUseCase", () => {
         "Add a bounded context named billing",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
         const parsed = result.value;
-        expect(parsed.originalText).toBe("Add a bounded context named billing");
-        expect(parsed.commands).toHaveLength(1);
-        expect(parsed.confidence).toBeGreaterThan(0);
-        expect(parsed.confidence).toBeLessThanOrEqual(1);
-        expect(parsed.metadata?.tokens).toBeDefined();
+        assert.strictEqual(
+          parsed.originalText,
+          "Add a bounded context named billing",
+        );
+        assert.strictEqual(parsed.commands.length, 1);
+        assert.ok(parsed.confidence > 0);
+        assert.ok(parsed.confidence <= 1);
+        assert.ok(parsed.metadata?.tokens !== undefined);
       }
     });
 
@@ -36,9 +37,10 @@ describe("ParseNLIntentUseCase", () => {
         "  Add a bounded context named billing  ",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
-        expect(result.value.originalText).toBe(
+        assert.strictEqual(
+          result.value.originalText,
           "Add a bounded context named billing",
         );
       }
@@ -49,13 +51,13 @@ describe("ParseNLIntentUseCase", () => {
         "Add a bounded context named payment",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
         const tokens = result.value.metadata?.tokens;
-        expect(tokens).toBeDefined();
-        expect(tokens).toContain("Add");
-        expect(tokens).toContain("bounded");
-        expect(tokens).toContain("payment");
+        assert.ok(tokens !== undefined);
+        assert.ok(tokens!.includes("Add"));
+        assert.ok(tokens!.includes("bounded"));
+        assert.ok(tokens!.includes("payment"));
       }
     });
   });
@@ -64,39 +66,39 @@ describe("ParseNLIntentUseCase", () => {
     it("should return error for empty string", async () => {
       const result = await useCase.execute("");
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.code).toBe("INVALID_INPUT");
+        assert.strictEqual(result.error.code, "INVALID_INPUT");
       }
     });
 
     it("should return error for whitespace-only string", async () => {
       const result = await useCase.execute("   ");
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.code).toBe("INVALID_INPUT");
+        assert.strictEqual(result.error.code, "INVALID_INPUT");
       }
     });
 
     it("should return PARSER_ERROR for unsupported intent", async () => {
       const result = await useCase.execute("Some nonsense text");
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.code).toBe("PARSER_ERROR");
-        expect(result.error.innerError).toBeDefined();
-        expect(result.error.innerError?.code).toBe("UNSUPPORTED_INTENT");
+        assert.strictEqual(result.error.code, "PARSER_ERROR");
+        assert.ok(result.error.innerError !== undefined);
+        assert.strictEqual(result.error.innerError?.code, "UNSUPPORTED_INTENT");
       }
     });
 
     it("should include parser error details in result", async () => {
       const result = await useCase.execute("Random gibberish");
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("Could not parse intent");
-        expect(result.error.innerError?.suggestions).toBeDefined();
+        assert.ok(result.error.message.includes("Could not parse intent"));
+        assert.ok(result.error.innerError?.suggestions !== undefined);
       }
     });
   });
@@ -107,15 +109,15 @@ describe("ParseNLIntentUseCase", () => {
         "Add a bounded context named inventory",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
         const parsed = result.value;
-        expect(parsed.originalText).toBeDefined();
-        expect(parsed.commands).toBeDefined();
-        expect(parsed.confidence).toBeDefined();
-        expect(parsed.intentType).toBeDefined();
-        expect(parsed.parameters).toBeDefined();
-        expect(parsed.metadata).toBeDefined();
+        assert.ok(parsed.originalText !== undefined);
+        assert.ok(parsed.commands !== undefined);
+        assert.ok(parsed.confidence !== undefined);
+        assert.ok(parsed.intentType !== undefined);
+        assert.ok(parsed.parameters !== undefined);
+        assert.ok(parsed.metadata !== undefined);
       }
     });
 
@@ -124,25 +126,24 @@ describe("ParseNLIntentUseCase", () => {
         "Add a bounded context named shipping",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
-        expect(result.value.confidence).toBeGreaterThanOrEqual(0);
-        expect(result.value.confidence).toBeLessThanOrEqual(1);
+        assert.ok(result.value.confidence >= 0);
+        assert.ok(result.value.confidence <= 1);
       }
     });
   });
 
   describe("Multiple Command Support", () => {
     it("should support parsing multiple related intents (future enhancement)", async () => {
-      // This test documents expected future behavior for batch operations
       const result = await useCase.execute(
         "Add a bounded context named billing",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
-        expect(Array.isArray(result.value.commands)).toBe(true);
-        expect(result.value.commands.length).toBeGreaterThan(0);
+        assert.strictEqual(Array.isArray(result.value.commands), true);
+        assert.ok(result.value.commands.length > 0);
       }
     });
   });

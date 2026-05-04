@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { Gesture } from "../../domain/gesture.js";
 import { ManifestAwareGestureParserAdapter } from "../../infrastructure/adapters/manifest-aware-gesture-parser.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";
@@ -30,9 +32,9 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(gesture);
 
-      expect(result.gesture).toBe(gesture);
-      expect(result.ast).toEqual(ast);
-      expect(result.confidence).toBeGreaterThan(0);
+      assert.strictEqual(result.gesture, gesture);
+      assert.deepStrictEqual(result.ast, ast);
+      assert.ok(result.confidence > 0);
     });
 
     it("should construct AST from constituent parts", () => {
@@ -58,8 +60,8 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(gesture);
 
-      expect(result.ast.nodes).toHaveLength(2);
-      expect(result.ast.edges).toHaveLength(1);
+      assert.strictEqual(result.ast.nodes.length, 2);
+      assert.strictEqual(result.ast.edges.length, 1);
     });
 
     it("should handle empty payload gracefully", () => {
@@ -67,26 +69,23 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(gesture);
 
-      expect(result.ast.nodes).toEqual([]);
-      expect(result.ast.edges).toEqual([]);
-      expect(result.confidence).toBe(0);
+      assert.deepStrictEqual(result.ast.nodes, []);
+      assert.deepStrictEqual(result.ast.edges, []);
+      assert.strictEqual(result.confidence, 0);
     });
 
     it("should compute confidence based on payload completeness", () => {
-      // Empty payload
       const empty = new Gesture("g1", "Empty", {});
       const emptyResult = adapter.parse(empty);
-      expect(emptyResult.confidence).toBe(0);
+      assert.strictEqual(emptyResult.confidence, 0);
 
-      // Partial payload (nodes only)
       const partial = new Gesture("g2", "Partial", {
         nodes: [{ id: "n1", kind: "Entity", attributes: {} }],
       });
       const partialResult = adapter.parse(partial);
-      expect(partialResult.confidence).toBeGreaterThan(0);
-      expect(partialResult.confidence).toBeLessThan(1);
+      assert.ok(partialResult.confidence > 0);
+      assert.ok(partialResult.confidence < 1);
 
-      // Full AST payload
       const full = new Gesture("g3", "Full", {
         ast: {
           nodes: [{ id: "n1", kind: "Entity", attributes: {} }],
@@ -95,7 +94,7 @@ describe("ManifestAwareGestureParserAdapter", () => {
         },
       });
       const fullResult = adapter.parse(full);
-      expect(fullResult.confidence).toBeGreaterThanOrEqual(0.5);
+      assert.ok(fullResult.confidence >= 0.5);
     });
 
     it("should preserve gesture metadata in result", () => {
@@ -103,9 +102,9 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(gesture);
 
-      expect(result.gesture.id).toBe("gesture1");
-      expect(result.gesture.type).toBe("TestType");
-      expect(result.gesture.lineage).toBe("lineage/path");
+      assert.strictEqual(result.gesture.id, "gesture1");
+      assert.strictEqual(result.gesture.type, "TestType");
+      assert.strictEqual(result.gesture.lineage, "lineage/path");
     });
   });
 
@@ -115,7 +114,7 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(gesture);
 
-      expect(result.confidence).toBe(0);
+      assert.strictEqual(result.confidence, 0);
     });
 
     it("should award points for AST presence", () => {
@@ -129,7 +128,7 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(withAst);
 
-      expect(result.confidence).toBeGreaterThan(0.3);
+      assert.ok(result.confidence > 0.3);
     });
 
     it("should award points for nodes and edges", () => {
@@ -151,7 +150,7 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(withNodes);
 
-      expect(result.confidence).toBeGreaterThan(0.2);
+      assert.ok(result.confidence > 0.2);
     });
 
     it("should award points for invariants", () => {
@@ -164,7 +163,7 @@ describe("ManifestAwareGestureParserAdapter", () => {
 
       const result = adapter.parse(withInvariants);
 
-      expect(result.confidence).toBeGreaterThan(0);
+      assert.ok(result.confidence > 0);
     });
   });
 });

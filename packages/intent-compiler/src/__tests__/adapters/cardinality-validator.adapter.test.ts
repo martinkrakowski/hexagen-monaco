@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { CardinalityValidatorAdapter } from "../../infrastructure/adapters/cardinality-validator.adapter.js";
 import type { DomainAST } from "@hexagen/core-domain";
 
@@ -29,8 +31,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
-      expect(result.violations).toHaveLength(0);
+      assert.strictEqual(result.isValid, true);
+      assert.strictEqual(result.violations.length, 0);
     });
 
     it("should fail when node count is less than expected", () => {
@@ -50,9 +52,9 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations[0]).toContain("has 1 instances");
-      expect(result.violations[0]).toContain("expected exactly 2");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations[0].includes("has 1 instances"));
+      assert.ok(result.violations[0].includes("expected exactly 2"));
     });
 
     it("should fail when node count is greater than expected", () => {
@@ -76,8 +78,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations[0]).toContain("has 3 instances");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations[0].includes("has 3 instances"));
     });
   });
 
@@ -102,7 +104,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should pass when node count exceeds minimum", () => {
@@ -126,7 +128,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should fail when node count is below minimum", () => {
@@ -146,8 +148,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations[0]).toContain("at least");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations[0].includes("at least"));
     });
   });
 
@@ -172,7 +174,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should pass when node count is below maximum", () => {
@@ -192,7 +194,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should fail when node count exceeds maximum", () => {
@@ -216,8 +218,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations[0]).toContain("at most");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations[0].includes("at most"));
     });
   });
 
@@ -242,7 +244,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should pass when node count equals min", () => {
@@ -262,7 +264,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should pass when node count equals max", () => {
@@ -286,7 +288,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should fail when node count is below min", () => {
@@ -306,8 +308,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations[0]).toContain("between");
+      assert.strictEqual(result.isValid, false);
+      assert.ok(result.violations[0].includes("between"));
     });
 
     it("should fail when node count is above max", () => {
@@ -332,7 +334,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
+      assert.strictEqual(result.isValid, false);
     });
   });
 
@@ -362,7 +364,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
 
     it("should report violations for specific node kinds", () => {
@@ -390,8 +392,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
-      expect(result.violations.length).toBe(2);
+      assert.strictEqual(result.isValid, false);
+      assert.strictEqual(result.violations.length, 2);
     });
   });
 
@@ -413,7 +415,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(false);
+      assert.strictEqual(result.isValid, false);
     });
 
     it("should pass for atleast invariant with count 0 on missing node kind", () => {
@@ -433,7 +435,7 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
+      assert.strictEqual(result.isValid, true);
     });
   });
 
@@ -454,8 +456,8 @@ describe("CardinalityValidatorAdapter", () => {
 
       const result = adapter.check(ast);
 
-      expect(result.isValid).toBe(true);
-      expect(result.violations).toHaveLength(0);
+      assert.strictEqual(result.isValid, true);
+      assert.strictEqual(result.violations.length, 0);
     });
   });
 });

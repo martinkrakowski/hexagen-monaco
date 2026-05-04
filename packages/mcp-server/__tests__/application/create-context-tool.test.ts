@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { EventBusPort } from "@hexagen/messaging";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
@@ -63,9 +64,8 @@ class EventBusFake implements EventBusPort {
   clear(): void {}
 }
 
-(async () => {
-  // ── dry_run ──────────────────────────────────────────────────────────────
-  {
+describe("create context tool", () => {
+  it("should return dryRun=true for dry_run request", async () => {
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteFake(),
       new EventBusFake(),
@@ -80,11 +80,9 @@ class EventBusFake implements EventBusPort {
     assert.strictEqual(result.alreadyExisted, false);
     assert.ok(result.message.includes("local-llm"));
     assert.ok(result.message.includes("supporting"));
-  }
-  console.log("  ✅ CreateContextToolUseCase: dry_run returns dryRun=true");
+  });
 
-  // ── happy path — creates context and publishes event ─────────────────────
-  {
+  it("should create context and publish event", async () => {
     const eventBus = new EventBusFake();
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteFake(),
@@ -103,13 +101,9 @@ class EventBusFake implements EventBusPort {
     assert.strictEqual(eventBus.published.length, 1);
     const event = eventBus.published[0] as { type: string };
     assert.strictEqual(event.type, "ContextCreated");
-  }
-  console.log(
-    "  ✅ CreateContextToolUseCase: creates context and publishes event",
-  );
+  });
 
-  // ── already existed — no event published ─────────────────────────────────
-  {
+  it("should return alreadyExisted=true and not publish event when context exists", async () => {
     const eventBus = new EventBusFake();
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteAlreadyExistsFake(),
@@ -124,13 +118,9 @@ class EventBusFake implements EventBusPort {
     assert.strictEqual(result.alreadyExisted, true);
     assert.ok(result.message.includes("already exists"));
     assert.strictEqual(eventBus.published.length, 0);
-  }
-  console.log(
-    "  ✅ CreateContextToolUseCase: returns alreadyExisted=true, no event",
-  );
+  });
 
-  // ── adapter failure propagates ────────────────────────────────────────────
-  {
+  it("should throw when adapter fails", async () => {
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteErrorFake(),
       new EventBusFake(),
@@ -140,11 +130,9 @@ class EventBusFake implements EventBusPort {
         useCase.execute({ name: "local-llm", type: "core", dry_run: false }),
       (err: unknown) => (err as Error).message.includes("disk write failure"),
     );
-  }
-  console.log("  ✅ CreateContextToolUseCase: throws when adapter fails");
+  });
 
-  // ── invalid name — empty ──────────────────────────────────────────────────
-  {
+  it("should throw on empty name", async () => {
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteFake(),
       new EventBusFake(),
@@ -153,11 +141,9 @@ class EventBusFake implements EventBusPort {
       async () => useCase.execute({ name: "", type: "core", dry_run: false }),
       /required/,
     );
-  }
-  console.log("  ✅ CreateContextToolUseCase: throws on empty name");
+  });
 
-  // ── invalid name — fails kebab-case regex ─────────────────────────────────
-  {
+  it("should throw on invalid name format", async () => {
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteFake(),
       new EventBusFake(),
@@ -167,11 +153,9 @@ class EventBusFake implements EventBusPort {
         useCase.execute({ name: "Invalid_Name", type: "core", dry_run: false }),
       /kebab-case/,
     );
-  }
-  console.log("  ✅ CreateContextToolUseCase: throws on invalid name format");
+  });
 
-  // ── reserved name ─────────────────────────────────────────────────────────
-  {
+  it("should throw on reserved name", async () => {
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteFake(),
       new EventBusFake(),
@@ -181,11 +165,9 @@ class EventBusFake implements EventBusPort {
         useCase.execute({ name: "shared", type: "core", dry_run: false }),
       /reserved/,
     );
-  }
-  console.log("  ✅ CreateContextToolUseCase: throws on reserved name");
+  });
 
-  // ── invalid type ──────────────────────────────────────────────────────────
-  {
+  it("should throw on invalid type", async () => {
     const useCase = new CreateContextToolUseCase(
       new ManifestWriteFake(),
       new EventBusFake(),
@@ -199,8 +181,5 @@ class EventBusFake implements EventBusPort {
         }),
       /type must be one of/,
     );
-  }
-  console.log("  ✅ CreateContextToolUseCase: throws on invalid type");
-
-  console.log("✅ create-context-tool use-case tests passed");
-})();
+  });
+});

@@ -11,7 +11,8 @@
  * 6. Network disconnection (ENOTFOUND)
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createMockRegistry,
   registerMockPort,
@@ -41,121 +42,106 @@ describe("Export Pipeline — Error Handling", () => {
   });
 
   it("error: GitHub authentication fails (401 Unauthorized)", async () => {
-    // Arrange: Create unauthorized GitHub adapter
     const githubAdapter = new UnauthorizedGitHubMock();
     registerMockPort(registry, PORT_NAMES.GITHUB_PROVIDER, githubAdapter);
 
-    // Act: Attempt authentication
     const result = await githubAdapter.authenticate("invalid-token");
 
-    // Assert: Verify 401 error
-    expect(result.success).toBe(false);
-    expect(result.statusCode).toBe(401);
-    expect(result.error).toContain("Unauthorized");
+    assert.strictEqual(result.success, false);
+    assert.strictEqual(result.statusCode, 401);
+    assert.ok(result.error.includes("Unauthorized"));
   });
 
   it("error: GitHub authorization fails (403 Forbidden)", async () => {
-    // Arrange: Create forbidden GitHub adapter
     const githubAdapter = new ForbiddenGitHubMock();
     registerMockPort(registry, PORT_NAMES.GITHUB_PROVIDER, githubAdapter);
 
-    // Act: Attempt to create repository (after auth succeeds)
     const authResult = await githubAdapter.authenticate("valid-token");
-    expect(authResult.success).toBe(true);
+    assert.strictEqual(authResult.success, true);
 
     const repoResult = await githubAdapter.createRepository({
       name: "new-repo",
     });
 
-    // Assert: Verify 403 error
-    expect(repoResult.success).toBe(false);
-    expect(repoResult.statusCode).toBe(403);
+    assert.strictEqual(repoResult.success, false);
+    assert.strictEqual(repoResult.statusCode, 403);
   });
 
-  it("error: S3 upload timeout (>5s) triggers rollback", async () => {
-    // Arrange: Create timeout storage adapter (1 second for faster test, simulates timeout)
-    const storageAdapter = new TimeoutCloudStorageMock(1000);
-    const txManager = new MockTransactionManagerAdapter();
-    registerMockPort(registry, PORT_NAMES.CLOUD_STORAGE, storageAdapter);
-    registerMockPort(registry, PORT_NAMES.TRANSACTION_MANAGER, txManager);
+  it(
+    "error: S3 upload timeout (>5s) triggers rollback",
+    { timeout: 5000 },
+    async () => {
+      const storageAdapter = new TimeoutCloudStorageMock(1000);
+      const txManager = new MockTransactionManagerAdapter();
+      registerMockPort(registry, PORT_NAMES.CLOUD_STORAGE, storageAdapter);
+      registerMockPort(registry, PORT_NAMES.TRANSACTION_MANAGER, txManager);
 
-    // Act: Begin transaction and attempt upload
-    await txManager.begin();
-    const uploadResult = await storageAdapter.uploadObject({
-      bucket: "test-bucket",
-      key: "export.zip",
-      body: Buffer.from("test data"),
-    });
+      await txManager.begin();
+      const uploadResult = await storageAdapter.uploadObject({
+        bucket: "test-bucket",
+        key: "export.zip",
+        body: Buffer.from("test data"),
+      });
 
-    // Simulate timeout handling: rollback on failure
-    if (!uploadResult.success) {
-      await txManager.rollback();
-    }
+      if (!uploadResult.success) {
+        await txManager.rollback();
+      }
 
-    // Assert: Verify timeout and rollback
-    expect(uploadResult.success).toBe(false);
-    expect(uploadResult.error).toContain("timeout");
-    expect(txManager.rollbackCalled).toBe(true);
-  }, 5000);
+      assert.strictEqual(uploadResult.success, false);
+      assert.ok(uploadResult.error.includes("timeout"));
+      assert.strictEqual(txManager.rollbackCalled, true);
+    },
+  );
 
   it("error: transaction rollback state reverted", async () => {
-    // Arrange: Create transaction manager
     const txManager = new MockTransactionManagerAdapter();
     registerMockPort(registry, PORT_NAMES.TRANSACTION_MANAGER, txManager);
 
-    // Act: Begin transaction, commit, then verify state
     const txId = await txManager.begin();
     const commitResult = await txManager.commit(txId);
 
-    // Assert: Verify transaction lifecycle
-    expect(commitResult.success).toBe(true);
-    expect(txManager.commitCalled).toBe(true);
-    expect(txManager.rollbackCalled).toBe(false);
+    assert.strictEqual(commitResult.success, true);
+    assert.strictEqual(txManager.commitCalled, true);
+    assert.strictEqual(txManager.rollbackCalled, false);
 
-    // Act: Rollback state
     txManager.reset();
-    expect(txManager.commitCalled).toBe(false);
-    expect(txManager.rollbackCalled).toBe(false);
+    assert.strictEqual(txManager.commitCalled, false);
+    assert.strictEqual(txManager.rollbackCalled, false);
   });
 
   it("error: SSE stream interruption (connection lost)", async () => {
-    // Arrange: Create interrupting stream
-    const stream = new InterruptingSSEStreamMock(2); // Interrupt after 2 events
+    const stream = new InterruptingSSEStreamMock(2);
     registerMockPort(registry, PORT_NAMES.SSE_STREAM, stream);
 
     stream.emitEvent({ type: "start", step: "github-auth", status: "pending" });
     stream.emitEvent({ type: "progress", step: "github-auth", progress: 50 });
     stream.emitEvent({ type: "complete", step: "github-auth", status: "done" });
 
-    // Act: Consume stream events
     const events = [];
     for await (const event of stream.streamEvents()) {
       events.push(event);
       if ("success" in event && !event.success) {
-        break; // Stream interrupted
+        break;
       }
     }
 
-    // Assert: Verify stream interrupted after 2 events
-    expect(events.length).toBe(3); // 2 events + 1 error event
+    assert.strictEqual(events.length, 3);
     const lastEvent = events[events.length - 1];
-    expect("success" in lastEvent && !lastEvent.success).toBe(true);
+    assert.strictEqual("success" in lastEvent && !lastEvent.success, true);
     if ("error" in lastEvent && lastEvent.error) {
-      expect(lastEvent.error.code).toBe(ErrorScenario.NETWORK_ERROR);
+      assert.strictEqual(lastEvent.error.code, ErrorScenario.NETWORK_ERROR);
     }
   });
 
   it("error: mixed errors (partial success scenario)", async () => {
-    // Arrange: Create partially failing system
-    const githubAdapter = new MockGitHubProviderAdapter(); // Succeeds
-    const storageAdapter = new NetworkErrorCloudStorageMock(); // Fails
+    const githubAdapter = new MockGitHubProviderAdapter();
+    const storageAdapter = new NetworkErrorCloudStorageMock();
     const stream = new PartialSuccessSSEStreamMock();
 
     registerMockPort(registry, PORT_NAMES.GITHUB_PROVIDER, githubAdapter);
     registerMockPort(registry, PORT_NAMES.CLOUD_STORAGE, storageAdapter);
     registerMockPort(registry, PORT_NAMES.SSE_STREAM, stream);
 
-    // Act: Attempt mixed operations
     const githubAuth = await githubAdapter.authenticate("valid-token");
     const storageUpload = await storageAdapter.uploadObject({
       bucket: "bucket",
@@ -176,34 +162,29 @@ describe("Export Pipeline — Error Handling", () => {
 
     const events = stream.getEvents();
 
-    // Assert: GitHub succeeds, S3 fails, mixed result
-    expect(githubAuth.success).toBe(true);
-    expect(storageUpload.success).toBe(false);
-    expect(events.length).toBe(2);
-    expect(events[0]).toHaveProperty("type", "success");
-    expect(events[1]).toHaveProperty("success", false);
+    assert.strictEqual(githubAuth.success, true);
+    assert.strictEqual(storageUpload.success, false);
+    assert.strictEqual(events.length, 2);
+    assert.strictEqual(events[0].type, "success");
+    assert.strictEqual(events[1].success, false);
   });
 
   it("error: network error (ENOTFOUND) during upload", async () => {
-    // Arrange: Create network error adapter
     const storageAdapter = new NetworkErrorCloudStorageMock();
     registerMockPort(registry, PORT_NAMES.CLOUD_STORAGE, storageAdapter);
 
-    // Act: Attempt upload with network error
     const result = await storageAdapter.uploadObject({
       bucket: "bucket",
       key: "file.zip",
       body: Buffer.from("data"),
     });
 
-    // Assert: Verify network error
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("ENOTFOUND");
-    expect(result.statusCode).toBe(0); // Network error indicator
+    assert.strictEqual(result.success, false);
+    assert.ok(result.error.includes("ENOTFOUND"));
+    assert.strictEqual(result.statusCode, 0);
   });
 
   it("error: stream recovers from single error event", async () => {
-    // Arrange: Create partial success stream
     const stream = new PartialSuccessSSEStreamMock();
 
     stream.emitEvent({
@@ -222,18 +203,15 @@ describe("Export Pipeline — Error Handling", () => {
       status: "retrying",
     });
 
-    // Act: Process all events
     const events = stream.getEvents();
 
-    // Assert: Verify event sequence with error in middle
-    expect(events.length).toBe(3);
-    expect(events[0]).toHaveProperty("type", "start");
-    expect(events[1]).toHaveProperty("success", false);
-    expect(events[2]).toHaveProperty("type", "retry");
+    assert.strictEqual(events.length, 3);
+    assert.strictEqual(events[0].type, "start");
+    assert.strictEqual(events[1].success, false);
+    assert.strictEqual(events[2].type, "retry");
   });
 
   it("error: export manifest with large context count performance", async () => {
-    // Arrange: Create manifest with 50 bounded contexts
     const largeManifest = createExportFixtureManifest();
     const largeContextManifest = {
       ...largeManifest,
@@ -244,9 +222,7 @@ describe("Export Pipeline — Error Handling", () => {
       })),
     };
 
-    // Act: Measure export operation time
     const startTime = Date.now();
-    // Simulate export processing
     const stream = new PartialSuccessSSEStreamMock();
     for (let i = 0; i < largeContextManifest.bounded_contexts.length; i++) {
       stream.emitEvent({
@@ -257,9 +233,8 @@ describe("Export Pipeline — Error Handling", () => {
     }
     const duration = Date.now() - startTime;
 
-    // Assert: Export completes in reasonable time
-    expect(duration).toBeLessThan(1000); // Should be fast
+    assert.ok(duration < 1000);
     const events = stream.getEvents();
-    expect(events.length).toBe(50);
+    assert.strictEqual(events.length, 50);
   });
 });

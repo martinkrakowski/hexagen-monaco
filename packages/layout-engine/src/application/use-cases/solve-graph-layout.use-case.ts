@@ -8,11 +8,11 @@ import type {
 export class SolveGraphLayoutUseCase {
   constructor(private readonly layoutPort: GraphLayoutPort) {}
 
-  execute(
+  async execute(
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     direction: "TB" | "LR" = "TB",
-  ): GraphLayoutResult {
+  ): Promise<GraphLayoutResult> {
     return this.layoutPort.layout(nodes, edges, direction);
   }
 }

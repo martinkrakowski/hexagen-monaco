@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   isGeneratedFile,
@@ -11,83 +12,44 @@ import {
   type ExportEntry,
 } from "../../src/generators/barrels/utils.js";
 
-/**
- * Unit tests for packages/sync/src/generators/barrels/utils.ts
- *
- * Coverage targets (6 pure functions):
- *   - isGeneratedFile
- *   - contentHash
- *   - detectCircularExports  (CRITICAL per AGENTS.md §7 — circular barrels are a
- *     critical invariant failure; the sync engine aborts + cleans up on detection)
- *   - generateBarrelContent  (Phase 1.4 changed to double-quoted emission)
- *   - parseBarrelExports     (must tolerate both single and double quotes for
- *                             backward compatibility with pre-Phase 1.4 barrels)
- *   - isSourceFile
- *
- * Test style mirrors __tests__/generators/package-json.test.ts:
- *   - self-invoking async IIFE
- *   - node:assert (strict variants)
- *   - console.log for progress, process.exitCode on failure
- *   - no fixtures, inline inputs (these are pure functions)
- */
-
-(async () => {
-  console.log("Running barrels/utils tests...\n");
-
-  // ---------------------------------------------------------------------------
-  // isGeneratedFile
-  // ---------------------------------------------------------------------------
-
-  // 1) Returns true when content contains the current GENERATED_MARKER
-  {
+describe("barrels utils", () => {
+  it("should detect current GENERATED_MARKER", async () => {
     const content = `${GENERATED_MARKER}\n\nexport * from "./a.js";\n`;
     assert.strictEqual(
       isGeneratedFile(content),
       true,
       "isGeneratedFile should return true for the current marker",
     );
-    console.log("✅ isGeneratedFile: detects current GENERATED_MARKER");
-  }
+  });
 
-  // 2) Returns true when content contains the legacy marker
-  {
+  it("should detect LEGACY_GENERATED_MARKER", async () => {
     const content = `// ${LEGACY_GENERATED_MARKER}\n\nexport * from './a.js';\n`;
     assert.strictEqual(
       isGeneratedFile(content),
       true,
       "isGeneratedFile should return true for the legacy marker",
     );
-    console.log("✅ isGeneratedFile: detects LEGACY_GENERATED_MARKER");
-  }
+  });
 
-  // 3) Returns false when content has no marker
-  {
+  it("should return false when no marker is present", async () => {
     const content = `export const foo = 1;\nexport const bar = 2;\n`;
     assert.strictEqual(
       isGeneratedFile(content),
       false,
       "isGeneratedFile should return false when no marker is present",
     );
-    console.log("✅ isGeneratedFile: returns false when no marker present");
-  }
+  });
 
-  // 4) Returns true when marker is anywhere in the file (not just line 1)
-  {
+  it("should detect marker at any line position", async () => {
     const content = `export const foo = 1;\n// other comment\n${GENERATED_MARKER}\nexport const bar = 2;\n`;
     assert.strictEqual(
       isGeneratedFile(content),
       true,
       "isGeneratedFile should match marker even when not on the first line",
     );
-    console.log("✅ isGeneratedFile: detects marker at any line position");
-  }
+  });
 
-  // ---------------------------------------------------------------------------
-  // contentHash
-  // ---------------------------------------------------------------------------
-
-  // 5) Consistent hex digest for the same input
-  {
+  it("should be deterministic for identical input", async () => {
     const input = 'export * from "./alpha.js";\n';
     const h1 = contentHash(input);
     const h2 = contentHash(input);
@@ -96,11 +58,9 @@ import {
       h2,
       "contentHash must be deterministic for identical input",
     );
-    console.log("✅ contentHash: deterministic for identical input");
-  }
+  });
 
-  // 6) Different inputs produce different hashes
-  {
+  it("should produce distinct hashes for distinct input", async () => {
     const h1 = contentHash("alpha");
     const h2 = contentHash("beta");
     assert.notStrictEqual(
@@ -108,11 +68,9 @@ import {
       h2,
       "contentHash must produce distinct hashes for distinct input",
     );
-    console.log("✅ contentHash: different inputs yield different hashes");
-  }
+  });
 
-  // 7) Returns 64-char lowercase hex string (SHA-256 size)
-  {
+  it("should return 64-char lowercase hex string", async () => {
     const h = contentHash("anything");
     assert.strictEqual(
       h.length,
@@ -124,28 +82,18 @@ import {
       /^[0-9a-f]{64}$/,
       "contentHash must return lowercase hex characters only",
     );
-    console.log("✅ contentHash: returns 64-char lowercase hex (SHA-256)");
-  }
+  });
 
-  // ---------------------------------------------------------------------------
-  // detectCircularExports  (CRITICAL — per AGENTS.md §7)
-  // ---------------------------------------------------------------------------
-
-  // 8) Empty graph → no cycle
-  {
+  it("should report no cycle for empty graph", async () => {
     const result = detectCircularExports(new Map());
     assert.deepStrictEqual(
       result,
       { hasCircular: false, cycle: null },
       "empty graph must report no circular dependency",
     );
-    console.log("✅ detectCircularExports: empty graph → no cycle");
-  }
+  });
 
-  // 9) DAG (no cycles) → no cycle
-  //    A → B → C
-  //    A → C
-  {
+  it("should report no cycle for DAG", async () => {
     const graph = new Map<string, string[]>([
       ["A", ["B", "C"]],
       ["B", ["C"]],
@@ -157,11 +105,9 @@ import {
       { hasCircular: false, cycle: null },
       "DAG must report no circular dependency",
     );
-    console.log("✅ detectCircularExports: DAG → no cycle");
-  }
+  });
 
-  // 10) Simple 2-node cycle: A → B → A
-  {
+  it("should detect 2-node cycle", async () => {
     const graph = new Map<string, string[]>([
       ["A", ["B"]],
       ["B", ["A"]],
@@ -177,19 +123,14 @@ import {
       result.cycle!.includes("A") && result.cycle!.includes("B"),
       `cycle must contain both A and B; got ${JSON.stringify(result.cycle)}`,
     );
-    // Cycle should close on itself: first and last element are the same node.
     assert.strictEqual(
       result.cycle![0],
       result.cycle![result.cycle!.length - 1],
       "cycle must close on itself (first === last for human-readable trace)",
     );
-    console.log(
-      `✅ detectCircularExports: 2-node cycle A→B→A detected (cycle=${JSON.stringify(result.cycle)})`,
-    );
-  }
+  });
 
-  // 11) 3-node cycle: A → B → C → A
-  {
+  it("should detect 3-node cycle", async () => {
     const graph = new Map<string, string[]>([
       ["A", ["B"]],
       ["B", ["C"]],
@@ -202,7 +143,6 @@ import {
       "3-node cycle must be detected",
     );
     assert.ok(result.cycle, "cycle array must be populated");
-    // Must contain all three nodes
     for (const n of ["A", "B", "C"]) {
       assert.ok(
         result.cycle!.includes(n),
@@ -214,13 +154,9 @@ import {
       result.cycle![result.cycle!.length - 1],
       "cycle must close on itself",
     );
-    console.log(
-      `✅ detectCircularExports: 3-node cycle A→B→C→A detected (cycle=${JSON.stringify(result.cycle)})`,
-    );
-  }
+  });
 
-  // 12) Self-loop: A → A
-  {
+  it("should detect self-loop", async () => {
     const graph = new Map<string, string[]>([["A", ["A"]]]);
     const result = detectCircularExports(graph);
     assert.strictEqual(
@@ -233,15 +169,9 @@ import {
       result.cycle!.includes("A"),
       "self-loop cycle must contain the offending node",
     );
-    console.log(
-      `✅ detectCircularExports: self-loop A→A detected (cycle=${JSON.stringify(result.cycle)})`,
-    );
-  }
+  });
 
-  // 13) Disconnected subgraphs — only one contains a cycle
-  //    Component 1 (DAG):  X → Y → Z
-  //    Component 2 (cycle): A → B → A
-  {
+  it("should detect cycle in disconnected subgraphs", async () => {
     const graph = new Map<string, string[]>([
       ["X", ["Y"]],
       ["Y", ["Z"]],
@@ -260,21 +190,15 @@ import {
       result.cycle!.includes("A") && result.cycle!.includes("B"),
       `reported cycle must come from the cyclic component, not the DAG; got ${JSON.stringify(result.cycle)}`,
     );
-    // The DAG nodes must NOT appear in the reported cycle
     for (const n of ["X", "Y", "Z"]) {
       assert.ok(
         !result.cycle!.includes(n),
         `DAG node ${n} must not appear in cycle; got ${JSON.stringify(result.cycle)}`,
       );
     }
-    console.log(
-      "✅ detectCircularExports: disconnected subgraphs — cycle isolated to cyclic component",
-    );
-  }
+  });
 
-  // 14) Cycle array preserves the order of the cycle (for human-readable
-  //     error messages the bootstrap validator prints).
-  {
+  it("should preserve cycle order as a walk through the graph", async () => {
     const graph = new Map<string, string[]>([
       ["A", ["B"]],
       ["B", ["C"]],
@@ -283,8 +207,6 @@ import {
     const result = detectCircularExports(graph);
     assert.ok(result.cycle, "cycle must be populated");
     const cycle = result.cycle!;
-    // The cycle closes on itself (first === last) — strip the closing node
-    // and verify the open path is exactly one consecutive walk in the graph.
     assert.strictEqual(
       cycle[0],
       cycle[cycle.length - 1],
@@ -300,28 +222,18 @@ import {
         `cycle order invalid: ${from} has no edge to ${to}; cycle=${JSON.stringify(cycle)}`,
       );
     }
-    console.log(
-      `✅ detectCircularExports: cycle order preserved as a walk through the graph (cycle=${JSON.stringify(cycle)})`,
-    );
-  }
+  });
 
-  // ---------------------------------------------------------------------------
-  // generateBarrelContent
-  // ---------------------------------------------------------------------------
-
-  // 15) Empty entries → null (do not create a barrel for empty directories)
-  {
+  it("should return null for empty entries", async () => {
     const result = generateBarrelContent([]);
     assert.strictEqual(
       result,
       null,
       "generateBarrelContent must return null for empty entries",
     );
-    console.log("✅ generateBarrelContent: empty entries → null");
-  }
+  });
 
-  // 16) Output is prefixed with the GENERATED_MARKER
-  {
+  it("should prefix output with GENERATED_MARKER", async () => {
     const entries: ExportEntry[] = [{ name: "alpha", isDirectory: false }];
     const output = generateBarrelContent(entries);
     assert.ok(output, "output must be non-null for non-empty entries");
@@ -329,45 +241,31 @@ import {
       output!.startsWith(GENERATED_MARKER),
       `output must start with GENERATED_MARKER; got: ${JSON.stringify(output)}`,
     );
-    console.log(
-      "✅ generateBarrelContent: output starts with GENERATED_MARKER",
-    );
-  }
+  });
 
-  // 17) File entries emit `export * from "./<name>.js"` with DOUBLE quotes
-  //     (Phase 1.4 output contract)
-  {
+  it("should emit double-quoted export for file entries", async () => {
     const entries: ExportEntry[] = [{ name: "alpha", isDirectory: false }];
     const output = generateBarrelContent(entries)!;
     assert.ok(
       output.includes(`export * from "./alpha.js";`),
       `file entry must emit double-quoted export for ./alpha.js; got: ${JSON.stringify(output)}`,
     );
-    // Belt-and-braces: make sure we did NOT emit single quotes.
     assert.ok(
       !output.includes(`export * from './alpha.js';`),
       `file entry must NOT emit single-quoted export (Phase 1.4 uses double quotes); got: ${JSON.stringify(output)}`,
     );
-    console.log(
-      '✅ generateBarrelContent: file entry emits double-quoted export * from "./<name>.js"',
-    );
-  }
+  });
 
-  // 18) Directory entries emit `export * from "./<name>/index.js"`
-  {
+  it("should emit directory entry with index.js path", async () => {
     const entries: ExportEntry[] = [{ name: "adapters", isDirectory: true }];
     const output = generateBarrelContent(entries)!;
     assert.ok(
       output.includes(`export * from "./adapters/index.js";`),
       `directory entry must emit export for ./adapters/index.js; got: ${JSON.stringify(output)}`,
     );
-    console.log(
-      '✅ generateBarrelContent: directory entry emits export * from "./<name>/index.js"',
-    );
-  }
+  });
 
-  // 19) Entries are sorted alphabetically by name, regardless of type
-  {
+  it("should sort entries alphabetically by name", async () => {
     const entries: ExportEntry[] = [
       { name: "zeta", isDirectory: false },
       { name: "alpha", isDirectory: true },
@@ -385,26 +283,18 @@ import {
       alphaIdx < muIdx && muIdx < zetaIdx,
       `entries must be alphabetically sorted (alpha < mu < zeta); got indices ${alphaIdx}, ${muIdx}, ${zetaIdx}`,
     );
-    console.log("✅ generateBarrelContent: entries sorted alphabetically");
-  }
+  });
 
-  // 20) Output ends with a trailing newline
-  {
+  it("should end output with trailing newline", async () => {
     const entries: ExportEntry[] = [{ name: "alpha", isDirectory: false }];
     const output = generateBarrelContent(entries)!;
     assert.ok(
       output.endsWith("\n"),
       `output must end with a trailing newline; got: ${JSON.stringify(output)}`,
     );
-    console.log("✅ generateBarrelContent: output ends with trailing newline");
-  }
+  });
 
-  // ---------------------------------------------------------------------------
-  // parseBarrelExports
-  // ---------------------------------------------------------------------------
-
-  // 21) Parses single-quoted exports (backward compatibility)
-  {
+  it("should parse single-quoted exports for backward compatibility", async () => {
     const content = `${GENERATED_MARKER}\n\nexport * from './alpha.js';\n`;
     const result = parseBarrelExports(content);
     assert.deepStrictEqual(
@@ -412,11 +302,9 @@ import {
       ["alpha"],
       "parseBarrelExports must tolerate single-quoted exports",
     );
-    console.log("✅ parseBarrelExports: parses single-quoted exports");
-  }
+  });
 
-  // 22) Parses double-quoted exports (new Phase 1.4 output)
-  {
+  it("should parse double-quoted exports", async () => {
     const content = `${GENERATED_MARKER}\n\nexport * from "./alpha.js";\n`;
     const result = parseBarrelExports(content);
     assert.deepStrictEqual(
@@ -424,11 +312,9 @@ import {
       ["alpha"],
       "parseBarrelExports must parse double-quoted exports",
     );
-    console.log("✅ parseBarrelExports: parses double-quoted exports");
-  }
+  });
 
-  // 23) Extracted names do not include the .js extension
-  {
+  it("should strip .js extension from extracted names", async () => {
     const content = `export * from "./foo.js";\nexport * from "./bar/index.js";\n`;
     const result = parseBarrelExports(content);
     for (const name of result) {
@@ -442,13 +328,9 @@ import {
       ["foo", "bar/index"],
       "parseBarrelExports must strip .js and return the inner path",
     );
-    console.log(
-      "✅ parseBarrelExports: strips .js extension from extracted names",
-    );
-  }
+  });
 
-  // 24) Content with no exports → empty array
-  {
+  it("should return empty array for content with no exports", async () => {
     const content = `${GENERATED_MARKER}\n\n// nothing to export yet\n`;
     const result = parseBarrelExports(content);
     assert.deepStrictEqual(
@@ -456,13 +338,9 @@ import {
       [],
       "parseBarrelExports must return [] when content has no export statements",
     );
-    console.log(
-      "✅ parseBarrelExports: returns [] for content with no exports",
-    );
-  }
+  });
 
-  // 25) Handles multiple exports on separate lines, mixed quote styles
-  {
+  it("should handle multiple exports with mixed quote styles", async () => {
     const content = [
       GENERATED_MARKER,
       "",
@@ -477,17 +355,9 @@ import {
       ["alpha", "beta", "gamma/index"],
       "parseBarrelExports must handle multiple exports across lines and mixed quote styles",
     );
-    console.log(
-      "✅ parseBarrelExports: handles multiple exports on separate lines (mixed quotes)",
-    );
-  }
+  });
 
-  // ---------------------------------------------------------------------------
-  // isSourceFile
-  // ---------------------------------------------------------------------------
-
-  // 26) Plain .ts source file → true
-  {
+  it("should return true for plain .ts files", async () => {
     assert.strictEqual(
       isSourceFile("foo.ts"),
       true,
@@ -498,51 +368,41 @@ import {
       true,
       "hyphenated .ts file must be treated as source",
     );
-    console.log("✅ isSourceFile: returns true for plain .ts files");
-  }
+  });
 
-  // 27) Declaration files (.d.ts) → false
-  {
+  it("should return false for .d.ts declaration files", async () => {
     assert.strictEqual(
       isSourceFile("types.d.ts"),
       false,
       ".d.ts declaration files must be excluded",
     );
-    console.log("✅ isSourceFile: returns false for .d.ts");
-  }
+  });
 
-  // 28) Test files (.test.ts) → false
-  {
+  it("should return false for .test.ts files", async () => {
     assert.strictEqual(
       isSourceFile("foo.test.ts"),
       false,
       ".test.ts files must be excluded",
     );
-    console.log("✅ isSourceFile: returns false for .test.ts");
-  }
+  });
 
-  // 29) Spec files (.spec.ts) → false
-  {
+  it("should return false for .spec.ts files", async () => {
     assert.strictEqual(
       isSourceFile("foo.spec.ts"),
       false,
       ".spec.ts files must be excluded",
     );
-    console.log("✅ isSourceFile: returns false for .spec.ts");
-  }
+  });
 
-  // 30) index.ts itself → false (barrel would recursively export itself)
-  {
+  it("should return false for index.ts to prevent self-reference", async () => {
     assert.strictEqual(
       isSourceFile("index.ts"),
       false,
       "index.ts must be excluded to prevent self-reference in the barrel",
     );
-    console.log("✅ isSourceFile: returns false for index.ts");
-  }
+  });
 
-  // 31) Non-.ts files → false
-  {
+  it("should return false for non-.ts files", async () => {
     assert.strictEqual(
       isSourceFile("config.json"),
       false,
@@ -563,11 +423,5 @@ import {
       false,
       "plain .js files must be excluded",
     );
-    console.log("✅ isSourceFile: returns false for non-.ts files");
-  }
-
-  console.log("\n✅ All barrels/utils tests passed!");
-})().catch((err) => {
-  console.error("❌ barrels/utils tests FAILED:", err);
-  process.exitCode = 1;
+  });
 });

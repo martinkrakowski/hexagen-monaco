@@ -1,7 +1,5 @@
-/**
- * Integration tests for NL parsing pipeline
- */
-
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { ParseNLIntentUseCase } from "../../application/use-cases/parse-nl-intent.use-case.js";
 import { NLToDomainCommandParserAdapter } from "../../infrastructure/adapters/nl-to-domain-command.adapter.js";
 import { NodeKind, EdgeKind } from "@hexagen/core-domain";
@@ -20,17 +18,17 @@ describe("NL Intent Parsing - Integration Tests", () => {
         "Add a bounded context named payment_processing",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (!result.success) throw new Error("Parse failed");
 
       const parsed = result.value;
-      expect(parsed.commands).toHaveLength(1);
+      assert.strictEqual(parsed.commands.length, 1);
 
       const cmd = parsed.commands[0];
-      expect(cmd.type).toBe("CreateNode");
+      assert.strictEqual(cmd.type, "CreateNode");
       if (cmd.type === "CreateNode") {
-        expect(cmd.payload.kind).toBe(NodeKind.BoundedContext);
-        expect(cmd.payload.attributes.name).toBe("payment_processing");
+        assert.strictEqual(cmd.payload.kind, NodeKind.BoundedContext);
+        assert.strictEqual(cmd.payload.attributes.name, "payment_processing");
       }
     });
 
@@ -39,13 +37,16 @@ describe("NL Intent Parsing - Integration Tests", () => {
         "Add an entity named Transaction to PaymentProcessing",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (!result.success) throw new Error("Parse failed");
 
       const cmd = result.value.commands[0];
       if (cmd.type === "CreateNode") {
-        expect(cmd.payload.kind).toBe(NodeKind.Entity);
-        expect(cmd.payload.attributes.parentContext).toBe("PaymentProcessing");
+        assert.strictEqual(cmd.payload.kind, NodeKind.Entity);
+        assert.strictEqual(
+          cmd.payload.attributes.parentContext,
+          "PaymentProcessing",
+        );
       }
     });
 
@@ -54,13 +55,13 @@ describe("NL Intent Parsing - Integration Tests", () => {
         "Add a use case named AuthorizePayment to PaymentProcessing",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (!result.success) throw new Error("Parse failed");
 
       const cmd = result.value.commands[0];
       if (cmd.type === "CreateNode") {
-        expect(cmd.payload.kind).toBe(NodeKind.UseCase);
-        expect(cmd.payload.attributes.name).toBe("AuthorizePayment");
+        assert.strictEqual(cmd.payload.kind, NodeKind.UseCase);
+        assert.strictEqual(cmd.payload.attributes.name, "AuthorizePayment");
       }
     });
 
@@ -69,15 +70,15 @@ describe("NL Intent Parsing - Integration Tests", () => {
         "Create a link from PaymentProcessing to NotificationService",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (!result.success) throw new Error("Parse failed");
 
       const cmd = result.value.commands[0];
-      expect(cmd.type).toBe("CreateEdge");
+      assert.strictEqual(cmd.type, "CreateEdge");
       if (cmd.type === "CreateEdge") {
-        expect(cmd.payload.kind).toBe(EdgeKind.Dependency);
-        expect(cmd.payload.source).toBe("PaymentProcessing");
-        expect(cmd.payload.target).toBe("NotificationService");
+        assert.strictEqual(cmd.payload.kind, EdgeKind.Dependency);
+        assert.strictEqual(cmd.payload.source, "PaymentProcessing");
+        assert.strictEqual(cmd.payload.target, "NotificationService");
       }
     });
 
@@ -86,13 +87,13 @@ describe("NL Intent Parsing - Integration Tests", () => {
         "Rename PaymentContext to PaymentProcessing",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (!result.success) throw new Error("Parse failed");
 
       const cmd = result.value.commands[0];
-      expect(cmd.type).toBe("UpdateNode");
+      assert.strictEqual(cmd.type, "UpdateNode");
       if (cmd.type === "UpdateNode") {
-        expect(cmd.payload.attributes.name).toBe("PaymentProcessing");
+        assert.strictEqual(cmd.payload.attributes.name, "PaymentProcessing");
       }
     });
 
@@ -101,13 +102,16 @@ describe("NL Intent Parsing - Integration Tests", () => {
         "Add a port to PaymentProcessing named PaymentGateway",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (!result.success) throw new Error("Parse failed");
 
       const cmd = result.value.commands[0];
       if (cmd.type === "CreateNode") {
-        expect(cmd.payload.kind).toBe(NodeKind.Port);
-        expect(cmd.payload.attributes.parentContext).toBe("PaymentProcessing");
+        assert.strictEqual(cmd.payload.kind, NodeKind.Port);
+        assert.strictEqual(
+          cmd.payload.attributes.parentContext,
+          "PaymentProcessing",
+        );
       }
     });
   });
@@ -117,11 +121,11 @@ describe("NL Intent Parsing - Integration Tests", () => {
       const intent = "Add a bounded context named OrderManagement";
       const result = await useCase.execute(intent);
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
-        expect(result.value.originalText).toBe(intent);
-        expect(result.value.commands).toHaveLength(1);
-        expect(result.value.confidence).toBeGreaterThan(0);
+        assert.strictEqual(result.value.originalText, intent);
+        assert.strictEqual(result.value.commands.length, 1);
+        assert.ok(result.value.confidence > 0);
       }
     });
 
@@ -134,9 +138,9 @@ describe("NL Intent Parsing - Integration Tests", () => {
 
       for (const intent of intents) {
         const result = await useCase.execute(intent);
-        expect(result.success).toBe(true);
+        assert.strictEqual(result.success, true);
         if (result.success) {
-          expect(result.value.commands.length).toBeGreaterThan(0);
+          assert.ok(result.value.commands.length > 0);
         }
       }
     });
@@ -145,22 +149,22 @@ describe("NL Intent Parsing - Integration Tests", () => {
   describe("Error Recovery", () => {
     it("should recover gracefully from unsupported intent", async () => {
       const result1 = await useCase.execute("Add a bounded context named A");
-      expect(result1.success).toBe(true);
+      assert.strictEqual(result1.success, true);
 
       const result2 = await useCase.execute("Some gibberish");
-      expect(result2.success).toBe(false);
+      assert.strictEqual(result2.success, false);
 
       const result3 = await useCase.execute("Add a bounded context named B");
-      expect(result3.success).toBe(true);
+      assert.strictEqual(result3.success, true);
     });
 
     it("should provide helpful suggestions on parse failure", async () => {
       const result = await useCase.execute("I want to add something");
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success && result.error.innerError) {
-        expect(result.error.innerError.suggestions).toBeDefined();
-        expect(result.error.innerError.suggestions?.length).toBeGreaterThan(0);
+        assert.ok(result.error.innerError.suggestions !== undefined);
+        assert.ok(result.error.innerError.suggestions?.length > 0);
       }
     });
   });

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   detectConflicts,
   type RuleExecutionManifest,
@@ -16,12 +18,12 @@ describe("Conflict Detection", () => {
 
       const conflictSet = detectConflicts(tx, rem);
 
-      expect(conflictSet.hasConflicts).toBe(true);
-      expect(conflictSet.conflicts).toHaveLength(1);
-      expect(conflictSet.conflicts[0].type).toBe("state-mismatch");
-      expect(conflictSet.conflicts[0].severity).toBe("warning");
-      expect(conflictSet.conflicts[0].remExpected).toBe(3);
-      expect(conflictSet.conflicts[0].actualState).toBe(1);
+      assert.strictEqual(conflictSet.hasConflicts, true);
+      assert.strictEqual(conflictSet.conflicts.length, 1);
+      assert.strictEqual(conflictSet.conflicts[0].type, "state-mismatch");
+      assert.strictEqual(conflictSet.conflicts[0].severity, "warning");
+      assert.strictEqual(conflictSet.conflicts[0].remExpected, 3);
+      assert.strictEqual(conflictSet.conflicts[0].actualState, 1);
     });
 
     it("should have no conflicts when state matches REM", () => {
@@ -34,8 +36,8 @@ describe("Conflict Detection", () => {
 
       const conflictSet = detectConflicts(tx, rem);
 
-      expect(conflictSet.hasConflicts).toBe(false);
-      expect(conflictSet.conflicts).toHaveLength(0);
+      assert.strictEqual(conflictSet.hasConflicts, false);
+      assert.strictEqual(conflictSet.conflicts.length, 0);
     });
 
     it("should handle missing rulesApplied in metadata", () => {
@@ -48,9 +50,9 @@ describe("Conflict Detection", () => {
 
       const conflictSet = detectConflicts(tx, rem);
 
-      expect(conflictSet.hasConflicts).toBe(true);
-      expect(conflictSet.conflicts[0].remExpected).toBe(2);
-      expect(conflictSet.conflicts[0].actualState).toBe(0);
+      assert.strictEqual(conflictSet.hasConflicts, true);
+      assert.strictEqual(conflictSet.conflicts[0].remExpected, 2);
+      assert.strictEqual(conflictSet.conflicts[0].actualState, 0);
     });
 
     it("should detect lineage integrity issues", () => {
@@ -63,10 +65,8 @@ describe("Conflict Detection", () => {
 
       const conflictSet = detectConflicts(tx, rem);
 
-      expect(conflictSet.hasConflicts).toBe(true);
-      expect(
-        conflictSet.conflicts.some((c) => c.type === "lineage-broken"),
-      ).toBe(true);
+      assert.strictEqual(conflictSet.hasConflicts, true);
+      assert.ok(conflictSet.conflicts.some((c) => c.type === "lineage-broken"));
     });
 
     it("should not detect lineage conflicts when lineage is valid", () => {
@@ -79,9 +79,9 @@ describe("Conflict Detection", () => {
 
       const conflictSet = detectConflicts(tx, rem);
 
-      expect(
-        conflictSet.conflicts.some((c) => c.type === "lineage-broken"),
-      ).toBe(false);
+      assert.ok(
+        !conflictSet.conflicts.some((c) => c.type === "lineage-broken"),
+      );
     });
 
     it("should set detectedAt timestamp", () => {
@@ -96,12 +96,8 @@ describe("Conflict Detection", () => {
       const conflictSet = detectConflicts(tx, rem);
 
       const after = new Date();
-      expect(conflictSet.detectedAt.getTime()).toBeGreaterThanOrEqual(
-        before.getTime(),
-      );
-      expect(conflictSet.detectedAt.getTime()).toBeLessThanOrEqual(
-        after.getTime(),
-      );
+      assert.ok(conflictSet.detectedAt.getTime() >= before.getTime());
+      assert.ok(conflictSet.detectedAt.getTime() <= after.getTime());
     });
   });
 });

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { InMemoryBackpressureController } from "../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
 
 function randomString(length: number = 8): string {
@@ -34,7 +36,7 @@ describe("Property: Intent coalescing does not drop semantically distinct intent
 
       for (const id of ids) {
         const signal = controller.accept(id);
-        expect(signal.tag).toBe("none");
+        assert.strictEqual(signal.tag, "none");
       }
     }
   });
@@ -45,10 +47,10 @@ describe("Property: Intent coalescing does not drop semantically distinct intent
       const intentId = randomString(12);
 
       const first = controller.accept(intentId);
-      expect(first.tag).toBe("none");
+      assert.strictEqual(first.tag, "none");
 
       const second = controller.accept(intentId);
-      expect(second.tag).toBe("coalesce");
+      assert.strictEqual(second.tag, "coalesce");
     }
   });
 
@@ -65,7 +67,7 @@ describe("Property: Intent coalescing does not drop semantically distinct intent
       }
 
       for (const [, tag] of results) {
-        expect(tag).not.toBe("coalesce");
+        assert.notStrictEqual(tag, "coalesce");
       }
     }
   });
@@ -78,12 +80,12 @@ describe("Property: Intent coalescing does not drop semantically distinct intent
       if (id1 === id2) continue;
 
       const signal1 = controller.accept(id1);
-      expect(signal1.tag).toBe("none");
+      assert.strictEqual(signal1.tag, "none");
 
       controller.complete(id1);
 
       const signal2 = controller.accept(id2);
-      expect(signal2.tag).not.toBe("coalesce");
+      assert.notStrictEqual(signal2.tag, "coalesce");
     }
   });
 });

@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { X, Check, ArrowRight, AlertTriangle } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import { diffLines, type Change } from "diff";
-import { applyDeterministicFix, canAutoFix } from "./fix-manifest-violations";
-import type { ValidationItem } from "./manifest-view-data";
+import { applyDeterministicFix, canAutoFix } from "@hexagen/manifest-generation";
+import type { ValidationItem } from "@hexagen/manifest-generation";
 
 export interface ManifestAutoFixDrawerProps {
   isOpen: boolean;

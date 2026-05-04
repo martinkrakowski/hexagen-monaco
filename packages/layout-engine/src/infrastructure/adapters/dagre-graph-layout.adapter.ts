@@ -8,11 +8,11 @@ import type {
 import dagre from "@dagrejs/dagre";
 
 export class DagreGraphLayoutAdapter implements GraphLayoutPort {
-  layout(
+  async layout(
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     direction: "TB" | "LR",
-  ): GraphLayoutResult {
+  ): Promise<GraphLayoutResult> {
     const g = new dagre.graphlib.Graph();
     g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 100 });
     g.setDefaultEdgeLabel(() => ({}));
@@ -36,6 +36,6 @@ export class DagreGraphLayoutAdapter implements GraphLayoutPort {
       };
     });
 
-    return { positions };
+    return Promise.resolve({ positions });
   }
 }

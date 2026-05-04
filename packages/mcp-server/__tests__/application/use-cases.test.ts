@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { EventBusPort } from "@hexagen/messaging";
 import { type ArchitectureGraph, type LinterReport } from "@hexagen/shared";
@@ -157,76 +158,90 @@ class EventBusFake implements EventBusPort {
   clear(): void {}
 }
 
-(async () => {
+describe("use cases", () => {
   const projectRead = new ProjectConfigurationReadFake();
   const sync = new SyncEngineFake();
   const linter = new LinterFake();
   const manifestWrite = new ManifestWriteFake();
   const eventBus = new EventBusFake();
 
-  const manifestResult = await new GetManifestResourceUseCase(
-    projectRead,
-  ).execute();
-  assert.ok(manifestResult.success, "getManifest should succeed");
-  assert.ok(manifestResult.value);
-
-  const graphResult = await new GetGraphResourceUseCase(
-    sync as ArchitectureQueryPort,
-  ).execute();
-  assert.ok(graphResult.success, "getGraph should succeed");
-  assert.strictEqual(graphResult.value.nodes.length, 1);
-
-  const linterResult = await new GetLinterReportResourceUseCase(
-    sync as ArchitectureQueryPort,
-  ).execute();
-  assert.ok(linterResult.success, "getLinterReport should succeed");
-  assert.strictEqual(linterResult.value.isCompliant, true);
-
-  const auditResult = await new AuditBoundariesToolUseCase(linter).execute();
-  assert.strictEqual(auditResult.report.scannedFilesCount, 8);
-
-  const scaffoldResult = await new ScaffoldModuleToolUseCase(
-    sync as ScaffoldingPort,
-    manifestWrite,
-    eventBus,
-  ).execute({
-    name: "mcp-server",
-    layer: "infrastructure",
-    context_type: "supporting",
-    dry_run: true,
+  it("should return manifest data", async () => {
+    const manifestResult = await new GetManifestResourceUseCase(
+      projectRead,
+    ).execute();
+    assert.ok(manifestResult.success, "getManifest should succeed");
+    assert.ok(manifestResult.value);
   });
-  assert.strictEqual(scaffoldResult.dryRun, true);
 
-  const dependencyResult = await new AddDependencyToolUseCase(
-    manifestWrite,
-    eventBus,
-  ).execute({
-    sourceModule: "mcp-server",
-    targetModule: "sync",
-    dry_run: false,
+  it("should return architecture graph", async () => {
+    const graphResult = await new GetGraphResourceUseCase(
+      sync as ArchitectureQueryPort,
+    ).execute();
+    assert.ok(graphResult.success, "getGraph should succeed");
+    assert.strictEqual(graphResult.value.nodes.length, 1);
   });
-  assert.strictEqual(dependencyResult.updated, true);
 
-  const createPortResult = await new CreatePortToolUseCase(
-    sync as ScaffoldingPort,
-    manifestWrite,
-  ).execute({
-    domain_name: "billing",
-    port_name: "PaymentGatewayPort",
-    type: "outbound",
-    dry_run: false,
+  it("should return linter report", async () => {
+    const linterResult = await new GetLinterReportResourceUseCase(
+      sync as ArchitectureQueryPort,
+    ).execute();
+    assert.ok(linterResult.success, "getLinterReport should succeed");
+    assert.strictEqual(linterResult.value.isCompliant, true);
   });
-  assert.ok(createPortResult.fileCreated);
 
-  const createAdapterResult = await new CreateAdapterToolUseCase(
-    sync as ScaffoldingPort,
-    manifestWrite,
-  ).execute({
-    port_name: "PaymentGatewayPort",
-    infrastructure_name: "stripe-billing",
-    dry_run: false,
+  it("should audit boundaries", async () => {
+    const auditResult = await new AuditBoundariesToolUseCase(linter).execute();
+    assert.strictEqual(auditResult.report.scannedFilesCount, 8);
   });
-  assert.ok(createAdapterResult.fileCreated);
 
-  console.log("✅ mcp-server application use-cases tests passed");
-})();
+  it("should scaffold module in dry_run mode", async () => {
+    const scaffoldResult = await new ScaffoldModuleToolUseCase(
+      sync as ScaffoldingPort,
+      manifestWrite,
+      eventBus,
+    ).execute({
+      name: "mcp-server",
+      layer: "infrastructure",
+      context_type: "supporting",
+      dry_run: true,
+    });
+    assert.strictEqual(scaffoldResult.dryRun, true);
+  });
+
+  it("should add dependency", async () => {
+    const dependencyResult = await new AddDependencyToolUseCase(
+      manifestWrite,
+      eventBus,
+    ).execute({
+      sourceModule: "mcp-server",
+      targetModule: "sync",
+      dry_run: false,
+    });
+    assert.strictEqual(dependencyResult.updated, true);
+  });
+
+  it("should create port", async () => {
+    const createPortResult = await new CreatePortToolUseCase(
+      sync as ScaffoldingPort,
+      manifestWrite,
+    ).execute({
+      domain_name: "billing",
+      port_name: "PaymentGatewayPort",
+      type: "outbound",
+      dry_run: false,
+    });
+    assert.ok(createPortResult.fileCreated);
+  });
+
+  it("should create adapter", async () => {
+    const createAdapterResult = await new CreateAdapterToolUseCase(
+      sync as ScaffoldingPort,
+      manifestWrite,
+    ).execute({
+      port_name: "PaymentGatewayPort",
+      infrastructure_name: "stripe-billing",
+      dry_run: false,
+    });
+    assert.ok(createAdapterResult.fileCreated);
+  });
+});

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { NodeKind, EdgeKind } from "@hexagen/core-domain";
 import type {
   DomainCommand,
@@ -28,10 +30,10 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("add_node");
-    expect(patches[0].targetId).toBe(NodeKind.BoundedContext);
-    expect(patches[0].payload.kind).toBe(NodeKind.BoundedContext);
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "add_node");
+    assert.strictEqual(patches[0].targetId, NodeKind.BoundedContext);
+    assert.strictEqual(patches[0].payload.kind, NodeKind.BoundedContext);
   });
 
   it("should map UpdateNodeCommand to update_node patch", () => {
@@ -42,9 +44,9 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("update_node");
-    expect(patches[0].targetId).toBe("my-context");
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "update_node");
+    assert.strictEqual(patches[0].targetId, "my-context");
   });
 
   it("should map DeleteNodeCommand to remove_node patch", () => {
@@ -55,9 +57,9 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("remove_node");
-    expect(patches[0].targetId).toBe("old-context");
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "remove_node");
+    assert.strictEqual(patches[0].targetId, "old-context");
   });
 
   it("should map CreateEdgeCommand to add_edge patch", () => {
@@ -73,10 +75,10 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("add_edge");
-    expect(patches[0].payload.source).toBe("context-a");
-    expect(patches[0].payload.target).toBe("context-b");
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "add_edge");
+    assert.strictEqual(patches[0].payload.source, "context-a");
+    assert.strictEqual(patches[0].payload.target, "context-b");
   });
 
   it("should map UpdateEdgeCommand to update_edge patch", () => {
@@ -87,9 +89,9 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("update_edge");
-    expect(patches[0].targetId).toBe("edge-1");
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "update_edge");
+    assert.strictEqual(patches[0].targetId, "edge-1");
   });
 
   it("should map DeleteEdgeCommand to remove_edge patch", () => {
@@ -100,9 +102,9 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("remove_edge");
-    expect(patches[0].targetId).toBe("edge-1");
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "remove_edge");
+    assert.strictEqual(patches[0].targetId, "edge-1");
   });
 
   it("should flatten BatchCommand into individual patches", () => {
@@ -121,9 +123,9 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(2);
-    expect(patches[0].type).toBe("add_node");
-    expect(patches[1].type).toBe("remove_node");
+    assert.strictEqual(patches.length, 2);
+    assert.strictEqual(patches[0].type, "add_node");
+    assert.strictEqual(patches[1].type, "remove_node");
   });
 
   it("should handle nested BatchCommands", () => {
@@ -148,8 +150,8 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert([cmd]);
 
-    expect(patches).toHaveLength(1);
-    expect(patches[0].type).toBe("add_node");
+    assert.strictEqual(patches.length, 1);
+    assert.strictEqual(patches[0].type, "add_node");
   });
 
   it("should convert multiple commands in order", () => {
@@ -172,15 +174,15 @@ describe("DomainCommandToManifestPatchAdapter", () => {
 
     const patches = adapter.convert(commands);
 
-    expect(patches).toHaveLength(3);
-    expect(patches[0].type).toBe("add_node");
-    expect(patches[1].type).toBe("add_edge");
-    expect(patches[2].type).toBe("remove_node");
+    assert.strictEqual(patches.length, 3);
+    assert.strictEqual(patches[0].type, "add_node");
+    assert.strictEqual(patches[1].type, "add_edge");
+    assert.strictEqual(patches[2].type, "remove_node");
   });
 
   it("should return empty array for empty input", () => {
     const patches = adapter.convert([]);
 
-    expect(patches).toHaveLength(0);
+    assert.strictEqual(patches.length, 0);
   });
 });

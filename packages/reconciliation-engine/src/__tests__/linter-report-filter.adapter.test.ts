@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { LinterReportFilterAdapter } from "../infrastructure/adapters/linter-report-filter.adapter.js";
 import type { Patch } from "../domain/llm-response.js";
 import type { LinterReportLike } from "@hexagen/core-domain";
@@ -39,14 +41,14 @@ describe("LinterReportFilterAdapter", () => {
     const patch = createPatch("1", "index.ts");
     const report = createCompliantReport();
 
-    expect(adapter.shouldAccept(patch, report)).toBe(true);
+    assert.strictEqual(adapter.shouldAccept(patch, report), true);
   });
 
   it("should reject patch with error in targetId", () => {
     const patch = createPatch("1", "index.ts");
     const report = createReportWithErrors(["index.ts"]);
 
-    expect(adapter.shouldAccept(patch, report)).toBe(false);
+    assert.strictEqual(adapter.shouldAccept(patch, report), false);
   });
 
   it("should reject patch with error in payload.file", () => {
@@ -54,7 +56,7 @@ describe("LinterReportFilterAdapter", () => {
     patch.payload.file = "src/index.ts";
     const report = createReportWithErrors(["src/index.ts"]);
 
-    expect(adapter.shouldAccept(patch, report)).toBe(false);
+    assert.strictEqual(adapter.shouldAccept(patch, report), false);
   });
 
   it("should reject patch with error in payload.target", () => {
@@ -62,21 +64,21 @@ describe("LinterReportFilterAdapter", () => {
     patch.payload.target = "src/index.ts";
     const report = createReportWithErrors(["src/index.ts"]);
 
-    expect(adapter.shouldAccept(patch, report)).toBe(false);
+    assert.strictEqual(adapter.shouldAccept(patch, report), false);
   });
 
   it("should accept patch when error is in different file", () => {
     const patch = createPatch("1", "index.ts");
     const report = createReportWithErrors(["other.ts"]);
 
-    expect(adapter.shouldAccept(patch, report)).toBe(true);
+    assert.strictEqual(adapter.shouldAccept(patch, report), true);
   });
 
   it("should block parent directories conservatively", () => {
     const patch = createPatch("1", "src");
     const report = createReportWithErrors(["src/components/Button.ts"]);
 
-    expect(adapter.shouldAccept(patch, report)).toBe(false);
+    assert.strictEqual(adapter.shouldAccept(patch, report), false);
   });
 
   it("should handle multiple errors across files", () => {
@@ -84,8 +86,8 @@ describe("LinterReportFilterAdapter", () => {
     const patch2 = createPatch("2", "util.ts");
     const report = createReportWithErrors(["index.ts", "util.ts", "other.ts"]);
 
-    expect(adapter.shouldAccept(patch1, report)).toBe(false);
-    expect(adapter.shouldAccept(patch2, report)).toBe(false);
+    assert.strictEqual(adapter.shouldAccept(patch1, report), false);
+    assert.strictEqual(adapter.shouldAccept(patch2, report), false);
   });
 
   it("should only block error-severity violations, not warnings", () => {
@@ -104,6 +106,6 @@ describe("LinterReportFilterAdapter", () => {
       scannedFilesCount: 1,
     };
 
-    expect(adapter.shouldAccept(patch, report)).toBe(true);
+    assert.strictEqual(adapter.shouldAccept(patch, report), true);
   });
 });

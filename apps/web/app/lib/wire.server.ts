@@ -36,10 +36,14 @@ import type {
 } from "@hexagen/agentic-interaction";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type {
-  ProjectSpecLike,
   ArchitectureGraphLike,
-  LinterReportLike,
 } from "@hexagen/prompt-compiler";
+import type { LinterReportLike } from "@hexagen/core-domain";
+import {
+  ManifestProviderAdapter,
+  ServerArchitectureGraphProviderAdapter,
+  ServerLinterReportProviderAdapter,
+} from "./adapters/wire-adapters";
 import { existsSync } from "fs";
 import { join, dirname } from "path";
 
@@ -78,10 +82,6 @@ function findMonorepoRoot(from: string = process.cwd()): string {
     `Could not locate monorepo root from ${from}. Maximum search depth (${maxDepth}) exceeded.`,
   );
 }
-
-const emptyManifest: ProjectSpecLike = {
-  boundedContexts: [],
-};
 
 const emptyArchitectureGraph: ArchitectureGraphLike = {
   nodes: [],
@@ -153,6 +153,34 @@ export const getLintValidation = (): CliLintValidationAdapter => {
     _lintValidation = new CliLintValidationAdapter(workspaceRoot);
   }
   return _lintValidation;
+};
+
+// ============================================================================
+// Adapter Singletons
+// ============================================================================
+
+let _manifestProvider: ManifestProviderAdapter | null = null;
+const getManifestProviderAdapter = (): ManifestProviderAdapter => {
+  if (!_manifestProvider) {
+    _manifestProvider = new ManifestProviderAdapter();
+  }
+  return _manifestProvider;
+};
+
+let _architectureGraphProvider: ServerArchitectureGraphProviderAdapter | null = null;
+const getArchitectureGraphProviderAdapter = (): ServerArchitectureGraphProviderAdapter => {
+  if (!_architectureGraphProvider) {
+    _architectureGraphProvider = new ServerArchitectureGraphProviderAdapter();
+  }
+  return _architectureGraphProvider;
+};
+
+let _linterReportProvider: ServerLinterReportProviderAdapter | null = null;
+const getLinterReportProviderAdapter = (): ServerLinterReportProviderAdapter => {
+  if (!_linterReportProvider) {
+    _linterReportProvider = new ServerLinterReportProviderAdapter();
+  }
+  return _linterReportProvider;
 };
 
 export type PipelineMode = "in-memory" | "cloud";
@@ -229,41 +257,25 @@ export const getModifyArchitectureUseCase = (
     llmSender,
     reconcileUseCase,
     transactionManager: getTransactionManager(),
-    /**
-     * DEVELOPMENT STUB: Returns empty manifest.
-     * Production code should override with actual ProjectSpec provider.
-     * If you see empty manifests in tests or development, this stub was used.
-     */
     manifestProvider: async () => {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[STUB] manifestProvider not overridden — returning empty manifest",
-      );
-      return emptyManifest;
+      const adapter = getManifestProviderAdapter();
+      return adapter.getManifest();
     },
-    /**
-     * DEVELOPMENT STUB: Returns empty architecture graph.
-     * Production code should override with actual ArchitectureGraph provider.
-     * If you see empty graphs in tests or development, this stub was used.
-     */
     architectureGraphProvider: async () => {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[STUB] architectureGraphProvider not overridden — returning empty graph",
-      );
-      return emptyArchitectureGraph;
+      const adapter = getArchitectureGraphProviderAdapter();
+      const result = await adapter.getArchitectureGraph("default");
+      if (!result.success) {
+        return emptyArchitectureGraph;
+      }
+      return result.value;
     },
-    /**
-     * DEVELOPMENT STUB: Returns empty linter report (always compliant).
-     * Production code should override with actual LinterReport provider.
-     * If you see empty reports in tests or development, this stub was used.
-     */
     linterReportProvider: async () => {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[STUB] linterReportProvider not overridden — returning empty report",
-      );
-      return emptyLinterReport;
+      const adapter = getLinterReportProviderAdapter();
+      const result = await adapter.getLinterReport();
+      if (!result.success) {
+        return emptyLinterReport;
+      }
+      return result.value;
     },
     signal,
     ...callbacks,

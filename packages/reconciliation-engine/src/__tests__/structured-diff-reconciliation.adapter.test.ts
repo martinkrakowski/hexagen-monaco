@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { StructuredDiffReconciliationAdapter } from "../infrastructure/adapters/structured-diff-reconciliation.adapter.js";
 import type { ReconcileRequest } from "../application/ports/in/reconcile.port.js";
 import type {
@@ -35,10 +37,10 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(1);
-    expect(result.patches[0].type).toBe("add_node");
-    expect(result.patches[0].targetId).toBe("bc-1");
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 1);
+    assert.strictEqual(result.patches[0].type, "add_node");
+    assert.strictEqual(result.patches[0].targetId, "bc-1");
   });
 
   it("should detect removed bounded contexts", async () => {
@@ -50,10 +52,10 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(1);
-    expect(result.patches[0].type).toBe("remove_node");
-    expect(result.patches[0].targetId).toBe("bc-1");
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 1);
+    assert.strictEqual(result.patches[0].type, "remove_node");
+    assert.strictEqual(result.patches[0].targetId, "bc-1");
   });
 
   it("should detect modified bounded contexts", async () => {
@@ -65,10 +67,10 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(1);
-    expect(result.patches[0].type).toBe("update_node");
-    expect(result.patches[0].targetId).toBe("bc-1");
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 1);
+    assert.strictEqual(result.patches[0].type, "update_node");
+    assert.strictEqual(result.patches[0].targetId, "bc-1");
   });
 
   it("should detect added nodes from graph", async () => {
@@ -83,10 +85,10 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     const addPatch = result.patches.find((p) => p.type === "add_node");
-    expect(addPatch).toBeDefined();
-    expect(addPatch!.targetId).toBe("node-1");
+    assert.ok(addPatch !== undefined);
+    assert.strictEqual(addPatch!.targetId, "node-1");
   });
 
   it("should detect removed nodes from graph", async () => {
@@ -103,10 +105,10 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     const removePatch = result.patches.find((p) => p.type === "remove_node");
-    expect(removePatch).toBeDefined();
-    expect(removePatch!.targetId).toBe("node-1");
+    assert.ok(removePatch !== undefined);
+    assert.strictEqual(removePatch!.targetId, "node-1");
   });
 
   it("should detect invalid edges and produce remove_edge patches", async () => {
@@ -129,9 +131,9 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     const edgePatch = result.patches.find((p) => p.type === "remove_edge");
-    expect(edgePatch).toBeDefined();
+    assert.ok(edgePatch !== undefined);
   });
 
   it("should produce no patches when no differences exist", async () => {
@@ -143,7 +145,7 @@ describe("StructuredDiffReconciliationAdapter", () => {
 
     const result = await adapter.reconcile(request);
 
-    expect(result.success).toBe(true);
-    expect(result.patches).toHaveLength(0);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.patches.length, 0);
   });
 });

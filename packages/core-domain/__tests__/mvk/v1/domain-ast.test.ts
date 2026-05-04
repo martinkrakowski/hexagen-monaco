@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   NodeKind,
   EdgeKind,
@@ -17,9 +19,9 @@ describe("DomainAST structure invariants", () => {
       attributes: { label: "Order" },
     };
 
-    expect(node.id).toBe("node-1");
-    expect(node.kind).toBe(NodeKind.Entity);
-    expect(typeof node.attributes).toBe("object");
+    assert.strictEqual(node.id, "node-1");
+    assert.strictEqual(node.kind, NodeKind.Entity);
+    assert.strictEqual(typeof node.attributes, "object");
   });
 
   it("DomainEdge has required id, kind, source, target, attributes fields", () => {
@@ -31,10 +33,10 @@ describe("DomainAST structure invariants", () => {
       attributes: {},
     };
 
-    expect(edge.id).toBe("edge-1");
-    expect(edge.kind).toBe(EdgeKind.Dependency);
-    expect(edge.source).toBe("node-1");
-    expect(edge.target).toBe("node-2");
+    assert.strictEqual(edge.id, "edge-1");
+    assert.strictEqual(edge.kind, EdgeKind.Dependency);
+    assert.strictEqual(edge.source, "node-1");
+    assert.strictEqual(edge.target, "node-2");
   });
 
   it("DomainAST has nodes, edges, and invariants", () => {
@@ -44,10 +46,10 @@ describe("DomainAST structure invariants", () => {
       invariants: { topology: [], cardinality: [] },
     };
 
-    expect(Array.isArray(ast.nodes)).toBe(true);
-    expect(Array.isArray(ast.edges)).toBe(true);
-    expect(Array.isArray(ast.invariants.topology)).toBe(true);
-    expect(Array.isArray(ast.invariants.cardinality)).toBe(true);
+    assert.ok(Array.isArray(ast.nodes));
+    assert.ok(Array.isArray(ast.edges));
+    assert.ok(Array.isArray(ast.invariants.topology));
+    assert.ok(Array.isArray(ast.invariants.cardinality));
   });
 
   it("DomainAST with populated nodes and edges", () => {
@@ -68,10 +70,10 @@ describe("DomainAST structure invariants", () => {
       invariants: { topology: [], cardinality: [] },
     };
 
-    expect(ast.nodes).toHaveLength(2);
-    expect(ast.edges).toHaveLength(1);
-    expect(ast.edges[0].source).toBe("n1");
-    expect(ast.edges[0].target).toBe("n2");
+    assert.strictEqual(ast.nodes.length, 2);
+    assert.strictEqual(ast.edges.length, 1);
+    assert.strictEqual(ast.edges[0].source, "n1");
+    assert.strictEqual(ast.edges[0].target, "n2");
   });
 });
 
@@ -79,7 +81,7 @@ describe("NodeKind and EdgeKind coverage", () => {
   it("all NodeKind values can be used in DomainNode.kind", () => {
     for (const kind of ALL_NODE_KINDS) {
       const node: DomainNode = { id: `node-${kind}`, kind, attributes: {} };
-      expect(node.kind).toBe(kind);
+      assert.strictEqual(node.kind, kind);
     }
   });
 
@@ -92,15 +94,15 @@ describe("NodeKind and EdgeKind coverage", () => {
         target: "n2",
         attributes: {},
       };
-      expect(edge.kind).toBe(kind);
+      assert.strictEqual(edge.kind, kind);
     }
   });
 
   it("number of NodeKind values matches expected count", () => {
-    expect(ALL_NODE_KINDS.length).toBe(20);
+    assert.strictEqual(ALL_NODE_KINDS.length, 20);
   });
 
   it("number of EdgeKind values matches expected count", () => {
-    expect(ALL_EDGE_KINDS.length).toBe(14);
+    assert.strictEqual(ALL_EDGE_KINDS.length, 14);
   });
 });

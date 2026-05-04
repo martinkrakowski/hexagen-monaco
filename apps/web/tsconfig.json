@@ -68,6 +68,9 @@
     },
     {
       "path": "../../packages/shared"
+    },
+    {
+      "path": "../../packages/llm-driver"
     }
   ],
   "exclude": [

@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -46,69 +47,83 @@ async function withTempManifest(
   }
 }
 
-(async () => {
-  console.log("Running manifest-service tests...\n");
-
-  await withTempManifest(validManifestYaml, async (_workspaceRoot, tempDir) => {
-    const result = await loadManifest(tempDir);
-    assert.strictEqual(result.success, true, "Should load valid manifest");
-    assert.ok(result.value, "Should have manifest data");
-    assert.strictEqual(result.value.system, "hexagen-monaco");
-    console.log("✅ loadManifest: success with valid manifest");
-  });
-
-  await withTempManifest(null, async (_workspaceRoot, tempDir) => {
-    const result = await loadManifest(tempDir);
-    assert.strictEqual(
-      result.success,
-      false,
-      "Should fail when manifest not found",
+describe("manifest service", () => {
+  it("should load valid manifest", async () => {
+    await withTempManifest(
+      validManifestYaml,
+      async (_workspaceRoot, tempDir) => {
+        const result = await loadManifest(tempDir);
+        assert.strictEqual(result.success, true, "Should load valid manifest");
+        assert.ok(result.value, "Should have manifest data");
+        assert.strictEqual(result.value.system, "hexagen-monaco");
+      },
     );
-    assert.match(result.error.message, /not found/i);
-    console.log("✅ loadManifest: fails when manifest not found");
   });
 
-  await withTempManifest("", async (_workspaceRoot, tempDir) => {
-    const result = await loadManifest(tempDir);
-    assert.strictEqual(result.success, false, "Should fail with empty file");
-    assert.match(result.error.message, /empty/i);
-    console.log("✅ loadManifest: fails with empty file");
-  });
-
-  await withTempManifest(
-    manifestWithInvalidStructure,
-    async (_workspaceRoot, tempDir) => {
+  it("should fail when manifest not found", async () => {
+    await withTempManifest(null, async (_workspaceRoot, tempDir) => {
       const result = await loadManifest(tempDir);
       assert.strictEqual(
         result.success,
         false,
-        "Should fail with invalid YAML",
+        "Should fail when manifest not found",
       );
-      console.log("✅ loadManifest: fails with invalid YAML");
-    },
-  );
-
-  await withTempManifest(validManifestYaml, async (_workspaceRoot, tempDir) => {
-    const writeResult = await saveManifest(tempDir, {
-      system: "test-system",
-      bounded_contexts: [],
-    } as Manifest);
-    assert.strictEqual(writeResult.success, true, "Should save manifest");
-    console.log("✅ saveManifest: success");
-
-    const readResult = await loadManifest(tempDir);
-    assert.strictEqual(readResult.success, true, "Should read saved manifest");
-    assert.strictEqual(readResult.value.system, "test-system");
-    console.log("✅ saveManifest: round-trip write-then-read works");
+      assert.match(result.error.message, /not found/i);
+    });
   });
 
-  await withTempManifest(validManifestYaml, async (_workspaceRoot, tempDir) => {
-    const result = await validateManifest(tempDir);
-    assert.strictEqual(result.success, true, "Should return success");
-    assert.ok(result.value, "Should have validation data");
-    assert.strictEqual(typeof result.value.valid, "boolean");
-    console.log("✅ validateManifest: returns validation result");
+  it("should fail with empty file", async () => {
+    await withTempManifest("", async (_workspaceRoot, tempDir) => {
+      const result = await loadManifest(tempDir);
+      assert.strictEqual(result.success, false, "Should fail with empty file");
+      assert.match(result.error.message, /empty/i);
+    });
   });
 
-  console.log("\n✅ All manifest-service tests passed!");
-})();
+  it("should fail with invalid YAML", async () => {
+    await withTempManifest(
+      manifestWithInvalidStructure,
+      async (_workspaceRoot, tempDir) => {
+        const result = await loadManifest(tempDir);
+        assert.strictEqual(
+          result.success,
+          false,
+          "Should fail with invalid YAML",
+        );
+      },
+    );
+  });
+
+  it("should save and round-trip manifest", async () => {
+    await withTempManifest(
+      validManifestYaml,
+      async (_workspaceRoot, tempDir) => {
+        const writeResult = await saveManifest(tempDir, {
+          system: "test-system",
+          bounded_contexts: [],
+        } as Manifest);
+        assert.strictEqual(writeResult.success, true, "Should save manifest");
+
+        const readResult = await loadManifest(tempDir);
+        assert.strictEqual(
+          readResult.success,
+          true,
+          "Should read saved manifest",
+        );
+        assert.strictEqual(readResult.value.system, "test-system");
+      },
+    );
+  });
+
+  it("should return validation result", async () => {
+    await withTempManifest(
+      validManifestYaml,
+      async (_workspaceRoot, tempDir) => {
+        const result = await validateManifest(tempDir);
+        assert.strictEqual(result.success, true, "Should return success");
+        assert.ok(result.value, "Should have validation data");
+        assert.strictEqual(typeof result.value.valid, "boolean");
+      },
+    );
+  });
+});

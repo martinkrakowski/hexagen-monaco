@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { NodeKind } from "@hexagen/core-domain";
 import type { DomainAST } from "@hexagen/core-domain";
 import { InMemorySpeculativeStateMachine } from "../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
@@ -132,7 +134,7 @@ describe("Property: No rollback path produces inconsistent SpeculativeState", ()
       }
     }
 
-    expect(violations).toBe(0);
+    assert.strictEqual(violations, 0);
   });
 
   it("committed snapshot should never be rollable", () => {
@@ -141,7 +143,7 @@ describe("Property: No rollback path produces inconsistent SpeculativeState", ()
       const ast = makeAST();
       const sid = machine.applySpeculative(ast, { op: "commit-test" });
       machine.commitSpeculative(sid);
-      expect(machine.rollbackSpeculative(sid)).toBe(false);
+      assert.strictEqual(machine.rollbackSpeculative(sid), false);
     }
   });
 
@@ -151,7 +153,7 @@ describe("Property: No rollback path produces inconsistent SpeculativeState", ()
       const ast = makeAST();
       const sid = machine.applySpeculative(ast, { op: "rollback-test" });
       machine.rollbackSpeculative(sid);
-      expect(machine.getSpeculativeState(sid)).toBeNull();
+      assert.strictEqual(machine.getSpeculativeState(sid), null);
     }
   });
 
@@ -162,7 +164,7 @@ describe("Property: No rollback path produces inconsistent SpeculativeState", ()
       const sid = machine.applySpeculative(ast, { op: "access-test" });
       machine.commitSpeculative(sid);
       const state = machine.getSpeculativeState(sid);
-      expect(state).not.toBeNull();
+      assert.ok(state !== null);
     }
   });
 });

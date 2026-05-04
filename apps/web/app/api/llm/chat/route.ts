@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.js";
 import { getServerLLMRequestPort } from "@/lib/wire.js";
 import { getProxyRequestUseCase } from "@/lib/byok-wire.js";
+import { SSE_HEADERS } from "@/lib/sse-helpers";
 import type { ChatMessage } from "@hexagen/local-llm";
 import type { ByokProvider } from "@hexagen/byok";
 
@@ -125,9 +126,7 @@ export async function POST(request: NextRequest) {
 
       return new Response(result.value.stream, {
         headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
+          ...SSE_HEADERS,
           ...(result.value.rotatedCiphertext && {
             "X-Byok-Rotated-Ciphertext": result.value.rotatedCiphertext,
           }),
@@ -152,11 +151,7 @@ export async function POST(request: NextRequest) {
     );
 
     return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
+      headers: { ...SSE_HEADERS },
     });
   } catch (error) {
     const errorMessage =

@@ -2,34 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
-import type { UseCloudLLMConfig } from "./useCloudLlm";
-
-/**
- * Wrap a promise with a timeout that rejects if not resolved within timeoutMs.
- */
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  timeoutMessage: string,
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs),
-    ),
-  ]);
-}
-
-/**
- * Finite State Machine for Cloud LLM connection lifecycle.
- * States: IDLE -> CONNECTING -> CONNECTED | ERROR
- *
- * Implements:
- * - Timeout guards (10s for vault operations)
- * - Exponential backoff retry logic
- * - AbortController for cancellation
- * - Error boundary with actionable messages
- */
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "error";
 
@@ -41,22 +13,9 @@ export interface ConnectionError {
 
 interface UseCloudConnectionState {
   state: ConnectionState;
-  config: UseCloudLLMConfig | null;
+  config: { provider: string; model: string } | null;
   error: ConnectionError | null;
 }
-
-const CONNECTION_TIMEOUT_MS = 10000; // 10 seconds
-const MAX_RETRY_ATTEMPTS = 3;
-const BASE_RETRY_DELAY_MS = 1000; // 1 second
-
-/**
- * Calculate exponential backoff delay: 1s, 2s, 4s
- */
-function calculateRetryDelay(attemptNumber: number): number {
-  return BASE_RETRY_DELAY_MS * Math.pow(2, attemptNumber);
-}
-
-
 
 export function useCloudConnection() {
   const [connectionState, setConnectionState] =
@@ -81,7 +40,6 @@ export function useCloudConnection() {
     | null
   >(null);
 
-  // Cleanup retry timeout on unmount
   useEffect(() => {
     return () => {
       if (retryTimeoutRef.current) {
@@ -95,9 +53,6 @@ export function useCloudConnection() {
     };
   }, []);
 
-  /**
-   * Attempt to connect to Cloud LLM with timeout and retry logic.
-   */
   const connect = useCallback(
     async (
       provider: string,
@@ -105,7 +60,6 @@ export function useCloudConnection() {
       vault: UserSecretVaultPort | null,
       retryCount = 0,
     ): Promise<void> => {
-      // Prevent concurrent connection attempts (ref-based to avoid stale closure)
       if (connectionStateRef.current === "connecting") {
         return;
       }
@@ -120,21 +74,14 @@ export function useCloudConnection() {
       abortControllerRef.current = abortController;
 
       try {
-        // Validate vault availability
         if (!vault) {
           throw new Error(
             "Secret vault not initialized. Please refresh the page and try again.",
           );
         }
 
-        // Wrap vault.store operation with timeout
-        const storeResult = await withTimeout(
-          vault.retrieve(),
-          CONNECTION_TIMEOUT_MS,
-          "Connection timeout: Vault operation took too long. Please try again.",
-        );
+        const storeResult = await vault.retrieve();
 
-        // Check if aborted during async operation
         if (abortController.signal.aborted) {
           setConnectionState({
             state: "idle",
@@ -144,7 +91,6 @@ export function useCloudConnection() {
           return;
         }
 
-        // Validate vault result
         if (!storeResult.success) {
           throw new Error(
             storeResult.error?.message ||
@@ -152,14 +98,12 @@ export function useCloudConnection() {
           );
         }
 
-        // Connection successful
         setConnectionState({
           state: "connected",
           config: { provider, model },
           error: null,
         });
       } catch (error) {
-        // Check if aborted
         if (abortController.signal.aborted) {
           setConnectionState({
             state: "idle",
@@ -171,7 +115,7 @@ export function useCloudConnection() {
 
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        const isRetryable = retryCount < MAX_RETRY_ATTEMPTS;
+        const isRetryable = retryCount < 3;
 
         setConnectionState({
           state: "error",
@@ -183,9 +127,8 @@ export function useCloudConnection() {
           },
         });
 
-        // Auto-retry with exponential backoff if retryable
         if (isRetryable) {
-          const delay = calculateRetryDelay(retryCount);
+          const delay = 1000 * Math.pow(2, retryCount);
           retryTimeoutRef.current = setTimeout(() => {
             if (connectRef.current) {
               connectRef.current(provider, model, vault, retryCount + 1);
@@ -199,17 +142,12 @@ export function useCloudConnection() {
     [],
   );
 
-  // Keep connectRef current with latest connect function to avoid stale closures
   useEffect(() => {
     connectRef.current = connect;
   }, [connect]);
 
-  /**
-   * Manually retry connection (resets retry count).
-   */
   const retry = useCallback(
     (provider: string, model: string, vault: UserSecretVaultPort | null) => {
-      // Clear any pending auto-retry
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
@@ -221,9 +159,6 @@ export function useCloudConnection() {
     [],
   );
 
-  /**
-   * Cancel ongoing connection attempt.
-   */
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
@@ -240,9 +175,6 @@ export function useCloudConnection() {
     });
   }, []);
 
-  /**
-   * Disconnect and reset to idle state.
-   */
   const disconnect = useCallback(() => {
     cancel();
     setConnectionState({
@@ -252,9 +184,6 @@ export function useCloudConnection() {
     });
   }, [cancel]);
 
-  /**
-   * Clear error and return to idle state.
-   */
   const clearError = useCallback(() => {
     setConnectionState((prev) => ({
       ...prev,
@@ -274,5 +203,3 @@ export function useCloudConnection() {
     clearError,
   };
 }
-
-// Made with Bob

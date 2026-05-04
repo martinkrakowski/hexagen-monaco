@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { FileCode } from "lucide-react";
-import type { ManifestViewData, ValidationItem } from "./manifest-view-data";
+import type { ManifestViewData, ValidationItem } from "@hexagen/manifest-generation";
 
 interface ManifestYamlSidebarProps {
   yamlString: string;

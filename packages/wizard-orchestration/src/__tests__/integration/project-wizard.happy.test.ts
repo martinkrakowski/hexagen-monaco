@@ -6,7 +6,8 @@
  * Verifies that the wizard can end-to-end process user input and produce valid output.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
 import {
   createMockRegistry,
   registerMockPort,
@@ -28,15 +29,12 @@ describe("Project Wizard — Happy Path", () => {
   let fileWriterAdapter: MockFileWriterAdapter;
 
   beforeEach(() => {
-    // Create fresh registry for each test
     registry = createMockRegistry();
 
-    // Create mock adapters (fresh instances per test)
     persistenceAdapter = new MockWizardPersistenceAdapter();
     generatorAdapter = new MockProjectGeneratorAdapter();
     fileWriterAdapter = new MockFileWriterAdapter();
 
-    // Register mocks in registry with compile-time type safety
     registerMockPort(
       registry,
       PORT_NAMES.WIZARD_PERSISTENCE,
@@ -47,27 +45,26 @@ describe("Project Wizard — Happy Path", () => {
   });
 
   it("happy path: user scaffolds new project successfully", async () => {
-    // Arrange: Prepare user input
     const projectInput = {
       projectName: "my-hexagen-project",
       description: "Test hexagonal architecture",
       patterns: ["layered", "clean"],
     };
 
-    // Act: Generate project using mocked generator
     const result = await generatorAdapter.generateProject(projectInput);
 
-    // Assert: Verify success and manifest structure
-    expect(result.success).toBe(true);
-    expect(result.manifest).toBeDefined();
-    expect(result.manifest).toHaveProperty("system");
-    expect(result.manifest?.system).toEqual("my-hexagen-project");
-    expect(result.manifest?.description).toBe("Test hexagonal architecture");
-    expect(result.manifest?.patterns).toContain("layered");
+    assert.strictEqual(result.success, true);
+    assert.ok(result.manifest !== undefined);
+    assert.ok("system" in (result.manifest as object));
+    assert.deepStrictEqual(result.manifest?.system, "my-hexagen-project");
+    assert.strictEqual(
+      result.manifest?.description,
+      "Test hexagonal architecture",
+    );
+    assert.ok((result.manifest?.patterns as string[]).includes("layered"));
   });
 
   it("happy path: generated manifest passes validation checks", async () => {
-    // Arrange: Generate a project
     const projectInput = {
       projectName: "valid-project",
       description: "A valid project",
@@ -76,38 +73,31 @@ describe("Project Wizard — Happy Path", () => {
     const generatedResult =
       await generatorAdapter.generateProject(projectInput);
 
-    // Assert: Verify manifest structure
-    expect(generatedResult.success).toBe(true);
+    assert.strictEqual(generatedResult.success, true);
     const manifest = generatedResult.manifest as Record<string, unknown>;
 
-    // Check that manifest has required fields
-    expect(manifest).toHaveProperty("system");
-    expect(manifest).toHaveProperty("scope");
-    expect(manifest).toHaveProperty("architecture");
-    expect(manifest).toHaveProperty("generator");
+    assert.ok("system" in manifest);
+    assert.ok("scope" in manifest);
+    assert.ok("architecture" in manifest);
+    assert.ok("generator" in manifest);
 
-    // Check bounded contexts array exists and has entries
     if ("bounded_contexts" in manifest) {
-      expect(Array.isArray(manifest.bounded_contexts)).toBe(true);
-      expect((manifest.bounded_contexts as unknown[]).length).toBeGreaterThan(
-        0,
-      );
+      assert.ok(Array.isArray(manifest.bounded_contexts));
+      assert.ok((manifest.bounded_contexts as unknown[]).length > 0);
 
-      // Verify each bounded context has required fields
       const contexts = manifest.bounded_contexts as Array<{
         name: string;
         type: string;
       }>;
       contexts.forEach((bc) => {
-        expect(bc).toHaveProperty("name");
-        expect(bc).toHaveProperty("type");
-        expect(typeof bc.name).toBe("string");
+        assert.ok("name" in bc);
+        assert.ok("type" in bc);
+        assert.strictEqual(typeof bc.name, "string");
       });
     }
   });
 
   it("happy path: session state persists correctly", async () => {
-    // Arrange: Create a session
     const sessionId = "session-123";
     const sessionState = {
       sessionId,
@@ -118,18 +108,15 @@ describe("Project Wizard — Happy Path", () => {
       timestamp: Date.now(),
     };
 
-    // Act: Save and retrieve session
     await persistenceAdapter.saveSession(sessionId, sessionState);
     const retrievedSession = await persistenceAdapter.getSession(sessionId);
 
-    // Assert: Verify session was persisted
-    expect(retrievedSession).toBeDefined();
-    expect(retrievedSession?.projectName).toEqual("persistent-project");
-    expect(retrievedSession?.currentStep).toEqual("step-2");
+    assert.ok(retrievedSession !== undefined);
+    assert.deepStrictEqual(retrievedSession?.projectName, "persistent-project");
+    assert.deepStrictEqual(retrievedSession?.currentStep, "step-2");
   });
 
   it("happy path: file writes are captured", async () => {
-    // Arrange: Write some files
     const files = [
       {
         path: "manifest.yaml",
@@ -141,23 +128,18 @@ describe("Project Wizard — Happy Path", () => {
       },
     ];
 
-    // Act: Write files
     for (const file of files) {
       await fileWriterAdapter.writeFile(file.path, file.content);
     }
 
-    // Assert: Verify files were captured
-    expect(fileWriterAdapter.hasFile("manifest.yaml")).toBe(true);
-    expect(fileWriterAdapter.hasFile("package.json")).toBe(true);
-    expect(fileWriterAdapter.getFile("manifest.yaml")).toContain(
-      "modular-monolith",
+    assert.strictEqual(fileWriterAdapter.hasFile("manifest.yaml"), true);
+    assert.strictEqual(fileWriterAdapter.hasFile("package.json"), true);
+    assert.ok(
+      fileWriterAdapter.getFile("manifest.yaml").includes("modular-monolith"),
     );
   });
 
   it("happy path: registry provides mocks without errors", async () => {
-    // Arrange: All mocks are registered above
-
-    // Act: Retrieve mocks from registry using type-safe constants
     const persistence = getMockPort<MockWizardPersistenceAdapter>(
       registry,
       PORT_NAMES.WIZARD_PERSISTENCE,
@@ -171,36 +153,30 @@ describe("Project Wizard — Happy Path", () => {
       PORT_NAMES.FILE_WRITER,
     );
 
-    // Assert: All mocks are available
-    expect(persistence).toBeDefined();
-    expect(generator).toBeDefined();
-    expect(fileWriter).toBeDefined();
+    assert.ok(persistence !== undefined);
+    assert.ok(generator !== undefined);
+    assert.ok(fileWriter !== undefined);
 
-    // Verify they're the right types
-    expect(typeof persistence.saveSession).toBe("function");
-    expect(typeof generator.generateProject).toBe("function");
-    expect(typeof fileWriter.writeFile).toBe("function");
+    assert.strictEqual(typeof persistence.saveSession, "function");
+    assert.strictEqual(typeof generator.generateProject, "function");
+    assert.strictEqual(typeof fileWriter.writeFile, "function");
   });
 
   it("happy path: fixture manifest loads correctly", async () => {
-    // Arrange: Load fixture manifest
     const fixture = await createWizardFixtureManifest();
 
-    // Assert: Verify fixture structure
-    expect(fixture).toHaveProperty("system");
-    expect(fixture).toHaveProperty("bounded_contexts");
-    expect(fixture.system).toEqual("test-hexagen");
+    assert.ok("system" in fixture);
+    assert.ok("bounded_contexts" in fixture);
+    assert.deepStrictEqual(fixture.system, "test-hexagen");
 
-    // Verify bounded contexts
     const boundedContexts = (fixture as Record<string, unknown>)
       .bounded_contexts as Array<{ name: string }>;
-    expect(Array.isArray(boundedContexts)).toBe(true);
-    expect(boundedContexts.length).toBeGreaterThanOrEqual(5);
+    assert.ok(Array.isArray(boundedContexts));
+    assert.ok(boundedContexts.length >= 5);
 
-    // Verify expected contexts exist
     const contextNames = boundedContexts.map((bc) => bc.name);
-    expect(contextNames).toContain("core-domain");
-    expect(contextNames).toContain("shared");
-    expect(contextNames).toContain("wizard-orchestration");
+    assert.ok(contextNames.includes("core-domain"));
+    assert.ok(contextNames.includes("shared"));
+    assert.ok(contextNames.includes("wizard-orchestration"));
   });
 });

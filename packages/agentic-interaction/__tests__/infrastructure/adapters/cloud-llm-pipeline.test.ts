@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { CloudLLMPipelineAdapter } from "../../../src/infrastructure/adapters/cloud-llm-pipeline.adapter.js";
 import type { CloudLLMPipelineAdapterConfig } from "../../../src/infrastructure/adapters/cloud-llm-pipeline.adapter.js";
@@ -84,9 +85,8 @@ const testChain: ProviderFallbackChain = {
   ],
 };
 
-(async () => {
-  // --- Test 1: Successful cloud LLM call ---
-  {
+describe("cloud-llm-pipeline", () => {
+  it("should succeed with valid response", async () => {
     const originalEnv = process.env.TEST_OPENAI_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-test-key-123";
 
@@ -111,16 +111,14 @@ const testChain: ProviderFallbackChain = {
           assert.strictEqual(result.value.usage.totalTokens, 15);
         }
       }
-      console.log("✅ Test 1: successful cloud LLM call - passed");
     } finally {
       if (originalEnv !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalEnv;
       else delete process.env.TEST_OPENAI_API_KEY;
     }
-  }
+  });
 
-  // --- Test 2: No API keys configured ---
-  {
+  it("should fail when no API keys configured", async () => {
     delete process.env.TEST_OPENAI_API_KEY;
     delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
 
@@ -138,11 +136,9 @@ const testChain: ProviderFallbackChain = {
         "Error should mention missing API keys",
       );
     }
-    console.log("✅ Test 2: no API keys configured - passed");
-  }
+  });
 
-  // --- Test 3: Fallback to secondary provider ---
-  {
+  it("should fallback to secondary provider on 429", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     const originalFallback = process.env.TEST_OPENAI_FALLBACK_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
@@ -167,7 +163,6 @@ const testChain: ProviderFallbackChain = {
           JSON.stringify({ result: "hello" }),
         );
       }
-      console.log("✅ Test 3: fallback to secondary provider - passed");
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
@@ -176,10 +171,9 @@ const testChain: ProviderFallbackChain = {
         process.env.TEST_OPENAI_FALLBACK_API_KEY = originalFallback;
       else delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
     }
-  }
+  });
 
-  // --- Test 4: All providers fail ---
-  {
+  it("should fail when all providers fail", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     const originalFallback = process.env.TEST_OPENAI_FALLBACK_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
@@ -198,7 +192,6 @@ const testChain: ProviderFallbackChain = {
       const result = await adapter.sendRequest(makeRequest());
 
       assert.ok(!result.success, "Should fail when all providers fail");
-      console.log("✅ Test 4: all providers fail - passed");
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
@@ -207,10 +200,9 @@ const testChain: ProviderFallbackChain = {
         process.env.TEST_OPENAI_FALLBACK_API_KEY = originalFallback;
       else delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
     }
-  }
+  });
 
-  // --- Test 5: Non-retryable error returns immediately ---
-  {
+  it("should return immediately on non-retryable error", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
 
@@ -232,18 +224,14 @@ const testChain: ProviderFallbackChain = {
           "Error should include status code",
         );
       }
-      console.log(
-        "✅ Test 5: non-retryable error returns immediately - passed",
-      );
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
       else delete process.env.TEST_OPENAI_API_KEY;
     }
-  }
+  });
 
-  // --- Test 6: Zod schema validation of response ---
-  {
+  it("should validate response against Zod schema", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
 
@@ -280,16 +268,14 @@ const testChain: ProviderFallbackChain = {
           assert.strictEqual(parsed.data.result, "validated output");
         }
       }
-      console.log("✅ Test 6: Zod schema validation of response - passed");
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
       else delete process.env.TEST_OPENAI_API_KEY;
     }
-  }
+  });
 
-  // --- Test 7: Provider metadata in response ---
-  {
+  it("should include provider metadata in response", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
 
@@ -316,16 +302,14 @@ const testChain: ProviderFallbackChain = {
           "Metadata should contain model name",
         );
       }
-      console.log("✅ Test 7: provider metadata in response - passed");
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
       else delete process.env.TEST_OPENAI_API_KEY;
     }
-  }
+  });
 
-  // --- Test 8: streamStructuredRequest fallback on 429 ---
-  {
+  it("should fallback on 429 for streamStructuredRequest", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     const originalFallback = process.env.TEST_OPENAI_FALLBACK_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
@@ -378,9 +362,6 @@ const testChain: ProviderFallbackChain = {
         results.some((r) => r.success && r.value === "hello"),
         "Should succeed via fallback provider",
       );
-      console.log(
-        "✅ Test 8: streamStructuredRequest fallback on 429 - passed",
-      );
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
@@ -389,10 +370,9 @@ const testChain: ProviderFallbackChain = {
         process.env.TEST_OPENAI_FALLBACK_API_KEY = originalFallback;
       else delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
     }
-  }
+  });
 
-  // --- Test 9: streamStructuredRequest no fallback on 403 ---
-  {
+  it("should not fallback on 403 for streamStructuredRequest", async () => {
     const originalPrimary = process.env.TEST_OPENAI_API_KEY;
     const originalFallback = process.env.TEST_OPENAI_FALLBACK_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
@@ -452,9 +432,6 @@ const testChain: ProviderFallbackChain = {
           "Error should include 403 status",
         );
       }
-      console.log(
-        "✅ Test 9: streamStructuredRequest no fallback on 403 - passed",
-      );
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
@@ -463,7 +440,5 @@ const testChain: ProviderFallbackChain = {
         process.env.TEST_OPENAI_FALLBACK_API_KEY = originalFallback;
       else delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
     }
-  }
-
-  console.log("✅ All CloudLLMPipelineAdapter tests passed.");
-})();
+  });
+});

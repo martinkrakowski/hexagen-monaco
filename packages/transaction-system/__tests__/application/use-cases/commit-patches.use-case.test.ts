@@ -1,9 +1,27 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach, mock } from "node:test";
 import type { Transaction } from "../../../src/domain/transaction.js";
 import type { TransactionManagerPort } from "../../../src/application/ports/in/transaction-manager.port.js";
 import type { ManifestMutationPort } from "../../../src/application/ports/out/manifest-mutation.port.js";
 import type { LintValidationPort } from "../../../src/application/ports/out/lint-validation.port.js";
 import type { Patch, IntentLineage } from "@hexagen/core-domain";
 import { CommitPatchesUseCase } from "../../../src/application/use-cases/commit-patches.use-case.js";
+
+type Mocked<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? ((...args: A) => R) & {
+        mock: {
+          calls: Array<{ arguments: A }>;
+          callCount(): number;
+          mockImplementationOnce(
+            impl: (...args: A) => R,
+            onCall?: number,
+          ): void;
+          restore(): void;
+        };
+      }
+    : T[K];
+};
 
 function makeLineage(overrides: Partial<IntentLineage> = {}): IntentLineage {
   return {
@@ -30,41 +48,37 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
 
 describe("CommitPatchesUseCase", () => {
   let useCase: CommitPatchesUseCase;
-  let transactionManager: jest.Mocked<TransactionManagerPort>;
-  let manifestMutation: jest.Mocked<ManifestMutationPort>;
-  let lintValidation: jest.Mocked<LintValidationPort>;
+  let transactionManager: Mocked<TransactionManagerPort>;
+  let manifestMutation: Mocked<ManifestMutationPort>;
+  let lintValidation: Mocked<LintValidationPort>;
 
   beforeEach(() => {
     transactionManager = {
-      begin: jest.fn().mockReturnValue(makeTransaction()),
-      transition: jest
-        .fn()
-        .mockReturnValue(makeTransaction({ status: "speculative" })),
-      get: jest.fn().mockReturnValue(makeTransaction()),
-      list: jest.fn().mockReturnValue([]),
-      commit: jest
-        .fn()
-        .mockReturnValue(makeTransaction({ status: "committed" })),
-      rollback: jest
-        .fn()
-        .mockReturnValue(makeTransaction({ status: "rolled_back" })),
-    };
+      begin: mock.fn(() => makeTransaction()),
+      transition: mock.fn(() => makeTransaction({ status: "speculative" })),
+      get: mock.fn(() => makeTransaction()),
+      list: mock.fn(() => []),
+      commit: mock.fn(() => makeTransaction({ status: "committed" })),
+      rollback: mock.fn(() => makeTransaction({ status: "rolled_back" })),
+    } as unknown as Mocked<TransactionManagerPort>;
 
     manifestMutation = {
-      applyPatches: jest
-        .fn()
-        .mockResolvedValue({ success: true, value: undefined }),
-      restoreFromGit: jest
-        .fn()
-        .mockResolvedValue({ success: true, value: undefined }),
-    };
+      applyPatches: mock.fn(() =>
+        Promise.resolve({ success: true, value: undefined }),
+      ),
+      restoreFromGit: mock.fn(() =>
+        Promise.resolve({ success: true, value: undefined }),
+      ),
+    } as unknown as Mocked<ManifestMutationPort>;
 
     lintValidation = {
-      validateManifest: jest.fn().mockResolvedValue({
-        success: true,
-        value: { valid: true, errors: [] },
-      }),
-    };
+      validateManifest: mock.fn(() =>
+        Promise.resolve({
+          success: true,
+          value: { valid: true, errors: [] },
+        }),
+      ),
+    } as unknown as Mocked<LintValidationPort>;
 
     useCase = new CommitPatchesUseCase(
       transactionManager,
@@ -91,36 +105,52 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       if (result.success) {
-        expect(result.value.status).toBe("committed");
+        assert.strictEqual(result.value.status, "committed");
       }
 
-      expect(transactionManager.begin).toHaveBeenCalledWith(
+      assert.strictEqual(
+        transactionManager.begin.mock.calls[0].arguments[0],
         "intent-1",
-        expect.objectContaining({ intentId: "intent-1" }),
       );
-      expect(transactionManager.transition).toHaveBeenCalledWith(
+      assert.strictEqual(
+        (
+          transactionManager.begin.mock.calls[0].arguments[1] as {
+            intentId: string;
+          }
+        ).intentId,
+        "intent-1",
+      );
+      assert.strictEqual(
+        transactionManager.transition.mock.calls[0].arguments[0],
         "txn-test-1",
+      );
+      assert.strictEqual(
+        transactionManager.transition.mock.calls[0].arguments[1],
         "speculative",
       );
-      expect(manifestMutation.applyPatches).toHaveBeenCalledWith(
-        patches,
+      assert.deepStrictEqual(
+        manifestMutation.applyPatches.mock.calls[0].arguments,
+        [patches, "/path/to/manifest.yaml"],
+      );
+      assert.strictEqual(
+        lintValidation.validateManifest.mock.calls[0].arguments[0],
         "/path/to/manifest.yaml",
       );
-      expect(lintValidation.validateManifest).toHaveBeenCalledWith(
-        "/path/to/manifest.yaml",
+      assert.strictEqual(
+        transactionManager.commit.mock.calls[0].arguments[0],
+        "txn-test-1",
       );
-      expect(transactionManager.commit).toHaveBeenCalledWith("txn-test-1");
     });
   });
 
   describe("patch application failure", () => {
     it("should rollback and restore from git when applyPatches fails", async () => {
-      manifestMutation.applyPatches.mockResolvedValueOnce({
+      manifestMutation.applyPatches.mock.mockImplementationOnce(async () => ({
         success: false,
         error: new Error("disk full"),
-      });
+      }));
 
       const result = await useCase.execute(
         [],
@@ -128,31 +158,37 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("disk full");
+        assert.ok(result.error.message.includes("disk full"));
       }
 
-      expect(manifestMutation.restoreFromGit).toHaveBeenCalledWith(
+      assert.strictEqual(
+        manifestMutation.restoreFromGit.mock.calls[0].arguments[0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.rollback).toHaveBeenCalledWith(
+      assert.strictEqual(
+        transactionManager.rollback.mock.calls[0].arguments[0],
         "txn-test-1",
-        expect.stringContaining("Patch application failed"),
       );
-      expect(transactionManager.commit).not.toHaveBeenCalled();
+      assert.ok(
+        (
+          transactionManager.rollback.mock.calls[0].arguments[1] as string
+        ).includes("Patch application failed"),
+      );
+      assert.strictEqual(transactionManager.commit.mock.calls.length, 0);
     });
   });
 
   describe("lint validation failure", () => {
     it("should rollback and restore from git when lint returns invalid", async () => {
-      lintValidation.validateManifest.mockResolvedValueOnce({
+      lintValidation.validateManifest.mock.mockImplementationOnce(async () => ({
         success: true,
         value: {
           valid: false,
           errors: ["port in >1 context", "missing adapter"],
         },
-      });
+      }));
 
       const result = await useCase.execute(
         [],
@@ -160,28 +196,34 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("port in >1 context");
+        assert.ok(result.error.message.includes("port in >1 context"));
       }
 
-      expect(manifestMutation.restoreFromGit).toHaveBeenCalledWith(
+      assert.strictEqual(
+        manifestMutation.restoreFromGit.mock.calls[0].arguments[0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.rollback).toHaveBeenCalledWith(
+      assert.strictEqual(
+        transactionManager.rollback.mock.calls[0].arguments[0],
         "txn-test-1",
-        expect.stringContaining("Lint validation failed"),
       );
-      expect(transactionManager.commit).not.toHaveBeenCalled();
+      assert.ok(
+        (
+          transactionManager.rollback.mock.calls[0].arguments[1] as string
+        ).includes("Lint validation failed"),
+      );
+      assert.strictEqual(transactionManager.commit.mock.calls.length, 0);
     });
   });
 
   describe("lint validation error", () => {
     it("should rollback when lint throws an error", async () => {
-      lintValidation.validateManifest.mockResolvedValueOnce({
+      lintValidation.validateManifest.mock.mockImplementationOnce(async () => ({
         success: false,
         error: new Error("linter crashed"),
-      });
+      }));
 
       const result = await useCase.execute(
         [],
@@ -189,22 +231,23 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("linter crashed");
+        assert.ok(result.error.message.includes("linter crashed"));
       }
 
-      expect(manifestMutation.restoreFromGit).toHaveBeenCalledWith(
+      assert.strictEqual(
+        manifestMutation.restoreFromGit.mock.calls[0].arguments[0],
         "/path/to/manifest.yaml",
       );
-      expect(transactionManager.rollback).toHaveBeenCalled();
+      assert.ok(transactionManager.rollback.mock.calls.length > 0);
     });
   });
 
   describe("begin transaction failure", () => {
     it("should return error when begin returns null", async () => {
-      transactionManager.begin.mockReturnValueOnce(
-        null as unknown as Transaction,
+      transactionManager.begin.mock.mockImplementationOnce(
+        () => null as unknown as Transaction,
       );
 
       const result = await useCase.execute(
@@ -213,17 +256,17 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("Failed to begin transaction");
+        assert.ok(result.error.message.includes("Failed to begin transaction"));
       }
     });
   });
 
   describe("commit failure", () => {
     it("should return error when commit returns null", async () => {
-      transactionManager.commit.mockReturnValueOnce(
-        null as unknown as Transaction,
+      transactionManager.commit.mock.mockImplementationOnce(
+        () => null as unknown as Transaction,
       );
 
       const result = await useCase.execute(
@@ -232,9 +275,11 @@ describe("CommitPatchesUseCase", () => {
         "/path/to/manifest.yaml",
       );
 
-      expect(result.success).toBe(false);
+      assert.strictEqual(result.success, false);
       if (!result.success) {
-        expect(result.error.message).toContain("Failed to commit transaction");
+        assert.ok(
+          result.error.message.includes("Failed to commit transaction"),
+        );
       }
     });
   });

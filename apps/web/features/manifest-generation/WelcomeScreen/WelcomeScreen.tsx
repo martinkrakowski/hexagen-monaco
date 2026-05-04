@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from "react";
 import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
 import { useClientManifestGeneration } from "../useClientManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
-import { isManifestCapableModel } from "@hexagen/local-llm";
+import { assessModelCapability } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { HeaderSection } from "./HeaderSection";
 import { FormSection } from "./FormSection";
@@ -26,7 +26,6 @@ export function WelcomeScreen({
   llmContext,
   onGeneratingStateChange,
 }: WelcomeScreenProps) {
-  // Form state management
   const [formState, formHandlers] = useWelcomeScreenForm();
   const [rememberChoice, setRememberChoice] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
@@ -37,16 +36,13 @@ export function WelcomeScreen({
     rememberChoiceRef.current = rememberChoice;
   }, [rememberChoice]);
 
-  // Flow state machine
   const [flowState, actions] = useWelcomeFlowState(llmContext);
   const clientGen = useClientManifestGeneration(llmContext);
 
-  // Notify parent of generating state
   useEffect(() => {
     onGeneratingStateChange?.(flowState.state === "generating");
   }, [flowState.state, onGeneratingStateChange]);
 
-  // Setup generation trigger
   const generateManifestRef = useRef(clientGen.generateManifest);
   useEffect(() => {
     generateManifestRef.current = clientGen.generateManifest;
@@ -67,27 +63,10 @@ export function WelcomeScreen({
     };
   }, [flowState.state, formState.description, formState.maxContexts]);
 
-  // React to generation results
   useEffect(() => {
     if (flowState.state !== "generating") return;
     if (clientGen.generationError) {
-      const err = clientGen.generationError;
-      const isYamlError = err.startsWith(
-        "Generated manifest has invalid YAML:",
-      );
-      if (isYamlError) {
-        actions.setError(
-          "The AI produced malformed YAML. Please try again with a shorter description, or click Retry.",
-          "yaml_validation_failed",
-        );
-      } else {
-        const code: "inference_failed" | "no_yaml_extracted" = err.includes(
-          "did not contain a valid manifest",
-        )
-          ? "no_yaml_extracted"
-          : "inference_failed";
-        actions.setError(err, code);
-      }
+      actions.setError(clientGen.generationError);
     }
   }, [clientGen.generationError, flowState.state, actions]);
 
@@ -98,7 +77,6 @@ export function WelcomeScreen({
     }
   }, [clientGen.generatedManifest, flowState.state, actions]);
 
-  // Sync clarification phase
   useEffect(() => {
     if (
       clientGen.phase === "clarification_needed" &&
@@ -114,7 +92,6 @@ export function WelcomeScreen({
     actions,
   ]);
 
-  // Setup confirmation continuations
   const confirmRef = useRef(clientGen.confirmTopologyAndContinue);
   useEffect(() => {
     confirmRef.current = clientGen.confirmTopologyAndContinue;
@@ -135,20 +112,19 @@ export function WelcomeScreen({
     }
   }, [flowState.state, clientGen.phase, clientGen.partialTopology]);
 
-  // Model capability checks
   const loadedModelId = llmContext.engineState.loadedModelId;
-  const modelNativelyCapable =
-    !loadedModelId || isManifestCapableModel(loadedModelId);
-  const manifestCapable = modelNativelyCapable || overrideModelCheck;
+  const capability = assessModelCapability(loadedModelId, overrideModelCheck);
+  const manifestCapable = capability.isCapable;
 
   useEffect(() => {
-    if (modelNativelyCapable) setOverrideModelCheck(false);
-  }, [modelNativelyCapable]);
+    if (capability.isCapable && !capability.reason.includes("Override")) {
+      setOverrideModelCheck(false);
+    }
+  }, [capability]);
 
   const canGenerate =
     formHandlers.isValid && flowState.state === "idle" && manifestCapable;
 
-  // Event handlers
   const handleGenerate = () => {
     if (!canGenerate) return;
     const prefs = getModelPreferences();
@@ -162,16 +138,7 @@ export function WelcomeScreen({
     }
   };
 
-  const handleRegenerate = () => {
-    if (clientGenAbortRef.current) {
-      clientGenAbortRef.current.abort();
-      clientGenAbortRef.current = null;
-    }
-    clientGen.reset();
-    actions.regenerateManifest();
-  };
-
-  const handleRetryFromError = () => {
+  const handleRetryOrRegenerate = () => {
     if (clientGenAbortRef.current) {
       clientGenAbortRef.current.abort();
       clientGenAbortRef.current = null;
@@ -184,7 +151,6 @@ export function WelcomeScreen({
     actions.confirmAndContinue();
   };
 
-  // Conditional state views (non-idle, non-generating, non-model_selection)
   if (
     flowState.state !== "idle" &&
     flowState.state !== "generating" &&
@@ -196,13 +162,12 @@ export function WelcomeScreen({
         actions={actions}
         onUseManifest={onUseManifest}
         onConfirmAndContinue={handleConfirmAndContinue}
-        onRegenerate={handleRegenerate}
-        onRetryFromError={handleRetryFromError}
+        onRegenerate={handleRetryOrRegenerate}
+        onRetryFromError={handleRetryOrRegenerate}
       />
     );
   }
 
-  // Model selection view
   if (flowState.state === "model_selection") {
     return (
       <ModelSelectionView
@@ -256,7 +221,7 @@ export function WelcomeScreen({
       />
 
       <ModelCapabilityCheck
-        modelNativelyCapable={modelNativelyCapable}
+        modelNativelyCapable={capability.isCapable && !capability.reason.includes("Override")}
         manifestCapable={manifestCapable}
         loadedModelId={loadedModelId}
         overrideModelCheck={overrideModelCheck}

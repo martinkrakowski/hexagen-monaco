@@ -1,48 +1,42 @@
-import assert from "node:assert";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { ValidateManifestChangeUseCase } from "../../src/application/use-cases/validate-manifest-change.use-case";
 
-(() => {
-  const useCase = new ValidateManifestChangeUseCase();
+describe("ValidateManifestChangeUseCase", () => {
+  it("should accept a valid manifest proposal", () => {
+    const useCase = new ValidateManifestChangeUseCase();
 
-  const validResult = useCase.execute({
-    system: "hexagen-monaco",
-    bounded_contexts: [
-      {
-        name: "sync",
-        type: "core",
-        description: "Sync engine",
-        layers: {},
-      },
-    ],
+    const validResult = useCase.execute({
+      system: "hexagen-monaco",
+      bounded_contexts: [
+        {
+          name: "sync",
+          type: "core",
+          description: "Sync engine",
+          layers: {},
+        },
+      ],
+    });
+
+    assert.strictEqual(validResult.valid, true);
+    assert.deepStrictEqual(validResult.errors, []);
   });
 
-  assert.strictEqual(
-    validResult.valid,
-    true,
-    "should accept a valid manifest proposal",
-  );
-  assert.deepStrictEqual(validResult.errors, []);
+  it("should reject an invalid manifest proposal", () => {
+    const useCase = new ValidateManifestChangeUseCase();
 
-  const invalidResult = useCase.execute({
-    bounded_contexts: [
-      {
-        name: "sync",
-        type: "invalid-type",
-        description: "bad",
-        layers: {},
-      },
-    ],
+    const invalidResult = useCase.execute({
+      bounded_contexts: [
+        {
+          name: "sync",
+          type: "invalid-type",
+          description: "bad",
+          layers: {},
+        },
+      ],
+    });
+
+    assert.strictEqual(invalidResult.valid, false);
+    assert.ok(invalidResult.errors.length > 0);
   });
-
-  assert.strictEqual(
-    invalidResult.valid,
-    false,
-    "should reject an invalid manifest proposal",
-  );
-  assert.ok(
-    invalidResult.errors.length > 0,
-    "should include validation errors",
-  );
-
-  console.log("✅ validate-manifest-change use case tests passed");
-})();
+});

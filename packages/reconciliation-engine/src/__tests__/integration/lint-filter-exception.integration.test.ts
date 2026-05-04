@@ -1,10 +1,5 @@
-/**
- * Integration test: Lint Filter Port Exception Handling
- *
- * Tests how the ReconcileUseCase handles exceptions from LintFilterPort
- * and propagates errors through the reconciliation pipeline.
- */
-
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { ReconcileUseCase } from "../../application/use-cases/reconcile.use-case.js";
 import { StructuredDiffReconciliationAdapter } from "../../infrastructure/adapters/structured-diff-reconciliation.adapter.js";
 import { VerdictComparatorAdapter } from "../../infrastructure/adapters/verdict-comparator.adapter.js";
@@ -37,8 +32,8 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
       new StructuredDiffReconciliationAdapter(),
       new VerdictComparatorAdapter(),
       new GovernanceAwareConflictResolverAdapter(),
-      undefined, // manifestPatchPort (deferred design artifact)
-      undefined, // lintFilterPort — will use inline fallback
+      undefined,
+      undefined,
     );
   });
 
@@ -59,9 +54,9 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.patches).toBeDefined();
-      expect(Array.isArray(result.patches)).toBe(true);
+      assert.strictEqual(result.success, true);
+      assert.ok(result.patches !== undefined);
+      assert.ok(Array.isArray(result.patches));
     });
 
     it("should accept patches when lint report is clean", async () => {
@@ -82,8 +77,8 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.summary).toBeDefined();
+      assert.strictEqual(result.success, true);
+      assert.ok(result.summary !== undefined);
     });
   });
 
@@ -106,8 +101,8 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.patches.length).toBeGreaterThanOrEqual(0);
+      assert.strictEqual(result.success, true);
+      assert.ok(result.patches.length >= 0);
     });
 
     it("should accept all verdicts when no lint violations exist", async () => {
@@ -139,7 +134,7 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
     });
   });
 
@@ -166,8 +161,8 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.patches).toBeDefined();
+      assert.strictEqual(result.success, true);
+      assert.ok(result.patches !== undefined);
     });
 
     it("should accept patches that pass conflict resolution", async () => {
@@ -188,7 +183,7 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
     });
   });
 
@@ -202,9 +197,9 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.patches).toBeDefined();
-      expect(Array.isArray(result.patches)).toBe(true);
+      assert.strictEqual(result.success, true);
+      assert.ok(result.patches !== undefined);
+      assert.ok(Array.isArray(result.patches));
     });
 
     it("should maintain result structure on all execution paths", async () => {
@@ -223,14 +218,14 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result).toHaveProperty("success");
-      expect(result).toHaveProperty("patches");
-      expect(result).toHaveProperty("errors");
-      expect(result).toHaveProperty("summary");
-      expect(typeof result.success).toBe("boolean");
-      expect(Array.isArray(result.patches)).toBe(true);
-      expect(Array.isArray(result.errors)).toBe(true);
-      expect(typeof result.summary).toBe("string");
+      assert.ok("success" in result);
+      assert.ok("patches" in result);
+      assert.ok("errors" in result);
+      assert.ok("summary" in result);
+      assert.strictEqual(typeof result.success, "boolean");
+      assert.ok(Array.isArray(result.patches));
+      assert.ok(Array.isArray(result.errors));
+      assert.strictEqual(typeof result.summary, "string");
     });
   });
 
@@ -259,8 +254,8 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.patches).toBeDefined();
+      assert.strictEqual(result.success, true);
+      assert.ok(result.patches !== undefined);
     });
 
     it("should reconcile successfully with complex graph topology", async () => {
@@ -300,7 +295,7 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
     });
   });
 
@@ -321,10 +316,10 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.summary).toBeDefined();
-      expect(result.summary.length).toBeGreaterThan(0);
-      expect(result.summary).toContain("Reconciliation");
+      assert.strictEqual(result.success, true);
+      assert.ok(result.summary !== undefined);
+      assert.ok(result.summary.length > 0);
+      assert.ok(result.summary.includes("Reconciliation"));
     });
 
     it("should include patch count in summary", async () => {
@@ -343,8 +338,8 @@ describe("Lint Filter Exception Handling - Integration Tests", () => {
 
       const result = await useCase.execute(request);
 
-      expect(result.success).toBe(true);
-      expect(result.summary).toMatch(/\d+\s+(patches|rejected)/i);
+      assert.strictEqual(result.success, true);
+      assert.match(result.summary, /\d+\s+(patches|rejected)/i);
     });
   });
 });

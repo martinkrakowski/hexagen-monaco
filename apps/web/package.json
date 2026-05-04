@@ -22,6 +22,7 @@
     "@hexagen/governance": "workspace:*",
     "@hexagen/layout-engine": "workspace:*",
     "@hexagen/local-llm": "workspace:*",
+    "@hexagen/manifest-generation": "workspace:*",
     "@hexagen/messaging": "workspace:*",
     "@hexagen/model-settings": "workspace:*",
     "@hexagen/monaco-orchestration": "workspace:*",

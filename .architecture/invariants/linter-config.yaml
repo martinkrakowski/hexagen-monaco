@@ -14,6 +14,10 @@ package_rules:
       - '@hexagen/visualization'
       - '@hexagen/agentic-interaction'
       - '@hexagen/byok'
+    composition_root_exceptions:
+      - apps/web/app/lib/wire.ts
+      - apps/web/app/lib/wire.client.ts
+      - apps/web/app/lib/wire.server.ts
 
   - name: 'sync'
     allowed_imports:
@@ -122,3 +126,18 @@ package_rules:
       - '@hexagen/shared'
       - '@hexagen/ui'
       - '@hexagen/local-llm'
+
+  - name: 'manifest-generation'
+    allowed_imports:
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/agentic-interaction'
+      - '@hexagen/local-llm'
+
+  - name: 'llm-driver'
+    allowed_imports:
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/local-llm'
+      - '@hexagen/byok'
+      - '@hexagen/agentic-interaction'

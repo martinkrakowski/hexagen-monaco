@@ -1,0 +1,305 @@
+import yaml from "js-yaml";
+import type {
+  ManifestViewData,
+  BoundedContextView,
+  PortEntry,
+  AdapterEntry,
+  ValidationItem,
+} from "../model/manifest-view-data.js";
+
+interface ManifestOutput {
+  system?: string;
+  scope?: string;
+  architecture?: string;
+  bounded_contexts?: ManifestContextOutput[];
+}
+
+interface ManifestContextOutput {
+  name?: string;
+  type?: string;
+  description?: string;
+  layers?: {
+    domain?: Record<string, unknown>;
+    application?: {
+      ports?: {
+        in?: string[];
+        out?: string[];
+      };
+    };
+    infrastructure?: {
+      adapters?: string[];
+    };
+  };
+}
+
+function findLineRanges(
+  yamlStr: string,
+): Map<string, { start: number; end: number }> {
+  const lines = yamlStr.split("\n");
+  const ranges = new Map<string, { start: number; end: number }>();
+  let currentContext: string | null = null;
+  let currentStart = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(/^\s*-\s*name:\s*"?([^"]+)"?/);
+    if (match) {
+      if (currentContext) {
+        ranges.set(currentContext, { start: currentStart, end: i - 1 });
+      }
+      currentContext = match[1];
+      if (currentContext.startsWith("-") && match[1].startsWith("-")) {
+        currentContext = match[1];
+      }
+      currentStart = i;
+    }
+  }
+  if (currentContext) {
+    ranges.set(currentContext, { start: currentStart, end: lines.length - 1 });
+  }
+
+  return ranges;
+}
+
+export function parseYamlToViewData(yamlString: string): ManifestViewData {
+  const validationItems: ValidationItem[] = [];
+  let parsed: ManifestOutput = {};
+
+  try {
+    parsed = (yaml.load(yamlString) as ManifestOutput) || {};
+  } catch (e: unknown) {
+    validationItems.push({
+      status: "fail",
+      title: "Invalid YAML",
+      description:
+        e instanceof Error ? e.message : "Failed to parse YAML document.",
+    });
+    return {
+      system: "",
+      scope: "",
+      architecture: "",
+      contexts: [],
+      validationItems,
+      overallScore: 0,
+    };
+  }
+
+  if (parsed.scope) {
+    validationItems.push({
+      status: "pass",
+      title: "Scope Defined",
+      description: `Scope field present with value \`${parsed.scope}\`.`,
+    });
+  } else {
+    validationItems.push({
+      status: "fail",
+      title: "Scope Missing",
+      description: `Scope field is missing from the manifest.`,
+    });
+  }
+
+  if (parsed.architecture) {
+    validationItems.push({
+      status: "pass",
+      title: "Architecture Declared",
+      description: `Architecture field specifies \`${parsed.architecture}\`.`,
+    });
+  } else {
+    validationItems.push({
+      status: "fail",
+      title: "Architecture Missing",
+      description: `Architecture field is missing from the manifest.`,
+    });
+  }
+
+  const contexts: BoundedContextView[] = [];
+  const rawContexts = parsed.bounded_contexts || [];
+  const ranges = findLineRanges(yamlString);
+  let validContractCount = 0;
+
+  rawContexts.forEach((c) => {
+    const name = c.name || "unnamed-context";
+    const type =
+      c.type === "core" || c.type === "supporting" || c.type === "driver"
+        ? c.type
+        : "supporting";
+    const desc = c.description || "";
+
+    let colorToken = "var(--manifest-context-supporting)";
+    if (type === "core") colorToken = "var(--manifest-context-core)";
+    if (type === "driver") colorToken = "var(--manifest-context-driver)";
+
+    const rawPortsIn = c.layers?.application?.ports?.in || [];
+    const rawPortsOut = c.layers?.application?.ports?.out || [];
+    const rawAdapters = c.layers?.infrastructure?.adapters || [];
+
+    if (rawPortsIn.length > 0 && rawPortsOut.length > 0) {
+      validContractCount++;
+    }
+
+    const healthReasons: string[] = [];
+    let hasError = false;
+    let hasWarn = false;
+
+    if (name.startsWith("-")) {
+      hasError = true;
+      healthReasons.push(
+        `Context Name "${name}" starts with hyphen — invalid identifier for code generation`,
+      );
+      validationItems.push({
+        status: "fail",
+        title: `Context Name "${name}"`,
+        description: `Starts with hyphen — produces invalid identifiers in code generation.`,
+        contextName: name,
+      });
+    }
+
+    const portsIn: PortEntry[] = rawPortsIn.map((p) => {
+      const isBang = p.includes("!");
+      if (isBang) {
+        hasWarn = true;
+        validationItems.push({
+          status: "warn",
+          title: 'YAML Tag Indicator "!" in Names',
+          description: `Port name \`${p}\` contains "!" — YAML tag indicator.`,
+          contextName: name,
+        });
+      }
+      return {
+        name: p,
+        hasIssue: isBang,
+        issueMessage: isBang ? 'Contains YAML tag character "!"' : undefined,
+      };
+    });
+
+    const adaptersList: AdapterEntry[] = rawAdapters.map((a) => {
+      const isBang = a.includes("!");
+      if (isBang) {
+        hasWarn = true;
+        validationItems.push({
+          status: "warn",
+          title: 'YAML Tag Indicator "!" in Names',
+          description: `Adapter \`${a}\` contains "!" — YAML tag indicator.`,
+          contextName: name,
+        });
+      }
+      return {
+        name: a,
+        hasIssue: isBang,
+        issueMessage: isBang ? 'Contains YAML tag character "!"' : undefined,
+      };
+    });
+
+    const portsOut: PortEntry[] = rawPortsOut.map((p) => {
+      const isBang = p.includes("!");
+      if (isBang) {
+        hasWarn = true;
+      }
+
+      const portBase = p.replace(/Port$/, "").replace(/!/g, "");
+      const matchedAdapter = adaptersList.find((a) => {
+        const adBase = a.name.replace(/Adapter$/, "").replace(/!/g, "");
+        return adBase.includes(portBase) || portBase.includes(adBase);
+      });
+
+      if (matchedAdapter) {
+        matchedAdapter.implements = p;
+      } else {
+        hasError = true;
+        healthReasons.push(`No adapter defined for outbound port: ${p}`);
+      }
+
+      return {
+        name: p,
+        hasIssue: isBang || !matchedAdapter,
+        issueMessage: !matchedAdapter
+          ? "No adapter defined for this port"
+          : isBang
+            ? 'Contains "!"'
+            : undefined,
+      };
+    });
+
+    if (rawPortsOut.length > 0 && rawAdapters.length === 0) {
+      hasError = true;
+      validationItems.push({
+        status: "fail",
+        title: `${name}: Zero Adapters`,
+        description: `${rawPortsOut.length} outbound ports but \`infrastructure: {}\` is empty.`,
+        contextName: name,
+      });
+    } else {
+      const unconnected = portsOut.filter(
+        (p) => !adaptersList.find((a) => a.implements === p.name),
+      );
+      if (unconnected.length > 0) {
+        validationItems.push({
+          status: "fail",
+          title: `${name}: ${unconnected.length} Unconnected Ports`,
+          description: `Missing adapters for: ${unconnected.map((p) => "'" + p.name + "'").join(", ")}.`,
+          contextName: name,
+        });
+      } else if (portsOut.length > 0) {
+        validationItems.push({
+          status: "pass",
+          title: `${name}: Connected`,
+          description: `All outbound ports have matching adapters.`,
+          contextName: name,
+        });
+      }
+    }
+
+    const health = hasError ? "error" : hasWarn ? "warning" : "healthy";
+    const range = ranges.get(name) || { start: 0, end: 0 };
+
+    contexts.push({
+      name,
+      type,
+      description: desc,
+      colorToken,
+      portsIn,
+      portsOut,
+      adapters: adaptersList,
+      health,
+      healthReasons,
+      yamlLineRange: range,
+    });
+  });
+
+  if (rawContexts.length > 0) {
+    if (validContractCount === rawContexts.length) {
+      validationItems.push({
+        status: "pass",
+        title: "Minimum Interface Contract",
+        description: `All ${rawContexts.length} bounded contexts define at least one port-in and one port-out.`,
+      });
+    } else {
+      validationItems.push({
+        status: "warn",
+        title: "Minimum Interface Contract",
+        description: `Some bounded contexts are missing ports in/out.`,
+      });
+    }
+  }
+
+  const uniqueValidation = Array.from(
+    new Map(
+      validationItems.map((item) => [item.title + item.description, item]),
+    ).values(),
+  );
+
+  const passCount = uniqueValidation.filter((v) => v.status === "pass").length;
+  const overallScore =
+    uniqueValidation.length > 0
+      ? Math.round((passCount / uniqueValidation.length) * 100)
+      : 0;
+
+  return {
+    system: parsed.system || "",
+    scope: parsed.scope || "",
+    architecture: parsed.architecture || "",
+    contexts,
+    validationItems: uniqueValidation,
+    overallScore,
+  };
+}

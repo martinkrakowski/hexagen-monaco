@@ -3,14 +3,14 @@ export { ModifyArchitectureUseCase } from "./modify-architecture.use-case.js";
 export type { ModifyArchitectureDeps } from "./modify-architecture.use-case.js";
 
 // Phase 9.3: Manifest generation use case
+export { GenerateManifestFromDescriptionUseCase } from "./generate-manifest-from-description.use-case.js";
 export {
-  GenerateManifestFromDescriptionUseCase,
-  type GenerateManifestFromDescriptionRequest,
-  type GenerateManifestFromDescriptionResponse,
   ManifestWarningCategory,
   type ManifestWarning,
   type GenerationDiagnostics,
-} from "./generate-manifest-from-description.use-case.js";
+  type GenerateManifestFromDescriptionRequest,
+  type GenerateManifestFromDescriptionResponse,
+} from "./generate-manifest-types.js";
 
 // Auto-fix use cases
 export {

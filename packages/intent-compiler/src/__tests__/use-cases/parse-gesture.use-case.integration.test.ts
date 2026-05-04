@@ -1,3 +1,5 @@
+import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import assert from "node:assert/strict";
 import { ParseGestureUseCase } from "../../application/use-cases/parse-gesture.use-case.js";
 import { Gesture } from "../../domain/gesture.js";
 import { Rejection } from "../../domain/rejection.js";
@@ -9,7 +11,7 @@ import type { DomainAST } from "@hexagen/core-domain";
 
 describe("ParseGestureUseCase Integration", () => {
   let useCase: ParseGestureUseCase;
-  let errorSpy: jest.SpyInstance;
+  let errorSpy: ReturnType<typeof mock.method>;
 
   beforeEach(() => {
     const parser = new ManifestAwareGestureParserAdapter();
@@ -24,11 +26,11 @@ describe("ParseGestureUseCase Integration", () => {
       rejectEmitter,
     );
 
-    errorSpy = jest.spyOn(console, "error").mockImplementation();
+    errorSpy = mock.method(console, "error", () => {});
   });
 
   afterEach(() => {
-    errorSpy.mockRestore();
+    errorSpy.mock.restore();
   });
 
   describe("valid gesture parsing", () => {
@@ -57,9 +59,9 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.gesture).toBe(gesture);
-      expect(result.ast).toEqual(ast);
-      expect(errorSpy).not.toHaveBeenCalled();
+      assert.strictEqual(result.gesture, gesture);
+      assert.deepStrictEqual(result.ast, ast);
+      assert.strictEqual(errorSpy.mock.calls.length, 0);
     });
 
     it("should pass all topology validations", () => {
@@ -95,8 +97,8 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.ast.nodes).toHaveLength(3);
-      expect(errorSpy).not.toHaveBeenCalled();
+      assert.strictEqual(result.ast.nodes.length, 3);
+      assert.strictEqual(errorSpy.mock.calls.length, 0);
     });
 
     it("should pass all cardinality validations", () => {
@@ -121,8 +123,8 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.ast.nodes).toHaveLength(2);
-      expect(errorSpy).not.toHaveBeenCalled();
+      assert.strictEqual(result.ast.nodes.length, 2);
+      assert.strictEqual(errorSpy.mock.calls.length, 0);
     });
   });
 
@@ -157,10 +159,10 @@ describe("ParseGestureUseCase Integration", () => {
 
       const gesture = new Gesture("g1", "AddNodes", { ast });
 
-      expect(() => useCase.execute(gesture)).toThrow();
-      expect(errorSpy).toHaveBeenCalled();
-      const message = errorSpy.mock.calls[0][0] as string;
-      expect(message).toContain("Topology validation failed");
+      assert.throws(() => useCase.execute(gesture));
+      assert.ok(errorSpy.mock.calls.length > 0);
+      const message = errorSpy.mock.calls[0].arguments[0] as string;
+      assert.ok(message.includes("Topology validation failed"));
     });
 
     it("should emit rejection and preserve error message", () => {
@@ -200,8 +202,8 @@ describe("ParseGestureUseCase Integration", () => {
         fail("should have thrown");
       } catch (e) {
         const error = e as Error;
-        expect(error.message).toContain("Topology validation failed");
-        expect(error).toHaveProperty("reason");
+        assert.ok(error.message.includes("Topology validation failed"));
+        assert.ok("reason" in error);
       }
     });
   });
@@ -227,10 +229,10 @@ describe("ParseGestureUseCase Integration", () => {
 
       const gesture = new Gesture("g1", "AddNodes", { ast });
 
-      expect(() => useCase.execute(gesture)).toThrow();
-      expect(errorSpy).toHaveBeenCalled();
-      const message = errorSpy.mock.calls[0][0] as string;
-      expect(message).toContain("Cardinality validation failed");
+      assert.throws(() => useCase.execute(gesture));
+      assert.ok(errorSpy.mock.calls.length > 0);
+      const message = errorSpy.mock.calls[0].arguments[0] as string;
+      assert.ok(message.includes("Cardinality validation failed"));
     });
   });
 
@@ -295,8 +297,8 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.ast).toEqual(ast);
-      expect(errorSpy).not.toHaveBeenCalled();
+      assert.deepStrictEqual(result.ast, ast);
+      assert.strictEqual(errorSpy.mock.calls.length, 0);
     });
 
     it("should fail on first validation error encountered", () => {
@@ -339,8 +341,8 @@ describe("ParseGestureUseCase Integration", () => {
         fail("should have thrown");
       } catch (e) {
         const rejection = e as Rejection;
-        expect(rejection.reason).toContain("Topology validation failed");
-        expect(rejection.reason).not.toContain("Cardinality");
+        assert.ok(rejection.reason.includes("Topology validation failed"));
+        assert.ok(!rejection.reason.includes("Cardinality"));
       }
     });
   });
@@ -351,8 +353,8 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.ast.nodes).toEqual([]);
-      expect(result.ast.edges).toEqual([]);
+      assert.deepStrictEqual(result.ast.nodes, []);
+      assert.deepStrictEqual(result.ast.edges, []);
     });
 
     it("should handle AST with only nodes, no edges", () => {
@@ -372,8 +374,8 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.ast.nodes).toHaveLength(2);
-      expect(result.ast.edges).toHaveLength(0);
+      assert.strictEqual(result.ast.nodes.length, 2);
+      assert.strictEqual(result.ast.edges.length, 0);
     });
 
     it("should handle AST with only edges, no nodes", () => {
@@ -398,8 +400,8 @@ describe("ParseGestureUseCase Integration", () => {
 
       const result = useCase.execute(gesture);
 
-      expect(result.ast.nodes).toHaveLength(0);
-      expect(result.ast.edges).toHaveLength(1);
+      assert.strictEqual(result.ast.nodes.length, 0);
+      assert.strictEqual(result.ast.edges.length, 1);
     });
   });
 });

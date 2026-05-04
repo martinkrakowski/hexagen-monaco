@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
 import { InMemorySemanticCache } from "../../../src/infrastructure/adapters/in-memory-semantic-cache.adapter.js";
 
 describe("InMemorySemanticCache", () => {
@@ -14,15 +16,15 @@ describe("InMemorySemanticCache", () => {
 
       const result = cache.get("key-1");
 
-      expect(result).not.toBeNull();
-      expect(result!.value).toEqual(value);
-      expect(result!.key).toBe("key-1");
+      assert.ok(result !== null);
+      assert.deepStrictEqual(result!.value, value);
+      assert.strictEqual(result!.key, "key-1");
     });
 
     it("should return null for non-existent key", () => {
       const result = cache.get("non-existent");
 
-      expect(result).toBeNull();
+      assert.strictEqual(result, null);
     });
 
     it("should overwrite an existing value", () => {
@@ -33,7 +35,7 @@ describe("InMemorySemanticCache", () => {
 
       const result = cache.get("key-1");
 
-      expect(result!.value).toEqual(value2);
+      assert.deepStrictEqual(result!.value, value2);
     });
   });
 
@@ -41,11 +43,11 @@ describe("InMemorySemanticCache", () => {
     it("should return true for existing key", () => {
       cache.set("key-1", { data: "test" });
 
-      expect(cache.has("key-1")).toBe(true);
+      assert.strictEqual(cache.has("key-1"), true);
     });
 
     it("should return false for non-existent key", () => {
-      expect(cache.has("non-existent")).toBe(false);
+      assert.strictEqual(cache.has("non-existent"), false);
     });
   });
 
@@ -54,17 +56,17 @@ describe("InMemorySemanticCache", () => {
       cache.set("key-1", { data: "test" });
       cache.delete("key-1");
 
-      expect(cache.get("key-1")).toBeNull();
+      assert.strictEqual(cache.get("key-1"), null);
     });
 
     it("should return true when deleting an existing key", () => {
       cache.set("key-1", { data: "test" });
 
-      expect(cache.delete("key-1")).toBe(true);
+      assert.strictEqual(cache.delete("key-1"), true);
     });
 
     it("should return false when deleting a non-existent key", () => {
-      expect(cache.delete("non-existent")).toBe(false);
+      assert.strictEqual(cache.delete("non-existent"), false);
     });
   });
 
@@ -77,9 +79,9 @@ describe("InMemorySemanticCache", () => {
       cache.clear();
 
       const stats = cache.stats();
-      expect(stats.size).toBe(0);
-      expect(stats.hits).toBe(0);
-      expect(stats.misses).toBe(0);
+      assert.strictEqual(stats.size, 0);
+      assert.strictEqual(stats.hits, 0);
+      assert.strictEqual(stats.misses, 0);
     });
   });
 
@@ -91,9 +93,9 @@ describe("InMemorySemanticCache", () => {
 
       const stats = cache.stats();
 
-      expect(stats.hits).toBe(1);
-      expect(stats.misses).toBe(1);
-      expect(stats.size).toBe(1);
+      assert.strictEqual(stats.hits, 1);
+      assert.strictEqual(stats.misses, 1);
+      assert.strictEqual(stats.size, 1);
     });
 
     it("should track multiple hits", () => {
@@ -104,8 +106,8 @@ describe("InMemorySemanticCache", () => {
 
       const stats = cache.stats();
 
-      expect(stats.hits).toBe(3);
-      expect(stats.misses).toBe(0);
+      assert.strictEqual(stats.hits, 3);
+      assert.strictEqual(stats.misses, 0);
     });
 
     it("should count misses for non-existent keys", () => {
@@ -114,8 +116,8 @@ describe("InMemorySemanticCache", () => {
 
       const stats = cache.stats();
 
-      expect(stats.misses).toBe(2);
-      expect(stats.hits).toBe(0);
+      assert.strictEqual(stats.misses, 2);
+      assert.strictEqual(stats.hits, 0);
     });
   });
 
@@ -125,8 +127,8 @@ describe("InMemorySemanticCache", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 5));
 
-      expect(cache.get("key-1")).toBeNull();
-      expect(cache.has("key-1")).toBe(false);
+      assert.strictEqual(cache.get("key-1"), null);
+      assert.strictEqual(cache.has("key-1"), false);
     });
 
     it("should not expire entries before TTL", () => {
@@ -134,8 +136,8 @@ describe("InMemorySemanticCache", () => {
 
       const result = cache.get("key-1");
 
-      expect(result).not.toBeNull();
-      expect(result!.value).toEqual({ data: "test" });
+      assert.ok(result !== null);
+      assert.deepStrictEqual(result!.value, { data: "test" });
     });
   });
 });

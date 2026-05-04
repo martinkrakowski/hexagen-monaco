@@ -18,6 +18,7 @@ export class GenerateManifestPipelineToolUseCase {
       description: input.description,
       maxRetries: input.maxRetries,
       dryRun: input.dryRun,
+      signal: input.signal,
     });
   }
 }

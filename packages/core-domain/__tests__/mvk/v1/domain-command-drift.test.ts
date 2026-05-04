@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import type {
   DomainCommand,
   CreateNodeCommand,
@@ -56,7 +58,7 @@ describe("MVK spec↔TS drift: DomainCommand shape", () => {
     ];
 
     for (const cmd of commands) {
-      expect(Object.keys(cmd)).toEqual(["type", "payload"]);
+      assert.deepStrictEqual(Object.keys(cmd), ["type", "payload"]);
     }
   });
 
@@ -65,7 +67,7 @@ describe("MVK spec↔TS drift: DomainCommand shape", () => {
       string,
       unknown
     >;
-    expect(mod.BaseDomainCommand).toBeUndefined();
+    assert.strictEqual(mod.BaseDomainCommand, undefined);
   });
 
   it("command.lineageId and command.timestamp are not accessible", () => {
@@ -73,11 +75,11 @@ describe("MVK spec↔TS drift: DomainCommand shape", () => {
       type: "CreateNode",
       payload: { kind: "BoundedContext", attributes: {} },
     };
-    expect(
+    assert.doesNotThrow(
       () => (cmd as unknown as { lineageId: string }).lineageId,
-    ).not.toThrow();
+    );
     const keys = Object.keys(cmd);
-    expect(keys).not.toContain("lineageId");
-    expect(keys).not.toContain("timestamp");
+    assert.ok(!keys.includes("lineageId"));
+    assert.ok(!keys.includes("timestamp"));
   });
 });

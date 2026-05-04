@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ModifyArchitectureUseCase } from "../../src/application/use-cases/modify-architecture.use-case.js";
 import type { ModifyArchitectureDeps } from "../../src/application/use-cases/modify-architecture.use-case.js";
@@ -173,9 +174,8 @@ function createMockDeps(
   };
 }
 
-(async () => {
-  // --- Full pipeline success ---
-  {
+describe("modify-architecture", () => {
+  it("should complete full pipeline successfully", async () => {
     const deps = createMockDeps();
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -203,11 +203,9 @@ function createMockDeps(
       );
       assert.strictEqual(result.value.steps.length, 5, "Should have 5 steps");
     }
-    console.log("✅ Test 1: full pipeline success - passed");
-  }
+  });
 
-  // --- Lint violation rejects patch ---
-  {
+  it("should reject patch targeting lint-errored file", async () => {
     const reportWithViolations: LinterReportLike = {
       timestamp: new Date().toISOString(),
       isCompliant: false,
@@ -251,11 +249,9 @@ function createMockDeps(
         "Patch targeting lint-errored file should be rejected",
       );
     }
-    console.log("✅ Test: lint violation rejects patch - passed");
-  }
+  });
 
-  // --- All ports called ---
-  {
+  it("should call all ports", async () => {
     let nlParsed = false;
     let compiled = false;
     let rendered = false;
@@ -336,11 +332,9 @@ function createMockDeps(
     assert.ok(llmCalled, "LLM sender should be called");
     assert.ok(reconciled, "Reconciliation should be called");
     assert.ok(transactionBegun, "Transaction begin should be called");
-    console.log("✅ Test 2: all ports called - passed");
-  }
+  });
 
-  // --- All steps completed on success ---
-  {
+  it("should complete all steps on success", async () => {
     const deps = createMockDeps();
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -360,11 +354,9 @@ function createMockDeps(
         "completed",
       ]);
     }
-    console.log("✅ Test 3: all steps completed on success - passed");
-  }
+  });
 
-  // --- NL parse failure ---
-  {
+  it("should fail on NL parse error", async () => {
     const deps = createMockDeps({ nlParser: createFailingNLParser() });
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -380,11 +372,9 @@ function createMockDeps(
         "Error should mention NL parsing",
       );
     }
-    console.log("✅ Test 4: NL parse failure - passed");
-  }
+  });
 
-  // --- LLM inference failure ---
-  {
+  it("should fail on LLM error", async () => {
     const deps = createMockDeps({ llmSender: createFailingLLMSender() });
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -400,11 +390,9 @@ function createMockDeps(
         "Error should mention LLM inference",
       );
     }
-    console.log("✅ Test 5: LLM inference failure - passed");
-  }
+  });
 
-  // --- Reconciliation failure ---
-  {
+  it("should fail on reconciliation error", async () => {
     const failingReconciliationPort = {
       reconcile: async () => ({
         success: false,
@@ -439,11 +427,9 @@ function createMockDeps(
         "Error should mention reconciliation",
       );
     }
-    console.log("✅ Test 6: reconciliation failure - passed");
-  }
+  });
 
-  // --- Step names and metadata ---
-  {
+  it("should return correct step names and metadata", async () => {
     const deps = createMockDeps();
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -475,11 +461,9 @@ function createMockDeps(
         manifestPath: ".architecture/manifest.yaml",
       });
     }
-    console.log("✅ Test 11: step names and metadata - passed");
-  }
+  });
 
-  // --- Steps have endTime when completed ---
-  {
+  it("should have endTime on completed steps", async () => {
     const deps = createMockDeps();
     const useCase = new ModifyArchitectureUseCase(deps);
     const result = await useCase.execute(
@@ -502,11 +486,9 @@ function createMockDeps(
         );
       }
     }
-    console.log("✅ Test 12: steps have endTime when completed - passed");
-  }
+  });
 
-  // --- Unexpected throw in pipeline ---
-  {
+  it("should fail on unexpected throw in pipeline", async () => {
     const deps = createMockDeps({
       promptCompiler: createThrowingPromptCompiler(),
     });
@@ -521,11 +503,9 @@ function createMockDeps(
     if (!result.success) {
       assert.strictEqual(result.error.message, "unexpected crash");
     }
-    console.log("✅ Test 13: unexpected throw in pipeline - passed");
-  }
+  });
 
-  // --- Reconciler throws ---
-  {
+  it("should fail when reconciler throws", async () => {
     const throwingReconciliationPort = {
       reconcile: async () => {
         throw new Error("reconciler crashed");
@@ -554,8 +534,5 @@ function createMockDeps(
     if (!result.success) {
       assert.strictEqual(result.error.message, "reconciler crashed");
     }
-    console.log("✅ Test 14: reconciler throws - passed");
-  }
-
-  console.log("✅ All ModifyArchitectureUseCase tests passed.");
-})();
+  });
+});

@@ -13,13 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
-
-/**
- * Reporter shape for diagnostic output
- */
-type ReportRecorder = {
-  record: (type: string, target: string, message: string) => void;
-};
+import type { ReportRecorder } from "../domain/types.js";
 
 /**
  * Wiring configuration from manifest

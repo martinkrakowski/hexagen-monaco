@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import {
   FORBIDDEN_TOKENS,
   isForbiddenToken,
@@ -6,24 +7,24 @@ import {
 
 describe("ForbiddenToken helpers", () => {
   it("FORBIDDEN_TOKENS includes all 11 forbidden prop names", () => {
-    expect(FORBIDDEN_TOKENS).toHaveLength(11);
-    expect(FORBIDDEN_TOKENS).toContain("data");
-    expect(FORBIDDEN_TOKENS).toContain("loading");
-    expect(FORBIDDEN_TOKENS).toContain("error");
-    expect(FORBIDDEN_TOKENS).toContain("result");
-    expect(FORBIDDEN_TOKENS).toContain("isFetching");
-    expect(FORBIDDEN_TOKENS).toContain("governance");
-    expect(FORBIDDEN_TOKENS).toContain("llm");
-    expect(FORBIDDEN_TOKENS).toContain("status");
-    expect(FORBIDDEN_TOKENS).toContain("isPending");
-    expect(FORBIDDEN_TOKENS).toContain("isSuccess");
-    expect(FORBIDDEN_TOKENS).toContain("isError");
+    assert.strictEqual(FORBIDDEN_TOKENS.length, 11);
+    assert.ok(FORBIDDEN_TOKENS.includes("data"));
+    assert.ok(FORBIDDEN_TOKENS.includes("loading"));
+    assert.ok(FORBIDDEN_TOKENS.includes("error"));
+    assert.ok(FORBIDDEN_TOKENS.includes("result"));
+    assert.ok(FORBIDDEN_TOKENS.includes("isFetching"));
+    assert.ok(FORBIDDEN_TOKENS.includes("governance"));
+    assert.ok(FORBIDDEN_TOKENS.includes("llm"));
+    assert.ok(FORBIDDEN_TOKENS.includes("status"));
+    assert.ok(FORBIDDEN_TOKENS.includes("isPending"));
+    assert.ok(FORBIDDEN_TOKENS.includes("isSuccess"));
+    assert.ok(FORBIDDEN_TOKENS.includes("isError"));
   });
 
   it("isForbiddenToken narrows string to ForbiddenToken", () => {
-    expect(isForbiddenToken("data")).toBe(true);
-    expect(isForbiddenToken("label")).toBe(false);
-    expect(isForbiddenToken("variant")).toBe(false);
-    expect(isForbiddenToken("onClick")).toBe(false);
+    assert.strictEqual(isForbiddenToken("data"), true);
+    assert.strictEqual(isForbiddenToken("label"), false);
+    assert.strictEqual(isForbiddenToken("variant"), false);
+    assert.strictEqual(isForbiddenToken("onClick"), false);
   });
 });

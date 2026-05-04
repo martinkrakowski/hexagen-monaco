@@ -34,6 +34,7 @@ import type {
   ChatPersistencePort,
 } from "@hexagen/local-llm";
 import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
+import { WebLlmMessagingAdapter } from "./adapters/web-llm-messaging.adapter";
 import {
   CvaVariantResolverAdapter,
   DefaultNodeVisualMapperAdapter,
@@ -41,7 +42,7 @@ import {
 } from "@hexagen/ui-projection-compiler";
 import type { MapNodeVisualPort } from "@hexagen/ui-projection-compiler";
 import {
-  DagreGraphLayoutAdapter,
+  ElkGraphLayoutAdapter,
   SolveGraphLayoutUseCase,
 } from "@hexagen/layout-engine";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
@@ -57,6 +58,11 @@ import {
   BrowserHardwareProfilerAdapter,
   IDBChatPersistenceAdapter,
 } from "@hexagen/local-llm";
+import {
+  LocalLlmGenerationAdapter,
+  ClientManifestGenerationUseCase,
+  ServerManifestGenerationUseCase,
+} from "@hexagen/manifest-generation";
 
 import {
   createWebLogger,
@@ -174,7 +180,11 @@ export const wireDependencies = () => {
     "ProjectDiscarded",
     (event: DomainEvent<ProjectDiscardedEvent>) => {
       // Clear IndexedDB persistence
-      void chatPersistence.purgeProjectData(event.payload.projectId);
+      void chatPersistence
+        .purgeProjectData(event.payload.projectId)
+        .catch((err) =>
+          console.error("Failed to purge chat persistence data:", err),
+        );
 
       // Clear Zustand thread store
       useGovernanceThreadStore.getState().clearAllThreads();
@@ -194,10 +204,10 @@ export const wireDependencies = () => {
   const mapNodeVisualUseCase = new MapNodeVisualUseCase(mapNodeVisualPort);
   registry.set(PORT_NAMES.MAP_NODE_VISUAL_USE_CASE, mapNodeVisualUseCase);
 
-  // Graph layout → dagre-based auto-layout
-  const dagreGraphLayoutAdapter = new DagreGraphLayoutAdapter();
+  // Graph layout → ELK-based auto-layout
+  const elkGraphLayoutAdapter = new ElkGraphLayoutAdapter();
   const solveGraphLayoutUseCase = new SolveGraphLayoutUseCase(
-    dagreGraphLayoutAdapter,
+    elkGraphLayoutAdapter,
   );
   registry.set(PORT_NAMES.SOLVE_GRAPH_LAYOUT_USE_CASE, solveGraphLayoutUseCase);
 
@@ -209,6 +219,26 @@ export const wireDependencies = () => {
       registry.get(PORT_NAMES.LLM_PROVIDER) as LLMProviderPort,
       defaultModel,
     ) satisfies ServerLLMRequestPort,
+  );
+
+  // Client Manifest Generation → Local LLM adapter wired to use case
+  const webLlmMessagingAdapter = new WebLlmMessagingAdapter(localLLMAdapter);
+  const localLlmMessagingAdapter = new LocalLlmGenerationAdapter(
+    webLlmMessagingAdapter,
+  );
+  const clientManifestGenerationUseCase = new ClientManifestGenerationUseCase(
+    localLlmMessagingAdapter,
+  );
+  registry.set(
+    PORT_NAMES.CLIENT_MANIFEST_GENERATION,
+    clientManifestGenerationUseCase,
+  );
+
+  // Server Manifest Generation → API-based use case
+  const serverManifestGenerationUseCase = new ServerManifestGenerationUseCase();
+  registry.set(
+    PORT_NAMES.SERVER_MANIFEST_GENERATION,
+    serverManifestGenerationUseCase,
   );
 
   // TODO: Wire REM context when app-level intent tracking available (Phase 3)
@@ -304,4 +334,14 @@ export const getGenerateHexagonalMapUseCase = () =>
 export const getSolveGraphLayoutUseCase = () =>
   dependencies.get<SolveGraphLayoutUseCase>(
     PORT_NAMES.SOLVE_GRAPH_LAYOUT_USE_CASE,
+  );
+
+export const getClientManifestGenerationUseCase = () =>
+  dependencies.get<ClientManifestGenerationUseCase>(
+    PORT_NAMES.CLIENT_MANIFEST_GENERATION,
+  );
+
+export const getServerManifestGenerationUseCase = () =>
+  dependencies.get<ServerManifestGenerationUseCase>(
+    PORT_NAMES.SERVER_MANIFEST_GENERATION,
   );

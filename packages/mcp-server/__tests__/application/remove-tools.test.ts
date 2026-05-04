@@ -1,3 +1,4 @@
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { EventBusPort } from "@hexagen/messaging";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
@@ -67,10 +68,10 @@ class ManifestWriteErrorFake {
   }
 }
 
-(async () => {
+describe("remove tools", () => {
   const eventBus = new EventBusFake();
 
-  {
+  it("should return dryRun=true for RemovePortTool dry_run", async () => {
     const useCase = new RemovePortToolUseCase(
       new ManifestWriteFake() as never,
       eventBus,
@@ -83,10 +84,9 @@ class ManifestWriteErrorFake {
     });
     assert.strictEqual(result.dryRun, true);
     assert.strictEqual(result.removed, false);
-  }
-  console.log("  ✅ RemovePortToolUseCase: dry_run returns dryRun=true");
+  });
 
-  {
+  it("should remove port and publish event for RemovePortTool", async () => {
     const useCase = new RemovePortToolUseCase(
       new ManifestWriteFake() as never,
       eventBus,
@@ -100,10 +100,9 @@ class ManifestWriteErrorFake {
     assert.strictEqual(result.dryRun, false);
     assert.strictEqual(result.removed, true);
     assert.ok(result.message.includes("billing"));
-  }
-  console.log("  ✅ RemovePortToolUseCase: removes port and publishes event");
+  });
 
-  {
+  it("should return removed=false when port not found for RemovePortTool", async () => {
     const useCase = new RemovePortToolUseCase(
       new ManifestWriteNotFoundFake() as never,
       eventBus,
@@ -116,12 +115,9 @@ class ManifestWriteErrorFake {
     });
     assert.strictEqual(result.removed, false);
     assert.ok(result.message.includes("not found"));
-  }
-  console.log(
-    "  ✅ RemovePortToolUseCase: returns removed=false when not found",
-  );
+  });
 
-  {
+  it("should throw when adapter fails for RemovePortTool", async () => {
     const useCase = new RemovePortToolUseCase(
       new ManifestWriteErrorFake() as never,
       eventBus,
@@ -136,10 +132,9 @@ class ManifestWriteErrorFake {
         }),
       (err: unknown) => (err as Error).message.includes("context not found"),
     );
-  }
-  console.log("  ✅ RemovePortToolUseCase: throws when adapter fails");
+  });
 
-  {
+  it("should throw on empty context_name for RemovePortTool", async () => {
     const useCase = new RemovePortToolUseCase(
       new ManifestWriteFake() as never,
       eventBus,
@@ -153,10 +148,9 @@ class ManifestWriteErrorFake {
         }),
       /required/,
     );
-  }
-  console.log("  ✅ RemovePortToolUseCase: throws on empty context_name");
+  });
 
-  {
+  it("should return dryRun=true for RemoveContextTool dry_run", async () => {
     const useCase = new RemoveContextToolUseCase(
       new ManifestWriteFake() as never,
       eventBus,
@@ -167,10 +161,9 @@ class ManifestWriteErrorFake {
     });
     assert.strictEqual(result.dryRun, true);
     assert.strictEqual(result.removed, false);
-  }
-  console.log("  ✅ RemoveContextToolUseCase: dry_run returns dryRun=true");
+  });
 
-  {
+  it("should remove context and publish event for RemoveContextTool", async () => {
     const useCase = new RemoveContextToolUseCase(
       new ManifestWriteFake() as never,
       eventBus,
@@ -182,12 +175,9 @@ class ManifestWriteErrorFake {
     assert.strictEqual(result.dryRun, false);
     assert.strictEqual(result.removed, true);
     assert.ok(result.message.includes("billing"));
-  }
-  console.log(
-    "  ✅ RemoveContextToolUseCase: removes context and publishes event",
-  );
+  });
 
-  {
+  it("should return removed=false when context not found for RemoveContextTool", async () => {
     const useCase = new RemoveContextToolUseCase(
       new ManifestWriteNotFoundFake() as never,
       eventBus,
@@ -198,12 +188,9 @@ class ManifestWriteErrorFake {
     });
     assert.strictEqual(result.removed, false);
     assert.ok(result.message.includes("not found"));
-  }
-  console.log(
-    "  ✅ RemoveContextToolUseCase: returns removed=false when not found",
-  );
+  });
 
-  {
+  it("should throw when adapter fails for RemoveContextTool", async () => {
     const useCase = new RemoveContextToolUseCase(
       new ManifestWriteErrorFake() as never,
       eventBus,
@@ -216,10 +203,9 @@ class ManifestWriteErrorFake {
         }),
       (err: unknown) => (err as Error).message.includes("context not found"),
     );
-  }
-  console.log("  ✅ RemoveContextToolUseCase: throws when adapter fails");
+  });
 
-  {
+  it("should throw on empty context_name for RemoveContextTool", async () => {
     const useCase = new RemoveContextToolUseCase(
       new ManifestWriteFake() as never,
       eventBus,
@@ -232,8 +218,5 @@ class ManifestWriteErrorFake {
         }),
       /required/,
     );
-  }
-  console.log("  ✅ RemoveContextToolUseCase: throws on empty context_name");
-
-  console.log("✅ remove-tools use-case tests passed");
-})();
+  });
+});
