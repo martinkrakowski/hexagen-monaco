@@ -38,7 +38,7 @@ export function Header({
       <header className="w-full px-6 py-1 bg-card border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img
-            src="/brand/hexagen-monaco-logotype-2.svg"
+            src="https://hexagen-monaco.cloud/images/hexagen-monaco-logotype-2.svg"
             alt="HexaGen Monaco"
             className="h-12 w-auto"
           />
