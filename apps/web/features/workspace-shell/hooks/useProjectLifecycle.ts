@@ -186,19 +186,16 @@ export function useProjectLifecycle(
         ui.closeDialog();
         ui.setStep(completeness.firstIncompleteStepIndex);
       } else {
-        ui.openDialog({
-          kind: "error",
-          title: "Invalid Manifest",
-          message:
-            outcome.message ||
+        window.alert(
+          outcome.message ||
             "Failed to parse the generated manifest. Please try regenerating.",
-        });
+        );
       }
     },
     [importManifest, form, ui],
   );
 
-const handleWelcomeManifestGenerated = useCallback(
+  const handleWelcomeManifestGenerated = useCallback(
     async (yamlContent: string) => {
       if (uiState.kind === "edit") {
         setPendingWelcomeManifest(yamlContent);
@@ -293,7 +290,9 @@ const handleWelcomeManifestGenerated = useCallback(
   }, [form, ui, editor, uiState, pendingWelcomeManifest, handleManifestLoaded]);
 
   const loadedProject =
-    uiState.kind === "edit" ? (loadSavedProject(uiState.projectId) ?? null) : null;
+    uiState.kind === "edit"
+      ? (loadSavedProject(uiState.projectId) ?? null)
+      : null;
 
   return {
     projects,
