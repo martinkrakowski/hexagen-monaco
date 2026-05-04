@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-17
 **Status:** Accepted
-**Authors:** Architecture Co-pilot, Human Architect
+**Authors:** Human Architect
 **Supersedes:** None
 
 ---
@@ -335,4 +335,4 @@ within existing elements of the `local-llm` and `web-driver` bounded contexts.
 - `apps/web/app/hooks/use-local-llm.tsx`
 - `apps/web/app/lib/grounded-prompt.ts`
 - Commits `1f3a497`, `f51d9ed` (squashed from 5 incremental fix commits)
-- ADR-0012: Human-AI Symbiosis Loop
+- ADR-0012: Human-Guided Modification Loop

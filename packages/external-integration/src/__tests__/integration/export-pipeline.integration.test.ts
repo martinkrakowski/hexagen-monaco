@@ -56,19 +56,19 @@ class MockProjectGeneratorAdapter {
 }
 
 class MockWizardPersistenceAdapter {
-  private sessions = new Map<string, any>();
+  private sessions = new Map<string, unknown>();
 
-  async saveSession(sessionId: string, state: any): Promise<void> {
+  async saveSession(sessionId: string, state: unknown): Promise<void> {
     this.sessions.set(sessionId, { ...state, timestamp: Date.now() });
   }
 
-  async getSession(sessionId: string): Promise<any | null> {
+  async getSession(sessionId: string): Promise<unknown | null> {
     return this.sessions.get(sessionId) ?? null;
   }
 }
 
 describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
-  let registry: any;
+  let registry: ReturnType<typeof createCrossBoundaryRegistry>;
 
   beforeEach(() => {
     registry = createCrossBoundaryRegistry();
@@ -97,7 +97,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
         async streamExport(request: {
           manifest: CrossBoundaryManifest;
           target: string;
-        }): Promise<any> {
+        }): Promise<unknown> {
           exportSteps.push("stream-prepare");
           exportSteps.push("stream-upload");
           exportSteps.push("stream-complete");
@@ -236,7 +236,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
         async streamExport(request: {
           manifest: CrossBoundaryManifest;
           target: string;
-        }): Promise<any> {
+        }): Promise<unknown> {
           const txId = await txManager.begin();
 
           try {
@@ -286,7 +286,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
 
       const exporter1 = {
         calls: 0,
-        async streamExport(): Promise<any> {
+        async streamExport(): Promise<unknown> {
           this.calls++;
           return null;
         },
@@ -301,7 +301,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
 
       const exporter2 = {
         calls: 0,
-        async streamExport(): Promise<any> {
+        async streamExport(): Promise<unknown> {
           this.calls++;
           return null;
         },

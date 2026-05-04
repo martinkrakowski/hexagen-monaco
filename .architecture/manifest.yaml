@@ -662,7 +662,7 @@ mvk:
   spec: .architecture/mvk/spec-v1.md
   driftReport: .architecture/mvk/drift-report-v1.md
   decisions:
-    - .architecture/decisions/0018-mvk-semantic-kernel-contracts.md
+  - .architecture/decisions/ADR-0018-mvk-semantic-kernel-contracts.md
   package: packages/core-domain
 planes:
   projection:
@@ -945,9 +945,9 @@ bounded_contexts:
         adapters: []
   - name: agentic-interaction
     type: supporting
-    description: >-
-      AI assistant integration — ports for LLM providers, suggestion engine,
-      cloud chat, and architecture modification pipeline orchestration (Phase 5)
+  description: >-
+    Assistant integration — ports for LLM providers, suggestion engine,
+    cloud chat, and architecture modification pipeline orchestration (Phase 5)
     layers:
       domain:
         value_objects:
@@ -1059,20 +1059,20 @@ bounded_contexts:
           - JsZipCreatorAdapter
   - name: governance
     type: supporting
-    description: >-
-      Governance read surface — exposes architectural decisions, invariants,
-      linter config, and workspace context as typed resources for AI agent
-      consumption
+  description: >-
+    Governance read surface — exposes architectural decisions, invariants,
+    linter config, and workspace context as typed resources for tool
+    consumption
     layers:
       domain: {}
     depends_on:
       - shared
   - name: mcp-server
     type: core
-    description: >-
-      MCP server — exposes architectural tools and resources over stdio
-      transport for AI agent interaction (audit, scaffold, dependency
-      management, governance reads, manifest diff)
+  description: >-
+    MCP server — exposes architectural tools and resources over stdio
+    transport for external tool interaction (audit, scaffold, dependency
+    management, governance reads, manifest diff)
     layers:
       domain: {}
       application:
@@ -1168,8 +1168,8 @@ bounded_contexts:
   - name: local-llm
     type: supporting
     description: >-
-      Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
-      offline-capable local AI inference with worker-based architecture and
+    Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides
+    offline-capable local inference with worker-based architecture and
       IndexedDB model caching. Enforces ACL: all LLM inputs must come through
       prompt-compiler's structured request port. Schema validation at response
       boundary rejects schema-drift.
@@ -1267,8 +1267,8 @@ bounded_contexts:
   - name: ai-pipeline
     type: core
     description: >-
-      NL-to-DomainCommand parser and intent processing for AI-driven
-      architecture modification. Phase 2b: Bridges the gap between user intent
+    NL-to-DomainCommand parser and intent processing for
+    architecture modification. Phase 2b: Bridges the gap between user intent
       (chat) and domain commands that can be executed by the architecture
       modification system.
     layers:
@@ -1670,7 +1670,7 @@ apps:
     driver: cli
     framework: plain-ts
     description: >-
-      Terminal UI — MCP server integration for AI agent interaction via ink and
+      Terminal UI — MCP server integration for tool interaction via ink and
       React
     depends_on:
       - shared

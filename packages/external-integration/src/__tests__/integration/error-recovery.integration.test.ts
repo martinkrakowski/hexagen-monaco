@@ -27,7 +27,7 @@ import {
 } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
 
 describe("Error Recovery — Integration Tests (Phase 6C)", () => {
-  let registry: any;
+  let registry: ReturnType<typeof createCrossBoundaryRegistry>;
 
   beforeEach(() => {
     registry = createCrossBoundaryRegistry();
@@ -45,7 +45,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       const flakyWizard = {
         async generateProject(input: {
           projectName: string;
-        }): Promise<{ success: boolean; manifest?: any; error?: any }> {
+        }): Promise<{ success: boolean; manifest?: unknown; error?: unknown }> {
           retryState.attempts++;
 
           if (retryState.attempts <= 2) {
@@ -72,7 +72,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         maxRetries: number = 3,
         backoffs: number[] = [100, 200, 400],
       ): Promise<T> => {
-        let lastError: any = null;
+        let lastError: unknown = null;
 
         for (let i = 0; i < maxRetries; i++) {
           try {
@@ -90,7 +90,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         throw lastError;
       };
 
-      const wizard = getMockPort<any>(registry, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard = getMockPort(registry, PORT_NAMES.PROJECT_GENERATOR);
       const result = await retryWithBackoff(
         () => wizard.generateProject({ projectName: "recovery-project" }),
         3,
@@ -118,8 +118,8 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       const failingWizard = {
         async generateProject(): Promise<{
           success: boolean;
-          manifest?: any;
-          error?: any;
+          manifest?: unknown;
+          error?: unknown;
         }> {
           errorLog.steps.push("wizard-error");
           return {
@@ -133,10 +133,10 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       };
 
       const gracefulGovernance = {
-        async scan(manifest: any): Promise<{
+        async scan(manifest: unknown): Promise<{
           success: boolean;
-          error?: any;
-          data?: any;
+          error?: unknown;
+          data?: unknown;
         }> {
           if (!manifest) {
             errorLog.steps.push("governance-skip");
@@ -154,8 +154,8 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
 
       const defensiveExport = {
         async validateManifest(
-          manifest: any,
-        ): Promise<{ success: boolean; error?: any }> {
+          manifest: unknown,
+        ): Promise<{ success: boolean; error?: unknown }> {
           if (!manifest) {
             errorLog.steps.push("export-refuse");
             return {
@@ -174,20 +174,20 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.LINTER, gracefulGovernance);
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, defensiveExport);
 
-      const wizard = getMockPort<any>(registry, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard = getMockPort(registry, PORT_NAMES.PROJECT_GENERATOR);
       const wizResult = await wizard.generateProject({
         projectName: "test",
       });
 
       assert.strictEqual(wizResult.success, false);
 
-      const governance = getMockPort<any>(registry, PORT_NAMES.LINTER);
+      const governance = getMockPort(registry, PORT_NAMES.LINTER);
       const govResult = await governance.scan(null);
 
       assert.strictEqual(govResult.success, false);
       assert.strictEqual(govResult.error?.code, "INVALID_MANIFEST");
 
-      const exporter = getMockPort<any>(registry, PORT_NAMES.SSE_STREAM);
+      const exporter = getMockPort(registry, PORT_NAMES.SSE_STREAM);
       const expResult = await exporter.validateManifest(null);
 
       assert.strictEqual(expResult.success, false);
@@ -208,7 +208,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       const workingWizard = {
         async generateProject(input: { projectName: string }): Promise<{
           success: boolean;
-          manifest?: any;
+          manifest?: unknown;
         }> {
           return {
             success: true,
@@ -245,17 +245,17 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.LINTER, failingGovernance);
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, recoveryExport);
 
-      const wizard = getMockPort<any>(registry, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard = getMockPort(registry, PORT_NAMES.PROJECT_GENERATOR);
       const wizResult = await wizard.generateProject({
         projectName: "resilient-project",
       });
       assert.strictEqual(wizResult.success, true);
 
-      const governance = getMockPort<any>(registry, PORT_NAMES.LINTER);
+      const governance = getMockPort(registry, PORT_NAMES.LINTER);
       const govResult = await governance.scan(wizResult.manifest);
       assert.strictEqual(govResult.success, false);
 
-      const exporter = getMockPort<any>(registry, PORT_NAMES.SSE_STREAM);
+      const exporter = getMockPort(registry, PORT_NAMES.SSE_STREAM);
       const expResult = await exporter.streamExport({
         manifest: wizResult.manifest,
         target: "zip",
@@ -271,14 +271,14 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
 
       const failingWizard1 = {
         callCount: 0,
-        async generateProject(): Promise<any> {
+        async generateProject(): Promise<unknown> {
           this.callCount++;
           throw new Error("Always fails");
         },
       };
       registerMockPort(registry1, PORT_NAMES.PROJECT_GENERATOR, failingWizard1);
 
-      const wizard1 = getMockPort<any>(registry1, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard1 = getMockPort(registry1, PORT_NAMES.PROJECT_GENERATOR);
       try {
         await wizard1.generateProject({});
       } catch {
@@ -291,14 +291,14 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
 
       const workingWizard2 = {
         callCount: 0,
-        async generateProject(): Promise<any> {
+        async generateProject(): Promise<unknown> {
           this.callCount++;
           return { success: true, manifest: {} };
         },
       };
       registerMockPort(registry2, PORT_NAMES.PROJECT_GENERATOR, workingWizard2);
 
-      const wizard2 = getMockPort<any>(registry2, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard2 = getMockPort(registry2, PORT_NAMES.PROJECT_GENERATOR);
       const result = await wizard2.generateProject({});
 
       assert.strictEqual(result.success, true);

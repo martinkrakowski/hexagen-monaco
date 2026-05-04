@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-17
 **Status:** Accepted
-**Authors:** Architecture Co-pilot, Human Architect
+**Authors:** Human Architect
 **Supersedes:** Partially supersedes ADR-0016 (model ID strategy; metadata approach)
 
 ---

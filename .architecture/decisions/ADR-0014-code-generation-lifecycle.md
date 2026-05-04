@@ -34,7 +34,7 @@ Option 1 was tempting because it delivers a "complete" project immediately, but 
 These are generated via:
 
 - CLI: `hexagen generate code` (via `@hexagen/code-generation`)
-- AI Agent: Using MCP tools or OpenCode integration
+- Automated agents: Using MCP tools or OpenCode integration
 - GitHub App: Opening Pull Requests automatically
 
 ## Rationale
@@ -63,9 +63,9 @@ Generating thousands of lines of code during a web UI wizard response would:
 
 By deferring to a separate process, we keep the bootstrap fast and responsive.
 
-### AI Agent Compatibility
+### Automated Agent Compatibility
 
-The human-AI symbiosis loop (ADR-0012) is designed to work with the structural scaffold. The AI receives:
+The human-guided modification loop (ADR-0012) is designed to work with the structural scaffold. The system receives:
 
 - The manifest structure
 - Empty port interfaces
@@ -81,7 +81,7 @@ This is more tractable than trying to "fix" generated code that might not match 
 - Clean git history with auditable first commit
 - Architecture boundaries established before code is added
 - Code generation can be run independently (CLI, agent, scheduled job)
-- AI agents can work with empty stubs more easily
+- Automated agents can work with empty stubs more easily
 
 ### Negative
 
@@ -93,5 +93,5 @@ This is more tractable than trying to "fix" generated code that might not match 
 
 - ADR-0010 (MCP Server Architecture) — Tools available for post-bootstrap code gen
 - ADR-0011 (Terminal UI Architecture) — TUI can trigger code generation
-- ADR-0012 (Human-AI Symbiosis Loop) — AI fills in stubs after bootstrap
+- ADR-0012 (Human-Guided Modification Loop) — System fills in stubs after bootstrap
 - `.architecture/manifest.yaml` — Bounded context definitions
