@@ -251,6 +251,42 @@ export function extractObjectFromWrapper<T extends Record<string, unknown>>(
   return null;
 }
 
+function extractFirstJSONBlock(s: string): string | null {
+  const start = s.search(/[{[]/);
+  if (start === -1) return null;
+
+  const openChar = s[start];
+  const closeChar = openChar === "{" ? "}" : "]";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{" || ch === "[") depth++;
+    if (ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0 && ch === closeChar) return s.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
 export function parseJSON<T>(
   raw: string,
 ):
@@ -260,21 +296,66 @@ export function parseJSON<T>(
   try {
     const data = JSON.parse(jsonStr) as T;
     return { ok: true, data, repairApplied: false };
-  } catch (e) {
-    const repaired = repairJSON(raw);
-    if (repaired !== null) {
-      try {
+  } catch {
+    // fallback 1: repair the extracted JSON
+    try {
+      const repaired = repairJSON(jsonStr);
+      if (repaired !== null) {
         const data = JSON.parse(repaired) as T;
         return { ok: true, data, repairApplied: true };
-      } catch {
-        // Ignore repair parse error and fall through
       }
+    } catch {
+      // fall through
     }
-    const message = e instanceof Error ? e.message : "Invalid JSON";
+    // fallback 2: extract first JSON block then repair it
+    try {
+      const extracted = extractFirstJSONBlock(jsonStr);
+      if (extracted) {
+        const data = JSON.parse(extracted) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 3: extract first block + repair it
+    try {
+      const extracted = extractFirstJSONBlock(jsonStr);
+      if (extracted) {
+        const repaired = repairJSON(extracted);
+        if (repaired !== null) {
+          const data = JSON.parse(repaired) as T;
+          return { ok: true, data, repairApplied: true };
+        }
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 4: try repairJSON on the full raw input
+    try {
+      const repaired = repairJSON(raw);
+      if (repaired !== null) {
+        const data = JSON.parse(repaired) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // fall through
+    }
+    // fallback 5: aggressive — find first { or [ and balance it
+    try {
+      const startIdx = jsonStr.search(/[{[]/);
+      if (startIdx !== -1) {
+        const subset = jsonStr.slice(startIdx);
+        const balanced = balanceJSON(subset);
+        const data = JSON.parse(balanced) as T;
+        return { ok: true, data, repairApplied: true };
+      }
+    } catch {
+      // all fallbacks failed
+    }
     return {
       ok: false,
-      error: `JSON parse error: ${message}`,
-      repairApplied: repaired !== null,
+      error: `JSON parse error: unable to parse or repair LLM output`,
+      repairApplied: false,
     };
   }
 }

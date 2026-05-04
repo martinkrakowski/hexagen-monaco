@@ -178,4 +178,5 @@ export {
   parseJSON,
   extractArrayFromWrapper,
   extractObjectFromWrapper,
+  coerceRawPorts,
 } from "./domain/index.js";

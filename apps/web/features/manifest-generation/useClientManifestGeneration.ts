@@ -15,6 +15,7 @@ import {
   extractArrayFromWrapper,
   extractObjectFromWrapper,
   normalizePortName,
+  coerceRawPorts,
   type ManifestDraft,
   type ManifestTopologyDraft,
   type ManifestTopologyDraftContext,
@@ -344,6 +345,9 @@ async function attemptPortsForContext(
         }
       }
 
+      const coerced = coerceRawPorts(portsData);
+      portsData = { in: coerced.in, out: coerced.out };
+
       const result = PortsListSchema.safeParse(portsData);
       if (!result.success) {
         const errors = result.error.issues
@@ -607,7 +611,47 @@ export function useClientManifestGeneration(
           return { ok: false, error: errorMsg };
         }
 
-        return { ok: true, adapters: parsed.data };
+        let extracted: unknown[] | null = null;
+
+        if (Array.isArray(parsed.data)) {
+          extracted = parsed.data;
+        } else if (typeof parsed.data === "object" && parsed.data !== null) {
+          extracted = extractArrayFromWrapper(parsed.data, [
+            "adapters",
+            "data",
+            "items",
+            "result",
+          ]);
+          if (extracted.length === 0) {
+            if (
+              "name" in (parsed.data as Record<string, unknown>) ||
+              "implements" in (parsed.data as Record<string, unknown>)
+            ) {
+              extracted = [parsed.data];
+            }
+          }
+        }
+
+        if (!extracted) {
+          return {
+            ok: false,
+            error:
+              "Adapter extraction failed: expected array but got non-object",
+          };
+        }
+
+        const adapters = extracted.filter(
+          (item): item is Record<string, unknown> =>
+            typeof item === "object" &&
+            item !== null &&
+            typeof (item as Record<string, unknown>).name === "string",
+        );
+
+        return {
+          ok: true,
+          adapters:
+            adapters as ManifestDraft["boundedContexts"][number]["adapters"],
+        };
       } catch (error) {
         return {
           ok: false,
@@ -755,6 +799,9 @@ export function useClientManifestGeneration(
             );
             if (result.ok) {
               adapters = result.adapters;
+              if (!Array.isArray(adapters)) {
+                adapters = [];
+              }
               logger.info(
                 `[manifest-gen] Got ${adapters.length} adapters for ${ctx.name}`,
               );
