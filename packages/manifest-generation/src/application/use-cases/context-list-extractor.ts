@@ -65,10 +65,8 @@ async function attemptContextList(
               break;
             }
           }
-          // Single object fallback: treat as one-element array
-          if (items.length === 0 && ("name" in obj || "status" in obj)) {
-            items = [data];
-          }
+          // Don't wrap single object - let it fall through to NDJSON parsing
+          // to ensure multi-line NDJSON responses are properly parsed
         }
       }
 
