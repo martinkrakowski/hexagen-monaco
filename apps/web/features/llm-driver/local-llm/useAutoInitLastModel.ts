@@ -57,7 +57,16 @@ export function useAutoInitLastModel({
       const modelToLoad = lastModel ?? DEFAULT_MODEL_ID;
 
       hasAttemptedAutoInitRef.current = true;
-      hasModelInCache(modelToLoad).then((isCached) => {
+
+      const CACHE_TIMEOUT_MS = 5_000;
+      const cacheCheckWithTimeout = Promise.race([
+        hasModelInCache(modelToLoad),
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(false), CACHE_TIMEOUT_MS),
+        ),
+      ]);
+
+      cacheCheckWithTimeout.then((isCached) => {
         if (isCached) {
           setEngineState((prev) => ({ ...prev, autoLoading: true }));
           initializeModel(modelToLoad);
