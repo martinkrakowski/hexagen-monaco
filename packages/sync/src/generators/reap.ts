@@ -38,9 +38,15 @@ export async function reapLegacyFolders(
       // Note: Folders containing only index.ts are now preserved.
       // The sync engine maintains these barrels, so deleting them
       // creates a delete-recreate cycle.
-    } catch (e: any) {
-      // ignore if folder does not exist
-      if (e.code !== "ENOENT") throw e;
+    } catch (e: unknown) {
+      if (
+        !(
+          e instanceof Error &&
+          "code" in e &&
+          (e as { code?: string }).code === "ENOENT"
+        )
+      )
+        throw e;
     }
   }
 }

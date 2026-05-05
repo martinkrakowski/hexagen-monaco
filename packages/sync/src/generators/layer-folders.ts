@@ -20,8 +20,12 @@ async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
   try {
     const content = await fs.readFile(filePath, "utf8");
     return yaml.load(content) as T;
-  } catch (e: any) {
-    if (e.code === "ENOENT") {
+  } catch (e: unknown) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "ENOENT"
+    ) {
       return null;
     }
     throw e;
@@ -47,7 +51,7 @@ async function generateBarrelContent(dirPath: string): Promise<string> {
         exportLines.push(`export * from './${entry.name}/index.js';`);
       }
     }
-  } catch (_) {
+  } catch {
     // Directory might be empty or newly created
   }
 
@@ -81,13 +85,14 @@ export async function ensureLayerFolders(
     "invariants",
     "layer-rules.yaml",
   );
-  const layerRules = await loadYamlSafe<any>(layerRulesPath);
+  const layerRules =
+    await loadYamlSafe<Record<string, unknown>>(layerRulesPath);
 
   if (!layerRules) {
     logger.warn("layer-rules.yaml not found — skipping layer rule enforcement");
   }
 
-  for (const [_layerName, layerConfig] of Object.entries(layers)) {
+  for (const [, layerConfig] of Object.entries(layers)) {
     const layerPath = path.join(moduleDir, layerConfig.folder);
 
     try {
