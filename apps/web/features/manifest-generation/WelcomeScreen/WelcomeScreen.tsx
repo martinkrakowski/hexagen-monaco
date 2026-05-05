@@ -275,7 +275,7 @@ export function WelcomeScreen({
             <button
               onClick={() => {
                 stagedGen.reset();
-                formHandlers.setValue("description", "");
+                formHandlers.reset();
               }}
               className="text-sm font-medium px-3 py-1 text-muted-foreground hover:bg-muted rounded transition-colors"
             >

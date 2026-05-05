@@ -40,28 +40,60 @@ async function attemptContextList(
         continue;
       }
 
-      const parsed =
-        parseJSON<Array<{ name: string; type: string; description: string }>>(
-          content,
-        );
-      if (!parsed.ok) {
-        const errorMsg = "error" in parsed ? parsed.error : "Unknown error";
-        if (attempt === MAX_RETRIES) {
-          return { ok: false, error: errorMsg };
-        }
+      // Handle NDJSON: split by lines and parse each object
+      const lines = content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      if (lines.length === 0) {
+        if (attempt === MAX_RETRIES)
+          return { ok: false, error: "Empty response from LLM" };
         continue;
       }
 
-      const rawContexts = extractArrayFromWrapper<{
+      const rawContexts: Array<{
         name?: string;
         type?: string;
         description?: string;
-      }>(parsed.data, ["contexts", "data", "items", "results", "list"]);
+        status?: string;
+        contextType?: string;
+      }> = [];
 
-      if (rawContexts.length === 0 && !Array.isArray(parsed.data)) {
-        const errorMsg = `Context list: expected array but got object with keys: ${Object.keys(parsed.data as object).join(", ")}`;
+      // Parse each NDJSON line
+      for (const line of lines) {
+        try {
+          const parsed = parseJSON<{
+            name?: string;
+            type?: string;
+            description?: string;
+            status?: string;
+            contextType?: string;
+          }>(line);
+
+          if (!parsed.ok) continue; // Skip malformed lines
+
+          const obj = parsed.data as Record<string, unknown>;
+
+          // Extract accepted contexts (skip rejected/uncertain)
+          if (obj.status === "accepted" || (obj.status !== "rejected" && obj.status !== "uncertain")) {
+            rawContexts.push({
+              name: obj.name as string | undefined,
+              type: (obj.contextType || obj.type) as string | undefined,
+              description: obj.description as string | undefined,
+            });
+          }
+        } catch {
+          // Continue on parsing errors for individual lines
+        }
+      }
+
+      if (rawContexts.length === 0) {
         if (attempt === MAX_RETRIES) {
-          return { ok: false, error: errorMsg };
+          return {
+            ok: false,
+            error: "No valid bounded contexts found in LLM response",
+          };
         }
         continue;
       }
