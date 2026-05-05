@@ -6,12 +6,6 @@ import type { Manifest } from "../../domain/model/manifest-schema/manifest-schem
 
 export class RenderManifestUseCase implements RenderManifestPort {
   async execute(_input: Manifest): Promise<RenderedManifest> {
-    // TODO: Implement use case logic
-    // For now, return a minimal valid response
-    return {
-      yaml: "system: test-system\nscope: test\narchitecture: hexagonal\n",
-      diagnostics: [],
-      token: "test-token",
-    };
+    throw new Error("RenderManifestUseCase.execute is not implemented");
   }
 }

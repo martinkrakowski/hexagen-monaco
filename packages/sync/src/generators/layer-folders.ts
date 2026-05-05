@@ -51,8 +51,16 @@ async function generateBarrelContent(dirPath: string): Promise<string> {
         exportLines.push(`export * from './${entry.name}/index.js';`);
       }
     }
-  } catch {
-    // Directory might be empty or newly created
+  } catch (e: unknown) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "ENOENT"
+    ) {
+      // Directory may not exist yet
+    } else {
+      throw e;
+    }
   }
 
   // NOTE: Shared kernel re-exports removed.
