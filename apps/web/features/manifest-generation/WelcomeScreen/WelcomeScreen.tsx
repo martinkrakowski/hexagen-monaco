@@ -104,18 +104,25 @@ export function WelcomeScreen({
     generateRef.current = stagedGen.generateManifest;
   }, [stagedGen.generateManifest]);
 
+  // Compute provider availability early (before useEffect that uses it)
+  const hasCloudKeys = hasServerApiKey || (capabilities?.canGenerate ?? false);
+
   useEffect(() => {
     if (flowState.state !== "generating") return;
     generateRef.current(formState.description, {
       platform: formState.platform,
       deployment: formState.deployment,
       signal: undefined,
+      // If no cloud keys but WebLLM available, use local generation
+      preferLocal: !hasCloudKeys && hasLocalLLM,
     });
   }, [
     flowState.state,
     formState.description,
     formState.platform,
     formState.deployment,
+    hasCloudKeys,
+    hasLocalLLM,
   ]);
 
   useEffect(() => {
@@ -148,7 +155,6 @@ export function WelcomeScreen({
   // Tier 2 (async): BYOK configured → enabled after probe completes
   // Tier 3 (sync): WebLLM available → enabled immediately (local fallback)
   // If all tiers missing, button disabled with helpful tooltip
-  const hasCloudKeys = hasServerApiKey || (capabilities?.canGenerate ?? false);
   const hasAnyProvider = hasCloudKeys || hasLocalLLM;
   const canGenerate =
     formHandlers.isValid &&
