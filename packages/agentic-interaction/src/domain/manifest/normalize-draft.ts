@@ -56,10 +56,10 @@ function normalizeContext(context: ManifestDraftContext): ManifestDraftContext {
     type: context.type,
     description: safeTrim(context.description),
     ports: {
-      in: context.ports.in.map(normalizePort),
-      out: context.ports.out.map(normalizePort),
+      in: (context.ports?.in ?? []).map(normalizePort),
+      out: (context.ports?.out ?? []).map(normalizePort),
     },
-    adapters: context.adapters.map((a) => ({
+    adapters: (context.adapters ?? []).map((a) => ({
       name: safeTrim(a.name),
       type: safeTrim(a.type),
       implements: normalizePortName(safeTrim(a.implements)),
@@ -76,8 +76,8 @@ function normalizeTopologyContext(
     type: context.type,
     description: safeTrim(context.description),
     ports: {
-      in: context.ports.in.map(normalizePort),
-      out: context.ports.out.map(normalizePort),
+      in: (context.ports?.in ?? []).map(normalizePort),
+      out: (context.ports?.out ?? []).map(normalizePort),
     },
     dependsOn: context.dependsOn?.map(toKebabCase),
   };

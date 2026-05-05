@@ -132,27 +132,50 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setPhase("stage-1");
           setStepDetail("Topology generation complete");
           const topology = (topologyResult as any).topology;
-          
-          // Step 2: Render manifest  
+
+          // Step 2: Extract adapters (adds adapters[] to each context)
+          setPhase("stage-4");
+          setStepDetail("Extracting adapters...");
+          const adaptersResult = await useCase.extractAdapters(
+            topology,
+            controller.signal,
+            (detail) => setStepDetail(detail),
+          );
+
+          if (!(adaptersResult as any).ok) {
+            throw new Error(
+              (adaptersResult as any).error instanceof Error
+                ? (adaptersResult as any).error.message
+                : String((adaptersResult as any).error),
+            );
+          }
+
+          const draft = (adaptersResult as any).draft;
+
+          // Step 3: Render manifest
           setPhase("stage-6");
           setStepDetail("Rendering manifest...");
           const renderResult = await useCase.renderManifest(
-            topology,
+            draft,
             controller.signal,
           );
 
           // Success
           const yaml = (renderResult as any).yaml || "";
+          const adapterCount = draft.boundedContexts.reduce(
+            (sum: number, c: any) => sum + (c.adapters?.length || 0),
+            0,
+          );
           handleEvent({
             type: "done",
             yaml,
-            contextCount: topology.boundedContexts.length,
-            portCount: topology.boundedContexts.reduce(
+            contextCount: draft.boundedContexts.length,
+            portCount: draft.boundedContexts.reduce(
               (sum: number, c: any) =>
                 sum + (c.ports?.in?.length || 0) + (c.ports?.out?.length || 0),
               0,
             ),
-            adapterCount: 0,
+            adapterCount,
           });
         } else {
           // Cloud: call server endpoint (staged generation with cloud keys)

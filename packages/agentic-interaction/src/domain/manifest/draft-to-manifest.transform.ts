@@ -34,9 +34,9 @@ function transformPortNames(ports: { name: string }[]): string[] {
 function transformContext(
   context: ManifestDraft["boundedContexts"][number],
 ): ManifestContextOutput {
-  const inPorts = transformPortNames(context.ports.in);
-  const outPorts = transformPortNames(context.ports.out);
-  const adapterNames = context.adapters.map((a) => a.name);
+  const inPorts = transformPortNames(context.ports?.in ?? []);
+  const outPorts = transformPortNames(context.ports?.out ?? []);
+  const adapterNames = (context.adapters ?? []).map((a) => a.name);
 
   const bc: ManifestContextOutput = {
     name: context.name,
