@@ -88,8 +88,15 @@ export async function safeWriteFileAtomic(
     currentContent = await fs.readFile(filePath, "utf8");
     currentHash = contentHash(currentContent);
     exists = true;
-  } catch (e: any) {
-    if (e.code !== "ENOENT") throw e;
+  } catch (e: unknown) {
+    if (
+      !(
+        e instanceof Error &&
+        "code" in e &&
+        (e as { code?: string }).code === "ENOENT"
+      )
+    )
+      throw e;
   }
 
   const newHash = contentHash(content);
@@ -137,8 +144,12 @@ export async function safeWriteFileAtomic(
     const status = exists ? "updated" : "created";
     logger.info(`${status} ${relativePath}`);
     return status;
-  } catch (err: any) {
-    if (err.code === "EXDEV") {
+  } catch (err: unknown) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as { code?: string }).code === "EXDEV"
+    ) {
       try {
         await fs.copyFile(tmpPath, filePath);
         await fs.unlink(tmpPath);
