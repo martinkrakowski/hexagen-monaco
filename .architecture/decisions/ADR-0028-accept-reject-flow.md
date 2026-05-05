@@ -4,14 +4,14 @@
 
 **Context**:
 
-The architecture modification flow originally combined patch generation and manifest mutation into a single atomic operation. This design posed a risk: users had no opportunity to review AI-generated changes before they were committed to the manifest, and any lint violations would leave the system in an inconsistent state requiring manual intervention.
+The architecture modification flow originally combined patch generation and manifest mutation into a single atomic operation. This design posed a risk: users had no opportunity to review generated changes before they were committed to the manifest, and any lint violations would leave the system in an inconsistent state requiring manual intervention.
 
 **Problem Statement**:
 
 The original Flow 1 (`/api/architecture/modify`) would:
 
 1. Accept a natural language intent
-2. Execute the AI pipeline to generate patches
+2. Execute the pipeline to generate patches
 3. Immediately apply patches to the manifest
 4. Return results
 
@@ -27,7 +27,7 @@ Split Flow 1 into two distinct phases:
 ### Phase 1: Generate (streaming)
 
 - Endpoint: `POST /api/architecture/modify/stream`
-- Executes AI pipeline and returns SSE stream of step progress
+- Executes pipeline and returns SSE stream of step progress
 - Creates a transaction in `speculative` status
 - Stores generated patches in transaction metadata
 - Returns `transactionId` for use in Phase 2
@@ -195,7 +195,7 @@ Add an explicit "preview" phase where patches are displayed but not stored.
 
 ### Positive
 
-- Users can review AI-generated patches before any manifest mutation occurs
+- Users can review generated patches before any manifest mutation occurs
 - Explicit accept/reject actions make the workflow transparent
 - Lint failures are handled automatically with git restore — no manual intervention required
 - Transaction state machine provides clear semantics for all code paths
@@ -217,7 +217,7 @@ Add an explicit "preview" phase where patches are displayed but not stored.
 ## Related ADRs
 
 - ADR-0009: Published CLI Bundling
-- ADR-0013: Timing Test Policy
+- ADR-0033: Timing Test Policy
 - ADR-0027: State Machine Evolution
 
 ## References

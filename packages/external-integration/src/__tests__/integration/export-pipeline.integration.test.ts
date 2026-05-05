@@ -29,6 +29,8 @@ import {
   getMockPort,
 } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
 
+type IntegrationError = { code: string; message: string };
+
 class MockProjectGeneratorAdapter {
   async generateProject(input: {
     projectName: string;
@@ -71,7 +73,7 @@ class MockWizardPersistenceAdapter {
 }
 
 describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
-  let registry: any;
+  let registry: ReturnType<typeof createCrossBoundaryRegistry>;
 
   beforeEach(() => {
     registry = createCrossBoundaryRegistry();
@@ -93,14 +95,14 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
       const exporter = {
         async validateManifest(
           manifest: CrossBoundaryManifest,
-        ): Promise<{ success: boolean; error?: any }> {
+        ): Promise<{ success: boolean; error?: IntegrationError }> {
           exportSteps.push("validate");
           return { success: true };
         },
         async streamExport(request: {
           manifest: CrossBoundaryManifest;
           target: string;
-        }): Promise<any> {
+        }): Promise<unknown> {
           exportSteps.push("stream-prepare");
           exportSteps.push("stream-upload");
           exportSteps.push("stream-complete");
@@ -137,11 +139,21 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      const linter = getMockPort<any>(registry, PORT_NAMES.LINTER);
+      const linter = getMockPort<{
+        lint: (m: CrossBoundaryManifest) => Promise<{ isCompliant: boolean }>;
+      }>(registry, PORT_NAMES.LINTER);
       const govResult = await linter.lint(manifest);
       assert.strictEqual(govResult.isCompliant, true);
 
-      const exportStream = getMockPort<any>(registry, PORT_NAMES.SSE_STREAM);
+      const exportStream = getMockPort<{
+        validateManifest: (
+          m: CrossBoundaryManifest,
+        ) => Promise<{ success: boolean }>;
+        streamExport: (r: {
+          manifest: CrossBoundaryManifest;
+          target: string;
+        }) => Promise<unknown>;
+      }>(registry, PORT_NAMES.SSE_STREAM);
       const validateResult = await exportStream.validateManifest(manifest);
       assert.strictEqual(validateResult.success, true);
 
@@ -166,7 +178,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
       const policyExporter = {
         async validateManifest(
           manifest: CrossBoundaryManifest,
-        ): Promise<{ success: boolean; error?: any }> {
+        ): Promise<{ success: boolean; error?: IntegrationError }> {
           const hasViolationMarkers =
             manifest.bounded_contexts?.some(
               (bc) =>
@@ -239,14 +251,13 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
         async streamExport(request: {
           manifest: CrossBoundaryManifest;
           target: string;
-        }): Promise<any> {
+        }): Promise<unknown> {
           const txId = await txManager.begin();
 
           try {
-            const github = getMockPort<any>(
-              registry,
-              PORT_NAMES.GITHUB_PROVIDER,
-            );
+            const github = getMockPort<{
+              createRepository?: (name: string) => Promise<unknown>;
+            }>(registry, PORT_NAMES.GITHUB_PROVIDER);
             if (github?.createRepository) {
               await github.createRepository(request.manifest.system);
             }
@@ -262,7 +273,12 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, failingExporter);
 
       const manifest = createFixtureManifest();
-      const exporter = getMockPort<any>(registry, PORT_NAMES.SSE_STREAM);
+      const exporter = getMockPort<{
+        streamExport: (r: {
+          manifest: CrossBoundaryManifest;
+          target: string;
+        }) => Promise<unknown>;
+      }>(registry, PORT_NAMES.SSE_STREAM);
 
       let errorThrown = false;
       try {
@@ -289,7 +305,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
 
       const exporter1 = {
         calls: 0,
-        async streamExport(): Promise<any> {
+        async streamExport(): Promise<unknown> {
           this.calls++;
           return null;
         },
@@ -304,7 +320,7 @@ describe("Export Pipeline — Integration Tests (Phase 6C)", () => {
 
       const exporter2 = {
         calls: 0,
-        async streamExport(): Promise<any> {
+        async streamExport(): Promise<unknown> {
           this.calls++;
           return null;
         },

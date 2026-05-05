@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "test": "turbo test",
+    "coverage": "c8 --lines 80 --functions 80 --branches 80 --statements 80 turbo test",
     "test:force": "turbo run test --force",
     "typecheck:test": "turbo run typecheck:test",
     "build": "turbo build",
@@ -47,6 +48,7 @@
     "@types/uuid": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
+    "c8": "^10.0.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-config-turbo": "^1.13.3",
@@ -60,8 +62,7 @@
     "turbo": "^1.13.3",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.0.0",
-    "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.0"
+    "vite-tsconfig-paths": "^6.1.1"
   },
   "resolutions": {
     "js-yaml": "^4.1.0",

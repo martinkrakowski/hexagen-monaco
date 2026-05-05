@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-15
 **Status:** Accepted
-**Authors:** Architecture Co-pilot, Human Architect
+**Authors:** Human Architect
 **Supersedes:** None
 
 ---

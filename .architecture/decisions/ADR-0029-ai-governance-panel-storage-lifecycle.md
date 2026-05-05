@@ -1,10 +1,10 @@
-# ADR-0029: AI Governance Panel Storage Lifecycle & State Management
+# ADR-0029: Governance Panel Storage Lifecycle & State Management
 
 **Status**: ACCEPTED (2026-04-28)
 
 **Context**:
 
-The AI Governance Panel in HexaGen Monaco manages three critical user interaction flows:
+The Governance Panel in HexaGen Monaco manages three critical user interaction flows:
 
 1. Project wizard Q&A threads with local/cloud LLM
 2. Violations and suggestions display with conversational context
@@ -374,5 +374,5 @@ export class InMemoryEventBusAdapter implements EventBusPort {
 ## References
 
 - [ADR-0028: Accept/Reject Flow](./ADR-0028-accept-reject-flow.md) - Transaction state machine precedent
-- [ADR-0015: Editor Workspace Persistence](./0015-editor-workspace-persistence.md) - Persistence patterns
-- [ADR-0017: Local LLM Domain-Driven Refactoring](./0017-local-llm-domain-driven-refactoring.md) - LLM architecture
+- [ADR-0015: Editor Workspace Persistence](./ADR-0015-editor-workspace-persistence.md) - Persistence patterns
+- [ADR-0017: Local LLM Domain-Driven Refactoring](./ADR-0017-local-llm-domain-driven-refactoring.md) - LLM architecture

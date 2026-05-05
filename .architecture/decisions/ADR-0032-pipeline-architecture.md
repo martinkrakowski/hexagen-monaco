@@ -1,4 +1,4 @@
-# ADR-0011: AI Pipeline Architecture — ManifestPatchPort Design Decision
+# ADR-0032: Pipeline Architecture — ManifestPatchPort Design Decision
 
 ## Status
 
@@ -60,8 +60,8 @@ The `ManifestPatchPort` interface will remain as a **design artifact**. The acti
 
 ## Related Decisions
 
-- [ADR-0010](./0010-ai-pipeline-phased-implementation.md): Phased approach for AI pipeline implementation
-- [ADR-0012](./0012-human-ai-symbiosis-loop.md): Human-AI interaction model
+- [ADR-0031](./ADR-0031-pipeline-phased-implementation.md): Phased approach for pipeline implementation
+- [ADR-0012](./ADR-0012-interactive-architecture-modification.md): Human-guided interaction model
 
 ---
 

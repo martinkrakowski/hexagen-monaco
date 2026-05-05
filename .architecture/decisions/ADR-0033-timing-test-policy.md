@@ -1,4 +1,4 @@
-# ADR-0013: Timing Test Policy — Eliminate Flakiness in Test Suite
+# ADR-0033: Timing Test Policy — Eliminate Flakiness in Test Suite
 
 **Status**: ACCEPTED (Phase 6.1, 2026-04-27)
 

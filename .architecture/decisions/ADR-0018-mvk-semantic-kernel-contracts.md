@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Accepted
-**Authors:** Architecture Co-pilot, Human Architect
+**Authors:** Human Architect
 **Supersedes:** None (extends ADR-0005 shared kernel framing)
 
 ---

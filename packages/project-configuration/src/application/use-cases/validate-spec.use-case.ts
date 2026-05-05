@@ -1,8 +1,12 @@
 import type { ValidateSpecPort } from "../ports/in/validate-spec.port";
+import type {
+  ValidateSpecRequest,
+  ValidateSpecResponse,
+} from "../ports/in/validate-spec.port";
 
 export class ValidateSpecUseCase implements ValidateSpecPort {
-  async execute(_data: unknown): Promise<unknown> {
+  async execute(_data: ValidateSpecRequest): Promise<ValidateSpecResponse> {
     void _data; // TODO: Implement use case logic
-    return {};
+    return { success: true };
   }
 }

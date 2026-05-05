@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import type { ParsedIntent } from "@hexagen/ai-pipeline";
+import type { NodeKind } from "@hexagen/core-domain";
 
 interface ParseResult {
   success: boolean;
@@ -34,7 +35,12 @@ class MockParser {
       success: true,
       value: {
         originalText: intent,
-        commands: [{ type: "CreateNode", payload: { attributes: {} } } as any],
+        commands: [
+          {
+            type: "CreateNode",
+            payload: { kind: "core" as NodeKind, attributes: {} },
+          },
+        ],
         confidence,
         intentType: "create_context",
         parameters: { name: "Service" },
