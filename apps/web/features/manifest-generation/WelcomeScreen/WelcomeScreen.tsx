@@ -24,6 +24,7 @@ import {
   getCapabilities,
   onCapabilityCacheInvalidated,
 } from "@/lib/manifest-generation";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire.client";
 import type { CapabilitiesResponse } from "../types/capabilities";
 
 export function WelcomeScreen({
@@ -39,19 +40,33 @@ export function WelcomeScreen({
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const rememberChoiceRef = useRef(false);
 
+  /**
+   * Tier 1 (Synchronous): Check if server has env-var API key configured.
+   * This fires immediately at component init without roundtrip.
+   */
+  const hasServerApiKey = hasServerLLMAccessKey();
+
+  /**
+   * Tier 2 (Asynchronous): Probe server for full capability picture.
+   * Always runs to discover BYOK configuration.
+   * Resolves BYOK tier for each provider and produces canGenerate aggregate.
+   */
   const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(
     null,
   );
 
-  // Probe capabilities on mount and when cache is invalidated
+  // Probe capabilities on mount and when cache is invalidated.
+  // Always probe for BYOK tier (don't skip based on Tier 1).
+  // Tier 1 is a fast-pass (button enabled immediately), not a prerequisite.
   useEffect(() => {
     const probeCapabilities = async () => {
       try {
         const result = await getCapabilities();
         setCapabilities(result);
       } catch {
-        // Fail open: assume we can generate if probe fails
-        setCapabilities({ capabilities: [], canGenerate: true });
+        // Fail open if probe fails AND Tier 1 passes (env key exists).
+        // Fail closed if probe fails AND Tier 1 fails (no env key, no BYOK either).
+        setCapabilities({ capabilities: [], canGenerate: hasServerApiKey });
       }
     };
 
@@ -119,18 +134,22 @@ export function WelcomeScreen({
     }
   }, [capability]);
 
-  // Gate on both model capability AND LLM provider availability
-  // While probing (capabilities === null), button is disabled. Once probe completes,
-  // capabilities.canGenerate determines gate. If probe fails, fail open via catch block.
-  const hasLlmProviders = capabilities?.canGenerate ?? false;
+  // Gate on both model capability AND LLM provider availability.
+  // Tier 1 (sync) OR Tier 2 (async): Button enabled if either tier has keys.
+  // Tier 1: env key → enabled immediately (fast-pass, don't wait for probe)
+  // Tier 2: probe resolved → enabled if BYOK exists or env key exists
+  // While probe in-flight: default to fail open (capabilities = undefined) so button enabled if Tier 1 passed
+  const hasLlmProviders =
+    hasServerApiKey || (capabilities?.canGenerate ?? false);
   const canGenerate =
     formHandlers.isValid &&
     flowState.state === "idle" &&
     manifestCapable &&
     hasLlmProviders;
 
+  // Tooltip messaging based on which tier is unavailable
   const disabledTooltip = !hasLlmProviders
-    ? "No API keys configured. Add an API key in Settings or configure server environment variables."
+    ? "No API keys configured. Set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, or COHERE_API_KEY) or add a BYOK key in Settings."
     : undefined;
 
   const handleGenerate = () => {
