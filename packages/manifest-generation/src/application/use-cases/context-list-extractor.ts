@@ -2,7 +2,6 @@ import type { ContextListEntry } from "@hexagen/agentic-interaction";
 import {
   createContextListSchema,
   parseJSON,
-  extractArrayFromWrapper,
   coerceContextType,
   CONTEXT_LIST_SYSTEM_PROMPT,
   compileContextListPrompt,
@@ -71,28 +70,34 @@ async function attemptContextList(
             contextType?: string;
           }>(line);
 
-          if (!parsed.ok) continue; // Skip malformed lines
+          if (!parsed.ok) {
+            // Log unparseable lines but continue
+            console.warn("[context-list] Failed to parse line:", line);
+            continue;
+          }
 
           const obj = parsed.data as Record<string, unknown>;
 
-          // Extract accepted contexts (skip rejected/uncertain)
-          if (obj.status === "accepted" || (obj.status !== "rejected" && obj.status !== "uncertain")) {
+          // Extract ONLY accepted contexts per STAGE2_CLASSIFICATION_SYSTEM_PROMPT
+          // Status must be explicitly "accepted"
+          if (obj.status === "accepted") {
             rawContexts.push({
               name: obj.name as string | undefined,
               type: (obj.contextType || obj.type) as string | undefined,
               description: obj.description as string | undefined,
             });
           }
-        } catch {
+        } catch (error) {
           // Continue on parsing errors for individual lines
+          console.warn("[context-list] Error parsing line:", error);
         }
       }
 
-      if (rawContexts.length === 0) {
+       if (rawContexts.length === 0) {
         if (attempt === MAX_RETRIES) {
           return {
             ok: false,
-            error: "No valid bounded contexts found in LLM response",
+            error: "The AI could not identify any valid bounded contexts from your description. Try providing more details about your system's business domains and responsibilities.",
           };
         }
         continue;

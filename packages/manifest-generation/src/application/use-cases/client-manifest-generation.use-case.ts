@@ -13,7 +13,6 @@ import {
   draftToManifest,
   renderDraft,
   parseJSON,
-  extractArrayFromWrapper,
   normalizePortName,
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
@@ -175,37 +174,25 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
               continue;
             }
 
-            const parsed = parseJSON<ManifestDraftContext["adapters"]>(content);
-            if (!parsed.ok) {
-              if (attempt === MAX_RETRIES) break;
-              continue;
-            }
+            const lines = content
+              .split("\n")
+              .map((l) => l.trim())
+              .filter((l) => l.length > 0);
 
-            let extracted: unknown[] | null = null;
+            const extracted: unknown[] = [];
 
-            if (Array.isArray(parsed.data)) {
-              extracted = parsed.data;
-            } else if (
-              typeof parsed.data === "object" &&
-              parsed.data !== null
-            ) {
-              extracted = extractArrayFromWrapper(parsed.data, [
-                "adapters",
-                "data",
-                "items",
-                "result",
-              ]);
-              if (extracted.length === 0) {
-                if (
-                  "name" in (parsed.data as Record<string, unknown>) ||
-                  "implements" in (parsed.data as Record<string, unknown>)
-                ) {
-                  extracted = [parsed.data];
+            for (const line of lines) {
+              try {
+                const lineParsed = parseJSON<Record<string, unknown>>(line);
+                if (lineParsed.ok) {
+                  extracted.push(lineParsed.data);
                 }
+              } catch {
+                // Skip malformed lines
               }
             }
 
-            if (extracted) {
+            if (extracted.length > 0) {
               adapters = extracted.filter(
                 (item): item is Record<string, unknown> =>
                   typeof item === "object" &&

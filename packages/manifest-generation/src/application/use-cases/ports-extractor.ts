@@ -2,8 +2,6 @@ import type { PortsList } from "@hexagen/agentic-interaction";
 import {
   PortsListSchema,
   parseJSON,
-  extractObjectFromWrapper,
-  coerceRawPorts,
   PORTS_LIST_SYSTEM_PROMPT,
   compilePortsPrompt,
 } from "@hexagen/agentic-interaction";
@@ -81,32 +79,51 @@ async function attemptPortsForContext(
         continue;
       }
 
-      const parsed = parseJSON<PortsList>(content);
-      if (!parsed.ok) {
+      const lines = content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      if (lines.length === 0) {
         if (attempt === MAX_RETRIES) break;
         continue;
       }
 
-      let portsData = parsed.data;
-      if (
-        !Array.isArray(portsData) &&
-        typeof portsData === "object" &&
-        portsData !== null
-      ) {
-        const obj = portsData as Record<string, unknown>;
-        if (typeof obj.in === "undefined" && typeof obj.out === "undefined") {
-          const unwrapped = extractObjectFromWrapper<Record<string, unknown>>(
-            portsData,
-            ["ports", "data", "result"],
-          );
-          if (unwrapped) {
-            portsData = unwrapped as PortsList;
+      const inPorts: Array<{ name: string; type: string; description: string }> = [];
+      const outPorts: Array<{ name: string; type: string; description: string }> = [];
+
+      for (const line of lines) {
+        try {
+          const parsed = parseJSON<{
+            contextName?: string;
+            direction?: string;
+            name?: string;
+            portType?: string;
+            description?: string;
+          }>(line);
+
+          if (!parsed.ok) continue;
+
+          const obj = parsed.data as Record<string, unknown>;
+          const portEntry = {
+            name: String(obj.name || ""),
+            type: String(obj.portType || obj.type || ""),
+            description: String(obj.description || obj.name || ""),
+          };
+
+          if (!portEntry.name) continue;
+
+          if (obj.direction === "in") {
+            inPorts.push(portEntry);
+          } else if (obj.direction === "out") {
+            outPorts.push(portEntry);
           }
+        } catch {
+          // Skip malformed lines
         }
       }
 
-      const coerced = coerceRawPorts(portsData);
-      portsData = { in: coerced.in, out: coerced.out };
+      const portsData: PortsList = { in: inPorts, out: outPorts };
 
       const result = PortsListSchema.safeParse(portsData);
       if (!result.success) {
