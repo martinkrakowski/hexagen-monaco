@@ -29,7 +29,7 @@ function getEncryptionAdapter(): AesGcmEncryptionAdapter {
   return _encryptionAdapter;
 }
 
-function getMetadataAdapter(): InMemoryKeyMetadataAdapter {
+export function getMetadataAdapter(): InMemoryKeyMetadataAdapter {
   if (!_metadataAdapter) {
     _metadataAdapter = new InMemoryKeyMetadataAdapter();
   }

@@ -6,6 +6,7 @@ export function ActionBar({
   isGenerating,
   onCancel,
   onGenerate,
+  disabledTooltip,
 }: ActionBarProps) {
   if (isGenerating) {
     return (
@@ -37,14 +38,21 @@ export function ActionBar({
           disabled={!canGenerate}
           className="w-full h-10 bg-primary text-primary-foreground font-bold rounded-md transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:opacity-90"
           size="lg"
+          title={disabledTooltip}
         >
           Generate Manifest
         </Button>
       </div>
 
       <p className="text-xs text-muted-foreground text-center mt-4 animate-fade-in-up delay-300">
-        AI will analyze your description to identify relevant domain structures,
-        ports, and adapters.
+        {disabledTooltip ? (
+          <span className="text-amber-600">{disabledTooltip}</span>
+        ) : (
+          <>
+            AI will analyze your description to identify relevant domain
+            structures, ports, and adapters.
+          </>
+        )}
       </p>
     </div>
   );

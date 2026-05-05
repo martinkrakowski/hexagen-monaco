@@ -4,6 +4,7 @@
   "globalEnv": [
     "APP_VERSION",
     "CI",
+    "COHERE_API_KEY",
     "COMMIT_HASH",
     "DEBUG",
     "GITHUB_ID",

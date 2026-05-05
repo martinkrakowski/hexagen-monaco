@@ -1,12 +1,8 @@
-/**
- * Welcome screen composition root for manifest generation.
- * Orchestrates sub-components and state synchronization.
- */
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
-import { useClientManifestGeneration } from "../useClientManifestGeneration";
+import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { assessModelCapability } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
@@ -24,6 +20,11 @@ import { ModelSelectionView } from "./ModelSelectionView";
 import { WelcomeScreenLayout } from "./WelcomeScreenLayout";
 import { useWelcomeScreenForm } from "./hooks/useWelcomeScreenForm";
 import type { WelcomeScreenProps } from "./types";
+import {
+  getCapabilities,
+  onCapabilityCacheInvalidated,
+} from "@/lib/manifest-generation";
+import type { CapabilitiesResponse } from "../types/capabilities";
 
 export function WelcomeScreen({
   onUseManifest,
@@ -37,87 +38,76 @@ export function WelcomeScreen({
   const [rememberChoice, setRememberChoice] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const rememberChoiceRef = useRef(false);
-  const clientGenAbortRef = useRef<AbortController | null>(null);
+
+  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(
+    null,
+  );
+
+  // Probe capabilities on mount and when cache is invalidated
+  useEffect(() => {
+    const probeCapabilities = async () => {
+      try {
+        const result = await getCapabilities();
+        setCapabilities(result);
+      } catch {
+        // Fail open: assume we can generate if probe fails
+        setCapabilities({ capabilities: [], canGenerate: true });
+      }
+    };
+
+    probeCapabilities();
+
+    // Listen for cache invalidation (e.g., when user adds BYOK key)
+    const unsubscribe = onCapabilityCacheInvalidated(() => {
+      probeCapabilities();
+    });
+
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     rememberChoiceRef.current = rememberChoice;
   }, [rememberChoice]);
 
   const [flowState, actions] = useWelcomeFlowState(llmContext);
-  const clientGen = useClientManifestGeneration(llmContext);
+  const stagedGen = useStagedManifestGeneration();
 
   useEffect(() => {
     onGeneratingStateChange?.(flowState.state === "generating");
   }, [flowState.state, onGeneratingStateChange]);
 
-  const generateManifestRef = useRef(clientGen.generateManifest);
+  const generateRef = useRef(stagedGen.generateManifest);
   useEffect(() => {
-    generateManifestRef.current = clientGen.generateManifest;
-  }, [clientGen.generateManifest]);
+    generateRef.current = stagedGen.generateManifest;
+  }, [stagedGen.generateManifest]);
 
   useEffect(() => {
     if (flowState.state !== "generating") return;
-    const controller = new AbortController();
-    clientGenAbortRef.current = controller;
-    generateManifestRef.current(
-      formState.description,
-      clientGenAbortRef.current?.signal,
-      formState.maxContexts,
-    );
-    return () => {
-      controller.abort();
-      clientGenAbortRef.current = null;
-    };
-  }, [flowState.state, formState.description, formState.maxContexts]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
-    if (clientGen.generationError) {
-      actions.setError(clientGen.generationError);
-    }
-  }, [clientGen.generationError, flowState.state, actions]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
-    if (clientGen.generatedManifest) {
-      actions.saveGenerationResult(clientGen.generatedManifest);
-    }
-  }, [clientGen.generatedManifest, flowState.state, actions]);
-
-  useEffect(() => {
-    if (
-      clientGen.phase === "clarification_needed" &&
-      flowState.state === "generating" &&
-      clientGen.clarificationTriggers.length > 0
-    ) {
-      actions.setClarificationNeeded(clientGen.clarificationTriggers);
-    }
+    generateRef.current(formState.description, {
+      platform: formState.platform,
+      deployment: formState.deployment,
+      signal: undefined,
+    });
   }, [
-    clientGen.phase,
-    clientGen.clarificationTriggers,
     flowState.state,
-    actions,
+    formState.description,
+    formState.platform,
+    formState.deployment,
   ]);
 
-  const confirmRef = useRef(clientGen.confirmTopologyAndContinue);
   useEffect(() => {
-    confirmRef.current = clientGen.confirmTopologyAndContinue;
-  }, [clientGen.confirmTopologyAndContinue]);
-
-  const confirmAndContinueRef = useRef(actions.confirmAndContinue);
-  useEffect(() => {
-    confirmAndContinueRef.current = actions.confirmAndContinue;
-  }, [actions.confirmAndContinue]);
-
-  useEffect(() => {
-    if (
-      flowState.state === "generating" &&
-      clientGen.phase === "clarification_needed" &&
-      clientGen.partialTopology !== null
-    ) {
-      confirmRef.current(clientGenAbortRef.current?.signal);
+    if (flowState.state !== "generating") return;
+    if (stagedGen.generationError) {
+      actions.setError(stagedGen.generationError);
     }
-  }, [flowState.state, clientGen.phase, clientGen.partialTopology]);
+  }, [stagedGen.generationError, flowState.state, actions]);
+
+  useEffect(() => {
+    if (flowState.state !== "generating") return;
+    if (stagedGen.generatedManifest) {
+      actions.saveGenerationResult(stagedGen.generatedManifest);
+    }
+  }, [stagedGen.generatedManifest, flowState.state, actions]);
 
   const loadedModelId = llmContext.engineState.loadedModelId;
   const capability = assessModelCapability(loadedModelId, overrideModelCheck);
@@ -129,8 +119,19 @@ export function WelcomeScreen({
     }
   }, [capability]);
 
+  // Gate on both model capability AND LLM provider availability
+  // While probing (capabilities === null), button is disabled. Once probe completes,
+  // capabilities.canGenerate determines gate. If probe fails, fail open via catch block.
+  const hasLlmProviders = capabilities?.canGenerate ?? false;
   const canGenerate =
-    formHandlers.isValid && flowState.state === "idle" && manifestCapable;
+    formHandlers.isValid &&
+    flowState.state === "idle" &&
+    manifestCapable &&
+    hasLlmProviders;
+
+  const disabledTooltip = !hasLlmProviders
+    ? "No API keys configured. Add an API key in Settings or configure server environment variables."
+    : undefined;
 
   const handleGenerate = () => {
     if (!canGenerate) return;
@@ -146,16 +147,8 @@ export function WelcomeScreen({
   };
 
   const handleRetryOrRegenerate = () => {
-    if (clientGenAbortRef.current) {
-      clientGenAbortRef.current.abort();
-      clientGenAbortRef.current = null;
-    }
-    clientGen.reset();
+    stagedGen.reset();
     actions.regenerateManifest();
-  };
-
-  const handleConfirmAndContinue = () => {
-    actions.confirmAndContinue();
   };
 
   if (
@@ -168,7 +161,7 @@ export function WelcomeScreen({
         flowState={flowState}
         actions={actions}
         onUseManifest={onUseManifest}
-        onConfirmAndContinue={handleConfirmAndContinue}
+        onConfirmAndContinue={handleRetryOrRegenerate}
         onRegenerate={handleRetryOrRegenerate}
         onRetryFromError={handleRetryOrRegenerate}
       />
@@ -216,7 +209,11 @@ export function WelcomeScreen({
         canGenerate={canGenerate}
         isGenerating={isGenerating}
         onGenerate={handleGenerate}
-        onCancel={() => actions.transitionTo("idle")}
+        onCancel={() => {
+          stagedGen.reset();
+          actions.transitionTo("idle");
+        }}
+        disabledTooltip={disabledTooltip}
       />
 
       <ExampleCardsSection
@@ -255,8 +252,9 @@ export function WelcomeScreen({
 
       {isGenerating && (
         <ThinkingBlock
-          phase={clientGen.phase}
-          stepDetail={clientGen.stepDetail}
+          phase={stagedGen.phase}
+          stepDetail={stagedGen.stepDetail}
+          stageProgress={stagedGen.stageProgress}
         />
       )}
 
