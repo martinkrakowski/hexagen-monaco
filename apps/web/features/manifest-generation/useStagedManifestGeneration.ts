@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
+import type { ClientManifestGenerationUseCase } from "@hexagen/manifest-generation";
+import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 
 export type StagedPhase =
   | "idle"
@@ -101,57 +103,106 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       }
 
       try {
-        // Choose endpoint based on provider: local browser LLM or cloud
-        const endpoint = options?.preferLocal
-          ? "/api/manifest/generate/local"
-          : "/api/manifest/generate/stage";
-        
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            description,
-            platform: options?.platform,
-            deployment: options?.deployment,
-            additionalContext: options?.additionalContext,
-            preferLocal: options?.preferLocal,
-          }),
-          signal: controller.signal,
-        });
+        // Route based on provider: client-side WebLLM or server cloud
+        if (options?.preferLocal) {
+          // WebLLM: run client-side use case directly (no HTTP call)
+          const useCase = getClientManifestGenerationUseCase() as unknown as ClientManifestGenerationUseCase;
+          
+          // Step 1: Generate topology
+          setPhase("stage-0");
+          setStepDetail("Analyzing project structure...");
+          const topologyResult = await useCase.generateTopology(
+            {
+              description,
+              maxContexts: 50,
+            },
+            controller.signal,
+            (detail) => setStepDetail(detail),
+          );
 
-        if (!response.ok || !response.body) {
-          const text = await response.text();
-          throw new Error(text || `HTTP ${response.status}`);
-        }
+          if (!(topologyResult as any).ok) {
+            throw new Error(
+              (topologyResult as any).error instanceof Error
+                ? (topologyResult as any).error.message
+                : String((topologyResult as any).error),
+            );
+          }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+          // Emit topology completion event
+          setPhase("stage-1");
+          setStepDetail("Topology generation complete");
+          const topology = (topologyResult as any).topology;
+          
+          // Step 2: Render manifest  
+          setPhase("stage-6");
+          setStepDetail("Rendering manifest...");
+          const renderResult = await useCase.renderManifest(
+            topology,
+            controller.signal,
+          );
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          // Success
+          const yaml = (renderResult as any).yaml || "";
+          handleEvent({
+            type: "done",
+            yaml,
+            contextCount: topology.boundedContexts.length,
+            portCount: topology.boundedContexts.reduce(
+              (sum: number, c: any) =>
+                sum + (c.ports?.in?.length || 0) + (c.ports?.out?.length || 0),
+              0,
+            ),
+            adapterCount: 0,
+          });
+        } else {
+          // Cloud: call server endpoint (staged generation with cloud keys)
+          const response = await fetch("/api/manifest/generate/stage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              description,
+              platform: options?.platform,
+              deployment: options?.deployment,
+              additionalContext: options?.additionalContext,
+              preferLocal: options?.preferLocal,
+            }),
+            signal: controller.signal,
+          });
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+          if (!response.ok || !response.body) {
+            const text = await response.text();
+            throw new Error(text || `HTTP ${response.status}`);
+          }
 
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const event = JSON.parse(line);
-              handleEvent(event);
-            } catch {
-              logger.warn("[staged-gen] Failed to parse NDJSON line", { line });
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const event = JSON.parse(line);
+                handleEvent(event);
+              } catch {
+                logger.warn("[staged-gen] Failed to parse NDJSON line", { line });
+              }
             }
           }
-        }
 
-        if (buffer.trim()) {
-          try {
-            handleEvent(JSON.parse(buffer));
-          } catch {
-            void buffer;
+          if (buffer.trim()) {
+            try {
+              handleEvent(JSON.parse(buffer));
+            } catch {
+              void buffer;
+            }
           }
         }
       } catch (error) {
