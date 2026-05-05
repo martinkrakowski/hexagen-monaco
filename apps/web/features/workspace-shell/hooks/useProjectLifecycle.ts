@@ -107,6 +107,9 @@ export function useProjectLifecycle(
     uiState,
     draft,
     clearDraft,
+    saveProject,
+    setActiveWorkspace: editor.setActiveWorkspace,
+    setSessionId: editor.setSessionId,
   });
 
   const hasGenerated = uiState.kind === "edit";
