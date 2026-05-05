@@ -58,7 +58,7 @@ export function useAutoInitLastModel({
 
       hasAttemptedAutoInitRef.current = true;
 
-      const CACHE_TIMEOUT_MS = 5_000;
+      const CACHE_TIMEOUT_MS = 10_000; // Increased from 5s to allow for slower IndexedDB
       const cacheCheckWithTimeout = Promise.race([
         hasModelInCache(modelToLoad),
         new Promise<boolean>((resolve) =>
