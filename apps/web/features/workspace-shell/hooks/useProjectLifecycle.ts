@@ -131,9 +131,13 @@ export function useProjectLifecycle(
   const { activeWorkspace } = useActiveWorkspace();
 
   // Initialize UI and form state from persisted activeWorkspace on page load
+  // BUT: only if there's no draft. Drafts take priority.
   useEffect(() => {
-    // Only initialize once if we have an activeWorkspace and shell is in genesis mode
-    if (activeWorkspace && uiState.kind === "genesis") {
+    // Only initialize once if:
+    // 1. We have an activeWorkspace
+    // 2. Shell is in genesis mode
+    // 3. No draft is being loaded/resumed
+    if (activeWorkspace && uiState.kind === "genesis" && !draftLoading && !draft) {
       const saved = loadSavedProject(activeWorkspace.projectId);
       if (saved) {
         form.reset(saved.formState);
