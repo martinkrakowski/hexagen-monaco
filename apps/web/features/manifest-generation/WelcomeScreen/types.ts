@@ -10,6 +10,19 @@ export interface WelcomeScreenProps {
   onUseManifest?: (manifest: string) => void;
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (isGenerating: boolean) => void;
+  onImportManifest: () => void;
+  onStartWizard: () => void;
+  onLoadProject: (id: string) => void;
+}
+
+export interface EntryPointsSectionProps {
+  onImportManifest: () => void;
+  onStartWizard: () => void;
+  onImportGithub?: () => void;
+}
+
+export interface PreviousProjectsSectionProps {
+  onLoadProject: (id: string) => void;
 }
 
 export interface HeaderSectionProps {

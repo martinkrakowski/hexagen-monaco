@@ -155,6 +155,12 @@ export function ProjectWorkspace() {
           onClose={ui.closeDialog}
           onUseManifest={lifecycle.handleWelcomeManifestGenerated}
           llmContext={llmContext}
+          onImportManifest={() => ui.openDialog({ kind: "load-manifest" })}
+          onStartWizard={() => {
+            ui.closeDialog();
+            ui.setStep(0);
+          }}
+          onLoadProject={lifecycle.handleLoadProject}
         />
       </div>
     </ExportProvider>
