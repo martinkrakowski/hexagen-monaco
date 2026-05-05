@@ -174,31 +174,73 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
               continue;
             }
 
-            const lines = content
-              .split("\n")
-              .map((l) => l.trim())
-              .filter((l) => l.length > 0);
+            // Try parsing as full JSON first (array or object wrapper)
+            let extracted: unknown[] = [];
+            const fullParsed = parseJSON<unknown>(content);
 
-            const extracted: unknown[] = [];
+            if (fullParsed.ok) {
+              const data = fullParsed.data;
+              if (Array.isArray(data)) {
+                extracted = data;
+              } else if (typeof data === "object" && data !== null) {
+                const obj = data as Record<string, unknown>;
+                for (const key of [
+                  "adapters",
+                  "data",
+                  "items",
+                  "results",
+                  "list",
+                ]) {
+                  if (Array.isArray(obj[key])) {
+                    extracted = obj[key] as unknown[];
+                    break;
+                  }
+                }
+                if (
+                  extracted.length === 0 &&
+                  ("name" in obj ||
+                    "adapterName" in obj ||
+                    "implements" in obj)
+                ) {
+                  extracted = [data];
+                }
+              }
+            }
 
-            for (const line of lines) {
-              try {
+            // Fallback: parse as NDJSON (one object per line)
+            if (extracted.length === 0) {
+              const lines = content
+                .split("\n")
+                .map((l) => l.trim())
+                .filter((l) => l.length > 0);
+
+              for (const line of lines) {
                 const lineParsed = parseJSON<Record<string, unknown>>(line);
                 if (lineParsed.ok) {
                   extracted.push(lineParsed.data);
                 }
-              } catch {
-                // Skip malformed lines
               }
             }
 
             if (extracted.length > 0) {
-              adapters = extracted.filter(
-                (item): item is Record<string, unknown> =>
-                  typeof item === "object" &&
-                  item !== null &&
-                  typeof (item as Record<string, unknown>).name === "string",
-              ) as ManifestDraftContext["adapters"];
+              adapters = extracted
+                .map((item) => {
+                  if (typeof item !== "object" || item === null) return null;
+                  const obj = item as Record<string, unknown>;
+                  // Normalize: adapterName → name
+                  const resolvedName =
+                    (obj.name as string) || (obj.adapterName as string) || "";
+                  return {
+                    ...obj,
+                    name: resolvedName,
+                  };
+                })
+                .filter(
+                  (item): item is Record<string, unknown> & { name: string } =>
+                    item !== null &&
+                    typeof item.name === "string" &&
+                    item.name.length > 0,
+                ) as ManifestDraftContext["adapters"];
               success = true;
             }
           } catch {

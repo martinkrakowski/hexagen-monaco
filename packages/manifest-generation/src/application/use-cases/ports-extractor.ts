@@ -79,47 +79,88 @@ async function attemptPortsForContext(
         continue;
       }
 
-      const lines = content
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+      // Try parsing as full JSON first (array or object wrapper)
+      // LLMs often ignore "NDJSON" instruction and return pretty JSON array
+      let items: unknown[] = [];
+      const fullParsed = parseJSON<unknown>(content);
 
-      if (lines.length === 0) {
+      if (fullParsed.ok) {
+        const data = fullParsed.data;
+        if (Array.isArray(data)) {
+          items = data;
+        } else if (typeof data === "object" && data !== null) {
+          const obj = data as Record<string, unknown>;
+          // Check for { in: [...], out: [...] } shape (legacy)
+          if (Array.isArray(obj.in) || Array.isArray(obj.out)) {
+            const inArr = (Array.isArray(obj.in) ? obj.in : []) as unknown[];
+            const outArr = (Array.isArray(obj.out) ? obj.out : []) as unknown[];
+            items = [
+              ...inArr.map((p) => ({ ...(p as object), direction: "in" })),
+              ...outArr.map((p) => ({ ...(p as object), direction: "out" })),
+            ];
+          } else {
+            // Check for wrapped array: { ports: [...] } or similar
+            for (const key of ["ports", "data", "items", "results", "list"]) {
+              if (Array.isArray(obj[key])) {
+                items = obj[key] as unknown[];
+                break;
+              }
+            }
+            // Single object fallback
+            if (items.length === 0 && ("name" in obj || "direction" in obj)) {
+              items = [data];
+            }
+          }
+        }
+      }
+
+      // Fallback: parse as NDJSON (one object per line)
+      if (items.length === 0) {
+        const lines = content
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+
+        for (const line of lines) {
+          const parsed = parseJSON<Record<string, unknown>>(line);
+          if (parsed.ok) {
+            items.push(parsed.data);
+          }
+        }
+      }
+
+      if (items.length === 0) {
         if (attempt === MAX_RETRIES) break;
         continue;
       }
 
-      const inPorts: Array<{ name: string; type: string; description: string }> = [];
-      const outPorts: Array<{ name: string; type: string; description: string }> = [];
+      const inPorts: Array<{
+        name: string;
+        type: string;
+        description: string;
+      }> = [];
+      const outPorts: Array<{
+        name: string;
+        type: string;
+        description: string;
+      }> = [];
 
-      for (const line of lines) {
-        try {
-          const parsed = parseJSON<{
-            contextName?: string;
-            direction?: string;
-            name?: string;
-            portType?: string;
-            description?: string;
-          }>(line);
+      for (const item of items) {
+        if (typeof item !== "object" || item === null) continue;
+        const obj = item as Record<string, unknown>;
 
-          if (!parsed.ok) continue;
+        const portEntry = {
+          name: String(obj.name || ""),
+          type: String(obj.portType || obj.type || ""),
+          description: String(obj.description || obj.name || ""),
+        };
 
-          const obj = parsed.data as Record<string, unknown>;
-          const portEntry = {
-            name: String(obj.name || ""),
-            type: String(obj.portType || obj.type || ""),
-            description: String(obj.description || obj.name || ""),
-          };
+        if (!portEntry.name) continue;
 
-          if (!portEntry.name) continue;
-
-          if (obj.direction === "in") {
-            inPorts.push(portEntry);
-          } else if (obj.direction === "out") {
-            outPorts.push(portEntry);
-          }
-        } catch {
-          // Skip malformed lines
+        if (obj.direction === "in") {
+          inPorts.push(portEntry);
+        } else if (obj.direction === "out") {
+          outPorts.push(portEntry);
         }
       }
 

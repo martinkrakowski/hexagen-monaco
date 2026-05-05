@@ -39,18 +39,6 @@ async function attemptContextList(
         continue;
       }
 
-      // Handle NDJSON: split by lines and parse each object
-      const lines = content
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-
-      if (lines.length === 0) {
-        if (attempt === MAX_RETRIES)
-          return { ok: false, error: "Empty response from LLM" };
-        continue;
-      }
-
       const rawContexts: Array<{
         name?: string;
         type?: string;
@@ -59,45 +47,70 @@ async function attemptContextList(
         contextType?: string;
       }> = [];
 
-      // Parse each NDJSON line
-      for (const line of lines) {
-        try {
-          const parsed = parseJSON<{
-            name?: string;
-            type?: string;
-            description?: string;
-            status?: string;
-            contextType?: string;
-          }>(line);
+      // Try parsing as full JSON first (array or object wrapper)
+      // LLMs often ignore "NDJSON" instruction and return pretty JSON array
+      const fullParsed = parseJSON<unknown>(content);
+      let items: unknown[] = [];
 
-          if (!parsed.ok) {
-            // Log unparseable lines but continue
-            console.warn("[context-list] Failed to parse line:", line);
-            continue;
+      if (fullParsed.ok) {
+        const data = fullParsed.data;
+        if (Array.isArray(data)) {
+          items = data;
+        } else if (typeof data === "object" && data !== null) {
+          // Check for wrapped array: { contexts: [...] } or similar
+          const obj = data as Record<string, unknown>;
+          for (const key of ["contexts", "data", "items", "results", "list"]) {
+            if (Array.isArray(obj[key])) {
+              items = obj[key] as unknown[];
+              break;
+            }
           }
-
-          const obj = parsed.data as Record<string, unknown>;
-
-          // Extract ONLY accepted contexts per STAGE2_CLASSIFICATION_SYSTEM_PROMPT
-          // Status must be explicitly "accepted"
-          if (obj.status === "accepted") {
-            rawContexts.push({
-              name: obj.name as string | undefined,
-              type: (obj.contextType || obj.type) as string | undefined,
-              description: obj.description as string | undefined,
-            });
+          // Single object fallback: treat as one-element array
+          if (items.length === 0 && ("name" in obj || "status" in obj)) {
+            items = [data];
           }
-        } catch (error) {
-          // Continue on parsing errors for individual lines
-          console.warn("[context-list] Error parsing line:", error);
         }
       }
 
-       if (rawContexts.length === 0) {
+      // Fallback: parse as NDJSON (one object per line)
+      if (items.length === 0) {
+        const lines = content
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+
+        for (const line of lines) {
+          const parsed = parseJSON<Record<string, unknown>>(line);
+          if (parsed.ok) {
+            items.push(parsed.data);
+          }
+        }
+      }
+
+      // Process items: filter accepted contexts
+      for (const item of items) {
+        if (typeof item !== "object" || item === null) continue;
+        const obj = item as Record<string, unknown>;
+
+        // Accept if status is "accepted" OR if no status field (assume accepted)
+        const hasStatus = "status" in obj;
+        if (!hasStatus || obj.status === "accepted") {
+          rawContexts.push({
+            name: obj.name as string | undefined,
+            type: (obj.contextType || obj.type) as string | undefined,
+            description: (obj.description || obj.reasoning) as
+              | string
+              | undefined,
+          });
+        }
+      }
+
+      if (rawContexts.length === 0) {
         if (attempt === MAX_RETRIES) {
           return {
             ok: false,
-            error: "The AI could not identify any valid bounded contexts from your description. Try providing more details about your system's business domains and responsibilities.",
+            error:
+              "The AI could not identify any valid bounded contexts from your description. Try providing more details about your system's business domains and responsibilities.",
           };
         }
         continue;
