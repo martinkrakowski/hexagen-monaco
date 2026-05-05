@@ -33,6 +33,34 @@ describe("extractJSON", () => {
     const raw = "  plain text  ";
     assert.strictEqual(extractJSON(raw), "plain text");
   });
+
+  it("preserves formatted JSON array (does not treat as NDJSON)", () => {
+    const raw = `[
+{"name": "climate-control"},
+{"name": "drift-analytics"}
+]`;
+    const result = extractJSON(raw);
+    assert.strictEqual(result, raw.trim(), "Formatted JSON array should not be treated as NDJSON");
+  });
+
+  it("preserves NDJSON format (multiple objects, one per line, no array wrapper)", () => {
+    const ndjson = `{"name": "climate-control", "type": "core"}
+{"name": "drift-analytics", "type": "core"}
+{"name": "notification-engine", "type": "supporting"}`;
+    const result = extractJSON(ndjson);
+    assert.strictEqual(result, ndjson, "NDJSON should be preserved as-is for line-by-line parsing");
+  });
+
+  it("detects NDJSON even with markdown fence", () => {
+    const raw = `\`\`\`json
+{"name": "climate-control"}
+{"name": "drift-analytics"}
+\`\`\``;
+    const result = extractJSON(raw);
+    // Should extract the content inside fences
+    assert.match(result, /climate-control/);
+    assert.match(result, /drift-analytics/);
+  });
 });
 
 describe("parseJSON", () => {

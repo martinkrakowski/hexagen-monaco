@@ -4,11 +4,83 @@ import {
   parseJSON,
   coerceContextType,
   CONTEXT_LIST_SYSTEM_PROMPT,
-  compileContextListPrompt,
+  compileStage2Prompt,
 } from "@hexagen/agentic-interaction";
 import type { LocalLlmMessagingPort } from "../ports/out/local-llm-messaging.port.js";
+import type {
+  NormalizedPrompt,
+  DomainAnalysis,
+} from "@hexagen/agentic-interaction";
 
 const MAX_RETRIES = 2;
+
+/**
+ * Extract domain context from description using simple heuristics.
+ * Identifies potential subdomains and keywords to provide stage 2 with richer context.
+ */
+function extractDomainContextFromDescription(
+  description: string,
+): DomainAnalysis {
+  const words = description
+    .toLowerCase()
+    .split(/[\s,.:;!?()[\]{}]+/)
+    .filter((w) => w.length > 2);
+  const uniqueWords = [...new Set(words)];
+
+  // Identify potential subdomains by common domain keywords
+  const domainKeywords = [
+    "manage",
+    "process",
+    "track",
+    "monitor",
+    "analyze",
+    "detect",
+    "control",
+    "schedule",
+    "authenticate",
+    "authorize",
+    "notify",
+    "report",
+    "generate",
+    "validate",
+    "transform",
+  ];
+
+  const potentialSubdomains: string[] = [];
+  for (const keyword of domainKeywords) {
+    if (description.toLowerCase().includes(keyword)) {
+      const context = description
+        .toLowerCase()
+        .split(keyword)
+        .map((part, i) => {
+          if (i === 0) return part;
+          const words = part.split(/[\s,.:;!?()[\]{}]/);
+          return words.slice(0, 3).join(" ").trim();
+        })
+        .filter((p) => p.length > 3 && p.length < 50);
+
+      if (context.length > 0) {
+        potentialSubdomains.push(`${keyword} ${context[0]}`);
+      }
+    }
+  }
+
+  // Extract nouns and verbs from noun phrases
+  const nounPhrases = description.match(/[A-Z][a-z]+(?:\s+[a-z]+)*/g) || [];
+  const nouns = [...new Set(nounPhrases.slice(0, 5))];
+
+  const verbs = uniqueWords.filter((w) =>
+    /^(manage|process|track|monitor|analyze|detect|control|schedule|create|update|delete|handle|serve|store|fetch|send|receive)/.test(
+      w,
+    ),
+  );
+
+  return {
+    subdomains: potentialSubdomains.slice(0, 5),
+    nouns: nouns,
+    verbs: verbs.slice(0, 5),
+  };
+}
 
 async function attemptContextList(
   messagingPort: LocalLlmMessagingPort,
@@ -19,7 +91,19 @@ async function attemptContextList(
 ): Promise<
   { ok: true; contexts: ContextListEntry[] } | { ok: false; error: string }
 > {
-  const userPrompt = compileContextListPrompt({ userDescription: description });
+  // Extract domain context to provide stage 2 with richer information
+  const domainContext = extractDomainContextFromDescription(description);
+  const stage0: NormalizedPrompt = {
+    intent: description,
+    explicitTechnologies: [],
+    explicitPatterns: [],
+    ambiguities: [],
+  };
+
+  const userPrompt = compileStage2Prompt({
+    stage0,
+    stage1: domainContext,
+  });
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (signal?.aborted) return { ok: false, error: "Aborted" };

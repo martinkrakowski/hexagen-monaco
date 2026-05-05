@@ -10,12 +10,15 @@ export function extractJSON(raw: string): string {
   if (fenced) return fenced[1].trim();
 
   // Check if it looks like NDJSON (multiple JSON objects, one per line)
+  // NDJSON: multiple lines each independently starting with {
+  // Exclude arrays (opening [ line) from the count
   const trimmed = raw.trim();
   const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length > 1) {
-    // Check if multiple lines start with { or [
-    const jsonLikeLines = lines.filter(l => l.match(/^[{[]/));
-    if (jsonLikeLines.length > 1) {
+    const isLikelyNDJSON =
+      lines.every(l => !l.startsWith('[') && !l.startsWith(']')) &&
+      lines.filter(l => l.startsWith('{')).length > 1;
+    if (isLikelyNDJSON) {
       // Likely NDJSON - return as-is for line-by-line parsing
       return trimmed;
     }
