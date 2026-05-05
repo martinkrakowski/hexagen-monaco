@@ -812,10 +812,10 @@ Add DAG fields but use only linear subset.
 - **ReconciliationState:** `packages/reconciliation-engine/src/domain/reconciliation-state.ts`
 - **PromoteStatePort:** `packages/reconciliation-engine/src/application/ports/in/promote-state.port.ts`
 - **Manifest:** `.architecture/manifest.yaml` (reconciliation-engine package)
-- **ADR-0010 & ADR-0011:** AI pipeline architecture (related DAG use case)
+- **ADR-0031 & ADR-0032:** Pipeline architecture (related DAG use case)
 
 ---
 
-**Author:** OpenCode / System Architect  
+**Author:** System Architect  
 **Approved By:** [Pending]  
 **Effective Date:** 2026-04-26

@@ -6,7 +6,7 @@
 
 ## Context
 
-We needed a standardized way to expose HexaGen Monaco's architectural capabilities to AI agents (OpenCode, Claude Desktop, Cursor) and developer tools. The Model Context Protocol (MCP) provides a well-defined specification for tool and resource exposure, but we had to make implementation choices for:
+We needed a standardized way to expose HexaGen Monaco's architectural capabilities to external tools (OpenCode, Claude Desktop, Cursor) and developer tools. The Model Context Protocol (MCP) provides a well-defined specification for tool and resource exposure, but we had to make implementation choices for:
 
 1. **Transport mechanism** — stdio vs HTTP
 2. **SDK integration** — dynamic vs static imports
@@ -19,7 +19,7 @@ We needed a standardized way to expose HexaGen Monaco's architectural capabiliti
 
 ### Key Implementation Decisions
 
-1. **Stdio transport** — Server communicates via stdin/stdout using JSON-RPC. This is the most portable approach for local AI tool integration.
+1. **Stdio transport** — Server communicates via stdin/stdout using JSON-RPC. This is the most portable approach for local tool integration.
 
 2. **Dynamic SDK imports** — The MCP SDK (`@modelcontextprotocol/sdk`) is loaded at runtime using `import()` rather than bundled statically. This avoids webpack `node:` scheme resolution errors in `apps/web`.
 
@@ -27,14 +27,14 @@ We needed a standardized way to expose HexaGen Monaco's architectural capabiliti
 
 4. **Read-only resources + write tools** — Resources expose architectural state (manifest, graph, linter report). Tools expose operations (audit, scaffold, add dependency, create port/adapter).
 
-5. **Dry-run by default for tools** — All write tools accept a `dry_run` parameter. When `true`, validation runs but no files are modified. This allows AI agents to preview changes.
+5. **Dry-run by default for tools** — All write tools accept a `dry_run` parameter. When `true`, validation runs but no files are modified. This allows external tools to preview changes.
 
 ## Rationale
 
 - **OpenCode compatibility** — OpenCode connects to stdio MCP servers with minimal config (`.opencode.json`).
 - **Protocol compliance** — Using official MCP SDK ensures compatibility with Claude Desktop, Cursor, and other clients.
 - **Separation of concerns** — MCP transport layer is infrastructure. Business logic lives in use cases. Easy to swap transport if needed.
-- **Safe AI integration** — Dry-run default prevents autonomous agents from making unintended changes.
+- **Safe integration** — Dry-run default prevents autonomous agents from making unintended changes.
 - **Event-driven updates** — Write operations publish events (`ModuleScaffolded`, `DependencyAdded`) to a bus so other systems (TUI) can react.
 
 ## Risks
@@ -47,8 +47,8 @@ We needed a standardized way to expose HexaGen Monaco's architectural capabiliti
 
 ### Positive
 
-- AI agents can query architectural state via resources
-- AI agents can trigger scaffold/port/adapter generation via tools
+- External tools can query architectural state via resources
+- External tools can trigger scaffold/port/adapter generation via tools
 - OpenCode, Claude Desktop, Cursor can all connect
 - TUI consumes same MCP server as external agents
 - Architecture integrity preserved through hexagonal layering

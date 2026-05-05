@@ -139,7 +139,7 @@ Persist ciphertext in a server-side database.
 
 Add BYOK as a new module inside `agentic-interaction`.
 
-**Rejected:** `agentic-interaction` is a supporting context for AI-assisted architecture modification. Server-side crypto is a fundamentally different domain concern. Separation allows independent evolution and testing.
+**Rejected:** `agentic-interaction` is a supporting context for architecture modification. Server-side crypto is a fundamentally different domain concern. Separation allows independent evolution and testing.
 
 ### Alternative 4: Proxy-Only (No Encryption)
 

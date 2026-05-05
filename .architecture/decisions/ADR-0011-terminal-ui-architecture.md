@@ -11,7 +11,7 @@ We needed a terminal-based user interface that could:
 - Display real-time architectural state (navigation tree, violations, rules)
 - Connect to the MCP server for live data
 - Support keyboard navigation and actions
-- Enable the human-AI symbiosis loop (select violation → invoke AI → execute fix)
+- Enable the human-guided modification loop (select violation → invoke action → execute fix)
 
 Key choices involved:
 
@@ -33,7 +33,7 @@ Key choices involved:
 
 3. **Three-pane layout** — Navigation tree (left), rule engine (top-right), violation inspector (bottom-right). This mirrors typical IDE panels and allows simultaneous viewing of structure + details.
 
-4. **Keyboard navigation** — Custom `useInput` hooks handle `j/k` (up/down), `Tab` (cycle panes), `u` (refresh), `r` (AI refactor), `q` (quit). No mouse support needed.
+4. **Keyboard navigation** — Custom `useInput` hooks handle `j/k` (up/down), `Tab` (cycle panes), `u` (refresh), `r` (automated refactor), `q` (quit). No mouse support needed.
 
 5. **File watching for live updates** — Use `fs.watch` on `.architecture/manifest.yaml` with debouncing. Changes trigger full state refresh. Avoids polling.
 
@@ -85,18 +85,18 @@ apps/tui/
 │       ├── manifest-service.ts        # Load nav tree
 │       ├── sync-service.ts           # Load linter report
 │       ├── messaging-service.ts      # File watching
-│       └── action.service.ts          # AI refactor flow
+│ └── action.service.ts # Automated refactor flow
 ```
 
 ### Keyboard Bindings
 
-| Key       | Action                                |
-| --------- | ------------------------------------- |
-| `j` / `k` | Navigate up/down in current pane      |
-| `Tab`     | Cycle focus between panes             |
-| `u`       | Refresh all data (re-fetch resources) |
-| `r`       | Invoke AI on selected violation       |
-| `q`       | Quit TUI                              |
+| Key       | Action                                        |
+| --------- | --------------------------------------------- |
+| `j` / `k` | Navigate up/down in current pane              |
+| `Tab`     | Cycle focus between panes                     |
+| `u`       | Refresh all data (re-fetch resources)         |
+| `r`       | Invoke automated action on selected violation |
+| `q`       | Quit TUI                                      |
 
 ### Service Responsibilities
 
@@ -120,4 +120,4 @@ apps/tui/
 - Zustand docs: https://github.com/pmndrs/zustand
 - `packages/mcp-server/` — MCP server this TUI connects to
 - `apps/tui/src/index.tsx` — Main TUI implementation
-- `apps/tui/src/services/action.service.ts` — AI refactor orchestration
+- `apps/tui/src/services/action.service.ts` — Modification orchestration

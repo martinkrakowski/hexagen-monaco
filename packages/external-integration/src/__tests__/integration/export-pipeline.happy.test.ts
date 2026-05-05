@@ -186,10 +186,10 @@ describe("Export Pipeline — Happy Path", () => {
     assert.ok("bounded_contexts" in fixture);
     assert.deepStrictEqual(fixture.system, "test-hexagen-export");
 
-    const boundedContexts = (fixture as any).bounded_contexts;
+    const boundedContexts = (fixture as CrossBoundaryManifest).bounded_contexts;
     assert.strictEqual(Array.isArray(boundedContexts), true);
 
-    const contextNames = boundedContexts.map((bc: any) => bc.name);
+    const contextNames = boundedContexts.map((bc: { name: string }) => bc.name);
     assert.ok(contextNames.includes("external-integration"));
   });
 

@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-03-12  
-**Authors:** Martin Krakowski, Claude (AI pair programmer)  
+**Authors:** Martin Krakowski  
 **Supersedes:** None  
 **Related:** ADR-0002 (Sync Engine Structural Fixes)
 

@@ -1,17 +1,17 @@
-# ADR-0010: Phased AI Pipeline Implementation (Superseding PR #26 Scaffolding)
+# ADR-0031: Phased Pipeline Implementation (Superseding PR #26 Scaffolding)
 
 **Date:** 2026-04-26
 **Status:** Accepted
 **Supersedes:** Orphaned commits `8987804`, `26589de` from deleted `feature/ai-driven-architecture-modification` branch
 **Superseded By:** None
 **Drivers:** PR #26 was a 270-file mega-PR mixing concerns across all pipeline layers; no clean review path
-**Related:** `docs/ai-pipeline-implementation-summary.md`; Phase 0–7 implementation
+**Related:** `docs/pipeline-implementation-summary.md`; Phase 0–7 implementation
 
 ---
 
 ## Context
 
-An initial `feature/ai-driven-architecture-modification` branch (PR #26) attempted to implement the AI-driven architecture modification pipeline as a single large change. The branch was deleted during Phase 0 cleanup after identifying the following problems:
+An initial `feature/ai-driven-architecture-modification` branch (PR #26) attempted to implement the architecture modification pipeline as a single large change. The branch was deleted during Phase 0 cleanup after identifying the following problems:
 
 1. **270 files changed** — impossible to review atomically
 2. **Mixed concerns** — domain models, adapters, API routes, and UI components in one diff
@@ -35,7 +35,7 @@ Two orphaned commits (`8987804`, `26589de`) remain in the object store from this
 
 - The orphaned commits `8987804` and `26589de` are formally superseded and may be garbage-collected by Git
 - No code from the deleted branch needs to be preserved — the current implementation has full parity
-- The `docs/ai-architecture-modification-pipeline-plan.md` from the orphaned commits is superseded by `docs/ai-pipeline-implementation-summary.md`
+- The `docs/ai-architecture-modification-pipeline-plan.md` from the orphaned commits is superseded by `docs/pipeline-implementation-summary.md`
 - Future pipeline work builds on the phased implementation, not the PR #26 scaffolding
 
 ## Comparison: Orphaned vs Current
