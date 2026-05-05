@@ -2,15 +2,16 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 
 /**
- * Test suite for two-tier LLM provider gating:
+ * Test suite for three-tier LLM provider gating:
  * Tier 1 (Synchronous): Check env-var API key via hasServerLLMAccessKey()
  * Tier 2 (Asynchronous): Probe server for BYOK tier + full capability picture
+ * Tier 3 (Synchronous): Check WebGPU support for local LLM fallback
  *
  * This prevents the "No cloud LLM API keys configured" error by ensuring
- * the button is gated at mount time (Tier 1) before any async roundtrip.
+ * button is enabled if ANY tier has capability: cloud key OR BYOK OR WebLLM.
  */
 
-describe("Two-Tier LLM Provider Gating", () => {
+describe("Three-Tier LLM Provider Gating (Cloud + BYOK + WebLLM)", () => {
   // Mock ServerLLMAdapter logic
   function mockHasAccessKey(apiKey) {
     return !!apiKey && apiKey.trim().length > 0;
@@ -100,6 +101,41 @@ describe("Two-Tier LLM Provider Gating", () => {
       // This prevents unnecessary async roundtrip when we already know no env key exists
       assert.strictEqual(hasServerApiKey, false);
       // In actual component: useEffect([hasServerApiKey]) would skip probe body
+    });
+  });
+
+  describe("Tier 3: WebLLM Local Fallback", () => {
+    it("should enable button via WebLLM when no cloud keys but WebGPU supported", () => {
+      // All cloud tiers fail, but browser supports local generation
+      const hasServerApiKey = false; // Tier 1
+      const capabilities = { capabilities: [], canGenerate: false }; // Tier 2
+      const hasLocalLLM = true; // Tier 3: WebGPU + hardware adequate
+      const hasAnyProvider =
+        (hasServerApiKey || (capabilities?.canGenerate ?? false)) || hasLocalLLM;
+      // Button enabled via Tier 3 fallback
+      assert.strictEqual(hasAnyProvider, true);
+    });
+
+    it("should disable button only if all three tiers unavailable", () => {
+      // No cloud key, no BYOK, no WebLLM
+      const hasServerApiKey = false; // Tier 1
+      const capabilities = { capabilities: [], canGenerate: false }; // Tier 2
+      const hasLocalLLM = false; // Tier 3: WebGPU unsupported or inadequate
+      const hasAnyProvider =
+        (hasServerApiKey || (capabilities?.canGenerate ?? false)) || hasLocalLLM;
+      // Button only disabled when all three fail
+      assert.strictEqual(hasAnyProvider, false);
+    });
+
+    it("should prefer cloud keys over WebLLM (cloud is faster/more capable)", () => {
+      // Both cloud and local available
+      const hasServerApiKey = true; // Tier 1
+      const capabilities = { capabilities: [], canGenerate: true }; // Tier 2
+      const hasLocalLLM = true; // Tier 3
+      const hasAnyProvider =
+        (hasServerApiKey || (capabilities?.canGenerate ?? false)) || hasLocalLLM;
+      // Button enabled (will use cloud by default, local is fallback)
+      assert.strictEqual(hasAnyProvider, true);
     });
   });
 

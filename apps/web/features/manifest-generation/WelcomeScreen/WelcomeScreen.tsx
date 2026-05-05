@@ -6,6 +6,7 @@ import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { assessModelCapability } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
+import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
 import { EntryPointsSection } from "./EntryPointsSection";
@@ -54,6 +55,13 @@ export function WelcomeScreen({
   const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(
     null,
   );
+
+  /**
+   * Tier 3 (Synchronous): Check if browser supports WebLLM (local generation).
+   * Polls WebGPU capability and hardware constraints.
+   */
+  const gpuDetection = useWebGPUDetection();
+  const hasLocalLLM = gpuDetection.isWebGPUSupported && gpuDetection.isHardwareAdequate;
 
   // Probe capabilities on mount and when cache is invalidated.
   // Always probe for BYOK tier (don't skip based on Tier 1).
@@ -135,21 +143,22 @@ export function WelcomeScreen({
   }, [capability]);
 
   // Gate on both model capability AND LLM provider availability.
-  // Tier 1 (sync) OR Tier 2 (async): Button enabled if either tier has keys.
-  // Tier 1: env key → enabled immediately (fast-pass, don't wait for probe)
-  // Tier 2: probe resolved → enabled if BYOK exists or env key exists
-  // While probe in-flight: default to fail open (capabilities = undefined) so button enabled if Tier 1 passed
-  const hasLlmProviders =
-    hasServerApiKey || (capabilities?.canGenerate ?? false);
+  // THREE-TIER GATE: button enabled if ANY tier has keys/capability
+  // Tier 1 (sync): env key → enabled immediately (fast-pass, don't wait)
+  // Tier 2 (async): BYOK configured → enabled after probe completes
+  // Tier 3 (sync): WebLLM available → enabled immediately (local fallback)
+  // If all tiers missing, button disabled with helpful tooltip
+  const hasCloudKeys = hasServerApiKey || (capabilities?.canGenerate ?? false);
+  const hasAnyProvider = hasCloudKeys || hasLocalLLM;
   const canGenerate =
     formHandlers.isValid &&
     flowState.state === "idle" &&
     manifestCapable &&
-    hasLlmProviders;
+    hasAnyProvider;
 
-  // Tooltip messaging based on which tier is unavailable
-  const disabledTooltip = !hasLlmProviders
-    ? "No API keys configured. Set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, or COHERE_API_KEY) or add a BYOK key in Settings."
+  // Tooltip messaging based on which providers are unavailable
+  const disabledTooltip = !hasAnyProvider
+    ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
     : undefined;
 
   const handleGenerate = () => {
