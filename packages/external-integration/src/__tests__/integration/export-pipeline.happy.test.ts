@@ -14,6 +14,7 @@ import {
   getMockPort,
   type PortRegistry,
 } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.ts";
+import type { CrossBoundaryManifest } from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
 import {
   MockGitHubProviderAdapter,
   MockCloudStorageAdapter,
@@ -186,10 +187,10 @@ describe("Export Pipeline — Happy Path", () => {
     assert.ok("bounded_contexts" in fixture);
     assert.deepStrictEqual(fixture.system, "test-hexagen-export");
 
-    const boundedContexts = (fixture as any).bounded_contexts;
+    const boundedContexts = (fixture as CrossBoundaryManifest).bounded_contexts;
     assert.strictEqual(Array.isArray(boundedContexts), true);
 
-    const contextNames = boundedContexts.map((bc: any) => bc.name);
+    const contextNames = boundedContexts.map((bc: { name: string }) => bc.name);
     assert.ok(contextNames.includes("external-integration"));
   });
 

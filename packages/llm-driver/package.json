@@ -9,5 +9,17 @@
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
     "@hexagen/shared": "workspace:*"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.15.0"
   }
 }

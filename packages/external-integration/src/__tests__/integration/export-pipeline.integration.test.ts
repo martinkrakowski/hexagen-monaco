@@ -56,13 +56,16 @@ class MockProjectGeneratorAdapter {
 }
 
 class MockWizardPersistenceAdapter {
-  private sessions = new Map<string, any>();
+  private sessions = new Map<string, Record<string, unknown>>();
 
-  async saveSession(sessionId: string, state: any): Promise<void> {
+  async saveSession(
+    sessionId: string,
+    state: Record<string, unknown>,
+  ): Promise<void> {
     this.sessions.set(sessionId, { ...state, timestamp: Date.now() });
   }
 
-  async getSession(sessionId: string): Promise<any | null> {
+  async getSession(sessionId: string): Promise<Record<string, unknown> | null> {
     return this.sessions.get(sessionId) ?? null;
   }
 }
