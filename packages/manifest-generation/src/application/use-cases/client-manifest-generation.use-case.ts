@@ -71,9 +71,9 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
       let inPorts: Port[] = [];
       let outPorts: Port[] = [];
 
-      if (portsResult.ok) {
+      if (portsResult.ok && portsResult.ports) {
         try {
-          inPorts = portsResult.ports.in.map((p: unknown) => {
+          inPorts = (portsResult.ports.in ?? []).map((p: unknown) => {
             const normalized = normalizePort(p, "use-case");
             return {
               ...normalized,
@@ -85,7 +85,7 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
         }
 
         try {
-          outPorts = portsResult.ports.out.map((p: unknown) => {
+          outPorts = (portsResult.ports.out ?? []).map((p: unknown) => {
             const normalized = normalizePort(p, "infrastructure");
             return {
               ...normalized,
@@ -140,8 +140,8 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
       onStepDetail?.(`Extracting adapters for ${ctx.name}...`);
 
       const allPortNames = [
-        ...ctx.ports.in.map((p: { name: string }) => p.name),
-        ...ctx.ports.out.map((p: { name: string }) => p.name),
+        ...(ctx.ports?.in ?? []).map((p: { name: string }) => p.name),
+        ...(ctx.ports?.out ?? []).map((p: { name: string }) => p.name),
       ];
 
       let adapters: ManifestDraftContext["adapters"] = [];
