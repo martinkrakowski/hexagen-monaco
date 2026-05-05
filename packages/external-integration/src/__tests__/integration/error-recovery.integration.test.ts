@@ -26,6 +26,8 @@ import {
   getMockPort,
 } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
 
+type IntegrationError = { code: string; message: string };
+
 describe("Error Recovery — Integration Tests (Phase 6C)", () => {
   let registry: ReturnType<typeof createCrossBoundaryRegistry>;
 
@@ -135,7 +137,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       const gracefulGovernance = {
         async scan(manifest: unknown): Promise<{
           success: boolean;
-          error?: unknown;
+          error?: IntegrationError;
           data?: unknown;
         }> {
           if (!manifest) {
@@ -155,7 +157,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       const defensiveExport = {
         async validateManifest(
           manifest: unknown,
-        ): Promise<{ success: boolean; error?: unknown }> {
+        ): Promise<{ success: boolean; error?: IntegrationError }> {
           if (!manifest) {
             errorLog.steps.push("export-refuse");
             return {
@@ -221,7 +223,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       };
 
       const failingGovernance = {
-        async scan(): Promise<{ success: boolean; error?: any }> {
+        async scan(): Promise<{ success: boolean; error?: IntegrationError }> {
           return {
             success: false,
             error: {

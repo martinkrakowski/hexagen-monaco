@@ -14,6 +14,7 @@ import {
   getMockPort,
   type PortRegistry,
 } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.ts";
+import type { CrossBoundaryManifest } from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
 import {
   MockGitHubProviderAdapter,
   MockCloudStorageAdapter,
