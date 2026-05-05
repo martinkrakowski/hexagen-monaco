@@ -1,15 +1,30 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import type { GenerationPhase } from "../useClientManifestGeneration";
+import { Loader2, Check } from "lucide-react";
+import type { StagedPhase, StageProgress } from "../useStagedManifestGeneration";
 
-const STEP_ORDER: GenerationPhase[] = ["topology", "adapters", "rendering"];
+const STAGE_ORDER: StagedPhase[] = [
+  "stage-0",
+  "stage-1",
+  "stage-2",
+  "stage-3",
+  "stage-4",
+  "stage-5",
+  "stage-6",
+];
 
-const STEP_LABELS: Partial<Record<GenerationPhase, string>> = {
-  topology: "Building Topology",
-  adapters: "Extracting Adapters",
-  rendering: "Rendering Manifest",
+const STAGE_LABELS: Record<StagedPhase, string> = {
+  idle: "Preparing",
+  "stage-0": "Normalizing Prompt",
+  "stage-1": "Extracting Domain",
+  "stage-2": "Classifying Contexts",
+  "stage-3": "Mapping Ports",
+  "stage-4": "Assigning Adapters",
+  "stage-5": "Assembling Manifest",
+  "stage-6": "Validating",
+  complete: "Complete",
+  failed: "Failed",
 };
 
 function usePrevious<T>(value: T): T | undefined {
@@ -21,23 +36,32 @@ function usePrevious<T>(value: T): T | undefined {
 }
 
 interface ThinkingBlockProps {
-  phase: GenerationPhase;
+  phase: StagedPhase;
   stepDetail: string;
+  stageProgress?: Record<number, StageProgress>;
 }
 
-function StepDot({ state }: { state: "completed" | "active" | "pending" }) {
+function StepIndicator({
+  state,
+}: {
+  state: "completed" | "active" | "pending";
+}) {
   if (state === "completed") {
     return (
-      <div className="w-2 h-2 rounded-full bg-muted-foreground/40 shrink-0" />
+      <div className="w-4 h-4 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+        <Check className="w-3 h-3 text-accent" />
+      </div>
     );
   }
   if (state === "active") {
     return (
-      <div className="w-2.5 h-2.5 rounded-full bg-accent shrink-0 step-dot-active" />
+      <div className="w-4 h-4 rounded-full bg-accent flex items-center justify-center shrink-0 step-dot-active">
+        <div className="w-1.5 h-1.5 rounded-full bg-accent-foreground" />
+      </div>
     );
   }
   return (
-    <div className="w-2 h-2 rounded-full border border-muted-foreground/20 shrink-0" />
+    <div className="w-4 h-4 rounded-full border border-muted-foreground/20 shrink-0" />
   );
 }
 
@@ -77,26 +101,54 @@ function DetailLine({ text }: { text: string }) {
   );
 }
 
-export function ThinkingBlock({ phase, stepDetail }: ThinkingBlockProps) {
-  const label = STEP_LABELS[phase];
-  if (!label) return null;
+function DurationBadge({ ms }: { ms?: number }) {
+  if (ms === undefined) return null;
+  const label = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+  return (
+    <span className="text-xs text-muted-foreground/60 tabular-nums">
+      {label}
+    </span>
+  );
+}
 
-  const currentStepIndex = STEP_ORDER.indexOf(phase);
+export function ThinkingBlock({ phase, stepDetail, stageProgress }: ThinkingBlockProps) {
+  if (phase === "idle" || phase === "failed") return null;
+
+  if (phase === "complete") {
+    return (
+      <div className="flex flex-col items-center gap-2 py-3">
+        <div className="flex items-center gap-2">
+          <Check className="h-4 w-4 text-accent" />
+          <span className="text-base font-semibold text-foreground">
+            Generation Complete
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const currentStageIndex = STAGE_ORDER.indexOf(phase);
+  const label = STAGE_LABELS[phase];
 
   return (
     <div className="flex flex-col items-center gap-4 py-3">
-      <div className="flex items-center gap-3">
-        {STEP_ORDER.map((step, index) => {
+      <div className="flex items-center gap-1.5">
+        {STAGE_ORDER.map((stage, index) => {
+          const stageNum = index;
+          const progress = stageProgress?.[stageNum];
           let dotState: "completed" | "active" | "pending";
-          if (index < currentStepIndex) dotState = "completed";
-          else if (index === currentStepIndex) dotState = "active";
+          if (index < currentStageIndex) dotState = "completed";
+          else if (index === currentStageIndex) dotState = "active";
           else dotState = "pending";
 
           return (
-            <div key={step} className="flex items-center gap-2">
-              <StepDot state={dotState} />
-              {index < STEP_ORDER.length - 1 && (
-                <div className="w-8 h-px bg-border" />
+            <div key={stage} className="flex items-center gap-1.5">
+              <StepIndicator state={dotState} />
+              {dotState === "completed" && (
+                <DurationBadge ms={progress?.durationMs} />
+              )}
+              {index < STAGE_ORDER.length - 1 && (
+                <div className="w-4 h-px bg-border" />
               )}
             </div>
           );

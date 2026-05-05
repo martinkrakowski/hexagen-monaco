@@ -22,7 +22,6 @@
     "./infrastructure/adapters/model-preferences.adapter": "./src/infrastructure/adapters/model-preferences.adapter.ts"
   },
   "scripts": {
-    "build": "tsc",
     "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\""
   },
   "dependencies": {
@@ -31,7 +30,5 @@
   },
   "devDependencies": {
     "tsx": "^4.19.2"
-  },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts"
+  }
 }

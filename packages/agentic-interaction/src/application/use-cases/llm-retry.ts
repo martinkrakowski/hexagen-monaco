@@ -31,14 +31,6 @@ async function callWithRetries<T>(
       userPrompt = initialUserPrompt;
     } else {
       const retryResult = retryFactory(attempt);
-      if (retryResult.kind === "clarify") {
-        console.log(
-          `[manifest-gen] phase=${phase}, attempt=${attempt}, action=clarify`,
-        );
-        throw new Error(
-          `${phase}: clarification needed after ${attempt} attempts`,
-        );
-      }
       userPrompt = retryResult.content;
     }
 

@@ -32,21 +32,21 @@ export const ManifestDraftAdapterSchema = z
 export const ManifestDraftContextSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(["core", "supporting", "driver", "shared-kernel"]),
-    description: z.string().min(1),
-    ports: z.object({
-      in: z.array(ManifestDraftPortSchema),
-      out: z.array(ManifestDraftPortSchema),
-    }),
-    adapters: z.array(ManifestDraftAdapterSchema),
-    dependsOn: z.array(z.string()).optional(),
-  })
-  .strict();
+type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+  description: z.string().min(1),
+  ports: z.object({
+    in: z.array(ManifestDraftPortSchema),
+    out: z.array(ManifestDraftPortSchema),
+  }),
+  adapters: z.array(ManifestDraftAdapterSchema),
+  dependsOn: z.array(z.string()).optional(),
+})
+.strict();
 
 export const ManifestTopologyDraftContextSchema = z
-  .object({
-    name: z.string().min(1),
-    type: z.enum(["core", "supporting", "driver", "shared-kernel"]),
+.object({
+  name: z.string().min(1),
+  type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
     description: z.string().min(1),
     ports: z.object({
       in: z.array(ManifestDraftPortSchema),
@@ -94,12 +94,12 @@ export function createContextListSchema(
     .array(
       z.object({
         name: z.string().min(1),
-        type: z.enum(["core", "supporting", "driver", "shared-kernel"]),
-        description: z.string().min(1),
-      }),
-    )
-    .min(1)
-    .max(max);
+type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+    description: z.string().min(1),
+  }),
+)
+.min(1)
+.max(max);
 }
 
 export const ContextListSchema = createContextListSchema();

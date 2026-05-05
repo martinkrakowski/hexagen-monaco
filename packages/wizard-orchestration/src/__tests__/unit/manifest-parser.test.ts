@@ -71,7 +71,7 @@ scope: "@hexagen/test"
 architecture: "modular-monolith"
 bounded_contexts:
   - name: "AdapterContext"
-    type: "driver"
+    type: "generic"
     description: "Context with adapters"
     layers:
       infrastructure:

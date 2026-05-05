@@ -5,7 +5,7 @@ import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 export interface ScaffoldModuleInput {
   name: string;
   layer: "domain" | "application" | "infrastructure";
-  context_type?: "core" | "supporting" | "driver" | "shared-kernel";
+  context_type?: "core" | "supporting" | "generic" | "shared-kernel";
   dry_run?: boolean;
 }
 

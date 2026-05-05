@@ -21,7 +21,7 @@ export interface TopologyGenerationResponse {
     workspace: { name: string; description: string };
     boundedContexts: Array<{
       name: string;
-      type: "core" | "supporting" | "driver" | "shared-kernel";
+      type: "core" | "supporting" | "generic" | "shared-kernel";
       description: string;
       ports: {
         in: Array<{ name: string; type: string; description: string }>;
