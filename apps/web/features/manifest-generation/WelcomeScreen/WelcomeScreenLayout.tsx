@@ -5,5 +5,5 @@ interface WelcomeScreenLayoutProps {
 }
 
 export function WelcomeScreenLayout({ children }: WelcomeScreenLayoutProps) {
-  return <div>{children}</div>;
+  return <div className="flex flex-col space-y-4 pb-6">{children}</div>;
 }

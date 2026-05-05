@@ -20,6 +20,9 @@ interface WelcomeManifestDialogProps {
   onUseManifest?: (manifest: string) => void;
   /** LLM context for local model management */
   llmContext: LocalLLMContext;
+  onImportManifest: () => void;
+  onStartWizard: () => void;
+  onLoadProject: (id: string) => void;
 }
 
 /**
@@ -34,6 +37,9 @@ export function WelcomeManifestDialog({
   onClose,
   onUseManifest,
   llmContext,
+  onImportManifest,
+  onStartWizard,
+  onLoadProject,
 }: WelcomeManifestDialogProps) {
   return (
     <Dialog open={open} onClose={onClose}>
@@ -50,6 +56,9 @@ export function WelcomeManifestDialog({
             <WelcomeScreen
               onUseManifest={onUseManifest}
               llmContext={llmContext}
+              onImportManifest={onImportManifest}
+              onStartWizard={onStartWizard}
+              onLoadProject={onLoadProject}
             />
           </div>
         </div>

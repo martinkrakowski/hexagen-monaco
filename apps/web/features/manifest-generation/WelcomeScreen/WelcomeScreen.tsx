@@ -10,10 +10,14 @@ import { useClientManifestGeneration } from "../useClientManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { assessModelCapability } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
-import { HeaderSection } from "./HeaderSection";
-import { FormSection } from "./FormSection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
+import { EntryPointsSection } from "./EntryPointsSection";
+import { PromptDivider } from "./PromptDivider";
+import { DescriptionInput } from "./DescriptionInput";
+import { ExampleCardsSection } from "./ExampleCardsSection";
+import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
+import { PreviousProjectsSection } from "./PreviousProjectsSection";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ModelSelectionView } from "./ModelSelectionView";
@@ -25,6 +29,9 @@ export function WelcomeScreen({
   onUseManifest,
   llmContext,
   onGeneratingStateChange,
+  onImportManifest,
+  onStartWizard,
+  onLoadProject,
 }: WelcomeScreenProps) {
   const [formState, formHandlers] = useWelcomeScreenForm();
   const [rememberChoice, setRememberChoice] = useState(false);
@@ -191,16 +198,37 @@ export function WelcomeScreen({
 
   return (
     <WelcomeScreenLayout>
-      <HeaderSection
-        title="Welcome to HexaGen Monaco"
-        subtitle="Describe your project in natural language to generate a clean, scalable hexagonal architecture manifest."
+      <EntryPointsSection
+        onImportManifest={onImportManifest}
+        onStartWizard={onStartWizard}
       />
 
-      <FormSection
-        description={formState.description}
-        onDescriptionChange={(value) =>
-          formHandlers.setValue("description", value)
-        }
+      <PromptDivider />
+
+      <DescriptionInput
+        value={formState.description}
+        onChange={(value) => formHandlers.setValue("description", value)}
+        charCount={formHandlers.charCount}
+        disabled={isGenerating}
+      />
+
+      <ActionBar
+        canGenerate={canGenerate}
+        isGenerating={isGenerating}
+        onGenerate={handleGenerate}
+        onCancel={() => actions.transitionTo("idle")}
+      />
+
+      <ExampleCardsSection
+        selectedExample={formState.selectedExample}
+        onUseExample={(example, index) => {
+          formHandlers.setValue("description", example);
+          formHandlers.setValue("selectedExample", index);
+        }}
+        isDisabled={isGenerating}
+      />
+
+      <AdvancedOptionsSection
         platform={formState.platform}
         onPlatformChange={(value) => formHandlers.setValue("platform", value)}
         deployment={formState.deployment}
@@ -211,17 +239,13 @@ export function WelcomeScreen({
         onMaxContextsChange={(value) =>
           formHandlers.setValue("maxContexts", value)
         }
-        selectedExample={formState.selectedExample}
-        onUseExample={(example, index) => {
-          formHandlers.setValue("description", example);
-          formHandlers.setValue("selectedExample", index);
-        }}
-        charCount={formHandlers.charCount}
         isDisabled={isGenerating}
       />
 
       <ModelCapabilityCheck
-        modelNativelyCapable={capability.isCapable && !capability.reason.includes("Override")}
+        modelNativelyCapable={
+          capability.isCapable && !capability.reason.includes("Override")
+        }
         manifestCapable={manifestCapable}
         loadedModelId={loadedModelId}
         overrideModelCheck={overrideModelCheck}
@@ -236,12 +260,9 @@ export function WelcomeScreen({
         />
       )}
 
-      <ActionBar
-        canGenerate={canGenerate}
-        isGenerating={isGenerating}
-        onGenerate={handleGenerate}
-        onCancel={() => actions.transitionTo("idle")}
-      />
+      <div className="my-2 border-t border-border" />
+
+      <PreviousProjectsSection onLoadProject={onLoadProject} />
     </WelcomeScreenLayout>
   );
 }
