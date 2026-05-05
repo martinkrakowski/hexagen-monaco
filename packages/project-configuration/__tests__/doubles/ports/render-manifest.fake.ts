@@ -1,6 +1,8 @@
-import type { RenderManifestPort } from "../../../src/application/ports/in/render-manifest.port";
+import type {
+  RenderManifestPort,
+  RenderedManifest,
+} from "../../../src/application/ports/in/render-manifest.port";
 import type { Manifest } from "../../../src/domain/model/manifest-schema/manifest-schema";
-import type { RenderedManifest } from "@hexagen/agentic-interaction";
 
 /**
  * In‑memory fake for `RenderManifestPort`.

@@ -1,6 +1,8 @@
-import type { RenderManifestPort } from "../ports/in/render-manifest.port";
+import type {
+  RenderManifestPort,
+  RenderedManifest,
+} from "../ports/in/render-manifest.port";
 import type { Manifest } from "../../domain/model/manifest-schema/manifest-schema";
-import type { RenderedManifest } from "@hexagen/agentic-interaction";
 
 export class RenderManifestUseCase implements RenderManifestPort {
   async execute(_input: Manifest): Promise<RenderedManifest> {
