@@ -128,7 +128,9 @@ export function WelcomeScreen({
   useEffect(() => {
     if (flowState.state !== "generating") return;
     if (stagedGen.generationError) {
-      actions.setError(stagedGen.generationError);
+      // Don't transition to error state modal.
+      // Keep error inline in welcome form for better UX.
+      // Error will be displayed in the form instead.
     }
   }, [stagedGen.generationError, flowState.state, actions]);
 
@@ -222,6 +224,7 @@ export function WelcomeScreen({
   }
 
   const isGenerating = flowState.state === "generating";
+  const hasError = stagedGen.generationError !== null;
 
   return (
     <WelcomeScreenLayout>
@@ -239,8 +242,51 @@ export function WelcomeScreen({
         disabled={isGenerating}
       />
 
+      {hasError && (
+        <div className="p-4 bg-destructive/10 border border-destructive rounded-md space-y-3">
+          <div className="flex items-start gap-3">
+            <svg
+              className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <div className="flex-1">
+              <h3 className="font-semibold text-destructive text-sm">
+                Generation Failed
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                {stagedGen.generationError}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => handleRetryOrRegenerate()}
+              className="text-sm font-medium px-3 py-1 text-destructive hover:bg-destructive/10 rounded transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => {
+                stagedGen.reset();
+                formHandlers.setValue("description", "");
+              }}
+              className="text-sm font-medium px-3 py-1 text-muted-foreground hover:bg-muted rounded transition-colors"
+            >
+              Clear & Start Over
+            </button>
+          </div>
+        </div>
+      )}
+
       <ActionBar
-        canGenerate={canGenerate}
+        canGenerate={canGenerate && !hasError}
         isGenerating={isGenerating}
         onGenerate={handleGenerate}
         onCancel={() => {
