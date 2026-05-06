@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
-    "@hexagen/local-llm": "workspace:*"
+    "@hexagen/local-llm": "workspace:*",
+    "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2"

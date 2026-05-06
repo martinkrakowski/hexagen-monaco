@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { WizardData } from "@hexagen/project-configuration";
+import type { GenerationResult } from "@hexagen/shared";
+import { getGenerationResultPersistence } from "../../../app/lib/wire.client";
 
 const MAX_RETRIES = 3;
 
@@ -53,6 +55,20 @@ export function useProjectGeneration(wizardData: WizardData) {
         lastGeneratedRef.current = currentDataStr;
         setIsStale(false);
         retryCountRef.current = 0;
+
+        try {
+          const persistence = getGenerationResultPersistence();
+          const result: GenerationResult = {
+            projectId: wizardData.governance?.workspaceName || "default",
+            timestamp: Date.now(),
+            files: Object.fromEntries(fileMap),
+            manifestYaml: data.manifestYaml || "",
+            source: "server",
+          };
+          await persistence.saveResult(result);
+        } catch {
+          // Persistence failure is non-fatal — generation still succeeded
+        }
       } catch (err: unknown) {
         retryCountRef.current += 1;
         const message =

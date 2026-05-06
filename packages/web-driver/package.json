@@ -17,6 +17,11 @@
       "source": "./src/infrastructure/constants/index.ts",
       "default": "./dist/infrastructure/constants/index.js"
     },
+    "./infrastructure/storage-quota-monitor": {
+      "types": "./dist/infrastructure/storage-quota-monitor.d.ts",
+      "source": "./src/infrastructure/storage-quota-monitor.ts",
+      "default": "./dist/infrastructure/storage-quota-monitor.js"
+    },
     "./__tests__/fixtures": {
       "types": "./dist/__tests__/fixtures/index.d.ts",
       "source": "./src/__tests__/fixtures/index.ts",

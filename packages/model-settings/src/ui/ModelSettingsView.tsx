@@ -25,6 +25,7 @@ interface ModelSettingsViewProps {
   isLoading: boolean;
   onSwitchToCloud?: () => void;
   requiresModelWarning?: boolean;
+  onResetConfig?: () => void;
 }
 
 interface CacheStatusEntry {
@@ -96,6 +97,7 @@ export function ModelSettingsView({
   isLoading,
   onSwitchToCloud,
   requiresModelWarning,
+  onResetConfig,
 }: ModelSettingsViewProps) {
   const [state, dispatch] = useReducer(modelSettingsReducer, {
     cacheStatus: new Map<DomainModelId, CacheStatusEntry>(),
@@ -395,6 +397,7 @@ export function ModelSettingsView({
         totalCachedSize={totalCachedSize}
         currentModelId={currentModelId}
         isLoading={isLoading}
+        onResetConfig={onResetConfig}
       />
     </div>
   );

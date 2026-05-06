@@ -2,104 +2,40 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { ProjectConfig } from "@hexagen/project-configuration";
+import type {
+  SavedProject as BaseSavedProject,
+  SavedProjectsPersistencePort,
+} from "@hexagen/shared";
+import { getSavedProjectsPersistence } from "../lib/wire.client";
 
-const STORAGE_KEY = "hexagen-saved-projects";
 const CURRENT_SCHEMA_VERSION = 2;
-const LEGACY_SCHEMA_VERSION = 1;
 
-export interface SavedProject {
-  id: string;
-  name: string;
-  schemaVersion: number;
-  createdAt: number;
-  updatedAt: number;
-  formState: ProjectConfig;
-  manifestYaml: string;
+export interface SavedProject extends BaseSavedProject {
+  readonly formState: ProjectConfig;
 }
 
-function migrateLegacyProject(legacy: {
-  id: string;
-  name: string;
-  createdAt: number;
-  updatedAt: number;
-  formState: Record<string, unknown>;
-  manifestYaml: string;
-}): SavedProject {
-  const formState = { ...legacy.formState };
-  delete formState.gitHubExport;
-  return {
-    id: legacy.id,
-    name: legacy.name,
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    createdAt: legacy.createdAt,
-    updatedAt: legacy.updatedAt,
-    formState: formState as ProjectConfig,
-    manifestYaml: legacy.manifestYaml,
-  };
+function toBase(project: SavedProject): BaseSavedProject {
+  return project;
 }
 
-function readFromStorage(): SavedProject[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-
-    const migrated: SavedProject[] = [];
-    let needsMigration = false;
-
-    for (const p of parsed) {
-      if (!p || typeof p.id !== "string" || typeof p.formState !== "object") {
-        continue;
-      }
-
-      if (p.schemaVersion === LEGACY_SCHEMA_VERSION) {
-        needsMigration = true;
-        migrated.push(
-          migrateLegacyProject(
-            p as {
-              id: string;
-              name: string;
-              createdAt: number;
-              updatedAt: number;
-              formState: Record<string, unknown>;
-              manifestYaml: string;
-            },
-          ),
-        );
-      } else if (p.schemaVersion === CURRENT_SCHEMA_VERSION) {
-        const project = p as SavedProject;
-        if (project.formState) {
-          delete (project.formState as Record<string, unknown>).gitHubExport;
-        }
-        migrated.push(project);
-      }
-    }
-
-    if (needsMigration) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-    }
-
-    return migrated;
-  } catch {
-    return [];
-  }
-}
-
-function writeToStorage(projects: SavedProject[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+function fromBase(base: BaseSavedProject): SavedProject {
+  return base as SavedProject;
 }
 
 export function useSavedProjects() {
   const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<SavedProject[]>([]);
 
+  const port: SavedProjectsPersistencePort = getSavedProjectsPersistence();
+
   useEffect(() => {
     setMounted(true);
-    setProjects(readFromStorage());
-  }, []);
+    port.loadProjects().then((result) => {
+      if (result.success) {
+        setProjects(result.value.map(fromBase));
+      }
+    });
+  }, [port]);
 
   const saveProject = useCallback(
     (name: string, formState: ProjectConfig, manifestYaml: string): string => {
@@ -116,10 +52,10 @@ export function useSavedProjects() {
       };
       const updated = [newProject, ...projects];
       setProjects(updated);
-      writeToStorage(updated);
+      port.saveProjects(updated.map(toBase));
       return id;
     },
-    [projects],
+    [projects, port],
   );
 
   const loadProject = useCallback(
@@ -133,9 +69,9 @@ export function useSavedProjects() {
     (id: string): void => {
       const updated = projects.filter((p) => p.id !== id);
       setProjects(updated);
-      writeToStorage(updated);
+      port.saveProjects(updated.map(toBase));
     },
-    [projects],
+    [projects, port],
   );
 
   const renameProject = useCallback(
@@ -144,9 +80,9 @@ export function useSavedProjects() {
         p.id === id ? { ...p, name: newName, updatedAt: Date.now() } : p,
       );
       setProjects(updated);
-      writeToStorage(updated);
+      port.saveProjects(updated.map(toBase));
     },
-    [projects],
+    [projects, port],
   );
 
   const updateProject = useCallback(
@@ -157,9 +93,9 @@ export function useSavedProjects() {
           : p,
       );
       setProjects(updated);
-      writeToStorage(updated);
+      port.saveProjects(updated.map(toBase));
     },
-    [projects],
+    [projects, port],
   );
 
   if (!mounted) {

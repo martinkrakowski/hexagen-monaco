@@ -3,23 +3,11 @@ import {
   parseDomainModelId,
   LEGACY_MODEL_MIGRATION,
 } from "@hexagen/local-llm";
+import { MODEL_PREFERENCE_KEYS } from "@hexagen/shared";
 
-/**
- * localStorage key for remembering the last-used model ID.
- * Stores a DomainModelId enum value (e.g., "qwen-2.5-3b").
- */
-export const LAST_MODEL_KEY = "hexagen:local-llm:last-model";
-
-/** localStorage key for the auto-load flag. */
-export const AUTO_LOAD_KEY = "hexagen:local-llm:auto-load";
-
-/**
- * localStorage key set to "true" after the user successfully enables
- * Local AI for the first time. Persists indefinitely across cancels
- * and cache clears — controls whether the user sees the first-time
- * OptIn screen or the "requires_model" model-picker after a reset.
- */
-export const HAS_ENABLED_KEY = "hexagen:local-llm:has-enabled";
+export const LAST_MODEL_KEY = MODEL_PREFERENCE_KEYS.LAST_MODEL_ID;
+export const AUTO_LOAD_KEY = MODEL_PREFERENCE_KEYS.AUTO_LOAD_ENABLED;
+export const HAS_ENABLED_KEY = MODEL_PREFERENCE_KEYS.HAS_ENABLED_LOCAL_MODELS;
 
 /**
  * Reads LAST_MODEL_KEY, applies any legacy → current id migration

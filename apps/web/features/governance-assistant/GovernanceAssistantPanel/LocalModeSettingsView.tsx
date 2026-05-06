@@ -17,6 +17,7 @@ type LocalModeSettingsViewProps = Pick<
   | "hasModelInCache"
   | "onBackFromSettings"
   | "onSwitchToCloud"
+  | "onResetConfig"
 >;
 
 export function LocalModeSettingsView({
@@ -30,6 +31,7 @@ export function LocalModeSettingsView({
   hasModelInCache,
   onBackFromSettings,
   onSwitchToCloud,
+  onResetConfig,
 }: LocalModeSettingsViewProps) {
   if (
     panelView !== "model-settings" ||
@@ -61,6 +63,7 @@ export function LocalModeSettingsView({
         }
         onSwitchToCloud={onSwitchToCloud}
         requiresModelWarning={showRequiresModel}
+        onResetConfig={onResetConfig}
       />
       <PanelFooter showHint={false} />
     </div>

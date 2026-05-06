@@ -4,11 +4,8 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type { DomainModelId, LLMEngineState } from "@hexagen/local-llm";
 import { DEFAULT_MODEL_ID } from "@hexagen/local-llm";
 
-import {
-  AUTO_LOAD_KEY,
-  HAS_ENABLED_KEY,
-  readAndMigrateLastModelId,
-} from "./storage-keys";
+import { readAndMigrateLastModelId } from "./storage-keys";
+import { getAutoLoadEnabled, getHasEnabledLocalModels } from "@hexagen/shared";
 
 interface UseAutoInitLastModelOptions {
   engineState: LLMEngineState;
@@ -52,14 +49,14 @@ export function useAutoInitLastModel({
     if (hasAttemptedAutoInitRef.current) return;
     if (engineState.status !== "opt_in") return;
 
-    if (localStorage.getItem(AUTO_LOAD_KEY) === "true") {
+    if (getAutoLoadEnabled()) {
       const lastModel = readAndMigrateLastModelId();
       const modelToLoad = lastModel ?? DEFAULT_MODEL_ID;
 
       hasAttemptedAutoInitRef.current = true;
       setEngineState((prev) => ({ ...prev, autoLoading: true }));
       initializeModel(modelToLoad);
-    } else if (localStorage.getItem(HAS_ENABLED_KEY) !== null) {
+    } else if (getHasEnabledLocalModels()) {
       hasAttemptedAutoInitRef.current = true;
       setEngineState((prev) => ({
         ...prev,

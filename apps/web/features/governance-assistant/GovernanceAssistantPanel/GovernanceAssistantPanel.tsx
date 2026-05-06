@@ -63,6 +63,8 @@ export function GovernanceAssistantPanel({
     switchModel,
     deleteCachedModel,
     hasModelInCache,
+    resetLocalAIConfig,
+    returnToModelSettings,
   } = useLocalLLM();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
@@ -257,6 +259,10 @@ export function GovernanceAssistantPanel({
           hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
         }
         onInitModel={initializeModel}
+        onResetConfig={() => {
+          resetLocalAIConfig();
+          returnToModelSettings();
+        }}
       />
     );
   }

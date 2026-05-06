@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { WizardDraft } from "@hexagen/shared";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import { getWizardPersistence } from "@/lib/wire";
+import type { IDBWizardDraftAdapter } from "@/lib/adapters/idb-wizard-draft.adapter";
 
 export function useWizardDraft() {
   const [mounted, setMounted] = useState(false);
@@ -15,6 +16,9 @@ export function useWizardDraft() {
     const load = async () => {
       try {
         const persistence = getWizardPersistence();
+        if (isIDBAdapter(persistence)) {
+          persistence.setProjectId(getActiveProjectId());
+        }
         const result = await persistence.loadDraft();
         if (result.success && result.value) {
           setDraft(result.value);
@@ -74,15 +78,16 @@ export function useWizardDraft() {
 
       try {
         const persistence = getWizardPersistence();
+        if (currentProjectId && isIDBAdapter(persistence)) {
+          persistence.setProjectId(currentProjectId);
+        }
         const result = await persistence.loadDraft();
         if (result.success && result.value) {
-          // Hydration guard: reject stale drafts from previous projects
           if (
             currentProjectId &&
             result.value.sessionId &&
             result.value.sessionId !== currentProjectId
           ) {
-            // Stale draft detected - purge it
             await persistence.clearDraft();
             return null;
           }
@@ -113,4 +118,25 @@ export function useWizardDraft() {
     loadDraft,
     loading,
   };
+}
+
+function isIDBAdapter(adapter: unknown): adapter is IDBWizardDraftAdapter {
+  return (
+    typeof adapter === "object" &&
+    adapter !== null &&
+    "setProjectId" in adapter &&
+    typeof (adapter as IDBWizardDraftAdapter).setProjectId === "function"
+  );
+}
+
+function getActiveProjectId(): string {
+  if (typeof window === "undefined") return "default";
+  try {
+    const raw = localStorage.getItem("hexagen-active-workspace");
+    if (!raw) return "default";
+    const parsed = JSON.parse(raw) as { projectId?: string };
+    return parsed.projectId ?? "default";
+  } catch {
+    return "default";
+  }
 }

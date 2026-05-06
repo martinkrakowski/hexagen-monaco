@@ -39,6 +39,7 @@ export function ModeWrapper({
   onDeleteModel,
   hasModelInCache,
   onInitModel,
+  onResetConfig,
 }: ModeWrapperProps) {
   if (mode === "cloud") {
     return (
@@ -82,6 +83,7 @@ export function ModeWrapper({
       hasModelInCache={hasModelInCache}
       onInitModel={onInitModel}
       panelView={panelView}
+      onResetConfig={onResetConfig}
     />
   );
 }

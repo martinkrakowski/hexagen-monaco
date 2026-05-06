@@ -13,22 +13,23 @@ export * from "./application/use-cases";
 // Re-export infrastructure adapters and constants (if intentionally public)
 export * from "./infrastructure/adapters";
 export * from "./infrastructure/constants";
+export * from "./infrastructure/migration";
 
 // Factory that wires the entire web-driver bounded context
-import { LocalStoragePersistenceAdapter } from "./infrastructure/adapters/local-storage-persistence.adapter";
+import { LocalStorageMonacoAdapter } from "./infrastructure/adapters/local-storage-monaco.adapter";
 
 import { PersistSessionIntentHandler } from "./application/use-cases/persist-session.intent-handler";
 import { ProjectViewProjectionUseCase } from "./application/use-cases/project-view-projection.use-case";
 
 export function createWebUseCaseFactories() {
-  const persistenceAdapter = new LocalStoragePersistenceAdapter();
+  const monacoAdapter = new LocalStorageMonacoAdapter();
 
   return {
     createPersistSessionIntentHandler: () =>
-      new PersistSessionIntentHandler(persistenceAdapter),
+      new PersistSessionIntentHandler(monacoAdapter),
     createProjectViewProjectionUseCase: () =>
       new ProjectViewProjectionUseCase(),
-    persistenceAdapter,
+    monacoAdapter,
   };
 }
 
