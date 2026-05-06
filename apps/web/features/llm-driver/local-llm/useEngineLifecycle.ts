@@ -289,8 +289,6 @@ export function useEngineLifecycle(
       }
       adapter?.dispose();
 
-      localStorage.removeItem(AUTO_LOAD_KEY);
-      localStorage.removeItem(LAST_MODEL_KEY);
       onMessagesClear();
       setEngineState((prev) => ({
         ...prev,

@@ -14,7 +14,6 @@ interface UseAutoInitLastModelOptions {
   engineState: LLMEngineState;
   setEngineState: Dispatch<SetStateAction<LLMEngineState>>;
   initializeModel: (modelId?: DomainModelId) => Promise<void>;
-  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
 }
 
 /**
@@ -22,20 +21,22 @@ interface UseAutoInitLastModelOptions {
  * to "opt_in" (immediately after WebGPU detection resolves). Three
  * mutually-exclusive branches:
  *
- *   1. AUTO_LOAD_KEY=true: user previously completed a successful
- *      load. Restore the last-used model (with legacy-id migration)
- *      and auto-initialize it, BUT only if that model is still in the
- *      IndexedDB cache. If not cached, clear AUTO_LOAD_KEY and route
- *      to "requires_model" so the user picks explicitly — silently
- *      re-downloading a multi-GB model behind a spinner is unacceptable.
+ * 1. AUTO_LOAD_KEY=true: user previously completed a successful
+ * load. Restore the last-used model (with legacy-id migration)
+ * and auto-initialize it unconditionally. If the model is cached
+ * in IndexedDB, it loads from cache (fast). If not cached, it
+ * re-downloads — this is acceptable because the user explicitly
+ * opted in and the cache check (via temp worker + dynamic import)
+ * is unreliable. If init fails, initializeModel clears the keys
+ * and routes to error state.
  *
- *   2. HAS_ENABLED_KEY set but AUTO_LOAD_KEY unset: user opted in but
- *      subsequently cancelled or cleared cache. Route to
- *      "requires_model" so the UI shows the model-selection screen
- *      instead of stranding the user on the opt-in hold spinner.
+ * 2. HAS_ENABLED_KEY set but AUTO_LOAD_KEY unset: user opted in but
+ * subsequently cancelled or cleared cache. Route to
+ * "requires_model" so the UI shows the model-selection screen
+ * instead of stranding the user on the opt-in hold spinner.
  *
- *   3. Neither flag set: first-time user. Route to "requires_model"
- *      (the model-settings view) so they choose a model explicitly.
+ * 3. Neither flag set: first-time user. Route to "requires_model"
+ * (the model-settings view) so they choose a model explicitly.
  *
  * The `hasAttemptedAutoInitRef` guards against the effect re-running
  * when dependencies change. Once we transition, the branch is done.
@@ -44,7 +45,6 @@ export function useAutoInitLastModel({
   engineState,
   setEngineState,
   initializeModel,
-  hasModelInCache,
 }: UseAutoInitLastModelOptions): void {
   const hasAttemptedAutoInitRef = useRef(false);
 
@@ -57,44 +57,8 @@ export function useAutoInitLastModel({
       const modelToLoad = lastModel ?? DEFAULT_MODEL_ID;
 
       hasAttemptedAutoInitRef.current = true;
-
-      const CACHE_TIMEOUT_MS = 10_000; // Increased from 5s to allow for slower IndexedDB
-
-      // Use a sentinel value to distinguish between timeout and "not cached":
-      // 1. undefined = timeout occurred
-      // 2. true/false = cache check completed successfully
-      const timeoutSentinel = Symbol("cache-check-timeout");
-      const cacheCheckWithTimeout = Promise.race([
-        hasModelInCache(modelToLoad)
-          .then((result) => result) // Cache check completed
-          .catch(() => false), // Cache check failed
-        new Promise<symbol>((resolve) =>
-          setTimeout(() => resolve(timeoutSentinel), CACHE_TIMEOUT_MS),
-        ),
-      ]);
-
-      cacheCheckWithTimeout.then((result) => {
-        if (result === timeoutSentinel) {
-          // Timeout occurred — assume cached and attempt init.
-          // If the model truly isn't cached, initializeModel will fail
-          // gracefully and clear the keys then.
-          setEngineState((prev) => ({ ...prev, autoLoading: true }));
-          initializeModel(modelToLoad);
-        } else if (result === true) {
-          // Cache check confirmed model is cached — initialize
-          setEngineState((prev) => ({ ...prev, autoLoading: true }));
-          initializeModel(modelToLoad);
-        } else {
-          // Cache check confirmed model is NOT cached —
-          // route to requires_model and clear AUTO_LOAD_KEY
-          localStorage.removeItem(AUTO_LOAD_KEY);
-          setEngineState((prev) => ({
-            ...prev,
-            status: "requires_model",
-            autoLoading: false,
-          }));
-        }
-      });
+      setEngineState((prev) => ({ ...prev, autoLoading: true }));
+      initializeModel(modelToLoad);
     } else if (localStorage.getItem(HAS_ENABLED_KEY) !== null) {
       hasAttemptedAutoInitRef.current = true;
       setEngineState((prev) => ({
@@ -110,5 +74,5 @@ export function useAutoInitLastModel({
         autoLoading: false,
       }));
     }
-  }, [engineState.status, initializeModel, hasModelInCache, setEngineState]);
+  }, [engineState.status, initializeModel, setEngineState]);
 }
