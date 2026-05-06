@@ -97,6 +97,17 @@ export class EditorWorkspaceMigrationStep implements MigrationStep {
         const sessionId = key.slice(WORKSPACE_KEY_PREFIX.length);
         const workspace = parsed as PersistedEditorWorkspace;
 
+        if (
+          typeof (workspace as { sessionId?: unknown }).sessionId ===
+            "string" &&
+          (workspace as { sessionId: string }).sessionId !== sessionId
+        ) {
+          errors.push(
+            `Key ${key}: sessionId mismatch (key=${sessionId}, payload=${(workspace as { sessionId: string }).sessionId})`,
+          );
+          continue;
+        }
+
         const saveResult = await this.editorWorkspacePersistence.saveWorkspace(
           sessionId,
           workspace,

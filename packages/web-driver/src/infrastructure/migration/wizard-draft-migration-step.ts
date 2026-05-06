@@ -46,6 +46,19 @@ export class WizardDraftMigrationStep implements MigrationStep {
         };
       }
 
+      const readBack = await this.wizardPersistence.loadDraft();
+      if (
+        !readBack.success ||
+        !readBack.value ||
+        readBack.value.id !== draft.id
+      ) {
+        return {
+          success: false,
+          recordsMigrated: 0,
+          errors: ["Verification failed: read-back mismatch from IndexedDB"],
+        };
+      }
+
       localStorage.removeItem(LEGACY_WIZARD_DRAFT_KEY);
       return { success: true, recordsMigrated: 1, errors: [] };
     } catch (e) {

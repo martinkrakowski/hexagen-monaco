@@ -105,7 +105,12 @@ export class SavedProjectsMigrationStep implements MigrationStep {
           continue;
         }
 
-        if (p.schemaVersion === LEGACY_SCHEMA_VERSION) {
+        const schemaVersion =
+          typeof p.schemaVersion === "number"
+            ? p.schemaVersion
+            : LEGACY_SCHEMA_VERSION;
+
+        if (schemaVersion <= LEGACY_SCHEMA_VERSION) {
           migrated.push(
             migrateLegacyProject(
               p as {
@@ -118,11 +123,20 @@ export class SavedProjectsMigrationStep implements MigrationStep {
               },
             ),
           );
-        } else if (p.schemaVersion === CURRENT_SCHEMA_VERSION) {
+        } else if (schemaVersion === CURRENT_SCHEMA_VERSION) {
           const formState = { ...(p.formState as Record<string, unknown>) };
           delete formState.gitHubExport;
           migrated.push({
             ...p,
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            formState: formState as SavedProject["formState"],
+          } as SavedProject);
+        } else {
+          const formState = { ...(p.formState as Record<string, unknown>) };
+          delete formState.gitHubExport;
+          migrated.push({
+            ...p,
+            schemaVersion: CURRENT_SCHEMA_VERSION,
             formState: formState as SavedProject["formState"],
           } as SavedProject);
         }

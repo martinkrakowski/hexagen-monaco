@@ -35,9 +35,13 @@ const ALL_DOMAINS: PersistenceDomain[] = [
 export class PersistenceDomainRegistry implements PersistenceDomainRegistryPort {
   getActiveBackend(domain: PersistenceDomain): "localStorage" | "indexedDB" {
     if (typeof window === "undefined") return DEFAULT_BACKENDS[domain];
-    const flag = localStorage.getItem(`${MIGRATION_FLAG_PREFIX}${domain}`);
-    if (flag === "true") return "indexedDB";
-    return DEFAULT_BACKENDS[domain];
+    try {
+      const flag = localStorage.getItem(`${MIGRATION_FLAG_PREFIX}${domain}`);
+      if (flag === "true") return "indexedDB";
+      return DEFAULT_BACKENDS[domain];
+    } catch {
+      return DEFAULT_BACKENDS[domain];
+    }
   }
 
   async markMigrated(
