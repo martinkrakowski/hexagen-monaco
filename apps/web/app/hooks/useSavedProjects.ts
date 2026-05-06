@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import type {
   SavedProject as BaseSavedProject,
   SavedProjectsPersistencePort,
+  PersistenceError,
 } from "@hexagen/shared";
 import { getSavedProjectsPersistence } from "../lib/wire.client";
 
@@ -25,6 +26,11 @@ function fromBase(base: BaseSavedProject): SavedProject {
 export function useSavedProjects() {
   const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<SavedProject[]>([]);
+  const [persistError, setPersistError] = useState<PersistenceError | null>(
+    null,
+  );
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   const port: SavedProjectsPersistencePort = getSavedProjectsPersistence();
 
@@ -36,6 +42,8 @@ export function useSavedProjects() {
       }
     });
   }, [port]);
+
+  const clearError = useCallback(() => setPersistError(null), []);
 
   const saveProject = useCallback(
     (name: string, formState: ProjectConfig, manifestYaml: string): string => {
@@ -50,12 +58,18 @@ export function useSavedProjects() {
         formState,
         manifestYaml,
       };
-      const updated = [newProject, ...projects];
+      const snapshot = projectsRef.current;
+      const updated = [newProject, ...snapshot];
       setProjects(updated);
-      port.saveProjects(updated.map(toBase));
+      port.saveProjects(updated.map(toBase)).then((result) => {
+        if (!result.success) {
+          setProjects(snapshot);
+          setPersistError(result.error);
+        }
+      });
       return id;
     },
-    [projects, port],
+    [port],
   );
 
   const loadProject = useCallback(
@@ -67,35 +81,53 @@ export function useSavedProjects() {
 
   const deleteProject = useCallback(
     (id: string): void => {
-      const updated = projects.filter((p) => p.id !== id);
+      const snapshot = projectsRef.current;
+      const updated = snapshot.filter((p) => p.id !== id);
       setProjects(updated);
-      port.saveProjects(updated.map(toBase));
+      port.saveProjects(updated.map(toBase)).then((result) => {
+        if (!result.success) {
+          setProjects(snapshot);
+          setPersistError(result.error);
+        }
+      });
     },
-    [projects, port],
+    [port],
   );
 
   const renameProject = useCallback(
     (id: string, newName: string): void => {
-      const updated = projects.map((p) =>
+      const snapshot = projectsRef.current;
+      const updated = snapshot.map((p) =>
         p.id === id ? { ...p, name: newName, updatedAt: Date.now() } : p,
       );
       setProjects(updated);
-      port.saveProjects(updated.map(toBase));
+      port.saveProjects(updated.map(toBase)).then((result) => {
+        if (!result.success) {
+          setProjects(snapshot);
+          setPersistError(result.error);
+        }
+      });
     },
-    [projects, port],
+    [port],
   );
 
   const updateProject = useCallback(
     (id: string, formState: ProjectConfig, manifestYaml: string): void => {
-      const updated = projects.map((p) =>
+      const snapshot = projectsRef.current;
+      const updated = snapshot.map((p) =>
         p.id === id
           ? { ...p, formState, manifestYaml, updatedAt: Date.now() }
           : p,
       );
       setProjects(updated);
-      port.saveProjects(updated.map(toBase));
+      port.saveProjects(updated.map(toBase)).then((result) => {
+        if (!result.success) {
+          setProjects(snapshot);
+          setPersistError(result.error);
+        }
+      });
     },
-    [projects, port],
+    [port],
   );
 
   if (!mounted) {
@@ -106,6 +138,8 @@ export function useSavedProjects() {
       deleteProject: () => {},
       renameProject: () => {},
       updateProject: () => {},
+      persistError: null as PersistenceError | null,
+      clearError: () => {},
     };
   }
 
@@ -116,5 +150,7 @@ export function useSavedProjects() {
     deleteProject,
     renameProject,
     updateProject,
+    persistError,
+    clearError,
   };
 }
