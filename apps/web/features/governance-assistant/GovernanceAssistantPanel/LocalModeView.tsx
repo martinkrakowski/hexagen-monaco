@@ -27,6 +27,7 @@ type LocalModeViewProps = Pick<
   | "onDeleteModel"
   | "hasModelInCache"
   | "panelView"
+  | "onResetConfig"
 >;
 
 export function LocalModeView(props: LocalModeViewProps) {
@@ -71,6 +72,7 @@ export function LocalModeView(props: LocalModeViewProps) {
       hasModelInCache={props.hasModelInCache}
       onBackFromSettings={props.onBackFromSettings}
       onSwitchToCloud={props.onSwitchToCloud}
+      onResetConfig={props.onResetConfig}
     />
   );
 }

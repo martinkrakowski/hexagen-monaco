@@ -1,4 +1,5 @@
 import type { DomainModelId } from "@hexagen/local-llm";
+import { MODEL_PREFERENCE_KEYS } from "@hexagen/shared";
 import type { ModelPreferencesPort } from "../../application/ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../../application/ports/out/model-verification.port";
 
@@ -8,16 +9,7 @@ interface StorageLike {
   removeItem(key: string): void;
 }
 
-const STORAGE_KEYS = {
-  LAST_MODEL_ID: "hexagen:local-llm:last-model",
-  AUTO_LOAD_ENABLED: "hexagen:local-llm:auto-load",
-  HAS_ENABLED_LOCAL_MODELS: "hexagen:local-llm:has-enabled",
-  CLOUD_PROVIDER: "hexagen:manifest-flow:cloud-provider",
-  REMEMBER_API_KEY: "hexagen:manifest-flow:remember-api-key",
-  SKIP_AI_SETUP: "hexagen:manifest-flow:skip-ai-setup",
-  REMEMBER_CHOICE: "hexagen:manifest-flow:remember-choice",
-  MODEL_CACHE_METADATA_PREFIX: "hexagen:local-llm:cache-metadata:",
-} as const;
+const STORAGE_KEYS = MODEL_PREFERENCE_KEYS;
 
 function getDefaultPreferences() {
   return {

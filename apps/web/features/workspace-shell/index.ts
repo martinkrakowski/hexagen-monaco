@@ -16,3 +16,4 @@ export {
   LAYOUT_AUTO_SAVE_ID,
 } from "./resizable-layout/constants";
 export { ProjectWorkspace } from "./ProjectWorkspace";
+export { StorageQuotaToast } from "./StorageQuotaToast";

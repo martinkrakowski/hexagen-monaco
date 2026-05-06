@@ -16,6 +16,7 @@ import type {
   ModelMetadata,
 } from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
+import { resetLocalAIConfig as sharedResetLocalAIConfig } from "@hexagen/shared";
 
 import { useEngineLifecycle } from "./local-llm/useEngineLifecycle";
 import { useModelCache } from "./local-llm/useModelCache";
@@ -51,6 +52,7 @@ interface LocalLLMContextValue {
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   hasAnyCachedModel: () => Promise<boolean>;
   returnToModelSettings: () => void;
+  resetLocalAIConfig: () => string[];
 }
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
@@ -95,6 +97,13 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     onMessagesClear: () => clearMessagesRef.current(),
   });
 
+  const resetConfig = (): string[] => {
+    const clearedKeys = sharedResetLocalAIConfig();
+    clearMessagesRef.current();
+    engine.adapterRef.current?.dispose();
+    return clearedKeys;
+  };
+
   const cache = useModelCache(engine.adapterRef);
 
   useAutoInitLastModel({
@@ -131,6 +140,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       hasModelInCache: cache.hasModelInCache,
       hasAnyCachedModel: cache.hasAnyCachedModel,
       returnToModelSettings: engine.returnToModelSettings,
+      resetLocalAIConfig: resetConfig,
     }),
     [
       engine.engineState,
@@ -198,6 +208,7 @@ export function useLocalLLM(): LocalLLMContextValue {
       hasModelInCache: async () => false,
       hasAnyCachedModel: async () => false,
       returnToModelSettings: () => {},
+      resetLocalAIConfig: () => [],
     };
   }
   return context;

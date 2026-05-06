@@ -98,4 +98,5 @@ export interface ModeWrapperProps {
   onDeleteModel: (modelId: DomainModelId) => Promise<void>;
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   onInitModel: () => void;
+  onResetConfig?: () => void;
 }

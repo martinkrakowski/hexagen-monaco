@@ -63,6 +63,8 @@ export function GovernanceAssistantPanel({
     switchModel,
     deleteCachedModel,
     hasModelInCache,
+    resetLocalAIConfig,
+    returnToModelSettings,
   } = useLocalLLM();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
@@ -163,20 +165,23 @@ export function GovernanceAssistantPanel({
     [activeItem, askQuestion, askStepQuestion],
   );
 
-  // Auto-navigate to settings if needed
-  if (status === "requires_model" && panelView !== "model-settings") {
-    setPanelView("model-settings");
-    autoNavigatedToSettings.current = true;
-  }
+  useEffect(() => {
+    if (status === "requires_model" && panelView !== "model-settings") {
+      setPanelView("model-settings");
+      autoNavigatedToSettings.current = true;
+    }
+  }, [status, panelView]);
 
-  if (
-    panelView === "model-settings" &&
-    status !== "ready" &&
-    status !== "requires_model"
-  ) {
-    setPanelView("main");
-    autoNavigatedToSettings.current = false;
-  }
+  useEffect(() => {
+    if (
+      panelView === "model-settings" &&
+      status !== "ready" &&
+      status !== "requires_model"
+    ) {
+      setPanelView("main");
+      autoNavigatedToSettings.current = false;
+    }
+  }, [panelView, status]);
 
   // Show/hide state calculations
   const showUnavailable =
@@ -257,6 +262,10 @@ export function GovernanceAssistantPanel({
           hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
         }
         onInitModel={initializeModel}
+        onResetConfig={() => {
+          resetLocalAIConfig();
+          returnToModelSettings();
+        }}
       />
     );
   }

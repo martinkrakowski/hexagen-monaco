@@ -1803,6 +1803,7 @@ __metadata:
   dependencies:
     "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/local-llm": "workspace:*"
+    "@hexagen/shared": "workspace:*"
     tsx: "npm:^4.19.2"
   languageName: unknown
   linkType: soft
@@ -15616,6 +15617,7 @@ __metadata:
     file-saver: "npm:^2.0.5"
     framer-motion: "npm:^11.0.0"
     html-to-image: "npm:^1.11.13"
+    idb-keyval: "npm:^6.2.1"
     immer: "npm:^11.1.4"
     js-yaml: "npm:^4.1.0"
     jsdom: "npm:^29.1.1"

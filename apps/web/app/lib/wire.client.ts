@@ -11,7 +11,10 @@ import type {
   CanvasLayoutPersistencePort,
   EditorWorkspacePersistencePort,
   MonacoPersistencePort,
+  SavedProjectsPersistencePort,
   WizardPersistencePort,
+  GenerationResultPersistencePort,
+  PersistenceDomainRegistryPort,
 } from "@hexagen/shared";
 
 import type { LoggerPort } from "@hexagen/shared";
@@ -47,11 +50,27 @@ import {
 } from "@hexagen/layout-engine";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import {
-  LocalStoragePersistenceAdapter,
+  LocalStorageMonacoAdapter,
   LocalStorageCanvasLayoutAdapter,
   ArchitectureGraphProviderAdapter,
   EphemeralSecretVaultAdapter,
+  IDBGenerationResultAdapter,
+  MigrationOrchestrator,
+  PersistenceDomainRegistry,
+  WizardDraftMigrationStep,
+  SavedProjectsMigrationStep,
+  EditorWorkspaceMigrationStep,
 } from "@hexagen/web-driver";
+import { IDBWizardDraftAdapter } from "./adapters/idb-wizard-draft.adapter";
+import { IDBSavedProjectsAdapter } from "./adapters/idb-saved-projects.adapter";
+import { IDBEditorWorkspaceAdapter } from "./adapters/idb-editor-workspace.adapter";
+import { migrateWizardDraftFromLocalStorage } from "./adapters/wizard-draft-migration";
+import type { StorageQuotaMonitor } from "@hexagen/web-driver";
+import { getStorageQuotaMonitor as createStorageQuotaMonitor } from "@hexagen/web-driver";
+import {
+  setHardwareProfiler,
+  type HardwareProfiler,
+} from "@hexagen/model-settings";
 import {
   WebLLMAdapter,
   WebGPUCapabilityAdapter,
@@ -78,23 +97,30 @@ import {
 export const wireDependencies = () => {
   const registry = new Map<string, unknown>();
 
-  // Monaco persistence port → concrete localStorage adapter
-  const localStorageAdapter = new LocalStoragePersistenceAdapter();
+  // Monaco persistence port → dedicated localStorage adapter
+  const monacoAdapter = new LocalStorageMonacoAdapter();
   registry.set(
     PORT_NAMES.MONACO_PERSISTENCE,
-    localStorageAdapter satisfies MonacoPersistencePort,
+    monacoAdapter satisfies MonacoPersistencePort,
   );
 
-  // Wizard persistence port → same localStorage adapter
+  // Wizard persistence port → IDB-backed adapter (project-scoped)
+  const wizardPersistence = new IDBWizardDraftAdapter("default");
   registry.set(
     PORT_NAMES.WIZARD_PERSISTENCE,
-    localStorageAdapter satisfies WizardPersistencePort,
+    wizardPersistence satisfies WizardPersistencePort,
   );
 
-  // Editor workspace persistence port → same localStorage adapter
+  // One-time migration: localStorage → IDB (idempotent, no-op if already done)
+  if (typeof window !== "undefined") {
+    void migrateWizardDraftFromLocalStorage();
+  }
+
+  // Editor workspace persistence port → IDB-backed adapter
+  const editorWorkspaceAdapter = new IDBEditorWorkspaceAdapter();
   registry.set(
     PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
-    localStorageAdapter satisfies EditorWorkspacePersistencePort,
+    editorWorkspaceAdapter satisfies EditorWorkspacePersistencePort,
   );
 
   // Canvas layout persistence port → dedicated adapter
@@ -102,6 +128,20 @@ export const wireDependencies = () => {
   registry.set(
     PORT_NAMES.CANVAS_LAYOUT_PERSISTENCE,
     canvasLayoutAdapter satisfies CanvasLayoutPersistencePort,
+  );
+
+  // Saved projects persistence port → IDB-backed adapter
+  const savedProjectsAdapter = new IDBSavedProjectsAdapter();
+  registry.set(
+    PORT_NAMES.SAVED_PROJECTS_PERSISTENCE,
+    savedProjectsAdapter satisfies SavedProjectsPersistencePort,
+  );
+
+  // Generation result persistence port → IDB adapter
+  const generationResultAdapter = new IDBGenerationResultAdapter();
+  registry.set(
+    PORT_NAMES.GENERATION_RESULT_PERSISTENCE,
+    generationResultAdapter satisfies GenerationResultPersistencePort,
   );
 
   // Logger port → console logger for web app
@@ -167,6 +207,16 @@ export const wireDependencies = () => {
     new BrowserHardwareProfilerAdapter() satisfies HardwareProfilerPort,
   );
 
+  // Wire hardware profiler into model-settings hook (DI injection)
+  if (typeof window !== "undefined") {
+    setHardwareProfiler(
+      () =>
+        registry.get(
+          PORT_NAMES.HARDWARE_PROFILER,
+        ) as unknown as HardwareProfiler,
+    );
+  }
+
   // Chat Persistence → IndexedDB adapter with event subscription
   const chatPersistence = new IDBChatPersistenceAdapter();
   registry.set(
@@ -186,15 +236,49 @@ export const wireDependencies = () => {
           console.error("Failed to purge chat persistence data:", err),
         );
 
+      // Clear generation results
+      void generationResultAdapter
+        .purgeProjectResults(event.payload.projectId)
+        .catch((err) =>
+          console.error("Failed to purge generation results:", err),
+        );
+
       // Clear Zustand thread store
       useGovernanceThreadStore.getState().clearAllThreads();
     },
   );
 
+  // Persistence Domain Registry → singleton
+  const domainRegistry = new PersistenceDomainRegistry();
+  registry.set(
+    PORT_NAMES.PERSISTENCE_DOMAIN_REGISTRY,
+    domainRegistry satisfies PersistenceDomainRegistryPort,
+  );
+
+  // Migration orchestrator → runs pending LS→IDB migrations on boot
+  const wizardPersistenceAdapter = registry.get(
+    PORT_NAMES.WIZARD_PERSISTENCE,
+  ) as WizardPersistencePort;
+  const migrationOrchestrator = new MigrationOrchestrator([
+    new WizardDraftMigrationStep(wizardPersistenceAdapter),
+    new SavedProjectsMigrationStep(savedProjectsAdapter, domainRegistry),
+    new EditorWorkspaceMigrationStep(editorWorkspaceAdapter, domainRegistry),
+  ]);
+  void migrationOrchestrator
+    .runPending()
+    .catch((err) => console.error("Migration orchestrator failed:", err));
+
   // Secret Vault → ephemeral in-memory adapter (browser-side user vault)
   registry.set(
     PORT_NAMES.SECRET_VAULT,
     new EphemeralSecretVaultAdapter() satisfies UserSecretVaultPort,
+  );
+
+  // Storage Quota Monitor → singleton
+  const storageQuotaMonitor = createStorageQuotaMonitor();
+  registry.set(
+    PORT_NAMES.STORAGE_QUOTA_MONITOR,
+    storageQuotaMonitor satisfies StorageQuotaMonitor,
   );
 
   // Projection compiler → canvas rendering pipeline
@@ -299,6 +383,16 @@ export const getCanvasLayoutPersistence = () =>
     PORT_NAMES.CANVAS_LAYOUT_PERSISTENCE,
   );
 
+export const getSavedProjectsPersistence = () =>
+  dependencies.get<SavedProjectsPersistencePort>(
+    PORT_NAMES.SAVED_PROJECTS_PERSISTENCE,
+  );
+
+export const getGenerationResultPersistence = () =>
+  dependencies.get<GenerationResultPersistencePort>(
+    PORT_NAMES.GENERATION_RESULT_PERSISTENCE,
+  );
+
 export const getLocalLLMProvider = () =>
   dependencies.get<LocalLLMProviderPort>(PORT_NAMES.LOCAL_LLM_PROVIDER);
 
@@ -344,6 +438,14 @@ export const getClientManifestGenerationUseCase = () =>
 export const getServerManifestGenerationUseCase = () =>
   dependencies.get<ServerManifestGenerationUseCase>(
     PORT_NAMES.SERVER_MANIFEST_GENERATION,
+  );
+
+export const getStorageQuotaMonitor = () =>
+  dependencies.get<StorageQuotaMonitor>(PORT_NAMES.STORAGE_QUOTA_MONITOR);
+
+export const getPersistenceDomainRegistry = () =>
+  dependencies.get<PersistenceDomainRegistryPort>(
+    PORT_NAMES.PERSISTENCE_DOMAIN_REGISTRY,
   );
 
 /**

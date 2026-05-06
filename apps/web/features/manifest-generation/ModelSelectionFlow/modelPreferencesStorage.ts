@@ -1,22 +1,26 @@
 import type { Result } from "@hexagen/shared";
+import {
+  MODEL_PREFERENCE_KEYS,
+  getAutoLoadEnabled as _getAutoLoadEnabled,
+  getHasEnabledLocalModels as _getHasEnabledLocalModels,
+  getHasEnabledLocalModelsFlag as _getHasEnabledLocalModelsFlag,
+  removeEnginePreferenceKeys as _removeEnginePreferenceKeys,
+  saveEngineInitSuccess as _saveEngineInitSuccess,
+  backfillHasEnabledForMigration as _backfillHasEnabledForMigration,
+} from "@hexagen/shared";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { ModelVerificationCacheAdapter } from "@hexagen/web-driver";
 
-/**
- * Storage keys for model preferences - synchronized with the LocalLLM context
- * to ensure consistent usage across the application
- */
-export const STORAGE_KEYS = {
-  LAST_MODEL_ID: "hexagen:local-llm:last-model",
-  AUTO_LOAD_ENABLED: "hexagen:local-llm:auto-load",
-  HAS_ENABLED_LOCAL_MODELS: "hexagen:local-llm:has-enabled",
-  CLOUD_PROVIDER: "hexagen:manifest-flow:cloud-provider",
-  REMEMBER_API_KEY: "hexagen:manifest-flow:remember-api-key",
-  API_KEY_VAULT_ID: "manifest-gen-api-key",
-  SKIP_AI_SETUP: "hexagen:manifest-flow:skip-ai-setup",
-  REMEMBER_CHOICE: "hexagen:manifest-flow:remember-choice",
-  MODEL_CACHE_METADATA_PREFIX: "hexagen:local-llm:cache-metadata:",
-};
+export { MODEL_PREFERENCE_KEYS };
+
+export const STORAGE_KEYS = MODEL_PREFERENCE_KEYS;
+
+export const getAutoLoadEnabled = _getAutoLoadEnabled;
+export const getHasEnabledLocalModels = _getHasEnabledLocalModels;
+export const getHasEnabledLocalModelsFlag = _getHasEnabledLocalModelsFlag;
+export const removeEnginePreferenceKeys = _removeEnginePreferenceKeys;
+export const saveEngineInitSuccess = _saveEngineInitSuccess;
+export const backfillHasEnabledForMigration = _backfillHasEnabledForMigration;
 
 export interface ModelPreferences {
   hasEnabledLocalModels: boolean;

@@ -4,6 +4,7 @@ import {
   createModelPreferencesAdapter,
   createLocalStorageVerificationAdapter,
 } from "../../src/infrastructure/adapters/model-preferences.adapter";
+import { MODEL_PREFERENCE_KEYS } from "@hexagen/shared";
 
 type DomainModelId =
   | "qwen-coder-3b"
@@ -58,9 +59,9 @@ describe("ModelPreferencesAdapter", () => {
     });
 
     it("should return stored preferences", () => {
-      storage.setItem("hexagen:local-llm:last-model", "qwen-coder-3b");
-      storage.setItem("hexagen:local-llm:auto-load", "true");
-      storage.setItem("hexagen:manifest-flow:skip-ai-setup", "true");
+      storage.setItem(MODEL_PREFERENCE_KEYS.LAST_MODEL_ID, "qwen-coder-3b");
+      storage.setItem(MODEL_PREFERENCE_KEYS.AUTO_LOAD_ENABLED, "true");
+      storage.setItem(MODEL_PREFERENCE_KEYS.SKIP_AI_SETUP, "true");
 
       const adapter = createModelPreferencesAdapter(storage);
       const prefs = adapter.getPreferences();
@@ -77,17 +78,20 @@ describe("ModelPreferencesAdapter", () => {
       adapter.setPreferences({ lastModelId: QWEN_CODER_3B });
 
       assert.strictEqual(
-        storage.getItem("hexagen:local-llm:last-model"),
+        storage.getItem(MODEL_PREFERENCE_KEYS.LAST_MODEL_ID),
         QWEN_CODER_3B,
       );
     });
 
     it("should remove lastModelId when set to null", () => {
-      storage.setItem("hexagen:local-llm:last-model", "qwen-coder-3b");
+      storage.setItem(MODEL_PREFERENCE_KEYS.LAST_MODEL_ID, "qwen-coder-3b");
       const adapter = createModelPreferencesAdapter(storage);
       adapter.setPreferences({ lastModelId: null });
 
-      assert.strictEqual(storage.getItem("hexagen:local-llm:last-model"), null);
+      assert.strictEqual(
+        storage.getItem(MODEL_PREFERENCE_KEYS.LAST_MODEL_ID),
+        null,
+      );
     });
 
     it("should store boolean values correctly", () => {
@@ -98,11 +102,11 @@ describe("ModelPreferencesAdapter", () => {
       });
 
       assert.strictEqual(
-        storage.getItem("hexagen:local-llm:auto-load"),
+        storage.getItem(MODEL_PREFERENCE_KEYS.AUTO_LOAD_ENABLED),
         "true",
       );
       assert.strictEqual(
-        storage.getItem("hexagen:manifest-flow:remember-choice"),
+        storage.getItem(MODEL_PREFERENCE_KEYS.REMEMBER_CHOICE),
         "true",
       );
     });
@@ -125,7 +129,7 @@ describe("LocalStorageVerificationAdapter", () => {
     it("should return true when verified within max age", () => {
       const now = Date.now();
       storage.setItem(
-        `hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`,
+        `${MODEL_PREFERENCE_KEYS.MODEL_CACHE_METADATA_PREFIX}${QWEN_CODER_3B}`,
         JSON.stringify({ verifiedAt: now, downloadCompleted: true }),
       );
 
@@ -136,7 +140,7 @@ describe("LocalStorageVerificationAdapter", () => {
     it("should return false when verification is stale", () => {
       const oldTime = Date.now() - 25 * 60 * 60 * 1000;
       storage.setItem(
-        `hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`,
+        `${MODEL_PREFERENCE_KEYS.MODEL_CACHE_METADATA_PREFIX}${QWEN_CODER_3B}`,
         JSON.stringify({ verifiedAt: oldTime, downloadCompleted: true }),
       );
 
@@ -148,7 +152,7 @@ describe("LocalStorageVerificationAdapter", () => {
   describe("updateModelCacheMetadata", () => {
     it("should update existing metadata", () => {
       storage.setItem(
-        `hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`,
+        `${MODEL_PREFERENCE_KEYS.MODEL_CACHE_METADATA_PREFIX}${QWEN_CODER_3B}`,
         JSON.stringify({ verifiedAt: null, downloadCompleted: false }),
       );
 
@@ -159,7 +163,9 @@ describe("LocalStorageVerificationAdapter", () => {
       });
 
       const stored = JSON.parse(
-        storage.getItem(`hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`)!,
+        storage.getItem(
+          `${MODEL_PREFERENCE_KEYS.MODEL_CACHE_METADATA_PREFIX}${QWEN_CODER_3B}`,
+        )!,
       );
       assert.ok(stored.verifiedAt != null);
       assert.strictEqual(stored.downloadCompleted, true);
@@ -169,7 +175,7 @@ describe("LocalStorageVerificationAdapter", () => {
   describe("clearModelCacheMetadata", () => {
     it("should remove cache metadata", () => {
       storage.setItem(
-        `hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`,
+        `${MODEL_PREFERENCE_KEYS.MODEL_CACHE_METADATA_PREFIX}${QWEN_CODER_3B}`,
         JSON.stringify({ verifiedAt: Date.now(), downloadCompleted: true }),
       );
 
@@ -177,7 +183,9 @@ describe("LocalStorageVerificationAdapter", () => {
       adapter.clearModelCacheMetadata(QWEN_CODER_3B);
 
       assert.strictEqual(
-        storage.getItem(`hexagen:local-llm:cache-metadata:${QWEN_CODER_3B}`),
+        storage.getItem(
+          `${MODEL_PREFERENCE_KEYS.MODEL_CACHE_METADATA_PREFIX}${QWEN_CODER_3B}`,
+        ),
         null,
       );
     });

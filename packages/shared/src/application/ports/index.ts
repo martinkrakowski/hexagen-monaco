@@ -2,5 +2,8 @@
 
 export * from "./canvas-layout-persistence.port.js";
 export * from "./editor-workspace-persistence.port.js";
+export * from "./generation-result-persistence.port.js";
 export * from "./monaco-persistence.port.js";
+export * from "./persistence-domain-registry.port.js";
+export * from "./saved-projects-persistence.port.js";
 export * from "./wizard-persistence.port.js";

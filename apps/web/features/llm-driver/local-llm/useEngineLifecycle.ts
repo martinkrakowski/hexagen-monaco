@@ -15,7 +15,12 @@ import type { Result } from "@hexagen/shared";
 
 import { getModelLifecycle, getWebGPUDetector } from "@/lib/wire";
 
-import { AUTO_LOAD_KEY, HAS_ENABLED_KEY, LAST_MODEL_KEY } from "./storage-keys";
+import {
+  backfillHasEnabledForMigration,
+  getHasEnabledLocalModels,
+  removeEnginePreferenceKeys,
+  saveEngineInitSuccess,
+} from "@hexagen/shared";
 import {
   deriveStatus,
   isNetworkFetchProgress,
@@ -92,15 +97,7 @@ export function useEngineLifecycle(
 
   // Effect: wire adapters + run WebGPU detection on mount.
   useEffect(() => {
-    // Migration: users from before HAS_ENABLED_KEY was introduced
-    // only have AUTO_LOAD_KEY. Backfill HAS_ENABLED_KEY so the
-    // opted-in hold logic works for existing users.
-    if (
-      localStorage.getItem(AUTO_LOAD_KEY) === "true" &&
-      localStorage.getItem(HAS_ENABLED_KEY) === null
-    ) {
-      localStorage.setItem(HAS_ENABLED_KEY, "true");
-    }
+    backfillHasEnabledForMigration();
 
     adapterRef.current = getModelLifecycle() as ModelLifecyclePort &
       SendStructuredRequestPort;
@@ -186,15 +183,8 @@ export function useEngineLifecycle(
           cancelPromise,
         ]);
       } catch {
-        // Cancelled. Always clear AUTO_LOAD_KEY and LAST_MODEL_KEY so
-        // a subsequent page reload does not attempt a silent background
-        // download. HAS_ENABLED_KEY is preserved if set, keeping the
-        // user in "requires_model" instead of dropping them back to the
-        // first-time OptIn screen.
-        const hasPreviouslyEnabled =
-          localStorage.getItem(HAS_ENABLED_KEY) !== null;
-        localStorage.removeItem(AUTO_LOAD_KEY);
-        localStorage.removeItem(LAST_MODEL_KEY);
+        const hasPreviouslyEnabled = getHasEnabledLocalModels();
+        removeEnginePreferenceKeys();
         adapter.dispose();
         cancelInitRef.current = null;
         isInitializingRef.current = false;
@@ -211,9 +201,7 @@ export function useEngineLifecycle(
       cancelInitRef.current = null;
 
       if (!initResult.success) {
-        // On error clear both flags — prevents an auto-fail loop on next mount.
-        localStorage.removeItem(AUTO_LOAD_KEY);
-        localStorage.removeItem(LAST_MODEL_KEY);
+        removeEnginePreferenceKeys();
         setEngineState((prev) => ({
           ...prev,
           status: "error",
@@ -224,12 +212,7 @@ export function useEngineLifecycle(
               : String(initResult.error),
         }));
       } else {
-        localStorage.setItem(AUTO_LOAD_KEY, "true");
-        localStorage.setItem(LAST_MODEL_KEY, targetModelId);
-        // Only set HAS_ENABLED_KEY on first successful enable.
-        if (localStorage.getItem(HAS_ENABLED_KEY) !== "true") {
-          localStorage.setItem(HAS_ENABLED_KEY, "true");
-        }
+        saveEngineInitSuccess(targetModelId);
         setEngineState((prev) => ({
           ...prev,
           status: "ready",
@@ -244,10 +227,7 @@ export function useEngineLifecycle(
   );
 
   const cancelDownload = useCallback(() => {
-    // Always clear both flags on a manual cancel. HAS_ENABLED_KEY is
-    // sufficient to remember the user has previously opted in.
-    localStorage.removeItem(AUTO_LOAD_KEY);
-    localStorage.removeItem(LAST_MODEL_KEY);
+    removeEnginePreferenceKeys();
     if (cancelInitRef.current) {
       cancelInitRef.current();
       cancelInitRef.current = null;
@@ -263,7 +243,7 @@ export function useEngineLifecycle(
   }, []);
 
   const returnToModelSettings = useCallback(() => {
-    const hasPreviouslyEnabled = localStorage.getItem(HAS_ENABLED_KEY) !== null;
+    const hasPreviouslyEnabled = getHasEnabledLocalModels();
     if (isInitializingRef.current || cancelInitRef.current) {
       cancelDownload();
       return;
@@ -313,8 +293,7 @@ export function useEngineLifecycle(
       if (modelId === engineState.loadedModelId) {
         adapter.dispose();
         onMessagesClear();
-        localStorage.removeItem(AUTO_LOAD_KEY);
-        localStorage.removeItem(LAST_MODEL_KEY);
+        removeEnginePreferenceKeys();
         setEngineState((prev) => ({
           ...prev,
           status: "requires_model",

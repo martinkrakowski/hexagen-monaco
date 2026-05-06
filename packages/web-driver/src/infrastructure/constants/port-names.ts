@@ -54,6 +54,10 @@ export const PORT_NAMES = {
   CANVAS_LAYOUT_PERSISTENCE: "CanvasLayoutPersistencePort",
   /** Chat history and conversation storage (IndexedDB) */
   CHAT_PERSISTENCE: "ChatPersistencePort",
+  /** Saved projects persistence (localStorage) */
+  SAVED_PROJECTS_PERSISTENCE: "SavedProjectsPersistencePort",
+  /** Generation results persistence (IndexedDB) */
+  GENERATION_RESULT_PERSISTENCE: "GenerationResultPersistencePort",
 
   // ============================================================================
   // Infrastructure Ports (Logging, Messaging, Buses)
@@ -140,6 +144,14 @@ export const PORT_NAMES = {
   SSE_STREAM: "SSEStreamPort",
   /** Transaction manager for distributed operations */
   TRANSACTION_MANAGER: "TransactionManagerPort",
+
+  // ============================================================================
+  // Storage Monitoring Ports
+  // ============================================================================
+  /** Storage quota monitor for localStorage usage tracking */
+  STORAGE_QUOTA_MONITOR: "StorageQuotaMonitorPort",
+  /** Persistence domain registry for migration tracking */
+  PERSISTENCE_DOMAIN_REGISTRY: "PersistenceDomainRegistryPort",
 } as const;
 
 /**
