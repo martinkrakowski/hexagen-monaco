@@ -3,6 +3,11 @@
 import { useState, useCallback, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { ClientManifestGenerationUseCase } from "@hexagen/manifest-generation";
+import type {
+  ClientManifestGenerationTopologyResult,
+  ClientManifestGenerationAdaptersResult,
+} from "@hexagen/manifest-generation";
+import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 
 export type StagedPhase =
@@ -25,13 +30,16 @@ export interface StageProgress {
 }
 
 export interface UseStagedManifestGenerationReturn {
-  generateManifest: (description: string, options?: {
-    platform?: string;
-    deployment?: string;
-    additionalContext?: string;
-    preferLocal?: boolean;
-    signal?: AbortSignal;
-  }) => Promise<void>;
+  generateManifest: (
+    description: string,
+    options?: {
+      platform?: string;
+      deployment?: string;
+      additionalContext?: string;
+      preferLocal?: boolean;
+      signal?: AbortSignal;
+    },
+  ) => Promise<void>;
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
@@ -63,10 +71,14 @@ function stageToPhase(stage: number): StagedPhase {
 export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [generatedManifest, setGeneratedManifest] = useState<string | null>(null);
+  const [generatedManifest, setGeneratedManifest] = useState<string | null>(
+    null,
+  );
   const [phase, setPhase] = useState<StagedPhase>("idle");
   const [stepDetail, setStepDetail] = useState("");
-  const [stageProgress, setStageProgress] = useState<Record<number, StageProgress>>({});
+  const [stageProgress, setStageProgress] = useState<
+    Record<number, StageProgress>
+  >({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
@@ -106,8 +118,9 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
         // Route based on provider: client-side WebLLM or server cloud
         if (options?.preferLocal) {
           // WebLLM: run client-side use case directly (no HTTP call)
-          const useCase = getClientManifestGenerationUseCase() as unknown as ClientManifestGenerationUseCase;
-          
+          const useCase =
+            getClientManifestGenerationUseCase() as unknown as ClientManifestGenerationUseCase;
+
           // Step 1: Generate topology
           setPhase("stage-0");
           setStepDetail("Analyzing project structure...");
@@ -120,18 +133,16 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             (detail) => setStepDetail(detail),
           );
 
-          if (!(topologyResult as any).ok) {
-            throw new Error(
-              (topologyResult as any).error instanceof Error
-                ? (topologyResult as any).error.message
-                : String((topologyResult as any).error),
-            );
+          if (!topologyResult.ok) {
+            throw new Error(String(topologyResult.error));
           }
 
           // Emit topology completion event
           setPhase("stage-1");
           setStepDetail("Topology generation complete");
-          const topology = (topologyResult as any).topology;
+          const topology = (
+            topologyResult as ClientManifestGenerationTopologyResult
+          ).topology;
 
           // Step 2: Extract adapters (adds adapters[] to each context)
           setPhase("stage-4");
@@ -142,15 +153,13 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             (detail) => setStepDetail(detail),
           );
 
-          if (!(adaptersResult as any).ok) {
-            throw new Error(
-              (adaptersResult as any).error instanceof Error
-                ? (adaptersResult as any).error.message
-                : String((adaptersResult as any).error),
-            );
+          if (!adaptersResult.ok) {
+            throw new Error(String(adaptersResult.error));
           }
 
-          const draft = (adaptersResult as any).draft;
+          const draft = (
+            adaptersResult as ClientManifestGenerationAdaptersResult
+          ).draft;
 
           // Step 3: Render manifest
           setPhase("stage-6");
@@ -161,9 +170,10 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           );
 
           // Success
-          const yaml = (renderResult as any).yaml || "";
+          const yaml = renderResult.yaml || "";
           const adapterCount = draft.boundedContexts.reduce(
-            (sum: number, c: any) => sum + (c.adapters?.length || 0),
+            (sum: number, c: ManifestDraftContext) =>
+              sum + (c.adapters?.length || 0),
             0,
           );
           handleEvent({
@@ -171,7 +181,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             yaml,
             contextCount: draft.boundedContexts.length,
             portCount: draft.boundedContexts.reduce(
-              (sum: number, c: any) =>
+              (sum: number, c: ManifestDraftContext) =>
                 sum + (c.ports?.in?.length || 0) + (c.ports?.out?.length || 0),
               0,
             ),
@@ -201,6 +211,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           const decoder = new TextDecoder();
           let buffer = "";
 
+          // eslint-disable-next-line no-constant-condition -- standard ReadableStream iteration pattern
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -215,7 +226,9 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
                 const event = JSON.parse(line);
                 handleEvent(event);
               } catch {
-                logger.warn("[staged-gen] Failed to parse NDJSON line", { line });
+                logger.warn("[staged-gen] Failed to parse NDJSON line", {
+                  line,
+                });
               }
             }
           }
@@ -235,7 +248,8 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setIsGenerating(false);
           return;
         }
-        const message = error instanceof Error ? error.message : "Unknown error";
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         logger.error(`[staged-gen] Failed: ${message}`);
         setGenerationError(message);
         setPhase("failed");
@@ -247,55 +261,53 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     [],
   );
 
-  const handleEvent = useCallback(
-    (event: Record<string, unknown>) => {
-      const type = event.type as string;
+  const handleEvent = useCallback((event: Record<string, unknown>) => {
+    const type = event.type as string;
 
-      if (type === "stage-start") {
-        const stage = event.stage as number;
-        const label = (event.label as string) || STAGE_LABELS[stage] || `Stage ${stage}`;
-        setPhase(stageToPhase(stage));
-        setStepDetail(`${label}...`);
-        setStageProgress((prev) => ({
-          ...prev,
-          [stage]: { stage, label, chunks: [] },
-        }));
-      } else if (type === "stage-complete") {
-        const stage = event.stage as number;
-        const durationMs = event.durationMs as number;
-        setStageProgress((prev) => ({
-          ...prev,
-          [stage]: { ...prev[stage], durationMs },
-        }));
-      } else if (type === "chunk") {
-        const stage = event.stage as number;
-        const data = event.data as string;
-        setStageProgress((prev) => ({
-          ...prev,
-          [stage]: {
-            ...prev[stage],
-            chunks: [...(prev[stage]?.chunks || []), data],
-          },
-        }));
-      } else if (type === "validation-error") {
-        const errors = event.errors as string[];
-        setValidationErrors(errors);
-      } else if (type === "done") {
-        setGeneratedManifest(event.yaml as string);
-        setContextCount(event.contextCount as number);
-        setPortCount(event.portCount as number);
-        setAdapterCount(event.adapterCount as number);
-        setPhase("complete");
-        setStepDetail("Manifest generation complete");
-        setIsGenerating(false);
-      } else if (type === "error") {
-        setGenerationError(event.message as string);
-        setPhase("failed");
-        setIsGenerating(false);
-      }
-    },
-    [],
-  );
+    if (type === "stage-start") {
+      const stage = event.stage as number;
+      const label =
+        (event.label as string) || STAGE_LABELS[stage] || `Stage ${stage}`;
+      setPhase(stageToPhase(stage));
+      setStepDetail(`${label}...`);
+      setStageProgress((prev) => ({
+        ...prev,
+        [stage]: { stage, label, chunks: [] },
+      }));
+    } else if (type === "stage-complete") {
+      const stage = event.stage as number;
+      const durationMs = event.durationMs as number;
+      setStageProgress((prev) => ({
+        ...prev,
+        [stage]: { ...prev[stage], durationMs },
+      }));
+    } else if (type === "chunk") {
+      const stage = event.stage as number;
+      const data = event.data as string;
+      setStageProgress((prev) => ({
+        ...prev,
+        [stage]: {
+          ...prev[stage],
+          chunks: [...(prev[stage]?.chunks || []), data],
+        },
+      }));
+    } else if (type === "validation-error") {
+      const errors = event.errors as string[];
+      setValidationErrors(errors);
+    } else if (type === "done") {
+      setGeneratedManifest(event.yaml as string);
+      setContextCount(event.contextCount as number);
+      setPortCount(event.portCount as number);
+      setAdapterCount(event.adapterCount as number);
+      setPhase("complete");
+      setStepDetail("Manifest generation complete");
+      setIsGenerating(false);
+    } else if (type === "error") {
+      setGenerationError(event.message as string);
+      setPhase("failed");
+      setIsGenerating(false);
+    }
+  }, []);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();

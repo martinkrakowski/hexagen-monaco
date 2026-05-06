@@ -2,8 +2,10 @@ export type {
   ClientManifestGenerationPort,
   ClientManifestGenerationInput,
   ClientManifestGenerationResult,
-  ClientManifestGenerationWarning,
+  ClientManifestGenerationTopologyResult,
+  ClientManifestGenerationAdaptersResult,
   ClientManifestGenerationAdaptersPhaseResult,
+  ClientManifestGenerationWarning,
   ClientManifestGenerationDeps,
 } from "./client-manifest-generation.port.js";
 export type {
