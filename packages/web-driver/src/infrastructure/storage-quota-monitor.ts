@@ -21,6 +21,8 @@ const SAVED_PROJECTS_KEY = "hexagen-saved-projects";
 const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function computeUsedBytes(): number {
+  if (typeof window === "undefined") return 0;
+
   let total = 0;
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -81,6 +83,8 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
   function trimOldWorkspaceSessions(
     maxAgeMs: number = DEFAULT_MAX_AGE_MS,
   ): number {
+    if (typeof window === "undefined") return 0;
+
     const cutoff = Date.now() - maxAgeMs;
     let trimmed = 0;
     const keysToRemove: string[] = [];
@@ -115,6 +119,8 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
   }
 
   function getLruSavedProjectIds(): string[] {
+    if (typeof window === "undefined") return [];
+
     const raw = localStorage.getItem(SAVED_PROJECTS_KEY);
     if (!raw) return [];
 

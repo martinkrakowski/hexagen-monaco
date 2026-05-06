@@ -10,6 +10,7 @@ export type { LoggerPort } from "./domain/logger-port.js";
 export { MonacoSession } from "./domain/monaco-session.js";
 export type { SessionMetadata } from "./domain/session-metadata.js";
 export type { PersistenceError } from "./domain/persistence-error.js";
+export type { PersistenceDomain } from "./domain/persistence-domain.js";
 export type { SavedProject } from "./domain/saved-project.js";
 export type { GenerationResult } from "./domain/types/generation-result.js";
 // NOTE: ProjectSpecification moved to @hexagen/project-configuration (canonical: ProjectSpec)
@@ -37,6 +38,7 @@ export type {
 } from "./application/ports/wizard-persistence.port.js";
 export type { SavedProjectsPersistencePort } from "./application/ports/saved-projects-persistence.port.js";
 export type { GenerationResultPersistencePort } from "./application/ports/generation-result-persistence.port.js";
+export type { PersistenceDomainRegistryPort } from "./application/ports/persistence-domain-registry.port.js";
 
 // Canvas / wizard exports
 // NOTE: Wizard domain types are now owned by @hexagen/project-configuration

@@ -26,6 +26,8 @@ export class MigrationOrchestrator {
   }
 
   async runPending(): Promise<MigrationResult[]> {
+    if (typeof window === "undefined") return [];
+
     const status = this.getStatus();
     const pending = this.steps.filter(
       (step) => !status.completedSteps.includes(step.id),
@@ -55,6 +57,14 @@ export class MigrationOrchestrator {
   }
 
   getStatus(): MigrationStatus {
+    if (typeof window === "undefined") {
+      return {
+        completedSteps: [],
+        pendingSteps: this.steps.map((s) => s.id),
+        lastRunAt: null,
+      };
+    }
+
     const raw = localStorage.getItem(this.statusKey);
     if (!raw) {
       return {
@@ -91,6 +101,8 @@ export class MigrationOrchestrator {
   }
 
   private markComplete(stepId: string): void {
+    if (typeof window === "undefined") return;
+
     const status = this.getStatus();
     if (!status.completedSteps.includes(stepId)) {
       status.completedSteps.push(stepId);
@@ -99,6 +111,8 @@ export class MigrationOrchestrator {
   }
 
   private updateLastRun(): void {
+    if (typeof window === "undefined") return;
+
     const status = this.getStatus();
     status.lastRunAt = Date.now();
     localStorage.setItem(this.statusKey, JSON.stringify(status));

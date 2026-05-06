@@ -10,6 +10,7 @@ export * from "./logger-port.js";
 export * from "./monaco-session.js";
 export * from "./persisted-canvas-layout.js";
 export * from "./persisted-editor-workspace.js";
+export * from "./persistence-domain.js";
 export * from "./persistence-error.js";
 export * from "./saved-project.js";
 export * from "./session-metadata.js";

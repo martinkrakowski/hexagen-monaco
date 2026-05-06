@@ -150,6 +150,8 @@ export const PORT_NAMES = {
   // ============================================================================
   /** Storage quota monitor for localStorage usage tracking */
   STORAGE_QUOTA_MONITOR: "StorageQuotaMonitorPort",
+  /** Persistence domain registry for migration tracking */
+  PERSISTENCE_DOMAIN_REGISTRY: "PersistenceDomainRegistryPort",
 } as const;
 
 /**

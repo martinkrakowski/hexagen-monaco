@@ -14,6 +14,7 @@ import type {
   SavedProjectsPersistencePort,
   WizardPersistencePort,
   GenerationResultPersistencePort,
+  PersistenceDomainRegistryPort,
 } from "@hexagen/shared";
 
 import type { LoggerPort } from "@hexagen/shared";
@@ -50,18 +51,19 @@ import {
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
 import {
   LocalStorageMonacoAdapter,
-  LocalStorageEditorWorkspaceAdapter,
   LocalStorageCanvasLayoutAdapter,
-  LocalStorageSavedProjectsAdapter,
   ArchitectureGraphProviderAdapter,
   EphemeralSecretVaultAdapter,
   IDBGenerationResultAdapter,
   MigrationOrchestrator,
+  PersistenceDomainRegistry,
   WizardDraftMigrationStep,
   SavedProjectsMigrationStep,
   EditorWorkspaceMigrationStep,
 } from "@hexagen/web-driver";
 import { IDBWizardDraftAdapter } from "./adapters/idb-wizard-draft.adapter";
+import { IDBSavedProjectsAdapter } from "./adapters/idb-saved-projects.adapter";
+import { IDBEditorWorkspaceAdapter } from "./adapters/idb-editor-workspace.adapter";
 import { migrateWizardDraftFromLocalStorage } from "./adapters/wizard-draft-migration";
 import type { StorageQuotaMonitor } from "@hexagen/web-driver";
 import { getStorageQuotaMonitor as createStorageQuotaMonitor } from "@hexagen/web-driver";
@@ -114,10 +116,11 @@ export const wireDependencies = () => {
     void migrateWizardDraftFromLocalStorage();
   }
 
-  // Editor workspace persistence port → dedicated localStorage adapter
+  // Editor workspace persistence port → IDB-backed adapter
+  const editorWorkspaceAdapter = new IDBEditorWorkspaceAdapter();
   registry.set(
     PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
-    new LocalStorageEditorWorkspaceAdapter() satisfies EditorWorkspacePersistencePort,
+    editorWorkspaceAdapter satisfies EditorWorkspacePersistencePort,
   );
 
   // Canvas layout persistence port → dedicated adapter
@@ -127,8 +130,8 @@ export const wireDependencies = () => {
     canvasLayoutAdapter satisfies CanvasLayoutPersistencePort,
   );
 
-  // Saved projects persistence port → dedicated adapter
-  const savedProjectsAdapter = new LocalStorageSavedProjectsAdapter();
+  // Saved projects persistence port → IDB-backed adapter
+  const savedProjectsAdapter = new IDBSavedProjectsAdapter();
   registry.set(
     PORT_NAMES.SAVED_PROJECTS_PERSISTENCE,
     savedProjectsAdapter satisfies SavedProjectsPersistencePort,
@@ -245,14 +248,21 @@ export const wireDependencies = () => {
     },
   );
 
+  // Persistence Domain Registry → singleton
+  const domainRegistry = new PersistenceDomainRegistry();
+  registry.set(
+    PORT_NAMES.PERSISTENCE_DOMAIN_REGISTRY,
+    domainRegistry satisfies PersistenceDomainRegistryPort,
+  );
+
   // Migration orchestrator → runs pending LS→IDB migrations on boot
   const wizardPersistenceAdapter = registry.get(
     PORT_NAMES.WIZARD_PERSISTENCE,
   ) as WizardPersistencePort;
   const migrationOrchestrator = new MigrationOrchestrator([
     new WizardDraftMigrationStep(wizardPersistenceAdapter),
-    new SavedProjectsMigrationStep(savedProjectsAdapter),
-    new EditorWorkspaceMigrationStep(),
+    new SavedProjectsMigrationStep(savedProjectsAdapter, domainRegistry),
+    new EditorWorkspaceMigrationStep(editorWorkspaceAdapter, domainRegistry),
   ]);
   void migrationOrchestrator
     .runPending()
@@ -432,6 +442,11 @@ export const getServerManifestGenerationUseCase = () =>
 
 export const getStorageQuotaMonitor = () =>
   dependencies.get<StorageQuotaMonitor>(PORT_NAMES.STORAGE_QUOTA_MONITOR);
+
+export const getPersistenceDomainRegistry = () =>
+  dependencies.get<PersistenceDomainRegistryPort>(
+    PORT_NAMES.PERSISTENCE_DOMAIN_REGISTRY,
+  );
 
 /**
  * Check if server LLM provider has valid cloud API key configured.

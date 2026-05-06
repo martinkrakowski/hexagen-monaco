@@ -14,6 +14,7 @@ export * from "./application/use-cases";
 export * from "./infrastructure/adapters";
 export * from "./infrastructure/constants";
 export * from "./infrastructure/migration";
+export { PersistenceDomainRegistry } from "./infrastructure/persistence-domain-registry.js";
 
 // Factory that wires the entire web-driver bounded context
 import { LocalStorageMonacoAdapter } from "./infrastructure/adapters/local-storage-monaco.adapter";
