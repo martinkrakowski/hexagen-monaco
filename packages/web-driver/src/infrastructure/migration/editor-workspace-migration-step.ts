@@ -41,7 +41,15 @@ export class EditorWorkspaceMigrationStep implements MigrationStep {
 
       const workspaceKeys = this.getWorkspaceKeys();
       if (workspaceKeys.length === 0) {
-        await this.domainRegistry.markMigrated("editor-workspace");
+        const markResult =
+          await this.domainRegistry.markMigrated("editor-workspace");
+        if (!markResult.success) {
+          return {
+            success: false,
+            recordsMigrated: 0,
+            errors: ["Failed to mark editor-workspace as migrated"],
+          };
+        }
         return { success: true, recordsMigrated: 0, errors: [] };
       }
 
@@ -127,7 +135,15 @@ export class EditorWorkspaceMigrationStep implements MigrationStep {
         localStorage.removeItem(key);
       }
 
-      await this.domainRegistry.markMigrated("editor-workspace");
+      const markResult =
+        await this.domainRegistry.markMigrated("editor-workspace");
+      if (!markResult.success) {
+        return {
+          success: false,
+          recordsMigrated: 0,
+          errors: ["Failed to mark editor-workspace as migrated"],
+        };
+      }
 
       return { success: true, recordsMigrated: migrated.length, errors: [] };
     } catch (e) {

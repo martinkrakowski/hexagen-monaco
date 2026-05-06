@@ -62,7 +62,15 @@ export class SavedProjectsMigrationStep implements MigrationStep {
 
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) {
-        await this.domainRegistry.markMigrated("saved-projects");
+        const markResult =
+          await this.domainRegistry.markMigrated("saved-projects");
+        if (!markResult.success) {
+          return {
+            success: false,
+            recordsMigrated: 0,
+            errors: ["Failed to mark saved-projects as migrated"],
+          };
+        }
         return { success: true, recordsMigrated: 0, errors: [] };
       }
 
@@ -78,7 +86,15 @@ export class SavedProjectsMigrationStep implements MigrationStep {
       }
 
       if (!Array.isArray(parsed)) {
-        await this.domainRegistry.markMigrated("saved-projects");
+        const markResult =
+          await this.domainRegistry.markMigrated("saved-projects");
+        if (!markResult.success) {
+          return {
+            success: false,
+            recordsMigrated: 0,
+            errors: ["Failed to mark saved-projects as migrated"],
+          };
+        }
         return { success: true, recordsMigrated: 0, errors: [] };
       }
 
@@ -132,7 +148,15 @@ export class SavedProjectsMigrationStep implements MigrationStep {
       }
 
       localStorage.removeItem(LS_KEY);
-      await this.domainRegistry.markMigrated("saved-projects");
+      const markResult =
+        await this.domainRegistry.markMigrated("saved-projects");
+      if (!markResult.success) {
+        return {
+          success: false,
+          recordsMigrated: 0,
+          errors: ["Failed to mark saved-projects as migrated"],
+        };
+      }
 
       return {
         success: true,

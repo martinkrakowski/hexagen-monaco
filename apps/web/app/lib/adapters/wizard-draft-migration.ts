@@ -12,7 +12,7 @@ export async function migrateWizardDraftFromLocalStorage(): Promise<boolean> {
   try {
     const draft = JSON.parse(raw) as { id?: string; sessionId?: string };
     const projectId = draft.sessionId ?? draft.id ?? "unknown";
-    await set(`${IDB_DRAFT_PREFIX}${projectId}`, JSON.parse(raw));
+    await set(`${IDB_DRAFT_PREFIX}${projectId}`, draft);
     localStorage.removeItem(LEGACY_LS_KEY);
     return true;
   } catch {

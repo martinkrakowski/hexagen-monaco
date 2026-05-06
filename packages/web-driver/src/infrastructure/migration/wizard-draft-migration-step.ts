@@ -17,6 +17,10 @@ export class WizardDraftMigrationStep implements MigrationStep {
   }
 
   async migrate(): Promise<MigrationResult> {
+    if (typeof window === "undefined") {
+      return { success: true, recordsMigrated: 0, errors: [] };
+    }
+
     const raw = localStorage.getItem(LEGACY_WIZARD_DRAFT_KEY);
     if (!raw) {
       return { success: true, recordsMigrated: 0, errors: [] };
@@ -56,6 +60,8 @@ export class WizardDraftMigrationStep implements MigrationStep {
   }
 
   async verify(): Promise<boolean> {
+    if (typeof window === "undefined") return true;
+
     const legacyExists = localStorage.getItem(LEGACY_WIZARD_DRAFT_KEY) !== null;
     if (legacyExists) return false;
 

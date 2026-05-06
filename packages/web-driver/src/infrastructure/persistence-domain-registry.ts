@@ -80,6 +80,6 @@ export class PersistenceDomainRegistry implements PersistenceDomainRegistryPort 
   }
 
   getAllDomains(): PersistenceDomain[] {
-    return ALL_DOMAINS;
+    return [...ALL_DOMAINS];
   }
 }

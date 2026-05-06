@@ -36,7 +36,8 @@ function createMonitorWithMock(mockStorage: MockLocalStorage) {
   const NEAR_QUOTA_THRESHOLD = 0.8;
   const CRITICAL_QUOTA_THRESHOLD = 0.95;
   const WORKSPACE_KEY_PREFIX = "hexagen-editor-workspace-";
-  const SAVED_PROJECTS_KEY = "hexagen-saved-projects";
+  const SAVED_PROJECTS_LS_KEY = "hexagen-saved-projects";
+  const SAVED_PROJECTS_IDB_KEY = "hexagen:saved-projects";
   const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
   function computeUsedBytes(): number {
@@ -97,7 +98,9 @@ function createMonitorWithMock(mockStorage: MockLocalStorage) {
     },
 
     getLruSavedProjectIds(): string[] {
-      const raw = mockStorage.getItem(SAVED_PROJECTS_KEY);
+      const raw =
+        mockStorage.getItem(SAVED_PROJECTS_IDB_KEY) ??
+        mockStorage.getItem(SAVED_PROJECTS_LS_KEY);
       if (!raw) return [];
       try {
         const parsed = JSON.parse(raw);
@@ -301,6 +304,22 @@ describe("StorageQuotaMonitor", () => {
       const ids = monitor.getLruSavedProjectIds();
 
       assert.deepStrictEqual(ids, ["p1"]);
+    });
+
+    it("prefers IDB key over LS key for saved projects", () => {
+      mockStorage.setItem(
+        "hexagen:saved-projects",
+        JSON.stringify([{ id: "idb-p1", updatedAt: 1000 }]),
+      );
+      mockStorage.setItem(
+        "hexagen-saved-projects",
+        JSON.stringify([{ id: "ls-p1", updatedAt: 2000 }]),
+      );
+
+      const monitor = createMonitorWithMock(mockStorage);
+      const ids = monitor.getLruSavedProjectIds();
+
+      assert.deepStrictEqual(ids, ["idb-p1"]);
     });
   });
 });

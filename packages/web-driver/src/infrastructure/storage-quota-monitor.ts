@@ -17,7 +17,9 @@ const TOTAL_BYTES = 5 * 1024 * 1024;
 const NEAR_QUOTA_THRESHOLD = 0.8;
 const CRITICAL_QUOTA_THRESHOLD = 0.95;
 const WORKSPACE_KEY_PREFIX = "hexagen-editor-workspace-";
-const SAVED_PROJECTS_KEY = "hexagen-saved-projects";
+const IDB_WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
+const SAVED_PROJECTS_LS_KEY = "hexagen-saved-projects";
+const SAVED_PROJECTS_IDB_KEY = "hexagen:saved-projects";
 const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function computeUsedBytes(): number {
@@ -91,7 +93,12 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key === null || !key.startsWith(WORKSPACE_KEY_PREFIX)) continue;
+      if (key === null) continue;
+      if (
+        !key.startsWith(WORKSPACE_KEY_PREFIX) &&
+        !key.startsWith(IDB_WORKSPACE_KEY_PREFIX)
+      )
+        continue;
 
       const raw = localStorage.getItem(key);
       if (raw === null) continue;
@@ -121,7 +128,9 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
   function getLruSavedProjectIds(): string[] {
     if (typeof window === "undefined") return [];
 
-    const raw = localStorage.getItem(SAVED_PROJECTS_KEY);
+    const raw =
+      localStorage.getItem(SAVED_PROJECTS_IDB_KEY) ??
+      localStorage.getItem(SAVED_PROJECTS_LS_KEY);
     if (!raw) return [];
 
     try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { HardDrive, Trash2 } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import {
@@ -48,8 +48,13 @@ export function StorageQuotaToast() {
     [deleteProject],
   );
 
+  useEffect(() => {
+    if (!isNearQuota && dismissed) {
+      setDismissed(false);
+    }
+  }, [isNearQuota, dismissed]);
+
   if (!isNearQuota) {
-    if (dismissed) setDismissed(false);
     return null;
   }
 
