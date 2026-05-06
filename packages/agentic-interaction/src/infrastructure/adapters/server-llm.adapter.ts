@@ -12,6 +12,15 @@ export class ServerLLMAdapter implements LLMProviderPort {
     private readonly defaultModel: string = "gpt-4o-mini",
   ) {}
 
+  /**
+   * Check if an API key is configured.
+   * Used for synchronous client-side gating before async operations.
+   * @returns true if apiKey is non-empty; false otherwise
+   */
+  hasAccessKey(): boolean {
+    return !!this.apiKey && this.apiKey.trim().length > 0;
+  }
+
   async complete(
     request: LLMCompletionRequest,
   ): Promise<import("@hexagen/shared").Result<LLMCompletionResponse>> {

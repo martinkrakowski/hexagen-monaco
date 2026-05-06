@@ -1,15 +1,12 @@
-/**
- * Welcome screen composition root for manifest generation.
- * Orchestrates sub-components and state synchronization.
- */
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
-import { useClientManifestGeneration } from "../useClientManifestGeneration";
+import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { assessModelCapability } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
+import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
 import { EntryPointsSection } from "./EntryPointsSection";
@@ -24,6 +21,12 @@ import { ModelSelectionView } from "./ModelSelectionView";
 import { WelcomeScreenLayout } from "./WelcomeScreenLayout";
 import { useWelcomeScreenForm } from "./hooks/useWelcomeScreenForm";
 import type { WelcomeScreenProps } from "./types";
+import {
+  getCapabilities,
+  onCapabilityCacheInvalidated,
+} from "@/lib/manifest-generation";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire.client";
+import type { CapabilitiesResponse } from "../types/capabilities";
 
 export function WelcomeScreen({
   onUseManifest,
@@ -37,87 +40,106 @@ export function WelcomeScreen({
   const [rememberChoice, setRememberChoice] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const rememberChoiceRef = useRef(false);
-  const clientGenAbortRef = useRef<AbortController | null>(null);
+
+  /**
+   * Tier 1 (Synchronous): Check if server has env-var API key configured.
+   * This fires immediately at component init without roundtrip.
+   */
+  const hasServerApiKey = hasServerLLMAccessKey();
+
+  /**
+   * Tier 2 (Asynchronous): Probe server for full capability picture.
+   * Always runs to discover BYOK configuration.
+   * Resolves BYOK tier for each provider and produces canGenerate aggregate.
+   */
+  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(
+    null,
+  );
+
+  /**
+   * Tier 3 (Synchronous): Check if browser supports WebLLM (local generation).
+   * Polls WebGPU capability and hardware constraints.
+   */
+  const gpuDetection = useWebGPUDetection();
+  const hasLocalLLM = gpuDetection.isWebGPUSupported && gpuDetection.isHardwareAdequate;
+
+  // Probe capabilities on mount and when cache is invalidated.
+  // Always probe for BYOK tier (don't skip based on Tier 1).
+  // Tier 1 is a fast-pass (button enabled immediately), not a prerequisite.
+  useEffect(() => {
+    const probeCapabilities = async () => {
+      try {
+        const result = await getCapabilities();
+        setCapabilities(result);
+      } catch {
+        // Fail open if probe fails AND Tier 1 passes (env key exists).
+        // Fail closed if probe fails AND Tier 1 fails (no env key, no BYOK either).
+        setCapabilities({ capabilities: [], canGenerate: hasServerApiKey });
+      }
+    };
+
+    probeCapabilities();
+
+    // Listen for cache invalidation (e.g., when user adds BYOK key)
+    const unsubscribe = onCapabilityCacheInvalidated(() => {
+      probeCapabilities();
+    });
+
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     rememberChoiceRef.current = rememberChoice;
   }, [rememberChoice]);
 
   const [flowState, actions] = useWelcomeFlowState(llmContext);
-  const clientGen = useClientManifestGeneration(llmContext);
+  const stagedGen = useStagedManifestGeneration();
 
   useEffect(() => {
     onGeneratingStateChange?.(flowState.state === "generating");
   }, [flowState.state, onGeneratingStateChange]);
 
-  const generateManifestRef = useRef(clientGen.generateManifest);
+  const generateRef = useRef(stagedGen.generateManifest);
   useEffect(() => {
-    generateManifestRef.current = clientGen.generateManifest;
-  }, [clientGen.generateManifest]);
+    generateRef.current = stagedGen.generateManifest;
+  }, [stagedGen.generateManifest]);
+
+  // Compute provider availability early (before useEffect that uses it)
+  const hasCloudKeys = hasServerApiKey || (capabilities?.canGenerate ?? false);
 
   useEffect(() => {
     if (flowState.state !== "generating") return;
-    const controller = new AbortController();
-    clientGenAbortRef.current = controller;
-    generateManifestRef.current(
-      formState.description,
-      clientGenAbortRef.current?.signal,
-      formState.maxContexts,
-    );
-    return () => {
-      controller.abort();
-      clientGenAbortRef.current = null;
-    };
-  }, [flowState.state, formState.description, formState.maxContexts]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
-    if (clientGen.generationError) {
-      actions.setError(clientGen.generationError);
-    }
-  }, [clientGen.generationError, flowState.state, actions]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
-    if (clientGen.generatedManifest) {
-      actions.saveGenerationResult(clientGen.generatedManifest);
-    }
-  }, [clientGen.generatedManifest, flowState.state, actions]);
-
-  useEffect(() => {
-    if (
-      clientGen.phase === "clarification_needed" &&
-      flowState.state === "generating" &&
-      clientGen.clarificationTriggers.length > 0
-    ) {
-      actions.setClarificationNeeded(clientGen.clarificationTriggers);
-    }
+    generateRef.current(formState.description, {
+      platform: formState.platform,
+      deployment: formState.deployment,
+      signal: undefined,
+      // If no cloud keys but WebLLM available, use local generation
+      preferLocal: !hasCloudKeys && hasLocalLLM,
+    });
   }, [
-    clientGen.phase,
-    clientGen.clarificationTriggers,
     flowState.state,
-    actions,
+    formState.description,
+    formState.platform,
+    formState.deployment,
+    hasCloudKeys,
+    hasLocalLLM,
   ]);
 
-  const confirmRef = useRef(clientGen.confirmTopologyAndContinue);
   useEffect(() => {
-    confirmRef.current = clientGen.confirmTopologyAndContinue;
-  }, [clientGen.confirmTopologyAndContinue]);
-
-  const confirmAndContinueRef = useRef(actions.confirmAndContinue);
-  useEffect(() => {
-    confirmAndContinueRef.current = actions.confirmAndContinue;
-  }, [actions.confirmAndContinue]);
-
-  useEffect(() => {
-    if (
-      flowState.state === "generating" &&
-      clientGen.phase === "clarification_needed" &&
-      clientGen.partialTopology !== null
-    ) {
-      confirmRef.current(clientGenAbortRef.current?.signal);
+    if (flowState.state !== "generating") return;
+    if (stagedGen.generationError) {
+      // Don't transition to error state modal.
+      // Keep error inline in welcome form for better UX.
+      // Error will be displayed in the form instead.
     }
-  }, [flowState.state, clientGen.phase, clientGen.partialTopology]);
+  }, [stagedGen.generationError, flowState.state, actions]);
+
+  useEffect(() => {
+    if (flowState.state !== "generating") return;
+    if (stagedGen.generatedManifest) {
+      actions.saveGenerationResult(stagedGen.generatedManifest);
+    }
+  }, [stagedGen.generatedManifest, flowState.state, actions]);
 
   const loadedModelId = llmContext.engineState.loadedModelId;
   const capability = assessModelCapability(loadedModelId, overrideModelCheck);
@@ -129,8 +151,23 @@ export function WelcomeScreen({
     }
   }, [capability]);
 
+  // Gate on both model capability AND LLM provider availability.
+  // THREE-TIER GATE: button enabled if ANY tier has keys/capability
+  // Tier 1 (sync): env key → enabled immediately (fast-pass, don't wait)
+  // Tier 2 (async): BYOK configured → enabled after probe completes
+  // Tier 3 (sync): WebLLM available → enabled immediately (local fallback)
+  // If all tiers missing, button disabled with helpful tooltip
+  const hasAnyProvider = hasCloudKeys || hasLocalLLM;
   const canGenerate =
-    formHandlers.isValid && flowState.state === "idle" && manifestCapable;
+    formHandlers.isValid &&
+    flowState.state === "idle" &&
+    manifestCapable &&
+    hasAnyProvider;
+
+  // Tooltip messaging based on which providers are unavailable
+  const disabledTooltip = !hasAnyProvider
+    ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
+    : undefined;
 
   const handleGenerate = () => {
     if (!canGenerate) return;
@@ -146,16 +183,8 @@ export function WelcomeScreen({
   };
 
   const handleRetryOrRegenerate = () => {
-    if (clientGenAbortRef.current) {
-      clientGenAbortRef.current.abort();
-      clientGenAbortRef.current = null;
-    }
-    clientGen.reset();
+    stagedGen.reset();
     actions.regenerateManifest();
-  };
-
-  const handleConfirmAndContinue = () => {
-    actions.confirmAndContinue();
   };
 
   if (
@@ -168,7 +197,7 @@ export function WelcomeScreen({
         flowState={flowState}
         actions={actions}
         onUseManifest={onUseManifest}
-        onConfirmAndContinue={handleConfirmAndContinue}
+        onConfirmAndContinue={handleRetryOrRegenerate}
         onRegenerate={handleRetryOrRegenerate}
         onRetryFromError={handleRetryOrRegenerate}
       />
@@ -195,6 +224,7 @@ export function WelcomeScreen({
   }
 
   const isGenerating = flowState.state === "generating";
+  const hasError = stagedGen.generationError !== null;
 
   return (
     <WelcomeScreenLayout>
@@ -212,11 +242,58 @@ export function WelcomeScreen({
         disabled={isGenerating}
       />
 
+      {hasError && (
+        <div className="p-4 bg-destructive/10 border border-destructive rounded-md space-y-3">
+          <div className="flex items-start gap-3">
+            <svg
+              className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <div className="flex-1">
+              <h3 className="font-semibold text-destructive text-sm">
+                Generation Failed
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                {stagedGen.generationError}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => handleRetryOrRegenerate()}
+              className="text-sm font-medium px-3 py-1 text-destructive hover:bg-destructive/10 rounded transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => {
+                stagedGen.reset();
+                formHandlers.reset();
+              }}
+              className="text-sm font-medium px-3 py-1 text-muted-foreground hover:bg-muted rounded transition-colors"
+            >
+              Clear & Start Over
+            </button>
+          </div>
+        </div>
+      )}
+
       <ActionBar
-        canGenerate={canGenerate}
+        canGenerate={canGenerate && !hasError}
         isGenerating={isGenerating}
         onGenerate={handleGenerate}
-        onCancel={() => actions.transitionTo("idle")}
+        onCancel={() => {
+          stagedGen.reset();
+          actions.transitionTo("idle");
+        }}
+        disabledTooltip={disabledTooltip}
       />
 
       <ExampleCardsSection
@@ -255,8 +332,9 @@ export function WelcomeScreen({
 
       {isGenerating && (
         <ThinkingBlock
-          phase={clientGen.phase}
-          stepDetail={clientGen.stepDetail}
+          phase={stagedGen.phase}
+          stepDetail={stagedGen.stepDetail}
+          stageProgress={stagedGen.stageProgress}
         />
       )}
 

@@ -2,11 +2,12 @@ import { JSDOM } from "jsdom";
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", { url: "http://localhost/" });
 global.window = dom.window as unknown as Window & typeof globalThis;
 global.document = dom.window.document as unknown as Document;
+const store: Record<string, string> = {};
 global.localStorage = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
-  clear: () => {},
+  getItem: (key: string) => store[key] ?? null,
+  setItem: (key: string, value: string) => { store[key] = value; },
+  removeItem: (key: string) => { delete store[key]; },
+  clear: () => { for (const k of Object.keys(store)) delete store[k]; },
   length: 0,
   key: () => null,
 } as unknown as Storage;
@@ -70,7 +71,7 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
     );
 
     const testManifest = "boundedContexts: []\n";
-    
+
     await act(async () => {
       await result.current.handleWelcomeManifestGenerated(testManifest);
     });
@@ -87,7 +88,7 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
     await waitFor(() => {
       assert.strictEqual(mockForm.reset.mock.callCount(), 1);
     });
-    
+
     // reset should have been called with the parsed manifest values
     const resetArgs = mockForm.reset.mock.calls[0].arguments[0];
     assert.deepStrictEqual(resetArgs.boundedContexts, []);
@@ -130,13 +131,13 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
     );
 
     const testManifest = "boundedContexts: []\n";
-    
+
     await act(async () => {
       await result.current.handleWelcomeManifestGenerated(testManifest);
     });
 
     assert.strictEqual(mockUi.openDialog.mock.callCount(), 0); // shouldn't open new-project
-    
+
     await waitFor(() => {
       assert.strictEqual(mockForm.reset.mock.callCount(), 1);
     });
@@ -146,5 +147,61 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
     assert.strictEqual(mockUi.closeDialog.mock.callCount(), 1);
     assert.strictEqual(mockUi.setStep.mock.callCount(), 1);
     assert.deepStrictEqual(mockUi.setStep.mock.calls[0].arguments, [0]);
+  });
+
+  it("should persist project when AI generation completes in genesis mode", async () => {
+    for (const k of Object.keys(store)) delete store[k];
+
+    const mockForm = {
+      getValues: mock.fn(() => emptyFormValues),
+      reset: mock.fn(),
+      trigger: mock.fn(async () => true),
+    } as unknown as UseFormReturn<ProjectConfig>;
+
+    const mockUi = {
+      currentStepIndex: 0,
+      openDialog: mock.fn(),
+      closeDialog: mock.fn(),
+      setStep: mock.fn(),
+      enterEditMode: mock.fn(),
+      enterGenesisMode: mock.fn(),
+    } as unknown as UseWorkspaceShellUiReturn;
+
+    const mockEditor = {
+      setSessionId: mock.fn(),
+      clearSession: mock.fn(),
+      setActiveWorkspace: mock.fn(),
+      clearActiveWorkspace: mock.fn(),
+    } as unknown as Pick<UseEditorSessionReturn, "setSessionId" | "clearSession" | "setActiveWorkspace" | "clearActiveWorkspace">;
+
+    const { result } = renderHook(() =>
+      useProjectLifecycle({
+        form: mockForm,
+        ui: mockUi,
+        uiState: { kind: "genesis" },
+        editor: mockEditor,
+        totalSteps: 4,
+      })
+    );
+
+    const testManifest = "system: verdant-sentinel\nboundedContexts: []\n";
+
+    await act(async () => {
+      await result.current.handleWelcomeManifestGenerated(testManifest);
+    });
+
+    await waitFor(() => {
+      assert.strictEqual(mockForm.reset.mock.callCount(), 1);
+    });
+
+    const stored = JSON.parse(store["hexagen-saved-projects"] ?? "[]");
+    assert.strictEqual(stored.length, 1);
+    assert.strictEqual(stored[0].name, "Verdant Sentinel");
+    assert.ok(stored[0].manifestYaml.includes("verdant-sentinel"));
+
+    assert.strictEqual(mockEditor.setActiveWorkspace.mock.callCount(), 1);
+    const ws = mockEditor.setActiveWorkspace.mock.calls[0].arguments[0];
+    assert.strictEqual(ws.name, "Verdant Sentinel");
+    assert.strictEqual(ws.isDirty, false);
   });
 });

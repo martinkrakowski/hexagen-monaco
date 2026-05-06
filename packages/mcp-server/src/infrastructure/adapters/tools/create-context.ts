@@ -9,7 +9,7 @@ export const createContextTool: ToolDefinition = {
       name: { type: "string" },
       type: {
         type: "string",
-        enum: ["core", "supporting", "driver", "shared-kernel"],
+        enum: ["core", "supporting", "generic", "shared-kernel"],
       },
       description: { type: "string" },
       dry_run: { type: "boolean" },
@@ -24,7 +24,7 @@ export const createContextTool: ToolDefinition = {
         type: String(a.type ?? "core") as
           | "core"
           | "supporting"
-          | "driver"
+          | "generic"
           | "shared-kernel",
         description: a.description as string | undefined,
         dry_run: (a.dry_run as boolean | undefined) ?? false,

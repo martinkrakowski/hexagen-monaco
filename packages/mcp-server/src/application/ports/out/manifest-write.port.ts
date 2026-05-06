@@ -7,7 +7,7 @@ export interface AddDependencyCommand {
 
 export interface RegisterBoundedContextCommand {
   name: string;
-  type?: "core" | "supporting" | "driver" | "shared-kernel";
+  type?: "core" | "supporting" | "generic" | "shared-kernel";
   description?: string;
 }
 

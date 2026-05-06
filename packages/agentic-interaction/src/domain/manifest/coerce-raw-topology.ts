@@ -20,7 +20,7 @@ export interface RawContext {
 export type BoundedContextType =
   | "core"
   | "supporting"
-  | "driver"
+  | "generic"
   | "shared-kernel";
 
 function toKebabCase(input: string): string {
@@ -47,7 +47,7 @@ export function coerceContextType(type: string): BoundedContextType {
   const validTypes: BoundedContextType[] = [
     "core",
     "supporting",
-    "driver",
+    "generic",
     "shared-kernel",
   ];
   const trimmed = (type ?? "").trim().toLowerCase();

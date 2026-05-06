@@ -37,6 +37,25 @@ export {
   createGeneratedManifest,
 } from "./domain/value-objects/index.js";
 export type {
+  NormalizedPrompt,
+  DomainAnalysis,
+  ClassifiedContext,
+  RejectedContext,
+  UncertainContext,
+  ClassificationResult,
+  InboundPortType,
+  OutboundPortType,
+  PortDefinition,
+  ContextPorts,
+  PortMap,
+  AdapterBinding,
+  ContextAdapters,
+  AdapterBindings,
+  AssembledManifest,
+  ValidationReport,
+  PipelineState,
+} from "./domain/value-objects/index.js";
+export type {
   CloudProviderEndpoint,
   ProviderFallbackChain,
   ResolvedProvider,
@@ -72,6 +91,15 @@ export {
   type HolisticManifestRepairRequest,
   type HolisticManifestRepairResponse,
 } from "./application/use-cases/index.js";
+export { ExecutePromptNormalizationUseCase } from "./application/use-cases/staged-generation/execute-prompt-normalization.use-case.js";
+export { ExecuteDomainExtractionUseCase } from "./application/use-cases/staged-generation/execute-domain-extraction.use-case.js";
+export { ExecuteContextClassificationUseCase } from "./application/use-cases/staged-generation/execute-context-classification.use-case.js";
+export { ExecutePortMappingUseCase } from "./application/use-cases/staged-generation/execute-port-mapping.use-case.js";
+export { ExecuteAdapterAssignmentUseCase } from "./application/use-cases/staged-generation/execute-adapter-assignment.use-case.js";
+export { ExecuteManifestAssemblyUseCase } from "./application/use-cases/staged-generation/execute-manifest-assembly.use-case.js";
+export { ExecuteValidationReviewUseCase } from "./application/use-cases/staged-generation/execute-validation-review.use-case.js";
+export { ExecuteStagedGenerationUseCase } from "./application/use-cases/staged-generation/execute-staged-generation.use-case.js";
+export type { StagedGenerationCallbacks } from "./application/use-cases/staged-generation/execute-staged-generation.use-case.js";
 export {
   serializeProjectContext,
   buildContextForLLM,
@@ -103,26 +131,37 @@ export {
 } from "./infrastructure/adapters/llm-provider-selector.adapter.js";
 export { EnvironmentSecretVaultAdapter } from "./infrastructure/adapters/environment-secret-vault.adapter.js";
 
-// Phase1: Manifest YAML extractor exports (from domain)
+// Manifest YAML extractor exports (from domain)
 export {
   extractManifestYaml,
   generateSuggestions,
   detectWarnings,
 } from "./domain/index.js";
 
-// Phase2: Prompt exports (from domain)
+// Staged pipeline prompt exports (from domain)
 export {
-  WORKSPACE_SYSTEM_PROMPT,
-  compileWorkspacePrompt,
-  CONTEXT_LIST_SYSTEM_PROMPT,
-  compileContextListPrompt,
-  PORTS_LIST_SYSTEM_PROMPT,
-  compilePortsPrompt,
-  ADAPTERS_LIST_SYSTEM_PROMPT,
-  compileAdaptersPrompt,
-  RETRY_PROMPTS,
+STAGE0_NORMALIZATION_SYSTEM_PROMPT,
+compileStage0Prompt,
+STAGE1_DOMAIN_SYSTEM_PROMPT,
+compileStage1Prompt,
+STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
+compileStage2Prompt,
+STAGE3_PORTS_SYSTEM_PROMPT,
+compileStage3Prompt,
+STAGE4_ADAPTERS_SYSTEM_PROMPT,
+compileStage4Prompt,
+STAGE6_VALIDATION_SYSTEM_PROMPT,
+compileStage6Prompt,
+RETRY_PROMPTS,
+MAX_RETRY_ATTEMPTS,
+CONTEXT_LIST_SYSTEM_PROMPT,
+compileContextListPrompt,
+PORTS_LIST_SYSTEM_PROMPT,
+compilePortsPrompt,
 } from "./domain/index.js";
-export type { PromptVariables } from "./domain/index.js";
+export type { PromptVariables, RetryResult } from "./domain/index.js";
+
+// Topology/adapters prompt exports (from domain)
 export {
   TOPOLOGY_SYSTEM_PROMPT,
   compileTopologyUserPrompt,
@@ -134,7 +173,7 @@ export {
 } from "./domain/index.js";
 export type { AdapterPromptVariables } from "./domain/index.js";
 
-// Phase3: Manifest draft pipeline exports (from domain)
+// Manifest draft pipeline exports (from domain)
 export {
   ManifestDraftSchema,
   ManifestTopologyDraftSchema,

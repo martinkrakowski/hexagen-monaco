@@ -5,7 +5,7 @@ import yaml from "js-yaml";
 export interface ManifestDocument {
   bounded_contexts?: Array<{
     name: string;
-    type?: "core" | "supporting" | "driver" | "shared-kernel";
+    type?: "core" | "supporting" | "generic" | "shared-kernel";
     depends_on?: string[];
     [key: string]: unknown;
   }>;

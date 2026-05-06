@@ -107,8 +107,19 @@ export function useEngineLifecycle(
     webgpuRef.current = getWebGPUDetector();
 
     if (adapterRef.current && webgpuRef.current) {
-      webgpuRef.current
-        .detect()
+      const DETECT_TIMEOUT_MS = 10_000;
+
+      const detectWithTimeout = Promise.race([
+        webgpuRef.current.detect(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("webgpu-detect-timeout")),
+            DETECT_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+
+      detectWithTimeout
         .then((result: Result<{ supported: boolean }>) => {
           const webgpuSupported =
             result.success && (result.value?.supported ?? false);
@@ -278,8 +289,6 @@ export function useEngineLifecycle(
       }
       adapter?.dispose();
 
-      localStorage.removeItem(AUTO_LOAD_KEY);
-      localStorage.removeItem(LAST_MODEL_KEY);
       onMessagesClear();
       setEngineState((prev) => ({
         ...prev,

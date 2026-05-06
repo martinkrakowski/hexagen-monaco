@@ -13,7 +13,6 @@ import {
   draftToManifest,
   renderDraft,
   parseJSON,
-  extractArrayFromWrapper,
   normalizePortName,
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
@@ -72,9 +71,9 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
       let inPorts: Port[] = [];
       let outPorts: Port[] = [];
 
-      if (portsResult.ok) {
+      if (portsResult.ok && portsResult.ports) {
         try {
-          inPorts = portsResult.ports.in.map((p: unknown) => {
+          inPorts = (portsResult.ports.in ?? []).map((p: unknown) => {
             const normalized = normalizePort(p, "use-case");
             return {
               ...normalized,
@@ -86,7 +85,7 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
         }
 
         try {
-          outPorts = portsResult.ports.out.map((p: unknown) => {
+          outPorts = (portsResult.ports.out ?? []).map((p: unknown) => {
             const normalized = normalizePort(p, "infrastructure");
             return {
               ...normalized,
@@ -141,8 +140,8 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
       onStepDetail?.(`Extracting adapters for ${ctx.name}...`);
 
       const allPortNames = [
-        ...ctx.ports.in.map((p: { name: string }) => p.name),
-        ...ctx.ports.out.map((p: { name: string }) => p.name),
+        ...(ctx.ports?.in ?? []).map((p: { name: string }) => p.name),
+        ...(ctx.ports?.out ?? []).map((p: { name: string }) => p.name),
       ];
 
       let adapters: ManifestDraftContext["adapters"] = [];
@@ -175,43 +174,73 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
               continue;
             }
 
-            const parsed = parseJSON<ManifestDraftContext["adapters"]>(content);
-            if (!parsed.ok) {
-              if (attempt === MAX_RETRIES) break;
-              continue;
-            }
+            // Try parsing as full JSON first (array or object wrapper)
+            let extracted: unknown[] = [];
+            const fullParsed = parseJSON<unknown>(content);
 
-            let extracted: unknown[] | null = null;
-
-            if (Array.isArray(parsed.data)) {
-              extracted = parsed.data;
-            } else if (
-              typeof parsed.data === "object" &&
-              parsed.data !== null
-            ) {
-              extracted = extractArrayFromWrapper(parsed.data, [
-                "adapters",
-                "data",
-                "items",
-                "result",
-              ]);
-              if (extracted.length === 0) {
+            if (fullParsed.ok) {
+              const data = fullParsed.data;
+              if (Array.isArray(data)) {
+                extracted = data;
+              } else if (typeof data === "object" && data !== null) {
+                const obj = data as Record<string, unknown>;
+                for (const key of [
+                  "adapters",
+                  "data",
+                  "items",
+                  "results",
+                  "list",
+                ]) {
+                  if (Array.isArray(obj[key])) {
+                    extracted = obj[key] as unknown[];
+                    break;
+                  }
+                }
                 if (
-                  "name" in (parsed.data as Record<string, unknown>) ||
-                  "implements" in (parsed.data as Record<string, unknown>)
+                  extracted.length === 0 &&
+                  ("name" in obj ||
+                    "adapterName" in obj ||
+                    "implements" in obj)
                 ) {
-                  extracted = [parsed.data];
+                  extracted = [data];
                 }
               }
             }
 
-            if (extracted) {
-              adapters = extracted.filter(
-                (item): item is Record<string, unknown> =>
-                  typeof item === "object" &&
-                  item !== null &&
-                  typeof (item as Record<string, unknown>).name === "string",
-              ) as ManifestDraftContext["adapters"];
+            // Fallback: parse as NDJSON (one object per line)
+            if (extracted.length === 0) {
+              const lines = content
+                .split("\n")
+                .map((l) => l.trim())
+                .filter((l) => l.length > 0);
+
+              for (const line of lines) {
+                const lineParsed = parseJSON<Record<string, unknown>>(line);
+                if (lineParsed.ok) {
+                  extracted.push(lineParsed.data);
+                }
+              }
+            }
+
+            if (extracted.length > 0) {
+              adapters = extracted
+                .map((item) => {
+                  if (typeof item !== "object" || item === null) return null;
+                  const obj = item as Record<string, unknown>;
+                  // Normalize: adapterName → name
+                  const resolvedName =
+                    (obj.name as string) || (obj.adapterName as string) || "";
+                  return {
+                    ...obj,
+                    name: resolvedName,
+                  };
+                })
+                .filter(
+                  (item): item is Record<string, unknown> & { name: string } =>
+                    item !== null &&
+                    typeof item.name === "string" &&
+                    item.name.length > 0,
+                ) as ManifestDraftContext["adapters"];
               success = true;
             }
           } catch {

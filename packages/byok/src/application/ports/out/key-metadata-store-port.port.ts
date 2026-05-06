@@ -14,4 +14,5 @@ export interface KeyMetadataStorePort {
     keyId: string,
     revokedBy: string,
   ): Promise<Result<void, ByokError>>;
+  hasKeys(userId: string): Promise<Result<boolean, ByokError>>;
 }

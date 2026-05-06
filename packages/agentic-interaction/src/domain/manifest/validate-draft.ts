@@ -61,10 +61,10 @@ function checkAdapterReferences(
 ): DraftDiagnostic[] {
   const diagnostics: DraftDiagnostic[] = [];
   const validPortNames = new Set([
-    ...context.ports.in.map((p) => p.name),
-    ...context.ports.out.map((p) => p.name),
+    ...(context.ports?.in ?? []).map((p) => p.name),
+    ...(context.ports?.out ?? []).map((p) => p.name),
   ]);
-  for (const adapter of context.adapters) {
+  for (const adapter of context.adapters ?? []) {
     if (!validPortNames.has(adapter.implements)) {
       diagnostics.push(
         diag(

@@ -6,7 +6,7 @@ import type {
 
 export interface CreateContextInput {
   name: string;
-  type: "core" | "supporting" | "driver" | "shared-kernel";
+  type: "core" | "supporting" | "generic" | "shared-kernel";
   description?: string;
   dry_run?: boolean;
 }
@@ -21,7 +21,7 @@ export interface CreateContextOutput {
 const VALID_CONTEXT_TYPES = [
   "core",
   "supporting",
-  "driver",
+  "generic",
   "shared-kernel",
 ] as const;
 

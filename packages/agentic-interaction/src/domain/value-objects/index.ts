@@ -20,3 +20,23 @@ export {
   GeneratedManifestValidator,
   createGeneratedManifest,
 } from "./generated-manifest.js";
+
+export type {
+  NormalizedPrompt,
+  DomainAnalysis,
+  ClassifiedContext,
+  RejectedContext,
+  UncertainContext,
+  ClassificationResult,
+  InboundPortType,
+  OutboundPortType,
+  PortDefinition,
+  ContextPorts,
+  PortMap,
+  AdapterBinding,
+  ContextAdapters,
+  AdapterBindings,
+  AssembledManifest,
+  ValidationReport,
+  PipelineState,
+} from "./pipeline-state.js";

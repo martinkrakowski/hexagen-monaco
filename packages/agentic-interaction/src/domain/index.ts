@@ -21,6 +21,23 @@ export type {
   VaultState,
   VaultStatus,
   VaultError,
+  NormalizedPrompt,
+  DomainAnalysis,
+  ClassifiedContext,
+  RejectedContext,
+  UncertainContext,
+  ClassificationResult,
+  InboundPortType,
+  OutboundPortType,
+  PortDefinition,
+  ContextPorts,
+  PortMap,
+  AdapterBinding,
+  ContextAdapters,
+  AdapterBindings,
+  AssembledManifest,
+  ValidationReport,
+  PipelineState,
 } from "./value-objects/index.js";
 export type {
   CloudProviderEndpoint,
@@ -39,28 +56,37 @@ export {
   detectWarnings,
 } from "./manifest-yaml-extractor.js";
 export {
-  WORKSPACE_SYSTEM_PROMPT,
-  compileWorkspacePrompt,
-  CONTEXT_LIST_SYSTEM_PROMPT,
-  compileContextListPrompt,
-  PORTS_LIST_SYSTEM_PROMPT,
-  compilePortsPrompt,
-  ADAPTERS_LIST_SYSTEM_PROMPT,
-  compileAdaptersPrompt,
-  RETRY_PROMPTS,
-  type PromptVariables,
-  type RetryResult,
+STAGE0_NORMALIZATION_SYSTEM_PROMPT,
+compileStage0Prompt,
+STAGE1_DOMAIN_SYSTEM_PROMPT,
+compileStage1Prompt,
+STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
+compileStage2Prompt,
+STAGE3_PORTS_SYSTEM_PROMPT,
+compileStage3Prompt,
+STAGE4_ADAPTERS_SYSTEM_PROMPT,
+compileStage4Prompt,
+STAGE6_VALIDATION_SYSTEM_PROMPT,
+compileStage6Prompt,
+RETRY_PROMPTS,
+MAX_RETRY_ATTEMPTS,
+CONTEXT_LIST_SYSTEM_PROMPT,
+compileContextListPrompt,
+PORTS_LIST_SYSTEM_PROMPT,
+compilePortsPrompt,
+type PromptVariables,
+type RetryResult,
 } from "./prompts/index.js";
 export {
   TOPOLOGY_SYSTEM_PROMPT,
   compileTopologyUserPrompt,
-  type TopologyPromptVariables,
 } from "./prompts/index.js";
+export type { TopologyPromptVariables } from "./prompts/index.js";
 export {
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
-  type AdapterPromptVariables,
 } from "./prompts/index.js";
+export type { AdapterPromptVariables } from "./prompts/index.js";
 
 // Manifest draft pipeline exports
 export {

@@ -59,6 +59,7 @@ export interface ActionBarProps {
   isGenerating: boolean;
   onGenerate: () => void;
   onCancel?: () => void;
+  disabledTooltip?: string;
 }
 
 export interface ClientManifestGenerationResult {

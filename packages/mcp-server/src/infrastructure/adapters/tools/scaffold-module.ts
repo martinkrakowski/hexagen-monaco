@@ -13,7 +13,7 @@ export const scaffoldModuleTool: ToolDefinition = {
       },
       context_type: {
         type: "string",
-        enum: ["core", "supporting", "driver", "shared-kernel"],
+        enum: ["core", "supporting", "generic", "shared-kernel"],
       },
       dry_run: { type: "boolean" },
     },
@@ -31,7 +31,7 @@ export const scaffoldModuleTool: ToolDefinition = {
         context_type: a.context_type as
           | "core"
           | "supporting"
-          | "driver"
+          | "generic"
           | "shared-kernel"
           | undefined,
         dry_run: (a.dry_run as boolean | undefined) ?? false,

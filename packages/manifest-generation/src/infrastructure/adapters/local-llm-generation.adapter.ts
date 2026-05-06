@@ -2,24 +2,12 @@ import type { LocalLlmMessagingPort } from "../../application/ports/out/local-ll
 
 const MAX_RETRIES = 2;
 
-function extractJsonFromText(text: string): string | null {
+function stripMarkdownFences(text: string): string {
   const trimmed = text.trim();
 
-  const codeBlockMatch = trimmed.match(
-    /```(?:json)?\s*([\s\S]*?)```/,
-  );
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim();
-  }
-
-  const jsonObjectMatch = trimmed.match(/\{[\s\S]*\}/);
-  if (jsonObjectMatch) {
-    return jsonObjectMatch[0].trim();
-  }
-
-  const jsonArrayMatch = trimmed.match(/\[[\s\S]*\]/);
-  if (jsonArrayMatch) {
-    return jsonArrayMatch[0].trim();
+  const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match) {
+    return match[1].trim();
   }
 
   return trimmed;
@@ -52,13 +40,15 @@ export class LocalLlmGenerationAdapter implements LocalLlmMessagingPort {
           continue;
         }
 
-        const extracted = extractJsonFromText(content);
-        if (!extracted) {
-          lastError = new Error("Could not extract JSON from response");
+        // Strip markdown code fences if present, but preserve
+        // NDJSON (multi-line) format — do NOT extract single JSON object.
+        const stripped = stripMarkdownFences(content);
+        if (!stripped || stripped.trim() === "") {
+          lastError = new Error("Could not extract content from response");
           continue;
         }
 
-        return extracted;
+        return stripped;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt === MAX_RETRIES) break;

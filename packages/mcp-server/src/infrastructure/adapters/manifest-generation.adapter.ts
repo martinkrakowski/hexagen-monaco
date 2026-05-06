@@ -233,12 +233,12 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
         normalized.boundedContexts.map((ctx) =>
           this.manifestWritePort!.registerBoundedContext({
             name: ctx.name,
-            type: ctx.type as
-              | "core"
-              | "supporting"
-              | "driver"
-              | "shared-kernel"
-              | undefined,
+type: ctx.type as
+          | "core"
+          | "supporting"
+          | "generic"
+          | "shared-kernel"
+          | undefined,
           }),
         ),
       );

@@ -101,7 +101,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     engineState: engine.engineState,
     setEngineState: engine.setEngineStateForAutoInit,
     initializeModel: engine.initializeModel,
-    hasModelInCache: cache.hasModelInCache,
   });
 
   const { governancePayload, editorStateRef } = useGovernancePayload();

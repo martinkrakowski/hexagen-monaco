@@ -3,7 +3,7 @@ import { z } from "zod";
 export const BoundedContextTypeSchema = z.enum([
   "core",
   "supporting",
-  "driver",
+  "generic",
   "shared-kernel",
 ]);
 

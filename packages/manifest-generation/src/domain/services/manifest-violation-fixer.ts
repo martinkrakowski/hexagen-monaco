@@ -42,6 +42,24 @@ function portToAdapterName(portName: string): string {
   return `${base}Adapter`;
 }
 
+function toPascalCase(input: string): string {
+  return input
+    .split(/[-_\s]+/)
+    .filter((s) => s.length > 0)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join("");
+}
+
+function synthesizeInboundPort(contextName: string): string {
+  const base = toPascalCase(contextName || "context");
+  return `${base}CommandPort`;
+}
+
+function synthesizeOutboundPort(contextName: string): string {
+  const base = toPascalCase(contextName || "context");
+  return `${base}RepositoryPort`;
+}
+
 function stripBangs(value: string): string {
   return value.replace(/!/g, "");
 }
@@ -69,10 +87,10 @@ export function canAutoFix(violation: ValidationItem): boolean {
   const title = violation.title;
   const desc = violation.description;
   if (title === "Invalid YAML") return false;
-  if (title === "Minimum Interface Contract" && desc.includes("missing ports"))
-    return false;
   if (title === "Scope Missing") return true;
   if (title === "Architecture Missing") return true;
+  if (title === "Minimum Interface Contract" && desc.includes("missing ports"))
+    return true;
   if (title.includes("Context Name") && desc.includes("Starts with hyphen"))
     return true;
   if (desc.includes("YAML tag indicator") || desc.includes('contains "!"'))
@@ -107,6 +125,56 @@ export function applyDeterministicFix(
       parsed.architecture = "modular-monolith";
       changed = true;
     }
+  } else if (
+    title === "Minimum Interface Contract" &&
+    desc.includes("missing ports")
+  ) {
+    // Synthesize default ports for contexts that are missing in/out ports.
+    // Each context needs ≥1 inbound and ≥1 outbound port to pass the check.
+    const contexts = parsed.bounded_contexts || [];
+    parsed.bounded_contexts = contexts.map((c) => {
+      const name = c.name || "context";
+      const portsIn = c.layers?.application?.ports?.in || [];
+      const portsOut = c.layers?.application?.ports?.out || [];
+      const existingAdapters = c.layers?.infrastructure?.adapters || [];
+
+      const needsIn = portsIn.length === 0;
+      const needsOut = portsOut.length === 0;
+      if (!needsIn && !needsOut) return c;
+
+      changed = true;
+
+      const newPortsIn = needsIn ? [synthesizeInboundPort(name)] : portsIn;
+      const newPortsOut = needsOut ? [synthesizeOutboundPort(name)] : portsOut;
+
+      // Auto-create adapter for newly synthesized outbound port
+      const newAdapters = [...existingAdapters];
+      if (needsOut) {
+        const outPort = newPortsOut[0];
+        const adapterName = portToAdapterName(outPort);
+        if (!newAdapters.includes(adapterName)) {
+          newAdapters.push(adapterName);
+        }
+      }
+
+      return {
+        ...c,
+        layers: {
+          ...c.layers,
+          application: {
+            ...c.layers?.application,
+            ports: {
+              in: newPortsIn,
+              out: newPortsOut,
+            },
+          },
+          infrastructure: {
+            ...c.layers?.infrastructure,
+            adapters: newAdapters,
+          },
+        },
+      };
+    });
   } else if (
     title.includes("Context Name") &&
     desc.includes("Starts with hyphen")

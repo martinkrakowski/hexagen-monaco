@@ -104,4 +104,21 @@ export class InMemoryKeyMetadataAdapter implements KeyMetadataStorePort {
       } satisfies ByokError);
     }
   }
+
+  async hasKeys(userId: string): Promise<Result<boolean, ByokError>> {
+    try {
+      for (const key of this.byUserProvider.keys()) {
+        if (key.startsWith(`${userId}:`)) {
+          return ok(true) as Result<boolean, ByokError>;
+        }
+      }
+      return ok(false) as Result<boolean, ByokError>;
+    } catch (error) {
+      return err({
+        kind: "metadata_store_error",
+        message:
+          error instanceof Error ? error.message : "Failed to check user keys",
+      } satisfies ByokError);
+    }
+  }
 }

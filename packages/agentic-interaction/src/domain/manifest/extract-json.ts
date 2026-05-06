@@ -5,9 +5,26 @@ export { balanceJSON } from "./json-balancer.js";
 export { repairJSON } from "./json-repair.js";
 
 export function extractJSON(raw: string): string {
+  // Try to extract fenced code block first
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
 
+  // Check if it looks like NDJSON (multiple JSON objects, one per line)
+  // NDJSON: multiple lines each independently starting with {
+  // Exclude arrays (opening [ line) from the count
+  const trimmed = raw.trim();
+  const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length > 1) {
+    const isLikelyNDJSON =
+      lines.every(l => !l.startsWith('[') && !l.startsWith(']')) &&
+      lines.filter(l => l.startsWith('{')).length > 1;
+    if (isLikelyNDJSON) {
+      // Likely NDJSON - return as-is for line-by-line parsing
+      return trimmed;
+    }
+  }
+
+  // Single JSON object/array extraction
   const start = raw.search(/[{[]/);
   const end = Math.max(raw.lastIndexOf("}"), raw.lastIndexOf("]"));
   if (start !== -1 && end !== -1 && end > start)
