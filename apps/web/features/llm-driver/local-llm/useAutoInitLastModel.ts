@@ -59,18 +59,34 @@ export function useAutoInitLastModel({
       hasAttemptedAutoInitRef.current = true;
 
       const CACHE_TIMEOUT_MS = 10_000; // Increased from 5s to allow for slower IndexedDB
+
+      // Use a sentinel value to distinguish between timeout and "not cached":
+      // 1. undefined = timeout occurred
+      // 2. true/false = cache check completed successfully
+      const timeoutSentinel = Symbol("cache-check-timeout");
       const cacheCheckWithTimeout = Promise.race([
-        hasModelInCache(modelToLoad),
-        new Promise<boolean>((resolve) =>
-          setTimeout(() => resolve(false), CACHE_TIMEOUT_MS),
+        hasModelInCache(modelToLoad)
+          .then((result) => result) // Cache check completed
+          .catch(() => false), // Cache check failed
+        new Promise<symbol>((resolve) =>
+          setTimeout(() => resolve(timeoutSentinel), CACHE_TIMEOUT_MS),
         ),
       ]);
 
-      cacheCheckWithTimeout.then((isCached) => {
-        if (isCached) {
+      cacheCheckWithTimeout.then((result) => {
+        if (result === timeoutSentinel) {
+          // Timeout occurred — assume cached and attempt init.
+          // If the model truly isn't cached, initializeModel will fail
+          // gracefully and clear the keys then.
+          setEngineState((prev) => ({ ...prev, autoLoading: true }));
+          initializeModel(modelToLoad);
+        } else if (result === true) {
+          // Cache check confirmed model is cached — initialize
           setEngineState((prev) => ({ ...prev, autoLoading: true }));
           initializeModel(modelToLoad);
         } else {
+          // Cache check confirmed model is NOT cached —
+          // route to requires_model and clear AUTO_LOAD_KEY
           localStorage.removeItem(AUTO_LOAD_KEY);
           setEngineState((prev) => ({
             ...prev,
