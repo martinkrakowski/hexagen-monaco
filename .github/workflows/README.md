@@ -59,4 +59,4 @@ The Kubernetes manifests in `k8s/` are bare YAML. At a single-replica deployment
 The E2E suite targets Chromium. The application's primary users are on Chrome-based browsers. Cross-browser coverage will be added when cross-browser compatibility becomes an explicit requirement (though the application has been manually cross-browser tested).
 
 **Pre-commit hooks are not run in CI:**
-Husky hooks run locally on commit. CI enforces the same constraints independently via `sync-integrity.yml`. The pre-commit hook is being migrated to `lint-staged` to scope checks to staged files only and eliminate the 2–5 minute full-monorepo scan on every local commit.
+Husky hooks run locally on commit. CI enforces the same constraints independently via `sync-integrity.yml`. The pre-commit hook is being migrated to `lint-staged` to scope checks to staged files only and eliminate the full-monorepo scan on every local commit.
