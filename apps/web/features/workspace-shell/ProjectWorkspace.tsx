@@ -34,6 +34,7 @@ export interface ProjectWorkspaceProps {
   onCloseRightPanel: () => void;
   onGoToStep: (index: number) => void;
   onNavigateToProjects?: () => void;
+  hasProjectUrlParam?: boolean;
   children?: React.ReactNode;
 }
 
@@ -45,6 +46,7 @@ export function ProjectWorkspace({
   onCloseRightPanel,
   onGoToStep,
   onNavigateToProjects,
+  hasProjectUrlParam,
   children,
 }: ProjectWorkspaceProps) {
   const totalSteps = wizardSteps.length;
@@ -60,6 +62,7 @@ export function ProjectWorkspace({
     editor,
     totalSteps,
     onGoToStep,
+    hasProjectUrlParam,
   });
 
   const isEditing = ui.state.kind === "edit";

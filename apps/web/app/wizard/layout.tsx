@@ -52,6 +52,8 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
 
   useProjectSearchParam();
 
+  const hasProjectUrlParam = searchParams.get("project") !== null;
+
   const stepParam = parseInt(params.step, 10);
   const currentStepIndex = Number.isNaN(stepParam)
     ? 0
@@ -80,6 +82,7 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
         onCloseRightPanel={rightToggle.close}
         onGoToStep={stepNav.goToStep}
         onNavigateToProjects={() => router.push("/projects")}
+        hasProjectUrlParam={hasProjectUrlParam}
       >
         {children}
       </ProjectWorkspace>

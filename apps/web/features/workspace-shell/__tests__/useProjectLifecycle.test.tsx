@@ -245,4 +245,128 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
     assert.strictEqual(ws.name, "Verdant Sentinel");
     assert.strictEqual(ws.isDirty, false);
   });
+
+  it("should not open resume-draft dialog when hasProjectUrlParam is true", async () => {
+    for (const k of Object.keys(store)) delete store[k];
+
+    const mockForm = {
+      getValues: mock.fn(() => emptyFormValues),
+      reset: mock.fn(),
+      trigger: mock.fn(async () => true),
+    } as unknown as UseFormReturn<ProjectConfig>;
+
+    const mockOnGoToStep = mock.fn();
+
+    const mockUi = {
+      currentStepIndex: 0,
+      viewMode: "visual" as const,
+      openDialog: mock.fn(),
+      closeDialog: mock.fn(),
+      setContextId: mock.fn(),
+      setMappingId: mock.fn(),
+      enterEditMode: mock.fn(),
+      enterGenesisMode: mock.fn(),
+    } as unknown as UseWorkspaceShellUiReturn;
+
+    const mockEditor = {
+      setSessionId: mock.fn(),
+      clearSession: mock.fn(),
+      setActiveWorkspace: mock.fn(),
+      clearActiveWorkspace: mock.fn(),
+    } as unknown as Pick<
+      UseEditorSessionReturn,
+      | "setSessionId"
+      | "clearSession"
+      | "setActiveWorkspace"
+      | "clearActiveWorkspace"
+    >;
+
+    renderHook(() =>
+      useProjectLifecycle({
+        form: mockForm,
+        ui: mockUi,
+        uiState: { kind: "genesis" },
+        editor: mockEditor,
+        totalSteps: 4,
+        onGoToStep: mockOnGoToStep,
+        hasProjectUrlParam: true,
+      }),
+    );
+
+    await waitFor(() => {
+      assert.strictEqual(mockUi.openDialog.mock.callCount(), 0);
+    });
+  });
+
+  it("should update URL with project ID when loading project from within wizard", async () => {
+    for (const k of Object.keys(store)) delete store[k];
+
+    // Setup: save a test project
+    const testProject = {
+      id: "project-123",
+      name: "Test Project",
+      formState: { ...emptyFormValues },
+      manifestYaml: "boundedContexts: []\n",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    store["hexagen-saved-projects"] = JSON.stringify([testProject]);
+
+    const mockForm = {
+      getValues: mock.fn(() => emptyFormValues),
+      reset: mock.fn(),
+      trigger: mock.fn(async () => true),
+    } as unknown as UseFormReturn<ProjectConfig>;
+
+    const mockOnGoToStep = mock.fn();
+
+    const mockUi = {
+      currentStepIndex: 0,
+      viewMode: "visual" as const,
+      openDialog: mock.fn(),
+      closeDialog: mock.fn(),
+      setContextId: mock.fn(),
+      setMappingId: mock.fn(),
+      enterEditMode: mock.fn(),
+      enterGenesisMode: mock.fn(),
+    } as unknown as UseWorkspaceShellUiReturn;
+
+    const mockEditor = {
+      setSessionId: mock.fn(),
+      clearSession: mock.fn(),
+      setActiveWorkspace: mock.fn(),
+      clearActiveWorkspace: mock.fn(),
+    } as unknown as Pick<
+      UseEditorSessionReturn,
+      | "setSessionId"
+      | "clearSession"
+      | "setActiveWorkspace"
+      | "clearActiveWorkspace"
+    >;
+
+    const { result } = renderHook(() =>
+      useProjectLifecycle({
+        form: mockForm,
+        ui: mockUi,
+        uiState: { kind: "genesis" },
+        editor: mockEditor,
+        totalSteps: 4,
+        onGoToStep: mockOnGoToStep,
+      }),
+    );
+
+    // Get initial URL
+    const initialUrl = window.location.href;
+    assert.strictEqual(initialUrl, "http://localhost/");
+
+    // Load project from within wizard
+    await act(async () => {
+      await result.current.handleLoadProject("project-123");
+    });
+
+    // Verify URL was updated with project param
+    const newUrl = window.location.href;
+    assert.strictEqual(newUrl, "http://localhost/?project=project-123");
+    assert.strictEqual(mockEditor.setActiveWorkspace.mock.callCount(), 1);
+  });
 });
