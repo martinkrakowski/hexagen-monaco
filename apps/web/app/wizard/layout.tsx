@@ -32,17 +32,17 @@ function useProjectSearchParam() {
     if (activeWorkspaceRef.current?.projectId === projectId) return;
 
     const saved = projects.find((p) => p.id === projectId);
-    if (saved) {
-      setActiveWorkspace({
-        projectId: saved.id,
-        name: saved.name,
-        isDirty: false,
-        lastModifiedAt: Date.now(),
-        wizardData: { ...saved.formState },
-        manifestYaml: saved.manifestYaml,
-      });
-    }
-  }, [projectId, setActiveWorkspace, projects.length]);
+    if (!saved) return;
+
+    setActiveWorkspace({
+      projectId: saved.id,
+      name: saved.name,
+      isDirty: false,
+      lastModifiedAt: Date.now(),
+      wizardData: { ...saved.formState },
+      manifestYaml: saved.manifestYaml,
+    });
+  }, [projectId, projects, setActiveWorkspace]);
 }
 
 function WizardLayoutInner({ children }: { children: React.ReactNode }) {
