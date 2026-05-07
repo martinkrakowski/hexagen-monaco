@@ -41,10 +41,14 @@ export function createPersistedStorage<T>(
     write(value: T | null): void {
       if (typeof window === "undefined") return;
       try {
-        if (value) {
+        if (value !== null) {
           localStorage.setItem(storageKey, JSON.stringify(value));
         } else {
           localStorage.removeItem(storageKey);
+        }
+        const listeners = listenersMap.get(storage);
+        if (listeners) {
+          listeners.forEach((cb) => cb());
         }
       } catch {
         // Swallow quota / private-mode errors — persistence is best-effort.
