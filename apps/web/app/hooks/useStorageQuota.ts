@@ -16,7 +16,7 @@ const serverStatus: StorageQuotaStatus = {
 
 function subscribe(callback: () => void): () => void {
   const monitor = getStorageQuotaMonitor();
-  return monitor.onQuotaWarning(() => {
+  return monitor.onStatusChange(() => {
     callback();
   });
 }

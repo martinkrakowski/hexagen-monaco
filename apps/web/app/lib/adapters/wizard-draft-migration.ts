@@ -1,4 +1,4 @@
-import { set } from "idb-keyval";
+import { get, set } from "idb-keyval";
 
 const LEGACY_LS_KEY = "hexagen-wizard-draft";
 const IDB_DRAFT_PREFIX = "hexagen:wizard-draft:";
@@ -12,7 +12,14 @@ export async function migrateWizardDraftFromLocalStorage(): Promise<boolean> {
   try {
     const draft = JSON.parse(raw) as { id?: string; sessionId?: string };
     const projectId = draft.sessionId ?? draft.id ?? "unknown";
-    await set(`${IDB_DRAFT_PREFIX}${projectId}`, draft);
+    const idbKey = `${IDB_DRAFT_PREFIX}${projectId}`;
+    await set(idbKey, draft);
+
+    const readBack = await get<{ id?: string; sessionId?: string }>(idbKey);
+    if (!readBack || readBack.id !== draft.id) {
+      return false;
+    }
+
     localStorage.removeItem(LEGACY_LS_KEY);
     return true;
   } catch {

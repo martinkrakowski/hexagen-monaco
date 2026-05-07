@@ -40,6 +40,8 @@ function createMonitorWithMock(mockStorage: MockLocalStorage) {
   const SAVED_PROJECTS_IDB_KEY = "hexagen:saved-projects";
   const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
+  let cachedStatus: any | null = null;
+
   function computeUsedBytes(): number {
     let total = 0;
     for (const [key, value] of mockStorage._store.entries()) {
@@ -60,10 +62,25 @@ function createMonitorWithMock(mockStorage: MockLocalStorage) {
     };
   }
 
-  return {
-    getStatus: computeStatus,
+  function getStatus() {
+    if (!cachedStatus) {
+      cachedStatus = computeStatus();
+    }
+    return cachedStatus;
+  }
 
-    onQuotaWarning(callback: (status: any) => void): () => void {
+  function invalidateCache(): void {
+    cachedStatus = null;
+    const status = getStatus();
+    for (const cb of listeners) {
+      cb(status);
+    }
+  }
+
+  return {
+    getStatus,
+
+    onStatusChange(callback: (status: any) => void): () => void {
       listeners.add(callback);
       return () => {
         listeners.delete(callback);
@@ -94,6 +111,10 @@ function createMonitorWithMock(mockStorage: MockLocalStorage) {
         mockStorage.removeItem(key);
         trimmed++;
       }
+
+      if (trimmed > 0) {
+        invalidateCache();
+      }
       return trimmed;
     },
 
@@ -116,6 +137,8 @@ function createMonitorWithMock(mockStorage: MockLocalStorage) {
         return [];
       }
     },
+
+    invalidateCache,
 
     _listeners: listeners,
   };
@@ -320,6 +343,86 @@ describe("StorageQuotaMonitor", () => {
       const ids = monitor.getLruSavedProjectIds();
 
       assert.deepStrictEqual(ids, ["idb-p1"]);
+    });
+  });
+
+  describe("invalidateCache()", () => {
+    it("causes getStatus to recompute after storage changes", () => {
+      const monitor = createMonitorWithMock(mockStorage);
+      const status1 = monitor.getStatus();
+      assert.strictEqual(status1.usedBytes, 0);
+
+      mockStorage.setItem("new-key", "some-value");
+      const status2 = monitor.getStatus();
+      assert.strictEqual(status2.usedBytes, 0);
+
+      monitor.invalidateCache();
+      const status3 = monitor.getStatus();
+      assert.ok(status3.usedBytes > 0);
+    });
+
+    it("notifies listeners when near quota after invalidation", () => {
+      const monitor = createMonitorWithMock(mockStorage);
+      let warningCalled = false;
+      monitor.onStatusChange(() => {
+        warningCalled = true;
+      });
+
+      const value = "x".repeat(4 * 1024 * 1024);
+      mockStorage.setItem("big-key", value);
+
+      monitor.invalidateCache();
+
+      assert.strictEqual(warningCalled, true);
+    });
+
+    it("notifies listeners on recovery from warning to OK", () => {
+      const value = "x".repeat(4 * 1024 * 1024);
+      mockStorage.setItem("big-key", value);
+
+      const monitor = createMonitorWithMock(mockStorage);
+      const statuses: any[] = [];
+      monitor.onStatusChange((status) => {
+        statuses.push(status);
+      });
+
+      mockStorage.removeItem("big-key");
+      monitor.invalidateCache();
+
+      assert.strictEqual(statuses.length, 1);
+      assert.strictEqual(statuses[0].isNearQuota, false);
+    });
+
+    it("notifies listeners on Warning→OK round-trip", () => {
+      const monitor = createMonitorWithMock(mockStorage);
+      const statuses: any[] = [];
+      monitor.onStatusChange((status) => {
+        statuses.push(status);
+      });
+
+      const value = "x".repeat(4 * 1024 * 1024);
+      mockStorage.setItem("big-key", value);
+      monitor.invalidateCache();
+
+      mockStorage.removeItem("big-key");
+      monitor.invalidateCache();
+
+      assert.strictEqual(statuses.length, 2);
+      assert.strictEqual(statuses[0].isNearQuota, true);
+      assert.strictEqual(statuses[1].isNearQuota, false);
+    });
+
+    it("notifies listeners on any status change after invalidation", () => {
+      const monitor = createMonitorWithMock(mockStorage);
+      let called = false;
+      monitor.onStatusChange(() => {
+        called = true;
+      });
+
+      mockStorage.setItem("small-key", "tiny");
+      monitor.invalidateCache();
+
+      assert.strictEqual(called, true);
     });
   });
 });

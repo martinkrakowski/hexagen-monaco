@@ -8,7 +8,8 @@ export interface StorageQuotaStatus {
 
 export interface StorageQuotaMonitor {
   getStatus(): StorageQuotaStatus;
-  onQuotaWarning(callback: (status: StorageQuotaStatus) => void): () => void;
+  onStatusChange(callback: (status: StorageQuotaStatus) => void): () => void;
+  invalidateCache(): void;
   trimOldWorkspaceSessions(maxAgeMs?: number): number;
   getLruSavedProjectIds(): string[];
 }
@@ -60,20 +61,18 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
   }
 
   function notifyListeners(status: StorageQuotaStatus): void {
-    if (status.isNearQuota) {
-      for (const cb of listeners) {
-        cb(status);
-      }
+    for (const cb of listeners) {
+      cb(status);
     }
   }
 
-  function invalidateAndNotify(): void {
+  function invalidateCache(): void {
     cachedStatus = null;
     const status = getStatus();
     notifyListeners(status);
   }
 
-  function onQuotaWarning(
+  function onStatusChange(
     callback: (status: StorageQuotaStatus) => void,
   ): () => void {
     listeners.add(callback);
@@ -119,7 +118,7 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
     }
 
     if (trimmed > 0) {
-      invalidateAndNotify();
+      invalidateCache();
     }
 
     return trimmed;
@@ -152,12 +151,13 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
   }
 
   if (typeof window !== "undefined") {
-    window.addEventListener("storage", invalidateAndNotify);
+    window.addEventListener("storage", invalidateCache);
   }
 
   return {
     getStatus,
-    onQuotaWarning,
+    onStatusChange,
+    invalidateCache,
     trimOldWorkspaceSessions,
     getLruSavedProjectIds,
   };
