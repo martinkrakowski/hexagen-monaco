@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 
 import { ProjectWorkspace } from "../../features/workspace-shell/ProjectWorkspace";
@@ -16,16 +16,22 @@ import { useSavedProjects } from "@/hooks/useSavedProjects";
 function useProjectSearchParam() {
   const searchParams = useSearchParams();
   const { activeWorkspace, setActiveWorkspace } = useActiveWorkspace();
-  const { projects, loadProject } = useSavedProjects();
+  const { projects } = useSavedProjects();
+
+  // Use ref to read activeWorkspace without re-triggering effect
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  activeWorkspaceRef.current = activeWorkspace;
 
   const projectId = searchParams.get("project");
 
   useEffect(() => {
     if (!projectId) return;
-    if (activeWorkspace?.projectId === projectId) return;
     if (projects.length === 0) return;
 
-    const saved = loadProject(projectId);
+    // Check ref instead of reactive value to avoid re-running when workspace updates
+    if (activeWorkspaceRef.current?.projectId === projectId) return;
+
+    const saved = projects.find((p) => p.id === projectId);
     if (saved) {
       setActiveWorkspace({
         projectId: saved.id,
@@ -36,13 +42,7 @@ function useProjectSearchParam() {
         manifestYaml: saved.manifestYaml,
       });
     }
-  }, [
-    projectId,
-    activeWorkspace,
-    setActiveWorkspace,
-    loadProject,
-    projects.length,
-  ]);
+  }, [projectId, setActiveWorkspace, projects.length]);
 }
 
 function WizardLayoutInner({ children }: { children: React.ReactNode }) {
