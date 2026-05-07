@@ -9,6 +9,7 @@ export interface StorageQuotaStatus {
 export interface StorageQuotaMonitor {
   getStatus(): StorageQuotaStatus;
   onStatusChange(callback: (status: StorageQuotaStatus) => void): () => void;
+  invalidateCache(): void;
   trimOldWorkspaceSessions(maxAgeMs?: number): number;
   getLruSavedProjectIds(): string[];
 }
@@ -65,7 +66,7 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
     }
   }
 
-  function invalidateAndNotify(): void {
+  function invalidateCache(): void {
     cachedStatus = null;
     const status = getStatus();
     notifyListeners(status);
@@ -117,7 +118,7 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
     }
 
     if (trimmed > 0) {
-      invalidateAndNotify();
+      invalidateCache();
     }
 
     return trimmed;
@@ -150,12 +151,13 @@ export function createStorageQuotaMonitor(): StorageQuotaMonitor {
   }
 
   if (typeof window !== "undefined") {
-    window.addEventListener("storage", invalidateAndNotify);
+    window.addEventListener("storage", invalidateCache);
   }
 
   return {
     getStatus,
     onStatusChange,
+    invalidateCache,
     trimOldWorkspaceSessions,
     getLruSavedProjectIds,
   };
