@@ -34,7 +34,12 @@ class MigrationOrchestrator {
   }
 
   get ready(): Promise<void> {
-    return this.migrationPromise?.then(() => {}) ?? Promise.resolve();
+    return (
+      this.migrationPromise?.then(
+        () => {},
+        () => {},
+      ) ?? Promise.resolve()
+    );
   }
 
   async runPending(): Promise<MigrationResult[]> {
@@ -42,9 +47,11 @@ class MigrationOrchestrator {
 
     const promise = this.executePending();
     this.migrationPromise = promise;
-    promise.finally(() => {
-      this.migrationPromise = null;
-    });
+    promise
+      .finally(() => {
+        this.migrationPromise = null;
+      })
+      .catch(() => {});
     return promise;
   }
 
@@ -294,6 +301,23 @@ describe("MigrationOrchestrator", () => {
       const results = await runPromise;
       assert.strictEqual(results.length, 1);
       await assert.doesNotReject(() => readyPromise);
+    });
+
+    it("absorbs rejection from a throwing step", async () => {
+      const thrown = new Error("kaboom");
+      const failingStep: MigrationStep = {
+        id: "step-throw",
+        description: "Throws",
+        migrate: () => Promise.reject(thrown),
+        verify: async () => true,
+      };
+      const orchestrator = new MigrationOrchestrator([failingStep]);
+
+      const runPromise = orchestrator.runPending();
+      const readyPromise = orchestrator.ready;
+
+      await assert.doesNotReject(() => readyPromise);
+      await assert.rejects(() => runPromise);
     });
 
     it("returns a new promise identity after runPending is called", async () => {

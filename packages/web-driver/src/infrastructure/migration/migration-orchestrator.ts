@@ -27,7 +27,12 @@ export class MigrationOrchestrator {
   }
 
   get ready(): Promise<void> {
-    return this.migrationPromise?.then(() => {}) ?? Promise.resolve();
+    return (
+      this.migrationPromise?.then(
+        () => {},
+        () => {},
+      ) ?? Promise.resolve()
+    );
   }
 
   async runPending(): Promise<MigrationResult[]> {
@@ -36,9 +41,11 @@ export class MigrationOrchestrator {
 
     const promise = this.executePending();
     this.migrationPromise = promise;
-    promise.finally(() => {
-      this.migrationPromise = null;
-    });
+    promise
+      .finally(() => {
+        this.migrationPromise = null;
+      })
+      .catch(() => {});
     return promise;
   }
 
