@@ -30,7 +30,7 @@ export function useSavedProjects() {
     null,
   );
   const projectsRef = useRef(projects);
-  projectsRef.current = projects;
+  const mutationSeq = useRef(0);
 
   const port: SavedProjectsPersistencePort = getSavedProjectsPersistence();
 
@@ -38,7 +38,9 @@ export function useSavedProjects() {
     setMounted(true);
     port.loadProjects().then((result) => {
       if (result.success) {
-        setProjects(result.value.map(fromBase));
+        const loaded = result.value.map(fromBase);
+        projectsRef.current = loaded;
+        setProjects(loaded);
       }
     });
   }, [port]);
@@ -60,10 +62,13 @@ export function useSavedProjects() {
       };
       const snapshot = projectsRef.current;
       const updated = [newProject, ...snapshot];
+      const seq = ++mutationSeq.current;
+      projectsRef.current = updated;
       setProjects(updated);
       port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success) {
+        if (!result.success && mutationSeq.current === seq) {
           setProjects(snapshot);
+          projectsRef.current = snapshot;
           setPersistError(result.error);
         }
       });
@@ -83,10 +88,13 @@ export function useSavedProjects() {
     (id: string): void => {
       const snapshot = projectsRef.current;
       const updated = snapshot.filter((p) => p.id !== id);
+      const seq = ++mutationSeq.current;
+      projectsRef.current = updated;
       setProjects(updated);
       port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success) {
+        if (!result.success && mutationSeq.current === seq) {
           setProjects(snapshot);
+          projectsRef.current = snapshot;
           setPersistError(result.error);
         }
       });
@@ -100,10 +108,13 @@ export function useSavedProjects() {
       const updated = snapshot.map((p) =>
         p.id === id ? { ...p, name: newName, updatedAt: Date.now() } : p,
       );
+      const seq = ++mutationSeq.current;
+      projectsRef.current = updated;
       setProjects(updated);
       port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success) {
+        if (!result.success && mutationSeq.current === seq) {
           setProjects(snapshot);
+          projectsRef.current = snapshot;
           setPersistError(result.error);
         }
       });
@@ -119,10 +130,13 @@ export function useSavedProjects() {
           ? { ...p, formState, manifestYaml, updatedAt: Date.now() }
           : p,
       );
+      const seq = ++mutationSeq.current;
+      projectsRef.current = updated;
       setProjects(updated);
       port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success) {
+        if (!result.success && mutationSeq.current === seq) {
           setProjects(snapshot);
+          projectsRef.current = snapshot;
           setPersistError(result.error);
         }
       });

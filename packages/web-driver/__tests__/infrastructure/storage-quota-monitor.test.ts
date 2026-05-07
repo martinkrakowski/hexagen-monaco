@@ -412,7 +412,7 @@ describe("StorageQuotaMonitor", () => {
       assert.strictEqual(statuses[1].isNearQuota, false);
     });
 
-    it("does not notify listeners when not near quota after invalidation", () => {
+    it("notifies listeners on any status change after invalidation", () => {
       const monitor = createMonitorWithMock(mockStorage);
       let called = false;
       monitor.onStatusChange(() => {
