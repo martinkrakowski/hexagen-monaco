@@ -9,6 +9,7 @@ import {
   getEditorWorkspacePersistence,
   getWizardPersistence,
   getLogger,
+  getMigrationReady,
 } from "@/lib/wire";
 
 const DEBOUNCE_MS = 500;
@@ -136,6 +137,7 @@ export function useEditorWorkspace() {
   );
 
   const initializeFromDraft = useCallback(async () => {
+    await getMigrationReady();
     const wizardPersistence = getWizardPersistence();
     const draftResult = await wizardPersistence.loadDraft();
     if (

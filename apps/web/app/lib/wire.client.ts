@@ -64,7 +64,6 @@ import {
 import { IDBWizardDraftAdapter } from "./adapters/idb-wizard-draft.adapter";
 import { IDBSavedProjectsAdapter } from "./adapters/idb-saved-projects.adapter";
 import { IDBEditorWorkspaceAdapter } from "./adapters/idb-editor-workspace.adapter";
-import { migrateWizardDraftFromLocalStorage } from "./adapters/wizard-draft-migration";
 import type { StorageQuotaMonitor } from "@hexagen/web-driver";
 import { getStorageQuotaMonitor as createStorageQuotaMonitor } from "@hexagen/web-driver";
 import {
@@ -110,11 +109,6 @@ export const wireDependencies = () => {
     PORT_NAMES.WIZARD_PERSISTENCE,
     wizardPersistence satisfies WizardPersistencePort,
   );
-
-  // One-time migration: localStorage → IDB (idempotent, no-op if already done)
-  if (typeof window !== "undefined") {
-    void migrateWizardDraftFromLocalStorage();
-  }
 
   // Editor workspace persistence port → IDB-backed adapter
   const editorWorkspaceAdapter = new IDBEditorWorkspaceAdapter();
@@ -344,6 +338,7 @@ export const wireDependencies = () => {
     register: (portName: string, instance: unknown) => {
       registry.set(portName, instance);
     },
+    migrationReady: migrationOrchestrator.ready,
   };
 };
 
@@ -442,6 +437,9 @@ export const getServerManifestGenerationUseCase = () =>
 
 export const getStorageQuotaMonitor = () =>
   dependencies.get<StorageQuotaMonitor>(PORT_NAMES.STORAGE_QUOTA_MONITOR);
+
+export const getMigrationReady = (): Promise<void> =>
+  dependencies.migrationReady;
 
 export const getPersistenceDomainRegistry = () =>
   dependencies.get<PersistenceDomainRegistryPort>(
