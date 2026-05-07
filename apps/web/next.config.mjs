@@ -107,6 +107,14 @@ const nextConfig = {
   },
 
   typescript: { ignoreBuildErrors: true },
+
+  redirects: async () => [
+    {
+      source: '/',
+      destination: '/projects',
+      permanent: true,
+    },
+  ],
 };
 
 export default nextConfig;
