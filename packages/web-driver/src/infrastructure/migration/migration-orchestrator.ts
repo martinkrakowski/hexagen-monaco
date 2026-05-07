@@ -20,14 +20,25 @@ export interface MigrationStatus {
 export class MigrationOrchestrator {
   private steps: MigrationStep[];
   private statusKey = "hexagen:migration:status";
+  private migrationPromise: Promise<MigrationResult[]> | null = null;
 
   constructor(steps: MigrationStep[]) {
     this.steps = steps;
   }
 
+  get ready(): Promise<void> {
+    return this.migrationPromise?.then(() => {}) ?? Promise.resolve();
+  }
+
   async runPending(): Promise<MigrationResult[]> {
     if (typeof window === "undefined") return [];
 
+    const promise = this.executePending();
+    this.migrationPromise = promise;
+    return promise;
+  }
+
+  private async executePending(): Promise<MigrationResult[]> {
     const status = this.getStatus();
     const pending = this.steps.filter(
       (step) => !status.completedSteps.includes(step.id),

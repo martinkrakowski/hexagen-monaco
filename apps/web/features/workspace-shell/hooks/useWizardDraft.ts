@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { WizardDraft } from "@hexagen/shared";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import { getWizardPersistence } from "@/lib/wire";
+import { getWizardPersistence, getMigrationReady } from "@/lib/wire";
 import type { IDBWizardDraftAdapter } from "@/lib/adapters/idb-wizard-draft.adapter";
 
 export function useWizardDraft() {
@@ -14,6 +14,7 @@ export function useWizardDraft() {
   useEffect(() => {
     setMounted(true);
     const load = async () => {
+      await getMigrationReady();
       try {
         const persistence = getWizardPersistence();
         if (isIDBAdapter(persistence)) {

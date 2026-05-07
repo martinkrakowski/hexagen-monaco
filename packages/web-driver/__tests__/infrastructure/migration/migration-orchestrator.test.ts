@@ -26,13 +26,24 @@ class MigrationOrchestrator {
   private steps: MigrationStep[];
   private completedSteps: Set<string> = new Set();
   private _lastRunAt: string | null = null;
+  private migrationPromise: Promise<MigrationResult[]> | null = null;
 
   constructor(steps: MigrationStep[]) {
     this.steps = steps;
     this.loadStatus();
   }
 
+  get ready(): Promise<void> {
+    return this.migrationPromise?.then(() => {}) ?? Promise.resolve();
+  }
+
   async runPending(): Promise<MigrationResult[]> {
+    const promise = this.executePending();
+    this.migrationPromise = promise;
+    return promise;
+  }
+
+  private async executePending(): Promise<MigrationResult[]> {
     const results: MigrationResult[] = [];
 
     for (const step of this.steps) {
@@ -234,6 +245,66 @@ describe("MigrationOrchestrator", () => {
       assert.deepStrictEqual(status.completedSteps, ["step-a"]);
       assert.deepStrictEqual(status.pendingSteps, []);
       assert.ok(status.lastRunAt !== null);
+    });
+  });
+
+  describe("ready", () => {
+    it("resolves immediately when runPending has not been called", async () => {
+      const step = createStep(
+        "step-r1",
+        { success: true, recordsMigrated: 0, errors: [] },
+        true,
+      );
+      const orchestrator = new MigrationOrchestrator([step]);
+
+      await assert.doesNotReject(() => orchestrator.ready);
+    });
+
+    it("resolves after runPending completes", async () => {
+      const step = createStep(
+        "step-r2",
+        { success: true, recordsMigrated: 1, errors: [] },
+        true,
+      );
+      const orchestrator = new MigrationOrchestrator([step]);
+
+      const runPromise = orchestrator.runPending();
+      const readyPromise = orchestrator.ready;
+
+      await runPromise;
+      await assert.doesNotReject(() => readyPromise);
+    });
+
+    it("resolves even when a step fails", async () => {
+      const step = createStep(
+        "step-r3",
+        { success: false, recordsMigrated: 0, errors: ["boom"] },
+        false,
+      );
+      const orchestrator = new MigrationOrchestrator([step]);
+
+      const runPromise = orchestrator.runPending();
+      const readyPromise = orchestrator.ready;
+
+      const results = await runPromise;
+      assert.strictEqual(results.length, 1);
+      await assert.doesNotReject(() => readyPromise);
+    });
+
+    it("returns the same promise identity before and after runPending", async () => {
+      const step = createStep(
+        "step-r4",
+        { success: true, recordsMigrated: 1, errors: [] },
+        true,
+      );
+      const orchestrator = new MigrationOrchestrator([step]);
+
+      const beforeReady = orchestrator.ready;
+      orchestrator.runPending();
+      const afterReady = orchestrator.ready;
+
+      assert.strictEqual(beforeReady === afterReady, false);
+      await afterReady;
     });
   });
 

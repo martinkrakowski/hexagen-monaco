@@ -7,7 +7,10 @@ import type {
   SavedProjectsPersistencePort,
   PersistenceError,
 } from "@hexagen/shared";
-import { getSavedProjectsPersistence } from "../lib/wire.client";
+import {
+  getSavedProjectsPersistence,
+  getMigrationReady,
+} from "../lib/wire.client";
 
 const CURRENT_SCHEMA_VERSION = 2;
 
@@ -36,13 +39,16 @@ export function useSavedProjects() {
 
   useEffect(() => {
     setMounted(true);
-    port.loadProjects().then((result) => {
+    const load = async () => {
+      await getMigrationReady();
+      const result = await port.loadProjects();
       if (result.success) {
         const loaded = result.value.map(fromBase);
         projectsRef.current = loaded;
         setProjects(loaded);
       }
-    });
+    };
+    load();
   }, [port]);
 
   const clearError = useCallback(() => setPersistError(null), []);
