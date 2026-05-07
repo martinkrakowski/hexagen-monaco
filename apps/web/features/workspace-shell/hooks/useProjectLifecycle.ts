@@ -137,7 +137,8 @@ export function useProjectLifecycle(
       activeWorkspace &&
       uiState.kind === "genesis" &&
       !draftLoading &&
-      !draft
+      !draft &&
+      projects.length > 0
     ) {
       const saved = loadSavedProject(activeWorkspace.projectId);
       if (saved) {
@@ -147,8 +148,7 @@ export function useProjectLifecycle(
         onGoToStep(0);
       }
     }
-    // eslint-disable react-hooks/exhaustive-deps
-  }, []);
+  }, [activeWorkspace, uiState.kind, draftLoading, draft, projects.length]);
 
   useEffect(() => {
     if (!draftLoading && draft && uiState.kind !== "edit") {

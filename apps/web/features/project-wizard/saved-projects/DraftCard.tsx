@@ -4,7 +4,7 @@ import { AlertTriangle, FileEdit, Trash2 } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import type { WizardDraft } from "@hexagen/shared";
 
-import { formatDate } from "./format-date";
+import { formatDate } from "@/components/saved-projects/format-date";
 
 interface DraftCardProps {
   draft: WizardDraft;

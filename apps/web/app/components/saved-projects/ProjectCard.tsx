@@ -9,37 +9,22 @@ import { formatDate } from "./format-date";
 interface ProjectCardProps {
   project: SavedProject;
   isLoaded: boolean;
-
-  // Rename state (controlled — overlay state machine lives in parent)
   isRenaming: boolean;
   renameValue: string;
   onChangeRenameValue: (value: string) => void;
   onStartRename: () => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
-
-  // Delete-confirm overlay
   isConfirmingDelete: boolean;
   onRequestDelete: () => void;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
-
-  // Load-with-draft overlay
   isConfirmingLoad: boolean;
   onRequestLoad: () => void;
   onConfirmLoadWithDraft: () => void;
   onCancelLoadWithDraft: () => void;
 }
 
-/**
- * Single saved-project row. Supports three mutually-exclusive
- * overlays (rename input, delete-confirm, load-with-draft-confirm)
- * plus a muted "Editing" indicator when the project is the one
- * currently loaded in the workspace.
- *
- * All overlay state is controlled from the parent (via
- * useSavedProjectsOverlay) — the card is stateless.
- */
 export function ProjectCard({
   project,
   isLoaded,
