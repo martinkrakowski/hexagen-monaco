@@ -15,6 +15,7 @@ interface HeaderProps {
   onNewProject: () => void;
   onLoadSavedProject: (project: SavedProject) => void;
   onOpenWelcomeManifest: () => void;
+  onNavigateToProjects?: () => void;
   isEditing?: boolean;
 }
 
@@ -23,6 +24,7 @@ export function Header({
   onNewProject,
   onLoadSavedProject,
   onOpenWelcomeManifest,
+  onNavigateToProjects,
   isEditing = false,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
@@ -37,11 +39,26 @@ export function Header({
     <div className="shrink-0">
       <header className="w-full px-6 py-1 bg-card border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img
-            src="https://hexagen-monaco.cloud/images/hexagen-monaco-logotype-2.svg"
-            alt="HexaGen Monaco"
-            className="h-12 w-auto"
-          />
+          {onNavigateToProjects ? (
+            <button
+              type="button"
+              onClick={onNavigateToProjects}
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              aria-label="Go to projects"
+            >
+              <img
+                src="https://hexagen-monaco.cloud/images/hexagen-monaco-logotype-2.svg"
+                alt="HexaGen Monaco"
+                className="h-12 w-auto"
+              />
+            </button>
+          ) : (
+            <img
+              src="https://hexagen-monaco.cloud/images/hexagen-monaco-logotype-2.svg"
+              alt="HexaGen Monaco"
+              className="h-12 w-auto"
+            />
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isEditing && (

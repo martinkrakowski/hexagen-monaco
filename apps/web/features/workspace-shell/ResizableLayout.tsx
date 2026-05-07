@@ -18,6 +18,10 @@ interface ResizableLayoutProps {
   leftTitle: string;
   /** Title rendered above the right panel. */
   rightTitle: string;
+  /** Called when the right panel is collapsed — clears ?right= from URL. */
+  onRightPanelClose?: () => void;
+  /** Called when the left panel is collapsed — clears ?middle= from URL. */
+  onLeftPanelClose?: () => void;
 }
 
 /**
@@ -26,29 +30,29 @@ interface ResizableLayoutProps {
  * All panel-specific rendering lives in `./resizable-layout/`.
  */
 export function ResizableLayout(props: ResizableLayoutProps) {
+  const { onRightPanelClose, onLeftPanelClose, ...rest } = props;
   const breakpoint = useBreakpoint();
   const isDesktop = breakpoint === "lg";
 
-  // Hooks must run unconditionally. Their state only takes effect on
-  // desktop, but allocating them here keeps ordering stable across
-  // breakpoint transitions.
   const leftCollapse = usePanelCollapse({
     defaultExpandedSize: LEFT_PANEL_SIZES.defaultSize,
+    onClose: onLeftPanelClose,
   });
   const rightCollapse = usePanelCollapse({
     defaultExpandedSize: RIGHT_PANEL_SIZES.defaultSize,
+    onClose: onRightPanelClose,
   });
 
   return (
     <div className="h-screen w-full overflow-hidden p-4 bg-background">
       {isDesktop ? (
         <DesktopLayout
-          {...props}
+          {...rest}
           leftCollapse={leftCollapse}
           rightCollapse={rightCollapse}
         />
       ) : (
-        <MobileLayout {...props} />
+        <MobileLayout {...rest} />
       )}
     </div>
   );

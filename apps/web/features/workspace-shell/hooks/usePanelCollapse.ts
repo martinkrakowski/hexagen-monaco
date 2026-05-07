@@ -6,6 +6,8 @@ import type { ImperativePanelHandle } from "react-resizable-panels";
 interface UsePanelCollapseOptions {
   /** Size (%) to restore to when the user clicks "expand". */
   defaultExpandedSize: number;
+  /** Optional callback fired when the panel collapses (e.g., to clear URL query param). */
+  onClose?: () => void;
 }
 
 export interface UsePanelCollapseReturn {
@@ -36,13 +38,14 @@ export interface UsePanelCollapseReturn {
 export function usePanelCollapse(
   options: UsePanelCollapseOptions,
 ): UsePanelCollapseReturn {
-  const { defaultExpandedSize } = options;
+  const { defaultExpandedSize, onClose } = options;
   const ref = useRef<ImperativePanelHandle | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const collapse = useCallback(() => {
     ref.current?.collapse();
-  }, []);
+    onClose?.();
+  }, [onClose]);
 
   const expand = useCallback(() => {
     ref.current?.resize(defaultExpandedSize);
@@ -50,7 +53,8 @@ export function usePanelCollapse(
 
   const onPanelCollapse = useCallback(() => {
     setIsCollapsed(true);
-  }, []);
+    onClose?.();
+  }, [onClose]);
 
   const onPanelExpand = useCallback(() => {
     setIsCollapsed(false);

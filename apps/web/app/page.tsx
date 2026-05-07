@@ -1,18 +1,24 @@
-import type { Metadata } from "next";
-export const dynamic = "force-dynamic";
+"use client";
+
+import { useState } from "react";
 import { ProjectWorkspace } from "../features/workspace-shell/ProjectWorkspace";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-
-export const metadata: Metadata = {
-  title: "HexaGen Monaco — Project Workspace",
-  description:
-    "Design and generate production-ready hexagonal monorepos with DDD principles",
-};
+import type { ViewMode } from "../types/view-mode";
 
 export default function Home() {
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>("visual");
+
   return (
     <ErrorBoundary>
-      <ProjectWorkspace />
+      <ProjectWorkspace
+        currentStepIndex={currentStepIndex}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onGoToStep={setCurrentStepIndex}
+        onCloseMiddlePanel={() => {}}
+        onCloseRightPanel={() => {}}
+      />
     </ErrorBoundary>
   );
 }

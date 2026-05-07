@@ -22,21 +22,36 @@ import { ResumeDraftDialog } from "./ResumeDraftDialog";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
 import { WelcomeManifestDialog } from "./WelcomeManifestDialog";
 
-/**
- * Root layout for the project workspace. Pure composition — no state,
- * no handlers, no effects. All concerns delegated to domain hooks:
- *
- * - useWizardForm       — form state + derived wizard data
- * - useWorkspaceShellUi — dialogs, view mode, step index, selection IDs
- * - useEditorSession    — editor workspace + active workspace
- * - useProjectLifecycle — orchestrated handlers composing the above
- */
-export function ProjectWorkspace() {
+import type { ViewMode } from "@/types/view-mode";
+
+export interface ProjectWorkspaceProps {
+  currentStepIndex: number;
+  viewMode: ViewMode;
+  middlePanel?: string;
+  rightPanel?: string;
+  onViewModeChange: (mode: ViewMode) => void;
+  onCloseMiddlePanel: () => void;
+  onCloseRightPanel: () => void;
+  onGoToStep: (index: number) => void;
+  onNavigateToProjects?: () => void;
+  children?: React.ReactNode;
+}
+
+export function ProjectWorkspace({
+  currentStepIndex,
+  viewMode,
+  onViewModeChange,
+  onCloseMiddlePanel,
+  onCloseRightPanel,
+  onGoToStep,
+  onNavigateToProjects,
+  children,
+}: ProjectWorkspaceProps) {
   const totalSteps = wizardSteps.length;
   const llmContext = useLocalLLM();
 
   const { form, wizardData, canProceed } = useWizardForm();
-  const ui = useWorkspaceShellUi();
+  const ui = useWorkspaceShellUi({ currentStepIndex, viewMode });
   const editor = useEditorSession();
   const lifecycle = useProjectLifecycle({
     form,
@@ -44,6 +59,7 @@ export function ProjectWorkspace() {
     uiState: ui.state,
     editor,
     totalSteps,
+    onGoToStep,
   });
 
   const isEditing = ui.state.kind === "edit";
@@ -63,6 +79,7 @@ export function ProjectWorkspace() {
           onLoadSavedProject={(project) =>
             lifecycle.handleLoadProject(project.id)
           }
+          onNavigateToProjects={onNavigateToProjects}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -70,6 +87,8 @@ export function ProjectWorkspace() {
             <ResizableLayout
               leftTitle="HexaGen Project Wizard"
               rightTitle="AI Governance"
+              onRightPanelClose={onCloseRightPanel}
+              onLeftPanelClose={onCloseMiddlePanel}
               left={
                 showSavedProjects ? (
                   <SavedProjectsList
@@ -85,9 +104,9 @@ export function ProjectWorkspace() {
                   />
                 ) : (
                   <WizardStepRouter
-                    currentStepIndex={ui.currentStepIndex}
+                    currentStepIndex={currentStepIndex}
                     totalSteps={totalSteps}
-                    canProceed={canProceed(ui.currentStepIndex)}
+                    canProceed={canProceed(currentStepIndex)}
                     isGenerating={lifecycle.isGenerating}
                     activeContextId={ui.activeContextId ?? ""}
                     activeMappingId={ui.activeMappingId ?? ""}
@@ -100,17 +119,17 @@ export function ProjectWorkspace() {
                       ui.openDialog({ kind: "saved-projects" })
                     }
                     onGenerate={lifecycle.handleGenerate}
-                    onViewModeChange={ui.setViewMode}
+                    onViewModeChange={onViewModeChange}
                   />
                 )
               }
               middle={
                 <ArchitecturePreviewPane
                   wizardData={wizardData}
-                  viewMode={ui.viewMode}
+                  viewMode={viewMode}
                   selectedFileId={editor.selectedFileId}
                   editedFiles={editor.editedFiles}
-                  onViewModeChange={ui.setViewMode}
+                  onViewModeChange={onViewModeChange}
                   onFileSelect={editor.selectFile}
                   onFileContentChange={editor.updateFile}
                   onFileSave={editor.markFileSaved}
@@ -119,7 +138,7 @@ export function ProjectWorkspace() {
               right={
                 <GovernancePanelWrapper
                   wizardData={wizardData}
-                  currentStepIndex={ui.currentStepIndex}
+                  currentStepIndex={currentStepIndex}
                 />
               }
             />
@@ -158,11 +177,12 @@ export function ProjectWorkspace() {
           onImportManifest={() => ui.openDialog({ kind: "load-manifest" })}
           onStartWizard={() => {
             ui.closeDialog();
-            ui.setStep(0);
+            onGoToStep(0);
           }}
           onLoadProject={lifecycle.handleLoadProject}
         />
       </div>
+      {children}
     </ExportProvider>
   );
 }
