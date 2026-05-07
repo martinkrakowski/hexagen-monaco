@@ -32,9 +32,13 @@ export class MigrationOrchestrator {
 
   async runPending(): Promise<MigrationResult[]> {
     if (typeof window === "undefined") return [];
+    if (this.migrationPromise) return this.migrationPromise;
 
     const promise = this.executePending();
     this.migrationPromise = promise;
+    promise.finally(() => {
+      this.migrationPromise = null;
+    });
     return promise;
   }
 

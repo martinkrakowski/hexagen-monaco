@@ -38,8 +38,13 @@ class MigrationOrchestrator {
   }
 
   async runPending(): Promise<MigrationResult[]> {
+    if (this.migrationPromise) return this.migrationPromise;
+
     const promise = this.executePending();
     this.migrationPromise = promise;
+    promise.finally(() => {
+      this.migrationPromise = null;
+    });
     return promise;
   }
 
@@ -291,7 +296,7 @@ describe("MigrationOrchestrator", () => {
       await assert.doesNotReject(() => readyPromise);
     });
 
-    it("returns the same promise identity before and after runPending", async () => {
+    it("returns a new promise identity after runPending is called", async () => {
       const step = createStep(
         "step-r4",
         { success: true, recordsMigrated: 1, errors: [] },
