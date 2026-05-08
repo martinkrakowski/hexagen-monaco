@@ -10,24 +10,31 @@ import {
   saveModelPreferences,
   type ApiKeyManager,
 } from "./modelPreferencesStorage";
-import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
+import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
 import { deriveStateFromEvent } from "./types";
-import type { WelcomeFlowState, WelcomeFlowActions } from "./types";
-import type { WelcomeScreenState } from "./types";
+import type {
+  ModelSelectionFlowState,
+  ModelSelectionFlowActions,
+} from "./types";
+import type { GenerateWithAiScreenState } from "./types";
 
-export type { WelcomeFlowState, WelcomeFlowActions, WelcomeScreenState };
+export type {
+  ModelSelectionFlowState,
+  ModelSelectionFlowActions,
+  GenerateWithAiScreenState,
+};
 export type { DomainModelId };
 
 import { useModelDownloadActions } from "./useModelDownloadActions";
 import { useCloudProviderActions } from "./useCloudProviderActions";
-import { useWelcomeFlowEffects } from "./useWelcomeFlowEffects";
+import { useModelSelectionFlowEffects } from "./useModelSelectionFlowEffects";
 
-export function useWelcomeFlowState(
+export function useModelSelectionFlowState(
   llmContext: LocalLLMContext,
-): [WelcomeFlowState, WelcomeFlowActions] {
+): [ModelSelectionFlowState, ModelSelectionFlowActions] {
   const { initializeModel, cancelDownload } = llmContext;
 
-  const [flowState, setFlowState] = useState<WelcomeFlowState>({
+  const [flowState, setFlowState] = useState<ModelSelectionFlowState>({
     state: "idle",
     isModelReady: false,
   });
@@ -39,7 +46,7 @@ export function useWelcomeFlowState(
   const preferences = useRef(getModelPreferences());
   const downloadIntentRef = useRef(0);
 
-  useWelcomeFlowEffects({
+  useModelSelectionFlowEffects({
     flowState,
     setFlowState,
     llmContext,
@@ -66,7 +73,7 @@ export function useWelcomeFlowState(
     apiKeyManager,
   });
 
-  const transitionTo = useCallback((state: WelcomeScreenState) => {
+  const transitionTo = useCallback((state: GenerateWithAiScreenState) => {
     setFlowState((prev) => ({ ...prev, state }));
   }, []);
 
@@ -83,7 +90,7 @@ export function useWelcomeFlowState(
   }, []);
 
   const setError = useCallback(
-    (message: string, errorCode?: WelcomeFlowErrorCode) => {
+    (message: string, errorCode?: GenerateWithAiErrorCode) => {
       setFlowState((prev) => ({
         ...prev,
         state: "error",
@@ -175,7 +182,7 @@ export function useWelcomeFlowState(
     }));
   }, []);
 
-  const actions: WelcomeFlowActions = useMemo(
+  const actions: ModelSelectionFlowActions = useMemo(
     () => ({
       transitionTo,
       selectLocalModel,

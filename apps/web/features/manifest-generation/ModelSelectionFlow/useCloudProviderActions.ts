@@ -2,16 +2,16 @@
 
 import { useCallback } from "react";
 import type { ApiKeyManager } from "./modelPreferencesStorage";
-import type { WelcomeFlowState } from "./types";
+import type { ModelSelectionFlowState } from "./types";
 import { deriveStateFromEvent } from "./types";
-import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
+import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
 import {
   validateApiKeyFormat,
   type ModelSelectionEvent,
 } from "@hexagen/manifest-generation";
 
 interface UseCloudProviderActionsOptions {
-  setFlowState: React.Dispatch<React.SetStateAction<WelcomeFlowState>>;
+  setFlowState: React.Dispatch<React.SetStateAction<ModelSelectionFlowState>>;
   apiKeyManager: ApiKeyManager | null;
 }
 
@@ -71,7 +71,7 @@ export function useCloudProviderActions({
             state: errorState,
             error:
               "The API key format appears invalid. Please check your key and try again.",
-            errorCode: "key_invalid_format" as WelcomeFlowErrorCode,
+            errorCode: "key_invalid_format" as GenerateWithAiErrorCode,
           }));
         }
       } catch (error) {
@@ -82,7 +82,7 @@ export function useCloudProviderActions({
             error instanceof Error
               ? error.message
               : "An error occurred validating your API key",
-          errorCode: "key_rejected" as WelcomeFlowErrorCode,
+          errorCode: "key_rejected" as GenerateWithAiErrorCode,
         }));
       }
     },

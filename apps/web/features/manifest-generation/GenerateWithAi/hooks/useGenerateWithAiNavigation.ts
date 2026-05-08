@@ -2,9 +2,9 @@ import { useRef, useCallback } from "react";
 import { getModelPreferences } from "../../ModelSelectionFlow/modelPreferencesStorage";
 import type { LocalLLMContext } from "../../../../lib/llm-interfaces";
 import type {
-  WelcomeFlowState,
-  WelcomeFlowActions,
-} from "../../ModelSelectionFlow/useWelcomeFlowState";
+  ModelSelectionFlowState,
+  ModelSelectionFlowActions,
+} from "../../ModelSelectionFlow/useModelSelectionFlowState";
 import type { ClientManifestGenerationResult } from "../types";
 
 export interface NavigationHandlers {
@@ -19,8 +19,8 @@ export interface NavigationHandlers {
 
 export function useGenerateWithAiNavigation(
   llmContext: LocalLLMContext,
-  flowState: WelcomeFlowState,
-  actions: WelcomeFlowActions,
+  flowState: ModelSelectionFlowState,
+  actions: ModelSelectionFlowActions,
   onSetDescription: (desc: string) => void,
   onSetSelectedExample: (idx: number | null) => void,
   clientGen: ClientManifestGenerationResult,

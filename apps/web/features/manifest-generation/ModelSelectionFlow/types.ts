@@ -1,18 +1,18 @@
 import type { DomainModelId } from "../../../lib/llm-interfaces";
-import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
+import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
 import {
   transitionState,
-  type WelcomeScreenState,
+  type GenerateWithAiScreenState,
   type ModelSelectionEvent,
 } from "@hexagen/manifest-generation";
 
-export type { WelcomeScreenState };
+export type { GenerateWithAiScreenState };
 export type { DomainModelId };
 
-export interface WelcomeFlowState {
-  state: WelcomeScreenState;
+export interface ModelSelectionFlowState {
+  state: GenerateWithAiScreenState;
   error?: string | null;
-  errorCode?: WelcomeFlowErrorCode | null;
+  errorCode?: GenerateWithAiErrorCode | null;
   aiSetupSkipped?: boolean;
   selectedModelId?: DomainModelId | null;
   cloudApiKey?: string | null;
@@ -36,8 +36,8 @@ export interface WelcomeFlowState {
   } | null;
 }
 
-export interface WelcomeFlowActions {
-  transitionTo: (state: WelcomeScreenState) => void;
+export interface ModelSelectionFlowActions {
+  transitionTo: (state: GenerateWithAiScreenState) => void;
   selectLocalModel: (modelId: DomainModelId, remember: boolean) => void;
   selectCloudProvider: (
     provider: string,
@@ -46,7 +46,7 @@ export interface WelcomeFlowActions {
   ) => void;
   skipAiSetup: () => void;
   cancelModelDownload: () => void;
-  setError: (message: string, errorCode?: WelcomeFlowErrorCode) => void;
+  setError: (message: string, errorCode?: GenerateWithAiErrorCode) => void;
   clearError: () => void;
   retryGeneration: () => void;
   saveGenerationResult: (manifest: string) => void;
@@ -69,8 +69,8 @@ export interface WelcomeFlowActions {
 }
 
 export function deriveStateFromEvent(
-  currentState: WelcomeScreenState,
+  currentState: GenerateWithAiScreenState,
   event: ModelSelectionEvent,
-): WelcomeScreenState {
+): GenerateWithAiScreenState {
   return transitionState(currentState, event);
 }

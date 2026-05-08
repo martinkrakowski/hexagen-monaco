@@ -1,6 +1,6 @@
 import type { DomainModelId } from "@hexagen/local-llm";
 
-export type WelcomeScreenState =
+export type GenerateWithAiScreenState =
   | "idle"
   | "model_selection"
   | "model_downloading"
@@ -41,7 +41,9 @@ export type ModelSelectionEvent =
   | { type: "CONFIRM_AND_CONTINUE" }
   | { type: "SET_ERROR"; message: string; errorCode?: string };
 
-function getValidTransitions(state: WelcomeScreenState): WelcomeScreenState[] {
+function getValidTransitions(
+  state: GenerateWithAiScreenState,
+): GenerateWithAiScreenState[] {
   switch (state) {
     case "idle":
       return ["model_selection", "generating", "wizard_hydration"];
@@ -77,16 +79,16 @@ function getValidTransitions(state: WelcomeScreenState): WelcomeScreenState[] {
 }
 
 export function canTransition(
-  currentState: WelcomeScreenState,
-  nextState: WelcomeScreenState,
+  currentState: GenerateWithAiScreenState,
+  nextState: GenerateWithAiScreenState,
 ): boolean {
   return getValidTransitions(currentState).includes(nextState);
 }
 
 export function transitionState(
-  currentState: WelcomeScreenState,
+  currentState: GenerateWithAiScreenState,
   event: ModelSelectionEvent,
-): WelcomeScreenState {
+): GenerateWithAiScreenState {
   switch (event.type) {
     case "SELECT_LOCAL_MODEL":
       return "model_downloading";
@@ -129,15 +131,15 @@ export function transitionState(
   }
 }
 
-export function getInitialState(): WelcomeScreenState {
+export function getInitialState(): GenerateWithAiScreenState {
   return "idle";
 }
 
-export function isTerminalState(state: WelcomeScreenState): boolean {
+export function isTerminalState(state: GenerateWithAiScreenState): boolean {
   return state === "wizard_hydration";
 }
 
-export function isBlockingState(state: WelcomeScreenState): boolean {
+export function isBlockingState(state: GenerateWithAiScreenState): boolean {
   return (
     state === "model_downloading" ||
     state === "key_validation" ||
@@ -147,16 +149,16 @@ export function isBlockingState(state: WelcomeScreenState): boolean {
 
 export interface ModelSelectionStateMachine {
   transition(
-    currentState: WelcomeScreenState,
+    currentState: GenerateWithAiScreenState,
     event: ModelSelectionEvent,
-  ): WelcomeScreenState;
+  ): GenerateWithAiScreenState;
   canTransition(
-    currentState: WelcomeScreenState,
-    nextState: WelcomeScreenState,
+    currentState: GenerateWithAiScreenState,
+    nextState: GenerateWithAiScreenState,
   ): boolean;
-  getInitialState(): WelcomeScreenState;
-  isTerminalState(state: WelcomeScreenState): boolean;
-  isBlockingState(state: WelcomeScreenState): boolean;
+  getInitialState(): GenerateWithAiScreenState;
+  isTerminalState(state: GenerateWithAiScreenState): boolean;
+  isBlockingState(state: GenerateWithAiScreenState): boolean;
 }
 
 export const modelSelectionMachine: ModelSelectionStateMachine = {

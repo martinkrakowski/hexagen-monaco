@@ -8,7 +8,7 @@ export {
 } from "./model-selection-state-machine";
 export type {
   ModelSelectionEvent,
-  WelcomeScreenState,
+  GenerateWithAiScreenState,
 } from "./model-selection-state-machine";
 export {
   isModelRecentlyVerified,

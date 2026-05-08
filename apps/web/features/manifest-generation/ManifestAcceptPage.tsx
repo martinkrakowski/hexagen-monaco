@@ -32,11 +32,11 @@ export function ManifestAcceptPage() {
 
   // Enforce happy path: redirect if no pending manifest
   useEffect(() => {
-    if (pendingManifest.yaml === null) {
+    if (pendingManifest.yaml === null && !isSaving) {
       setRedirecting(true);
       router.replace("/projects/new/ai");
     }
-  }, [pendingManifest.yaml, router]);
+  }, [pendingManifest.yaml, router, isSaving]);
 
   const handleAccept = async (yaml: string) => {
     if (!pendingManifest.projectName || !pendingManifest.formValues) {
@@ -46,18 +46,15 @@ export function ManifestAcceptPage() {
     setIsSaving(true);
     setSaveError(null);
     try {
-      // Save the project using the extracted form values and YAML
       const projectId = saveProject(
         pendingManifest.projectName,
         pendingManifest.formValues as ProjectSpec,
         yaml,
       );
 
-      // Clear the store
-      pendingManifest.clear();
-
-      // Navigate to the wizard with the new project ID
       router.push(`/wizard/1?project=${projectId}`);
+
+      pendingManifest.clear();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to save project";
@@ -171,6 +168,7 @@ export function ManifestAcceptPage() {
               onApprove={handleAccept}
               onRegenerate={handleBack}
               onStartOver={handleBack}
+              hideActions
             />
           </div>
 

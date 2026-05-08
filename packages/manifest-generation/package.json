@@ -16,7 +16,7 @@
     "./application/ports/out/model-preferences.port": "./src/application/ports/out/model-preferences.port.ts",
     "./application/ports/out/model-verification.port": "./src/application/ports/out/model-verification.port.ts",
     "./application/use-cases/client-manifest-generation.use-case": "./src/application/use-cases/client-manifest-generation.use-case.ts",
-    "./application/use-cases/welcome-flow.use-case": "./src/application/use-cases/welcome-flow.use-case.ts",
+    "./application/use-cases/generate-with-ai-flow.use-case": "./src/application/use-cases/generate-with-ai-flow.use-case.ts",
     "./application/use-cases/model-download-orchestrator.use-case": "./src/application/use-cases/model-download-orchestrator.use-case.ts",
     "./infrastructure/adapters/local-llm-generation.adapter": "./src/infrastructure/adapters/local-llm-generation.adapter.ts",
     "./infrastructure/adapters/model-preferences.adapter": "./src/infrastructure/adapters/model-preferences.adapter.ts"

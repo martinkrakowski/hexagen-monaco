@@ -1,5 +1,5 @@
 import type { DomainModelId } from "@hexagen/local-llm";
-import type { WelcomeScreenState } from "../../domain/services/model-selection-state-machine";
+import type { GenerateWithAiScreenState } from "../../domain/services/model-selection-state-machine";
 import type { ModelPreferencesPort } from "../ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../ports/out/model-verification.port";
 import { validateApiKeyFormat } from "../../domain/services/api-key-validation-service";
@@ -22,7 +22,7 @@ export interface CloudProviderCommand {
 
 export interface OrchestratorResult {
   success: boolean;
-  nextState: WelcomeScreenState;
+  nextState: GenerateWithAiScreenState;
   error?: string;
   errorCode?: string;
 }

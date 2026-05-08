@@ -11,14 +11,14 @@ import { UnsupportedHardwareMessage } from "./UnsupportedHardwareMessage";
 import { InterruptedView } from "./InterruptedView";
 
 import type {
-  WelcomeFlowState,
-  WelcomeFlowActions,
+  ModelSelectionFlowState,
+  ModelSelectionFlowActions,
   DomainModelId,
-} from "./useWelcomeFlowState";
+} from "./useModelSelectionFlowState";
 
 interface ModelSelectionContainerProps {
-  flowState: WelcomeFlowState;
-  flowActions: WelcomeFlowActions;
+  flowState: ModelSelectionFlowState;
+  flowActions: ModelSelectionFlowActions;
   llmContext: LocalLLMContext;
 }
 

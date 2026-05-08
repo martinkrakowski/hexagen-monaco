@@ -4,15 +4,15 @@ import { useState } from "react";
 import { Button, CardContent } from "@hexagen/ui";
 import type { DomainModelId } from "@hexagen/local-llm";
 import type {
-  WelcomeFlowState,
-  WelcomeFlowActions,
-} from "./useWelcomeFlowState";
+  ModelSelectionFlowState,
+  ModelSelectionFlowActions,
+} from "./useModelSelectionFlowState";
 
 interface SimpleModelSelectionProps {
-  selectLocalModel: WelcomeFlowActions["selectLocalModel"];
-  selectCloudProvider: WelcomeFlowActions["selectCloudProvider"];
-  cancelModelDownload: WelcomeFlowActions["cancelModelDownload"];
-  flowState: WelcomeFlowState;
+  selectLocalModel: ModelSelectionFlowActions["selectLocalModel"];
+  selectCloudProvider: ModelSelectionFlowActions["selectCloudProvider"];
+  cancelModelDownload: ModelSelectionFlowActions["cancelModelDownload"];
+  flowState: ModelSelectionFlowState;
 }
 
 export function SimpleModelSelection({

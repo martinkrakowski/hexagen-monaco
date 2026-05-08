@@ -11,26 +11,26 @@ import {
   isModelVerified,
   updateModelCacheMetadata,
 } from "./modelPreferencesStorage";
-import type { WelcomeFlowState } from "./types";
-import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
+import type { ModelSelectionFlowState } from "./types";
+import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
 
-interface UseWelcomeFlowEffectsOptions {
-  flowState: WelcomeFlowState;
-  setFlowState: React.Dispatch<React.SetStateAction<WelcomeFlowState>>;
+interface UseModelSelectionFlowEffectsOptions {
+  flowState: ModelSelectionFlowState;
+  setFlowState: React.Dispatch<React.SetStateAction<ModelSelectionFlowState>>;
   llmContext: LocalLLMContext;
   hasCheckedCache: RefObject<boolean>;
   preferences: RefObject<ReturnType<typeof getModelPreferences>>;
   setApiKeyManager: React.Dispatch<React.SetStateAction<ApiKeyManager | null>>;
 }
 
-export function useWelcomeFlowEffects({
+export function useModelSelectionFlowEffects({
   flowState,
   setFlowState,
   llmContext,
   hasCheckedCache,
   preferences,
   setApiKeyManager,
-}: UseWelcomeFlowEffectsOptions) {
+}: UseModelSelectionFlowEffectsOptions) {
   const { engineState, initializeModel, hasAnyCachedModel, hasModelInCache } =
     llmContext;
 
@@ -130,7 +130,7 @@ export function useWelcomeFlowEffects({
             error: isSmokeTestTimeout
               ? "The model failed to respond in time. It may be corrupted or too slow for this device."
               : "The model cache appears to be corrupted. You can repair the download.",
-            errorCode: "model_corrupted" as WelcomeFlowErrorCode,
+            errorCode: "model_corrupted" as GenerateWithAiErrorCode,
             isModelReady: false,
           }));
 
@@ -143,7 +143,7 @@ export function useWelcomeFlowEffects({
         ...prev,
         state: "error",
         error: engineState.errorMessage || "Failed to initialize model",
-        errorCode: "network_failure" as WelcomeFlowErrorCode,
+        errorCode: "network_failure" as GenerateWithAiErrorCode,
         isModelReady: false,
       }));
     }

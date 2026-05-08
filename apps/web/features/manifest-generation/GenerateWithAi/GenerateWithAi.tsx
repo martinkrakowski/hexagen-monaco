@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
+import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { assessModelCapability } from "@hexagen/manifest-generation";
@@ -81,13 +81,13 @@ export function GenerateWithAi({
     });
 
     return unsubscribe;
-  }, []);
+  }, [hasServerApiKey]);
 
   useEffect(() => {
     rememberChoiceRef.current = rememberChoice;
   }, [rememberChoice]);
 
-  const [flowState, actions] = useWelcomeFlowState(llmContext);
+  const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
 
   useEffect(() => {
