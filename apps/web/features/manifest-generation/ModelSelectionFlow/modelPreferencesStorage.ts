@@ -37,8 +37,19 @@ export interface ModelCacheMetadata {
   downloadCompleted: boolean;
 }
 
+const isBrowser: boolean = (() => {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.localStorage !== "undefined"
+    );
+  } catch {
+    return false;
+  }
+})();
+
 export function getModelCacheMetadata(modelId: string): ModelCacheMetadata {
-  if (typeof localStorage === "undefined") {
+  if (!isBrowser) {
     return { verifiedAt: null, downloadCompleted: false };
   }
 
@@ -60,7 +71,7 @@ export function updateModelCacheMetadata(
   modelId: string,
   updates: Partial<ModelCacheMetadata>,
 ): void {
-  if (typeof localStorage === "undefined") return;
+  if (!isBrowser) return;
 
   const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
   const current = getModelCacheMetadata(modelId);
@@ -78,7 +89,7 @@ export function updateModelCacheMetadata(
 }
 
 export function clearModelCacheMetadata(modelId: string): void {
-  if (typeof localStorage === "undefined") return;
+  if (!isBrowser) return;
 
   const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
   localStorage.removeItem(key);
@@ -109,7 +120,7 @@ export function isModelVerified(
 }
 
 export function getModelPreferences(): ModelPreferences {
-  if (typeof localStorage === "undefined") {
+  if (!isBrowser) {
     return {
       hasEnabledLocalModels: false,
       lastModelId: null,
@@ -141,7 +152,7 @@ export function getModelPreferences(): ModelPreferences {
 export function saveModelPreferences(
   preferences: Partial<ModelPreferences>,
 ): void {
-  if (typeof localStorage === "undefined") return;
+  if (!isBrowser) return;
 
   if (preferences.hasEnabledLocalModels !== undefined) {
     localStorage.setItem(
@@ -199,7 +210,7 @@ export function saveModelPreferences(
 }
 
 export function clearModelPreferences(): void {
-  if (typeof localStorage === "undefined") return;
+  if (!isBrowser) return;
 
   localStorage.removeItem(STORAGE_KEYS.LAST_MODEL_ID);
   localStorage.removeItem(STORAGE_KEYS.AUTO_LOAD_ENABLED);

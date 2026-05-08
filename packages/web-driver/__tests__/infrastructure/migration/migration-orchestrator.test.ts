@@ -98,9 +98,24 @@ class MigrationOrchestrator {
     return this.completedSteps.has(stepId);
   }
 
+  private getStorage(): Storage | null {
+    try {
+      if (
+        typeof window !== "undefined" &&
+        typeof window.localStorage !== "undefined"
+      ) {
+        return window.localStorage;
+      }
+    } catch {
+      // Node.js 22+ exposes localStorage as a getter that throws SecurityError
+    }
+    return null;
+  }
+
   private loadStatus(): void {
-    if (typeof localStorage === "undefined") return;
-    const stored = localStorage.getItem(MIGRATION_STATUS_KEY);
+    const storage = this.getStorage();
+    if (!storage) return;
+    const stored = storage.getItem(MIGRATION_STATUS_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -115,8 +130,9 @@ class MigrationOrchestrator {
   }
 
   private persistStatus(): void {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(
+    const storage = this.getStorage();
+    if (!storage) return;
+    storage.setItem(
       MIGRATION_STATUS_KEY,
       JSON.stringify({
         completedSteps: Array.from(this.completedSteps),
@@ -175,7 +191,7 @@ describe("MigrationOrchestrator", () => {
 
   beforeEach(() => {
     mockStorage = createMockStorage();
-    (globalThis as any).localStorage = mockStorage;
+    (globalThis as any).window = { localStorage: mockStorage };
   });
 
   describe("idempotency", () => {
