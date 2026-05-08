@@ -3,13 +3,29 @@ import type {
   ModelSelectionFlowState,
   ModelSelectionFlowActions,
 } from "../ModelSelectionFlow/useModelSelectionFlowState";
+import type { ViewTab } from "../ManifestPreview";
 
 export type { ModelSelectionFlowState };
+export type { ViewTab };
 
 export interface GenerateWithAiProps {
   onUseManifest?: (manifest: string) => void;
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (isGenerating: boolean) => void;
+  onPreviewStateChange?: (actions: PreviewFooterActions | null) => void;
+}
+
+export interface PreviewFooterActions {
+  onRegenerate: () => void;
+  onUseManifest: (yaml: string) => void;
+  manifestYaml: string;
+  hasFailures: boolean;
+  activeTab: ViewTab;
+  onTabChange: (tab: ViewTab) => void;
+  overallScore: number;
+  systemLabel: string;
+  architectureLabel: string;
+  contextCount: number;
 }
 
 export interface EntryPointsSectionProps {
@@ -71,4 +87,6 @@ export interface StateViewProps {
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;
   onRetryFromError: () => void;
+  externalActiveTab?: ViewTab;
+  onTabChange?: (tab: ViewTab) => void;
 }

@@ -9,6 +9,7 @@ import { LocalLLMProvider } from "@/llm-driver/useLocalLlm";
 import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationContext";
 import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
 import { SecretVaultProvider } from "@/lib/vault-context";
+import { NormalizeErrors } from "./NormalizeErrors";
 
 /*
  * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
@@ -65,6 +66,7 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
+        <NormalizeErrors />
         <SecretVaultProvider>
           <ThemeProvider>
             <SharedStateProvider>

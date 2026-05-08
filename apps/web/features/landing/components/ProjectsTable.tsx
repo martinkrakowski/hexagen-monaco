@@ -10,6 +10,11 @@ import { sortItems } from "../domain/project-list";
 import { SortableColumnHeader } from "./SortableColumnHeader";
 import { ProjectRow } from "./ProjectRow";
 
+interface RenameOverlay {
+  id: string;
+  value: string;
+}
+
 interface ProjectsTableProps {
   items: readonly ProjectListItem[];
   sort: SortState;
@@ -23,6 +28,10 @@ interface ProjectsTableProps {
   onRequestDelete: (id: string) => void;
   relativeTime: (ts: number) => string;
   shortDate: (ts: number) => string;
+  renameOverlay: RenameOverlay | null;
+  onUpdateRenameValue: (value: string) => void;
+  onCommitRename: (id: string) => void;
+  onCancelRename: () => void;
 }
 
 export function ProjectsTable({
@@ -38,6 +47,10 @@ export function ProjectsTable({
   onRequestDelete,
   relativeTime,
   shortDate,
+  renameOverlay,
+  onUpdateRenameValue,
+  onCommitRename,
+  onCancelRename,
 }: ProjectsTableProps) {
   const sorted = sortItems(items, sort);
   const allIds = sorted.map((item) => item.id);
@@ -92,6 +105,13 @@ export function ProjectsTable({
               onRequestDelete={onRequestDelete}
               relativeTime={relativeTime}
               shortDate={shortDate}
+              isRenaming={renameOverlay?.id === item.id}
+              renameValue={
+                renameOverlay?.id === item.id ? renameOverlay.value : undefined
+              }
+              onUpdateRenameValue={onUpdateRenameValue}
+              onCommitRename={onCommitRename}
+              onCancelRename={onCancelRename}
             />
           ))}
         </tbody>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo } from "react";
+import React, { memo, useRef, useEffect } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Checkbox } from "@hexagen/ui";
 import { Button } from "@hexagen/ui";
@@ -15,6 +15,11 @@ interface ProjectRowProps {
   onRequestDelete: (id: string) => void;
   relativeTime: (ts: number) => string;
   shortDate: (ts: number) => string;
+  isRenaming?: boolean;
+  renameValue?: string;
+  onUpdateRenameValue?: (value: string) => void;
+  onCommitRename?: (id: string) => void;
+  onCancelRename?: () => void;
 }
 
 export const ProjectRow = memo(function ProjectRow({
@@ -26,7 +31,29 @@ export const ProjectRow = memo(function ProjectRow({
   onRequestDelete,
   relativeTime,
   shortDate,
+  isRenaming = false,
+  renameValue,
+  onUpdateRenameValue,
+  onCommitRename,
+  onCancelRename,
 }: ProjectRowProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isRenaming]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && onCommitRename) {
+      onCommitRename(item.id);
+    } else if (e.key === "Escape" && onCancelRename) {
+      onCancelRename();
+    }
+  };
+
   return (
     <tr className="group border-b border-border transition-colors hover:bg-accent/30 h-12">
       <td className="w-10 px-3 py-2">
@@ -38,13 +65,26 @@ export const ProjectRow = memo(function ProjectRow({
       </td>
       <td className="px-3 py-2">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() => onLoadProject(item.id)}
-            className="text-primary hover:underline cursor-pointer text-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            {item.name}
-          </button>
+          {isRenaming ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={renameValue ?? item.name}
+              onChange={(e) => onUpdateRenameValue?.(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={() => onCommitRename?.(item.id)}
+              className="text-sm bg-background border border-ring rounded px-2 py-1 w-full max-w-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Rename ${item.name}`}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => onLoadProject(item.id)}
+              className="text-primary hover:underline cursor-pointer text-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              {item.name}
+            </button>
+          )}
           <p className="text-xs text-muted-foreground truncate max-w-md hidden sm:block">
             {item.description}
           </p>

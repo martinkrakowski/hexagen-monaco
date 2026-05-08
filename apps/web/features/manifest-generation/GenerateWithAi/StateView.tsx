@@ -7,8 +7,8 @@ import type { StateViewProps } from "./types";
 
 const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {
   "no-inbound-ports": "No Inbound Ports",
-  "single-context-no-outbound": "Missing Outbound Ports",
-  "generic-context-name": "Generic Context Name",
+  "single-context-no-outbound": "No Outbound Ports",
+  "generic-context-name": "Generic Name",
 };
 
 export function StateView({
@@ -18,6 +18,8 @@ export function StateView({
   onConfirmAndContinue,
   onRegenerate,
   onRetryFromError,
+  externalActiveTab,
+  onTabChange,
 }: StateViewProps) {
   // Clarification needed
   if (flowState.state === "clarification_needed") {
@@ -76,6 +78,11 @@ export function StateView({
         onApprove={(yaml) => onUseManifest?.(yaml)}
         onRegenerate={onRegenerate}
         onStartOver={actions.rejectManifest}
+        hideActions
+        hideHeader
+        embedded
+        activeTab={externalActiveTab}
+        onTabChange={onTabChange}
       />
     );
   }
