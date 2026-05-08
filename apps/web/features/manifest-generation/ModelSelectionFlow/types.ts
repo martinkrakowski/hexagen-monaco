@@ -1,5 +1,5 @@
 import type { DomainModelId } from "../../../lib/llm-interfaces";
-import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
+import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
 import {
   transitionState,
   type WelcomeScreenState,
@@ -9,10 +9,10 @@ import {
 export type { WelcomeScreenState };
 export type { DomainModelId };
 
-export interface WelcomeFlowState {
+export interface ModelSelectionFlowState {
   state: WelcomeScreenState;
   error?: string | null;
-  errorCode?: WelcomeFlowErrorCode | null;
+  errorCode?: GenerateWithAiErrorCode | null;
   aiSetupSkipped?: boolean;
   selectedModelId?: DomainModelId | null;
   cloudApiKey?: string | null;
@@ -36,7 +36,7 @@ export interface WelcomeFlowState {
   } | null;
 }
 
-export interface WelcomeFlowActions {
+export interface ModelSelectionFlowActions {
   transitionTo: (state: WelcomeScreenState) => void;
   selectLocalModel: (modelId: DomainModelId, remember: boolean) => void;
   selectCloudProvider: (
@@ -46,7 +46,7 @@ export interface WelcomeFlowActions {
   ) => void;
   skipAiSetup: () => void;
   cancelModelDownload: () => void;
-  setError: (message: string, errorCode?: WelcomeFlowErrorCode) => void;
+  setError: (message: string, errorCode?: GenerateWithAiErrorCode) => void;
   clearError: () => void;
   retryGeneration: () => void;
   saveGenerationResult: (manifest: string) => void;

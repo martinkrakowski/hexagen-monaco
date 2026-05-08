@@ -2,7 +2,7 @@ import { Button, Badge } from "@hexagen/ui";
 import { ManifestPreview } from "../ManifestPreview";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
-import { WELCOME_FLOW_ERROR_MESSAGES } from "./WelcomeFlowError";
+import { GENERATE_WITH_AI_ERROR_MESSAGES } from "./GenerateWithAiError";
 import type { StateViewProps } from "./types";
 
 const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {
@@ -111,8 +111,8 @@ export function StateView({
   // Error state
   if (flowState.state === "error") {
     const errorMessage = flowState.errorCode
-      ? WELCOME_FLOW_ERROR_MESSAGES[
-          flowState.errorCode as keyof typeof WELCOME_FLOW_ERROR_MESSAGES
+      ? GENERATE_WITH_AI_ERROR_MESSAGES[
+          flowState.errorCode as keyof typeof GENERATE_WITH_AI_ERROR_MESSAGES
         ]
       : flowState.error || "An unknown error occurred";
 

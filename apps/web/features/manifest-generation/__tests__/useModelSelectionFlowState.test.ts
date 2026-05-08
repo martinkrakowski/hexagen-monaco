@@ -8,7 +8,7 @@ global.document = dom.window.document as unknown as Document;
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useWelcomeFlowState } from "../ModelSelectionFlow/useWelcomeFlowState";
+import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import type {
   LocalLLMContext,
   LocalLLMState,
@@ -45,7 +45,7 @@ mock.module("../../../app/lib/wire", () => ({
   getSecretVault: () => ({}),
 }));
 
-describe("useWelcomeFlowState", () => {
+describe("useModelSelectionFlowState", () => {
   let mockEngineState: LocalLLMState;
   let mockInitializeModel: mock.Mock<(modelId: string) => Promise<void>>;
   let mockCancelDownload: mock.Mock<() => void>;
@@ -75,7 +75,9 @@ describe("useWelcomeFlowState", () => {
 
   describe("Initial State", () => {
     it("should start in idle state", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       assert.strictEqual(result.current[0].state, "idle");
     });
 
@@ -92,7 +94,9 @@ describe("useWelcomeFlowState", () => {
         }),
       }));
 
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       // Wait for the effect to run
       act(() => {});
       assert.strictEqual(result.current[0].state, "unsupported");
@@ -110,7 +114,9 @@ describe("useWelcomeFlowState", () => {
         }),
       }));
 
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       act(() => {});
       assert.strictEqual(result.current[0].errorCode, "webgpu_unavailable");
     });
@@ -118,7 +124,9 @@ describe("useWelcomeFlowState", () => {
 
   describe("State Transitions", () => {
     it("should transition idle → model_selection (user clicks prefer local)", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { transitionTo } = result.current[1];
 
       act(() => {
@@ -129,7 +137,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition model_selection → model_downloading (user selects model)", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel } = result.current[1];
 
       act(() => {
@@ -142,7 +152,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition model_downloading → generating (model ready)", async () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel } = result.current[1];
 
       act(() => {
@@ -162,7 +174,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition model_downloading → error (download fails)", async () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel } = result.current[1];
 
       // Make initializeModel throw an error
@@ -181,7 +195,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition generating → preview (manifest generated)", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { saveGenerationResult } = result.current[1];
 
       act(() => {
@@ -193,7 +209,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition generating → error (generation fails)", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { setError } = result.current[1];
 
       act(() => {
@@ -205,7 +223,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition error → idle (user retries)", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { setError, retryGeneration } = result.current[1];
 
       // First go to error state
@@ -223,7 +243,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should transition to interrupted state (user cancels download)", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel, cancelModelDownload } = result.current[1];
 
       // Start downloading
@@ -254,13 +276,17 @@ describe("useWelcomeFlowState", () => {
         }),
       }));
 
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       act(() => {});
       assert.strictEqual(result.current[0].state, "unsupported");
     });
 
     it("should reject manifest preserving lastRejectedManifest", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { saveGenerationResult, rejectManifest } = result.current[1];
 
       act(() => {
@@ -282,7 +308,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should regenerate manifest transitioning preview → generating", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { saveGenerationResult, regenerateManifest } = result.current[1];
 
       act(() => {
@@ -300,7 +328,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should clear manifest content on regenerate", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { saveGenerationResult, regenerateManifest } = result.current[1];
 
       act(() => {
@@ -317,7 +347,9 @@ describe("useWelcomeFlowState", () => {
 
   describe("Actions", () => {
     it("should validate API key with correct format", async () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { validateApiKey } = result.current[1];
 
       // Test OpenAI key format
@@ -348,7 +380,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should select local model with remember=true/false", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel } = result.current[1];
 
       // Test with remember=true
@@ -365,7 +399,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should cancel model download", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { cancelModelDownload } = result.current[1];
 
       act(() => {
@@ -376,7 +412,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should skip AI setup", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { skipAiSetup } = result.current[1];
 
       act(() => {
@@ -388,7 +426,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should clear error and return to idle", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { setError, clearError } = result.current[1];
 
       act(() => {
@@ -404,7 +444,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should restart from selection", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { setError, restartFromSelection } = result.current[1];
 
       act(() => {
@@ -420,7 +462,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should proceed to wizard", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { proceedToWizard } = result.current[1];
 
       act(() => {
@@ -431,7 +475,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should set error with error code", () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { setError } = result.current[1];
 
       act(() => {
@@ -444,7 +490,9 @@ describe("useWelcomeFlowState", () => {
     });
 
     it("should set key_invalid_format error code when cloud key validation fails", async () => {
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectCloudProvider } = result.current[1];
 
       await act(async () => {
@@ -466,7 +514,9 @@ describe("useWelcomeFlowState", () => {
         });
       });
 
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel, cancelModelDownload } = result.current[1];
 
       // Start model download
@@ -505,7 +555,9 @@ describe("useWelcomeFlowState", () => {
         return Promise.resolve();
       });
 
-      const { result } = renderHook(() => useWelcomeFlowState(llmContext));
+      const { result } = renderHook(() =>
+        useModelSelectionFlowState(llmContext),
+      );
       const { selectLocalModel } = result.current[1];
 
       // Start model A download

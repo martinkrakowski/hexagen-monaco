@@ -6,11 +6,11 @@ import {
   saveModelPreferences,
   clearModelCacheMetadata,
 } from "./modelPreferencesStorage";
-import type { WelcomeFlowState } from "./types";
+import type { ModelSelectionFlowState } from "./types";
 import { deriveStateFromEvent } from "./types";
 
 interface UseModelDownloadActionsOptions {
-  setFlowState: React.Dispatch<React.SetStateAction<WelcomeFlowState>>;
+  setFlowState: React.Dispatch<React.SetStateAction<ModelSelectionFlowState>>;
   initializeModel: (modelId: DomainModelId) => Promise<void>;
   cancelDownload: () => void;
   downloadIntentRef: RefObject<number>;

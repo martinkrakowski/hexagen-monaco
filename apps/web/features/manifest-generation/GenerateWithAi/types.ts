@@ -1,10 +1,10 @@
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 import type {
-  WelcomeFlowState,
-  WelcomeFlowActions,
-} from "../ModelSelectionFlow/useWelcomeFlowState";
+  ModelSelectionFlowState,
+  ModelSelectionFlowActions,
+} from "../ModelSelectionFlow/useModelSelectionFlowState";
 
-export type { WelcomeFlowState };
+export type { ModelSelectionFlowState };
 
 export interface GenerateWithAiProps {
   onUseManifest?: (manifest: string) => void;
@@ -69,8 +69,8 @@ export interface ClientManifestGenerationResult {
 }
 
 export interface StateViewProps {
-  flowState: WelcomeFlowState;
-  actions: WelcomeFlowActions;
+  flowState: ModelSelectionFlowState;
+  actions: ModelSelectionFlowActions;
   onUseManifest?: (manifest: string) => void;
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;
