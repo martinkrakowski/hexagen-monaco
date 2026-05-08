@@ -273,17 +273,6 @@ export function WelcomeScreen({
         </div>
       )}
 
-      <ActionBar
-        canGenerate={canGenerate && !hasError}
-        isGenerating={isGenerating}
-        onGenerate={handleGenerate}
-        onCancel={() => {
-          stagedGen.reset();
-          actions.transitionTo("idle");
-        }}
-        disabledTooltip={disabledTooltip}
-      />
-
       <ExampleCardsSection
         selectedExample={formState.selectedExample}
         onUseExample={(example, index) => {
@@ -316,6 +305,17 @@ export function WelcomeScreen({
         overrideModelCheck={overrideModelCheck}
         onOverrideChange={setOverrideModelCheck}
         onSwitchModel={() => actions.transitionTo("model_selection")}
+      />
+
+      <ActionBar
+        canGenerate={canGenerate && !hasError}
+        isGenerating={isGenerating}
+        onGenerate={handleGenerate}
+        onCancel={() => {
+          stagedGen.reset();
+          actions.transitionTo("idle");
+        }}
+        disabledTooltip={disabledTooltip}
       />
 
       {isGenerating && (
