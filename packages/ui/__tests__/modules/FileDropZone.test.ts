@@ -80,12 +80,13 @@ describe("FileDropZone component", () => {
     const input = container.querySelector(
       'input[type="file"]',
     ) as HTMLInputElement;
-    input.click = () => {};
+    let clicked = false;
+    input.click = () => {
+      clicked = true;
+    };
     const dropZone = container.querySelector('[role="button"]');
     fireEvent.click(dropZone);
-    // Mock click on input
-    fireEvent.click(input);
-    assert.ok(input);
+    assert.ok(clicked, "clicking drop zone should invoke input.click");
   });
 
   it("handles file selection via input change", () => {
