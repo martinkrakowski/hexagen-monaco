@@ -15,7 +15,11 @@
       {
         "patterns": [
           {
-            "group": ["@hexagen/*/*", "!@hexagen/shared/*"],
+            "group": [
+              "@hexagen/*/*",
+              "!@hexagen/shared/*",
+              "!@hexagen/local-llm/shared"
+            ],
             "message": "Cross-package imports must be done via the barrel file. Only deep imports from `shared` are allowed."
           }
         ]

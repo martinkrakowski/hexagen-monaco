@@ -9,8 +9,13 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "source": "./src/index.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/index.js",
+      "source": "./src/index.ts"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "default": "./dist/shared/index.js",
+      "source": "./src/shared/index.ts"
     }
   },
   "scripts": {

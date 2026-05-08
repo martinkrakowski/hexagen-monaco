@@ -1,8 +1,8 @@
 import type {
   SendStructuredRequestPort,
   DomainModelId,
-} from "@hexagen/local-llm";
-import { createLLMRequest } from "@hexagen/local-llm";
+} from "@hexagen/local-llm/shared";
+import { createLLMRequest } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import { extractYamlFromResponse } from "../../domain/manifest-yaml-extractor.js";
 

@@ -1,16 +1,9 @@
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
 import type {
   PipelineState,
-  NormalizedPrompt,
-  DomainAnalysis,
-  ClassificationResult,
-  PortMap,
-  AdapterBindings,
-  AssembledManifest,
   ValidationReport,
 } from "../../../domain/value-objects/pipeline-state.js";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
-import { MAX_RETRY_ATTEMPTS } from "../../../domain/prompts/generate-manifest.prompt.js";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case.js";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case.js";
 import { ExecuteContextClassificationUseCase } from "./execute-context-classification.use-case.js";
@@ -26,7 +19,9 @@ export interface StagedGenerationCallbacks {
   onValidationError?: (stage: number, errors: string[]) => void;
 }
 
-type StageResult<T> = { success: true; value: T } | { success: false; error: unknown };
+type StageResult<T> =
+  | { success: true; value: T }
+  | { success: false; error: unknown };
 
 export class ExecuteStagedGenerationUseCase {
   private readonly stage0: ExecutePromptNormalizationUseCase;
@@ -76,35 +71,48 @@ export class ExecuteStagedGenerationUseCase {
 
     // Stage 0: Prompt Normalization
     const s0 = await runStage(0, "Prompt Normalization", () =>
-      this.stage0.execute(userDescription, variables, (chunk) => callbacks?.onChunk?.(0, chunk)),
+      this.stage0.execute(userDescription, variables, (chunk) =>
+        callbacks?.onChunk?.(0, chunk),
+      ),
     );
     if (!s0.success) return { success: false, error: s0.error, state };
     state.stage0 = s0.value;
 
     // Stage 1: Domain Extraction
     const s1 = await runStage(1, "Domain Extraction", () =>
-      this.stage1.execute({ stage0: state.stage0 }, (chunk) => callbacks?.onChunk?.(1, chunk)),
+      this.stage1.execute({ stage0: state.stage0 }, (chunk) =>
+        callbacks?.onChunk?.(1, chunk),
+      ),
     );
     if (!s1.success) return { success: false, error: s1.error, state };
     state.stage1 = s1.value;
 
     // Stage 2: Context Classification
     const s2 = await runStage(2, "Context Classification", () =>
-      this.stage2.execute({ stage0: state.stage0, stage1: state.stage1 }, (chunk) => callbacks?.onChunk?.(2, chunk)),
+      this.stage2.execute(
+        { stage0: state.stage0, stage1: state.stage1 },
+        (chunk) => callbacks?.onChunk?.(2, chunk),
+      ),
     );
     if (!s2.success) return { success: false, error: s2.error, state };
     state.stage2 = s2.value;
 
     // Stage 3: Port Mapping
     const s3 = await runStage(3, "Port Mapping", () =>
-      this.stage3.execute({ stage2: state.stage2 }, (chunk) => callbacks?.onChunk?.(3, chunk)),
+      this.stage3.execute({ stage2: state.stage2 }, (chunk) =>
+        callbacks?.onChunk?.(3, chunk),
+      ),
     );
     if (!s3.success) return { success: false, error: s3.error, state };
     state.stage3 = s3.value;
 
     // Stage 4: Adapter Assignment
     const s4 = await runStage(4, "Adapter Assignment", () =>
-      this.stage4.execute({ stage0: state.stage0, stage3: state.stage3 }, variables, (chunk) => callbacks?.onChunk?.(4, chunk)),
+      this.stage4.execute(
+        { stage0: state.stage0, stage3: state.stage3 },
+        variables,
+        (chunk) => callbacks?.onChunk?.(4, chunk),
+      ),
     );
     if (!s4.success) return { success: false, error: s4.error, state };
     state.stage4 = s4.value;
@@ -123,7 +131,9 @@ export class ExecuteStagedGenerationUseCase {
 
     // Stage 6: Validation Review
     const s6 = await runStage(6, "Validation Review", () =>
-      this.stage6.execute({ stage5: state.stage5 }, (chunk) => callbacks?.onChunk?.(6, chunk)),
+      this.stage6.execute({ stage5: state.stage5 }, (chunk) =>
+        callbacks?.onChunk?.(6, chunk),
+      ),
     );
     if (!s6.success) return { success: false, error: s6.error, state };
     state.stage6 = s6.value;

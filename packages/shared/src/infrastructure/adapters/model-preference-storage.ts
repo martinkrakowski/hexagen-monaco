@@ -6,9 +6,20 @@ export interface ModelPreferencesStorage {
   removeItem(key: string): void;
 }
 
+const isBrowser: boolean = (() => {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.localStorage !== "undefined"
+    );
+  } catch {
+    return false;
+  }
+})();
+
 function getStorage(): ModelPreferencesStorage | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage;
+  if (!isBrowser) return null;
+  return window.localStorage;
 }
 
 export function getAutoLoadEnabled(): boolean {

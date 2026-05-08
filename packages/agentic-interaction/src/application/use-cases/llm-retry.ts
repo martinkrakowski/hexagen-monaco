@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import { parseJSON } from "../../domain/index.js";
 import type { RetryResult } from "../../domain/prompts/generate-manifest.prompt.js";

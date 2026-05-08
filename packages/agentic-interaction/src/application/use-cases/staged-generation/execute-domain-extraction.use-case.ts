@@ -1,6 +1,6 @@
 import { ok, err } from "@hexagen/shared";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import {
   STAGE1_DOMAIN_SYSTEM_PROMPT,
@@ -17,7 +17,10 @@ export class ExecuteDomainExtractionUseCase {
   async execute(
     state: Pick<PipelineState, "stage0">,
     onChunk?: (chunk: string) => void,
-  ): Promise<{ success: true; value: DomainAnalysis } | { success: false; error: unknown }> {
+  ): Promise<
+    | { success: true; value: DomainAnalysis }
+    | { success: false; error: unknown }
+  > {
     const prompt = compileStage1Prompt(state);
 
     const request = createLLMRequest(

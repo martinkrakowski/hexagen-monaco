@@ -5,7 +5,7 @@ import type {
   ArchitectureGraphLike,
   LinterReportLike,
 } from "@hexagen/prompt-compiler";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
 import type {
   ReconcileUseCase,
   ProjectSpecLike,

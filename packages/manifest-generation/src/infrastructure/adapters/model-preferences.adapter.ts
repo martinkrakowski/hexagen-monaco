@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm";
+import type { DomainModelId } from "@hexagen/local-llm/shared";
 import { MODEL_PREFERENCE_KEYS } from "@hexagen/shared";
 import type { ModelPreferencesPort } from "../../application/ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../../application/ports/out/model-verification.port";
@@ -121,8 +121,29 @@ export function createModelPreferencesAdapter(
   };
 }
 
+const noopStorage: StorageLike = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+function getStorageSafely(): StorageLike | null {
+  try {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.localStorage !== "undefined"
+    ) {
+      return window.localStorage;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function createLocalStorageModelPreferencesAdapter(): ModelPreferencesPort {
-  return createModelPreferencesAdapter(localStorage);
+  const storage = getStorageSafely() ?? noopStorage;
+  return createModelPreferencesAdapter(storage);
 }
 
 interface CacheMetadata {
@@ -179,5 +200,6 @@ export function createLocalStorageVerificationAdapter(
 }
 
 export function createBrowserVerificationAdapter(): ModelVerificationPort {
-  return createLocalStorageVerificationAdapter(localStorage);
+  const storage = getStorageSafely() ?? noopStorage;
+  return createLocalStorageVerificationAdapter(storage);
 }

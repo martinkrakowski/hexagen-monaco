@@ -1,12 +1,12 @@
 import { ok, err } from "@hexagen/shared";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
 } from "../../../domain/index.js";
-import type { NormalizedPrompt, PipelineState } from "../../../domain/value-objects/pipeline-state.js";
+import type { NormalizedPrompt } from "../../../domain/value-objects/pipeline-state.js";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
 
 export class ExecutePromptNormalizationUseCase {
@@ -16,7 +16,10 @@ export class ExecutePromptNormalizationUseCase {
     userDescription: string,
     variables?: PromptVariables,
     onChunk?: (chunk: string) => void,
-  ): Promise<{ success: true; value: NormalizedPrompt } | { success: false; error: unknown }> {
+  ): Promise<
+    | { success: true; value: NormalizedPrompt }
+    | { success: false; error: unknown }
+  > {
     const prompt = compileStage0Prompt({}, variables || { userDescription });
 
     const request = createLLMRequest(
