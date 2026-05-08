@@ -1,18 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { ProjectCard } from "@/components/saved-projects";
 import { useSavedProjectsOverlay } from "@/hooks/useSavedProjectsOverlay";
 import type { SavedProject } from "@/hooks/useSavedProjects";
-import { EmptyProjectsHero } from "./EmptyProjectsHero";
 
 interface ProjectCardGridProps {
   projects: SavedProject[];
   onLoadProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => void;
-  onOpenWelcomeDialog: () => void;
-  onImportManifest: () => void;
-  onStartWizard: () => void;
+}
+
+function EmptyState() {
+  return (
+    <div className="text-center py-12">
+      <p className="text-muted-foreground mb-4">No projects yet.</p>
+      <Link href="/projects/new" className="text-primary hover:underline">
+        Create a new project
+      </Link>
+    </div>
+  );
 }
 
 export function ProjectCardGrid({
@@ -20,9 +28,6 @@ export function ProjectCardGrid({
   onLoadProject,
   onDeleteProject,
   onRenameProject,
-  onOpenWelcomeDialog,
-  onImportManifest,
-  onStartWizard,
 }: ProjectCardGridProps) {
   const {
     overlay,
@@ -35,13 +40,7 @@ export function ProjectCardGrid({
   } = useSavedProjectsOverlay();
 
   if (projects.length === 0) {
-    return (
-      <EmptyProjectsHero
-        onOpenWelcomeDialog={onOpenWelcomeDialog}
-        onImportManifest={onImportManifest}
-        onStartWizard={onStartWizard}
-      />
-    );
+    return <EmptyState />;
   }
 
   const handleCommitRename = (id: string) => {

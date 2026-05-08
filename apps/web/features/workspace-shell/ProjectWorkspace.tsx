@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FormProvider } from "react-hook-form";
 
 import { ResizableLayout } from "./ResizableLayout";
@@ -49,6 +50,7 @@ export function ProjectWorkspace({
   hasProjectUrlParam,
   children,
 }: ProjectWorkspaceProps) {
+  const router = useRouter();
   const totalSteps = wizardSteps.length;
   const llmContext = useLocalLLM();
 
@@ -75,7 +77,7 @@ export function ProjectWorkspace({
         <Header
           onLoadManifest={() => ui.openDialog({ kind: "load-manifest" })}
           isEditing={isEditing}
-          onNewProject={() => ui.openDialog({ kind: "welcome-manifest" })}
+          onNewProject={() => router.push("/projects/new")}
           onOpenWelcomeManifest={() =>
             ui.openDialog({ kind: "welcome-manifest" })
           }

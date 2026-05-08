@@ -1,3 +1,5 @@
-export default function ImportManifestPage() {
-  return <div>Import Manifest - /projects/new/import</div>;
+import { ImportManifestPage } from "@/manifest-generation/ImportManifestPage";
+
+export default function Page() {
+  return <ImportManifestPage />;
 }

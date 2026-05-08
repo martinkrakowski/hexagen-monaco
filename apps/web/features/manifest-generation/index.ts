@@ -8,5 +8,7 @@ export { ExampleCard } from "./ExampleCard";
 export { useManifestGeneration } from "./useManifestGeneration";
 export { useWelcomeFlowState } from "./ModelSelectionFlow/useWelcomeFlowState";
 export { ModelSelectionContainer } from "./ModelSelectionFlow/ModelSelectionContainer";
+export { ManifestAcceptPage } from "./ManifestAcceptPage";
+export { usePendingManifest } from "./store/usePendingManifest";
 
 // Made with Bob

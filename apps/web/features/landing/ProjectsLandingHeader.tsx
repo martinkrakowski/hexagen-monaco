@@ -1,16 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { Sun, Moon, Plus } from "lucide-react";
 import { Button } from "@hexagen/ui";
 
-interface ProjectsLandingHeaderProps {
-  onNewProject: () => void;
-}
-
-export function ProjectsLandingHeader({
-  onNewProject,
-}: ProjectsLandingHeaderProps) {
+export function ProjectsLandingHeader() {
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -23,7 +19,7 @@ export function ProjectsLandingHeader({
         />
       </div>
       <div className="flex items-center gap-2">
-        <Button onClick={onNewProject} size="sm">
+        <Button onClick={() => router.push("/projects/new")} size="sm">
           <Plus className="h-4 w-4 mr-1" />
           New Project
         </Button>

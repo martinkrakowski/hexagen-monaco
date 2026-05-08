@@ -1,3 +1,5 @@
+import { NewProjectPage } from "@/landing/NewProjectPage";
+
 export default function NewProjectMethodSelectionPage() {
-  return <div>Method Selection - /projects/new</div>;
+  return <NewProjectPage />;
 }

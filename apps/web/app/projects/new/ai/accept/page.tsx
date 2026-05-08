@@ -1,3 +1,5 @@
-export default function ManifestAcceptPage() {
-  return <div>Manifest Accept - /projects/new/ai/accept</div>;
+import { ManifestAcceptPage } from "@/manifest-generation/ManifestAcceptPage";
+
+export default function Page() {
+  return <ManifestAcceptPage />;
 }
