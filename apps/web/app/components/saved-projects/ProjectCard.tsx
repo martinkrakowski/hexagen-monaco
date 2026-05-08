@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
-import { Button } from "@hexagen/ui";
+import { Button, Card, CardHeader, CardTitle, CardContent } from "@hexagen/ui";
 import type { SavedProject } from "@/hooks/useSavedProjects";
 
 import { formatDate } from "./format-date";
@@ -38,9 +38,9 @@ export function ProjectCard({
   onRequestLoad,
 }: ProjectCardProps) {
   return (
-    <div className="relative p-4 border border-border rounded-lg bg-background">
+    <Card className="relative bg-background shadow-none">
       {isConfirmingDelete && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-2">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-md gap-2">
           <AlertTriangle
             aria-hidden="true"
             className="h-4 w-4 text-destructive"
@@ -66,7 +66,7 @@ export function ProjectCard({
       )}
 
       <div className={isConfirmingDelete ? "invisible" : ""}>
-        <div className="flex items-start justify-between mb-2">
+        <CardHeader>
           <div className="flex-1 min-w-0">
             {isRenaming ? (
               <input
@@ -81,56 +81,56 @@ export function ProjectCard({
                 className="w-full px-2 py-1 bg-muted border border-input rounded text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             ) : (
-              <h3 className="font-medium text-foreground truncate">
-                {project.name}
-              </h3>
+              <CardTitle className="truncate">{project.name}</CardTitle>
             )}
             <p className="text-xs text-muted-foreground mt-1">
               {project.formState.governance?.workspaceName || "Untitled"}
             </p>
           </div>
-        </div>
+        </CardHeader>
 
-        <div className="text-xs text-muted-foreground mb-3">
-          Created: {formatDate(project.createdAt)}
-          {project.updatedAt !== project.createdAt &&
-            ` • Updated: ${formatDate(project.updatedAt)}`}
-        </div>
+        <CardContent>
+          <div className="text-xs text-muted-foreground mb-3">
+            Created: {formatDate(project.createdAt)}
+            {project.updatedAt !== project.createdAt &&
+              ` • Updated: ${formatDate(project.updatedAt)}`}
+          </div>
 
-        <div className="flex items-center gap-2">
-          {isLoaded ? (
-            <span className="text-xs font-medium text-muted-foreground px-2 py-1">
-              Editing
-            </span>
-          ) : (
+          <div className="flex items-center gap-2">
+            {isLoaded ? (
+              <span className="text-xs font-medium text-muted-foreground px-2 py-1">
+                Editing
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                onClick={onRequestLoad}
+                className="h-auto px-3 py-1.5 text-xs"
+              >
+                Load
+              </Button>
+            )}
             <Button
+              variant="outline"
               size="sm"
-              onClick={onRequestLoad}
+              onClick={onStartRename}
               className="h-auto px-3 py-1.5 text-xs"
             >
-              Load
+              <Pencil aria-hidden="true" className="h-3 w-3 mr-1" />
+              Rename
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onStartRename}
-            className="h-auto px-3 py-1.5 text-xs"
-          >
-            <Pencil aria-hidden="true" className="h-3 w-3 mr-1" />
-            Rename
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRequestDelete}
-            className="h-auto px-3 py-1.5 text-xs text-destructive hover:text-destructive ml-auto"
-          >
-            <Trash2 aria-hidden="true" className="h-3 w-3 mr-1" />
-            Delete
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRequestDelete}
+              className="h-auto px-3 py-1.5 text-xs text-destructive hover:text-destructive ml-auto"
+            >
+              <Trash2 aria-hidden="true" className="h-3 w-3 mr-1" />
+              Delete
+            </Button>
+          </div>
+        </CardContent>
       </div>
-    </div>
+    </Card>
   );
 }
