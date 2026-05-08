@@ -15,6 +15,7 @@ import { ActionBar } from "./ActionBar";
 import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
 import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
+import { HeaderSection } from "./HeaderSection";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ModelSelectionView } from "./ModelSelectionView";
@@ -262,11 +263,17 @@ export function GenerateWithAi({
 
   return (
     <GenerateWithAiLayout>
+      <HeaderSection
+        title="Project with AI"
+        subtitle="Describe what you want to build. The more context you provide, the better the result."
+      />
+
       <DescriptionInput
         value={formState.description}
         onChange={(value) => formHandlers.setValue("description", value)}
         charCount={formHandlers.charCount}
         disabled={isGenerating}
+        isAiReady={hasAnyProvider}
       />
 
       {hasError && (

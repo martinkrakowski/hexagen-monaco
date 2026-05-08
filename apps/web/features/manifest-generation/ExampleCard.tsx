@@ -19,11 +19,9 @@ export function ExampleCard({
       disabled={disabled}
       onClick={onClick}
       className={[
-        "bg-secondary border border-border rounded-md p-4 text-left transition-colors",
-        "hover:bg-accent",
+        "w-full text-left p-4 bg-card border border-card-border rounded-lg hover:border-primary/40 transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        "active:brightness-90",
-        selected ? "example-btn-active" : "",
+        selected ? "border-primary" : "",
         disabled
           ? "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
           : "",
@@ -32,13 +30,8 @@ export function ExampleCard({
         .join(" ")}
       aria-label={description}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="block w-1 h-1 rounded-full bg-primary" />
-        <span className="text-sm font-medium text-foreground">{title}</span>
-      </div>
-      <p className="text-xs text-muted-foreground leading-relaxed pl-3">
-        {description}
-      </p>
+      <strong className="block">{title}</strong>
+      <span className="text-sm text-muted-foreground">{description}</span>
     </button>
   );
 }

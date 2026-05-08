@@ -52,6 +52,7 @@ export interface FormSectionProps {
   onUseExample: (example: string, index: number) => void;
   charCount: number;
   isDisabled: boolean;
+  isAiReady: boolean;
 }
 
 export interface ModelCapabilityCheckProps {

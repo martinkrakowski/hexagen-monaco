@@ -16,6 +16,7 @@ export function FormSection({
   onUseExample,
   charCount,
   isDisabled,
+  isAiReady,
 }: FormSectionProps) {
   return (
     <div className="space-y-4">
@@ -24,6 +25,7 @@ export function FormSection({
         onChange={onDescriptionChange}
         charCount={charCount}
         disabled={isDisabled}
+        isAiReady={isAiReady}
       />
 
       <ExampleCardsSection

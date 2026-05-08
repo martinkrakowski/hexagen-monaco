@@ -8,50 +8,61 @@ export function ActionBar({
   onGenerate,
   disabledTooltip,
 }: ActionBarProps) {
-  if (isGenerating) {
-    return (
-      <div className="space-y-4">
-        <div className="mt-6">
-          <Button
-            onClick={onCancel}
-            variant="ghost"
-            className="w-full h-10 font-medium rounded-md"
-            size="lg"
-          >
-            Cancel
-          </Button>
-        </div>
-
-        <p className="text-xs text-muted-foreground text-center mt-4">
-          AI is analyzing your description to identify domain structures, ports,
-          and adapters.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      <div className="mt-6">
-        <Button
-          onClick={onGenerate}
-          disabled={!canGenerate}
-          className="w-full h-10 bg-primary text-primary-foreground font-bold rounded-md transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:opacity-90"
-          size="lg"
-          title={disabledTooltip}
-        >
-          Generate Manifest
-        </Button>
-      </div>
+      <Button
+        onClick={isGenerating ? onCancel : onGenerate}
+        disabled={isGenerating ? false : !canGenerate}
+        className="w-full bg-primary text-primary-foreground font-medium h-11 rounded-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        size="lg"
+        title={isGenerating ? undefined : disabledTooltip}
+      >
+        {isGenerating ? (
+          <>
+            <svg
+              className="animate-spin h-4 w-4"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+            Generating...
+          </>
+        ) : (
+          "Generate Manifest"
+        )}
+      </Button>
 
-      <p className="text-xs text-muted-foreground text-center mt-4 animate-fade-in-up delay-300">
-        {disabledTooltip ? (
+      {isGenerating && onCancel && (
+        <Button
+          onClick={onCancel}
+          variant="ghost"
+          className="w-full h-10 font-medium rounded-md"
+        >
+          Cancel
+        </Button>
+      )}
+
+      <p className="text-xs text-muted-foreground text-center">
+        {isGenerating ? (
+          "AI is analyzing your description to identify domain structures, ports, and adapters."
+        ) : disabledTooltip ? (
           <span className="text-amber-600">{disabledTooltip}</span>
         ) : (
-          <>
-            AI will analyze your description to identify relevant domain
-            structures, ports, and adapters.
-          </>
+          "AI will analyze your description to identify relevant domain structures, ports, and adapters."
         )}
       </p>
     </div>

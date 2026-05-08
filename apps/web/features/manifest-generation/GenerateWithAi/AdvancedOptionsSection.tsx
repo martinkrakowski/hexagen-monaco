@@ -1,6 +1,9 @@
 import { Label, Input } from "@hexagen/ui";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "@hexagen/agentic-interaction";
 
+const MIN_CONTEXTS = 1;
+const MAX_CONTEXTS = 25;
+
 interface AdvancedOptionsSectionProps {
   platform: string;
   onPlatformChange: (value: string) => void;
@@ -61,22 +64,28 @@ export function AdvancedOptionsSection({
               disabled={isDisabled}
             />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="maxContexts">
-              Max Bounded Contexts (default: {DEFAULT_MAX_BOUNDED_CONTEXTS})
-            </Label>
-            <Input
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="maxContexts">Max Bounded Contexts</Label>
+              <span className="text-sm font-mono text-muted-foreground tabular-nums">
+                {maxContexts}
+              </span>
+            </div>
+            <input
               id="maxContexts"
-              type="number"
-              min={1}
-              max={25}
+              type="range"
+              min={MIN_CONTEXTS}
+              max={MAX_CONTEXTS}
               value={maxContexts}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10);
-                if (!isNaN(v) && v >= 1 && v <= 25) onMaxContextsChange(v);
-              }}
+              onChange={(e) => onMaxContextsChange(Number(e.target.value))}
               disabled={isDisabled}
+              className="w-full h-2 rounded-full appearance-none bg-input cursor-pointer accent-primary disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{MIN_CONTEXTS}</span>
+              <span>Default: {DEFAULT_MAX_BOUNDED_CONTEXTS}</span>
+              <span>{MAX_CONTEXTS}</span>
+            </div>
           </div>
         </div>
       </details>
