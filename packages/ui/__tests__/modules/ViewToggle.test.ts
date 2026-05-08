@@ -78,7 +78,7 @@ describe("ViewToggle component", () => {
   });
 
   it("forwards ref", () => {
-    const ref = React.createRef();
+    const ref = React.createRef<HTMLDivElement>();
     render(React.createElement(ViewToggle, { ...defaultProps, ref }));
     assert.ok(ref.current instanceof dom.window.HTMLDivElement);
   });

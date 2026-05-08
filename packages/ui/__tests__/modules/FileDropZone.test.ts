@@ -129,7 +129,7 @@ describe("FileDropZone component", () => {
     );
     const dropZone = container.querySelector('[role="button"]');
     fireEvent.dragOver(dropZone);
-    assert.match(dropZone.className, /border-primary/);
+    assert.strictEqual(dropZone?.getAttribute("data-drag-over"), "true");
   });
 
   // TODO: Fix drag leave test

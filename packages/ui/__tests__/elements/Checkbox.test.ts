@@ -75,9 +75,7 @@ describe("Checkbox component", () => {
     const { container } = render(
       React.createElement(Checkbox, { className: "custom-checkbox" }),
     );
-    const spans = container.querySelectorAll("span");
-    // className goes to inner span (visual checkbox), not outer
-    const visualSpan = spans[1]; // second span is the visual one
+    const visualSpan = container.querySelector('[data-slot="checkbox-visual"]');
     assert.match(visualSpan?.className ?? "", /custom-checkbox/);
   });
 

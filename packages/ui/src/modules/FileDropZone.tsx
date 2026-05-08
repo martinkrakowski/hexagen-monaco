@@ -101,6 +101,7 @@ const FileDropZoneRender: ForwardRefRenderFunction<
         onClick={() => inputRef.current?.click()}
         onKeyDown={handleKeyDown}
         aria-label={label}
+        data-drag-over={isDragging ? "true" : "false"}
         className={[
           "w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
           isDragging
