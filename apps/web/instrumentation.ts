@@ -1,5 +1,9 @@
+let registered = false;
+
 export function register() {
+  if (registered) return;
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    registered = true;
     process.on("unhandledRejection", (reason: unknown) => {
       if (!(reason instanceof Error)) {
         console.error("[unhandledRejection]", reason);

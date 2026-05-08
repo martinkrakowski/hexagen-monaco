@@ -55,6 +55,10 @@ export function sortItems(
       case "created":
         cmp = a.sortCreated - b.sortCreated;
         break;
+      default: {
+        const _exhaustive: never = field;
+        throw new Error(`Unhandled sort field: ${_exhaustive}`);
+      }
     }
     return cmp * multiplier;
   });

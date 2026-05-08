@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { ChevronsUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import type { SortField, SortState } from "../domain/project-list";
 
@@ -18,7 +17,7 @@ export function SortableColumnHeader({
   onToggleSort,
 }: SortableColumnHeaderProps) {
   const isActive = currentSort.field === field;
-  const icon = isActive
+  const Icon = isActive
     ? currentSort.direction === "asc"
       ? ArrowUp
       : ArrowDown
@@ -41,7 +40,7 @@ export function SortableColumnHeader({
         className="inline-flex items-center gap-1 cursor-pointer transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {label}
-        {React.createElement(icon, { className: "h-3 w-3" })}
+        <Icon className="h-3 w-3" />
       </button>
     </th>
   );

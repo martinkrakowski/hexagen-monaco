@@ -1,6 +1,6 @@
 "use client";
 
-interface ProjectToastProps {
+export interface ProjectToastProps {
   message: string;
   type: "success" | "destructive";
   visible: boolean;

@@ -66,23 +66,20 @@ export function NewProjectPage() {
     <ProjectsShell
       title="New Project"
       footer={
-        <>
-          <span />
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={handleStartBlank}>
-              <Wand2 className="h-4 w-4 mr-2" />
-              Start Blank
-            </Button>
-            <Button onClick={handleImportManifest}>
-              <Upload className="h-4 w-4 mr-2" />
-              Import Manifest
-            </Button>
-            <Button onClick={handleGenerateWithAI}>
-              <Sparkles className="h-4 w-4 mr-2" />
-              Generate with AI
-            </Button>
-          </div>
-        </>
+        <div className="flex items-center gap-3 ml-auto">
+          <Button variant="outline" onClick={handleStartBlank}>
+            <Wand2 className="h-4 w-4 mr-2" />
+            Start Blank
+          </Button>
+          <Button onClick={handleImportManifest}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Manifest
+          </Button>
+          <Button onClick={handleGenerateWithAI}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Generate with AI
+          </Button>
+        </div>
       }
     >
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center p-8">

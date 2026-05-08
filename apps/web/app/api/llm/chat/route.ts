@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
         provider: body.byokProvider! as ByokProvider,
         payload: {
           messages: body.messages,
-          model: body.model ?? "gpt-4o",
+          model: body.model ?? "gpt-4o-mini",
           stream: true,
           ...(body.temperature !== undefined && {
             temperature: body.temperature,
