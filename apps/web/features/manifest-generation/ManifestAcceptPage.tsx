@@ -168,6 +168,7 @@ export function ManifestAcceptPage() {
               onApprove={handleAccept}
               onRegenerate={handleBack}
               onStartOver={handleBack}
+              hideActions
             />
           </div>
 

@@ -26,6 +26,7 @@ interface ManifestPreviewProps {
   onApprove: (manifestYaml: string) => void;
   onRegenerate: () => void;
   onStartOver: () => void;
+  hideActions?: boolean;
 }
 
 type ViewTab = "context-map" | "hexagonal" | "mermaid" | "validation";
@@ -35,6 +36,7 @@ export function ManifestPreview({
   onApprove,
   onRegenerate,
   onStartOver,
+  hideActions,
 }: ManifestPreviewProps) {
   const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
   const [activeContext, setActiveContext] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function ManifestPreview({
 
   const hasFailures = viewData.validationItems.some((v) => v.status === "fail");
 
-const handleSelectContext = (name: string) => {
+  const handleSelectContext = (name: string) => {
     setActiveContext(name);
     setActiveTab("hexagonal");
   };
@@ -207,24 +209,26 @@ const handleSelectContext = (name: string) => {
         </div>
       </main>
 
-      <footer className="relative z-10 flex items-center justify-between px-5 py-3 border-t border-border bg-surface shrink-0">
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={onRegenerate}>
-            <RefreshCw className="w-4 h-4 mr-1.5" /> Regenerate
+      {!hideActions && (
+        <footer className="relative z-10 flex items-center justify-between px-5 py-3 border-t border-border bg-surface shrink-0">
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onRegenerate}>
+              <RefreshCw className="w-4 h-4 mr-1.5" /> Regenerate
+            </Button>
+          </div>
+          <Button
+            onClick={() => onApprove(localManifestYaml)}
+            disabled={hasFailures}
+            className={
+              !hasFailures
+                ? "bg-gradient-to-br from-accent to-amber-600 text-black hover:shadow-lg hover:shadow-accent/30 transition-all"
+                : ""
+            }
+          >
+            Use This Manifest <ArrowRight className="w-4 h-4 ml-1.5" />
           </Button>
-        </div>
-        <Button
-          onClick={() => onApprove(localManifestYaml)}
-          disabled={hasFailures}
-          className={
-            !hasFailures
-              ? "bg-gradient-to-br from-accent to-amber-600 text-black hover:shadow-lg hover:shadow-accent/30 transition-all"
-              : ""
-          }
-        >
-          Use This Manifest <ArrowRight className="w-4 h-4 ml-1.5" />
-        </Button>
-      </footer>
+        </footer>
+      )}
 
       <ManifestAutoFixDrawer
         isOpen={!!activeFixViolation}
