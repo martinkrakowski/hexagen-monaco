@@ -189,9 +189,16 @@ function createStep(
 describe("MigrationOrchestrator", () => {
   let mockStorage: ReturnType<typeof createMockStorage>;
 
+  let originalWindow: typeof globalThis.window | undefined;
+
   beforeEach(() => {
     mockStorage = createMockStorage();
+    originalWindow = globalThis.window;
     (globalThis as any).window = { localStorage: mockStorage };
+  });
+
+  afterEach(() => {
+    (globalThis as any).window = originalWindow;
   });
 
   describe("idempotency", () => {

@@ -1,7 +1,7 @@
 # ADR-0035: `@hexagen/local-llm/shared` subpath export for server-safe domain types
 
 **Status:** Accepted
-**Date:** 2025-05-08
+**Date:** 2026-05-08
 **Deciders:** Engineering
 
 ---

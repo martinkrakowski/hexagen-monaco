@@ -1,7 +1,7 @@
 # ADR-0036: SSR guards for browser storage APIs in Node.js 22+
 
 **Status:** Accepted
-**Date:** 2025-05-08
+**Date:** 2026-05-08
 **Deciders:** Engineering
 
 ---
@@ -14,7 +14,7 @@ browser implementations, the Node.js implementation requires a
 `--localstorage-file <path>` CLI flag to initialise the backing store.
 Accessing `localStorage` without that flag throws:
 
-```
+```text
 SecurityError: Cannot initialize local storage without a `--localstorage-file` path
 ```
 
@@ -23,7 +23,7 @@ on `DOMException.prototype` — there is no setter. Attempting to assign to it
 (as Next.js's `logErrorWithOriginalStack` does when formatting unhandled
 rejections) throws a secondary `TypeError`:
 
-```
+```text
 TypeError: Cannot set property message of <DOMException> which has only a getter
 ```
 
