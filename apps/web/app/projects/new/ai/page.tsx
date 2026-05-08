@@ -1,3 +1,12 @@
-export default function AIGenerationPage() {
-  return <div>AI Generation - /projects/new/ai</div>;
+import { Suspense } from "react";
+import { AIGenerationPageClient } from "./AIGenerationPageClient";
+
+export const dynamic = "force-dynamic";
+
+export default function Page() {
+  return (
+    <Suspense>
+      <AIGenerationPageClient />
+    </Suspense>
+  );
 }

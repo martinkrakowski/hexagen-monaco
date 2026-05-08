@@ -9,6 +9,7 @@ export { useManifestGeneration } from "./useManifestGeneration";
 export { useWelcomeFlowState } from "./ModelSelectionFlow/useWelcomeFlowState";
 export { ModelSelectionContainer } from "./ModelSelectionFlow/ModelSelectionContainer";
 export { ManifestAcceptPage } from "./ManifestAcceptPage";
+export { AIGenerationPage } from "./AIGenerationPage";
 export { usePendingManifest } from "./store/usePendingManifest";
 
 // Made with Bob
