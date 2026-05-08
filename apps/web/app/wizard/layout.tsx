@@ -52,9 +52,10 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
   useProjectSearchParam();
 
   const stepParam = /^\d+$/.test(params.step) ? Number(params.step) : NaN;
-  const currentStepIndex = Number.isNaN(stepParam)
-    ? 0
-    : Math.max(0, Math.min(stepParam - 1, wizardSteps.length - 1));
+  const currentStepIndex =
+    Number.isNaN(stepParam) || stepParam < 1 || stepParam > wizardSteps.length
+      ? 0
+      : stepParam - 1;
 
   const viewMode: ViewMode =
     searchParams.get("view") === "code" ? "code" : "visual";

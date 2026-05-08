@@ -81,7 +81,7 @@ export function GenerateWithAi({
     });
 
     return unsubscribe;
-  }, []);
+  }, [hasServerApiKey]);
 
   useEffect(() => {
     rememberChoiceRef.current = rememberChoice;

@@ -48,7 +48,7 @@ function createMockUseCase(
     checkClarificationTriggers: mock.fn(
       () => overrides.checkClarificationTriggersResult ?? [],
     ),
-  } as unknown as ClientManifestGenerationUseCase;
+  } satisfies ClientManifestGenerationUseCase;
 }
 
 describe("GenerateWithAiFlowUseCase", () => {
@@ -70,8 +70,8 @@ describe("GenerateWithAiFlowUseCase", () => {
       callbacks,
     );
 
-    assert.equal(result.kind, "complete");
-    assert.equal(
+    assert.strictEqual(result.kind, "complete");
+    assert.strictEqual(
       (result as { kind: "complete"; manifest: string }).manifest,
       "test: yaml",
     );
@@ -103,7 +103,7 @@ describe("GenerateWithAiFlowUseCase", () => {
       callbacks,
     );
 
-    assert.equal(result.kind, "clarification_needed");
+    assert.strictEqual(result.kind, "clarification_needed");
   });
 
   it("returns error on topology generation failure", async () => {
@@ -130,8 +130,8 @@ describe("GenerateWithAiFlowUseCase", () => {
       callbacks,
     );
 
-    assert.equal(result.kind, "error");
-    assert.equal(
+    assert.strictEqual(result.kind, "error");
+    assert.strictEqual(
       (result as { kind: "error"; code: string }).code,
       "yaml_validation_failed",
     );
