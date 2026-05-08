@@ -1,5 +1,6 @@
 import { getEventBus, getChatPersistence } from "@/lib/wire";
 import { PROJECT_DISCARDED_EVENT } from "@hexagen/monaco-orchestration";
+import { logger } from "../../../lib/structured-logger";
 
 export interface DiscardProjectResult {
   success: boolean;
@@ -28,7 +29,7 @@ export async function discardProject(
   try {
     await chatPersistence.purgeProjectData(params.projectId);
   } catch (err) {
-    console.error("Failed to purge chat persistence data:", err);
+    logger.error("Failed to purge chat persistence data:", { error: err });
   }
 
   return { success: true };

@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 import { FileCode } from "lucide-react";
-import type { ManifestViewData, ValidationItem } from "@hexagen/manifest-generation";
+import type {
+  ManifestViewData,
+  ValidationItem,
+} from "@hexagen/manifest-generation";
 
 interface ManifestYamlSidebarProps {
   yamlString: string;
@@ -37,16 +40,13 @@ export function ManifestYamlSidebar({
   const activeRange = activeContext?.yamlLineRange;
 
   return (
-    <aside
-      className="flex flex-col border-r border-border bg-sidebar shrink-0 overflow-hidden resize-x"
-      style={{ width: "24rem", minWidth: "16rem", maxWidth: "60%" }}
-    >
+    <aside className="flex flex-col border-r border-border bg-sidebar shrink-0 overflow-hidden resize-x w-96 min-w-64 max-w-3/5">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
-        <FileCode className="w-3.5 h-3.5 text-accent" />
+        <FileCode className="w-4 h-4 text-accent" />
         <span className="text-xs font-semibold text-muted-foreground font-mono">
           manifest.yaml
         </span>
-        <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-card text-muted-foreground font-mono">
+        <span className="ml-auto text-xs px-2 py-1 rounded-md bg-card text-muted-foreground font-mono">
           read-only
         </span>
       </div>
@@ -80,7 +80,7 @@ export function ManifestYamlSidebar({
           } else {
             hlLine = hlLine.replace(
               /!/g,
-              '<span class="font-bold bg-destructive/10 text-destructive px-[2px] rounded-[2px]">!</span>',
+              '<span class="font-bold bg-destructive/10 text-destructive px-1 rounded-sm">!</span>',
             );
             hlLine = hlLine.replace(
               /"([^"]+)"/g,
@@ -88,7 +88,7 @@ export function ManifestYamlSidebar({
             );
             hlLine = hlLine.replace(
               /^(\s*)([\w_-]+)(:)/,
-              '$1<span class="text-cyan-400">$2</span><span class="text-muted-foreground">$3</span>',
+              '$1<span class="text-info">$2</span><span class="text-muted-foreground">$3</span>',
             );
             hlLine = hlLine.replace(
               /^(\s*)(- )/g,

@@ -1,27 +1,30 @@
-import type { HTMLAttributes, Ref } from "react";
+import type { HTMLAttributes, ForwardRefRenderFunction } from "react";
+import { forwardRef } from "react";
 import { Eye, Code } from "lucide-react";
 import { cn } from "../lib/utils.js";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
-export interface ViewToggleProps<T extends string = string> extends Omit<
-  HTMLAttributes<HTMLDivElement>,
-  "onChange"
+export interface ViewToggleProps extends NoSemanticState<
+  Omit<HTMLAttributes<HTMLDivElement>, "onChange">
 > {
-  view: T;
-  options: readonly [T, T];
-  onChange: (view: T) => void;
+  view: string;
+  options: readonly [string, string];
+  onChange: (view: string) => void;
   ariaLabel?: string;
-  ref?: Ref<HTMLDivElement>;
 }
 
-export function ViewToggle<T extends string = string>({
-  className,
-  view,
-  options,
-  onChange,
-  ariaLabel = "Toggle view",
-  ref,
-  ...props
-}: ViewToggleProps<T>) {
+const ViewToggleRender: ForwardRefRenderFunction<
+  HTMLDivElement,
+  ViewToggleProps
+> = (props: ViewToggleProps, ref: React.Ref<HTMLDivElement>) => {
+  const {
+    className,
+    view,
+    options,
+    onChange,
+    ariaLabel = "Toggle view",
+    ...rest
+  } = props;
   const [optionA, optionB] = options;
   const handleChange = () => {
     onChange(view === optionA ? optionB : optionA);
@@ -31,7 +34,7 @@ export function ViewToggle<T extends string = string>({
     <div
       ref={ref}
       className={cn("flex items-center gap-2", className)}
-      {...props}
+      {...rest}
     >
       <label className="relative inline-flex items-center cursor-pointer select-none">
         <input
@@ -46,22 +49,22 @@ export function ViewToggle<T extends string = string>({
 
         <div className="absolute left-1 top-1 w-6 h-6 bg-background rounded-full shadow-sm transition-transform flex items-center justify-center peer-checked:translate-x-8">
           {view === optionA ? (
-            <Eye className="h-3.5 w-3.5 text-primary" />
+            <Eye className="h-4 w-4 text-primary" />
           ) : (
-            <Code className="h-3.5 w-3.5 text-primary" />
+            <Code className="h-4 w-4 text-primary" />
           )}
         </div>
 
-        <div className="absolute inset-0 flex items-center justify-between px-2.5 pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none">
           <Eye
             className={cn(
-              "h-3.5 w-3.5 transition-opacity",
+              "h-4 w-4 transition-opacity",
               view === optionA ? "opacity-0" : "opacity-20",
             )}
           />
           <Code
             className={cn(
-              "h-3.5 w-3.5 transition-opacity",
+              "h-4 w-4 transition-opacity",
               view === optionB ? "opacity-0" : "opacity-20",
             )}
           />
@@ -69,4 +72,7 @@ export function ViewToggle<T extends string = string>({
       </label>
     </div>
   );
-}
+};
+
+export const ViewToggle = forwardRef(ViewToggleRender);
+ViewToggle.displayName = "ViewToggle";

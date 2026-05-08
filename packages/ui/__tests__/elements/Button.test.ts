@@ -1,0 +1,115 @@
+import { describe, it, before, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
+import React from "react";
+import { render, cleanup } from "@testing-library/react";
+import { Button } from "../../src/elements/Button.js";
+
+let dom: JSDOM;
+
+before(() => {
+  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
+  global.window = dom.window;
+  global.document = dom.window.document;
+  Object.defineProperty(global, "navigator", {
+    value: dom.window.navigator,
+    writable: true,
+  });
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("Button component", () => {
+  it("renders a button element with correct text", () => {
+    const { getByRole } = render(React.createElement(Button, null, "Click me"));
+    const button = getByRole("button", { name: "Click me" });
+    assert.ok(button instanceof dom.window.HTMLButtonElement);
+  });
+
+  it("forwards ref to underlying button element", () => {
+    const ref = React.createRef();
+    render(React.createElement(Button, { ref }, "Test"));
+    assert.ok(ref.current instanceof dom.window.HTMLButtonElement);
+    assert.strictEqual(ref.current?.textContent, "Test");
+  });
+
+  it("applies default variant classes", () => {
+    const { getByRole } = render(React.createElement(Button, null, "Default"));
+    const button = getByRole("button");
+    assert.match(button.className, /bg-primary/);
+    assert.match(button.className, /text-primary-foreground/);
+  });
+
+  it("applies destructive variant classes", () => {
+    const { getByRole } = render(
+      React.createElement(Button, { variant: "destructive" }, "Delete"),
+    );
+    const button = getByRole("button");
+    assert.match(button.className, /bg-destructive/);
+    assert.match(button.className, /text-destructive-foreground/);
+  });
+
+  it("applies outline variant classes", () => {
+    const { getByRole } = render(
+      React.createElement(Button, { variant: "outline" }, "Outline"),
+    );
+    const button = getByRole("button");
+    assert.match(button.className, /border-input/);
+  });
+
+  it("applies size variants correctly", () => {
+    const { rerender, getByRole } = render(
+      React.createElement(Button, { size: "sm" }, "Small"),
+    );
+    let button = getByRole("button");
+    assert.match(button.className, /h-9/);
+
+    rerender(React.createElement(Button, { size: "lg" }, "Large"));
+    button = getByRole("button");
+    assert.match(button.className, /h-11/);
+
+    rerender(React.createElement(Button, { size: "icon" }, "Icon"));
+    button = getByRole("button");
+    assert.match(button.className, /h-10/);
+    assert.match(button.className, /w-10/);
+  });
+
+  it("handles disabled state correctly", () => {
+    const { getByRole } = render(
+      React.createElement(Button, { disabled: true }, "Disabled"),
+    );
+    const button = getByRole("button");
+    assert.strictEqual(button.disabled, true);
+    assert.match(button.className, /disabled:opacity-50/);
+    assert.match(button.className, /disabled:pointer-events-none/);
+  });
+
+  it("forwards standard button HTML attributes", () => {
+    const handleClick = () => {};
+    const { getByTestId } = render(
+      React.createElement(
+        Button,
+        {
+          type: "submit",
+          onClick: handleClick,
+          "data-testid": "submit-btn",
+        },
+        "Submit",
+      ),
+    );
+    const button = getByTestId("submit-btn");
+    assert.strictEqual(button.type, "submit");
+    assert.ok(button.onclick);
+  });
+
+  it("merges custom className with variant classes", () => {
+    const { getByRole } = render(
+      React.createElement(Button, { className: "custom-class" }, "Custom"),
+    );
+    const button = getByRole("button");
+    assert.match(button.className, /custom-class/);
+    assert.match(button.className, /bg-primary/);
+  });
+});

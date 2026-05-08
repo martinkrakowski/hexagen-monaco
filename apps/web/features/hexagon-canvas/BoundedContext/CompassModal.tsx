@@ -8,7 +8,7 @@ export function CompassModal({ label, items, onClose }: CompassModalProps) {
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--overlay)/0.4)] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/40 backdrop-blur-sm"
       onClick={onClose}
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
@@ -18,7 +18,7 @@ export function CompassModal({ label, items, onClose }: CompassModalProps) {
       <div
         role="document"
         aria-label={label}
-        className="relative w-80 rounded-xl border border-border bg-background shadow-2xl p-5"
+        className="relative w-80 rounded-lg border border-border bg-background shadow-md p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -35,7 +35,7 @@ export function CompassModal({ label, items, onClose }: CompassModalProps) {
             No items defined.
           </p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {items.map((item, idx) => (
               <li
                 key={`${label}-${item}`}

@@ -48,11 +48,9 @@ export class ManifestProviderAdapter {
   }
 }
 
-export class ServerArchitectureGraphProviderAdapter
-  implements ArchitectureGraphProviderPort
-{
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+export class ServerArchitectureGraphProviderAdapter implements ArchitectureGraphProviderPort {
   async getArchitectureGraph(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _projectId: string,
   ): Promise<Result<ArchitectureGraph>> {
     try {
@@ -78,9 +76,7 @@ export class ServerArchitectureGraphProviderAdapter
   }
 }
 
-export class ServerLinterReportProviderAdapter
-  implements LinterReportProviderPort
-{
+export class ServerLinterReportProviderAdapter implements LinterReportProviderPort {
   async getLinterReport(): Promise<Result<LinterReport>> {
     return ok({
       timestamp: new Date().toISOString(),

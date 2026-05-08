@@ -48,7 +48,7 @@ export function ArchitecturePreviewPane({
         <ViewToggle
           view={viewMode}
           options={["visual", "code"] as const}
-          onChange={onViewModeChange}
+          onChange={onViewModeChange as (view: string) => void}
           ariaLabel="Toggle between visual and code view"
         />
       </div>

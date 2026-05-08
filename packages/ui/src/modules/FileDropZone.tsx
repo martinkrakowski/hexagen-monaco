@@ -5,10 +5,15 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
   type ReactNode,
+  forwardRef,
+  type ForwardRefRenderFunction,
 } from "react";
 import { Icon } from "../elements/Icon.js";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
-export interface FileDropZoneProps {
+export interface FileDropZoneProps extends NoSemanticState<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   onFileLoaded: (content: string) => void;
   accept?: string;
   validateFile?: (file: File) => string | null;
@@ -17,14 +22,18 @@ export interface FileDropZoneProps {
   className?: string;
 }
 
-export function FileDropZone({
-  onFileLoaded,
-  accept,
-  validateFile,
-  label = "Upload file — click or drop to browse",
-  hint,
-  className,
-}: FileDropZoneProps) {
+const FileDropZoneRender: ForwardRefRenderFunction<
+  HTMLDivElement,
+  FileDropZoneProps
+> = (props, ref) => {
+  const {
+    onFileLoaded,
+    accept,
+    validateFile,
+    label = "Upload file — click or drop to browse",
+    hint,
+    className,
+  } = props;
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +87,7 @@ export function FileDropZone({
 
   return (
     <div
+      ref={ref}
       className={["flex flex-col items-center", className]
         .filter(Boolean)
         .join(" ")}
@@ -125,4 +135,7 @@ export function FileDropZone({
       )}
     </div>
   );
-}
+};
+
+export const FileDropZone = forwardRef(FileDropZoneRender);
+FileDropZone.displayName = "FileDropZone";
