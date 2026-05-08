@@ -1,4 +1,4 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import React from "react";
@@ -13,6 +13,7 @@ import {
 } from "../../src/sections/Dialog.js";
 
 let dom: JSDOM;
+let originalCreateElement: typeof dom.window.document.createElement;
 
 before(() => {
   dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
@@ -22,14 +23,12 @@ before(() => {
     value: dom.window.navigator,
     writable: true,
   });
-  // Mock dialog element methods
   const mockDialog = {
     showModal: () => {},
     close: () => {},
     open: false,
   };
-  // Override createElement to mock dialog elements
-  const originalCreateElement = dom.window.document.createElement.bind(
+  originalCreateElement = dom.window.document.createElement.bind(
     dom.window.document,
   );
   dom.window.document.createElement = (tagName: string) => {
@@ -39,6 +38,10 @@ before(() => {
     }
     return el;
   };
+});
+
+after(() => {
+  dom.window.document.createElement = originalCreateElement;
 });
 
 afterEach(() => {

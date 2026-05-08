@@ -82,4 +82,16 @@ describe("ViewToggle component", () => {
     render(React.createElement(ViewToggle, { ...defaultProps, ref }));
     assert.ok(ref.current instanceof dom.window.HTMLDivElement);
   });
+
+  it("renders custom icons when iconA and iconB are provided", () => {
+    const { container } = render(
+      React.createElement(ViewToggle, {
+        ...defaultProps,
+        iconA: React.createElement("span", { "data-testid": "custom-a" }, "A"),
+        iconB: React.createElement("span", { "data-testid": "custom-b" }, "B"),
+      }),
+    );
+    assert.ok(container.querySelector('[data-testid="custom-a"]'));
+    assert.ok(container.querySelector('[data-testid="custom-b"]'));
+  });
 });
