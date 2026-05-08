@@ -9,12 +9,9 @@ import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
-import { EntryPointsSection } from "./EntryPointsSection";
-import { PromptDivider } from "./PromptDivider";
 import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
 import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
-import { PreviousProjectsSection } from "./PreviousProjectsSection";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ModelSelectionView } from "./ModelSelectionView";
@@ -32,9 +29,6 @@ export function WelcomeScreen({
   onUseManifest,
   llmContext,
   onGeneratingStateChange,
-  onImportManifest,
-  onStartWizard,
-  onLoadProject,
 }: WelcomeScreenProps) {
   const [formState, formHandlers] = useWelcomeScreenForm();
   const [rememberChoice, setRememberChoice] = useState(false);
@@ -61,7 +55,8 @@ export function WelcomeScreen({
    * Polls WebGPU capability and hardware constraints.
    */
   const gpuDetection = useWebGPUDetection();
-  const hasLocalLLM = gpuDetection.isWebGPUSupported && gpuDetection.isHardwareAdequate;
+  const hasLocalLLM =
+    gpuDetection.isWebGPUSupported && gpuDetection.isHardwareAdequate;
 
   // Probe capabilities on mount and when cache is invalidated.
   // Always probe for BYOK tier (don't skip based on Tier 1).
@@ -228,13 +223,6 @@ export function WelcomeScreen({
 
   return (
     <WelcomeScreenLayout>
-      <EntryPointsSection
-        onImportManifest={onImportManifest}
-        onStartWizard={onStartWizard}
-      />
-
-      <PromptDivider />
-
       <DescriptionInput
         value={formState.description}
         onChange={(value) => formHandlers.setValue("description", value)}
@@ -337,10 +325,6 @@ export function WelcomeScreen({
           stageProgress={stagedGen.stageProgress}
         />
       )}
-
-      <div className="my-2 border-t border-border" />
-
-      <PreviousProjectsSection onLoadProject={onLoadProject} />
     </WelcomeScreenLayout>
   );
 }

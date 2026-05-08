@@ -39,21 +39,6 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     [setPendingManifest, router],
   );
 
-  const handleImportManifest = useCallback(() => {
-    router.push("/projects/new/import");
-  }, [router]);
-
-  const handleStartWizard = useCallback(() => {
-    router.push("/wizard/1?new=true");
-  }, [router]);
-
-  const handleLoadProject = useCallback(
-    (id: string) => {
-      router.push(`/wizard/1?project=${id}`);
-    },
-    [router],
-  );
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-4">
@@ -78,9 +63,6 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
         <WelcomeScreen
           onUseManifest={handleUseManifest}
           llmContext={llmContext}
-          onImportManifest={handleImportManifest}
-          onStartWizard={handleStartWizard}
-          onLoadProject={handleLoadProject}
         />
       </div>
     </div>
