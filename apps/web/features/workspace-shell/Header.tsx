@@ -8,12 +8,10 @@ import { ExportStatusStrip } from "./ExportStatusStrip";
 import { ExportDialog } from "../export/ExportDialog";
 import { useProjectExport } from "@/contexts/ExportContext";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
-import type { SavedProject } from "@/hooks/useSavedProjects";
 
 interface HeaderProps {
   onLoadManifest: () => void;
   onNewProject: () => void;
-  onLoadSavedProject: (project: SavedProject) => void;
   onOpenWelcomeManifest: () => void;
   onNavigateToProjects?: () => void;
   isEditing?: boolean;
@@ -22,7 +20,6 @@ interface HeaderProps {
 export function Header({
   onLoadManifest,
   onNewProject,
-  onLoadSavedProject,
   onOpenWelcomeManifest,
   onNavigateToProjects,
   isEditing = false,
@@ -75,9 +72,8 @@ export function Header({
           />
           <div className="hidden lg:flex items-center gap-2">
             <ProjectMenu
-              onLoadManifest={onLoadManifest}
               onNewProject={onNewProject}
-              onLoadSavedProject={onLoadSavedProject}
+              onNavigateToProjects={() => onNavigateToProjects?.()}
               onExportZip={() => void exportFlow.exportZip()}
               onRequestGithubExport={() =>
                 void exportFlow.requestGithubExport()

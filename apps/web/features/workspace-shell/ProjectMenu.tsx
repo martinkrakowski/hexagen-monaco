@@ -9,15 +9,11 @@ import {
   FileText,
   PlusCircle,
 } from "lucide-react";
-import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";
-import { SavedProjectsSubmenu } from "./SavedProjectsSubmenu";
 
 interface ProjectMenuProps {
   onNewProject: () => void;
-  onLoadManifest: () => void;
-  onLoadSavedProject: (project: SavedProject) => void;
+  onNavigateToProjects: () => void;
 
-  // Export actions — owned by the Header via useProjectExport
   onExportZip: () => void;
   onRequestGithubExport: () => void;
 
@@ -26,17 +22,9 @@ interface ProjectMenuProps {
   isAuthenticated: boolean;
 }
 
-/**
- * Pure menu UI. Owns only local dropdown state (isOpen, submenu
- * visibility). All export state and handlers flow in as props from
- * the Header (via useProjectExport). Status/error surfaces in the
- * Header's ExportStatusStrip — NOT in this dropdown, which closes
- * on action.
- */
 export function ProjectMenu({
   onNewProject,
-  onLoadManifest,
-  onLoadSavedProject,
+  onNavigateToProjects,
   onExportZip,
   onRequestGithubExport,
   canExport,
@@ -44,14 +32,10 @@ export function ProjectMenu({
   isAuthenticated,
 }: ProjectMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showSavedSubmenu, setShowSavedSubmenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const { projects, deleteProject } = useSavedProjects();
 
   const closeMenu = useCallback(() => {
     setIsOpen(false);
-    setShowSavedSubmenu(false);
   }, []);
 
   useEffect(() => {
@@ -70,14 +54,6 @@ export function ProjectMenu({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [closeMenu]);
-
-  const handleSavedProjectClick = useCallback(
-    (project: SavedProject) => {
-      closeMenu();
-      onLoadSavedProject(project);
-    },
-    [closeMenu, onLoadSavedProject],
-  );
 
   const handleMenuAction = useCallback(
     (action: () => void) => () => {
@@ -121,42 +97,12 @@ export function ProjectMenu({
           <button
             type="button"
             role="menuitem"
-            onClick={handleMenuAction(onLoadManifest)}
+            onClick={handleMenuAction(onNavigateToProjects)}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-left"
           >
-            <Upload className="w-4 h-4" />
-            Import Manifest
+            <FileText className="w-4 h-4" />
+            Saved Projects
           </button>
-
-          <div className="h-px bg-border my-1" />
-
-          <div
-            className="relative"
-            onMouseEnter={() => setShowSavedSubmenu(true)}
-            onMouseLeave={() => setShowSavedSubmenu(false)}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              aria-haspopup="menu"
-              aria-expanded={showSavedSubmenu}
-              onClick={() => setShowSavedSubmenu((prev) => !prev)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted text-left"
-            >
-              <span className="flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Saved Projects
-              </span>
-              <ChevronRight className="w-3 h-3" />
-            </button>
-
-            <SavedProjectsSubmenu
-              open={showSavedSubmenu}
-              projects={projects}
-              onSelect={handleSavedProjectClick}
-              onDelete={deleteProject}
-            />
-          </div>
 
           <div className="h-px bg-border my-1" />
 
@@ -179,10 +125,9 @@ export function ProjectMenu({
             type="button"
             role="menuitem"
             onClick={handleMenuAction(onRequestGithubExport)}
-            disabled={isExporting}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left ${
-              isExporting ? "opacity-50 cursor-not-allowed" : "hover:bg-muted"
-            }`}
+            disabled
+            title="Coming soon"
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left opacity-50 cursor-not-allowed"
           >
             <Upload className="w-4 h-4" />
             {isAuthenticated ? "Push to GitHub" : "Sign in to GitHub"}

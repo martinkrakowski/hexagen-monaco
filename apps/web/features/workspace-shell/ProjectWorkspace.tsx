@@ -71,9 +71,6 @@ export function ProjectWorkspace({
           isEditing={isEditing}
           onNewProject={() => router.push("/projects/new")}
           onOpenWelcomeManifest={() => router.push("/projects/new/ai")}
-          onLoadSavedProject={(project) =>
-            lifecycle.handleLoadProject(project.id)
-          }
           onNavigateToProjects={onNavigateToProjects}
         />
 
