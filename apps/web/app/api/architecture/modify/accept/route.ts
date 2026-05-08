@@ -5,7 +5,7 @@ import {
   getManifestMutation,
   getLintValidation,
 } from "@/lib/wire.server";
-import { getLogger } from "@/lib/wire";
+import { createWebLogger } from "@/lib/wire.shared";
 
 function validateManifestPath(rawPath: string): string {
   const cwd = process.cwd();
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       const restoreResult =
         await manifestMutation.restoreFromGit(resolvedManifestPath);
       if (!restoreResult.success) {
-        const logger = getLogger();
+        const logger = createWebLogger();
         logger.errorWithException(
           restoreResult.error,
           "[api/architecture/modify/accept] Git restore failed after lint violation",
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
 
     transactionManager.commit(transactionId);
 
-    const logger = getLogger();
+    const logger = createWebLogger();
     logger.info(
       "[api/architecture/modify/accept] Patches accepted and committed",
       {
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
-    const logger = getLogger();
+    const logger = createWebLogger();
     logger.errorWithException(
       error,
       `[api/architecture/modify/accept] Unexpected error${transactionId ? ` for transaction ${transactionId}` : ""}`,

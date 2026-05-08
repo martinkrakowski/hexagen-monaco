@@ -1,4 +1,4 @@
-import { getEventBus, getChatPersistence } from "@/lib/wire";
+import { getEventBus, getChatPersistence } from "@/lib/wire.client";
 import { PROJECT_DISCARDED_EVENT } from "@hexagen/monaco-orchestration";
 import { logger } from "../../../lib/structured-logger";
 

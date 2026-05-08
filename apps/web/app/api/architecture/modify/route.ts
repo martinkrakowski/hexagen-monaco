@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { getModifyArchitectureUseCase } from "@/lib/wire.server";
-import { getLogger } from "@/lib/wire";
+import { createWebLogger } from "@/lib/wire.shared";
 import type { IntentLineage } from "@hexagen/core-domain";
 
 /**
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (err) {
-    const logger = getLogger();
+    const logger = createWebLogger();
     logger.errorWithException(err, "[api/architecture/modify] Failed");
     const message =
       err instanceof Error ? err.message : "Internal server error";

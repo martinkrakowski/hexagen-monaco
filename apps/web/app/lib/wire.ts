@@ -1,6 +1,8 @@
 // apps/web/app/lib/wire.ts
 // Backward-compatible re-export barrel for dependency composition
-// New code: import from wire.client or wire.server directly
+// Server code MUST import from wire.server or wire.shared directly.
+// This barrel re-exports wire.client, which constructs browser-only adapters
+// at module load time — importing it server-side causes SSR failures.
 
 /* eslint-disable no-console */
 // Console is intentional here: startup diagnostics only

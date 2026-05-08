@@ -2,7 +2,7 @@
 // Endpoint to generate a new project from spec
 
 import { NextRequest, NextResponse } from "next/server";
-import { getLogger } from "@/lib/wire";
+import { createWebLogger } from "@/lib/wire.shared";
 import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import type { ExportConfig } from "@hexagen/project-generation";
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       files: filesObj,
     });
   } catch (err) {
-    const logger = getLogger();
+    const logger = createWebLogger();
     logger.errorWithException(err, "[api/generate] Failed to generate project");
     const message =
       err instanceof Error ? err.message : "Internal server error";
