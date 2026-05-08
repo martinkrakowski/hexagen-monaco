@@ -1,105 +1,52 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Sparkles, Upload, Wand2 } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { Button } from "@hexagen/ui";
-import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { ProjectsShell } from "@/landing/ProjectsShell";
-import type { ProjectConfig } from "@hexagen/project-configuration";
-
-const blankProjectConfig: ProjectConfig = {
-  governance: {
-    workspaceName: "@hexagen",
-    workspaceTemplate: "modular-monolith",
-    workspaceDescription: undefined,
-    packageManager: "yarn",
-    topologyStrictness: "flexible",
-    namespacePrefix: "@hexagen",
-    namingConventions: {
-      contextDirectoryPattern: "packages/",
-      adapterSuffix: ".adapter.ts",
-    },
-  },
-  boundedContexts: [
-    {
-      id: crypto.randomUUID(),
-      name: "core",
-      description: "",
-      infrastructureTarget: "nestjs",
-      coreDomainEntities: [],
-      valueObjects: [],
-      domainEvents: [],
-      entities: [],
-      useCases: [],
-      portConfiguration: {
-        inboundPorts: [],
-        outboundPorts: [],
-      },
-      uiFramework: "",
-      persistenceAdapter: "",
-      messagingAdapter: "",
-      telemetryProvider: "",
-    },
-  ],
-  externalContexts: [],
-  peerMappings: [],
-};
+import { useCreationPaths } from "@/landing/application/useCreationPaths";
+import { usePathNavigation } from "@/landing/application/usePathNavigation";
+import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
+import { CreationPathGrid } from "@/landing/components/CreationPathGrid";
+import { CREATION_STEPS } from "@/landing/domain/creation-path";
 
 export function NewProjectPage() {
   const router = useRouter();
-  const { saveProject } = useSavedProjects();
-
-  const handleGenerateWithAI = () => {
-    router.push("/projects/new/ai");
-  };
-
-  const handleImportManifest = () => {
-    router.push("/projects/new/import");
-  };
-
-  const handleStartBlank = () => {
-    const projectId = saveProject("Untitled Project", blankProjectConfig, "");
-    router.push(`/wizard/1?project=${projectId}`);
-  };
+  const options = useCreationPaths();
+  const { navigate } = usePathNavigation();
 
   return (
     <ProjectsShell
       title="New Project"
       footer={
         <div className="flex items-center gap-3 ml-auto">
-          <Button variant="outline" onClick={handleStartBlank}>
-            <Wand2 className="h-4 w-4 mr-2" />
-            Start Blank
-          </Button>
-          <Button onClick={handleImportManifest}>
-            <Upload className="h-4 w-4 mr-2" />
-            Import Manifest
-          </Button>
-          <Button onClick={handleGenerateWithAI}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Generate with AI
+          <Button variant="ghost" onClick={() => router.push("/projects")}>
+            <FolderOpen className="h-4 w-4 mr-2" />
+            Saved Projects
           </Button>
         </div>
       }
     >
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center p-8">
-        <div className="rounded-lg border border-border bg-card p-8 max-w-lg w-full text-center space-y-6">
-          <div className="flex justify-center">
-            <div className="bg-cinematic-border-vivid rounded-full p-3 animate-spin-border">
-              <div className="bg-card rounded-full p-3">
-                <Sparkles className="h-8 w-8 text-primary" />
-              </div>
-            </div>
-          </div>
+      <div className="h-full overflow-y-auto dot-grid bg-ambient">
+        <div className="flex items-center justify-center min-h-full py-12">
+          <div className="max-w-3xl mx-auto px-6 w-full">
+            <CreationStepIndicator currentStep={1} steps={CREATION_STEPS} />
 
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-foreground">
-              Choose Your Creation Path
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Design and generate production-ready hexagonal monorepos with DDD
-              principles. Select your preferred method to get started.
-            </p>
+            <div className="text-center mb-12 animate-fade-in-up delay-100">
+              <h1 className="text-4xl font-bold tracking-tight mb-4">
+                Choose Your Creation Path
+              </h1>
+              <p className="text-muted-foreground text-lg max-w-lg mx-auto leading-relaxed">
+                Design and generate a production-ready hexagonal monorepo
+                aligned with DDD principles.
+              </p>
+            </div>
+
+            <CreationPathGrid options={options} onSelectPath={navigate} />
+
+            <div className="text-center mt-8 text-xs text-muted-foreground">
+              All paths produce an editable, standards-compliant manifest
+            </div>
           </div>
         </div>
       </div>

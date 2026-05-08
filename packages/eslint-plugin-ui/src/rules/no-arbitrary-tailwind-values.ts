@@ -4,6 +4,7 @@ type MessageIds = "arbitraryValue";
 
 const EXCEPTION_PATTERNS = [
   "active:scale-[0.98]", // Documented press feedback exception
+  "scale-[0.98]", // Matched by regex from active:scale-[0.98]
 ];
 
 /**
