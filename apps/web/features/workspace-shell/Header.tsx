@@ -73,7 +73,7 @@ export function Header({
           <div className="hidden lg:flex items-center gap-2">
             <ProjectMenu
               onNewProject={onNewProject}
-              onNavigateToProjects={() => onNavigateToProjects?.()}
+              onNavigateToProjects={onNavigateToProjects}
               onExportZip={() => void exportFlow.exportZip()}
               onRequestGithubExport={() =>
                 void exportFlow.requestGithubExport()

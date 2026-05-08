@@ -12,7 +12,7 @@ import {
 
 interface ProjectMenuProps {
   onNewProject: () => void;
-  onNavigateToProjects: () => void;
+  onNavigateToProjects?: () => void;
 
   onExportZip: () => void;
   onRequestGithubExport: () => void;
@@ -94,15 +94,17 @@ export function ProjectMenu({
             New Project
           </button>
 
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleMenuAction(onNavigateToProjects)}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-left"
-          >
-            <FileText className="w-4 h-4" />
-            Saved Projects
-          </button>
+          {onNavigateToProjects && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleMenuAction(onNavigateToProjects)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-left"
+            >
+              <FileText className="w-4 h-4" />
+              Saved Projects
+            </button>
+          )}
 
           <div className="h-px bg-border my-1" />
 

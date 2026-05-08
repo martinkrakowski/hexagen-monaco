@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FormProvider } from "react-hook-form";
 
@@ -63,14 +64,28 @@ export function ProjectWorkspace({
   const showSavedProjects = ui.dialog.kind === "saved-projects";
   const loadedProjectId = ui.state.kind === "edit" ? ui.state.projectId : null;
 
+  const pendingRoute = useRef<string | null>(null);
+
+  const navigateWithConfirm = useCallback(
+    (route: string) => {
+      if (isEditing) {
+        pendingRoute.current = route;
+        ui.openDialog({ kind: "new-project" });
+      } else {
+        router.push(route);
+      }
+    },
+    [isEditing, ui, router],
+  );
+
   return (
     <ExportProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
         <Header
-          onLoadManifest={() => router.push("/projects/new/import")}
+          onLoadManifest={() => navigateWithConfirm("/projects/new/import")}
           isEditing={isEditing}
-          onNewProject={() => router.push("/projects/new")}
-          onOpenWelcomeManifest={() => router.push("/projects/new/ai")}
+          onNewProject={() => navigateWithConfirm("/projects/new")}
+          onOpenWelcomeManifest={() => navigateWithConfirm("/projects/new/ai")}
           onNavigateToProjects={onNavigateToProjects}
         />
 
@@ -138,8 +153,18 @@ export function ProjectWorkspace({
           open={ui.dialog.kind === "new-project"}
           onClose={lifecycle.handleCancelNewProject}
           loadedProject={lifecycle.loadedProject}
-          onSaveAndNew={lifecycle.handleSaveAndNew}
-          onDiscardAndNew={lifecycle.handleDiscardAndNew}
+          onSaveAndNew={() => {
+            lifecycle.handleSaveAndNew();
+            const route = pendingRoute.current;
+            pendingRoute.current = null;
+            if (route) router.push(route);
+          }}
+          onDiscardAndNew={() => {
+            lifecycle.handleDiscardAndNew();
+            const route = pendingRoute.current;
+            pendingRoute.current = null;
+            if (route) router.push(route);
+          }}
           onCancel={lifecycle.handleCancelNewProject}
         />
       </div>

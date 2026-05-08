@@ -1,4 +1,5 @@
-import { describe, it, assert, afterEach } from "node:test";
+import { describe, it, afterEach } from "node:test";
+import assert from "node:assert/strict";
 import { usePendingManifest } from "./usePendingManifest";
 import { ProjectSpec } from "@hexagen/project-configuration";
 

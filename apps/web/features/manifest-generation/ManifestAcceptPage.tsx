@@ -27,13 +27,14 @@ export function ManifestAcceptPage() {
   const pendingManifest = usePendingManifest();
   const { saveProject } = useSavedProjects();
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
 
   // Enforce happy path: redirect if no pending manifest
   useEffect(() => {
     if (pendingManifest.yaml === null) {
       setRedirecting(true);
-      router.push("/projects/new/ai");
+      router.replace("/projects/new/ai");
     }
   }, [pendingManifest.yaml, router]);
 
@@ -43,6 +44,7 @@ export function ManifestAcceptPage() {
     }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       // Save the project using the extracted form values and YAML
       const projectId = saveProject(
@@ -57,7 +59,9 @@ export function ManifestAcceptPage() {
       // Navigate to the wizard with the new project ID
       router.push(`/wizard/1?project=${projectId}`);
     } catch (error) {
-      console.error("Failed to save project:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to save project";
+      setSaveError(message);
       setIsSaving(false);
     }
   };
@@ -128,6 +132,12 @@ export function ManifestAcceptPage() {
               below. Click "Accept & Continue" to proceed to the wizard.
             </p>
           </div>
+
+          {saveError && (
+            <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive">
+              {saveError}
+            </div>
+          )}
 
           {/* Form values display section */}
           <div className="bg-card border border-border rounded-lg p-6 space-y-4">

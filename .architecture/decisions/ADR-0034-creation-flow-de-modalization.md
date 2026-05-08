@@ -122,11 +122,11 @@ The following were removed entirely:
 
 ## What Did Not Change
 
-- `apps/web/app/wizard/layout.tsx` and `useProjectSearchParam` — unchanged
-- `useProjectLifecycle` and `ProjectWorkspace` — auto-save added but shell structure unchanged
 - `useSavedProjects` and `ActiveWorkspaceContext` — unchanged
 - The `/wizard/[step]?project={id}` routing contract — unchanged
-- `ProjectsLandingHeader` structure — only button handler changed from dialog to `router.push`
+- `useProjectLifecycle` — auto-save added but hook signature unchanged
+- `apps/web/app/wizard/layout.tsx` — added `useProjectSearchParam` and `onNavigateToProjects`; routing contract unchanged
+- `ProjectsLandingHeader` — deleted (replaced by shared workspace `Header`); not a modification
 
 ---
 

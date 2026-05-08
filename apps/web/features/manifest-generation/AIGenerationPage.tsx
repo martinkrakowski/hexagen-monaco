@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { WelcomeScreen } from "./WelcomeScreen";
@@ -16,14 +16,25 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const router = useRouter();
   const { set: setPendingManifest } = usePendingManifest();
 
+  const [parseError, setParseError] = useState<string | null>(null);
+
   const handleUseManifest = useCallback(
     (yaml: string) => {
-      const wizardData = parseManifestToWizardData(yaml);
-      const projectName =
-        wizardData.governance?.workspaceName ||
-        `AI Project ${new Date().toLocaleTimeString()}`;
-      setPendingManifest(yaml, wizardData, projectName);
-      router.push("/projects/new/ai/accept");
+      try {
+        setParseError(null);
+        const wizardData = parseManifestToWizardData(yaml);
+        const projectName =
+          wizardData.governance?.workspaceName ||
+          `AI Project ${new Date().toLocaleTimeString()}`;
+        setPendingManifest(yaml, wizardData, projectName);
+        router.push("/projects/new/ai/accept");
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to parse generated manifest";
+        setParseError(message);
+      }
     },
     [setPendingManifest, router],
   );
@@ -59,6 +70,11 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           </h1>
         </div>
 
+        {parseError && (
+          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive">
+            {parseError}
+          </div>
+        )}
         <WelcomeScreen
           onUseManifest={handleUseManifest}
           llmContext={llmContext}
