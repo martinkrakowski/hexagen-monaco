@@ -4,6 +4,9 @@
 
 export function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // Suppress unhandledRejection errors with read-only .message property
+    // (e.g., DOMException, TypeError from DOM APIs)
+    // These cause Next.js formatServerError to fail with "Cannot set property message"
     process.on("unhandledRejection", (reason: unknown) => {
       if (!(reason instanceof Error)) {
         console.error("[unhandledRejection]", reason);
@@ -12,9 +15,10 @@ export function register() {
       const proto = Object.getPrototypeOf(reason);
       const desc = Object.getOwnPropertyDescriptor(proto, "message");
       if (desc && typeof desc.get === "function" && !desc.set) {
+        // Silently suppress — Next.js can't serialize this error anyway
         return;
       }
-      console.error("[unhandledRejection]", reason);
+      console.error("[unhandledRejection]", reason.message, reason.stack);
     });
   }
 }
