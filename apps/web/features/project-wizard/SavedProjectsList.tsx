@@ -3,9 +3,8 @@
 import { Button } from "@hexagen/ui";
 import type { SavedProject } from "@/hooks/useSavedProjects";
 import { useSavedProjectsOverlay } from "@/hooks/useSavedProjectsOverlay";
-import type { WizardDraft } from "@hexagen/shared";
 
-import { DraftCard, ProjectCard, ProjectsEmptyState } from "./saved-projects";
+import { ProjectCard, ProjectsEmptyState } from "./saved-projects";
 
 interface SavedProjectsListProps {
   projects: SavedProject[];
@@ -13,28 +12,15 @@ interface SavedProjectsListProps {
   onDelete: (id: string) => void;
   onRename: (id: string, newName: string) => void;
   onBackToWizard: () => void;
-  draft?: WizardDraft | null;
-  onResumeDraft?: () => void;
-  onDiscardDraft?: () => void;
   loadedProjectId?: string | null;
 }
 
-/**
- * Saved-projects management screen. Lists saved projects with
- * load/rename/delete actions and surfaces any in-progress draft
- * for resume/discard. All overlay state (rename, delete-confirm,
- * discard-draft, load-with-draft) is held in a single discriminated
- * union via useSavedProjectsOverlay.
- */
 export function SavedProjectsList({
   projects,
   onLoad,
   onDelete,
   onRename,
   onBackToWizard,
-  draft,
-  onResumeDraft,
-  onDiscardDraft,
   loadedProjectId,
 }: SavedProjectsListProps) {
   const {
@@ -44,34 +30,14 @@ export function SavedProjectsList({
     commitRename,
     cancelRename,
     requestDelete,
-    requestDiscardDraft,
-    requestLoadWithDraft,
     close,
   } = useSavedProjectsOverlay();
-
-  const handleLoadClick = (id: string) => {
-    if (draft) {
-      requestLoadWithDraft(id);
-    } else {
-      onLoad(id);
-    }
-  };
 
   const handleCommitRename = (id: string) => {
     if (overlay.kind === "rename" && overlay.value.trim()) {
       onRename(id, overlay.value.trim());
     }
     commitRename();
-  };
-
-  const handleConfirmDiscardDraft = () => {
-    close();
-    onDiscardDraft?.();
-  };
-
-  const handleConfirmLoadWithDraft = (id: string) => {
-    close();
-    onLoad(id);
   };
 
   const handleConfirmDelete = (id: string) => {
@@ -91,21 +57,10 @@ export function SavedProjectsList({
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {!hasProjects && !draft ? (
+        {!hasProjects ? (
           <ProjectsEmptyState />
         ) : (
           <div className="space-y-3">
-            {draft && (
-              <DraftCard
-                draft={draft}
-                isConfirmingDiscard={overlay.kind === "discard-draft"}
-                onResume={() => onResumeDraft?.()}
-                onRequestDiscard={requestDiscardDraft}
-                onConfirmDiscard={handleConfirmDiscardDraft}
-                onCancelDiscard={close}
-              />
-            )}
-
             {projects.map((project) => {
               const isRenaming =
                 overlay.kind === "rename" && overlay.id === project.id;
@@ -115,8 +70,6 @@ export function SavedProjectsList({
                   : project.name;
               const isConfirmingDelete =
                 overlay.kind === "delete" && overlay.id === project.id;
-              const isConfirmingLoad =
-                overlay.kind === "load-with-draft" && overlay.id === project.id;
 
               return (
                 <ProjectCard
@@ -133,12 +86,7 @@ export function SavedProjectsList({
                   onRequestDelete={() => requestDelete(project.id)}
                   onConfirmDelete={() => handleConfirmDelete(project.id)}
                   onCancelDelete={close}
-                  isConfirmingLoad={isConfirmingLoad}
-                  onRequestLoad={() => handleLoadClick(project.id)}
-                  onConfirmLoadWithDraft={() =>
-                    handleConfirmLoadWithDraft(project.id)
-                  }
-                  onCancelLoadWithDraft={close}
+                  onRequestLoad={() => onLoad(project.id)}
                 />
               );
             })}

@@ -13,7 +13,7 @@ import type { ProjectConfig } from "@hexagen/project-configuration";
  * ImportManifestPage — Single-page manifest import flow.
  *
  * This page is rendered at `/projects/new/import` and allows users to:
- * 1. Upload manifest file (YAML/YML) via drag-drop or browse (reuses ManifestFileDropZone)
+ * 1. Upload manifest file (YAML/YML) via drag-drop or browse
  * 2. Paste manifest YAML directly in textarea
  * 3. Preview the parsed manifest
  * 4. Accept and save to wizard (parsed YAML → ProjectConfig → saveProject)
@@ -40,7 +40,7 @@ export function ImportManifestPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   /**
-   * Handle raw YAML string from file upload (ManifestFileDropZone returns raw YAML)
+   * Handle raw YAML string from file upload
    */
   const handleFileLoaded = (content: string) => {
     setManifestYaml(content);

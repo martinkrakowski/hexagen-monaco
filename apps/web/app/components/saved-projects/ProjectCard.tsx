@@ -19,10 +19,7 @@ interface ProjectCardProps {
   onRequestDelete: () => void;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
-  isConfirmingLoad: boolean;
   onRequestLoad: () => void;
-  onConfirmLoadWithDraft: () => void;
-  onCancelLoadWithDraft: () => void;
 }
 
 export function ProjectCard({
@@ -38,13 +35,8 @@ export function ProjectCard({
   onRequestDelete,
   onConfirmDelete,
   onCancelDelete,
-  isConfirmingLoad,
   onRequestLoad,
-  onConfirmLoadWithDraft,
-  onCancelLoadWithDraft,
 }: ProjectCardProps) {
-  const hasOverlay = isConfirmingDelete || isConfirmingLoad;
-
   return (
     <div className="relative p-4 border border-border rounded-lg bg-background">
       {isConfirmingDelete && (
@@ -73,42 +65,7 @@ export function ProjectCard({
         </div>
       )}
 
-      {isConfirmingLoad && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg gap-3 p-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle
-              aria-hidden="true"
-              className="h-4 w-4 text-warning shrink-0"
-            />
-            <span className="text-xs font-medium text-foreground">
-              Load this project?
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground text-center">
-            Your unsaved draft will be permanently lost.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={onConfirmLoadWithDraft}
-              className="h-auto px-3 py-1 text-xs"
-            >
-              Load &amp; Discard Draft
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onCancelLoadWithDraft}
-              className="h-auto px-3 py-1 text-xs"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className={hasOverlay ? "invisible" : ""}>
+      <div className={isConfirmingDelete ? "invisible" : ""}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1 min-w-0">
             {isRenaming ? (

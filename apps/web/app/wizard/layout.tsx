@@ -15,30 +15,19 @@ import { useSavedProjects } from "@/hooks/useSavedProjects";
 
 function useProjectSearchParam() {
   const searchParams = useSearchParams();
-  const { activeWorkspace, setActiveWorkspace, clearActiveWorkspace } =
-    useActiveWorkspace();
+  const { activeWorkspace, setActiveWorkspace } = useActiveWorkspace();
   const { projects, isLoading } = useSavedProjects();
 
-  // Use ref to read activeWorkspace without re-triggering effect
   const activeWorkspaceRef = useRef(activeWorkspace);
   activeWorkspaceRef.current = activeWorkspace;
 
   const projectId = searchParams.get("project");
-  const isNewProject = searchParams.get("new") === "true";
 
   useEffect(() => {
-    // If ?new=true, clear activeWorkspace to start blank (prevents loading stale project from localStorage)
-    if (isNewProject) {
-      clearActiveWorkspace();
-      return;
-    }
-
     if (!projectId) return;
-    // Wait for IDB to finish loading before trying to find the project
     if (isLoading) return;
     if (projects.length === 0) return;
 
-    // Check ref instead of reactive value to avoid re-running when workspace updates
     if (activeWorkspaceRef.current?.projectId === projectId) return;
 
     const saved = projects.find((p) => p.id === projectId);
@@ -52,14 +41,7 @@ function useProjectSearchParam() {
       wizardData: { ...saved.formState },
       manifestYaml: saved.manifestYaml,
     });
-  }, [
-    projectId,
-    isNewProject,
-    isLoading,
-    projects,
-    setActiveWorkspace,
-    clearActiveWorkspace,
-  ]);
+  }, [projectId, isLoading, projects, setActiveWorkspace]);
 }
 
 function WizardLayoutInner({ children }: { children: React.ReactNode }) {
@@ -68,8 +50,6 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useProjectSearchParam();
-
-  const hasProjectUrlParam = searchParams.get("project") !== null;
 
   const stepParam = parseInt(params.step, 10);
   const currentStepIndex = Number.isNaN(stepParam)
@@ -99,7 +79,6 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
         onCloseRightPanel={rightToggle.close}
         onGoToStep={stepNav.goToStep}
         onNavigateToProjects={() => router.push("/projects")}
-        hasProjectUrlParam={hasProjectUrlParam}
       >
         {children}
       </ProjectWorkspace>

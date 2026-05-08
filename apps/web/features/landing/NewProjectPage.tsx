@@ -3,9 +3,50 @@
 import { useRouter } from "next/navigation";
 import { Sparkles, Upload, Wand2 } from "lucide-react";
 import { Button } from "@hexagen/ui";
+import { useSavedProjects } from "@/hooks/useSavedProjects";
+import type { ProjectConfig } from "@hexagen/project-configuration";
+
+const blankProjectConfig: ProjectConfig = {
+  governance: {
+    workspaceName: "@hexagen",
+    workspaceTemplate: "modular-monolith",
+    workspaceDescription: undefined,
+    packageManager: "yarn",
+    topologyStrictness: "flexible",
+    namespacePrefix: "@hexagen",
+    namingConventions: {
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".adapter.ts",
+    },
+  },
+  boundedContexts: [
+    {
+      id: crypto.randomUUID(),
+      name: "core",
+      description: "",
+      infrastructureTarget: "nestjs",
+      coreDomainEntities: [],
+      valueObjects: [],
+      domainEvents: [],
+      entities: [],
+      useCases: [],
+      portConfiguration: {
+        inboundPorts: [],
+        outboundPorts: [],
+      },
+      uiFramework: "",
+      persistenceAdapter: "",
+      messagingAdapter: "",
+      telemetryProvider: "",
+    },
+  ],
+  externalContexts: [],
+  peerMappings: [],
+};
 
 export function NewProjectPage() {
   const router = useRouter();
+  const { saveProject } = useSavedProjects();
 
   const handleGenerateWithAI = () => {
     router.push("/projects/new/ai");
@@ -16,9 +57,8 @@ export function NewProjectPage() {
   };
 
   const handleStartBlank = () => {
-    // Navigate to wizard with ?new=true to signal a blank start
-    // This will trigger useProjectSearchParam to clear activeWorkspace, preventing stale project load
-    router.push("/wizard/1?new=true");
+    const projectId = saveProject("Untitled Project", blankProjectConfig, "");
+    router.push(`/wizard/1?project=${projectId}`);
   };
 
   return (

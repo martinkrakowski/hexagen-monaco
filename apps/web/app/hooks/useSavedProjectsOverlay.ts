@@ -5,9 +5,7 @@ import { useCallback, useState } from "react";
 export type SavedProjectsOverlay =
   | { kind: "none" }
   | { kind: "rename"; id: string; value: string }
-  | { kind: "delete"; id: string }
-  | { kind: "discard-draft" }
-  | { kind: "load-with-draft"; id: string };
+  | { kind: "delete"; id: string };
 
 export interface UseSavedProjectsOverlayReturn {
   overlay: SavedProjectsOverlay;
@@ -16,8 +14,6 @@ export interface UseSavedProjectsOverlayReturn {
   commitRename: () => void;
   cancelRename: () => void;
   requestDelete: (id: string) => void;
-  requestDiscardDraft: () => void;
-  requestLoadWithDraft: (id: string) => void;
   close: () => void;
 }
 
@@ -46,14 +42,6 @@ export function useSavedProjectsOverlay(): UseSavedProjectsOverlayReturn {
     setOverlay({ kind: "delete", id });
   }, []);
 
-  const requestDiscardDraft = useCallback(() => {
-    setOverlay({ kind: "discard-draft" });
-  }, []);
-
-  const requestLoadWithDraft = useCallback((id: string) => {
-    setOverlay({ kind: "load-with-draft", id });
-  }, []);
-
   const close = useCallback(() => {
     setOverlay({ kind: "none" });
   }, []);
@@ -65,8 +53,6 @@ export function useSavedProjectsOverlay(): UseSavedProjectsOverlayReturn {
     commitRename,
     cancelRename,
     requestDelete,
-    requestDiscardDraft,
-    requestLoadWithDraft,
     close,
   };
 }

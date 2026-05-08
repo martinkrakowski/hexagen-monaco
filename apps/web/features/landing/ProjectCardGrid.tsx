@@ -82,10 +82,7 @@ export function ProjectCardGrid({
             onRequestDelete={() => requestDelete(project.id)}
             onConfirmDelete={() => handleConfirmDelete(project.id)}
             onCancelDelete={close}
-            isConfirmingLoad={false}
             onRequestLoad={() => onLoadProject(project.id)}
-            onConfirmLoadWithDraft={() => onLoadProject(project.id)}
-            onCancelLoadWithDraft={close}
           />
         );
       })}

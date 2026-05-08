@@ -14,14 +14,10 @@ import { useEditorSession } from "./hooks/useEditorSession";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import { ExportProvider } from "@/contexts/ExportContext";
-import { useLocalLLM } from "../llm-driver/useLocalLlm";
 
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
-import { LoadManifestDialog } from "./LoadManifestDialog";
-import { ResumeDraftDialog } from "./ResumeDraftDialog";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
-import { WelcomeManifestDialog } from "./WelcomeManifestDialog";
 
 import type { ViewMode } from "@/types/view-mode";
 
@@ -35,7 +31,6 @@ export interface ProjectWorkspaceProps {
   onCloseRightPanel: () => void;
   onGoToStep: (index: number) => void;
   onNavigateToProjects?: () => void;
-  hasProjectUrlParam?: boolean;
   children?: React.ReactNode;
 }
 
@@ -47,12 +42,10 @@ export function ProjectWorkspace({
   onCloseRightPanel,
   onGoToStep,
   onNavigateToProjects,
-  hasProjectUrlParam,
   children,
 }: ProjectWorkspaceProps) {
   const router = useRouter();
   const totalSteps = wizardSteps.length;
-  const llmContext = useLocalLLM();
 
   const { form, wizardData, canProceed } = useWizardForm();
   const ui = useWorkspaceShellUi({ currentStepIndex, viewMode });
@@ -64,7 +57,6 @@ export function ProjectWorkspace({
     editor,
     totalSteps,
     onGoToStep,
-    hasProjectUrlParam,
   });
 
   const isEditing = ui.state.kind === "edit";
@@ -75,12 +67,10 @@ export function ProjectWorkspace({
     <ExportProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
         <Header
-          onLoadManifest={() => ui.openDialog({ kind: "load-manifest" })}
+          onLoadManifest={() => router.push("/projects/new/import")}
           isEditing={isEditing}
           onNewProject={() => router.push("/projects/new")}
-          onOpenWelcomeManifest={() =>
-            ui.openDialog({ kind: "welcome-manifest" })
-          }
+          onOpenWelcomeManifest={() => router.push("/projects/new/ai")}
           onLoadSavedProject={(project) =>
             lifecycle.handleLoadProject(project.id)
           }
@@ -102,9 +92,6 @@ export function ProjectWorkspace({
                     onDelete={lifecycle.deleteProject}
                     onRename={lifecycle.renameProject}
                     onBackToWizard={ui.closeDialog}
-                    draft={lifecycle.draft}
-                    onResumeDraft={lifecycle.handleResumeDraft}
-                    onDiscardDraft={lifecycle.handleDiscardDraft}
                     loadedProjectId={loadedProjectId}
                   />
                 ) : (
@@ -150,21 +137,6 @@ export function ProjectWorkspace({
           </FormProvider>
         </main>
 
-        <LoadManifestDialog
-          open={ui.dialog.kind === "load-manifest"}
-          onClose={ui.closeDialog}
-          onFileLoaded={lifecycle.handleManifestLoaded}
-        />
-
-        <ResumeDraftDialog
-          open={ui.dialog.kind === "resume-draft"}
-          onClose={ui.closeDialog}
-          draft={lifecycle.draft}
-          totalSteps={totalSteps}
-          onResume={lifecycle.handleResumeDraft}
-          onDiscard={lifecycle.handleDiscardDraft}
-        />
-
         <NewProjectConfirmDialog
           open={ui.dialog.kind === "new-project"}
           onClose={lifecycle.handleCancelNewProject}
@@ -172,19 +144,6 @@ export function ProjectWorkspace({
           onSaveAndNew={lifecycle.handleSaveAndNew}
           onDiscardAndNew={lifecycle.handleDiscardAndNew}
           onCancel={lifecycle.handleCancelNewProject}
-        />
-
-        <WelcomeManifestDialog
-          open={ui.dialog.kind === "welcome-manifest"}
-          onClose={ui.closeDialog}
-          onUseManifest={lifecycle.handleWelcomeManifestGenerated}
-          llmContext={llmContext}
-          onImportManifest={() => ui.openDialog({ kind: "load-manifest" })}
-          onStartWizard={() => {
-            ui.closeDialog();
-            onGoToStep(0);
-          }}
-          onLoadProject={lifecycle.handleLoadProject}
         />
       </div>
       {children}
