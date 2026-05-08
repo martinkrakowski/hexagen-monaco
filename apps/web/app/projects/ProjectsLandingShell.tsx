@@ -25,7 +25,7 @@ function deriveProjectName(yamlContent: string): string {
 export function ProjectsLandingShell() {
   const router = useRouter();
   const llmContext = useLocalLLM();
-  const { projects, saveProject, deleteProject, renameProject } =
+  const { projects, isLoading, saveProject, deleteProject, renameProject } =
     useSavedProjects();
   const { importManifest } = useManifestImport();
 
@@ -99,15 +99,23 @@ export function ProjectsLandingShell() {
       <ProjectsLandingHeader onNewProject={handleNewProject} />
 
       <main className="flex-1 container mx-auto px-6 py-8">
-        <ProjectCardGrid
-          projects={projects}
-          onLoadProject={handleLoadProject}
-          onDeleteProject={deleteProject}
-          onRenameProject={renameProject}
-          onOpenWelcomeDialog={() => setWelcomeDialogOpen(true)}
-          onImportManifest={() => setLoadManifestDialogOpen(true)}
-          onStartWizard={handleStartWizard}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="text-center text-muted-foreground">
+              Loading projects...
+            </div>
+          </div>
+        ) : (
+          <ProjectCardGrid
+            projects={projects}
+            onLoadProject={handleLoadProject}
+            onDeleteProject={deleteProject}
+            onRenameProject={renameProject}
+            onOpenWelcomeDialog={() => setWelcomeDialogOpen(true)}
+            onImportManifest={() => setLoadManifestDialogOpen(true)}
+            onStartWizard={handleStartWizard}
+          />
+        )}
       </main>
 
       <WelcomeManifestDialog
