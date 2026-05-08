@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 export function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     process.on("unhandledRejection", (reason: unknown) => {
