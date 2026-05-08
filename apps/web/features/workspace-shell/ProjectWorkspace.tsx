@@ -136,14 +136,20 @@ export function ProjectWorkspace({
           loadedProject={lifecycle.loadedProject}
           onSaveAndNew={async () => {
             const route = pendingRoute.current;
-            pendingRoute.current = null;
-            await lifecycle.handleSaveAndNew();
+            try {
+              await lifecycle.handleSaveAndNew();
+            } finally {
+              pendingRoute.current = null;
+            }
             if (route) router.push(route);
           }}
           onDiscardAndNew={async () => {
             const route = pendingRoute.current;
-            pendingRoute.current = null;
-            await lifecycle.handleDiscardAndNew();
+            try {
+              await lifecycle.handleDiscardAndNew();
+            } finally {
+              pendingRoute.current = null;
+            }
             if (route) router.push(route);
           }}
           onCancel={lifecycle.handleCancelNewProject}

@@ -135,6 +135,9 @@ export function ImportManifestPage() {
             onApprove={handleAccept}
             onRegenerate={() => setManifestYaml(null)}
             onStartOver={() => setManifestYaml(null)}
+            hideActions
+            hideHeader
+            embedded
           />
         </div>
       </div>

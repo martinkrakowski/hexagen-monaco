@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
@@ -183,10 +183,10 @@ export function GenerateWithAi({
     }
   };
 
-  const handleRetryOrRegenerate = () => {
+  const handleRetryOrRegenerate = useCallback(() => {
     stagedGen.reset();
     actions.regenerateManifest();
-  };
+  }, [stagedGen, actions]);
 
   useEffect(() => {
     if (!onPreviewStateChange) return;
@@ -210,7 +210,14 @@ export function GenerateWithAi({
     } else {
       onPreviewStateChange(null);
     }
-  }, [flowState.state, flowState.manifestContent, onPreviewStateChange]);
+  }, [
+    flowState.state,
+    flowState.manifestContent,
+    onPreviewStateChange,
+    previewActiveTab,
+    handleRetryOrRegenerate,
+    onUseManifest,
+  ]);
 
   if (
     flowState.state !== "idle" &&

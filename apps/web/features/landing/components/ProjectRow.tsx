@@ -38,6 +38,7 @@ export const ProjectRow = memo(function ProjectRow({
   onCancelRename,
 }: ProjectRowProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const isCancellingRef = useRef(false);
 
   useEffect(() => {
     if (isRenaming && inputRef.current) {
@@ -50,6 +51,7 @@ export const ProjectRow = memo(function ProjectRow({
     if (e.key === "Enter" && onCommitRename) {
       onCommitRename(item.id);
     } else if (e.key === "Escape" && onCancelRename) {
+      isCancellingRef.current = true;
       onCancelRename();
     }
   };
@@ -72,7 +74,13 @@ export const ProjectRow = memo(function ProjectRow({
               value={renameValue ?? item.name}
               onChange={(e) => onUpdateRenameValue?.(e.target.value)}
               onKeyDown={handleKeyDown}
-              onBlur={() => onCommitRename?.(item.id)}
+              onBlur={() => {
+                if (isCancellingRef.current) {
+                  isCancellingRef.current = false;
+                  return;
+                }
+                onCommitRename?.(item.id);
+              }}
               className="text-sm bg-background border border-ring rounded px-2 py-1 w-full max-w-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={`Rename ${item.name}`}
             />

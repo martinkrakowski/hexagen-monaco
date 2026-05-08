@@ -50,49 +50,51 @@ export function ProjectCardGrid({
     return project?.name ?? "";
   }, [deleteTargetId, projects]);
 
-  if (items.length === 0) {
-    return <ProjectsEmptyState />;
-  }
-
   return (
     <>
-      <ProjectsTable
-        items={items}
-        sort={sort}
-        onToggleSort={toggleSort}
-        isSelected={selection.isSelected}
-        allSelected={selection.allSelected}
-        onToggleSelect={selection.toggle}
-        onToggleAll={selection.toggleAll}
-        onLoadProject={onLoadProject}
-        onRequestRename={handleStartRename}
-        onRequestDelete={overlay.requestDelete}
-        relativeTime={relativeTime}
-        shortDate={shortDate}
-        renameOverlay={
-          overlay.overlay.kind === "rename" ? overlay.overlay : null
-        }
-        onUpdateRenameValue={overlay.updateRenameValue}
-        onCommitRename={handleCommitRename}
-        onCancelRename={overlay.cancelRename}
-      />
+      {items.length === 0 ? (
+        <ProjectsEmptyState />
+      ) : (
+        <>
+          <ProjectsTable
+            items={items}
+            sort={sort}
+            onToggleSort={toggleSort}
+            isSelected={selection.isSelected}
+            allSelected={selection.allSelected}
+            onToggleSelect={selection.toggle}
+            onToggleAll={selection.toggleAll}
+            onLoadProject={onLoadProject}
+            onRequestRename={handleStartRename}
+            onRequestDelete={overlay.requestDelete}
+            relativeTime={relativeTime}
+            shortDate={shortDate}
+            renameOverlay={
+              overlay.overlay.kind === "rename" ? overlay.overlay : null
+            }
+            onUpdateRenameValue={overlay.updateRenameValue}
+            onCommitRename={handleCommitRename}
+            onCancelRename={overlay.cancelRename}
+          />
 
-      <BulkActionsBar
-        selectedCount={selection.count}
-        onDeleteSelected={handleDeleteSelected}
-        onClearSelection={selection.clearSelection}
-      />
+          <BulkActionsBar
+            selectedCount={selection.count}
+            onDeleteSelected={handleDeleteSelected}
+            onClearSelection={selection.clearSelection}
+          />
 
-      <DeleteProjectDialog
-        open={overlay.overlay.kind === "delete"}
-        onClose={overlay.close}
-        onConfirm={() => {
-          if (deleteTargetId) {
-            handleConfirmDelete(deleteTargetId);
-          }
-        }}
-        projectName={deleteTargetName()}
-      />
+          <DeleteProjectDialog
+            open={overlay.overlay.kind === "delete"}
+            onClose={overlay.close}
+            onConfirm={() => {
+              if (deleteTargetId) {
+                handleConfirmDelete(deleteTargetId);
+              }
+            }}
+            projectName={deleteTargetName()}
+          />
+        </>
+      )}
 
       <ProjectToast
         message={toast.message}

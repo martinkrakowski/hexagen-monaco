@@ -42,11 +42,14 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml, router, isSaving]);
 
-  const viewData = useMemo(
-    () =>
-      pendingManifest.yaml ? parseYamlToViewData(pendingManifest.yaml) : null,
-    [pendingManifest.yaml],
-  );
+  const viewData = useMemo(() => {
+    if (!pendingManifest.yaml) return null;
+    try {
+      return parseYamlToViewData(pendingManifest.yaml);
+    } catch {
+      return null;
+    }
+  }, [pendingManifest.yaml]);
 
   const handleAccept = useCallback(async () => {
     if (
@@ -83,6 +86,12 @@ export function ManifestAcceptPage() {
 
   const hasFailures =
     viewData?.validationItems.some((v) => v.status === "fail") ?? false;
+
+  const canAccept =
+    !!pendingManifest.yaml &&
+    !!pendingManifest.projectName &&
+    !!pendingManifest.formValues &&
+    !hasFailures;
 
   const renderHeaderContent = () => {
     if (!viewData) {
@@ -185,7 +194,10 @@ export function ManifestAcceptPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Generation
           </Button>
-          <Button onClick={handleAccept} disabled={isSaving || hasFailures}>
+          <Button
+            onClick={handleAccept}
+            disabled={isSaving || !canAccept || !viewData}
+          >
             Use This Manifest
             <ArrowRight className="w-4 h-4 ml-2" />
           </Button>

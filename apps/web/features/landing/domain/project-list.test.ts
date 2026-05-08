@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { toProjectListItem, sortItems } from "./project-list.js";
 import type { ProjectListItem, SortState } from "./project-list.js";
+import type { SavedProject } from "@/hooks/useSavedProjects";
 
 interface MockSavedProject {
   readonly id: string;
@@ -36,7 +37,7 @@ function makeProject(
 describe("toProjectListItem", () => {
   it("maps all fields correctly from a SavedProject", () => {
     const project = makeProject();
-    const result = toProjectListItem(project as never);
+    const result = toProjectListItem(project as unknown as SavedProject);
 
     assert.strictEqual(result.id, "proj-1");
     assert.strictEqual(result.name, "MyProject");
@@ -52,25 +53,25 @@ describe("toProjectListItem", () => {
     const project = makeProject({
       formState: { governance: { workspaceDescription: "Custom description" } },
     });
-    const result = toProjectListItem(project as never);
+    const result = toProjectListItem(project as unknown as SavedProject);
     assert.strictEqual(result.description, "Custom description");
   });
 
   it("falls back to empty string when governance is missing", () => {
     const project = makeProject({ formState: {} });
-    const result = toProjectListItem(project as never);
+    const result = toProjectListItem(project as unknown as SavedProject);
     assert.strictEqual(result.description, "");
   });
 
   it("falls back to empty string when workspaceDescription is missing", () => {
     const project = makeProject({ formState: { governance: {} } });
-    const result = toProjectListItem(project as never);
+    const result = toProjectListItem(project as unknown as SavedProject);
     assert.strictEqual(result.description, "");
   });
 
   it("lowercases name for sortName", () => {
     const project = makeProject({ name: "CamelCaseName" });
-    const result = toProjectListItem(project as never);
+    const result = toProjectListItem(project as unknown as SavedProject);
     assert.strictEqual(result.sortName, "camelcasename");
   });
 });
