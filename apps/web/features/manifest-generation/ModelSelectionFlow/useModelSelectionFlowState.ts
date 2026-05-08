@@ -16,12 +16,12 @@ import type {
   ModelSelectionFlowState,
   ModelSelectionFlowActions,
 } from "./types";
-import type { WelcomeScreenState } from "./types";
+import type { GenerateWithAiScreenState } from "./types";
 
 export type {
   ModelSelectionFlowState,
   ModelSelectionFlowActions,
-  WelcomeScreenState,
+  GenerateWithAiScreenState,
 };
 export type { DomainModelId };
 
@@ -73,7 +73,7 @@ export function useModelSelectionFlowState(
     apiKeyManager,
   });
 
-  const transitionTo = useCallback((state: WelcomeScreenState) => {
+  const transitionTo = useCallback((state: GenerateWithAiScreenState) => {
     setFlowState((prev) => ({ ...prev, state }));
   }, []);
 

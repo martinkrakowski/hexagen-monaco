@@ -1,4 +1,4 @@
-import type { WelcomeScreenState } from "../../domain/services/model-selection-state-machine.js";
+import type { GenerateWithAiScreenState } from "../../domain/services/model-selection-state-machine.js";
 import type {
   ManifestTopologyDraft,
   ClarificationTrigger,
@@ -6,20 +6,20 @@ import type {
 import type { ClientManifestGenerationPort } from "../ports/in/client-manifest-generation.port.js";
 import { classifyGenerationError } from "../../domain/services/generation-error-handler.js";
 
-export interface WelcomeFlowCallbacks {
-  onTransitionTo(state: WelcomeScreenState): void;
+export interface GenerateWithAiFlowCallbacks {
+  onTransitionTo(state: GenerateWithAiScreenState): void;
   onError(message: string, code?: string): void;
   onSaveGenerationResult(manifest: string): void;
   onClarificationNeeded(triggers: ClarificationTrigger[]): void;
   onStepDetail(detail: string): void;
 }
 
-export interface WelcomeFlowInput {
+export interface GenerateWithAiFlowInput {
   description: string;
   maxContexts?: number;
 }
 
-export type WelcomeFlowResult =
+export type GenerateWithAiFlowResult =
   | { kind: "complete"; manifest: string }
   | {
       kind: "clarification_needed";
@@ -28,14 +28,14 @@ export type WelcomeFlowResult =
     }
   | { kind: "error"; code: string; message: string };
 
-export class WelcomeFlowUseCase {
+export class GenerateWithAiFlowUseCase {
   constructor(private readonly manifestUseCase: ClientManifestGenerationPort) {}
 
   async execute(
-    input: WelcomeFlowInput,
+    input: GenerateWithAiFlowInput,
     signal: AbortSignal,
-    callbacks: WelcomeFlowCallbacks,
-  ): Promise<WelcomeFlowResult> {
+    callbacks: GenerateWithAiFlowCallbacks,
+  ): Promise<GenerateWithAiFlowResult> {
     callbacks.onStepDetail("Analyzing project structure...");
 
     const topologyResult = await this.manifestUseCase.generateTopology(
@@ -94,8 +94,8 @@ export class WelcomeFlowUseCase {
   async confirmClarification(
     partialTopology: ManifestTopologyDraft,
     signal: AbortSignal,
-    callbacks: WelcomeFlowCallbacks,
-  ): Promise<WelcomeFlowResult> {
+    callbacks: GenerateWithAiFlowCallbacks,
+  ): Promise<GenerateWithAiFlowResult> {
     callbacks.onStepDetail("Extracting adapters...");
     const adaptersResult = await this.manifestUseCase.extractAdapters(
       partialTopology,

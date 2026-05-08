@@ -2,15 +2,15 @@ import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
 import {
   transitionState,
-  type WelcomeScreenState,
+  type GenerateWithAiScreenState,
   type ModelSelectionEvent,
 } from "@hexagen/manifest-generation";
 
-export type { WelcomeScreenState };
+export type { GenerateWithAiScreenState };
 export type { DomainModelId };
 
 export interface ModelSelectionFlowState {
-  state: WelcomeScreenState;
+  state: GenerateWithAiScreenState;
   error?: string | null;
   errorCode?: GenerateWithAiErrorCode | null;
   aiSetupSkipped?: boolean;
@@ -37,7 +37,7 @@ export interface ModelSelectionFlowState {
 }
 
 export interface ModelSelectionFlowActions {
-  transitionTo: (state: WelcomeScreenState) => void;
+  transitionTo: (state: GenerateWithAiScreenState) => void;
   selectLocalModel: (modelId: DomainModelId, remember: boolean) => void;
   selectCloudProvider: (
     provider: string,
@@ -69,8 +69,8 @@ export interface ModelSelectionFlowActions {
 }
 
 export function deriveStateFromEvent(
-  currentState: WelcomeScreenState,
+  currentState: GenerateWithAiScreenState,
   event: ModelSelectionEvent,
-): WelcomeScreenState {
+): GenerateWithAiScreenState {
   return transitionState(currentState, event);
 }

@@ -46,7 +46,7 @@ export {
 } from "./domain/services/model-selection-state-machine.js";
 export type {
   ModelSelectionEvent,
-  WelcomeScreenState,
+  GenerateWithAiScreenState,
 } from "./domain/services/model-selection-state-machine.js";
 export {
   validateApiKeyFormat,
