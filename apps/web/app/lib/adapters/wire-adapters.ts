@@ -50,9 +50,9 @@ export class ManifestProviderAdapter {
 
 export class ServerArchitectureGraphProviderAdapter implements ArchitectureGraphProviderPort {
   async getArchitectureGraph(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _projectId: string,
   ): Promise<Result<ArchitectureGraph>> {
+    void _projectId; // satisfy no-unused-vars with underscore prefix
     try {
       const manifestPath = path.join(
         process.cwd(),

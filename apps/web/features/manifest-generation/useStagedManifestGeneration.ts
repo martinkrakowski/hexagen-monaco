@@ -212,6 +212,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           let buffer = "";
 
           // eslint-disable-next-line no-constant-condition -- standard ReadableStream iteration pattern
+          // eslint-disable-next-line no-constant-condition -- standard ReadableStream iteration pattern
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
