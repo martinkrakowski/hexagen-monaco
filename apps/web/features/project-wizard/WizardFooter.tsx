@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
+
 interface WizardFooterProps {
   onBack?: () => void;
-  onShowSavedProjects?: () => void;
   onNext?: () => void;
   onGenerate?: () => void;
   canProceed?: boolean;
@@ -16,7 +17,6 @@ interface WizardFooterProps {
 
 export function WizardFooter({
   onBack,
-  onShowSavedProjects,
   onNext,
   onGenerate,
   canProceed = true,
@@ -38,14 +38,13 @@ export function WizardFooter({
           Back
         </button>
       )}
-      {!showBack && onShowSavedProjects && (
-        <button
-          type="button"
-          onClick={onShowSavedProjects}
+      {!showBack && (
+        <Link
+          href="/projects"
           className="px-6 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted rounded-md transition-colors border border-input"
         >
           Previous Projects
-        </button>
+        </Link>
       )}
       <div className="flex items-center gap-4">
         {currentStep !== undefined && totalSteps !== undefined && (

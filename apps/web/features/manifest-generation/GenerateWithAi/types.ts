@@ -18,10 +18,6 @@ export interface EntryPointsSectionProps {
   onImportGithub?: () => void;
 }
 
-export interface PreviousProjectsSectionProps {
-  onLoadProject: (id: string) => void;
-}
-
 export interface HeaderSectionProps {
   title: string;
   subtitle: string;
