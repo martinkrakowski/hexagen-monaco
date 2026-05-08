@@ -16,7 +16,7 @@ import { useSavedProjects } from "@/hooks/useSavedProjects";
 function useProjectSearchParam() {
   const searchParams = useSearchParams();
   const { activeWorkspace, setActiveWorkspace } = useActiveWorkspace();
-  const { projects } = useSavedProjects();
+  const { projects, isLoading } = useSavedProjects();
 
   // Use ref to read activeWorkspace without re-triggering effect
   const activeWorkspaceRef = useRef(activeWorkspace);
@@ -26,6 +26,8 @@ function useProjectSearchParam() {
 
   useEffect(() => {
     if (!projectId) return;
+    // Wait for IDB to finish loading before trying to find the project
+    if (isLoading) return;
     if (projects.length === 0) return;
 
     // Check ref instead of reactive value to avoid re-running when workspace updates
@@ -42,7 +44,7 @@ function useProjectSearchParam() {
       wizardData: { ...saved.formState },
       manifestYaml: saved.manifestYaml,
     });
-  }, [projectId, projects, setActiveWorkspace]);
+  }, [projectId, isLoading, projects, setActiveWorkspace]);
 }
 
 function WizardLayoutInner({ children }: { children: React.ReactNode }) {
