@@ -25,6 +25,7 @@ const CheckboxElement: ForwardRefRenderFunction<
         {...props}
       />
       <span
+        data-slot="checkbox-visual"
         className={[
           "flex h-5 w-5 items-center justify-center rounded border border-primary",
           "peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",

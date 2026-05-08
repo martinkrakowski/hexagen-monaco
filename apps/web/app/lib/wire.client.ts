@@ -18,6 +18,7 @@ import type {
 } from "@hexagen/shared";
 
 import type { LoggerPort } from "@hexagen/shared";
+import { logger } from "../../lib/structured-logger";
 import type {
   IArchitectureGraphProviderPort,
   GenerateHexagonalMapPort,
@@ -227,14 +228,16 @@ export const wireDependencies = () => {
       void chatPersistence
         .purgeProjectData(event.payload.projectId)
         .catch((err) =>
-          console.error("Failed to purge chat persistence data:", err),
+          logger.error("Failed to purge chat persistence data:", {
+            error: err,
+          }),
         );
 
       // Clear generation results
       void generationResultAdapter
         .purgeProjectResults(event.payload.projectId)
         .catch((err) =>
-          console.error("Failed to purge generation results:", err),
+          logger.error("Failed to purge generation results:", { error: err }),
         );
 
       // Clear Zustand thread store
@@ -260,7 +263,9 @@ export const wireDependencies = () => {
   ]);
   void migrationOrchestrator
     .runPending()
-    .catch((err) => console.error("Migration orchestrator failed:", err));
+    .catch((err) =>
+      logger.error("Migration orchestrator failed:", { error: err }),
+    );
 
   // Secret Vault → ephemeral in-memory adapter (browser-side user vault)
   registry.set(

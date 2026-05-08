@@ -48,13 +48,11 @@ export class ManifestProviderAdapter {
   }
 }
 
-export class ServerArchitectureGraphProviderAdapter
-  implements ArchitectureGraphProviderPort
-{
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+export class ServerArchitectureGraphProviderAdapter implements ArchitectureGraphProviderPort {
   async getArchitectureGraph(
     _projectId: string,
   ): Promise<Result<ArchitectureGraph>> {
+    void _projectId; // satisfy no-unused-vars with underscore prefix
     try {
       const manifestPath = path.join(
         process.cwd(),
@@ -78,9 +76,7 @@ export class ServerArchitectureGraphProviderAdapter
   }
 }
 
-export class ServerLinterReportProviderAdapter
-  implements LinterReportProviderPort
-{
+export class ServerLinterReportProviderAdapter implements LinterReportProviderPort {
   async getLinterReport(): Promise<Result<LinterReport>> {
     return ok({
       timestamp: new Date().toISOString(),

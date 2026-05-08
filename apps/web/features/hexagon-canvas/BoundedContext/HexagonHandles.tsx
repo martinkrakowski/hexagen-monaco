@@ -23,19 +23,19 @@ export function HexagonHandles({
         type="target"
         position={Position.Top}
         id="north"
-        className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+        className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-md`}
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="south"
-        className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+        className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-md`}
       />
       <Handle
         type="target"
         position={Position.Left}
         id="west"
-        className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-[0_0_10px_hsl(var(--ring)/0.5)]`}
+        className={`${structuralHandle} !w-3 !h-3 border-2 border-background shadow-md`}
       />
       <Handle
         type="source"

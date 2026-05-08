@@ -38,7 +38,7 @@ export function ModelProgressCard({
   const { displayModelId, displayName } = useModelDisplayData(model, modelId);
 
   const borderClass = isInProgress
-    ? "bg-cinematic-border animate-spin-border shadow-[0_0_30px_hsl(var(--primary)_/_0.12),inset_0_0_15px_hsl(var(--primary)_/_0.05)]"
+    ? "shadow-md"
     : "bg-gradient-to-br from-destructive/15 via-transparent to-destructive/10";
 
   const enterInitial = shouldReduceMotion
@@ -62,7 +62,7 @@ export function ModelProgressCard({
               onCancel={onCancel}
             />
 
-            <div className="px-5 pb-4">
+            <div className="px-4 pb-4">
               <ModelNameCard
                 displayName={displayName}
                 displayModelId={displayModelId}
@@ -79,7 +79,7 @@ export function ModelProgressCard({
               {isError && <ErrorSection errorMessage={errorMessage} />}
             </AnimatePresence>
 
-            <div className="mx-5 h-px bg-border" />
+            <div className="mx-4 h-1 bg-border" />
 
             <ActionButtons
               isInProgress={isInProgress}

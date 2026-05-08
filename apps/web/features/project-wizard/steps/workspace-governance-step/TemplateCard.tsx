@@ -19,9 +19,7 @@ function Badge({ label, tone }: BadgeProps) {
       ? "bg-destructive/10 text-destructive"
       : "bg-muted text-muted-foreground";
   return (
-    <span className={`text-[10px] ${classes} px-2 py-0.5 rounded`}>
-      {label}
-    </span>
+    <span className={`text-xs ${classes} px-2 py-1 rounded-md`}>{label}</span>
   );
 }
 
@@ -49,16 +47,16 @@ export function TemplateCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`relative flex flex-col p-4 cursor-pointer rounded-xl border-2 transition-all text-left ${
+      className={`relative flex flex-col p-4 cursor-pointer rounded-lg border-2 transition-all text-left ${
         isSelected
           ? "border-primary bg-primary/5 shadow-sm"
           : "border-border hover:border-primary/50 hover:bg-muted/30"
       }`}
     >
       {isSelected && (
-        <div className="absolute top-3 right-3 h-2.5 w-2.5 rounded-full bg-primary" />
+        <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-primary" />
       )}
-      <div className="font-semibold text-sm mb-1 pr-5">{template.title}</div>
+      <div className="font-semibold text-sm mb-1 pr-4">{template.title}</div>
       <p className="text-xs text-muted-foreground flex-1 line-clamp-3">
         {template.description}
       </p>
