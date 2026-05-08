@@ -4,7 +4,6 @@ type MessageIds = "arbitraryValue";
 
 const EXCEPTION_PATTERNS = [
   "active:scale-[0.98]", // Documented press feedback exception
-  "scale-[0.98]", // Matched by regex from active:scale-[0.98]
 ];
 
 /**
@@ -27,7 +26,7 @@ const rule: TSESLint.RuleModule<MessageIds> = {
     schema: [],
   },
   create(context) {
-    const ARBITRARY_PATTERN = /(\w+)-\[[\w-.%#()]+\]/g;
+    const ARBITRARY_PATTERN = /((?:\w+:)*\w+)-\[[\w-.%#()]+\]/g;
 
     return {
       Literal(node: TSESTree.Literal) {
