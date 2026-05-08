@@ -329,8 +329,6 @@ export function GenerateWithAi({
       />
 
       <AdvancedOptionsSection
-        platform={formState.platform}
-        onPlatformChange={(value) => formHandlers.setValue("platform", value)}
         deployment={formState.deployment}
         onDeploymentChange={(value) =>
           formHandlers.setValue("deployment", value)

@@ -6,8 +6,6 @@ import type { FormSectionProps } from "./types";
 export function FormSection({
   description,
   onDescriptionChange,
-  platform,
-  onPlatformChange,
   deployment,
   onDeploymentChange,
   maxContexts,
@@ -35,8 +33,6 @@ export function FormSection({
       />
 
       <AdvancedOptionsSection
-        platform={platform}
-        onPlatformChange={onPlatformChange}
         deployment={deployment}
         onDeploymentChange={onDeploymentChange}
         maxContexts={maxContexts}

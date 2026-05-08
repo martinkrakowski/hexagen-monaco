@@ -145,17 +145,19 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       headerContent={renderHeaderContent()}
       footer={renderFooter()}
     >
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="h-full flex flex-col">
         {parseError && (
-          <div className="p-4 mb-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive">
+          <div className="p-4 mb-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive shrink-0">
             {parseError}
           </div>
         )}
-        <GenerateWithAi
-          onUseManifest={handleUseManifest}
-          llmContext={llmContext}
-          onPreviewStateChange={setPreviewActions}
-        />
+        <div className="flex-1 min-h-0">
+          <GenerateWithAi
+            onUseManifest={handleUseManifest}
+            llmContext={llmContext}
+            onPreviewStateChange={setPreviewActions}
+          />
+        </div>
       </div>
     </ProjectsShell>
   );

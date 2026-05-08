@@ -5,8 +5,6 @@ const MIN_CONTEXTS = 1;
 const MAX_CONTEXTS = 25;
 
 interface AdvancedOptionsSectionProps {
-  platform: string;
-  onPlatformChange: (value: string) => void;
   deployment: string;
   onDeploymentChange: (value: string) => void;
   maxContexts: number;
@@ -15,8 +13,6 @@ interface AdvancedOptionsSectionProps {
 }
 
 export function AdvancedOptionsSection({
-  platform,
-  onPlatformChange,
   deployment,
   onDeploymentChange,
   maxContexts,
@@ -44,16 +40,6 @@ export function AdvancedOptionsSection({
           </svg>
         </summary>
         <div className="mt-4 space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="platform">Platform (optional)</Label>
-            <Input
-              id="platform"
-              value={platform}
-              onChange={(e) => onPlatformChange(e.target.value)}
-              placeholder="e.g., Node.js, Python, Java"
-              disabled={isDisabled}
-            />
-          </div>
           <div className="space-y-1">
             <Label htmlFor="deployment">Deployment (optional)</Label>
             <Input
