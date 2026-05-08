@@ -1,4 +1,3 @@
-export { DraftCard } from "./DraftCard";
-export { ProjectCard } from "./ProjectCard";
+export { ProjectCard } from "@/components/saved-projects/ProjectCard";
+export { formatDate } from "@/components/saved-projects/format-date";
 export { ProjectsEmptyState } from "./ProjectsEmptyState";
-export { formatDate } from "./format-date";

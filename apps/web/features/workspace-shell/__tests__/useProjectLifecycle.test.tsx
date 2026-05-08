@@ -1,13 +1,21 @@
 import { JSDOM } from "jsdom";
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", { url: "http://localhost/" });
+const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
+  url: "http://localhost/",
+});
 global.window = dom.window as unknown as Window & typeof globalThis;
 global.document = dom.window.document as unknown as Document;
 const store: Record<string, string> = {};
 global.localStorage = {
   getItem: (key: string) => store[key] ?? null,
-  setItem: (key: string, value: string) => { store[key] = value; },
-  removeItem: (key: string) => { delete store[key]; },
-  clear: () => { for (const k of Object.keys(store)) delete store[k]; },
+  setItem: (key: string, value: string) => {
+    store[key] = value;
+  },
+  removeItem: (key: string) => {
+    delete store[key];
+  },
+  clear: () => {
+    for (const k of Object.keys(store)) delete store[k];
+  },
   length: 0,
   key: () => null,
 } as unknown as Storage;
@@ -36,19 +44,23 @@ import type { UseEditorSessionReturn } from "../hooks/useEditorSession";
 import { useProjectLifecycle } from "../hooks/useProjectLifecycle";
 import { emptyFormValues } from "../../project-wizard/config";
 
-describe("useProjectLifecycle - Welcome Manifest Integration", () => {
-  it("should trigger new-project dialog when in edit mode", async () => {
+describe("useProjectLifecycle - Manifest Integration", () => {
+  it("should save and start new project in edit mode", async () => {
     const mockForm = {
       getValues: mock.fn(() => emptyFormValues),
       reset: mock.fn(),
       trigger: mock.fn(async () => true),
     } as unknown as UseFormReturn<ProjectConfig>;
 
+    const mockOnGoToStep = mock.fn();
+
     const mockUi = {
       currentStepIndex: 0,
+      viewMode: "visual" as const,
       openDialog: mock.fn(),
       closeDialog: mock.fn(),
-      setStep: mock.fn(),
+      setContextId: mock.fn(),
+      setMappingId: mock.fn(),
       enterEditMode: mock.fn(),
       enterGenesisMode: mock.fn(),
     } as unknown as UseWorkspaceShellUiReturn;
@@ -58,7 +70,13 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
       clearSession: mock.fn(),
       setActiveWorkspace: mock.fn(),
       clearActiveWorkspace: mock.fn(),
-    } as unknown as Pick<UseEditorSessionReturn, "setSessionId" | "clearSession" | "setActiveWorkspace" | "clearActiveWorkspace">;
+    } as unknown as Pick<
+      UseEditorSessionReturn,
+      | "setSessionId"
+      | "clearSession"
+      | "setActiveWorkspace"
+      | "clearActiveWorkspace"
+    >;
 
     const { result } = renderHook(() =>
       useProjectLifecycle({
@@ -67,20 +85,10 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
         uiState: { kind: "edit", projectId: "123" },
         editor: mockEditor,
         totalSteps: 4,
-      })
+        onGoToStep: mockOnGoToStep,
+      }),
     );
 
-    const testManifest = "boundedContexts: []\n";
-
-    await act(async () => {
-      await result.current.handleWelcomeManifestGenerated(testManifest);
-    });
-
-    assert.strictEqual(mockUi.openDialog.mock.callCount(), 1);
-    assert.deepStrictEqual(mockUi.openDialog.mock.calls[0].arguments, [{ kind: "new-project" }]);
-    assert.strictEqual(mockForm.reset.mock.callCount(), 0);
-
-    // Now test save and new to verify pending manifest is loaded
     await act(async () => {
       await result.current.handleSaveAndNew();
     });
@@ -89,12 +97,9 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
       assert.strictEqual(mockForm.reset.mock.callCount(), 1);
     });
 
-    // reset should have been called with the parsed manifest values
-    const resetArgs = mockForm.reset.mock.calls[0].arguments[0];
-    assert.deepStrictEqual(resetArgs.boundedContexts, []);
     assert.strictEqual(mockUi.closeDialog.mock.callCount(), 1);
-    assert.strictEqual(mockUi.setStep.mock.callCount(), 1);
-    assert.deepStrictEqual(mockUi.setStep.mock.calls[0].arguments, [0]);
+    assert.strictEqual(mockOnGoToStep.mock.callCount(), 1);
+    assert.deepStrictEqual(mockOnGoToStep.mock.calls[0].arguments, [0]);
   });
 
   it("should load manifest directly when in genesis mode", async () => {
@@ -104,11 +109,15 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
       trigger: mock.fn(async () => true),
     } as unknown as UseFormReturn<ProjectConfig>;
 
+    const mockOnGoToStep = mock.fn();
+
     const mockUi = {
       currentStepIndex: 0,
+      viewMode: "visual" as const,
       openDialog: mock.fn(),
       closeDialog: mock.fn(),
-      setStep: mock.fn(),
+      setContextId: mock.fn(),
+      setMappingId: mock.fn(),
       enterEditMode: mock.fn(),
       enterGenesisMode: mock.fn(),
     } as unknown as UseWorkspaceShellUiReturn;
@@ -118,7 +127,13 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
       clearSession: mock.fn(),
       setActiveWorkspace: mock.fn(),
       clearActiveWorkspace: mock.fn(),
-    } as unknown as Pick<UseEditorSessionReturn, "setSessionId" | "clearSession" | "setActiveWorkspace" | "clearActiveWorkspace">;
+    } as unknown as Pick<
+      UseEditorSessionReturn,
+      | "setSessionId"
+      | "clearSession"
+      | "setActiveWorkspace"
+      | "clearActiveWorkspace"
+    >;
 
     const { result } = renderHook(() =>
       useProjectLifecycle({
@@ -127,16 +142,15 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
         uiState: { kind: "genesis" },
         editor: mockEditor,
         totalSteps: 4,
-      })
+        onGoToStep: mockOnGoToStep,
+      }),
     );
 
     const testManifest = "boundedContexts: []\n";
 
     await act(async () => {
-      await result.current.handleWelcomeManifestGenerated(testManifest);
+      await result.current.handleManifestLoaded(testManifest);
     });
-
-    assert.strictEqual(mockUi.openDialog.mock.callCount(), 0); // shouldn't open new-project
 
     await waitFor(() => {
       assert.strictEqual(mockForm.reset.mock.callCount(), 1);
@@ -145,12 +159,22 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
     const resetArgs = mockForm.reset.mock.calls[0].arguments[0];
     assert.deepStrictEqual(resetArgs.boundedContexts, []);
     assert.strictEqual(mockUi.closeDialog.mock.callCount(), 1);
-    assert.strictEqual(mockUi.setStep.mock.callCount(), 1);
-    assert.deepStrictEqual(mockUi.setStep.mock.calls[0].arguments, [0]);
+    assert.strictEqual(mockOnGoToStep.mock.callCount(), 1);
+    assert.deepStrictEqual(mockOnGoToStep.mock.calls[0].arguments, [0]);
   });
 
-  it("should persist project when AI generation completes in genesis mode", async () => {
+  it("should update URL with project ID when loading project from within wizard", async () => {
     for (const k of Object.keys(store)) delete store[k];
+
+    const testProject = {
+      id: "project-123",
+      name: "Test Project",
+      formState: { ...emptyFormValues },
+      manifestYaml: "boundedContexts: []\n",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    store["hexagen-saved-projects"] = JSON.stringify([testProject]);
 
     const mockForm = {
       getValues: mock.fn(() => emptyFormValues),
@@ -158,11 +182,15 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
       trigger: mock.fn(async () => true),
     } as unknown as UseFormReturn<ProjectConfig>;
 
+    const mockOnGoToStep = mock.fn();
+
     const mockUi = {
       currentStepIndex: 0,
+      viewMode: "visual" as const,
       openDialog: mock.fn(),
       closeDialog: mock.fn(),
-      setStep: mock.fn(),
+      setContextId: mock.fn(),
+      setMappingId: mock.fn(),
       enterEditMode: mock.fn(),
       enterGenesisMode: mock.fn(),
     } as unknown as UseWorkspaceShellUiReturn;
@@ -172,7 +200,13 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
       clearSession: mock.fn(),
       setActiveWorkspace: mock.fn(),
       clearActiveWorkspace: mock.fn(),
-    } as unknown as Pick<UseEditorSessionReturn, "setSessionId" | "clearSession" | "setActiveWorkspace" | "clearActiveWorkspace">;
+    } as unknown as Pick<
+      UseEditorSessionReturn,
+      | "setSessionId"
+      | "clearSession"
+      | "setActiveWorkspace"
+      | "clearActiveWorkspace"
+    >;
 
     const { result } = renderHook(() =>
       useProjectLifecycle({
@@ -181,27 +215,19 @@ describe("useProjectLifecycle - Welcome Manifest Integration", () => {
         uiState: { kind: "genesis" },
         editor: mockEditor,
         totalSteps: 4,
-      })
+        onGoToStep: mockOnGoToStep,
+      }),
     );
 
-    const testManifest = "system: verdant-sentinel\nboundedContexts: []\n";
+    const initialUrl = window.location.href;
+    assert.strictEqual(initialUrl, "http://localhost/");
 
     await act(async () => {
-      await result.current.handleWelcomeManifestGenerated(testManifest);
+      await result.current.handleLoadProject("project-123");
     });
 
-    await waitFor(() => {
-      assert.strictEqual(mockForm.reset.mock.callCount(), 1);
-    });
-
-    const stored = JSON.parse(store["hexagen-saved-projects"] ?? "[]");
-    assert.strictEqual(stored.length, 1);
-    assert.strictEqual(stored[0].name, "Verdant Sentinel");
-    assert.ok(stored[0].manifestYaml.includes("verdant-sentinel"));
-
+    const newUrl = window.location.href;
+    assert.strictEqual(newUrl, "http://localhost/?project=project-123");
     assert.strictEqual(mockEditor.setActiveWorkspace.mock.callCount(), 1);
-    const ws = mockEditor.setActiveWorkspace.mock.calls[0].arguments[0];
-    assert.strictEqual(ws.name, "Verdant Sentinel");
-    assert.strictEqual(ws.isDirty, false);
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readdir, readFile } from "fs/promises";
 import path from "path";
+import yaml from "js-yaml";
 import type { Manifest } from "@hexagen/project-configuration";
 
 interface PortAdapterStatus {
@@ -21,7 +22,7 @@ export async function GET() {
 
     try {
       const content = await readFile(manifestPath, "utf-8");
-      const parsed = JSON.parse(content) as Manifest;
+      const parsed = yaml.load(content) as Manifest;
       manifest = parsed;
     } catch {
       return NextResponse.json({ status: [] });

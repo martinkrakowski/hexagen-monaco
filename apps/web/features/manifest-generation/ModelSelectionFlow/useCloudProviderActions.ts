@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import type { ApiKeyManager } from "./modelPreferencesStorage";
 import type { WelcomeFlowState } from "./types";
 import { deriveStateFromEvent } from "./types";
-import type { WelcomeFlowErrorCode } from "../WelcomeScreen/WelcomeFlowError";
+import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
 import {
   validateApiKeyFormat,
   type ModelSelectionEvent,

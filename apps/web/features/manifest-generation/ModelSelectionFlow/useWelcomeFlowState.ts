@@ -10,7 +10,7 @@ import {
   saveModelPreferences,
   type ApiKeyManager,
 } from "./modelPreferencesStorage";
-import type { WelcomeFlowErrorCode } from "../WelcomeScreen/WelcomeFlowError";
+import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
 import { deriveStateFromEvent } from "./types";
 import type { WelcomeFlowState, WelcomeFlowActions } from "./types";
 import type { WelcomeScreenState } from "./types";

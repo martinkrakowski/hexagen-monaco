@@ -28,6 +28,7 @@ function fromBase(base: BaseSavedProject): SavedProject {
 
 export function useSavedProjects() {
   const [mounted, setMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [persistError, setPersistError] = useState<PersistenceError | null>(
     null,
@@ -47,6 +48,7 @@ export function useSavedProjects() {
         projectsRef.current = loaded;
         setProjects(loaded);
       }
+      setIsLoading(false);
     };
     load();
   }, [port]);
@@ -152,6 +154,7 @@ export function useSavedProjects() {
 
   if (!mounted) {
     return {
+      isLoading: true,
       projects: [] as SavedProject[],
       saveProject: () => "",
       loadProject: () => undefined,
@@ -164,6 +167,7 @@ export function useSavedProjects() {
   }
 
   return {
+    isLoading,
     projects,
     saveProject,
     loadProject,

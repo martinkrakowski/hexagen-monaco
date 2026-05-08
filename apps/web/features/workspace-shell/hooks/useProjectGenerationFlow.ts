@@ -19,7 +19,6 @@ interface UseProjectGenerationFlowOptions {
     formState: ProjectConfig,
     manifestYaml: string,
   ) => string;
-  clearDraft: () => Promise<void>;
   setActiveWorkspace: (workspace: {
     projectId: string;
     name: string;

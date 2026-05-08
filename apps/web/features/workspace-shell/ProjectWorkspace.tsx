@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { FormProvider } from "react-hook-form";
 
 import { ResizableLayout } from "./ResizableLayout";
@@ -13,30 +15,41 @@ import { useEditorSession } from "./hooks/useEditorSession";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
 import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
 import { ExportProvider } from "@/contexts/ExportContext";
-import { useLocalLLM } from "../llm-driver/useLocalLlm";
 
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
-import { LoadManifestDialog } from "./LoadManifestDialog";
-import { ResumeDraftDialog } from "./ResumeDraftDialog";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
-import { WelcomeManifestDialog } from "./WelcomeManifestDialog";
 
-/**
- * Root layout for the project workspace. Pure composition — no state,
- * no handlers, no effects. All concerns delegated to domain hooks:
- *
- * - useWizardForm       — form state + derived wizard data
- * - useWorkspaceShellUi — dialogs, view mode, step index, selection IDs
- * - useEditorSession    — editor workspace + active workspace
- * - useProjectLifecycle — orchestrated handlers composing the above
- */
-export function ProjectWorkspace() {
+import type { ViewMode } from "@/types/view-mode";
+
+export interface ProjectWorkspaceProps {
+  currentStepIndex: number;
+  viewMode: ViewMode;
+  middlePanel?: string;
+  rightPanel?: string;
+  onViewModeChange: (mode: ViewMode) => void;
+  onCloseMiddlePanel: () => void;
+  onCloseRightPanel: () => void;
+  onGoToStep: (index: number) => void;
+  onNavigateToProjects?: () => void;
+  children?: React.ReactNode;
+}
+
+export function ProjectWorkspace({
+  currentStepIndex,
+  viewMode,
+  onViewModeChange,
+  onCloseMiddlePanel,
+  onCloseRightPanel,
+  onGoToStep,
+  onNavigateToProjects,
+  children,
+}: ProjectWorkspaceProps) {
+  const router = useRouter();
   const totalSteps = wizardSteps.length;
-  const llmContext = useLocalLLM();
 
   const { form, wizardData, canProceed } = useWizardForm();
-  const ui = useWorkspaceShellUi();
+  const ui = useWorkspaceShellUi({ currentStepIndex, viewMode });
   const editor = useEditorSession();
   const lifecycle = useProjectLifecycle({
     form,
@@ -44,25 +57,36 @@ export function ProjectWorkspace() {
     uiState: ui.state,
     editor,
     totalSteps,
+    onGoToStep,
   });
 
   const isEditing = ui.state.kind === "edit";
   const showSavedProjects = ui.dialog.kind === "saved-projects";
   const loadedProjectId = ui.state.kind === "edit" ? ui.state.projectId : null;
 
+  const pendingRoute = useRef<string | null>(null);
+
+  const navigateWithConfirm = useCallback(
+    (route: string) => {
+      if (isEditing) {
+        pendingRoute.current = route;
+        ui.openDialog({ kind: "new-project" });
+      } else {
+        router.push(route);
+      }
+    },
+    [isEditing, ui, router],
+  );
+
   return (
     <ExportProvider>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
         <Header
-          onLoadManifest={() => ui.openDialog({ kind: "load-manifest" })}
+          onLoadManifest={() => navigateWithConfirm("/projects/new/import")}
           isEditing={isEditing}
-          onNewProject={() => ui.openDialog({ kind: "welcome-manifest" })}
-          onOpenWelcomeManifest={() =>
-            ui.openDialog({ kind: "welcome-manifest" })
-          }
-          onLoadSavedProject={(project) =>
-            lifecycle.handleLoadProject(project.id)
-          }
+          onNewProject={() => navigateWithConfirm("/projects/new")}
+          onOpenWelcomeManifest={() => navigateWithConfirm("/projects/new/ai")}
+          onNavigateToProjects={onNavigateToProjects}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -70,6 +94,8 @@ export function ProjectWorkspace() {
             <ResizableLayout
               leftTitle="HexaGen Project Wizard"
               rightTitle="AI Governance"
+              onRightPanelClose={onCloseRightPanel}
+              onLeftPanelClose={onCloseMiddlePanel}
               left={
                 showSavedProjects ? (
                   <SavedProjectsList
@@ -78,16 +104,13 @@ export function ProjectWorkspace() {
                     onDelete={lifecycle.deleteProject}
                     onRename={lifecycle.renameProject}
                     onBackToWizard={ui.closeDialog}
-                    draft={lifecycle.draft}
-                    onResumeDraft={lifecycle.handleResumeDraft}
-                    onDiscardDraft={lifecycle.handleDiscardDraft}
                     loadedProjectId={loadedProjectId}
                   />
                 ) : (
                   <WizardStepRouter
-                    currentStepIndex={ui.currentStepIndex}
+                    currentStepIndex={currentStepIndex}
                     totalSteps={totalSteps}
-                    canProceed={canProceed(ui.currentStepIndex)}
+                    canProceed={canProceed(currentStepIndex)}
                     isGenerating={lifecycle.isGenerating}
                     activeContextId={ui.activeContextId ?? ""}
                     activeMappingId={ui.activeMappingId ?? ""}
@@ -100,17 +123,17 @@ export function ProjectWorkspace() {
                       ui.openDialog({ kind: "saved-projects" })
                     }
                     onGenerate={lifecycle.handleGenerate}
-                    onViewModeChange={ui.setViewMode}
+                    onViewModeChange={onViewModeChange}
                   />
                 )
               }
               middle={
                 <ArchitecturePreviewPane
                   wizardData={wizardData}
-                  viewMode={ui.viewMode}
+                  viewMode={viewMode}
                   selectedFileId={editor.selectedFileId}
                   editedFiles={editor.editedFiles}
-                  onViewModeChange={ui.setViewMode}
+                  onViewModeChange={onViewModeChange}
                   onFileSelect={editor.selectFile}
                   onFileContentChange={editor.updateFile}
                   onFileSave={editor.markFileSaved}
@@ -119,50 +142,33 @@ export function ProjectWorkspace() {
               right={
                 <GovernancePanelWrapper
                   wizardData={wizardData}
-                  currentStepIndex={ui.currentStepIndex}
+                  currentStepIndex={currentStepIndex}
                 />
               }
             />
           </FormProvider>
         </main>
 
-        <LoadManifestDialog
-          open={ui.dialog.kind === "load-manifest"}
-          onClose={ui.closeDialog}
-          onFileLoaded={lifecycle.handleManifestLoaded}
-        />
-
-        <ResumeDraftDialog
-          open={ui.dialog.kind === "resume-draft"}
-          onClose={ui.closeDialog}
-          draft={lifecycle.draft}
-          totalSteps={totalSteps}
-          onResume={lifecycle.handleResumeDraft}
-          onDiscard={lifecycle.handleDiscardDraft}
-        />
-
         <NewProjectConfirmDialog
           open={ui.dialog.kind === "new-project"}
           onClose={lifecycle.handleCancelNewProject}
           loadedProject={lifecycle.loadedProject}
-          onSaveAndNew={lifecycle.handleSaveAndNew}
-          onDiscardAndNew={lifecycle.handleDiscardAndNew}
+          onSaveAndNew={() => {
+            lifecycle.handleSaveAndNew();
+            const route = pendingRoute.current;
+            pendingRoute.current = null;
+            if (route) router.push(route);
+          }}
+          onDiscardAndNew={() => {
+            lifecycle.handleDiscardAndNew();
+            const route = pendingRoute.current;
+            pendingRoute.current = null;
+            if (route) router.push(route);
+          }}
           onCancel={lifecycle.handleCancelNewProject}
         />
-
-        <WelcomeManifestDialog
-          open={ui.dialog.kind === "welcome-manifest"}
-          onClose={ui.closeDialog}
-          onUseManifest={lifecycle.handleWelcomeManifestGenerated}
-          llmContext={llmContext}
-          onImportManifest={() => ui.openDialog({ kind: "load-manifest" })}
-          onStartWizard={() => {
-            ui.closeDialog();
-            ui.setStep(0);
-          }}
-          onLoadProject={lifecycle.handleLoadProject}
-        />
       </div>
+      {children}
     </ExportProvider>
   );
 }

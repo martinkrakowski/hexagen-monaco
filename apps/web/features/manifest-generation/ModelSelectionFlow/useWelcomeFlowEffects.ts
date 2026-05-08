@@ -12,7 +12,7 @@ import {
   updateModelCacheMetadata,
 } from "./modelPreferencesStorage";
 import type { WelcomeFlowState } from "./types";
-import type { WelcomeFlowErrorCode } from "../WelcomeScreen/WelcomeFlowError";
+import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
 
 interface UseWelcomeFlowEffectsOptions {
   flowState: WelcomeFlowState;
