@@ -1,3 +1,5 @@
+"use client";
+
 import { get, set } from "idb-keyval";
 import type { SavedProject } from "@hexagen/shared";
 

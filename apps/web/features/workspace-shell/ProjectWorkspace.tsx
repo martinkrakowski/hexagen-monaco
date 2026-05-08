@@ -25,8 +25,6 @@ import type { ViewMode } from "@/types/view-mode";
 export interface ProjectWorkspaceProps {
   currentStepIndex: number;
   viewMode: ViewMode;
-  middlePanel?: string;
-  rightPanel?: string;
   onViewModeChange: (mode: ViewMode) => void;
   onCloseMiddlePanel: () => void;
   onCloseRightPanel: () => void;

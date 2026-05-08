@@ -51,16 +51,13 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
 
   useProjectSearchParam();
 
-  const stepParam = parseInt(params.step, 10);
+  const stepParam = /^\d+$/.test(params.step) ? Number(params.step) : NaN;
   const currentStepIndex = Number.isNaN(stepParam)
     ? 0
     : Math.max(0, Math.min(stepParam - 1, wizardSteps.length - 1));
 
   const viewMode: ViewMode =
     searchParams.get("view") === "code" ? "code" : "visual";
-
-  const middlePanel = searchParams.get("middle") ?? undefined;
-  const rightPanel = searchParams.get("right") ?? undefined;
 
   const viewToggle = usePanelToggle("view");
   const middleToggle = usePanelToggle("middle");
@@ -72,8 +69,6 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
       <ProjectWorkspace
         currentStepIndex={currentStepIndex}
         viewMode={viewMode}
-        middlePanel={middlePanel}
-        rightPanel={rightPanel}
         onViewModeChange={(mode: ViewMode) => viewToggle.toggle(mode)}
         onCloseMiddlePanel={middleToggle.close}
         onCloseRightPanel={rightToggle.close}

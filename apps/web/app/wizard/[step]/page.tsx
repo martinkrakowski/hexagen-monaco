@@ -7,7 +7,7 @@ import { wizardSteps } from "../../../features/project-wizard/config";
 export default function WizardStepPage() {
   const params = useParams<{ step: string }>();
   const router = useRouter();
-  const step = parseInt(params.step, 10);
+  const step = /^\d+$/.test(params.step) ? Number(params.step) : NaN;
 
   useEffect(() => {
     if (Number.isNaN(step) || step < 1 || step > wizardSteps.length) {
