@@ -1,5 +1,5 @@
 import type { Result } from "@hexagen/shared";
-import type { LLMRequest } from "@hexagen/local-llm";
+import type { LLMRequest } from "@hexagen/local-llm/shared";
 import type { ResolvedProvider } from "../../domain/provider-config.js";
 import { resolveFallbackChain } from "../../domain/provider-config.js";
 import {

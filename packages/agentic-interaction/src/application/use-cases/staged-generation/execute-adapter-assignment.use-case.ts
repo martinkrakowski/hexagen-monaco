@@ -1,6 +1,6 @@
 import { ok, err } from "@hexagen/shared";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import {
   STAGE4_ADAPTERS_SYSTEM_PROMPT,
@@ -20,7 +20,10 @@ export class ExecuteAdapterAssignmentUseCase {
     state: Pick<PipelineState, "stage0" | "stage3">,
     variables: PromptVariables,
     onChunk?: (chunk: string) => void,
-  ): Promise<{ success: true; value: AdapterBindings } | { success: false; error: unknown }> {
+  ): Promise<
+    | { success: true; value: AdapterBindings }
+    | { success: false; error: unknown }
+  > {
     const prompt = compileStage4Prompt(state, variables);
 
     const request = createLLMRequest(
@@ -59,7 +62,12 @@ export class ExecuteAdapterAssignmentUseCase {
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line);
-        const { contextName, adapterName, adapterType, implements: impl } = parsed;
+        const {
+          contextName,
+          adapterName,
+          adapterType,
+          implements: impl,
+        } = parsed;
 
         if (!contextName || !adapterName || !adapterType || !impl) continue;
 

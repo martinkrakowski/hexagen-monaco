@@ -3,9 +3,9 @@ import type {
   SendStructuredRequestPort,
   LLMRequest,
   LLMResponse,
-} from "@hexagen/local-llm";
-import { createLLMResponse } from "@hexagen/local-llm";
-import type { DomainModelId } from "@hexagen/local-llm";
+} from "@hexagen/local-llm/shared";
+import { createLLMResponse } from "@hexagen/local-llm/shared";
+import type { DomainModelId } from "@hexagen/local-llm/shared";
 import type { ResolvedProvider } from "../../domain/provider-config.js";
 import { resolveFallbackChain } from "../../domain/provider-config.js";
 import {

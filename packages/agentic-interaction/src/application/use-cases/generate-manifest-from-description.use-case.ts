@@ -1,4 +1,4 @@
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
 import type {
   ProjectDescription,
   GeneratedManifest,
@@ -50,7 +50,10 @@ export class GenerateManifestFromDescriptionUseCase {
       if (!result.success) {
         return {
           success: false,
-          error: result.error instanceof Error ? result.error.message : "Staged generation failed",
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : "Staged generation failed",
         };
       }
 

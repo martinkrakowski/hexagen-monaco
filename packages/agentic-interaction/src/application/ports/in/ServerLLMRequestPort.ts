@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@hexagen/local-llm";
+import type { ChatMessage } from "@hexagen/local-llm/shared";
 
 /**
  * Defines the structured request payload for a server-side LLM chat request.

@@ -16,8 +16,8 @@ import type {
   ProjectSpecLike as PromptProjectSpecLike,
   PromptCompileRequest,
 } from "@hexagen/prompt-compiler";
-import type { LLMRequest } from "@hexagen/local-llm";
-import { DomainModelId } from "@hexagen/local-llm";
+import type { LLMRequest } from "@hexagen/local-llm/shared";
+import { DomainModelId } from "@hexagen/local-llm/shared";
 import type {
   Patch,
   StructuredLLMOutput,

@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm";
+import type { DomainModelId } from "@hexagen/local-llm/shared";
 
 export interface ModelPreferences {
   hasEnabledLocalModels: boolean;

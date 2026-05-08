@@ -1,6 +1,6 @@
 import { ok, err } from "@hexagen/shared";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import {
   STAGE3_PORTS_SYSTEM_PROMPT,
@@ -16,14 +16,24 @@ import type {
 } from "../../../domain/value-objects/pipeline-state.js";
 
 const VALID_INBOUND_TYPES = new Set<string>(["command", "query", "event"]);
-const VALID_OUTBOUND_TYPES = new Set<string>(["repository", "publisher", "external-client", "notifier"]);
+const VALID_OUTBOUND_TYPES = new Set<string>([
+  "repository",
+  "publisher",
+  "external-client",
+  "notifier",
+]);
 
-function coercePortType(direction: string, raw: string): InboundPortType | OutboundPortType | null {
+function coercePortType(
+  direction: string,
+  raw: string,
+): InboundPortType | OutboundPortType | null {
   if (direction === "in") {
     return VALID_INBOUND_TYPES.has(raw) ? (raw as InboundPortType) : "command";
   }
   if (direction === "out") {
-    return VALID_OUTBOUND_TYPES.has(raw) ? (raw as OutboundPortType) : "repository";
+    return VALID_OUTBOUND_TYPES.has(raw)
+      ? (raw as OutboundPortType)
+      : "repository";
   }
   return null;
 }
@@ -34,7 +44,9 @@ export class ExecutePortMappingUseCase {
   async execute(
     state: Pick<PipelineState, "stage2">,
     onChunk?: (chunk: string) => void,
-  ): Promise<{ success: true; value: PortMap } | { success: false; error: unknown }> {
+  ): Promise<
+    { success: true; value: PortMap } | { success: false; error: unknown }
+  > {
     const prompt = compileStage3Prompt(state);
 
     const request = createLLMRequest(
@@ -86,9 +98,17 @@ export class ExecutePortMappingUseCase {
         if (!coercedType) continue;
 
         if (direction === "in") {
-          ports.in.push({ name, type: coercedType as InboundPortType, description: description || "" });
+          ports.in.push({
+            name,
+            type: coercedType as InboundPortType,
+            description: description || "",
+          });
         } else if (direction === "out") {
-          ports.out.push({ name, type: coercedType as OutboundPortType, description: description || "" });
+          ports.out.push({
+            name,
+            type: coercedType as OutboundPortType,
+            description: description || "",
+          });
         }
       } catch {
         // ignore malformed NDJSON lines

@@ -1,6 +1,6 @@
 import { ok, err } from "@hexagen/shared";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
 import { z } from "zod";
 import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
@@ -17,7 +17,10 @@ export class ExecuteValidationReviewUseCase {
   async execute(
     state: Pick<PipelineState, "stage5">,
     onChunk?: (chunk: string) => void,
-  ): Promise<{ success: true; value: ValidationReport } | { success: false; error: unknown }> {
+  ): Promise<
+    | { success: true; value: ValidationReport }
+    | { success: false; error: unknown }
+  > {
     const prompt = compileStage6Prompt(state);
 
     const request = createLLMRequest(

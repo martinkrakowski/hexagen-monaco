@@ -5,7 +5,7 @@ import type {
   LLMResponse,
   LocalLLMProviderPort,
   SendStructuredRequestPort,
-} from "@hexagen/local-llm";
+} from "@hexagen/local-llm/shared";
 import type {
   ProviderFallbackChain,
   SecretVaultPort,
