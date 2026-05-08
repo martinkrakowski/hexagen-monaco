@@ -455,6 +455,10 @@ dialog::backdrop {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+.animate-shimmer-slow {
+  animation: shimmer 5s ease-in-out infinite;
+}
+
 .animate-dot-pulse {
   animation: dot-pulse 1.6s ease-in-out infinite;
 }
@@ -492,6 +496,7 @@ dialog::backdrop {
 @media (prefers-reduced-motion: reduce) {
   .animate-spin-border,
   .animate-shimmer,
+  .animate-shimmer-slow,
   .animate-dot-pulse,
   .animate-fade-in-up,
   .detail-rolodex-exit,

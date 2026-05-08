@@ -538,6 +538,7 @@ The following custom CSS utility classes are defined in `globals.css` and are ap
 | `.animate-soft-pulse`        | Gentle opacity pulse (2.5s infinite)                                               | `globals.css` |
 | `.animate-spin-border`       | Conic-gradient border rotation (6s infinite)                                       | `globals.css` |
 | `.animate-shimmer`           | Horizontal shimmer effect (1.4s infinite)                                          | `globals.css` |
+| `.animate-shimmer-slow`      | Slow horizontal shimmer effect (5s infinite)                                       | `globals.css` |
 | `.animate-dot-pulse`         | Dot pulse with primary-color box-shadow (1.6s infinite)                            | `globals.css` |
 | `.animate-fade-in-up`        | Entrance animation (opacity 0→1, translateY 16px→0, 0.5s ease-out both)            | `globals.css` |
 | `.bg-cinematic-border`       | Conic-gradient border background for ModelProgressCard                             | `globals.css` |

@@ -104,7 +104,7 @@ export function CreationPathCard({
       )}
     >
       {theme === "primary" && (
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer-slow" />
       )}
       <div className={theme === "primary" ? "relative z-10" : ""}>
         <div className={cn(iconContainerVariants({ colorTheme: theme }))}>
