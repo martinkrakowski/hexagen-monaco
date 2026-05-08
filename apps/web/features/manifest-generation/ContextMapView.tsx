@@ -47,7 +47,15 @@ export function ContextMapView({
             <div
               key={ctx.name}
               className={`rounded-lg p-4 bg-card border ${cardBorder} cursor-pointer transition-colors duration-200 shadow-sm hover:shadow-md animate-fade-in-up`}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectContext(ctx.name)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectContext(ctx.name);
+                }
+              }}
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold px-2 py-1 rounded-sm font-mono tracking-wider uppercase text-info bg-info/10">
