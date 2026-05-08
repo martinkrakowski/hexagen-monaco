@@ -341,6 +341,12 @@ dialog::backdrop {
   z-index: -1;
 }
 
+/* ── Dot-grid background pattern ──────────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(hsl(var(--muted-foreground) / 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
 /* ── Example button active state ───────────────────────────────────────────── */
 .example-btn-active {
   border-color: hsl(var(--primary)) !important;
@@ -449,6 +455,10 @@ dialog::backdrop {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+.animate-shimmer-slow {
+  animation: shimmer 5s ease-in-out infinite;
+}
+
 .animate-dot-pulse {
   animation: dot-pulse 1.6s ease-in-out infinite;
 }
@@ -486,6 +496,7 @@ dialog::backdrop {
 @media (prefers-reduced-motion: reduce) {
   .animate-spin-border,
   .animate-shimmer,
+  .animate-shimmer-slow,
   .animate-dot-pulse,
   .animate-fade-in-up,
   .detail-rolodex-exit,

@@ -26,7 +26,7 @@ const rule: TSESLint.RuleModule<MessageIds> = {
     schema: [],
   },
   create(context) {
-    const ARBITRARY_PATTERN = /(\w+)-\[[\w-.%#()]+\]/g;
+    const ARBITRARY_PATTERN = /((?:\w+:)*\w+)-\[[\w-.%#()]+\]/g;
 
     return {
       Literal(node: TSESTree.Literal) {
