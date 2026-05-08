@@ -2,7 +2,10 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Loader2, Check } from "lucide-react";
-import type { StagedPhase, StageProgress } from "../useStagedManifestGeneration";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../useStagedManifestGeneration";
 
 const STAGE_ORDER: StagedPhase[] = [
   "stage-0",
@@ -111,7 +114,11 @@ function DurationBadge({ ms }: { ms?: number }) {
   );
 }
 
-export function ThinkingBlock({ phase, stepDetail, stageProgress }: ThinkingBlockProps) {
+export function ThinkingBlock({
+  phase,
+  stepDetail,
+  stageProgress,
+}: ThinkingBlockProps) {
   if (phase === "idle" || phase === "failed") return null;
 
   if (phase === "complete") {

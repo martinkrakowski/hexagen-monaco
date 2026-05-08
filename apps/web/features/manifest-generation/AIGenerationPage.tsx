@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { WelcomeScreen } from "./WelcomeScreen";
+import { GenerateWithAi } from "./GenerateWithAi";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
@@ -60,7 +60,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
             {parseError}
           </div>
         )}
-        <WelcomeScreen
+        <GenerateWithAi
           onUseManifest={handleUseManifest}
           llmContext={llmContext}
         />

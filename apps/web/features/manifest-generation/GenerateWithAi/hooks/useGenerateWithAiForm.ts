@@ -27,7 +27,7 @@ const initialState: FormState = {
   selectedExample: null,
 };
 
-export function useWelcomeScreenForm(): [FormState, FormHandlers] {
+export function useGenerateWithAiForm(): [FormState, FormHandlers] {
   const [formState, setFormState] = useState<FormState>(initialState);
 
   const setValue = (key: keyof FormState, value: string | number | null) => {

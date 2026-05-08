@@ -17,7 +17,7 @@ export interface NavigationHandlers {
   setRememberChoice: (value: boolean) => void;
 }
 
-export function useWelcomeScreenNavigation(
+export function useGenerateWithAiNavigation(
   llmContext: LocalLLMContext,
   flowState: WelcomeFlowState,
   actions: WelcomeFlowActions,

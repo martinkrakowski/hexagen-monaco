@@ -6,7 +6,7 @@ import type {
 
 export type { WelcomeFlowState };
 
-export interface WelcomeScreenProps {
+export interface GenerateWithAiProps {
   onUseManifest?: (manifest: string) => void;
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (isGenerating: boolean) => void;

@@ -1,5 +1,5 @@
 import type { DomainModelId } from "../../../lib/llm-interfaces";
-import type { WelcomeFlowErrorCode } from "../WelcomeScreen/WelcomeFlowError";
+import type { WelcomeFlowErrorCode } from "../GenerateWithAi/WelcomeFlowError";
 import {
   transitionState,
   type WelcomeScreenState,

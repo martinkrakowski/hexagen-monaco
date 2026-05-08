@@ -15,9 +15,9 @@ import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ModelSelectionView } from "./ModelSelectionView";
-import { WelcomeScreenLayout } from "./WelcomeScreenLayout";
-import { useWelcomeScreenForm } from "./hooks/useWelcomeScreenForm";
-import type { WelcomeScreenProps } from "./types";
+import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
+import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
+import type { GenerateWithAiProps } from "./types";
 import {
   getCapabilities,
   onCapabilityCacheInvalidated,
@@ -25,12 +25,12 @@ import {
 import { hasServerLLMAccessKey } from "../../../app/lib/wire.client";
 import type { CapabilitiesResponse } from "../types/capabilities";
 
-export function WelcomeScreen({
+export function GenerateWithAi({
   onUseManifest,
   llmContext,
   onGeneratingStateChange,
-}: WelcomeScreenProps) {
-  const [formState, formHandlers] = useWelcomeScreenForm();
+}: GenerateWithAiProps) {
+  const [formState, formHandlers] = useGenerateWithAiForm();
   const [rememberChoice, setRememberChoice] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const rememberChoiceRef = useRef(false);
@@ -222,7 +222,7 @@ export function WelcomeScreen({
   const hasError = stagedGen.generationError !== null;
 
   return (
-    <WelcomeScreenLayout>
+    <GenerateWithAiLayout>
       <DescriptionInput
         value={formState.description}
         onChange={(value) => formHandlers.setValue("description", value)}
@@ -325,6 +325,6 @@ export function WelcomeScreen({
           stageProgress={stagedGen.stageProgress}
         />
       )}
-    </WelcomeScreenLayout>
+    </GenerateWithAiLayout>
   );
 }
