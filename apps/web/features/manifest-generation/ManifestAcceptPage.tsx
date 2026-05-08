@@ -1,27 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@hexagen/ui";
-import { ArrowLeft, Check, ArrowRight } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Network,
+  Hexagon,
+  Component,
+  ShieldCheck,
+} from "lucide-react";
 import { ManifestPreview } from "./ManifestPreview";
+import type { ViewTab } from "./ManifestPreview";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
+import { ProjectsShell } from "@/landing/ProjectsShell";
 import type { ProjectSpec } from "@hexagen/project-configuration";
+import { parseYamlToViewData } from "@hexagen/manifest-generation";
 
-/**
- * ManifestAcceptPage — Extracted review/accept step from the creation flow.
- *
- * This page is rendered at `/projects/new/ai/accept` after manifest generation.
- * It allows users to review the generated YAML and accept it to proceed to the wizard.
- *
- * Flow:
- * 1. On mount, check if pending manifest exists in store
- * 2. If missing, redirect to `/projects/new/ai` (enforce happy path)
- * 3. Render manifest preview with review UI
- * 4. Accept button: call saveProject(), clear store, navigate to `/wizard/1?project={id}`
- * 5. Back button: clear store, navigate to `/projects/new/ai`
- */
+const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
+  { id: "context-map", icon: Network, label: "Context Map" },
+  { id: "hexagonal", icon: Hexagon, label: "Hexagonal" },
+  { id: "mermaid", icon: Component, label: "Mermaid" },
+  { id: "validation", icon: ShieldCheck, label: "Validation" },
+];
+
 export function ManifestAcceptPage() {
   const router = useRouter();
   const pendingManifest = usePendingManifest();
@@ -29,8 +33,8 @@ export function ManifestAcceptPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
 
-  // Enforce happy path: redirect if no pending manifest
   useEffect(() => {
     if (pendingManifest.yaml === null && !isSaving) {
       setRedirecting(true);
@@ -38,8 +42,21 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml, router, isSaving]);
 
-  const handleAccept = async (yaml: string) => {
-    if (!pendingManifest.projectName || !pendingManifest.formValues) {
+  const viewData = useMemo(() => {
+    if (!pendingManifest.yaml) return null;
+    try {
+      return parseYamlToViewData(pendingManifest.yaml);
+    } catch {
+      return null;
+    }
+  }, [pendingManifest.yaml]);
+
+  const handleAccept = useCallback(async () => {
+    if (
+      !pendingManifest.yaml ||
+      !pendingManifest.projectName ||
+      !pendingManifest.formValues
+    ) {
       return;
     }
 
@@ -49,11 +66,10 @@ export function ManifestAcceptPage() {
       const projectId = saveProject(
         pendingManifest.projectName,
         pendingManifest.formValues as ProjectSpec,
-        yaml,
+        pendingManifest.yaml,
       );
 
       router.push(`/wizard/1?project=${projectId}`);
-
       pendingManifest.clear();
     } catch (error) {
       const message =
@@ -61,137 +77,149 @@ export function ManifestAcceptPage() {
       setSaveError(message);
       setIsSaving(false);
     }
-  };
+  }, [pendingManifest, saveProject, router]);
 
-  const handleBack = () => {
-    // Clear the store
+  const handleBack = useCallback(() => {
     pendingManifest.clear();
-    // Navigate back to the AI generation screen
     router.push("/projects/new/ai");
+  }, [pendingManifest, router]);
+
+  const hasFailures =
+    viewData?.validationItems.some((v) => v.status === "fail") ?? false;
+
+  const canAccept =
+    !!pendingManifest.yaml &&
+    !!pendingManifest.projectName &&
+    !!pendingManifest.formValues &&
+    !hasFailures;
+
+  const renderHeaderContent = () => {
+    if (!viewData) {
+      return (
+        <span className="font-semibold text-sm truncate">
+          Approve Generated Manifest
+        </span>
+      );
+    }
+
+    const scoreColor =
+      viewData.overallScore >= 80
+        ? "bg-success/10 text-success border-success/20"
+        : viewData.overallScore >= 50
+          ? "bg-warning/10 text-warning border-warning/20"
+          : "bg-destructive/10 text-destructive border-destructive/20";
+
+    return (
+      <>
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-sm truncate">
+            Approve Generated Manifest
+          </span>
+          <span
+            className={`text-xs px-2 py-0.5 rounded font-mono border ${scoreColor}`}
+          >
+            {viewData.overallScore}% Score
+          </span>
+          <span className="text-xs text-muted-foreground font-mono hidden md:inline">
+            {viewData.system} · {viewData.architecture} ·{" "}
+            {viewData.contexts.length} contexts
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {TAB_CONFIG.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center px-2.5 py-1 rounded-md text-xs transition-colors ${
+                activeTab === id
+                  ? "bg-accent/10 text-accent border border-accent/20"
+                  : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
+              }`}
+            >
+              <Icon className="w-3 h-3 mr-1" /> {label}
+            </button>
+          ))}
+        </div>
+      </>
+    );
   };
 
-  // Show loading state while redirecting
   if (redirecting) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-2">
-          <h2 className="text-lg font-semibold text-foreground">
-            Redirecting...
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            No manifest found. Returning to generation screen.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading state while saving
-  if (isSaving) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-2">
-          <h2 className="text-lg font-semibold text-foreground">
-            Saving Project...
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Please wait while we save your project.
-          </p>
-          <div className="flex justify-center mt-4">
-            <span className="animate-spin text-2xl">⏳</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Render the manifest preview with review UI
-  if (pendingManifest.yaml) {
-    return (
-      <div className="min-h-screen bg-background py-6 px-4">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* Header section */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleBack}
-                className="p-1.5 hover:bg-card rounded-md transition-colors"
-                title="Back to generation"
-              >
-                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
-              </button>
-              <h1 className="text-2xl font-bold text-foreground">
-                Review & Accept Manifest
-              </h1>
-            </div>
-            <p className="text-sm text-muted-foreground ml-11">
-              Review your generated architecture manifest and project details
-              below. Click "Accept & Continue" to proceed to the wizard.
+      <ProjectsShell title="Approve Generated Manifest">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center space-y-2">
+            <h2 className="text-lg font-semibold text-foreground">
+              Redirecting...
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              No manifest found. Returning to generation screen.
             </p>
           </div>
-
-          {saveError && (
-            <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive">
-              {saveError}
-            </div>
-          )}
-
-          {/* Form values display section */}
-          <div className="bg-card border border-border rounded-lg p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-foreground">
-              Project Details
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Project Name
-                </label>
-                <p className="text-base text-foreground mt-1 p-2 bg-background rounded border border-border">
-                  {pendingManifest.projectName || "—"}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Bounded Contexts
-                </label>
-                <p className="text-base text-foreground mt-1 p-2 bg-background rounded border border-border">
-                  {pendingManifest.formValues?.boundedContexts?.length || 0}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Manifest preview section */}
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <ManifestPreview
-              manifestYaml={pendingManifest.yaml}
-              onApprove={handleAccept}
-              onRegenerate={handleBack}
-              onStartOver={handleBack}
-              hideActions
-            />
-          </div>
-
-          {/* Footer actions */}
-          <div className="flex items-center justify-between py-4 border-t border-border pt-6">
-            <Button variant="outline" onClick={handleBack} disabled={isSaving}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Generation
-            </Button>
-            <Button
-              onClick={() => handleAccept(pendingManifest.yaml!)}
-              disabled={isSaving}
-              className="bg-gradient-to-br from-accent to-amber-600 text-black hover:shadow-lg hover:shadow-accent/30 transition-all"
-            >
-              <Check className="w-4 h-4 mr-2" />
-              Accept & Continue
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
         </div>
-      </div>
+      </ProjectsShell>
     );
   }
 
-  return null;
+  if (isSaving) {
+    return (
+      <ProjectsShell title="Approve Generated Manifest">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center space-y-2">
+            <h2 className="text-lg font-semibold text-foreground">
+              Saving Project...
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Please wait while we save your project.
+            </p>
+            <div className="flex justify-center mt-4">
+              <span className="animate-spin text-2xl">⏳</span>
+            </div>
+          </div>
+        </div>
+      </ProjectsShell>
+    );
+  }
+
+  if (!pendingManifest.yaml) {
+    return null;
+  }
+
+  return (
+    <ProjectsShell
+      headerContent={renderHeaderContent()}
+      footer={
+        <>
+          <Button variant="outline" onClick={handleBack} disabled={isSaving}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Generation
+          </Button>
+          <Button
+            onClick={handleAccept}
+            disabled={isSaving || !canAccept || !viewData}
+          >
+            Use This Manifest
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        </>
+      }
+    >
+      {saveError && (
+        <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive">
+          {saveError}
+        </div>
+      )}
+      <ManifestPreview
+        manifestYaml={pendingManifest.yaml}
+        onApprove={handleAccept}
+        onRegenerate={handleBack}
+        onStartOver={handleBack}
+        hideActions
+        hideHeader
+        embedded
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+    </ProjectsShell>
+  );
 }

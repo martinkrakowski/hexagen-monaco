@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
-import { assessModelCapability } from "@hexagen/manifest-generation";
+import {
+  assessModelCapability,
+  parseYamlToViewData,
+} from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
@@ -17,7 +20,7 @@ import { ThinkingBlock } from "./ThinkingBlock";
 import { ModelSelectionView } from "./ModelSelectionView";
 import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
-import type { GenerateWithAiProps } from "./types";
+import type { GenerateWithAiProps, ViewTab } from "./types";
 import {
   getCapabilities,
   onCapabilityCacheInvalidated,
@@ -29,10 +32,13 @@ export function GenerateWithAi({
   onUseManifest,
   llmContext,
   onGeneratingStateChange,
+  onPreviewStateChange,
 }: GenerateWithAiProps) {
   const [formState, formHandlers] = useGenerateWithAiForm();
   const [rememberChoice, setRememberChoice] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
+  const [previewActiveTab, setPreviewActiveTab] =
+    useState<ViewTab>("context-map");
   const rememberChoiceRef = useRef(false);
 
   /**
@@ -177,10 +183,41 @@ export function GenerateWithAi({
     }
   };
 
-  const handleRetryOrRegenerate = () => {
+  const handleRetryOrRegenerate = useCallback(() => {
     stagedGen.reset();
     actions.regenerateManifest();
-  };
+  }, [stagedGen, actions]);
+
+  useEffect(() => {
+    if (!onPreviewStateChange) return;
+    if (flowState.state === "preview" && flowState.manifestContent) {
+      const viewData = parseYamlToViewData(flowState.manifestContent);
+      const hasFailures = viewData.validationItems.some(
+        (v) => v.status === "fail",
+      );
+      onPreviewStateChange({
+        onRegenerate: handleRetryOrRegenerate,
+        onUseManifest: (yaml) => onUseManifest?.(yaml),
+        manifestYaml: flowState.manifestContent,
+        hasFailures,
+        activeTab: previewActiveTab,
+        onTabChange: setPreviewActiveTab,
+        overallScore: viewData.overallScore,
+        systemLabel: viewData.system,
+        architectureLabel: viewData.architecture,
+        contextCount: viewData.contexts.length,
+      });
+    } else {
+      onPreviewStateChange(null);
+    }
+  }, [
+    flowState.state,
+    flowState.manifestContent,
+    onPreviewStateChange,
+    previewActiveTab,
+    handleRetryOrRegenerate,
+    onUseManifest,
+  ]);
 
   if (
     flowState.state !== "idle" &&
@@ -195,6 +232,8 @@ export function GenerateWithAi({
         onConfirmAndContinue={handleRetryOrRegenerate}
         onRegenerate={handleRetryOrRegenerate}
         onRetryFromError={handleRetryOrRegenerate}
+        externalActiveTab={previewActiveTab}
+        onTabChange={setPreviewActiveTab}
       />
     );
   }

@@ -11,7 +11,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
-import { WebLLMAdapter, type DomainModelId } from "@hexagen/local-llm";
+import type { WebLLMAdapter, DomainModelId } from "@hexagen/local-llm";
 import { logger } from "../../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
@@ -68,7 +68,7 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
-  if (typeof Worker === "undefined") {
+  if (typeof window === "undefined") {
     return NextResponse.json(
       {
         success: false,
@@ -128,9 +128,10 @@ export async function POST(
     // Wire up dependencies
     const secretVault = new EnvironmentSecretVaultAdapter();
 
-    let webLlmAdapter = null;
+    let webLlmAdapter: WebLLMAdapter | null = null;
     try {
-      webLlmAdapter = new WebLLMAdapter({
+      const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
+      webLlmAdapter = new Adapter({
         defaultModelId: (body.modelId as DomainModelId) || undefined,
       });
     } catch (error) {

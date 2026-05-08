@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { getTransactionManager, getManifestMutation } from "@/lib/wire.server";
-import { getLogger } from "@/lib/wire";
+import { createWebLogger } from "@/lib/wire.shared";
 
 function validateManifestPath(rawPath: string): string {
   const cwd = process.cwd();
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     const restoreResult =
       await manifestMutation.restoreFromGit(resolvedManifestPath);
     if (!restoreResult.success) {
-      const logger = getLogger();
+      const logger = createWebLogger();
       logger.errorWithException(
         restoreResult.error,
         "[api/architecture/modify/reject] Defensive git restore failed",
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     transactionManager.rollback(transactionId, reason ?? "User rejected");
 
-    const logger = getLogger();
+    const logger = createWebLogger();
     logger.info("[api/architecture/modify/reject] Transaction rolled back", {
       transactionId,
       reason: reason ?? "User rejected the changes",
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       reason: reason ?? "User rejected the changes",
     });
   } catch (error) {
-    const logger = getLogger();
+    const logger = createWebLogger();
     logger.errorWithException(
       error,
       `[api/architecture/modify/reject] Unexpected error${transactionId ? ` for transaction ${transactionId}` : ""}`,

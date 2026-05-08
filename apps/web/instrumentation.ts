@@ -1,0 +1,20 @@
+let registered = false;
+
+export function register() {
+  if (registered) return;
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    registered = true;
+    process.on("unhandledRejection", (reason: unknown) => {
+      if (!(reason instanceof Error)) {
+        console.error("[unhandledRejection]", reason);
+        return;
+      }
+      const proto = Object.getPrototypeOf(reason);
+      const desc = Object.getOwnPropertyDescriptor(proto, "message");
+      if (desc && typeof desc.get === "function" && !desc.set) {
+        return;
+      }
+      console.error("[unhandledRejection]", reason.message, reason.stack);
+    });
+  }
+}

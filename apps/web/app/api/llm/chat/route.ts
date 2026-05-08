@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.js";
-import { getServerLLMRequestPort } from "@/lib/wire.js";
+import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
+import { createLLMProvider } from "@/lib/wire.shared";
 import { getProxyRequestUseCase } from "@/lib/byok-wire.js";
 import { SSE_HEADERS } from "@/lib/sse-helpers";
 import type { ChatMessage } from "@hexagen/local-llm";
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
         provider: body.byokProvider! as ByokProvider,
         payload: {
           messages: body.messages,
-          model: body.model ?? "gpt-4o",
+          model: body.model ?? "gpt-4o-mini",
           stream: true,
           ...(body.temperature !== undefined && {
             temperature: body.temperature,
@@ -144,7 +145,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const port = getServerLLMRequestPort();
+    const port = new HandleServerChatUseCase(
+      createLLMProvider(),
+      process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini",
+    );
     const stream = await port.handleRequest(
       { messages: body.messages as ChatMessage[] },
       { id: userId },

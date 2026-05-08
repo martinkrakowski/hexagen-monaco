@@ -3,20 +3,20 @@ import type {
   DomainModelId,
   LLMRequest,
   LLMResponse,
+  LocalLLMProviderPort,
   SendStructuredRequestPort,
 } from "@hexagen/local-llm";
 import type {
   ProviderFallbackChain,
   SecretVaultPort,
 } from "../../domain/provider-config.js";
-import { WebLLMAdapter } from "@hexagen/local-llm";
 import { CloudLLMPipelineAdapter } from "./cloud-llm-pipeline.adapter.js";
 
 export interface LLMProviderSelectorAdapterConfig {
   /**
    * The local WebLLM adapter to use for local processing
    */
-  webLlmAdapter: WebLLMAdapter | null;
+  webLlmAdapter: (LocalLLMProviderPort & SendStructuredRequestPort) | null;
 
   /**
    * The fallback chain for cloud providers

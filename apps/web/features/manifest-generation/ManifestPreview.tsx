@@ -27,9 +27,13 @@ interface ManifestPreviewProps {
   onRegenerate: () => void;
   onStartOver: () => void;
   hideActions?: boolean;
+  hideHeader?: boolean;
+  activeTab?: ViewTab;
+  onTabChange?: (tab: ViewTab) => void;
+  embedded?: boolean;
 }
 
-type ViewTab = "context-map" | "hexagonal" | "mermaid" | "validation";
+export type ViewTab = "context-map" | "hexagonal" | "mermaid" | "validation";
 
 export function ManifestPreview({
   manifestYaml,
@@ -37,8 +41,15 @@ export function ManifestPreview({
   onRegenerate,
   onStartOver,
   hideActions,
+  hideHeader,
+  activeTab: externalActiveTab,
+  onTabChange,
+  embedded,
 }: ManifestPreviewProps) {
-  const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
+  const [internalActiveTab, setInternalActiveTab] =
+    useState<ViewTab>("context-map");
+  const activeTab = externalActiveTab ?? internalActiveTab;
+  const setActiveTab = onTabChange ?? setInternalActiveTab;
   const [activeContext, setActiveContext] = useState<string | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -68,9 +79,13 @@ export function ManifestPreview({
 
   return (
     <div
-      className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : "relative w-full rounded-xl border border-border"}`}
+      className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : embedded ? "relative w-full h-full" : "relative w-full rounded-xl border border-border"}`}
       style={
-        isFullScreen ? { marginTop: 0 } : { height: "60vh", minHeight: "450px" }
+        isFullScreen
+          ? { marginTop: 0 }
+          : embedded
+            ? undefined
+            : { height: "60vh", minHeight: "450px" }
       }
     >
       {/* Decorative ambient background */}
@@ -85,69 +100,71 @@ export function ManifestPreview({
         />
       </div>
 
-      <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 pl-5 pr-14 py-3 border-b border-border bg-surface shrink-0">
-        <div className="flex flex-wrap items-center gap-4">
-          <Button variant="outline" size="sm" onClick={onStartOver}>
-            <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Start Over
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-base font-bold tracking-wide">
-                Generated Manifest
-              </h1>
-              <span
-                className={`text-xs px-2 py-0.5 rounded font-mono ${viewData.overallScore >= 80 ? "bg-success/10 text-success border-success/20" : viewData.overallScore >= 50 ? "bg-warning/10 text-warning border-warning/20" : "bg-destructive/10 text-destructive border-destructive/20"} border`}
-              >
-                {viewData.overallScore}% Score
-              </span>
+      {!hideHeader && (
+        <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 pl-5 pr-14 py-3 border-b border-border bg-surface shrink-0">
+          <div className="flex flex-wrap items-center gap-4">
+            <Button variant="outline" size="sm" onClick={onStartOver}>
+              <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Start Over
+            </Button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-base font-bold tracking-wide">
+                  Generated Manifest
+                </h1>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded font-mono ${viewData.overallScore >= 80 ? "bg-success/10 text-success border-success/20" : viewData.overallScore >= 50 ? "bg-warning/10 text-warning border-warning/20" : "bg-destructive/10 text-destructive border-destructive/20"} border`}
+                >
+                  {viewData.overallScore}% Score
+                </span>
+              </div>
+              <p className="text-xs mt-0.5 text-muted-foreground font-mono">
+                {viewData.system} &middot; {viewData.architecture} &middot;{" "}
+                {viewData.contexts.length} contexts
+              </p>
             </div>
-            <p className="text-xs mt-0.5 text-muted-foreground font-mono">
-              {viewData.system} &middot; {viewData.architecture} &middot;{" "}
-              {viewData.contexts.length} contexts
-            </p>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              onClick={() => {
+                setActiveTab("context-map");
+                setActiveContext(null);
+              }}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "context-map" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+            >
+              <Network className="w-3.5 h-3.5 mr-1.5" /> Context Map
+            </button>
+            <button
+              onClick={() => setActiveTab("hexagonal")}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "hexagonal" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+            >
+              <Hexagon className="w-3.5 h-3.5 mr-1.5" /> Hexagonal
+            </button>
+            <button
+              onClick={() => setActiveTab("mermaid")}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "mermaid" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+            >
+              <Component className="w-3.5 h-3.5 mr-1.5" /> Mermaid
+            </button>
+            <button
+              onClick={() => setActiveTab("validation")}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "validation" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Validation
+            </button>
+          </div>
           <button
-            onClick={() => {
-              setActiveTab("context-map");
-              setActiveContext(null);
-            }}
-            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "context-map" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+            onClick={() => setIsFullScreen(!isFullScreen)}
+            className="absolute right-3 top-3 flex items-center p-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
+            title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
           >
-            <Network className="w-3.5 h-3.5 mr-1.5" /> Context Map
+            {isFullScreen ? (
+              <Minimize2 className="w-4 h-4" />
+            ) : (
+              <Maximize2 className="w-4 h-4" />
+            )}
           </button>
-          <button
-            onClick={() => setActiveTab("hexagonal")}
-            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "hexagonal" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
-          >
-            <Hexagon className="w-3.5 h-3.5 mr-1.5" /> Hexagonal
-          </button>
-          <button
-            onClick={() => setActiveTab("mermaid")}
-            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "mermaid" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
-          >
-            <Component className="w-3.5 h-3.5 mr-1.5" /> Mermaid
-          </button>
-          <button
-            onClick={() => setActiveTab("validation")}
-            className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "validation" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Validation
-          </button>
-        </div>
-        <button
-          onClick={() => setIsFullScreen(!isFullScreen)}
-          className="absolute right-3 top-3 flex items-center p-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
-          title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
-        >
-          {isFullScreen ? (
-            <Minimize2 className="w-4 h-4" />
-          ) : (
-            <Maximize2 className="w-4 h-4" />
-          )}
-        </button>
-      </header>
+        </header>
+      )}
 
       <main className="relative z-10 flex flex-1 overflow-hidden">
         <ManifestYamlSidebar
@@ -219,11 +236,6 @@ export function ManifestPreview({
           <Button
             onClick={() => onApprove(localManifestYaml)}
             disabled={hasFailures}
-            className={
-              !hasFailures
-                ? "bg-gradient-to-br from-accent to-amber-600 text-black hover:shadow-lg hover:shadow-accent/30 transition-all"
-                : ""
-            }
           >
             Use This Manifest <ArrowRight className="w-4 h-4 ml-1.5" />
           </Button>

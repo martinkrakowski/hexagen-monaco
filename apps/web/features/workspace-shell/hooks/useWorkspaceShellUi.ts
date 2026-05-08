@@ -9,8 +9,7 @@ export type WorkspaceShellState =
 export type WorkspaceDialogState =
   | { kind: "none" }
   | { kind: "new-project" }
-  | { kind: "delete-confirm"; projectId: string }
-  | { kind: "saved-projects" };
+  | { kind: "delete-confirm"; projectId: string };
 
 import type { ViewMode } from "@/types/view-mode";
 

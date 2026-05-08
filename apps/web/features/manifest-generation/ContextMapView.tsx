@@ -29,7 +29,7 @@ export function ContextMapView({
       <div
         className={`grid gap-6 ${isFullScreen ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}
       >
-        {viewData.contexts.map((ctx) => {
+        {viewData.contexts.map((ctx, ctxIndex) => {
           const isError = ctx.health === "error";
           const isWarn = ctx.health === "warning";
           const hasBang =
@@ -45,7 +45,7 @@ export function ContextMapView({
 
           return (
             <div
-              key={ctx.name}
+              key={`${ctx.name}-${ctxIndex}`}
               className={`rounded-lg p-4 bg-card border ${cardBorder} cursor-pointer transition-colors duration-200 shadow-sm hover:shadow-md animate-fade-in-up`}
               role="button"
               tabIndex={0}
@@ -85,9 +85,9 @@ export function ContextMapView({
                   {ctx.portsIn.length})
                 </div>
                 <div className="space-y-1">
-                  {ctx.portsIn.map((p) => (
+                  {ctx.portsIn.map((p, pi) => (
                     <div
-                      key={p.name}
+                      key={`in-${p.name}-${pi}`}
                       className={`text-xs px-2 py-1 rounded-sm border font-mono ${p.hasIssue ? "bg-destructive/5 border-destructive/10 text-destructive" : "bg-success/5 border-success/10 text-muted-foreground"}`}
                     >
                       <div className="flex items-center">
@@ -112,9 +112,9 @@ export function ContextMapView({
                   /{ctx.portsOut.length} connected)
                 </div>
                 <div className="space-y-1">
-                  {ctx.portsOut.map((p) => (
+                  {ctx.portsOut.map((p, pi) => (
                     <div
-                      key={p.name}
+                      key={`out-${p.name}-${pi}`}
                       className={`text-xs px-2 py-1 rounded-sm border ${p.hasIssue ? "bg-destructive/5 border-destructive/10" : "bg-info/5 border-info/10"}`}
                     >
                       <div

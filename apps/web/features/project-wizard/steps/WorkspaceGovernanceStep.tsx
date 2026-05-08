@@ -15,7 +15,6 @@ import {
 
 interface WorkspaceGovernanceStepProps {
   onNext: () => void;
-  onShowSavedProjects: () => void;
   canProceed: boolean;
   currentStep?: number;
   totalSteps?: number;
@@ -32,7 +31,6 @@ interface WorkspaceGovernanceStepProps {
  */
 export function WorkspaceGovernanceStep({
   onNext,
-  onShowSavedProjects,
   canProceed,
   currentStep = 1,
   totalSteps = 6,
@@ -124,7 +122,6 @@ export function WorkspaceGovernanceStep({
       </div>
 
       <WizardFooter
-        onShowSavedProjects={onShowSavedProjects}
         onNext={handleNext}
         canProceed={Boolean(
           canProceed && workspaceName.trim() && namespacePrefix.trim(),

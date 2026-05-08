@@ -1,26 +1,20 @@
 "use client";
 
-import Link from "next/link";
-import { ProjectCard } from "@/components/saved-projects";
-import { useSavedProjectsOverlay } from "@/hooks/useSavedProjectsOverlay";
+import { useMemo, useCallback } from "react";
 import type { SavedProject } from "@/hooks/useSavedProjects";
+import { toProjectListItem, sortItems } from "./domain/project-list";
+import { useProjectTable } from "./application/useProjectTable";
+import { ProjectsTable } from "./components/ProjectsTable";
+import { ProjectsEmptyState } from "./components/ProjectsEmptyState";
+import { BulkActionsBar } from "./components/BulkActionsBar";
+import { DeleteProjectDialog } from "./components/DeleteProjectDialog";
+import { ProjectToast } from "./components/ProjectToast";
 
 interface ProjectCardGridProps {
   projects: SavedProject[];
   onLoadProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => void;
-}
-
-function EmptyState() {
-  return (
-    <div className="text-center py-12">
-      <p className="text-muted-foreground mb-4">No projects yet.</p>
-      <Link href="/projects/new" className="text-primary hover:underline">
-        Create a new project
-      </Link>
-    </div>
-  );
 }
 
 export function ProjectCardGrid({
@@ -30,62 +24,83 @@ export function ProjectCardGrid({
   onRenameProject,
 }: ProjectCardGridProps) {
   const {
+    sort,
+    toggleSort,
+    selection,
+    relativeTime,
+    shortDate,
     overlay,
-    startRename,
-    updateRenameValue,
-    commitRename,
-    cancelRename,
-    requestDelete,
-    close,
-  } = useSavedProjectsOverlay();
+    toast,
+    handleCommitRename,
+    handleConfirmDelete,
+    handleDeleteSelected,
+    handleStartRename,
+  } = useProjectTable(projects, onDeleteProject, onRenameProject);
 
-  if (projects.length === 0) {
-    return <EmptyState />;
-  }
+  const items = useMemo(
+    () => sortItems(projects.map(toProjectListItem), sort),
+    [projects, sort],
+  );
 
-  const handleCommitRename = (id: string) => {
-    if (overlay.kind === "rename" && overlay.value.trim()) {
-      onRenameProject(id, overlay.value.trim());
-    }
-    commitRename();
-  };
-
-  const handleConfirmDelete = (id: string) => {
-    onDeleteProject(id);
-    close();
-  };
+  const deleteTargetId =
+    overlay.overlay.kind === "delete" ? overlay.overlay.id : "";
+  const deleteTargetName = useCallback((): string => {
+    if (!deleteTargetId) return "";
+    const project = projects.find((p) => p.id === deleteTargetId);
+    return project?.name ?? "";
+  }, [deleteTargetId, projects]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {projects.map((project) => {
-        const isRenaming =
-          overlay.kind === "rename" && overlay.id === project.id;
-        const renameValue =
-          overlay.kind === "rename" && overlay.id === project.id
-            ? overlay.value
-            : project.name;
-        const isConfirmingDelete =
-          overlay.kind === "delete" && overlay.id === project.id;
-
-        return (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            isLoaded={false}
-            isRenaming={isRenaming}
-            renameValue={renameValue}
-            onChangeRenameValue={updateRenameValue}
-            onStartRename={() => startRename(project.id, project.name)}
-            onCommitRename={() => handleCommitRename(project.id)}
-            onCancelRename={cancelRename}
-            isConfirmingDelete={isConfirmingDelete}
-            onRequestDelete={() => requestDelete(project.id)}
-            onConfirmDelete={() => handleConfirmDelete(project.id)}
-            onCancelDelete={close}
-            onRequestLoad={() => onLoadProject(project.id)}
+    <>
+      {items.length === 0 ? (
+        <ProjectsEmptyState />
+      ) : (
+        <>
+          <ProjectsTable
+            items={items}
+            sort={sort}
+            onToggleSort={toggleSort}
+            isSelected={selection.isSelected}
+            allSelected={selection.allSelected}
+            onToggleSelect={selection.toggle}
+            onToggleAll={selection.toggleAll}
+            onLoadProject={onLoadProject}
+            onRequestRename={handleStartRename}
+            onRequestDelete={overlay.requestDelete}
+            relativeTime={relativeTime}
+            shortDate={shortDate}
+            renameOverlay={
+              overlay.overlay.kind === "rename" ? overlay.overlay : null
+            }
+            onUpdateRenameValue={overlay.updateRenameValue}
+            onCommitRename={handleCommitRename}
+            onCancelRename={overlay.cancelRename}
           />
-        );
-      })}
-    </div>
+
+          <BulkActionsBar
+            selectedCount={selection.count}
+            onDeleteSelected={handleDeleteSelected}
+            onClearSelection={selection.clearSelection}
+          />
+
+          <DeleteProjectDialog
+            open={overlay.overlay.kind === "delete"}
+            onClose={overlay.close}
+            onConfirm={() => {
+              if (deleteTargetId) {
+                handleConfirmDelete(deleteTargetId);
+              }
+            }}
+            projectName={deleteTargetName()}
+          />
+        </>
+      )}
+
+      <ProjectToast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+      />
+    </>
   );
 }

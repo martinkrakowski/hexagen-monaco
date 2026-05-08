@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server";
 import path from "path";
 import { getModifyArchitectureUseCase } from "@/lib/wire.server";
-import { getLogger } from "@/lib/wire";
+import { createWebLogger } from "@/lib/wire.shared";
 import {
   createSSEResponse,
   formatSSEComment,
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       try {
         ctx.controller.enqueue(ctx.encoder.encode(formatSSEEvent(event, data)));
       } catch (err) {
-        const logger = getLogger();
+        const logger = createWebLogger();
         logger.errorWithException(
           err,
           `[api/architecture/modify/stream] Failed to serialize SSE event: ${event}`,
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
           },
         );
       } catch (err) {
-        const logger = getLogger();
+        const logger = createWebLogger();
         logger.errorWithException(
           err,
           "[api/architecture/modify/stream] Use case wiring failed",
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
 
       abortSignal.removeEventListener("abort", abortHandler);
     } catch (err) {
-      const logger = getLogger();
+      const logger = createWebLogger();
       logger.errorWithException(
         err,
         "[api/architecture/modify/stream] Pipeline execution failed",

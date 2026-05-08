@@ -11,7 +11,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
-import { WebLLMAdapter } from "@hexagen/local-llm";
+import type { WebLLMAdapter } from "@hexagen/local-llm";
 import { logger } from "../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
@@ -117,20 +117,13 @@ export async function POST(
     // Wire up dependencies
     const secretVault = new EnvironmentSecretVaultAdapter();
 
-    // Create WebLLM adapter if in browser environment
-    let webLlmAdapter = null;
+    let webLlmAdapter: WebLLMAdapter | null = null;
     try {
-      // Only create WebLLM adapter if we're in a browser environment
-      // This will throw an error in a server-side environment where Worker is not available
-      if (typeof Worker !== "undefined") {
-        webLlmAdapter = new WebLLMAdapter({
-          // createWorker: () => new Worker(...),
-          // When deployed, provide the actual worker factory
-        });
+      if (typeof window !== "undefined") {
+        const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
+        webLlmAdapter = new Adapter({});
       }
     } catch (error) {
-      // If we can't create the WebLLM adapter, we'll continue without it
-      // and fall back to cloud providers
       logger.warn("WebLLM adapter initialization failed:", { error });
     }
 
