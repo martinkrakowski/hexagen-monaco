@@ -6,43 +6,45 @@ import type { CreationPathId } from "../domain/creation-path";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-const blankProjectConfig: ProjectConfig = {
-  governance: {
-    workspaceName: "@hexagen",
-    workspaceTemplate: "modular-monolith",
-    workspaceDescription: undefined,
-    packageManager: "yarn",
-    topologyStrictness: "flexible",
-    namespacePrefix: "@hexagen",
-    namingConventions: {
-      contextDirectoryPattern: "packages/",
-      adapterSuffix: ".adapter.ts",
-    },
-  },
-  boundedContexts: [
-    {
-      id: crypto.randomUUID(),
-      name: "core",
-      description: "",
-      infrastructureTarget: "nestjs",
-      coreDomainEntities: [],
-      valueObjects: [],
-      domainEvents: [],
-      entities: [],
-      useCases: [],
-      portConfiguration: {
-        inboundPorts: [],
-        outboundPorts: [],
+function createBlankProjectConfig(): ProjectConfig {
+  return {
+    governance: {
+      workspaceName: "@hexagen",
+      workspaceTemplate: "modular-monolith",
+      workspaceDescription: undefined,
+      packageManager: "yarn",
+      topologyStrictness: "flexible",
+      namespacePrefix: "@hexagen",
+      namingConventions: {
+        contextDirectoryPattern: "packages/",
+        adapterSuffix: ".adapter.ts",
       },
-      uiFramework: "",
-      persistenceAdapter: "",
-      messagingAdapter: "",
-      telemetryProvider: "",
     },
-  ],
-  externalContexts: [],
-  peerMappings: [],
-};
+    boundedContexts: [
+      {
+        id: crypto.randomUUID(),
+        name: "core",
+        description: "",
+        infrastructureTarget: "nestjs",
+        coreDomainEntities: [],
+        valueObjects: [],
+        domainEvents: [],
+        entities: [],
+        useCases: [],
+        portConfiguration: {
+          inboundPorts: [],
+          outboundPorts: [],
+        },
+        uiFramework: "",
+        persistenceAdapter: "",
+        messagingAdapter: "",
+        telemetryProvider: "",
+      },
+    ],
+    externalContexts: [],
+    peerMappings: [],
+  };
+}
 
 export function usePathNavigation() {
   const router = useRouter();
@@ -54,7 +56,7 @@ export function usePathNavigation() {
         case "blank": {
           const projectId = saveProject(
             "Untitled Project",
-            blankProjectConfig,
+            createBlankProjectConfig(),
             "",
           );
           router.push(`/wizard/1?project=${projectId}`);
