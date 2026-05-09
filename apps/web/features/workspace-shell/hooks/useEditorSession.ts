@@ -56,16 +56,30 @@ export function useEditorSession(): UseEditorSessionReturn {
     return record;
   }, [state.files]);
 
-  return {
-    selectedFileId: state.selectedFileId,
-    editedFiles,
-    setSessionId,
-    clearSession,
-    selectFile,
-    updateFile,
-    markFileSaved,
-    activeWorkspace,
-    setActiveWorkspace,
-    clearActiveWorkspace,
-  };
+  return useMemo(
+    () => ({
+      selectedFileId: state.selectedFileId,
+      editedFiles,
+      setSessionId,
+      clearSession,
+      selectFile,
+      updateFile,
+      markFileSaved,
+      activeWorkspace,
+      setActiveWorkspace,
+      clearActiveWorkspace,
+    }),
+    [
+      state.selectedFileId,
+      editedFiles,
+      setSessionId,
+      clearSession,
+      selectFile,
+      updateFile,
+      markFileSaved,
+      activeWorkspace,
+      setActiveWorkspace,
+      clearActiveWorkspace,
+    ],
+  );
 }

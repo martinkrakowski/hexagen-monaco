@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { PipelineStepStatus } from "@hexagen/ai-pipeline";
 import type { Patch } from "@hexagen/reconciliation-engine";
 import { usePipelineStreaming } from "./usePipelineStreaming";
@@ -236,12 +236,15 @@ export function useArchitectureModification() {
     [state.result?.transactionId, state.result],
   );
 
-  return {
-    ...state,
-    modify,
-    abort,
-    reset,
-    acceptPatches,
-    rejectPatches,
-  };
+  return useMemo(
+    () => ({
+      ...state,
+      modify,
+      abort,
+      reset,
+      acceptPatches,
+      rejectPatches,
+    }),
+    [state, modify, abort, reset, acceptPatches, rejectPatches],
+  );
 }
