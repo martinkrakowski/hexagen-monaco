@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type {
   HexagonNode,
   HexagonEdge,
@@ -43,7 +43,7 @@ interface UseCanvasStateResult {
     updates: Pick<HexagonNode, "label" | "type">,
   ) => void;
   onCloseEditor: () => void;
-  clearCanvasLayout: () => void;
+  clearCanvasLayout: () => Promise<void>;
   recalculateLayout: () => Promise<void>;
 }
 
@@ -59,6 +59,11 @@ export function useCanvasState(
     viewport: createCanvasViewport(),
   });
   const [error, setError] = useState<Error | null>(null);
+
+  // Ref for wizardData so callbacks that read it don't need it in their dep arrays.
+  // wizardData changes are handled reactively via the useEffect that calls loadGraph.
+  const wizardDataRef = useRef(wizardData);
+  wizardDataRef.current = wizardData;
 
   // Zustand store for structural state
   const {
@@ -121,10 +126,10 @@ export function useCanvasState(
 
         // The generator positions ALL root-level nodes explicitly using
         // LAYOUT_CONFIG offsets:
-        //   - The bounded-context hex
-        //   - Compass adapters on N/S (primary/secondary adapters)
-        //   - Compass ports on W/E (primary/secondary ports)
-        //   - Root-level entities and use-cases stacked south of the hex
+        // - The bounded-context hex
+        // - Compass adapters on N/S (primary/secondary adapters)
+        // - Compass ports on W/E (primary/secondary ports)
+        // - Root-level entities and use-cases stacked south of the hex
         // We preserve these positions and let ELK influence ONLY the inner
         // layout (currently just the Domain / UseCases column labels inside
         // the hex). ELK's layered/partitioning algorithm conflates north/south
@@ -165,16 +170,22 @@ export function useCanvasState(
    * Regenerate a fresh, compiled graph from wizardData.
    * Does NOT run ELK — caller decides whether to run layout or apply saved
    * positions. Returns null when wizardData has no bounded contexts.
+   *
+   * Uses wizardDataRef to avoid destabilizing dependents when wizardData
+   * identity changes on every parent render (e.g. every keystroke in wizard).
+   * The wizardData *content* change is handled by the useEffect that triggers
+   * loadGraph.
    */
   const regenerateGraphFromWizard = useCallback((): {
     nodes: HexagonNode[];
     edges: HexagonEdge[];
   } | null => {
-    if (!wizardData?.boundedContexts?.length) {
+    const wd = wizardDataRef.current;
+    if (!wd?.boundedContexts?.length) {
       return null;
     }
     const generateMap = getGenerateHexagonalMapUseCase();
-    const { nodes, edges } = generateMap.execute({ wizardData });
+    const { nodes, edges } = generateMap.execute({ wizardData: wd });
     const mapNodeVisualUseCase = getMapNodeVisualUseCase();
 
     const compiledNodes = nodes.map((node) => {
@@ -203,7 +214,7 @@ export function useCanvasState(
     });
 
     return { nodes: compiledNodes, edges };
-  }, [wizardData]);
+  }, []);
 
   /**
    * Load and process graph data
@@ -215,13 +226,14 @@ export function useCanvasState(
       return;
     }
 
-    if (wizardData?.boundedContexts?.length) {
+    const wd = wizardDataRef.current;
+    if (wd?.boundedContexts?.length) {
       const regenerated = regenerateGraphFromWizard();
       if (!regenerated) return;
       const { nodes: compiledNodes, edges } = regenerated;
 
       // Check if manifest changed
-      const newHash = generateManifestHash(wizardData);
+      const newHash = generateManifestHash(wd);
       const manifestChanged = manifestHash !== null && manifestHash !== newHash;
 
       // Apply saved positions or calculate new layout
@@ -279,7 +291,6 @@ export function useCanvasState(
   }, [
     projectId,
     layoutLoaded,
-    wizardData,
     manifestHash,
     nodePositions,
     applySavedPositions,
@@ -317,28 +328,40 @@ export function useCanvasState(
     setState((prev) => ({ ...prev, selectedNodeId: node.id }));
   }, []);
 
+  /**
+   * Add a new entity node. Reads current nodes/edges from the store at
+   * invocation time to avoid depending on array identity in the dep list.
+   */
   const onAddNode = useCallback(() => {
-    const root = nodes.find((n) => n.id === "root-core");
-    const anchor = root ?? nodes[0];
+    const { nodes: currentNodes, edges: currentEdges } =
+      useCanvasGraphStore.getState();
+    const root = currentNodes.find((n) => n.id === "root-core");
+    const anchor = root ?? currentNodes[0];
     const position = anchor
       ? { x: anchor.position.x + 220, y: anchor.position.y + 220 }
       : { x: 100, y: 100 };
     const newNode = createDefaultHexagonNode("entity", "New Node", position);
 
-    setGraph([...nodes, newNode], edges);
+    setGraph([...currentNodes, newNode], currentEdges);
     setState((prev) => ({ ...prev, selectedNodeId: newNode.id }));
-  }, [nodes, edges, setGraph]);
+  }, [setGraph]);
 
   const onExportImage = useCallback(() => {}, []);
 
+  /**
+   * Update a node's label/type. Reads current nodes/edges from the store at
+   * invocation time to avoid depending on array identity in the dep list.
+   */
   const onUpdateNode = useCallback(
     (nodeId: string, updates: Pick<HexagonNode, "label" | "type">) => {
-      const updatedNodes = nodes.map((n) =>
+      const { nodes: currentNodes, edges: currentEdges } =
+        useCanvasGraphStore.getState();
+      const updatedNodes = currentNodes.map((n) =>
         n.id === nodeId ? { ...n, ...updates } : n,
       );
-      setGraph(updatedNodes, edges);
+      setGraph(updatedNodes, currentEdges);
     },
-    [nodes, edges, setGraph],
+    [setGraph],
   );
 
   const onCloseEditor = useCallback(() => {
@@ -365,46 +388,63 @@ export function useCanvasState(
       return;
     }
 
-    const laidOutNodes = await calculateElkLayout(nodes, edges);
-    setGraph(laidOutNodes, edges);
-  }, [
-    clearLayout,
-    regenerateGraphFromWizard,
-    nodes,
-    edges,
-    calculateElkLayout,
-    setGraph,
-  ]);
+    const { nodes: currentNodes, edges: currentEdges } =
+      useCanvasGraphStore.getState();
+    const laidOutNodes = await calculateElkLayout(currentNodes, currentEdges);
+    setGraph(laidOutNodes, currentEdges);
+  }, [clearLayout, regenerateGraphFromWizard, calculateElkLayout, setGraph]);
 
   /**
    * Force recalculate layout on the current store graph (does NOT regenerate).
    * Kept for callers that want to re-run ELK without discarding in-progress
    * user edits. The Clean-up button uses handleClearCanvasLayout above.
+   *
+   * Reads nodes/edges from the store at invocation time to avoid depending
+   * on array identity in the dep list.
    */
   const recalculateLayout = useCallback(async () => {
-    const laidOutNodes = await calculateElkLayout(nodes, edges);
-    setGraph(laidOutNodes, edges);
-  }, [nodes, edges, calculateElkLayout, setGraph]);
+    const { nodes: currentNodes, edges: currentEdges } =
+      useCanvasGraphStore.getState();
+    const laidOutNodes = await calculateElkLayout(currentNodes, currentEdges);
+    setGraph(laidOutNodes, currentEdges);
+  }, [calculateElkLayout, setGraph]);
 
   if (error) {
     return { error };
   }
 
-  return {
-    nodes,
-    edges,
-    viewport: state.viewport,
-    selectedNodeId: state.selectedNodeId,
-    isLayoutCalculating,
-    onNodeDragStop,
-    onNodeDoubleClick,
-    onAddNode,
-    onExportImage,
-    onUpdateNode,
-    onCloseEditor,
-    clearCanvasLayout: handleClearCanvasLayout,
-    recalculateLayout,
-  };
+  return useMemo(
+    () => ({
+      nodes,
+      edges,
+      viewport: state.viewport,
+      selectedNodeId: state.selectedNodeId,
+      isLayoutCalculating,
+      onNodeDragStop,
+      onNodeDoubleClick,
+      onAddNode,
+      onExportImage,
+      onUpdateNode,
+      onCloseEditor,
+      clearCanvasLayout: handleClearCanvasLayout,
+      recalculateLayout,
+    }),
+    [
+      nodes,
+      edges,
+      state.viewport,
+      state.selectedNodeId,
+      isLayoutCalculating,
+      onNodeDragStop,
+      onNodeDoubleClick,
+      onAddNode,
+      onExportImage,
+      onUpdateNode,
+      onCloseEditor,
+      handleClearCanvasLayout,
+      recalculateLayout,
+    ],
+  );
 }
 
 // Made with Bob

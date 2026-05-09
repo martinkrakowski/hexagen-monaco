@@ -8,6 +8,10 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { CanvasViewportProps } from "./types";
+import { useMemo } from "react";
+
+/** Static proOptions — never changes, hoisted to module scope to avoid per-render allocation. */
+const PRO_OPTIONS = { hideAttribution: true } as const;
 
 export function CanvasViewport({
   nodes,
@@ -19,11 +23,16 @@ export function CanvasViewport({
   colorMode,
 }: CanvasViewportProps) {
   const theme = colorMode === "dark" ? "dark" : "light";
-  const bgColor = `hsl(${
-    getComputedStyle(document.documentElement)
+
+  // Memoize the background color derivation — only recompute when theme changes.
+  // Avoids calling getComputedStyle on every render (synchronous DOM read).
+  const bgColor = useMemo(() => {
+    const cssValue = getComputedStyle(document.documentElement)
       .getPropertyValue("--muted-foreground")
-      .trim() || (theme === "dark" ? "35 5% 35%" : "35 5% 65%")
-  } / 0.4)`;
+      .trim();
+    const fallback = theme === "dark" ? "35 5% 35%" : "35 5% 65%";
+    return `hsl(${cssValue || fallback} / 0.4)`;
+  }, [theme]);
 
   return (
     <div className="w-full h-full min-h-96">
@@ -37,7 +46,7 @@ export function CanvasViewport({
         fitView
         colorMode={colorMode}
         className="bg-card"
-        proOptions={{ hideAttribution: true }}
+        proOptions={PRO_OPTIONS}
       >
         <Background
           variant={BackgroundVariant.Dots}
