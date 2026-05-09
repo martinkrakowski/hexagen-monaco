@@ -1,4 +1,4 @@
-import { Button, Checkbox } from "@hexagen/ui";
+import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 import type { ModelSelectionFlowState } from "./types";
@@ -6,8 +6,6 @@ import type { ModelSelectionFlowState } from "./types";
 interface ModelSelectionViewProps {
   flowState: ModelSelectionFlowState;
   llmContext: LocalLLMContext;
-  rememberChoice: boolean;
-  onRememberChoiceChange: (value: boolean) => void;
   onSelectModel: (modelId: string) => void;
   onBack: () => void;
   onModelReady: () => void;
@@ -16,8 +14,6 @@ interface ModelSelectionViewProps {
 export function ModelSelectionView({
   flowState,
   llmContext,
-  rememberChoice,
-  onRememberChoiceChange,
   onSelectModel,
   onBack,
   onModelReady,
@@ -58,30 +54,6 @@ export function ModelSelectionView({
           <Button onClick={onModelReady}>Generate Manifest</Button>
         </div>
       )}
-
-      <div className="flex justify-between items-center">
-        <label
-          htmlFor="remember-choice"
-          className="flex items-center space-x-2 cursor-pointer"
-        >
-          <Checkbox
-            id="remember-choice"
-            checked={rememberChoice}
-            onCheckedChange={(checked) =>
-              onRememberChoiceChange(checked === true)
-            }
-          />
-          <span className="text-sm text-muted-foreground">
-            Remember my choice for future sessions
-          </span>
-        </label>
-      </div>
-
-      <div className="text-center">
-        <Button variant="ghost" onClick={onBack}>
-          Back to Description
-        </Button>
-      </div>
     </div>
   );
 }

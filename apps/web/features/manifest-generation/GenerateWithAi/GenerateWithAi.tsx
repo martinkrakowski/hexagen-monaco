@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
@@ -21,7 +22,6 @@ import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
 import { HeaderSection } from "./HeaderSection";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
-import { ModelSelectionView } from "./ModelSelectionView";
 import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
 import type { GenerateWithAiProps, ViewTab } from "./types";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/manifest-generation";
 import { hasServerLLMAccessKey } from "../../../app/lib/wire.client";
 import type { CapabilitiesResponse } from "../types/capabilities";
+import { useModelSelectionIntent } from "../store/useModelSelectionIntent";
 
 export function GenerateWithAi({
   onUseManifest,
@@ -38,12 +39,13 @@ export function GenerateWithAi({
   onGeneratingStateChange,
   onPreviewStateChange,
 }: GenerateWithAiProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const modelSelectionIntent = useModelSelectionIntent();
   const [formState, formHandlers] = useGenerateWithAiForm();
-  const [rememberChoice, setRememberChoice] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const [previewActiveTab, setPreviewActiveTab] =
     useState<ViewTab>("context-map");
-  const rememberChoiceRef = useRef(false);
 
   /**
    * Tier 1 (Synchronous): Check if server has env-var API key configured.
@@ -92,10 +94,6 @@ export function GenerateWithAi({
 
     return unsubscribe;
   }, [hasServerApiKey]);
-
-  useEffect(() => {
-    rememberChoiceRef.current = rememberChoice;
-  }, [rememberChoice]);
 
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
@@ -174,6 +172,14 @@ export function GenerateWithAi({
     ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
     : undefined;
 
+  const navigateToModelSelection = useCallback(
+    (autoGenerate = false) => {
+      modelSelectionIntent.setAutoGenerate(autoGenerate);
+      router.push("/projects/new/ai/models");
+    },
+    [modelSelectionIntent, router],
+  );
+
   const handleGenerate = () => {
     if (!canGenerate) return;
     const prefs = getModelPreferences();
@@ -183,9 +189,32 @@ export function GenerateWithAi({
     ) {
       actions.transitionTo("generating");
     } else {
-      actions.transitionTo("model_selection");
+      navigateToModelSelection(true);
     }
   };
+
+  const hasReturnedFromModelSelection = searchParams.get("generate") === "1";
+
+  useEffect(() => {
+    if (!hasReturnedFromModelSelection) return;
+    if (flowState.state !== "idle") return;
+    if (!formHandlers.isValid) return;
+    const prefs = getModelPreferences();
+    if (
+      llmContext.engineState.status === "ready" ||
+      (prefs.rememberChoice && prefs.lastModelId)
+    ) {
+      actions.transitionTo("generating");
+      router.replace("/projects/new/ai");
+    }
+  }, [
+    hasReturnedFromModelSelection,
+    flowState.state,
+    formHandlers.isValid,
+    llmContext.engineState.status,
+    actions,
+    router,
+  ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
     stagedGen.reset();
@@ -227,11 +256,7 @@ export function GenerateWithAi({
     previewActiveTab,
   ]);
 
-  if (
-    flowState.state !== "idle" &&
-    flowState.state !== "generating" &&
-    flowState.state !== "model_selection"
-  ) {
+  if (flowState.state !== "idle" && flowState.state !== "generating") {
     return (
       <StateView
         flowState={flowState}
@@ -242,25 +267,6 @@ export function GenerateWithAi({
         onRetryFromError={handleRetryOrRegenerate}
         externalActiveTab={previewActiveTab}
         onTabChange={setPreviewActiveTab}
-      />
-    );
-  }
-
-  if (flowState.state === "model_selection") {
-    return (
-      <ModelSelectionView
-        flowState={flowState}
-        llmContext={llmContext}
-        rememberChoice={rememberChoice}
-        onRememberChoiceChange={setRememberChoice}
-        onSelectModel={(modelId) =>
-          actions.selectLocalModel(
-            modelId as DomainModelId,
-            rememberChoiceRef.current,
-          )
-        }
-        onBack={() => actions.transitionTo("idle")}
-        onModelReady={() => actions.transitionTo("generating")}
       />
     );
   }
@@ -351,6 +357,7 @@ export function GenerateWithAi({
           formHandlers.setValue("maxContexts", value)
         }
         isDisabled={isGenerating}
+        onChangeModel={() => navigateToModelSelection(false)}
       />
 
       <ModelCapabilityCheck
@@ -361,7 +368,7 @@ export function GenerateWithAi({
         loadedModelId={loadedModelId}
         overrideModelCheck={overrideModelCheck}
         onOverrideChange={setOverrideModelCheck}
-        onSwitchModel={() => actions.transitionTo("model_selection")}
+        onSwitchModel={() => navigateToModelSelection(false)}
       />
 
       {(isModelLoading || isModelError) &&
@@ -382,7 +389,7 @@ export function GenerateWithAi({
                 status={engineStatus as LLMEngineStatus}
                 progress={llmContext.engineState.progress}
                 errorMessage={llmContext.engineState.errorMessage}
-                onCancel={() => actions.transitionTo("model_selection")}
+                onCancel={() => navigateToModelSelection(false)}
                 onRetry={() => {
                   const modelId = llmContext.engineState.loadedModelId;
                   if (modelId) llmContext.initializeModel(modelId);
