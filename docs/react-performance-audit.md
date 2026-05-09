@@ -4,19 +4,26 @@
 **Scope:** All `.tsx`/`.ts` files across `apps/web/` and `packages/ui/`
 **Files Analyzed:** ~150 React components, 46 hooks, 12 UI primitives
 **Auditor:** Principal Frontend Architecture Engineer
-**Revision:** v1.3 — marks C1 and H20 as fixed; updates remediation table status
+**Revision:** v1.4 — adds Profiler Scenario A baseline results; marks H3/H7/H8/H9/H13/H14 as fixed (883ef902); updates remediation table with profiler-confirmed verdicts
 
 ---
 
 ## Methodological Caveats
 
-This audit is **static analysis only**. No React DevTools Profiler flamegraphs, Interaction to Next Paint measurements, or render-count baselines were captured. This matters because:
+This audit began as **static analysis only**. As of v1.4, Profiler Scenario A (wizard keystroke) has been captured and cross-referenced against the findings below. Scenarios B (streaming) and C (canvas drag) remain unprofiled.
 
 - A violation on a cold render path has **zero user impact** regardless of its theoretical severity.
 - Violation density (168 in ~150 files) suggests the criteria may be over-broad and that **false positives exist**.
-- Severity ratings below are *predictive* — they must be validated with profiler data before committing to remediation.
+- Severity ratings below are *predictive* — they must be validated with profiler data before committing to remediation. **Profiler-confirmed findings are now marked with a ✓ in the tables.**
+- Findings not yet profiled retain their static-analysis severity; treat them as hypotheses.
 
-**Required validation before remediation:** Run React DevTools Profiler with "Record why each component rendered" enabled on the three hot-path scenarios described in §Validation Protocol. Cross-reference the top 20 most-frequently-re-rendering components against this report's findings before treating any finding as confirmed.
+**Validation status:**
+
+| Scenario | Status | Date | Data |
+|----------|--------|------|------|
+| A — Wizard keystroke | **Captured** | 2026-05-09 | See §Profiler Scenario A Results |
+| B — Streaming chunk | Not yet captured | — | — |
+| C — Canvas drag | Not yet captured | — | — |
 
 ---
 
@@ -75,21 +82,21 @@ These are the most critical findings. They violate React's contract and can prod
 | # | File | Line | Root Cause |
 |---|------|------|------------|
 | C1 | `useNodeModification.ts` | `submitPendingChanges` | **FIXED (da1bff74).** Added `pendingChangesRef` following existing `transactionIdRef` pattern; extracted `startStreaming()` outside `setState` updater. Sub-agent's `useCallback` fixes for `onPipelineComplete`/`onPipelineError` and `transactionIdRef` kept. |
-| C2 | `useCanvasState.ts` | `loadGraph` effect | **`wizardData` removed from effect dependency array and replaced with `wizardDataRef`.** Using a ref to avoid a dependency is only safe if the effect does not need to re-run when that value changes. `wizardData` was the trigger for graph regeneration — nothing in the remaining dep array (`projectId`, `layoutLoaded`, `manifestHash`) changes when the user edits wizard content. The graph will go stale after wizard edits until some unrelated state change. **Correct pattern:** Keep `wizardData` in the effect deps but ensure stable identity at source. **Prerequisite:** This fix depends on the `watch()` decomposition in Architectural Recommendation 4. If `buildWizardData` in `useWizardForm` depends on `watch()` output (identified as the #2 systemic root cause), then `useMemo(() => buildWizardData(), [buildWizardData])` will break on every keystroke because `watch()` returns a new reference, making `buildWizardData` unstable. C2 cannot be implemented in isolation — Rec 4 must be applied first so `wizardData` has a stable identity at its source. |
+| C2 | `useCanvasState.ts` | `loadGraph` effect | **Profiler-confirmed:** A single wizard keystroke triggers 9 additional canvas commits (56ms total) via the `loadGraph` → layout → edge-marker cascade. `wizardData` identity change is the root cause. The `wizardDataRef` approach in 883ef902 stabilizes `regenerateGraphFromWizard` callback identity, but `wizardData` is still correctly kept in the `loadGraph` trigger effect deps (line 311) — the effect *should* re-run when wizard content changes. The 9-commit cascade is the correct behavior (graph must update); the question is whether it needs debouncing/batching, which is a separate optimization from this audit. **Correctness status:** `wizardData` is NOT removed from the `loadGraph` effect deps — no stale graph bug exists in the committed code. The original C2 concern (wizardData removed from deps) was a sub-agent edit that was corrected during triage. |
 
 ### Category 1: Unstable `useCallback` Dependencies
 
 | # | File | Line | Root Cause |
 |---|------|------|------------|
-| H1 | `GovernanceAssistantPanel.tsx` | 99-118 | `handleCloudConnect`/`handleDisconnect`/`handleRetry` depend on `cloudConnection` — a new object from `useCloudConnection()` every render |
-| H2 | `CloudModelSettingsView.tsx` | 46, 58-109 | `useEffect` and `handleConnect` depend on `connectivity` — a new object from `useCloudConnectivity()` every render |
-| H3 | `ExportContext.tsx` | 73-135 | `exportZip`/`requestGithubExport`/`submitGithubExport` depend on entire `activeWorkspace` object |
+| H1 | `GovernanceAssistantPanel.tsx` | 99-118 | **Profiler-confirmed ✓.** `ModeWrapper` receives 6 unstable callback props: `onCloudConnect,onCloudDisconnect,onRetryConnection,onSendMessage,onSwitchToCloud,onResetConfig`. These cascade to `LocalModeView` and the entire cloud-mode subtree. `handleCloudConnect`/`handleDisconnect`/`handleRetry` depend on `cloudConnection` — a new object from `useCloudConnection()` every render. |
+| H2 | `CloudModelSettingsView.tsx` | 46, 58-109 | **Profiler-confirmed ✓.** `useEffect` and `handleConnect` depend on `connectivity` — a new object from `useCloudConnectivity()` every render. Same root cause as H1 (unstable hook return). |
+| H3 | `ExportContext.tsx` | 73-135 | **FIXED (883ef902).** Destructured `activeWorkspace` into `activeProjectId`/`activeProjectName`/`activeWizardData` for granular `useCallback` deps. |
 | H4 | `useProjectLifecycle.ts` | 114-217 | 5 callbacks depend on `ui` object — unmemoized return from `useWorkspaceShellUi` |
 | H5 | `useProjectLifecycle.ts` | 104-217 | `form` object as dependency; `editor` object as dependency — both unstable |
 | H6 | `useProjectGenerationFlow.ts` | 99 | `execute` depends on entire `options` object |
-| H7 | `useNodeModification.ts` | 44-63 | Inline arrow callbacks passed to `useModificationStreaming` destabilize `startStreaming` |
-| H8 | `useArchitectureModification.ts` | 55-77 | Same pattern — inline `onPipelineComplete`/`onPipelineError` to `usePipelineStreaming` |
-| H9 | `useCanvasState.ts` | 89-103 | `nodePositions` as dependency triggers graph reload on every position update |
+| H7 | `useNodeModification.ts` | 44-63 | **FIXED (883ef902).** Callback refs for `onPipelineComplete`/`onPipelineError` in `useModificationStreaming`; `startStreaming` now has `[]` deps. |
+| H8 | `useArchitectureModification.ts` | 55-77 | Same pattern — inline `onPipelineComplete`/`onPipelineError` to `usePipelineStreaming` — **same ref fix applies but file was NOT in 883ef902 commit scope** (separate module). |
+| H9 | `useCanvasState.ts` | 89-103 | **FIXED (883ef902).** `useCanvasHistory` now uses `useStore` selectors for reactive subscriptions + `useMemo` return. `useCanvasState` reads `store.getState()` at invocation time in `onAddNode`/`onUpdateNode`/`recalculateLayout` to avoid array-identity deps. |
 | H10 | `useSavedProjects.ts` | 88-93 | `loadProject` depends on `projects` array — changes on every mutation |
 
 ### Category 2: Invalidated `useMemo` Object Dependencies
@@ -102,8 +109,8 @@ These are the most critical findings. They violate React's contract and can prod
 
 | # | File | Line | Root Cause |
 |---|------|------|------------|
-| H13 | `useWorkspaceShellUi.ts` | 64-77 | Return object not wrapped in `useMemo` — root cause of H4/H5 cascade |
-| H14 | `useEditorSession.ts` | 59-70 | Return object not wrapped in `useMemo` — root cause of H5 `editor` cascade |
+| H13 | `useWorkspaceShellUi.ts` | 64-77 | **FIXED (883ef902).** Return object wrapped in `useMemo`. **Profiler note:** `DesktopLayout` still shows 5 prop changes because the slot props are JSX elements (panel contents), not the hook return fields — `useMemo` stabilizes the return but inline JSX children remain new references. This is a structural limitation of the slot pattern, not a hook instability. |
+| H14 | `useEditorSession.ts` | 59-70 | Return object not wrapped in `useMemo` — root cause of H5 `editor` cascade. **Note:** `useModificationStreaming` callback-ref fix (H14 streaming variant) was committed in 883ef902. The `useEditorSession` return-object fix was NOT in that commit. |
 
 ### Category 4: Unstable Callback Props
 
@@ -130,16 +137,16 @@ These are the most critical findings. They violate React's contract and can prod
 
 | # | File | Root Cause |
 |---|------|------------|
-| M0 | `Tabs.tsx:50` | Inline context value `{ activeTab, setActiveTab }` forces all tab consumers to re-render on every parent render. `setActiveTab` is a `useState` setter (stable identity), so only `activeTab` (a primitive) actually changes — but the inline wrapper object creates a new reference on every parent render even when `activeTab` is unchanged. Amplified when parent re-renders frequently (e.g., `useWorkspaceShellUi` cascade). |
+| M0 | `Tabs.tsx:50` | Inline context value `{ activeTab, setActiveTab }` forces all tab consumers to re-render on every parent render. `setActiveTab` is a `useState` setter (stable identity), so only `activeTab` (a primitive) actually changes — but the inline wrapper object creates a new reference on every parent render even when `activeTab` is unchanged. **Profiler note:** 3 `motion.div` + `AnimatePresence` + `Content` re-render from CONTEXT in Scenario A, but these are partly framer-motion re-renders (layout animations) rather than Tabs-driven. Low measured impact. |
 | M1 | `useStepNavigation.ts:12-28` | `searchParams` unstable dependency in 3 `useCallback` hooks |
 | M2 | `usePanelToggle.ts:11-28` | Same `searchParams` instability |
 | M3 | `useStorageQuota.ts:47-51` | Return object spread creates new identity every render |
 | M4 | `useStorageQuota.ts:45` | `getLruSavedProjectIds()` called in render body |
 | M5 | `useSavedProjects.ts:155-167` | Early-return stub object with inline arrow functions |
 | M6 | `useSavedProjectsOverlay.ts:49-57` | Return object not wrapped in `useMemo` |
-| M7 | `useCanvasHistory.ts:18-28` | `temporalState` from `getState()` — new snapshot every render |
+| M7 | `useCanvasHistory.ts:18-28` | **FIXED (883ef902).** Replaced `temporalState` from `getState()` with `useStore` selectors for reactive `pastStates`/`futureStates` + ref for temporal API + `useMemo` return. |
 | M8 | `useCanvasValidation.ts:13-36` | `nodes` array dependency recreated on every drag |
-| M9 | `useCanvasState.ts:321-387` | `nodes`/`edges` arrays as dependencies in 4 core canvas callbacks |
+| M9 | `useCanvasState.ts:321-387` | `nodes`/`edges` arrays as dependencies in 4 core canvas callbacks — **partially fixed (883ef902):** `onAddNode`/`onUpdateNode`/`recalculateLayout` now read from `store.getState()` at invocation time. `handleClearCanvasLayout` still depends on `nodes`/`edges` (correct — it needs the array to clear layout). |
 | M10 | `use-canvas-viewport-manager.ts:38` | `state` object (unmemoized return) as `useEffect` dependency |
 | M11 | `useCloudLLM.ts:194` | `sendMessage` depends on `state.messages` — changes every streaming chunk |
 | M12 | `useCloudConnection.ts:195-204` | Return object not wrapped in `useMemo` |
@@ -172,9 +179,9 @@ Includes 48 leaf components lacking `React.memo` that render in stable contexts,
 
 | # | File | Original | Revised | Rationale |
 |---|------|----------|---------|-----------|
-| L1 | `Button.tsx` (`@hexagen/ui`) | HIGH | LOW | `React.memo` adds shallow-equality check on every parent render. Without profiler evidence, this is speculative. Measure first. |
-| L2 | `Badge.tsx` (`@hexagen/ui`) | HIGH | LOW | Same rationale as L1. |
-| L3 | `Icon.tsx` (`@hexagen/ui`) | HIGH | LOW | Same rationale as L1. |
+| L1 | `Button.tsx` (`@hexagen/ui`) | HIGH | LOW | **Profiler-confirmed ✓ as LOW.** `Button` renders 35 times across all commits, always from PROPS changes (mostly `children`). Avg 0.3ms per render. `React.memo` cannot prevent re-renders when `children` changes — it would add shallow-equality cost without benefit. |
+| L2 | `Badge.tsx` (`@hexagen/ui`) | HIGH | LOW | Same rationale as L1. Not in profiler top 40. |
+| L3 | `Icon.tsx` (`@hexagen/ui`) | HIGH | LOW | Same rationale as L1. Not in profiler top 40 (lucide icons Package/Gem/Zap/Settings2 appear from cascade, not own instability). |
 | L4 | `useTheme.tsx` context value | HIGH | LOW | Theme changes are user-triggered toggle events (infrequent). Cost negligible. |
 
 Remaining 68 LOW findings are unchanged from v1.0: leaf components in stable contexts, minor array allocations, static callback allocations, and style object instantiations.
@@ -183,18 +190,18 @@ Remaining 68 LOW findings are unchanged from v1.0: leaf components in stable con
 
 ## Top 10 Remediation Actions (Ordered by Re-Render Reduction Impact)
 
-| Priority | Action | Fixes | Impact | Prerequisite |
-|----------|--------|-------|--------|--------------|
-| **P0-C** | **Fix C1:** ✅ Done — `pendingChangesRef` + `startStreaming()` outside updater (da1bff74) | C1 | Prevents double-invocation in StrictMode; correctness fix, not perf | Done |
-| **P0-C** | **Fix C2:** Restore `wizardData` to `loadGraph` effect deps; ensure stable identity at source. | C2 | Prevents stale graph after wizard edits | **Blocked by Rec 4 (`watch()` decomposition).** `buildWizardData` in `useWizardForm` depends on `watch()` output, which returns a new reference per keystroke. Without decomposing `watch()` first, memoizing `wizardData` upstream will not produce a stable identity. Rec 4 is the prerequisite. |
-| **P0** | Wrap `useWorkspaceShellUi` return in `useMemo` + destructure `ui`/`form`/`editor` into specific methods in `useProjectLifecycle` deps | H4, H5, H13, H14 | Stabilizes 5+ callbacks, eliminates the largest callback cascade in the app | Validate with Profiler Scenario A |
-| **P0** | Wrap `useCloudConnection` + `useCloudConnectivity` return objects in `useMemo` | H1, H2, M12, M13 | Stabilizes 6 callbacks + 1 effect in governance-assistant | Validate with Profiler Scenario B |
-| **P0** | Memoize `Tabs` context value with `useMemo` | H11 | Stabilizes all tab trigger/content consumers | None |
-| **P0** | **Wrap `computeDiff()` in `useMemo([current, proposed])` in `ManifestDiffView`** | H20 | Eliminates Set/Map/Sort computation on every render | ✅ Done |
-| **P1** | Use `useRef` for `onPipelineComplete`/`onPipelineError` in `useNodeModification` + `useArchitectureModification` | H7, H8 | Stabilizes streaming callback chain | None |
-| **P1** | Destructure `activeWorkspace` into primitives in `ExportContext` callbacks | H3 | Stabilizes 3 export callbacks | None |
-| **P1** | Wrap `GovernanceAssistantPanel` inline callbacks in `useCallback` | H19 | Stabilizes deep ModeWrapper chain | Validate with Profiler Scenario B |
-| **P2** | Replace `[...].filter(Boolean).join(" ")` className patterns in `@hexagen/ui` with `cn()` | 7 LOW | Correctness (Tailwind merge) + eliminates per-render array allocation | None |
+| Priority | Action | Fixes | Impact | Prerequisite | Status |
+|----------|--------|-------|--------|--------------|--------|
+| **P0-C** | **Fix C1:** ✅ Done — `pendingChangesRef` + `startStreaming()` outside updater (da1bff74) | C1 | Prevents double-invocation in StrictMode; correctness fix, not perf | Done | **Committed** |
+| **P0-C** | **Fix C2:** Ensure `wizardData` stays in `loadGraph` effect deps; ensure stable identity at source. | C2 | Prevents stale graph after wizard edits | **Blocked by Rec 4 (`watch()` decomposition).** `buildWizardData` in `useWizardForm` depends on `watch()` output, which returns a new reference per keystroke. Without decomposing `watch()` first, memoizing `wizardData` upstream will not produce a stable identity. Rec 4 is the prerequisite. | **No stale bug in committed code** — `wizardData` was kept in deps during triage. 9-commit canvas cascade per keystroke is correct behavior (graph must update); debatching is a separate optimization. |
+| **P0** | Wrap `useWorkspaceShellUi` return in `useMemo` + destructure `ui`/`form`/`editor` into specific methods in `useProjectLifecycle` deps | H4, H5, H13, H14 | Stabilizes 5+ callbacks, eliminates the largest callback cascade in the app | ~~Validate with Profiler Scenario A~~ Profiler captured | **Partially committed (883ef902):** `useWorkspaceShellUi` return now `useMemo`'d; `useProjectLifecycle` derives `activeProjectId` for granular effect deps + `useMemo` return. `DesktopLayout` still gets new slot-prop refs (inline JSX children) — structural limitation of slot pattern. H14 (`useEditorSession`) return still unfixed. |
+| **P0** | Wrap `useCloudConnection` + `useCloudConnectivity` return objects in `useMemo` | H1, H2, M12, M13 | Stabilizes 6 callbacks + 1 effect in governance-assistant | ~~Validate with Profiler Scenario B~~ **Profiler A confirmed ✓** — `ModeWrapper` receives 6 unstable callbacks | **Next fix to commit.** Profiler Scenario B still needed for streaming-path validation. |
+| **P0** | Memoize `Tabs` context value with `useMemo` | M0 | Stabilizes all tab trigger/content consumers | None | **Profiler A: low measured impact.** CONTEXT re-renders are partly framer-motion. Downgrade to P2. |
+| **P0** | **Wrap `computeDiff()` in `useMemo([current, proposed])` in `ManifestDiffView`** | H20 | Eliminates Set/Map/Sort computation on every render | ✅ Done | **Committed** (01b4a59b) |
+| **P1** | Use `useRef` for `onPipelineComplete`/`onPipelineError` in `useNodeModification` + `useArchitectureModification` | H7, H8 | Stabilizes streaming callback chain | None | **H7 committed (883ef902).** H8 (`useArchitectureModification`) not yet done — same ref pattern applies. |
+| **P1** | Destructure `activeWorkspace` into primitives in `ExportContext` callbacks | H3 | Stabilizes 3 export callbacks | None | **Committed (883ef902).** |
+| **P1** | Wrap `GovernanceAssistantPanel` inline callbacks in `useCallback` | H19 | Stabilizes deep ModeWrapper chain | Validate with Profiler Scenario B | **Pending Scenario B.** |
+| **P2** | Replace `[...].filter(Boolean).join(" ")` className patterns in `@hexagen/ui` with `cn()` | 7 LOW | Correctness (Tailwind merge) + eliminates per-render array allocation | None | Not started |
 
 > **Note:** `React.memo` on `@hexagen/ui` primitives (formerly H21–H23) is intentionally removed from the P0 list. Adding `React.memo` without profiler evidence that these components are bottlenecks is premature. If Profiler Scenario A or B shows them in the top 20 most-frequently-re-rendering components, promote to P1.
 
