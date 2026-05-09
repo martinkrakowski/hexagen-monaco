@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { HexagonNode } from "@hexagen/visualization";
 import type { Patch } from "@hexagen/reconciliation-engine";
 import { useModificationStreaming } from "./useModificationStreaming";
@@ -41,8 +41,13 @@ export function useNodeModification() {
     pendingChanges: [],
   });
 
-  const { startStreaming, abort: abortStreaming } = useModificationStreaming({
-    onPipelineComplete: (data) => {
+  // Stabilize callback references so useModificationStreaming's startStreaming
+  // identity is not invalidated on every render. Without useCallback, the
+  // inline object { onPipelineComplete, onPipelineError } gets a new identity
+  // each render, causing startStreaming to be recreated, which then
+  // destabilizes submitPendingChanges and the entire modification chain.
+  const onPipelineComplete = useCallback(
+    (data: { patches: unknown[]; transactionId: string }) => {
       const patches = data.patches as Patch[];
       const transactionId = data.transactionId;
       setState({
@@ -53,13 +58,20 @@ export function useNodeModification() {
         pendingChanges: [],
       });
     },
-    onPipelineError: (error) => {
-      setState((prev) => ({
-        ...prev,
-        status: "failed",
-        error,
-      }));
-    },
+    [],
+  );
+
+  const onPipelineError = useCallback((error: string) => {
+    setState((prev) => ({
+      ...prev,
+      status: "failed",
+      error,
+    }));
+  }, []);
+
+  const { startStreaming, abort: abortStreaming } = useModificationStreaming({
+    onPipelineComplete,
+    onPipelineError,
   });
 
   const recordChange = useCallback(
@@ -115,9 +127,12 @@ export function useNodeModification() {
     [recordChange],
   );
 
+  const pendingChangesRef = useRef(state.pendingChanges);
+  pendingChangesRef.current = state.pendingChanges;
+
   const submitPendingChanges = useCallback(
     (nodes: HexagonNode[]) => {
-      const changes = state.pendingChanges;
+      const changes = pendingChangesRef.current;
       if (changes.length === 0) return;
 
       const intent = buildIntentFromChanges(changes, nodes);
@@ -132,11 +147,17 @@ export function useNodeModification() {
 
       startStreaming(intent);
     },
-    [state.pendingChanges, startStreaming],
+    [startStreaming],
   );
 
+  // Use a ref to read the latest transactionId so acceptModification has a
+  // stable identity and does not need state.transactionId in its deps array.
+  const transactionIdRef = useRef(state.transactionId);
+  transactionIdRef.current = state.transactionId;
+
   const acceptModification = useCallback(async () => {
-    if (!state.transactionId) {
+    const currentTransactionId = transactionIdRef.current;
+    if (!currentTransactionId) {
       throw new Error("No active transaction to accept");
     }
 
@@ -147,7 +168,7 @@ export function useNodeModification() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionId: state.transactionId,
+          transactionId: currentTransactionId,
         }),
       });
 
@@ -177,54 +198,52 @@ export function useNodeModification() {
       }));
       throw error;
     }
-  }, [state.transactionId]);
+  }, []);
 
-  const rejectModification = useCallback(
-    async (reason?: string) => {
-      if (!state.transactionId) {
-        throw new Error("No active transaction to reject");
-      }
+  const rejectModification = useCallback(async (reason?: string) => {
+    const currentTransactionId = transactionIdRef.current;
+    if (!currentTransactionId) {
+      throw new Error("No active transaction to reject");
+    }
 
-      setState((prev) => ({ ...prev, status: "rejecting" }));
+    setState((prev) => ({ ...prev, status: "rejecting" }));
 
-      try {
-        const response = await fetch("/api/architecture/modify/reject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transactionId: state.transactionId,
-            reason: reason ?? "User rejected the changes",
-          }),
-        });
+    try {
+      const response = await fetch("/api/architecture/modify/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: currentTransactionId,
+          reason: reason ?? "User rejected the changes",
+        }),
+      });
 
-        const data = (await response.json()) as {
-          success: boolean;
-          error?: string;
-        };
+      const data = (await response.json()) as {
+        success: boolean;
+        error?: string;
+      };
 
-        if (!data.success) {
-          setState((prev) => ({
-            ...prev,
-            status: "failed",
-            error: data.error ?? "Reject failed",
-          }));
-          throw new Error(data.error ?? "Reject failed");
-        }
-
-        setState((prev) => ({ ...prev, status: "rejected" }));
-        return data;
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
+      if (!data.success) {
         setState((prev) => ({
           ...prev,
           status: "failed",
-          error: errorMsg,
+          error: data.error ?? "Reject failed",
         }));
-        throw error;
+        throw new Error(data.error ?? "Reject failed");
       }
-    },
-    [state.transactionId],
-  );
+
+      setState((prev) => ({ ...prev, status: "rejected" }));
+      return data;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setState((prev) => ({
+        ...prev,
+        status: "failed",
+        error: errorMsg,
+      }));
+      throw error;
+    }
+  }, []);
 
   const reset = useCallback(() => {
     abortStreaming();
