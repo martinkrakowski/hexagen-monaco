@@ -41,6 +41,8 @@ export function useCloudLLM() {
   const byokStoreRef = useRef<ByokStore | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
+  const messagesRef = useRef(state.messages);
+  messagesRef.current = state.messages;
 
   const setVault = useCallback((vault: UserSecretVaultPort) => {
     vaultRef.current = vault;
@@ -86,7 +88,7 @@ export function useCloudLLM() {
 
       isStreamingRef.current = true;
 
-      const priorMessages = state.messages;
+      const priorMessages = messagesRef.current;
       const now = Date.now();
       const assistantId = `assistant-${now}`;
 
@@ -191,7 +193,7 @@ export function useCloudLLM() {
         abortControllerRef.current = null;
       }
     },
-    [state.messages],
+    [],
   );
 
   const abort = useCallback(() => {

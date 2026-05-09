@@ -78,6 +78,11 @@ export function GovernanceAssistantPanel({
   const cloudConnection = useCloudConnection();
   const vault = useSecretVault();
 
+  const cloudConnectionRef = useRef(cloudConnection);
+  cloudConnectionRef.current = cloudConnection;
+  const cloudLLMRef = useRef(cloudLLM);
+  cloudLLMRef.current = cloudLLM;
+
   useEffect(() => {
     cloudLLM.setVault(vault);
   }, [cloudLLM, vault]);
@@ -97,25 +102,43 @@ export function GovernanceAssistantPanel({
 
   const handleCloudConnect = useCallback(
     async (provider: string, model: string) => {
-      await cloudConnection.connect(provider, model, vault);
+      await cloudConnectionRef.current.connect(provider, model, vault);
     },
-    [cloudConnection, vault],
+    [vault],
   );
 
   const handleCloudDisconnect = useCallback(() => {
-    cloudConnection.disconnect();
-    cloudLLM.clearMessages();
-  }, [cloudConnection, cloudLLM]);
+    cloudConnectionRef.current.disconnect();
+    cloudLLMRef.current.clearMessages();
+  }, []);
 
   const handleRetryConnection = useCallback(() => {
-    if (cloudConnection.error) {
-      const lastProvider = cloudConnection.config?.provider;
-      const lastModel = cloudConnection.config?.model;
+    const cc = cloudConnectionRef.current;
+    if (cc.error) {
+      const lastProvider = cc.config?.provider;
+      const lastModel = cc.config?.model;
       if (lastProvider && lastModel) {
-        cloudConnection.retry(lastProvider, lastModel, vault);
+        cc.retry(lastProvider, lastModel, vault);
       }
     }
-  }, [cloudConnection, vault]);
+  }, [vault]);
+
+  const handleSendMessage = useCallback((content: string) => {
+    const config = cloudConnectionRef.current.config;
+    if (config) {
+      cloudLLMRef.current.sendMessage(content, config);
+    }
+  }, []);
+
+  const handleSwitchToCloud = useCallback(() => {
+    setMode("cloud");
+    setPanelView("main");
+  }, []);
+
+  const handleResetConfig = useCallback(() => {
+    resetLocalAIConfig();
+    returnToModelSettings();
+  }, [returnToModelSettings]);
 
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
@@ -228,11 +251,7 @@ export function GovernanceAssistantPanel({
         cloudMessages={cloudLLM.messages as CloudChatMessage[]}
         cloudLLMStatus={cloudLLM.status}
         cloudLLMError={cloudLLM.errorMessage}
-        onSendMessage={(content) => {
-          if (cloudConnection.config) {
-            cloudLLM.sendMessage(content, cloudConnection.config);
-          }
-        }}
+        onSendMessage={handleSendMessage}
         onAbort={cloudLLM.abort}
         onClear={cloudLLM.clearMessages}
         modelName={modelName}
@@ -248,10 +267,7 @@ export function GovernanceAssistantPanel({
         onCancelDownload={cancelDownload}
         onOpenSettings={handleOpenSettings}
         onBackFromSettings={handleBackFromSettings}
-        onSwitchToCloud={() => {
-          setMode("cloud");
-          setPanelView("main");
-        }}
+        onSwitchToCloud={handleSwitchToCloud}
         loadedModel={loadedModel}
         messagesLength={messages.length}
         onSwitchModel={switchModel as (modelId: DomainModelId) => Promise<void>}
@@ -262,10 +278,7 @@ export function GovernanceAssistantPanel({
           hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
         }
         onInitModel={initializeModel}
-        onResetConfig={() => {
-          resetLocalAIConfig();
-          returnToModelSettings();
-        }}
+        onResetConfig={handleResetConfig}
       />
     );
   }
