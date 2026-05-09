@@ -61,10 +61,11 @@ export function ManifestPreview({
   const [activeFixViolation, setActiveFixViolation] =
     useState<ValidationItem | null>(null);
 
-  // Sync with prop if parent regenerates
-  useMemo(() => setLocalManifestYaml(manifestYaml), [manifestYaml]);
-
   const autoFixAppliedRef = useRef(false);
+  useEffect(() => {
+    setLocalManifestYaml(manifestYaml);
+    autoFixAppliedRef.current = false;
+  }, [manifestYaml]);
   useEffect(() => {
     if (autoFixAppliedRef.current) return;
     autoFixAppliedRef.current = true;

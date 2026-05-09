@@ -60,7 +60,10 @@ export function ActionBar({
         </Button>
       )}
 
-      <p className="text-xs text-muted-foreground text-center">
+      <p
+        className="text-xs text-muted-foreground text-center"
+        aria-live="polite"
+      >
         {isGenerating ? (
           "AI is analyzing your description to identify domain structures, ports, and adapters."
         ) : disabledTooltip ? (

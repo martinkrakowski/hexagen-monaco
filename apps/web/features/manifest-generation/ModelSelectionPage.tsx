@@ -32,14 +32,14 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
 
   const handleSelectModel = useCallback(
     async (modelId: DomainModelId) => {
-      llmContext.initializeModel(modelId).catch(() => {});
+      return llmContext.initializeModel(modelId);
     },
     [llmContext],
   );
 
   const handleDeleteModel = useCallback(
     async (modelId: DomainModelId) => {
-      llmContext.deleteCachedModel(modelId);
+      return llmContext.deleteCachedModel(modelId);
     },
     [llmContext],
   );

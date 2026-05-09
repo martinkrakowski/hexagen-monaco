@@ -43,9 +43,14 @@ export function GenerateWithAi({
   const searchParams = useSearchParams();
   const modelSelectionIntent = useModelSelectionIntent();
   const [formState, formHandlers] = useGenerateWithAiForm();
+  const [mounted, setMounted] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const [previewActiveTab, setPreviewActiveTab] =
     useState<ViewTab>("context-map");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   /**
    * Tier 1 (Synchronous): Check if server has env-var API key configured.
@@ -379,7 +384,8 @@ export function GenerateWithAi({
         onSwitchModel={() => navigateToModelSelection(false)}
       />
 
-      {(isModelLoading || isModelError) &&
+      {mounted &&
+        (isModelLoading || isModelError) &&
         createPortal(
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"

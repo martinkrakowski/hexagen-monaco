@@ -28,7 +28,7 @@ export function ExampleCard({
       ]
         .filter(Boolean)
         .join(" ")}
-      aria-label={description}
+      aria-label={`${title}: ${description}`}
     >
       <strong className="block">{title}</strong>
       <span className="text-sm text-muted-foreground">{description}</span>

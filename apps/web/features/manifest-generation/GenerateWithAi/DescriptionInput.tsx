@@ -30,6 +30,7 @@ export function DescriptionInput({
         </div>
         <Textarea
           id="description"
+          aria-label="Project description"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
