@@ -1,4 +1,5 @@
 import { Textarea } from "@hexagen/ui";
+import { AiReadyIndicator } from "./AiReadyIndicator";
 
 const MAX_LENGTH = 2000;
 const MIN_LENGTH = 10;
@@ -8,6 +9,7 @@ interface DescriptionInputProps {
   onChange: (value: string) => void;
   charCount: number;
   disabled: boolean;
+  isAiReady: boolean;
 }
 
 export function DescriptionInput({
@@ -15,42 +17,32 @@ export function DescriptionInput({
   onChange,
   charCount,
   disabled,
+  isAiReady,
 }: DescriptionInputProps) {
   return (
-    <section>
-      <label
-        htmlFor="description"
-        className="block text-sm font-medium text-muted-foreground mb-2"
-      >
-        Project Description
-      </label>
-      <Textarea
-        id="description"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Example: A task management system with user authentication, project boards, and real-time collaboration features..."
-        className="w-full min-h-[var(--textarea-min-height)] bg-input border border-input rounded-md px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-y"
-        disabled={disabled}
-      />
-      <div className="flex justify-end mt-1">
-        <span
-          className={[
-            "text-sm",
-            charCount < MIN_LENGTH
-              ? "text-muted-foreground"
-              : charCount > MAX_LENGTH
-                ? "text-destructive"
-                : "text-success",
-          ].join(" ")}
-        >
-          {charCount} / {MAX_LENGTH}
-        </span>
+    <div>
+      <div className="bg-card border border-card-border rounded-lg textarea-glow">
+        <div className="p-4 pb-2 flex items-center justify-between border-b border-card-border">
+          <AiReadyIndicator isReady={isAiReady} />
+          <span className="text-xs font-mono text-muted-foreground">
+            {charCount} / {MAX_LENGTH}
+          </span>
+        </div>
+        <Textarea
+          id="description"
+          aria-label="Project description"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
+          className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/60 p-4 text-sm leading-relaxed resize-none focus:outline-none h-48"
+          disabled={disabled}
+        />
       </div>
       {charCount < MIN_LENGTH && charCount > 0 && (
         <p className="text-sm text-muted-foreground mt-1">
           Minimum {MIN_LENGTH} characters required
         </p>
       )}
-    </section>
+    </div>
   );
 }

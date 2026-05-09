@@ -9,13 +9,11 @@ import type { ManifestViewData } from "@hexagen/manifest-generation";
 
 interface ContextMapViewProps {
   viewData: ManifestViewData;
-  onSelectContext: (name: string) => void;
   isFullScreen?: boolean;
 }
 
 export function ContextMapView({
   viewData,
-  onSelectContext,
   isFullScreen,
 }: ContextMapViewProps) {
   return (
@@ -46,16 +44,7 @@ export function ContextMapView({
           return (
             <div
               key={`${ctx.name}-${ctxIndex}`}
-              className={`rounded-lg p-4 bg-card border ${cardBorder} cursor-pointer transition-colors duration-200 shadow-sm hover:shadow-md animate-fade-in-up`}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelectContext(ctx.name)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelectContext(ctx.name);
-                }
-              }}
+              className={`rounded-lg p-4 bg-card border ${cardBorder} transition-colors duration-200 shadow-sm animate-fade-in-up`}
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold px-2 py-1 rounded-sm font-mono tracking-wider uppercase text-info bg-info/10">

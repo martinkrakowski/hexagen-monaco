@@ -12,7 +12,6 @@ import {
   ArrowRight,
   RefreshCw,
   Network,
-  Hexagon,
   Component,
   ShieldCheck,
 } from "lucide-react";
@@ -25,7 +24,6 @@ interface AIGenerationPageProps {
 
 const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
   { id: "context-map", icon: Network, label: "Context Map" },
-  { id: "hexagonal", icon: Hexagon, label: "Hexagonal" },
   { id: "mermaid", icon: Component, label: "Mermaid" },
   { id: "validation", icon: ShieldCheck, label: "Validation" },
 ];
@@ -47,7 +45,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
         setPendingManifest(yaml, wizardData, projectName);
-        router.push("/projects/new/ai/approve");
+        router.push("/projects/new/ai/accept");
       } catch (error) {
         const message =
           error instanceof Error
@@ -96,7 +94,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
               onClick={() => previewActions.onTabChange(id)}
               className={`flex items-center px-2.5 py-1 rounded-md text-xs transition-colors ${
                 previewActions.activeTab === id
-                  ? "bg-accent/10 text-accent border border-accent/20"
+                  ? "bg-accent text-accent-foreground border border-accent"
                   : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
               }`}
             >
@@ -112,10 +110,16 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     if (previewActions) {
       return (
         <>
-          <Button variant="outline" onClick={previewActions.onRegenerate}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Regenerate
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={previewActions.onBack}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <Button variant="secondary" onClick={previewActions.onRegenerate}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Regenerate
+            </Button>
+          </div>
           <Button
             onClick={() =>
               previewActions.onUseManifest(previewActions.manifestYaml)
@@ -131,7 +135,10 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
 
     return (
       <>
-        <Button variant="outline" onClick={() => router.push("/projects/new")}>
+        <Button
+          variant="secondary"
+          onClick={() => router.push("/projects/new")}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
@@ -145,17 +152,19 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       headerContent={renderHeaderContent()}
       footer={renderFooter()}
     >
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="h-full flex flex-col">
         {parseError && (
-          <div className="p-4 mb-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive">
+          <div className="p-4 mb-4 bg-destructive/10 border border-destructive/30 rounded-md text-sm text-destructive shrink-0">
             {parseError}
           </div>
         )}
-        <GenerateWithAi
-          onUseManifest={handleUseManifest}
-          llmContext={llmContext}
-          onPreviewStateChange={setPreviewActions}
-        />
+        <div className="flex-1 min-h-0">
+          <GenerateWithAi
+            onUseManifest={handleUseManifest}
+            llmContext={llmContext}
+            onPreviewStateChange={setPreviewActions}
+          />
+        </div>
       </div>
     </ProjectsShell>
   );

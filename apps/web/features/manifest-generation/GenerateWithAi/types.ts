@@ -16,6 +16,7 @@ export interface GenerateWithAiProps {
 }
 
 export interface PreviewFooterActions {
+  onBack: () => void;
   onRegenerate: () => void;
   onUseManifest: (yaml: string) => void;
   manifestYaml: string;
@@ -39,21 +40,6 @@ export interface HeaderSectionProps {
   subtitle: string;
 }
 
-export interface FormSectionProps {
-  description: string;
-  onDescriptionChange: (value: string) => void;
-  platform: string;
-  onPlatformChange: (value: string) => void;
-  deployment: string;
-  onDeploymentChange: (value: string) => void;
-  maxContexts: number;
-  onMaxContextsChange: (value: number) => void;
-  selectedExample: number | null;
-  onUseExample: (example: string, index: number) => void;
-  charCount: number;
-  isDisabled: boolean;
-}
-
 export interface ModelCapabilityCheckProps {
   modelNativelyCapable: boolean;
   manifestCapable: boolean;
@@ -67,7 +53,7 @@ export interface ActionBarProps {
   canGenerate: boolean;
   isGenerating: boolean;
   onGenerate: () => void;
-  onCancel?: () => void;
+  onCancel: () => void;
   disabledTooltip?: string;
 }
 
@@ -87,6 +73,7 @@ export interface StateViewProps {
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;
   onRetryFromError: () => void;
+  onYamlChange?: (yaml: string) => void;
   externalActiveTab?: ViewTab;
   onTabChange?: (tab: ViewTab) => void;
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
@@ -9,15 +11,17 @@ import {
   parseYamlToViewData,
 } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
+import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
+import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
 import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
 import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
+import { HeaderSection } from "./HeaderSection";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
-import { ModelSelectionView } from "./ModelSelectionView";
 import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
 import type { GenerateWithAiProps, ViewTab } from "./types";
@@ -27,6 +31,7 @@ import {
 } from "@/lib/manifest-generation";
 import { hasServerLLMAccessKey } from "../../../app/lib/wire.client";
 import type { CapabilitiesResponse } from "../types/capabilities";
+import { useModelSelectionIntent } from "../store/useModelSelectionIntent";
 
 export function GenerateWithAi({
   onUseManifest,
@@ -34,12 +39,18 @@ export function GenerateWithAi({
   onGeneratingStateChange,
   onPreviewStateChange,
 }: GenerateWithAiProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const modelSelectionIntent = useModelSelectionIntent();
   const [formState, formHandlers] = useGenerateWithAiForm();
-  const [rememberChoice, setRememberChoice] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const [previewActiveTab, setPreviewActiveTab] =
     useState<ViewTab>("context-map");
-  const rememberChoiceRef = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   /**
    * Tier 1 (Synchronous): Check if server has env-var API key configured.
@@ -89,10 +100,6 @@ export function GenerateWithAi({
     return unsubscribe;
   }, [hasServerApiKey]);
 
-  useEffect(() => {
-    rememberChoiceRef.current = rememberChoice;
-  }, [rememberChoice]);
-
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
 
@@ -111,16 +118,13 @@ export function GenerateWithAi({
   useEffect(() => {
     if (flowState.state !== "generating") return;
     generateRef.current(formState.description, {
-      platform: formState.platform,
       deployment: formState.deployment,
       signal: undefined,
-      // If no cloud keys but WebLLM available, use local generation
       preferLocal: !hasCloudKeys && hasLocalLLM,
     });
   }, [
     flowState.state,
     formState.description,
-    formState.platform,
     formState.deployment,
     hasCloudKeys,
     hasLocalLLM,
@@ -146,11 +150,14 @@ export function GenerateWithAi({
   const capability = assessModelCapability(loadedModelId, overrideModelCheck);
   const manifestCapable = capability.isCapable;
 
+  const isNativelyCapable =
+    capability.isCapable && !capability.reason.includes("Override");
+
   useEffect(() => {
-    if (capability.isCapable && !capability.reason.includes("Override")) {
+    if (isNativelyCapable) {
       setOverrideModelCheck(false);
     }
-  }, [capability]);
+  }, [isNativelyCapable]);
 
   // Gate on both model capability AND LLM provider availability.
   // THREE-TIER GATE: button enabled if ANY tier has keys/capability
@@ -170,6 +177,14 @@ export function GenerateWithAi({
     ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
     : undefined;
 
+  const navigateToModelSelection = useCallback(
+    (autoGenerate = false) => {
+      modelSelectionIntent.setAutoGenerate(autoGenerate);
+      router.push("/projects/new/ai/models");
+    },
+    [modelSelectionIntent, router],
+  );
+
   const handleGenerate = () => {
     if (!canGenerate) return;
     const prefs = getModelPreferences();
@@ -179,14 +194,43 @@ export function GenerateWithAi({
     ) {
       actions.transitionTo("generating");
     } else {
-      actions.transitionTo("model_selection");
+      navigateToModelSelection(true);
     }
   };
+
+  const hasReturnedFromModelSelection = searchParams.get("generate") === "1";
+
+  useEffect(() => {
+    if (!hasReturnedFromModelSelection) return;
+    if (flowState.state !== "idle") return;
+    if (!formHandlers.isValid) return;
+    const prefs = getModelPreferences();
+    if (
+      llmContext.engineState.status === "ready" ||
+      (prefs.rememberChoice && prefs.lastModelId)
+    ) {
+      actions.transitionTo("generating");
+      router.replace("/projects/new/ai");
+    }
+  }, [
+    hasReturnedFromModelSelection,
+    flowState.state,
+    formHandlers.isValid,
+    llmContext.engineState.status,
+    actions,
+    router,
+  ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
     stagedGen.reset();
     actions.regenerateManifest();
   }, [stagedGen, actions]);
+
+  const handleRetryRef = useRef(handleRetryOrRegenerate);
+  handleRetryRef.current = handleRetryOrRegenerate;
+
+  const onUseManifestRef = useRef(onUseManifest);
+  onUseManifestRef.current = onUseManifest;
 
   useEffect(() => {
     if (!onPreviewStateChange) return;
@@ -196,8 +240,12 @@ export function GenerateWithAi({
         (v) => v.status === "fail",
       );
       onPreviewStateChange({
-        onRegenerate: handleRetryOrRegenerate,
-        onUseManifest: (yaml) => onUseManifest?.(yaml),
+        onBack: () => {
+          actions.clearError();
+          stagedGen.reset();
+        },
+        onRegenerate: () => handleRetryRef.current(),
+        onUseManifest: (yaml) => onUseManifestRef.current?.(yaml),
         manifestYaml: flowState.manifestContent,
         hasFailures,
         activeTab: previewActiveTab,
@@ -215,15 +263,9 @@ export function GenerateWithAi({
     flowState.manifestContent,
     onPreviewStateChange,
     previewActiveTab,
-    handleRetryOrRegenerate,
-    onUseManifest,
   ]);
 
-  if (
-    flowState.state !== "idle" &&
-    flowState.state !== "generating" &&
-    flowState.state !== "model_selection"
-  ) {
+  if (flowState.state !== "idle" && flowState.state !== "generating") {
     return (
       <StateView
         flowState={flowState}
@@ -232,41 +274,38 @@ export function GenerateWithAi({
         onConfirmAndContinue={handleRetryOrRegenerate}
         onRegenerate={handleRetryOrRegenerate}
         onRetryFromError={handleRetryOrRegenerate}
+        onYamlChange={(yaml) => actions.saveGenerationResult(yaml)}
         externalActiveTab={previewActiveTab}
         onTabChange={setPreviewActiveTab}
       />
     );
   }
 
-  if (flowState.state === "model_selection") {
-    return (
-      <ModelSelectionView
-        flowState={flowState}
-        llmContext={llmContext}
-        rememberChoice={rememberChoice}
-        onRememberChoiceChange={setRememberChoice}
-        onSelectModel={(modelId) =>
-          actions.selectLocalModel(
-            modelId as DomainModelId,
-            rememberChoiceRef.current,
-          )
-        }
-        onBack={() => actions.transitionTo("idle")}
-        onModelReady={() => actions.transitionTo("generating")}
-      />
-    );
-  }
+  const engineStatus = llmContext.engineState.status;
+  const isModelLoading =
+    engineStatus === "downloading" ||
+    (engineStatus === "loading_vram" && !llmContext.engineState.autoLoading);
+  const isModelError = engineStatus === "error";
 
   const isGenerating = flowState.state === "generating";
   const hasError = stagedGen.generationError !== null;
 
   return (
     <GenerateWithAiLayout>
+      <HeaderSection
+        title="Project with AI"
+        subtitle="Describe what you want to build. The more context you provide, the better the result."
+      />
+
       <DescriptionInput
         value={formState.description}
-        onChange={(value) => formHandlers.setValue("description", value)}
+        onChange={(value) => {
+          formHandlers.setValue("description", value);
+          formHandlers.setValue("selectedExample", null);
+        }}
         charCount={formHandlers.charCount}
         disabled={isGenerating}
+        isAiReady={hasAnyProvider}
       />
 
       {hasError && (
@@ -322,8 +361,6 @@ export function GenerateWithAi({
       />
 
       <AdvancedOptionsSection
-        platform={formState.platform}
-        onPlatformChange={(value) => formHandlers.setValue("platform", value)}
         deployment={formState.deployment}
         onDeploymentChange={(value) =>
           formHandlers.setValue("deployment", value)
@@ -333,6 +370,7 @@ export function GenerateWithAi({
           formHandlers.setValue("maxContexts", value)
         }
         isDisabled={isGenerating}
+        onChangeModel={() => navigateToModelSelection(false)}
       />
 
       <ModelCapabilityCheck
@@ -343,19 +381,44 @@ export function GenerateWithAi({
         loadedModelId={loadedModelId}
         overrideModelCheck={overrideModelCheck}
         onOverrideChange={setOverrideModelCheck}
-        onSwitchModel={() => actions.transitionTo("model_selection")}
+        onSwitchModel={() => navigateToModelSelection(false)}
       />
 
-      <ActionBar
-        canGenerate={canGenerate && !hasError}
-        isGenerating={isGenerating}
-        onGenerate={handleGenerate}
-        onCancel={() => {
-          stagedGen.reset();
-          actions.transitionTo("idle");
-        }}
-        disabledTooltip={disabledTooltip}
-      />
+      {mounted &&
+        (isModelLoading || isModelError) &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && isModelLoading) return;
+            }}
+            aria-modal="true"
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ModelProgressCard
+                status={engineStatus as LLMEngineStatus}
+                progress={llmContext.engineState.progress}
+                errorMessage={llmContext.engineState.errorMessage}
+                onCancel={() => navigateToModelSelection(false)}
+                onRetry={() => {
+                  const modelId = llmContext.engineState.loadedModelId;
+                  if (modelId) llmContext.initializeModel(modelId);
+                }}
+                model={llmContext.loadedModel as ModelMetadata | null}
+                modelId={
+                  llmContext.engineState.loadedModelId as
+                    | DomainModelId
+                    | undefined
+                }
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {isGenerating && (
         <ThinkingBlock
@@ -364,6 +427,17 @@ export function GenerateWithAi({
           stageProgress={stagedGen.stageProgress}
         />
       )}
+
+      <ActionBar
+        canGenerate={canGenerate && !hasError}
+        isGenerating={isGenerating}
+        onGenerate={handleGenerate}
+        onCancel={() => {
+          actions.clearError();
+          stagedGen.reset();
+        }}
+        disabledTooltip={disabledTooltip}
+      />
     </GenerateWithAiLayout>
   );
 }

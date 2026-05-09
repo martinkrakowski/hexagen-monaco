@@ -142,7 +142,7 @@ export function ModelCard({
               </span>
             )}
             {isRecommended && (
-              <span className="inline-flex items-center rounded-full bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent shrink-0">
+              <span className="inline-flex items-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-medium text-accent-foreground shrink-0">
                 ✨ Recommended
               </span>
             )}

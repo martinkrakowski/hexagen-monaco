@@ -106,6 +106,7 @@ export function useModelSelectionFlowState(
       ...prev,
       error: null,
       state: "idle",
+      manifestContent: undefined,
     }));
   }, []);
 

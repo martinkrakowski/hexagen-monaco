@@ -8,6 +8,7 @@ interface PendingManifestState {
   formValues: ProjectSpec | null;
   projectName: string | null;
   set: (yaml: string, formValues: ProjectSpec, projectName: string) => void;
+  updateYaml: (yaml: string) => void;
   clear: () => void;
 }
 
@@ -17,6 +18,9 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
   projectName: null,
   set: (yaml: string, formValues: ProjectSpec, projectName: string) => {
     set({ yaml, formValues, projectName });
+  },
+  updateYaml: (yaml: string) => {
+    set({ yaml });
   },
   clear: () => {
     set({ yaml: null, formValues: null, projectName: null });

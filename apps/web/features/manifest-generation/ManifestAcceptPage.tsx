@@ -6,8 +6,8 @@ import { Button } from "@hexagen/ui";
 import {
   ArrowLeft,
   ArrowRight,
+  RefreshCw,
   Network,
-  Hexagon,
   Component,
   ShieldCheck,
 } from "lucide-react";
@@ -21,7 +21,6 @@ import { parseYamlToViewData } from "@hexagen/manifest-generation";
 
 const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
   { id: "context-map", icon: Network, label: "Context Map" },
-  { id: "hexagonal", icon: Hexagon, label: "Hexagonal" },
   { id: "mermaid", icon: Component, label: "Mermaid" },
   { id: "validation", icon: ShieldCheck, label: "Validation" },
 ];
@@ -84,6 +83,11 @@ export function ManifestAcceptPage() {
     router.push("/projects/new/ai");
   }, [pendingManifest, router]);
 
+  const handleRegenerate = useCallback(() => {
+    pendingManifest.clear();
+    router.push("/projects/new/ai?generate=1");
+  }, [pendingManifest, router]);
+
   const hasFailures =
     viewData?.validationItems.some((v) => v.status === "fail") ?? false;
 
@@ -132,7 +136,7 @@ export function ManifestAcceptPage() {
               onClick={() => setActiveTab(id)}
               className={`flex items-center px-2.5 py-1 rounded-md text-xs transition-colors ${
                 activeTab === id
-                  ? "bg-accent/10 text-accent border border-accent/20"
+                  ? "bg-accent text-accent-foreground border border-accent"
                   : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
               }`}
             >
@@ -190,16 +194,53 @@ export function ManifestAcceptPage() {
       headerContent={renderHeaderContent()}
       footer={
         <>
-          <Button variant="outline" onClick={handleBack} disabled={isSaving}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Generation
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={handleBack}
+              disabled={isSaving}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleRegenerate}
+              disabled={isSaving}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Regenerate
+            </Button>
+          </div>
           <Button
             onClick={handleAccept}
             disabled={isSaving || !canAccept || !viewData}
           >
+            {isSaving ? (
+              <svg
+                className="animate-spin h-4 w-4 ml-2"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+            ) : (
+              <ArrowRight className="w-4 h-4 ml-2" />
+            )}
             Use This Manifest
-            <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </>
       }
@@ -210,10 +251,11 @@ export function ManifestAcceptPage() {
         </div>
       )}
       <ManifestPreview
-        manifestYaml={pendingManifest.yaml}
+        manifestYaml={pendingManifest.yaml ?? ""}
         onApprove={handleAccept}
-        onRegenerate={handleBack}
+        onRegenerate={handleRegenerate}
         onStartOver={handleBack}
+        onYamlChange={pendingManifest.updateYaml}
         hideActions
         hideHeader
         embedded

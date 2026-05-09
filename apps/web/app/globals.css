@@ -385,6 +385,11 @@ dialog::backdrop {
     0 0 0 4px hsl(var(--ring));
 }
 
+.textarea-glow:focus-within {
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.5), 0 0 20px -4px hsl(var(--primary) / 0.2);
+  transition: box-shadow 0.2s ease;
+}
+
 /* ── Animation utilities ───────────────────────────────────────────────────── */
 @keyframes slide {
   from {
@@ -507,6 +512,9 @@ dialog::backdrop {
   .animate-fade-in-up,
   .detail-rolodex-enter {
     opacity: 1;
+  }
+  .textarea-glow:focus-within {
+    transition: none;
   }
 }
 

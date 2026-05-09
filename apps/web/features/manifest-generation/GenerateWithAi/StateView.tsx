@@ -18,6 +18,7 @@ export function StateView({
   onConfirmAndContinue,
   onRegenerate,
   onRetryFromError,
+  onYamlChange,
   externalActiveTab,
   onTabChange,
 }: StateViewProps) {
@@ -78,6 +79,7 @@ export function StateView({
         onApprove={(yaml) => onUseManifest?.(yaml)}
         onRegenerate={onRegenerate}
         onStartOver={actions.rejectManifest}
+        onYamlChange={onYamlChange}
         hideActions
         hideHeader
         embedded
