@@ -256,15 +256,18 @@ export function ModelSettingsView({
     }
   };
 
-  const totalCached = Array.from(cacheStatus.values()).filter(
-    (s) => s.isCached,
-  ).length;
-  const totalCachedSize = LOCAL_MODELS.reduce((sum, model) => {
-    if (cacheStatus.get(model.modelId)?.isCached) {
-      return sum + model.downloadSizeGB;
-    }
-    return sum;
-  }, 0);
+  const { totalCached, totalCachedSize } = useMemo(() => {
+    const cached = Array.from(cacheStatus.values()).filter(
+      (s) => s.isCached,
+    ).length;
+    const cachedSize = LOCAL_MODELS.reduce((sum, model) => {
+      if (cacheStatus.get(model.modelId)?.isCached) {
+        return sum + model.downloadSizeGB;
+      }
+      return sum;
+    }, 0);
+    return { totalCached: cached, totalCachedSize: cachedSize };
+  }, [cacheStatus]);
 
   return (
     <div className="h-full flex flex-col bg-card">
