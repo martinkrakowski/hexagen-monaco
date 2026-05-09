@@ -61,9 +61,16 @@ export function useCanvasState(
   const [error, setError] = useState<Error | null>(null);
 
   // Ref for wizardData so callbacks that read it don't need it in their dep arrays.
-  // wizardData changes are handled reactively via the useEffect that calls loadGraph.
   const wizardDataRef = useRef(wizardData);
   wizardDataRef.current = wizardData;
+
+  // Content-derived signal: only fires loadGraph when wizardData's
+  // serialized content actually changes, not on every identity churn
+  // from useWatch in the wizard form.
+  const wizardDataHash = useMemo(
+    () => (wizardData ? generateManifestHash(wizardData) : null),
+    [wizardData],
+  );
 
   // Zustand store for structural state
   const {
@@ -228,21 +235,25 @@ export function useCanvasState(
 
     const wd = wizardDataRef.current;
     if (wd?.boundedContexts?.length) {
+      const newHash = generateManifestHash(wd);
+
+      // Early exit: content unchanged — skip regeneration, store writes,
+      // and viewport reset. This prevents per-keystroke cascades when
+      // wizardData identity churns but the serialized form is identical.
+      if (manifestHash === newHash && manifestHash !== null) {
+        return;
+      }
+
       const regenerated = regenerateGraphFromWizard();
       if (!regenerated) return;
       const { nodes: compiledNodes, edges } = regenerated;
 
-      // Check if manifest changed
-      const newHash = generateManifestHash(wd);
       const manifestChanged = manifestHash !== null && manifestHash !== newHash;
 
-      // Apply saved positions or calculate new layout
       let finalNodes: HexagonNode[];
       if (manifestChanged || Object.keys(nodePositions).length === 0) {
-        // Manifest changed or no saved positions - calculate layout
         finalNodes = await calculateElkLayout(compiledNodes, edges);
       } else {
-        // Use saved positions
         finalNodes = applySavedPositions(compiledNodes);
       }
 
@@ -308,7 +319,7 @@ export function useCanvasState(
     if (layoutLoaded) {
       loadGraph();
     }
-  }, [layoutLoaded, wizardData, loadGraph]);
+  }, [layoutLoaded, wizardDataHash, loadGraph]);
 
   /**
    * Handle node drag stop - update both stores

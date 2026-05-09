@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import {
   useForm,
   useWatch,
@@ -16,6 +16,17 @@ import {
 
 import { emptyFormValues } from "../../project-wizard/config";
 import { buildWizardData } from "@hexagen/wizard-orchestration";
+
+function stableHash(data: unknown): string {
+  const str = JSON.stringify(data);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
+}
 
 export interface UseWizardFormReturn {
   form: UseFormReturn<ProjectConfig>;
@@ -56,17 +67,40 @@ export function useWizardForm(): UseWizardFormReturn {
   });
   const governance = useWatch({ control: form.control, name: "governance" });
 
-  // Memo: re-computes only when a watched form slice changes
-  const wizardData = useMemo(
+  // Content-keyed memo: re-computes only when the serialized form content
+  // actually changes. useWatch returns new object identity on every
+  // keystroke (e.g. typing in governance.workspaceName), but we only
+  // need a new wizardData when the *content* differs — the canvas
+  // and code-view consumers react to structural changes, not identity.
+  const contentHash = useMemo(
     () =>
-      buildWizardData(
+      stableHash({
         boundedContexts,
         externalContexts,
         peerMappings,
         governance,
-      ),
+      }),
     [boundedContexts, externalContexts, peerMappings, governance],
   );
+  const wizardDataRef = useRef<WizardData>(
+    buildWizardData(
+      boundedContexts,
+      externalContexts,
+      peerMappings,
+      governance,
+    ),
+  );
+  const prevHashRef = useRef<string>(contentHash);
+  if (contentHash !== prevHashRef.current) {
+    prevHashRef.current = contentHash;
+    wizardDataRef.current = buildWizardData(
+      boundedContexts,
+      externalContexts,
+      peerMappings,
+      governance,
+    );
+  }
+  const wizardData = wizardDataRef.current;
 
   // Returns a validation predicate by step index; closures over the
   // reactive boundedContexts slice so it updates as the user edits.
