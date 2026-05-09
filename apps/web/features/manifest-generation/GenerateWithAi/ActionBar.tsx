@@ -4,18 +4,17 @@ import type { ActionBarProps } from "./types";
 export function ActionBar({
   canGenerate,
   isGenerating,
-  onCancel,
   onGenerate,
   disabledTooltip,
 }: ActionBarProps) {
   return (
     <div className="space-y-4">
       <Button
-        onClick={isGenerating ? onCancel : onGenerate}
-        disabled={isGenerating ? false : !canGenerate}
+        onClick={onGenerate}
+        disabled={!canGenerate || isGenerating}
         className="w-full bg-primary text-primary-foreground font-medium h-11 rounded-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         size="lg"
-        title={isGenerating ? undefined : disabledTooltip}
+        title={disabledTooltip}
       >
         {isGenerating ? (
           <>
@@ -45,16 +44,6 @@ export function ActionBar({
           "Generate Manifest"
         )}
       </Button>
-
-      {isGenerating && onCancel && (
-        <Button
-          onClick={onCancel}
-          variant="ghost"
-          className="w-full h-10 font-medium rounded-md"
-        >
-          Cancel
-        </Button>
-      )}
 
       <p className="text-xs text-muted-foreground text-center">
         {isGenerating ? (

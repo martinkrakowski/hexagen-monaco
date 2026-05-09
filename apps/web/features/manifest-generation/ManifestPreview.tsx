@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import {
   Network,
-  Hexagon,
   Component,
   ShieldCheck,
   ArrowRight,
@@ -13,7 +12,6 @@ import {
 import { Button } from "@hexagen/ui";
 import { ManifestYamlSidebar } from "./ManifestYamlSidebar";
 import { ContextMapView } from "./ContextMapView";
-import { HexagonalArchitectureView } from "./HexagonalArchitectureView";
 import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
 import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
@@ -33,7 +31,7 @@ interface ManifestPreviewProps {
   embedded?: boolean;
 }
 
-export type ViewTab = "context-map" | "hexagonal" | "mermaid" | "validation";
+export type ViewTab = "context-map" | "mermaid" | "validation";
 
 export function ManifestPreview({
   manifestYaml,
@@ -50,7 +48,6 @@ export function ManifestPreview({
     useState<ViewTab>("context-map");
   const activeTab = externalActiveTab ?? internalActiveTab;
   const setActiveTab = onTabChange ?? setInternalActiveTab;
-  const [activeContext, setActiveContext] = useState<string | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Local state for manifest to allow inline auto-fixes
@@ -71,11 +68,6 @@ export function ManifestPreview({
   );
 
   const hasFailures = viewData.validationItems.some((v) => v.status === "fail");
-
-  const handleSelectContext = (name: string) => {
-    setActiveContext(name);
-    setActiveTab("hexagonal");
-  };
 
   return (
     <div
@@ -103,7 +95,7 @@ export function ManifestPreview({
       {!hideHeader && (
         <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 pl-5 pr-14 py-3 border-b border-border bg-surface shrink-0">
           <div className="flex flex-wrap items-center gap-4">
-            <Button variant="outline" size="sm" onClick={onStartOver}>
+            <Button variant="secondary" size="sm" onClick={onStartOver}>
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Start Over
             </Button>
             <div>
@@ -127,27 +119,20 @@ export function ManifestPreview({
             <button
               onClick={() => {
                 setActiveTab("context-map");
-                setActiveContext(null);
               }}
-              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "context-map" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "context-map" ? "bg-accent text-accent-foreground border border-accent" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
             >
               <Network className="w-3.5 h-3.5 mr-1.5" /> Context Map
             </button>
             <button
-              onClick={() => setActiveTab("hexagonal")}
-              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "hexagonal" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
-            >
-              <Hexagon className="w-3.5 h-3.5 mr-1.5" /> Hexagonal
-            </button>
-            <button
               onClick={() => setActiveTab("mermaid")}
-              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "mermaid" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "mermaid" ? "bg-accent text-accent-foreground border border-accent" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
             >
               <Component className="w-3.5 h-3.5 mr-1.5" /> Mermaid
             </button>
             <button
               onClick={() => setActiveTab("validation")}
-              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "validation" ? "bg-accent/10 text-accent border border-accent/20" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${activeTab === "validation" ? "bg-accent text-accent-foreground border border-accent" : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"}`}
             >
               <ShieldCheck className="w-3.5 h-3.5 mr-1.5" /> Validation
             </button>
@@ -170,7 +155,6 @@ export function ManifestPreview({
         <ManifestYamlSidebar
           yamlString={localManifestYaml}
           viewData={viewData}
-          activeContextName={activeTab === "hexagonal" ? activeContext : null}
         />
 
         <div
@@ -183,33 +167,7 @@ export function ManifestPreview({
         >
           {activeTab === "context-map" && (
             <div className="absolute inset-0 overflow-auto custom-scrollbar">
-              <ContextMapView
-                viewData={viewData}
-                onSelectContext={handleSelectContext}
-                isFullScreen={isFullScreen}
-              />
-            </div>
-          )}
-          {activeTab === "hexagonal" && (
-            <div className="absolute inset-0 overflow-auto custom-scrollbar">
-              {activeContext ? (
-                <HexagonalArchitectureView
-                  context={
-                    viewData.contexts.find((c) => c.name === activeContext)!
-                  }
-                  onBack={() => {
-                    setActiveTab("context-map");
-                    setActiveContext(null);
-                  }}
-                  onRequestFix={(v) =>
-                    setActiveFixViolation(v as ValidationItem)
-                  }
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  Select a context from the map
-                </div>
-              )}
+              <ContextMapView viewData={viewData} isFullScreen={isFullScreen} />
             </div>
           )}
           {activeTab === "mermaid" && (
@@ -229,7 +187,7 @@ export function ManifestPreview({
       {!hideActions && (
         <footer className="relative z-10 flex items-center justify-between px-5 py-3 border-t border-border bg-surface shrink-0">
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onRegenerate}>
+            <Button variant="secondary" onClick={onRegenerate}>
               <RefreshCw className="w-4 h-4 mr-1.5" /> Regenerate
             </Button>
           </div>

@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Network,
-  Hexagon,
   Component,
   ShieldCheck,
 } from "lucide-react";
@@ -21,7 +20,6 @@ import { parseYamlToViewData } from "@hexagen/manifest-generation";
 
 const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
   { id: "context-map", icon: Network, label: "Context Map" },
-  { id: "hexagonal", icon: Hexagon, label: "Hexagonal" },
   { id: "mermaid", icon: Component, label: "Mermaid" },
   { id: "validation", icon: ShieldCheck, label: "Validation" },
 ];
@@ -132,7 +130,7 @@ export function ManifestAcceptPage() {
               onClick={() => setActiveTab(id)}
               className={`flex items-center px-2.5 py-1 rounded-md text-xs transition-colors ${
                 activeTab === id
-                  ? "bg-accent/10 text-accent border border-accent/20"
+                  ? "bg-accent text-accent-foreground border border-accent"
                   : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
               }`}
             >
@@ -190,7 +188,7 @@ export function ManifestAcceptPage() {
       headerContent={renderHeaderContent()}
       footer={
         <>
-          <Button variant="outline" onClick={handleBack} disabled={isSaving}>
+          <Button variant="secondary" onClick={handleBack} disabled={isSaving}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Generation
           </Button>

@@ -4,7 +4,10 @@ import {
   AlertTriangle,
   ShieldAlert,
 } from "lucide-react";
-import type { ManifestViewData, ValidationItem } from "@hexagen/manifest-generation";
+import type {
+  ManifestViewData,
+  ValidationItem,
+} from "@hexagen/manifest-generation";
 
 interface ValidationReportViewProps {
   viewData: ManifestViewData;
@@ -122,7 +125,7 @@ export function ValidationReportView({
                 {!isPass && onRequestFix && (
                   <button
                     onClick={() => onRequestFix(v)}
-                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/10 hover:bg-accent/20 text-accent text-xs font-semibold transition-colors"
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent hover:bg-accent/90 text-accent-foreground text-xs font-semibold transition-colors"
                   >
                     ✨ Fix
                   </button>

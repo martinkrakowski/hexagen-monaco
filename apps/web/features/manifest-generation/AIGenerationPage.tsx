@@ -12,7 +12,6 @@ import {
   ArrowRight,
   RefreshCw,
   Network,
-  Hexagon,
   Component,
   ShieldCheck,
 } from "lucide-react";
@@ -25,7 +24,6 @@ interface AIGenerationPageProps {
 
 const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
   { id: "context-map", icon: Network, label: "Context Map" },
-  { id: "hexagonal", icon: Hexagon, label: "Hexagonal" },
   { id: "mermaid", icon: Component, label: "Mermaid" },
   { id: "validation", icon: ShieldCheck, label: "Validation" },
 ];
@@ -96,7 +94,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
               onClick={() => previewActions.onTabChange(id)}
               className={`flex items-center px-2.5 py-1 rounded-md text-xs transition-colors ${
                 previewActions.activeTab === id
-                  ? "bg-accent/10 text-accent border border-accent/20"
+                  ? "bg-accent text-accent-foreground border border-accent"
                   : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
               }`}
             >
@@ -112,7 +110,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     if (previewActions) {
       return (
         <>
-          <Button variant="outline" onClick={previewActions.onRegenerate}>
+          <Button variant="secondary" onClick={previewActions.onRegenerate}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Regenerate
           </Button>
@@ -131,7 +129,10 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
 
     return (
       <>
-        <Button variant="outline" onClick={() => router.push("/projects/new")}>
+        <Button
+          variant="secondary"
+          onClick={() => router.push("/projects/new")}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>

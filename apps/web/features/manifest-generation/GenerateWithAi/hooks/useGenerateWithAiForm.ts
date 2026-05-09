@@ -6,7 +6,6 @@ const MAX_LENGTH = 2000;
 
 export interface FormState {
   description: string;
-  platform: string;
   deployment: string;
   maxContexts: number;
   selectedExample: number | null;
@@ -21,7 +20,6 @@ export interface FormHandlers {
 
 const initialState: FormState = {
   description: "",
-  platform: "",
   deployment: "",
   maxContexts: DEFAULT_MAX_BOUNDED_CONTEXTS,
   selectedExample: null,
