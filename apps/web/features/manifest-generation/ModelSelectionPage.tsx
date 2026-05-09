@@ -150,7 +150,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 status={engineStatus as LLMEngineStatus}
                 progress={llmContext.engineState.progress}
                 errorMessage={llmContext.engineState.errorMessage}
-                onCancel={() => router.push("/projects/new/ai")}
+                onCancel={() => {
+                  clear();
+                  router.push("/projects/new/ai");
+                }}
                 onRetry={() => {
                   const modelId = llmContext.engineState.loadedModelId;
                   if (modelId) llmContext.initializeModel(modelId);
