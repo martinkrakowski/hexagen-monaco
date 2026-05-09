@@ -5,19 +5,26 @@ export function ActionBar({
   canGenerate,
   isGenerating,
   onGenerate,
+  onCancel,
   disabledTooltip,
 }: ActionBarProps) {
   return (
     <div className="space-y-4">
-      <Button
-        onClick={onGenerate}
-        disabled={!canGenerate || isGenerating}
-        className="w-full bg-primary text-primary-foreground font-medium h-11 rounded-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        size="lg"
-        title={disabledTooltip}
-      >
-        {isGenerating ? (
-          <>
+      {isGenerating ? (
+        <div className="flex gap-2">
+          <Button
+            onClick={onCancel}
+            variant="secondary"
+            className="flex-1 h-11 rounded-md font-medium"
+            size="lg"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled
+            className="flex-1 bg-primary text-primary-foreground font-medium h-11 rounded-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            size="lg"
+          >
             <svg
               className="animate-spin h-4 w-4"
               xmlns="http://www.w3.org/2000/svg"
@@ -39,11 +46,19 @@ export function ActionBar({
               />
             </svg>
             Generating...
-          </>
-        ) : (
-          "Generate Manifest"
-        )}
-      </Button>
+          </Button>
+        </div>
+      ) : (
+        <Button
+          onClick={onGenerate}
+          disabled={!canGenerate}
+          className="w-full bg-primary text-primary-foreground font-medium h-11 rounded-md flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          size="lg"
+          title={disabledTooltip}
+        >
+          Generate Manifest
+        </Button>
+      )}
 
       <p className="text-xs text-muted-foreground text-center">
         {isGenerating ? (

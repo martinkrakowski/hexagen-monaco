@@ -6,6 +6,7 @@ import { Button } from "@hexagen/ui";
 import {
   ArrowLeft,
   ArrowRight,
+  RefreshCw,
   Network,
   Component,
   ShieldCheck,
@@ -80,6 +81,11 @@ export function ManifestAcceptPage() {
   const handleBack = useCallback(() => {
     pendingManifest.clear();
     router.push("/projects/new/ai");
+  }, [pendingManifest, router]);
+
+  const handleRegenerate = useCallback(() => {
+    pendingManifest.clear();
+    router.push("/projects/new/ai?generate=1");
   }, [pendingManifest, router]);
 
   const hasFailures =
@@ -188,16 +194,53 @@ export function ManifestAcceptPage() {
       headerContent={renderHeaderContent()}
       footer={
         <>
-          <Button variant="secondary" onClick={handleBack} disabled={isSaving}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Generation
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={handleBack}
+              disabled={isSaving}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleRegenerate}
+              disabled={isSaving}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Regenerate
+            </Button>
+          </div>
           <Button
             onClick={handleAccept}
             disabled={isSaving || !canAccept || !viewData}
           >
+            {isSaving ? (
+              <svg
+                className="animate-spin h-4 w-4 ml-2"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+            ) : (
+              <ArrowRight className="w-4 h-4 ml-2" />
+            )}
             Use This Manifest
-            <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </>
       }
@@ -208,10 +251,11 @@ export function ManifestAcceptPage() {
         </div>
       )}
       <ManifestPreview
-        manifestYaml={pendingManifest.yaml}
+        manifestYaml={pendingManifest.yaml ?? ""}
         onApprove={handleAccept}
-        onRegenerate={handleBack}
+        onRegenerate={handleRegenerate}
         onStartOver={handleBack}
+        onYamlChange={pendingManifest.updateYaml}
         hideActions
         hideHeader
         embedded

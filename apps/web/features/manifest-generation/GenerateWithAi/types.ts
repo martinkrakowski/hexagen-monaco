@@ -16,6 +16,7 @@ export interface GenerateWithAiProps {
 }
 
 export interface PreviewFooterActions {
+  onBack: () => void;
   onRegenerate: () => void;
   onUseManifest: (yaml: string) => void;
   manifestYaml: string;
@@ -52,6 +53,7 @@ export interface ActionBarProps {
   canGenerate: boolean;
   isGenerating: boolean;
   onGenerate: () => void;
+  onCancel: () => void;
   disabledTooltip?: string;
 }
 
@@ -71,6 +73,7 @@ export interface StateViewProps {
   onConfirmAndContinue: () => void;
   onRegenerate: () => void;
   onRetryFromError: () => void;
+  onYamlChange?: (yaml: string) => void;
   externalActiveTab?: ViewTab;
   onTabChange?: (tab: ViewTab) => void;
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Network,
   Component,
@@ -16,7 +16,11 @@ import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
 import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
 import type { ValidationItem } from "@hexagen/manifest-generation";
-import { parseYamlToViewData } from "@hexagen/manifest-generation";
+import {
+  parseYamlToViewData,
+  canAutoFix,
+  applyDeterministicFix,
+} from "@hexagen/manifest-generation";
 import { generateMermaidDiagram } from "./generate-mermaid-diagram";
 
 interface ManifestPreviewProps {
@@ -24,6 +28,7 @@ interface ManifestPreviewProps {
   onApprove: (manifestYaml: string) => void;
   onRegenerate: () => void;
   onStartOver: () => void;
+  onYamlChange?: (yaml: string) => void;
   hideActions?: boolean;
   hideHeader?: boolean;
   activeTab?: ViewTab;
@@ -38,6 +43,7 @@ export function ManifestPreview({
   onApprove,
   onRegenerate,
   onStartOver,
+  onYamlChange,
   hideActions,
   hideHeader,
   activeTab: externalActiveTab,
@@ -57,6 +63,32 @@ export function ManifestPreview({
 
   // Sync with prop if parent regenerates
   useMemo(() => setLocalManifestYaml(manifestYaml), [manifestYaml]);
+
+  const autoFixAppliedRef = useRef(false);
+  useEffect(() => {
+    if (autoFixAppliedRef.current) return;
+    autoFixAppliedRef.current = true;
+    let yaml = localManifestYaml;
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const data = parseYamlToViewData(yaml);
+      for (const v of data.validationItems) {
+        if (v.status !== "pass" && canAutoFix(v)) {
+          const patched = applyDeterministicFix(yaml, v);
+          if (patched && patched !== yaml) {
+            yaml = patched;
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+    if (yaml !== localManifestYaml) {
+      setLocalManifestYaml(yaml);
+      onYamlChange?.(yaml);
+    }
+  }, [localManifestYaml, onYamlChange]);
 
   const viewData = useMemo(
     () => parseYamlToViewData(localManifestYaml),
@@ -207,6 +239,7 @@ export function ManifestPreview({
         currentYaml={localManifestYaml}
         onApply={(patchedYaml) => {
           setLocalManifestYaml(patchedYaml);
+          onYamlChange?.(patchedYaml);
           setActiveFixViolation(null);
         }}
       />

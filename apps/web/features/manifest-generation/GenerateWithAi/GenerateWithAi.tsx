@@ -235,6 +235,10 @@ export function GenerateWithAi({
         (v) => v.status === "fail",
       );
       onPreviewStateChange({
+        onBack: () => {
+          actions.clearError();
+          stagedGen.reset();
+        },
         onRegenerate: () => handleRetryRef.current(),
         onUseManifest: (yaml) => onUseManifestRef.current?.(yaml),
         manifestYaml: flowState.manifestContent,
@@ -265,6 +269,7 @@ export function GenerateWithAi({
         onConfirmAndContinue={handleRetryOrRegenerate}
         onRegenerate={handleRetryOrRegenerate}
         onRetryFromError={handleRetryOrRegenerate}
+        onYamlChange={(yaml) => actions.saveGenerationResult(yaml)}
         externalActiveTab={previewActiveTab}
         onTabChange={setPreviewActiveTab}
       />
@@ -289,7 +294,10 @@ export function GenerateWithAi({
 
       <DescriptionInput
         value={formState.description}
-        onChange={(value) => formHandlers.setValue("description", value)}
+        onChange={(value) => {
+          formHandlers.setValue("description", value);
+          formHandlers.setValue("selectedExample", null);
+        }}
         charCount={formHandlers.charCount}
         disabled={isGenerating}
         isAiReady={hasAnyProvider}
@@ -418,6 +426,10 @@ export function GenerateWithAi({
         canGenerate={canGenerate && !hasError}
         isGenerating={isGenerating}
         onGenerate={handleGenerate}
+        onCancel={() => {
+          actions.clearError();
+          stagedGen.reset();
+        }}
         disabledTooltip={disabledTooltip}
       />
     </GenerateWithAiLayout>

@@ -45,7 +45,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
         setPendingManifest(yaml, wizardData, projectName);
-        router.push("/projects/new/ai/approve");
+        router.push("/projects/new/ai/accept");
       } catch (error) {
         const message =
           error instanceof Error
@@ -110,10 +110,16 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     if (previewActions) {
       return (
         <>
-          <Button variant="secondary" onClick={previewActions.onRegenerate}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Regenerate
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={previewActions.onBack}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <Button variant="secondary" onClick={previewActions.onRegenerate}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Regenerate
+            </Button>
+          </div>
           <Button
             onClick={() =>
               previewActions.onUseManifest(previewActions.manifestYaml)
