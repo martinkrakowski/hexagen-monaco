@@ -93,7 +93,8 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
               onSwitchModel={handleSelectModel}
               onDeleteModel={handleDeleteModel}
               hasModelInCache={handleHasModelInCache}
-              onBack={handleBack}
+              onBack={undefined}
+              hideHeader
               isLoading={isLoading}
               onSwitchToCloud={undefined}
               requiresModelWarning={false}

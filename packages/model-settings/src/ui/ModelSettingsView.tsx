@@ -1,10 +1,13 @@
 "use client";
 
 import { useReducer, useEffect, useMemo } from "react";
-import { LOCAL_MODELS, getModelDescriptor } from "@hexagen/local-llm";
+import {
+  LOCAL_MODELS,
+  getModelDescriptor,
+  recommendModel,
+} from "@hexagen/local-llm";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { useHardwareDetection } from "./useHardwareDetection";
-import { recommendModel, checkCompatibility } from "@hexagen/local-llm";
 
 import {
   ModelSettingsHeader,
@@ -26,6 +29,7 @@ interface ModelSettingsViewProps {
   onSwitchToCloud?: () => void;
   requiresModelWarning?: boolean;
   onResetConfig?: () => void;
+  hideHeader?: boolean;
 }
 
 interface CacheStatusEntry {
@@ -98,6 +102,7 @@ export function ModelSettingsView({
   onSwitchToCloud,
   requiresModelWarning,
   onResetConfig,
+  hideHeader,
 }: ModelSettingsViewProps) {
   const [state, dispatch] = useReducer(modelSettingsReducer, {
     cacheStatus: new Map<DomainModelId, CacheStatusEntry>(),
@@ -261,54 +266,13 @@ export function ModelSettingsView({
     return sum;
   }, 0);
 
-  const getCompatibility = (modelId: DomainModelId) => {
-    const descriptor = LOCAL_MODELS.find((m) => m.modelId === modelId);
-    if (!descriptor || selectedModelId !== modelId) return undefined;
-    return checkCompatibility(descriptor, hardwareProfile) ?? undefined;
-  };
-
   return (
     <div className="h-full flex flex-col bg-card">
-      <ModelSettingsHeader onBack={onBack} />
+      {!hideHeader && <ModelSettingsHeader onBack={onBack} />}
 
       {requiresModelWarning && <WarningBanner />}
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
-        {recommendedModelId && !isDetectingHardware && (
-          <div className="mb-6">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase mb-3">
-              ✨ Recommended for Your System
-            </h2>
-            {LOCAL_MODELS.find((m) => m.modelId === recommendedModelId) && (
-              <ModelTierSection
-                title=""
-                descriptors={[
-                  LOCAL_MODELS.find((m) => m.modelId === recommendedModelId)!,
-                ]}
-                currentModelId={currentModelId}
-                selectedModelId={selectedModelId}
-                confirmDeleteId={confirmDeleteId}
-                pendingSwitchId={pendingSwitchId}
-                recommendedModelId={recommendedModelId}
-                cacheStatusMap={cacheStatus}
-                onSelectModel={handleSelectModel}
-                onDelete={setConfirmDeleteId}
-                onConfirmDelete={(id) => handleDelete(id)}
-                onCancelDelete={() => setConfirmDeleteId(null)}
-                onConfirmSwitch={handleConfirmSwitch}
-                onCancelSwitch={() => setPendingSwitchId(null)}
-                currentModelDisplayName={currentModelDisplayName}
-                isLoading={isLoading}
-                isSwitching={isSwitching}
-                isDeleting={isDeleting}
-                error={error}
-                loadedModel={loadedModel}
-                compatibilityIssue={getCompatibility(recommendedModelId)}
-              />
-            )}
-          </div>
-        )}
-
         {LOCAL_MODELS.some((m) => m.tier === "desktop-high") && (
           <ModelTierSection
             title="Desktop"

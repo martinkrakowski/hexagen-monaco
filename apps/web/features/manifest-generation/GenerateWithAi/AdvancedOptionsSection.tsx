@@ -1,5 +1,6 @@
-import { Label, Input } from "@hexagen/ui";
+import { Label, Input, Button } from "@hexagen/ui";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "@hexagen/agentic-interaction";
+import { Cpu } from "lucide-react";
 
 const MIN_CONTEXTS = 1;
 const MAX_CONTEXTS = 25;
@@ -10,6 +11,7 @@ interface AdvancedOptionsSectionProps {
   maxContexts: number;
   onMaxContextsChange: (value: number) => void;
   isDisabled: boolean;
+  onChangeModel?: () => void;
 }
 
 export function AdvancedOptionsSection({
@@ -18,6 +20,7 @@ export function AdvancedOptionsSection({
   maxContexts,
   onMaxContextsChange,
   isDisabled,
+  onChangeModel,
 }: AdvancedOptionsSectionProps) {
   return (
     <section className="border-t border-border pt-4">
@@ -73,6 +76,18 @@ export function AdvancedOptionsSection({
               <span>{MAX_CONTEXTS}</span>
             </div>
           </div>
+          {onChangeModel && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onChangeModel}
+              disabled={isDisabled}
+              className="w-full"
+            >
+              <Cpu className="h-3.5 w-3.5 mr-2" />
+              Change Model
+            </Button>
+          )}
         </div>
       </details>
     </section>
