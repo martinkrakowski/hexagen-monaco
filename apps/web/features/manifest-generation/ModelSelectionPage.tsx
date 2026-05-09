@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Button } from "@hexagen/ui";
@@ -21,6 +21,8 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const router = useRouter();
   const { autoGenerate, clear } = useModelSelectionIntent();
   const [mounted, setMounted] = useState(false);
+  const llmRef = useRef(llmContext);
+  llmRef.current = llmContext;
 
   useEffect(() => {
     setMounted(true);
@@ -38,23 +40,17 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
     router.push("/projects/new/ai?generate=1");
   }, [clear, router]);
 
-  const handleSelectModel = useCallback(
-    async (modelId: DomainModelId) => {
-      return llmContext.initializeModel(modelId);
-    },
-    [llmContext],
-  );
+  const handleSelectModel = useCallback(async (modelId: DomainModelId) => {
+    return llmRef.current.initializeModel(modelId);
+  }, []);
 
-  const handleDeleteModel = useCallback(
-    async (modelId: DomainModelId) => {
-      return llmContext.deleteCachedModel(modelId);
-    },
-    [llmContext],
-  );
+  const handleDeleteModel = useCallback(async (modelId: DomainModelId) => {
+    return llmRef.current.deleteCachedModel(modelId);
+  }, []);
 
   const handleHasModelInCache = useCallback(
-    (modelId: DomainModelId) => llmContext.hasModelInCache(modelId),
-    [llmContext],
+    (modelId: DomainModelId) => llmRef.current.hasModelInCache(modelId),
+    [],
   );
 
   const isLoading =
