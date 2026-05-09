@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import type { DomainModelId } from "@hexagen/local-llm";
 import { ModelFooterIndicator } from "../ModelFooterIndicator";
 
@@ -10,7 +10,7 @@ interface StorageFooterProps {
   onResetConfig?: () => void;
 }
 
-export function StorageFooter({
+function StorageFooterComponent({
   totalCached,
   totalCachedSize,
   currentModelId,
@@ -90,3 +90,5 @@ export function StorageFooter({
     </footer>
   );
 }
+
+export const StorageFooter = memo(StorageFooterComponent);
