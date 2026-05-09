@@ -4,13 +4,13 @@
 **Scope:** All `.tsx`/`.ts` files across `apps/web/` and `packages/ui/`
 **Files Analyzed:** ~150 React components, 46 hooks, 12 UI primitives
 **Auditor:** Principal Frontend Architecture Engineer
-**Revision:** v1.4 — adds Profiler Scenario A baseline results; marks H3/H7/H8/H9/H13/H14 as fixed (883ef902); updates remediation table with profiler-confirmed verdicts
+**Revision:** v1.5 — H1/H2/H8/H14 fixes committed (7ab197e0); updates remediation status table
 
 ---
 
 ## Methodological Caveats
 
-This audit began as **static analysis only**. As of v1.4, Profiler Scenario A (wizard keystroke) has been captured and cross-referenced against the findings below. Scenarios B (streaming) and C (canvas drag) remain unprofiled.
+This audit began as **static analysis only**. As of v1.5, Profiler Scenario A (wizard keystroke) has been captured and cross-referenced against the findings below. Scenarios B (streaming) and C (canvas drag) remain unprofiled.
 
 - A violation on a cold render path has **zero user impact** regardless of its theoretical severity.
 - Violation density (168 in ~150 files) suggests the criteria may be over-broad and that **false positives exist**.
@@ -88,14 +88,14 @@ These are the most critical findings. They violate React's contract and can prod
 
 | # | File | Line | Root Cause |
 |---|------|------|------------|
-| H1 | `GovernanceAssistantPanel.tsx` | 99-118 | **Profiler-confirmed ✓.** `ModeWrapper` receives 6 unstable callback props: `onCloudConnect,onCloudDisconnect,onRetryConnection,onSendMessage,onSwitchToCloud,onResetConfig`. These cascade to `LocalModeView` and the entire cloud-mode subtree. `handleCloudConnect`/`handleDisconnect`/`handleRetry` depend on `cloudConnection` — a new object from `useCloudConnection()` every render. |
-| H2 | `CloudModelSettingsView.tsx` | 46, 58-109 | **Profiler-confirmed ✓.** `useEffect` and `handleConnect` depend on `connectivity` — a new object from `useCloudConnectivity()` every render. Same root cause as H1 (unstable hook return). |
+| H1 | `GovernanceAssistantPanel.tsx` | 99-118 | **FIXED (7ab197e0).** `useCloudConnection` return now wrapped in `useMemo` — `ModeWrapper` callbacks stable when connection state unchanged. |
+| H2 | `CloudModelSettingsView.tsx` | 46, 58-109 | **FIXED (7ab197e0).** `useCloudConnectivity` return wrapped in `useMemo`; removed `getState()` per-render allocation. |
 | H3 | `ExportContext.tsx` | 73-135 | **FIXED (883ef902).** Destructured `activeWorkspace` into `activeProjectId`/`activeProjectName`/`activeWizardData` for granular `useCallback` deps. |
 | H4 | `useProjectLifecycle.ts` | 114-217 | 5 callbacks depend on `ui` object — unmemoized return from `useWorkspaceShellUi` |
 | H5 | `useProjectLifecycle.ts` | 104-217 | `form` object as dependency; `editor` object as dependency — both unstable |
 | H6 | `useProjectGenerationFlow.ts` | 99 | `execute` depends on entire `options` object |
 | H7 | `useNodeModification.ts` | 44-63 | **FIXED (883ef902).** Callback refs for `onPipelineComplete`/`onPipelineError` in `useModificationStreaming`; `startStreaming` now has `[]` deps. |
-| H8 | `useArchitectureModification.ts` | 55-77 | Same pattern — inline `onPipelineComplete`/`onPipelineError` to `usePipelineStreaming` — **same ref fix applies but file was NOT in 883ef902 commit scope** (separate module). |
+| H8 | `useArchitectureModification.ts` | 55-77 | **FIXED (7ab197e0).** `usePipelineStreaming` converted to callback refs; `startStreaming` deps reduced to `[endpoint]`. `useArchitectureModification` return wrapped in `useMemo`. |
 | H9 | `useCanvasState.ts` | 89-103 | **FIXED (883ef902).** `useCanvasHistory` now uses `useStore` selectors for reactive subscriptions + `useMemo` return. `useCanvasState` reads `store.getState()` at invocation time in `onAddNode`/`onUpdateNode`/`recalculateLayout` to avoid array-identity deps. |
 | H10 | `useSavedProjects.ts` | 88-93 | `loadProject` depends on `projects` array — changes on every mutation |
 
@@ -110,7 +110,7 @@ These are the most critical findings. They violate React's contract and can prod
 | # | File | Line | Root Cause |
 |---|------|------|------------|
 | H13 | `useWorkspaceShellUi.ts` | 64-77 | **FIXED (883ef902).** Return object wrapped in `useMemo`. **Profiler note:** `DesktopLayout` still shows 5 prop changes because the slot props are JSX elements (panel contents), not the hook return fields — `useMemo` stabilizes the return but inline JSX children remain new references. This is a structural limitation of the slot pattern, not a hook instability. |
-| H14 | `useEditorSession.ts` | 59-70 | Return object not wrapped in `useMemo` — root cause of H5 `editor` cascade. **Note:** `useModificationStreaming` callback-ref fix (H14 streaming variant) was committed in 883ef902. The `useEditorSession` return-object fix was NOT in that commit. |
+| H14 | `useEditorSession.ts` | 59-70 | **FIXED (7ab197e0).** Return object wrapped in `useMemo` with 10 individual field deps — stabilizes `editor` cascade to H5 consumers. |
 
 ### Category 4: Unstable Callback Props
 
@@ -194,11 +194,11 @@ Remaining 68 LOW findings are unchanged from v1.0: leaf components in stable con
 |----------|--------|-------|--------|--------------|--------|
 | **P0-C** | **Fix C1:** ✅ Done — `pendingChangesRef` + `startStreaming()` outside updater (da1bff74) | C1 | Prevents double-invocation in StrictMode; correctness fix, not perf | Done | **Committed** |
 | **P0-C** | **Fix C2:** Ensure `wizardData` stays in `loadGraph` effect deps; ensure stable identity at source. | C2 | Prevents stale graph after wizard edits | **Blocked by Rec 4 (`watch()` decomposition).** `buildWizardData` in `useWizardForm` depends on `watch()` output, which returns a new reference per keystroke. Without decomposing `watch()` first, memoizing `wizardData` upstream will not produce a stable identity. Rec 4 is the prerequisite. | **No stale bug in committed code** — `wizardData` was kept in deps during triage. 9-commit canvas cascade per keystroke is correct behavior (graph must update); debatching is a separate optimization. |
-| **P0** | Wrap `useWorkspaceShellUi` return in `useMemo` + destructure `ui`/`form`/`editor` into specific methods in `useProjectLifecycle` deps | H4, H5, H13, H14 | Stabilizes 5+ callbacks, eliminates the largest callback cascade in the app | ~~Validate with Profiler Scenario A~~ Profiler captured | **Partially committed (883ef902):** `useWorkspaceShellUi` return now `useMemo`'d; `useProjectLifecycle` derives `activeProjectId` for granular effect deps + `useMemo` return. `DesktopLayout` still gets new slot-prop refs (inline JSX children) — structural limitation of slot pattern. H14 (`useEditorSession`) return still unfixed. |
-| **P0** | Wrap `useCloudConnection` + `useCloudConnectivity` return objects in `useMemo` | H1, H2, M12, M13 | Stabilizes 6 callbacks + 1 effect in governance-assistant | ~~Validate with Profiler Scenario B~~ **Profiler A confirmed ✓** — `ModeWrapper` receives 6 unstable callbacks | **Next fix to commit.** Profiler Scenario B still needed for streaming-path validation. |
+| **P0** | Wrap `useWorkspaceShellUi` return in `useMemo` + destructure `ui`/`form`/`editor` into specific methods in `useProjectLifecycle` deps | H4, H5, H13, H14 | Stabilizes 5+ callbacks, eliminates the largest callback cascade in the app | ~~Validate with Profiler Scenario A~~ Profiler captured | **Committed (883ef902 + 7ab197e0):** `useWorkspaceShellUi` return `useMemo`'d (883ef902); `useEditorSession` return `useMemo`'d (7ab197e0). `DesktopLayout` still gets new slot-prop refs (inline JSX children) — structural limitation of slot pattern. |
+| **P0** | Wrap `useCloudConnection` + `useCloudConnectivity` return objects in `useMemo` | H1, H2, M12, M13 | Stabilizes 6 callbacks + 1 effect in governance-assistant | ~~Validate with Profiler Scenario B~~ **Profiler A confirmed ✓** — `ModeWrapper` receives 6 unstable callbacks | **Committed (7ab197e0).** Profiler Scenario B still needed for streaming-path validation. |
 | **P0** | Memoize `Tabs` context value with `useMemo` | M0 | Stabilizes all tab trigger/content consumers | None | **Profiler A: low measured impact.** CONTEXT re-renders are partly framer-motion. Downgrade to P2. |
 | **P0** | **Wrap `computeDiff()` in `useMemo([current, proposed])` in `ManifestDiffView`** | H20 | Eliminates Set/Map/Sort computation on every render | ✅ Done | **Committed** (01b4a59b) |
-| **P1** | Use `useRef` for `onPipelineComplete`/`onPipelineError` in `useNodeModification` + `useArchitectureModification` | H7, H8 | Stabilizes streaming callback chain | None | **H7 committed (883ef902).** H8 (`useArchitectureModification`) not yet done — same ref pattern applies. |
+| **P1** | Use `useRef` for `onPipelineComplete`/`onPipelineError` in `useNodeModification` + `useArchitectureModification` | H7, H8 | Stabilizes streaming callback chain | None | **Committed (883ef902 + 7ab197e0).** H7 callback refs in 883ef902; H8 callback refs + `useArchitectureModification` return `useMemo` in 7ab197e0. |
 | **P1** | Destructure `activeWorkspace` into primitives in `ExportContext` callbacks | H3 | Stabilizes 3 export callbacks | None | **Committed (883ef902).** |
 | **P1** | Wrap `GovernanceAssistantPanel` inline callbacks in `useCallback` | H19 | Stabilizes deep ModeWrapper chain | Validate with Profiler Scenario B | **Pending Scenario B.** |
 | **P2** | Replace `[...].filter(Boolean).join(" ")` className patterns in `@hexagen/ui` with `cn()` | 7 LOW | Correctness (Tailwind merge) + eliminates per-render array allocation | None | Not started |
