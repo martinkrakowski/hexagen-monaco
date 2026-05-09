@@ -41,7 +41,11 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   }, [clear, router]);
 
   const handleSelectModel = useCallback(async (modelId: DomainModelId) => {
-    return llmRef.current.initializeModel(modelId);
+    const ctx = llmRef.current;
+    if (ctx.engineState.loadedModelId) {
+      return ctx.switchModel(modelId);
+    }
+    return ctx.initializeModel(modelId);
   }, []);
 
   const handleDeleteModel = useCallback(async (modelId: DomainModelId) => {
