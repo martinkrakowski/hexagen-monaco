@@ -66,20 +66,19 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
     engineStatus === "downloading" || engineStatus === "loading_vram";
   const isModelError = engineStatus === "error";
 
-  const footer =
-    !isModelLoading && !isModelError ? (
-      <>
-        <Button variant="secondary" onClick={handleBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        {isModelReady && autoGenerate ? (
-          <Button onClick={handleGenerate}>Generate Manifest</Button>
-        ) : (
-          <span />
-        )}
-      </>
-    ) : null;
+  const footer = (
+    <>
+      <Button variant="secondary" onClick={handleBack}>
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Back
+      </Button>
+      {isModelReady && autoGenerate && !isModelLoading && !isModelError ? (
+        <Button onClick={handleGenerate}>Generate Manifest</Button>
+      ) : (
+        <span />
+      )}
+    </>
+  );
 
   return (
     <>
