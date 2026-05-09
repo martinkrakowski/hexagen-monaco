@@ -272,7 +272,7 @@ export function ModelSettingsView({
 
       {requiresModelWarning && <WarningBanner />}
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5 mx-auto max-w-2xl w-full">
         {LOCAL_MODELS.some((m) => m.tier === "desktop-high") && (
           <ModelTierSection
             title="Desktop"
