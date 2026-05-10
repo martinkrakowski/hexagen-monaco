@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 import { Card, CardContent } from "@hexagen/ui";
 import { ViewToggle } from "@hexagen/ui";
 import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
@@ -27,7 +27,7 @@ function recordToMap(record: Record<string, string>): Map<string, string> {
   return m;
 }
 
-export function ArchitecturePreviewPane({
+export const ArchitecturePreviewPane = memo(function ArchitecturePreviewPane({
   wizardData,
   viewMode,
   selectedFileId,
@@ -69,4 +69,4 @@ export function ArchitecturePreviewPane({
       </CardContent>
     </Card>
   );
-}
+});

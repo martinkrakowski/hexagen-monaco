@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import type { WizardData } from "@hexagen/project-configuration";
 import { Tabs } from "@hexagen/ui";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
@@ -15,7 +15,7 @@ interface GovernancePanelWrapperProps {
   currentStepIndex: number;
 }
 
-export function GovernancePanelWrapper({
+export const GovernancePanelWrapper = memo(function GovernancePanelWrapper({
   wizardData,
   currentStepIndex,
 }: GovernancePanelWrapperProps) {
@@ -49,4 +49,4 @@ export function GovernancePanelWrapper({
       </div>
     </ErrorBoundary>
   );
-}
+});

@@ -86,13 +86,13 @@ export function ProjectWorkspace({
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
-          <FormProvider {...form}>
-            <ResizableLayout
-              leftTitle="HexaGen Project Wizard"
-              rightTitle="AI Governance"
-              onRightPanelClose={onCloseRightPanel}
-              onLeftPanelClose={onCloseMiddlePanel}
-              left={
+          <ResizableLayout
+            leftTitle="HexaGen Project Wizard"
+            rightTitle="AI Governance"
+            onRightPanelClose={onCloseRightPanel}
+            onLeftPanelClose={onCloseMiddlePanel}
+            left={
+              <FormProvider {...form}>
                 <WizardStepRouter
                   currentStepIndex={currentStepIndex}
                   totalSteps={totalSteps}
@@ -108,27 +108,27 @@ export function ProjectWorkspace({
                   onGenerate={lifecycle.handleGenerate}
                   onViewModeChange={onViewModeChange}
                 />
-              }
-              middle={
-                <ArchitecturePreviewPane
-                  wizardData={wizardData}
-                  viewMode={viewMode}
-                  selectedFileId={editor.selectedFileId}
-                  editedFiles={editor.editedFiles}
-                  onViewModeChange={onViewModeChange}
-                  onFileSelect={editor.selectFile}
-                  onFileContentChange={editor.updateFile}
-                  onFileSave={editor.markFileSaved}
-                />
-              }
-              right={
-                <GovernancePanelWrapper
-                  wizardData={wizardData}
-                  currentStepIndex={currentStepIndex}
-                />
-              }
-            />
-          </FormProvider>
+              </FormProvider>
+            }
+            middle={
+              <ArchitecturePreviewPane
+                wizardData={wizardData}
+                viewMode={viewMode}
+                selectedFileId={editor.selectedFileId}
+                editedFiles={editor.editedFiles}
+                onViewModeChange={onViewModeChange}
+                onFileSelect={editor.selectFile}
+                onFileContentChange={editor.updateFile}
+                onFileSave={editor.markFileSaved}
+              />
+            }
+            right={
+              <GovernancePanelWrapper
+                wizardData={wizardData}
+                currentStepIndex={currentStepIndex}
+              />
+            }
+          />
         </main>
 
         <NewProjectConfirmDialog
