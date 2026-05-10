@@ -42,13 +42,18 @@ export function BoundedContextStep({
 }: BoundedContextStepProps) {
   const { control } = useFormContext<ProjectConfig>();
 
-  const { append, update, remove } = useFieldArray({
+  const { fields, append, update, remove } = useFieldArray({
     control,
     name: "boundedContexts",
     keyName: "_rfId",
   });
 
-  const boundedContexts = useWatch({ control, name: "boundedContexts" }) || [];
+  const watchedContexts = useWatch({ control, name: "boundedContexts" }) || [];
+
+  const boundedContexts = fields.map((field, index) => ({
+    ...field,
+    ...(watchedContexts[index] || {}),
+  }));
 
   const {
     view,

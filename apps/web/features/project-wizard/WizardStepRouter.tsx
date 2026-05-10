@@ -47,7 +47,7 @@ export function WizardStepRouter({
       return (
         <WorkspaceGovernanceStep
           onNext={lifecycle.handleNext}
-          canProceed={lifecycle.canProceed(1)}
+          canProceed={lifecycle.canProceed(currentStepIndex)}
           currentStep={1}
           totalSteps={totalSteps}
           title={title}
@@ -60,7 +60,7 @@ export function WizardStepRouter({
         <BoundedContextStep
           onNext={lifecycle.handleNext}
           onBack={lifecycle.handleBack}
-          canProceed={lifecycle.canProceed(2)}
+          canProceed={lifecycle.canProceed(currentStepIndex)}
           activeContextId={activeContextId}
           onContextSelect={onContextSelect}
           currentStep={2}
@@ -75,7 +75,7 @@ export function WizardStepRouter({
         <PeerContextMappingStep
           onNext={lifecycle.handleNext}
           onBack={lifecycle.handleBack}
-          canProceed={lifecycle.canProceed(3)}
+          canProceed={lifecycle.canProceed(currentStepIndex)}
           activeMappingId={activeMappingId}
           onMappingSelect={onMappingSelect}
           currentStep={3}
@@ -90,7 +90,7 @@ export function WizardStepRouter({
         <PortConfigurationStep
           onNext={lifecycle.handleNext}
           onBack={lifecycle.handleBack}
-          canProceed={lifecycle.canProceed(4)}
+          canProceed={lifecycle.canProceed(currentStepIndex)}
           currentStep={4}
           totalSteps={totalSteps}
           title={title}
@@ -103,7 +103,7 @@ export function WizardStepRouter({
         <SummaryStep
           onBack={lifecycle.handleBack}
           onGenerate={lifecycle.handleGenerate}
-          canProceed={lifecycle.canProceed(5)}
+          canProceed={lifecycle.canProceed(currentStepIndex)}
           isGenerating={lifecycle.isGenerating}
           onViewModeChange={onViewModeChange}
           currentStep={5}
