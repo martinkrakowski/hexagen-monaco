@@ -23,10 +23,13 @@ export async function GET() {
     const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
 
     if (!apiKey) {
-      return NextResponse.json({
-        suggestions: [],
-        error: "LLM API key not configured",
-      });
+      return NextResponse.json(
+        {
+          suggestions: [],
+          error: "LLM API key not configured",
+        },
+        { status: 200 },
+      );
     }
 
     const llmProvider = new ServerLLMAdapter(apiKey, baseUrl, model);
@@ -80,15 +83,7 @@ export async function GET() {
     }));
 
     return NextResponse.json({ suggestions });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to generate suggestions",
-      },
-      { status: 500 },
-    );
+  } catch {
+    return NextResponse.json({ suggestions: [] }, { status: 200 });
   }
 }

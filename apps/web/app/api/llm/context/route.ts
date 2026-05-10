@@ -44,8 +44,16 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
     const workspaceRoot = await findWorkspaceRoot(process.cwd());
     if (!workspaceRoot) {
       return NextResponse.json(
-        { error: "Workspace root not found" } as unknown as GovernancePayload,
-        { status: 500 },
+        {
+          system: "",
+          scope: "",
+          architecture: "",
+          boundedContexts: [],
+          ports: {},
+          invariants: [],
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 },
       );
     }
 
@@ -60,8 +68,16 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
       manifestContent = await readFile(manifestPath, "utf-8");
     } catch {
       return NextResponse.json(
-        { error: "Manifest not found" } as unknown as GovernancePayload,
-        { status: 500 },
+        {
+          system: "",
+          scope: "",
+          architecture: "",
+          boundedContexts: [],
+          ports: {},
+          invariants: [],
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 },
       );
     }
 
@@ -70,8 +86,16 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
       manifest = yaml.load(manifestContent) as Record<string, unknown>;
     } catch {
       return NextResponse.json(
-        { error: "Invalid manifest format" } as unknown as GovernancePayload,
-        { status: 500 },
+        {
+          system: "",
+          scope: "",
+          architecture: "",
+          boundedContexts: [],
+          ports: {},
+          invariants: [],
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 },
       );
     }
 
@@ -129,15 +153,18 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
         "Cache-Control": "public, max-age=3600",
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load governance context",
-      } as unknown as GovernancePayload,
-      { status: 500 },
+        system: "",
+        scope: "",
+        architecture: "",
+        boundedContexts: [],
+        ports: {},
+        invariants: [],
+        timestamp: new Date().toISOString(),
+      },
+      { status: 200 },
     );
   }
 }

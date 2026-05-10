@@ -77,12 +77,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ status });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to get status",
-      },
-      { status: 500 },
-    );
+  } catch {
+    return NextResponse.json({ status: [] });
   }
 }
