@@ -58,28 +58,33 @@ export function useGovernancePayload(): UseGovernancePayloadReturn {
   });
 
   // Fetch governance payload – exposed as a retryable callback
-  const fetchGovernance = useCallback(async () => {
-    if (governancePayload) return;
-    try {
-      const res = await fetch("/api/llm/context");
-      if (res.ok) {
-        const payload = await res.json();
-        setGovernancePayload(payload);
-        setError(null);
-      } else {
-        const errMsg = `Unexpected response ${res.status}`;
-        setError(errMsg);
+  const fetchGovernance = useCallback(
+    async (force = false) => {
+      if (governancePayload && !force) return;
+      try {
+        const res = await fetch("/api/llm/context");
+        if (res.ok) {
+          const payload = await res.json();
+          setGovernancePayload(payload);
+          setError(null);
+        } else {
+          const errMsg = `Unexpected response ${res.status}`;
+          setError(errMsg);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-    }
-  }, [governancePayload]);
+    },
+    [governancePayload],
+  );
 
   // Run once on mount
   useEffect(() => {
     fetchGovernance();
   }, [fetchGovernance]);
 
-  return { governancePayload, editorStateRef, error, retry: fetchGovernance };
+  const retry = useCallback(() => fetchGovernance(true), [fetchGovernance]);
+
+  return { governancePayload, editorStateRef, error, retry };
 }

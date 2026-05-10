@@ -27,6 +27,18 @@ interface GovernancePayload {
   timestamp: string;
 }
 
+function createEmptyPayload(): GovernancePayload {
+  return {
+    system: "",
+    scope: "",
+    architecture: "",
+    boundedContexts: [],
+    ports: {},
+    invariants: [],
+    timestamp: new Date().toISOString(),
+  };
+}
+
 async function findWorkspaceRoot(start: string): Promise<string | null> {
   const manifestPath = path.join(start, ".architecture", "manifest.yaml");
   try {
@@ -39,22 +51,11 @@ async function findWorkspaceRoot(start: string): Promise<string | null> {
   }
 }
 
-export async function GET(): Promise<NextResponse<GovernancePayload>> {
+export async function GET(): Promise<NextResponse<GovernancePayload | { error: string }>> {
   try {
     const workspaceRoot = await findWorkspaceRoot(process.cwd());
     if (!workspaceRoot) {
-      return NextResponse.json(
-        {
-          system: "",
-          scope: "",
-          architecture: "",
-          boundedContexts: [],
-          ports: {},
-          invariants: [],
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 },
-      );
+      return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
 
     const manifestPath = path.join(
@@ -67,36 +68,14 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
     try {
       manifestContent = await readFile(manifestPath, "utf-8");
     } catch {
-      return NextResponse.json(
-        {
-          system: "",
-          scope: "",
-          architecture: "",
-          boundedContexts: [],
-          ports: {},
-          invariants: [],
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 },
-      );
+      return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
 
     let manifest: Record<string, unknown>;
     try {
       manifest = yaml.load(manifestContent) as Record<string, unknown>;
     } catch {
-      return NextResponse.json(
-        {
-          system: "",
-          scope: "",
-          architecture: "",
-          boundedContexts: [],
-          ports: {},
-          invariants: [],
-          timestamp: new Date().toISOString(),
-        },
-        { status: 200 },
-      );
+      return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
 
     const boundedContextsArray = manifest.bounded_contexts as
@@ -155,16 +134,8 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
     });
   } catch {
     return NextResponse.json(
-      {
-        system: "",
-        scope: "",
-        architecture: "",
-        boundedContexts: [],
-        ports: {},
-        invariants: [],
-        timestamp: new Date().toISOString(),
-      },
-      { status: 200 },
+      { error: "Internal Server Error" },
+      { status: 500 },
     );
   }
 }

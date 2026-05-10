@@ -56,23 +56,21 @@ export async function POST(request: Request) {
         | Record<string, unknown>
         | undefined;
 
-      if (adapters) {
-        const adapterCount = Object.keys(adapters).length;
-        const appLayer = layers?.application as Record<string, unknown> | undefined;
-        const portConfig = appLayer?.ports as Record<string, unknown> | undefined;
-        const ports = portConfig
-          ? Object.keys(portConfig?.in || {}).length +
-            Object.keys(portConfig?.out || {}).length
-          : 0;
+      const adapterCount = adapters ? Object.keys(adapters).length : 0;
+      const appLayer = layers?.application as Record<string, unknown> | undefined;
+      const portConfig = appLayer?.ports as Record<string, unknown> | undefined;
+      const ports = portConfig
+        ? Object.keys(portConfig?.in || {}).length +
+          Object.keys(portConfig?.out || {}).length
+        : 0;
 
-        if (ports > 0 && adapterCount === 0) {
-          violations.push({
-            id: `${ctxName}-missing-adapters`,
-            type: "warning",
-            message: `Context "${ctxName}" has ${ports} port(s) but no adapters implemented`,
-            severity: "MEDIUM",
-          });
-        }
+      if (ports > 0 && adapterCount === 0) {
+        violations.push({
+          id: `${ctxName}-missing-adapters`,
+          type: "warning",
+          message: `Context "${ctxName}" has ${ports} port(s) but no adapters implemented`,
+          severity: "MEDIUM",
+        });
       }
 
       const dependencies = ctx.dependencies as

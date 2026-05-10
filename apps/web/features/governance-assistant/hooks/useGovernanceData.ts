@@ -63,6 +63,7 @@ export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGo
     async (manifestYaml: string, openFileContent?: string) => {
       if (!enabled || !manifestYaml) {
         setData(emptyData);
+        setError(null);
         return;
       }
       setIsLoading(true);
@@ -87,17 +88,27 @@ export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGo
           }),
         ]);
 
+        // Check for non-OK responses
+        const responses = [
+          { res: violationsRes, name: "violations" },
+          { res: suggestionsRes, name: "suggestions" },
+          { res: statusRes, name: "status" },
+        ];
+
+        for (const { res, name } of responses) {
+          if (!res.ok) {
+            const errorMsg = `Failed to fetch ${name}: ${res.status}`;
+            setError(errorMsg);
+            setIsLoading(false);
+            return;
+          }
+        }
+
         const [violationsData, suggestionsData, statusData] = await Promise.all([
           violationsRes.json(),
           suggestionsRes.json(),
           statusRes.json(),
         ]);
-
-        setData({
-          violations: violationsData.violations || [],
-          suggestions: suggestionsData.suggestions || [],
-          portAdapterStatus: statusData.status || [],
-        });
 
         if (violationsData.error || suggestionsData.error || statusData.error) {
           setError(
@@ -107,6 +118,12 @@ export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGo
               "Failed to fetch governance data",
           );
         }
+
+        setData({
+          violations: violationsData.violations || [],
+          suggestions: suggestionsData.suggestions || [],
+          portAdapterStatus: statusData.status || [],
+        });
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch governance data",
