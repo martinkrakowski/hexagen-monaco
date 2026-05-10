@@ -34,6 +34,11 @@ interface GovernanceData {
   portAdapterStatus: PortAdapterStatus[];
 }
 
+interface UseGovernanceDataOptions {
+  /** If false, skip auto-fetch on mount (for new projects without manifest) */
+  enabled?: boolean;
+}
+
 interface UseGovernanceDataReturn {
   data: GovernanceData;
   isLoading: boolean;
@@ -53,13 +58,15 @@ const emptyData: GovernanceData = {
   portAdapterStatus: [],
 };
 
-export function useGovernanceData(): UseGovernanceDataReturn {
+export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGovernanceDataReturn {
+  const { enabled = true } = options;
   const [data, setData] = useState<GovernanceData>(emptyData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Legacy refresh — GET from separate endpoints (reads from disk)
   const fetchAll = useCallback(async () => {
+    if (!enabled) return;
     setIsLoading(true);
     setError(null);
 
@@ -97,12 +104,14 @@ export function useGovernanceData(): UseGovernanceDataReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
-  // Auto-fetch governance data on mount — CR1 fix
+  // Auto-fetch governance data on mount — only when enabled
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (enabled) {
+      fetchAll();
+    }
+  }, [enabled, fetchAll]);
 
   // Dynamic refresh — POST manifest + open file content to combined endpoint
   const refreshWithData = useCallback(

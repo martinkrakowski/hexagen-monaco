@@ -13,18 +13,21 @@ type PanelMode = "qa" | "modify";
 
 interface GovernancePanelWrapperProps {
   currentStepIndex: number;
+  /** If false, skip governance API calls (for new projects without manifest) */
+  enabled?: boolean;
 }
 
 export const GovernancePanelWrapper = React.memo(
   function GovernancePanelWrapper({
     currentStepIndex,
+    enabled = true,
   }: GovernancePanelWrapperProps) {
     const wizardData = useWizardData();
     const {
       data,
       isLoading: isGovernanceLoading,
       refresh,
-    } = useGovernanceData();
+    } = useGovernanceData({ enabled });
     const [mode, setMode] = useState<PanelMode>("qa");
 
     return (
