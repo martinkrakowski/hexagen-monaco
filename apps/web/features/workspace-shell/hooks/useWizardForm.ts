@@ -36,6 +36,7 @@ export interface UseWizardFormReturn {
   governance: ProjectConfig["governance"];
   wizardData: WizardData;
   canProceed: (stepIndex: number) => boolean;
+  contentHash: string;
 }
 
 /**
@@ -122,5 +123,6 @@ export function useWizardForm(): UseWizardFormReturn {
     governance,
     wizardData,
     canProceed,
+    contentHash,
   };
 }

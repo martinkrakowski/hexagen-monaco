@@ -45,11 +45,12 @@ export function ProjectWorkspace({
   const router = useRouter();
   const totalSteps = wizardSteps.length;
 
-  const { form, wizardData, canProceed } = useWizardForm();
+  const { form, wizardData, canProceed, contentHash } = useWizardForm();
   const ui = useWorkspaceShellUi({ currentStepIndex, viewMode });
   const editor = useEditorSession();
   const lifecycle = useProjectLifecycle({
     form,
+    contentHash,
     ui,
     uiState: ui.state,
     editor,
