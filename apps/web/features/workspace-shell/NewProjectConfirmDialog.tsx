@@ -21,6 +21,10 @@ export function NewProjectConfirmDialog({
   router,
 }: NewProjectConfirmDialogProps) {
   const lifecycle = useWizardLifecycleContext();
+  const handleCancel = () => {
+    pendingRoute.current = null;
+    onClose();
+  };
   const projectName =
     lifecycle.loadedProject?.formState?.governance?.workspaceName ??
     lifecycle.loadedProject?.name;
@@ -28,7 +32,7 @@ export function NewProjectConfirmDialog({
   return (
     <Dialog
       open={isOpen}
-      onClose={onClose}
+      onClose={handleCancel}
     >
       <DialogContent>
         <DialogHeader>
@@ -76,7 +80,7 @@ export function NewProjectConfirmDialog({
           </button>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCancel}
             className="w-full px-4 py-2 border border-input bg-background rounded-md hover:bg-muted text-sm"
           >
             Cancel

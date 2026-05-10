@@ -151,25 +151,25 @@ function mapToFlowEdge(
 function mapToFlowEdges(
   edges: HexagonEdge[],
   nodes: HexagonNodeData[],
-  cache: Map<string, { source: HexagonEdge; flow: FlowEdge }>,
+  cache: Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>,
 ): {
   flowEdges: FlowEdge[];
-  nextCache: Map<string, { source: HexagonEdge; flow: FlowEdge }>;
+  nextCache: Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>;
 } {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const nextCache = new Map<string, { source: HexagonEdge; flow: FlowEdge }>();
+  const nextCache = new Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>();
   const flowEdges: FlowEdge[] = [];
 
   for (const edge of edges) {
     const cached = cache.get(edge.id);
     const sourceNode = nodeMap.get(edge.source);
-    if (cached && cached.source === edge) {
+    if (cached && cached.source === edge && cached.sourceNode === sourceNode) {
       flowEdges.push(cached.flow);
       nextCache.set(edge.id, cached);
     } else {
       const flow = mapToFlowEdge(edge, sourceNode);
       flowEdges.push(flow);
-      nextCache.set(edge.id, { source: edge, flow });
+      nextCache.set(edge.id, { source: edge, sourceNode, flow });
     }
   }
 
@@ -190,7 +190,7 @@ export function useCanvasConfig(
     Map<string, { source: HexagonNodeData; flow: HexagonFlowNode }>
   >(new Map());
   const edgeCacheRef = useRef<
-    Map<string, { source: HexagonEdge; flow: FlowEdge }>
+    Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>
   >(new Map());
 
   const flowNodes = useMemo(() => {

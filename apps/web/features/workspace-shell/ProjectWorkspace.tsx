@@ -87,6 +87,10 @@ export function ProjectWorkspace({
                     currentStepIndex={currentStepIndex}
                     totalSteps={totalSteps}
                     onViewModeChange={onViewModeChange}
+                    activeContextId={ui.activeContextId ?? ""}
+                    activeMappingId={ui.activeMappingId ?? ""}
+                    onContextSelect={(id) => ui.setContextId(id)}
+                    onMappingSelect={(id) => ui.setMappingId(id)}
                   />
                 }
                 middle={
@@ -111,11 +115,10 @@ export function ProjectWorkspace({
             </main>
 
             <NewProjectConfirmDialog
+              isOpen={ui.dialog.kind === "new-project"}
+              onClose={ui.closeDialog}
               pendingRoute={pendingRoute}
               router={router}
-              onNavigateToProjects={
-                onNavigateToProjects ? () => onNavigateToProjects() : undefined
-              }
             />
           </div>
           {children}

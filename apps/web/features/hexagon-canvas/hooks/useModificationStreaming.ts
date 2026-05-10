@@ -45,9 +45,9 @@ export function useModificationStreaming(
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
+    abortControllerRef.current?.abort();
 
     debounceTimerRef.current = setTimeout(async () => {
-      abortControllerRef.current?.abort();
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
@@ -135,7 +135,9 @@ export function useModificationStreaming(
         setStreamingState({ isStreaming: false, error: errorMsg });
         onPipelineErrorRef.current?.(errorMsg);
       } finally {
-        abortControllerRef.current = null;
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null;
+        }
       }
     }, DEBOUNCE_MS);
   }, []);

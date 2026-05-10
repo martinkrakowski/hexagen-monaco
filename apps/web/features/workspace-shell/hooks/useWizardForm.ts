@@ -75,18 +75,11 @@ export function useWizardForm(): UseWizardFormReturn {
     governance,
   });
 
-  const wizardDataRef = useRef<WizardData>(
-    buildWizardData(
-      boundedContexts,
-      externalContexts,
-      peerMappings,
-      governance,
-    ),
-  );
+  const wizardDataRef = useRef<WizardData | null>(null);
   const prevCanvasHashRef = useRef<string>(canvasHash);
 
   // ONLY rebuild wizardData if canvas-relevant fields mutated
-  if (canvasHash !== prevCanvasHashRef.current) {
+  if (wizardDataRef.current === null || canvasHash !== prevCanvasHashRef.current) {
     prevCanvasHashRef.current = canvasHash;
     wizardDataRef.current = buildWizardData(
       boundedContexts,
@@ -95,7 +88,7 @@ export function useWizardForm(): UseWizardFormReturn {
       governance,
     );
   }
-  const wizardData = wizardDataRef.current;
+  const wizardData = wizardDataRef.current!;
 
   // Returns a validation predicate by step index; closures over the
   // reactive boundedContexts slice so it updates as the user edits.

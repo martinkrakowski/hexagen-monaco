@@ -27,10 +27,13 @@ export function CanvasViewport({
   // Memoize the background color derivation — only recompute when theme changes.
   // Avoids calling getComputedStyle on every render (synchronous DOM read).
   const bgColor = useMemo(() => {
+    const fallback = theme === "dark" ? "35 5% 35%" : "35 5% 65%";
+    if (typeof document === "undefined") {
+      return `hsl(${fallback} / 0.4)`;
+    }
     const cssValue = getComputedStyle(document.documentElement)
       .getPropertyValue("--muted-foreground")
       .trim();
-    const fallback = theme === "dark" ? "35 5% 35%" : "35 5% 65%";
     return `hsl(${cssValue || fallback} / 0.4)`;
   }, [theme]);
 

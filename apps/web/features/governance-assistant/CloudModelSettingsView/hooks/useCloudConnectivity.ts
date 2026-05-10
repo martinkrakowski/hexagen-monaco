@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo } from "react";
 export function useCloudConnectivity(
   isConnecting?: boolean,
   connectionError?: string | null,
+  isConnectedProp?: boolean,
 ) {
   const [internalError, setInternalError] = useState<string | null>(null);
 
@@ -14,7 +15,7 @@ export function useCloudConnectivity(
     setInternalError(error);
   }, []);
 
-  const isConnected = !connectionError && !internalError;
+  const isConnected = isConnectedProp ?? (!connectionError && !internalError);
 
   return useMemo(
     () => ({
