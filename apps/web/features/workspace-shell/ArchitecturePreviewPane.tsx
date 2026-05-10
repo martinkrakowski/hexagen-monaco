@@ -4,12 +4,11 @@ import { ViewToggle } from "@hexagen/ui";
 import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
 import { CodeView } from "../code-view/CodeView";
 import { EditableMonaco } from "../monaco-editor/EditableMonaco";
+import { useWizardData } from "./contexts/WizardLifecycleContext";
 
-import type { WizardData } from "@hexagen/project-configuration";
 import type { ViewMode } from "@/types/view-mode";
 
 interface ArchitecturePreviewPaneProps {
-  wizardData: WizardData;
   viewMode: ViewMode;
   selectedFileId: string | null;
   editedFiles: Record<string, string>;
@@ -29,7 +28,6 @@ function recordToMap(record: Record<string, string>): Map<string, string> {
 
 export const ArchitecturePreviewPane = React.memo(
   function ArchitecturePreviewPane({
-    wizardData,
     viewMode,
     selectedFileId,
     editedFiles,
@@ -38,6 +36,7 @@ export const ArchitecturePreviewPane = React.memo(
     onFileContentChange,
     onFileSave,
   }: ArchitecturePreviewPaneProps) {
+    const wizardData = useWizardData();
     const editedFilesMap = useMemo(
       () => recordToMap(editedFiles),
       [editedFiles],

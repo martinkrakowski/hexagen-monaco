@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface PanelHeaderProps {
@@ -9,11 +10,7 @@ interface PanelHeaderProps {
   onCollapse: () => void;
 }
 
-/**
- * Header bar for a collapsible panel. Renders the panel title plus a
- * collapse button that points inward toward the middle pane.
- */
-export function PanelHeader({
+export const PanelHeader = React.memo(function PanelHeader({
   title,
   side,
   isCollapsed,
@@ -34,4 +31,4 @@ export function PanelHeader({
       </button>
     </div>
   );
-}
+});

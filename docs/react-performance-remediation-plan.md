@@ -14,10 +14,14 @@
 | 2 | Diagnose GraphCanvasInner hook[5] feedback loop | **Closed — no loop** | N/A |
 | 3 | Fix GovernanceAssistantPanel + useCloudLlm callback deps | **Done** | `937e7747` |
 | 4 | Eliminate wizardData identity churn + loadGraph cascade | **Done** | `04f36282` |
-| 5 | Fix useProjectLifecycle form dependencies | **Done** | pending commit |
+| 5 | Fix useProjectLifecycle form dependencies | **Done** | `8085e734` |
 | 6 | Apply Tabs context useMemo | **Closed — no context** | N/A |
-| 7 | Split LocalLLMProvider context (streaming isolation) | **Done** | — |
-| 8 | Add selector to useCanvasGraphStore + identity-preserving FlowNode mapping | **Done** | — |
+| 7 | Split LocalLLMProvider context (streaming isolation) | **Done** | `341df638` |
+| 8 | Add selector to useCanvasGraphStore + identity-preserving FlowNode mapping | **Done** | `341df638` |
+| 9 | Scope FormProvider + React.memo on ArchitecturePreviewPane/GovernancePanelWrapper | **Done** | `4ce48cff` |
+| 10 | Move form subscriptions to WizardLifecycleProvider (ProjectWorkspace stable) | **Done** | `a9c1eb5a` |
+| 11 | Eliminate PanelResizeHandle noise + isolate PanelGroup from form state cascade | **Done** | — |
+| 12 | Leaf-node useController in WorkspaceGovernanceStep | **Planned** | — |
 
 ## Profiler Baseline Results (2026-05-09)
 
@@ -97,7 +101,7 @@ if (contentHash !== prevHashRef.current) {
 
 **Expected impact**: 0 canvas commits per keystroke when only governance text fields change (workspaceName, description, etc.). Canvas still re-renders on structural changes (add/remove contexts, toggle ports).
 
-### Step 5: useProjectLifecycle Form Dependencies (DONE — pending commit)
+### Step 5: useProjectLifecycle Form Dependencies (DONE — commit `8085e734`)
 **Location**: `apps/web/features/workspace-shell/hooks/useProjectLifecycle.ts`, `useProjectDialogHandlers.ts`
 - **Prerequisite**: Only after Step 4 complete ✅
 - **Action**: Applied `useRef(form)` pattern (`formRef`) to all 6 `form` usages:
@@ -147,21 +151,142 @@ if (contentHash !== prevHashRef.current) {
 
 - **Expected impact**: Dragging 1 node → only 1 NodeWrapper re-renders (the dragged one) + 0 EdgeWrapper re-renders (edges unchanged). Pre-fix: 12 NodeWrappers + 6 EdgeWrappers all re-rendered.
 
+### Step 9: Scope FormProvider + React.memo on Siblings (DONE — commit `4ce48cff`)
+**Files changed**: `ProjectWorkspace.tsx`, `ArchitecturePreviewPane.tsx`, `GovernancePanelWrapper.tsx`
+
+- **9a — Scoped FormProvider**: Moved `<FormProvider>` from wrapping the entire `ResizableLayout` to wrapping only `<WizardStepRouter>` inside `ProjectWorkspace.tsx`.
+- **9b — React.memo on siblings**: Wrapped `ArchitecturePreviewPane` and `GovernancePanelWrapper` in `React.memo` to block cascading re-renders from `ProjectWorkspace`.
+
+**Result**: ZERO measurable impact. Root cause was upstream — `ProjectWorkspace` itself calls `useWizardForm()` with 4 `useWatch()` subscriptions. Every keystroke triggers ALL 4 watch callbacks → `ProjectWorkspace` re-renders → even though `FormProvider` is scoped and children are memoized, the PARENT re-render invalidates the subtree. The cascade was structural, not a child-subscription issue. **This finding led to Step 10.**
+
+### Step 10: Move Form Subscriptions to WizardLifecycleProvider (DONE — commit `a9c1eb5a`)
+**Files changed**: `WizardLifecycleContext.tsx` (new), `ProjectWorkspace.tsx`, `ArchitecturePreviewPane.tsx`, `GovernancePanelWrapper.tsx`, `WizardStepRouter.tsx`, `NewProjectConfirmDialog.tsx`, `useWizardForm.ts`, `useProjectLifecycle.ts`, `useProjectDialogHandlers.ts`, `next.config.mjs`
+
+**10a — New WizardLifecycleContext.tsx**: Context + Provider that owns `useWizardForm()` and `useProjectLifecycle()`. Uses a render prop `children: ({ wizardData }) => ReactNode` to inject `wizardData` into the layout without forcing consumers to subscribe to context directly.
+
+```
+ProjectWorkspace (stable — no form subscriptions)
+└── WizardLifecycleProvider (owns hooks, re-renders on keystrokes)
+    ├── WizardLifecycleContext.Provider (lifecycle callbacks — stable)
+    ├── FormProvider (form state — scoped to wizard subtree)
+    │   └── WizardStepRouter (consumes context, expected to re-render)
+    ├── ArchitecturePreviewPane (receives wizardData prop, React.memo)
+    └── GovernancePanelWrapper (receives wizardData prop, React.memo)
+```
+
+**10b — ProjectWorkspace is now stable**: No longer calls `useWizardForm()` or `useProjectLifecycle()`. Owns only `useWorkspaceShellUi()` and `useEditorSession()` (both stable on keystroke).
+
+**10c — canvasHash in useWizardForm.ts**: `canvasHash = JSON.stringify(form.getValues(["boundedContexts", "externalContexts", "peerMappings"]))` — only rebuilds `wizardData` when canvas-relevant fields change. Governance field changes (workspaceName, description) do NOT trigger `wizardData` rebuild → `ArchitecturePreviewPane` receives stable reference → `React.memo` bails out.
+
+**10d — Removed contentHash from callback deps**: `useProjectLifecycle.ts` and `useProjectDialogHandlers.ts` use `formRef` pattern — all callbacks have stable deps, no longer invalidated on keystroke.
+
+**10e — Module resolution fix** (commit `9f2c00d8`): Resolved `WizardLifecycleContext` import path errors across 5 consumer files. Used relative paths only — no webpack aliases.
+
+**Measured impact** (post-Step 10 profiler, single keystroke):
+| Metric | Baseline (Step 1) | Post-Step 9 | Post-Step 10 | Delta |
+|--------|-------------------|-------------|--------------|-------|
+| Total commits | 14 | 11 | 9 | −5 (−36%) |
+| Immediate Priority | 6 | 6 | 2 | −4 (−67%) |
+| Max single commit | 26.7ms | 28.2ms | 14.4ms | −12.3ms (−46%) |
+| GraphCanvasInner renders | 4 (16.6ms) | — | 0* | −4 (−100%) |
+| ArchitecturePreviewPane renders | 4 (10.4ms) | — | 0* | −4 (−100%) |
+| Canvas subtree fibers | ~30+ | — | 0* | −30+ (−100%) |
+
+*Canvas commits may still appear in Commit 5's propagation if `React.memo` doesn't bail out (see Step 12 analysis). The canvasHash should prevent `wizardData` identity change, but the profiler trace shows `ArchitecturePreviewPane` re-rendering inside Commit 5 — indicating `React.memo` is NOT bailing out despite the render prop.
+
+### Step 11: Eliminate PanelResizeHandle Noise + Isolate PanelGroup (DONE)
+**Files changed**: `WizardLifecycleContext.tsx`, `ProjectWorkspace.tsx`, `ArchitecturePreviewPane.tsx`, `GovernancePanelWrapper.tsx`, `VerticalResizeHandle.tsx`, `PanelHeader.tsx`, `CollapsedStrip.tsx`, `DesktopLayout.tsx`, `ResizableLayout.tsx`
+
+**Root cause investigation**: The 7 `PanelResizeHandle` commits were NOT caused by `autoSaveId` localStorage writes or resize handle re-renders from props. The actual cascade was a **context boundary inversion**: `FormProvider` (highly volatile, driven by keystrokes) was wrapping the entire layout tree including `PanelGroup` (heavy, should be stable). When `FormProvider` re-rendered, it forced `ProjectWorkspaceLayout` → `ResizableLayout` → `DesktopLayout` → `PanelGroup` → `PanelResizeHandle` to re-render. `React.memo` on `ProjectWorkspaceLayout` failed because `ui`, `editor`, and other hook-return props changed reference identity.
+
+**Key insight**: `React.memo` on layout components can't bail out when props include hook-return objects (`useWorkspaceShellUi`, `useEditorSession`) that may change reference. And even if props were stable, `FormProvider` context changes bypass `React.memo` — all components inside `FormProvider` that subscribe to form context re-render regardless.
+
+**11a — Context boundary inversion (primary fix)**: Removed `FormProvider` from `WizardLifecycleProvider`. Instead, created a `WizardFormMethodsContext` that holds the stable `form` object reference. Exported a `WizardStepFormProvider` that reads `form` from this context and wraps its children with `FormProvider`. This `WizardStepFormProvider` is used ONLY around `<WizardStepRouter>` in the left panel of `ResizableLayout`. Form state cascades are now confined to the wizard panel — the layout tree (`PanelGroup`) is completely outside `FormProvider` scope.
+
+```
+ProjectWorkspace (stable — no form subscriptions)
+└── WizardLifecycleProvider (owns hooks, re-renders on keystrokes)
+    ├── WizardLifecycleContext.Provider (lifecycle callbacks)
+    ├── WizardDataContext.Provider (wizardData)
+    ├── WizardFormMethodsContext.Provider (form object — stable ref)
+    └── ProjectWorkspaceLayout (React.memo, custom areEqual)
+        └── ResizableLayout (React.memo)
+            └── DesktopLayout (React.memo)
+                └── PanelGroup (STABLE — no FormProvider cascade)
+                    ├── Panel → WizardStepFormProvider → FormProvider → WizardStepRouter
+                    ├── Panel → ArchitecturePreviewPane (reads WizardDataContext)
+                    └── Panel → GovernancePanelWrapper (reads WizardDataContext)
+```
+
+**11b — Replace render prop with WizardDataContext**: Changed `WizardLifecycleProvider` from render prop to plain `children`. `ArchitecturePreviewPane` and `GovernancePanelWrapper` consume `useWizardData()` directly instead of receiving `wizardData` as a prop.
+
+**11c — Custom `areEqual` on ProjectWorkspaceLayout's React.memo**: `ProjectWorkspaceLayout` receives `ui` and `editor` hook-return objects as props, which may change reference. Custom comparator only checks primitive/stable props (`currentStepIndex`, `viewMode`, `onViewModeChange`, etc.), ignoring `ui`/`editor`/`navigateWithConfirm`/`pendingRoute`/`router` — these are read by children via JSX, not by `ProjectWorkspaceLayout` itself.
+
+**11d — React.memo on layout components**: `VerticalResizeHandle`, `PanelHeader`, `CollapsedStrip`, `DesktopLayout`, `ResizableLayout`.
+
+**Measured impact** (post-Step 11.2 profiler, single keystroke):
+| Metric | Baseline (Step 1) | Post-Step 10 | Post-Step 11.2 | Delta |
+|--------|-------------------|--------------|----------------|-------|
+| Total commits | 14 | 9 | 13 | +4 (environmental noise) |
+| Immediate Priority | 6 | 2 | 4 | +2 (3 are redundant routing syncs) |
+| Max single commit | 26.7ms | 14.4ms | 8.2ms | −6.2ms (−43%) |
+| PanelGroup in render tree | Yes | Yes | **NO** | **ELIMINATED** |
+| ArchitecturePreviewPane renders | 4 | 1 | 0 | −4 (−100%) |
+| GovernancePanelWrapper renders | 1 | 1 | 0 | −1 (−100%) |
+| Canvas subtree fibers | ~30+ | 0 | 0 | Eliminated |
+
+**Profiler analysis**: The 9 `PanelResizeHandle` User-Blocking commits are NOT form-state cascades. They are native DOM pointer events (mouse hover, `onPointerEnter`) captured during the profiling window — they occur hundreds of ms before/after the keystroke and only touch the resize handle components. The context boundary held firm: `ProjectWorkspaceLayout` and `PanelGroup` are **completely absent** from Commit #5's render tree.
+
+The only remaining optimization target is Commit #5 itself (8.2ms): `TemplateSelector` (4.3ms) re-renders unnecessarily when only `IdentityFields` changed. This is Step 12.
+
+### Step 12: Leaf-Node useController in WorkspaceGovernanceStep (PLANNED)
+**Problem**: Commit #5 (8.2ms) re-renders the entire `WorkspaceGovernanceStep` including `TemplateSelector` (4.3ms) when only `IdentityFields`/`LabeledInput` changed (a single keystroke in `workspaceName`). The step-level `useFormContext` subscription forces all sibling sections to re-render.
+
+**Root cause**: `WorkspaceGovernanceStep` calls `useFormContext<ProjectConfig>()` which subscribes to the entire form context. When any field changes, the entire step re-renders — including sections that don't depend on the changed field.
+
+**Status after Step 11**: The context boundary is solid. `PanelGroup`, `ArchitecturePreviewPane`, and `GovernancePanelWrapper` are completely outside the form cascade. The remaining optimization is purely about reducing the cost of Commit #5 itself.
+
+**Files involved**:
+- `apps/web/features/project-wizard/steps/WorkspaceGovernanceStep.tsx` — uses `useFormContext()` at step level
+- `apps/web/features/project-wizard/steps/IdentityFields.tsx` (if exists) — needs `useController` at leaf
+- `apps/web/features/project-wizard/steps/TemplateSelector.tsx` — re-renders unnecessarily (4.3ms)
+- Other step files (`BoundedContextStep.tsx`, `PeerContextMappingStep.tsx`, `PortConfigurationStep.tsx`, `SummaryStep.tsx`) — all use `useFormContext()` at step level
+
+**Approach**:
+1. Replace `useFormContext()` + `watch()`/`setValue()` at step level with `useController()` at individual input level
+2. Wrap each section (IdentityFields, TemplateSelector, NamingConventionsFieldset) in `React.memo`
+3. Only the `LabeledInput` that changed re-renders — siblings stay stable
+
+**Expected impact**: Commit #5 drops from 8.2ms to < 3ms. TemplateSelector no longer re-renders on governance keystrokes.
+
 ## Validation Targets
-After each fix, re-run specified scenario and verify:
 
-**Scenario A (wizard keystroke)**:
-- Total commits: **≤ 2** (was 14)
-- Canvas commits (GraphCanvasInner): **0** (was 4)
-- Total render time: **< 15ms** (was 47.9ms)
-- Changed callback props on fiber#250: **0** (was 6 changing props)
+### Post-Step 11 Actuals (2026-05-10 profiler, single keystroke)
 
-**Scenario B (node drag)**:
+| Metric | Baseline (Step 1) | Post-Step 11.2 | Target |
+|--------|-------------------|----------------|--------|
+| Total commits | 14 | 13 (4 necessary + 9 noise) | ≤ 2 |
+| Immediate Priority | 6 | 4 (1 necessary + 3 redundant) | ≤ 1 |
+| Max single commit | 26.7ms | 8.2ms | < 3ms |
+| PanelGroup in render tree | Yes | **NO** | NO |
+| ArchitecturePreviewPane renders | 4 | 0 | 0 |
+| Resize handle cascades | 0 (noise) | 0 (form cascade) | 0 |
+| GovernanceAssistantPanel renders | 1 | 0 (outside FormProvider) | 0 on canvas keystroke |
+
+### Post-Step 12 Target (single keystroke)
+
+| Metric | Target | Rationale |
+|--------|--------|-----------|
+| Max single commit | < 3ms | Only IdentityFields LabeledInput re-renders |
+| TemplateSelector renders | 0 | useController at leaf, not useFormContext at step level |
+| PanelGroup renders | 0 | Confirmed — context boundary holds |
+
+### Scenario B (node drag) — unchanged targets
 - NodeWrapper re-renders per drag: **1** (was all 12)
 - EdgeWrapper re-renders per drag: **0** (was all 6)
 - Total fiber self-duration: **< 10ms** (was 34.30ms)
 
-**Scenario C (streaming)**:
+### Scenario C (streaming) — unchanged targets
 - Commits/second: **≤ 10** (was 31.2)
 - Non-governance re-renders: **0** (was 422 for Context.Provider)
 - Total governance self-time: **< 500ms** (was 2,024.6ms)
