@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { Tabs } from "@hexagen/ui";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { useGovernanceData } from "./hooks/useGovernanceData";
@@ -8,6 +8,7 @@ import { GovernanceAssistantPanel } from "./GovernanceAssistantPanel";
 import { ArchitectureModificationPanel } from "./architecture-modification";
 // eslint-disable-next-line hexagen-ui/no-feature-slice-imports
 import { useWizardData } from "../workspace-shell/contexts/WizardLifecycleContext";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 
 type PanelMode = "qa" | "modify";
 
@@ -23,12 +24,20 @@ export const GovernancePanelWrapper = React.memo(
     enabled = true,
   }: GovernancePanelWrapperProps) {
     const wizardData = useWizardData();
+    const { activeWorkspace } = useActiveWorkspace();
     const {
       data,
       isLoading: isGovernanceLoading,
       refresh,
     } = useGovernanceData({ enabled });
     const [mode, setMode] = useState<PanelMode>("qa");
+
+    const handleRefresh = useCallback(async () => {
+      const manifestYaml = activeWorkspace?.manifestYaml;
+      if (manifestYaml) {
+        await refresh(manifestYaml);
+      }
+    }, [activeWorkspace?.manifestYaml, refresh]);
 
     return (
       <ErrorBoundary>
@@ -48,7 +57,7 @@ export const GovernancePanelWrapper = React.memo(
                 currentStepIndex={currentStepIndex}
                 violations={data.violations}
                 suggestions={data.suggestions}
-                onRefresh={refresh}
+                onRefresh={handleRefresh}
                 isLoading={isGovernanceLoading}
               />
             </Tabs.Content>

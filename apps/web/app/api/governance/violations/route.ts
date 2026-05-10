@@ -1,84 +1,117 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { LinterReportSchema } from "@hexagen/governance";
-import { PERFORMANCE_TARGETS } from "@hexagen/web-driver";
-
-const execAsync = promisify(exec);
+import * as yaml from "js-yaml";
 
 interface Violation {
   id: string;
   type: "error" | "warning" | "info";
   message: string;
-  context?: string;
   severity: "HIGH" | "MEDIUM" | "LOW";
-  errorCode?: string; // Discriminates timeout/permission vs execution errors
 }
 
-export async function GET() {
-  // Declare tracking variables for lint execution
-  let valid = true;
-  let errors: string[] = [];
-  let errorCode: string | undefined;
+interface ViolationsRequestBody {
+  manifestYaml: string;
+}
 
+export async function POST(request: Request) {
   try {
-    try {
-      await execAsync("yarn lint:arch", {
-        cwd: process.cwd(),
-        timeout: PERFORMANCE_TARGETS.LINTER.timeout,
-      });
-    } catch (_err) {
-      valid = false;
-      const err = _err as Error & { stderr?: string | Buffer; code?: string };
+    const body = (await request.json()) as ViolationsRequestBody;
 
-      // Discriminate error types for severity classification
-      errorCode = err.code;
-      const message = err.stderr ? String(err.stderr) : err.message;
-      errors = message
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+    if (!body.manifestYaml) {
+      return NextResponse.json(
+        { error: "manifestYaml is required" },
+        { status: 400 },
+      );
     }
 
-    // Determine severity based on error code
-    const isSoftError =
-      errorCode === "ETIMEDOUT" ||
-      errorCode === "ENOENT" ||
-      errorCode === "EACCES";
-    const violationSeverity = isSoftError ? "MEDIUM" : "HIGH";
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = yaml.load(body.manifestYaml) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({
+        violations: [],
+        isCompliant: true,
+      });
+    }
 
-    const violations: Violation[] = errors.map((msg, idx) => ({
-      id: String(idx + 1),
-      type: "error" as const,
-      message: msg,
-      severity: violationSeverity as "HIGH" | "MEDIUM",
-      errorCode: errorCode,
-    }));
+    const boundedContexts = parsed.bounded_contexts as
+      | Array<Record<string, unknown>>
+      | undefined;
 
-    const report = LinterReportSchema.parse({
-      timestamp: new Date().toISOString(),
-      isCompliant: valid,
-      violations: violations.map((v) => ({
-        ruleId: `arch-lint-${v.id}`,
-        severity: v.type === "error" ? "error" : "warning",
-        file: ".architecture/manifest.yaml",
-        message: v.message,
-      })),
-      scannedFilesCount: 1,
-    });
+    if (!boundedContexts || boundedContexts.length === 0) {
+      return NextResponse.json({
+        violations: [],
+        isCompliant: true,
+      });
+    }
+
+    const violations: Violation[] = [];
+
+    for (const ctx of boundedContexts) {
+      const ctxName = ctx.name as string;
+      const layers = ctx.layers as Record<string, unknown> | undefined;
+      const domainLayer = layers?.domain as
+        | Record<string, unknown>
+        | undefined;
+      const adapters = domainLayer?.adapters as
+        | Record<string, unknown>
+        | undefined;
+
+      if (adapters) {
+        const adapterCount = Object.keys(adapters).length;
+        const appLayer = layers?.application as Record<string, unknown> | undefined;
+        const portConfig = appLayer?.ports as Record<string, unknown> | undefined;
+        const ports = portConfig
+          ? Object.keys(portConfig?.in || {}).length +
+            Object.keys(portConfig?.out || {}).length
+          : 0;
+
+        if (ports > 0 && adapterCount === 0) {
+          violations.push({
+            id: `${ctxName}-missing-adapters`,
+            type: "warning",
+            message: `Context "${ctxName}" has ${ports} port(s) but no adapters implemented`,
+            severity: "MEDIUM",
+          });
+        }
+      }
+
+      const dependencies = ctx.dependencies as
+        | Array<Record<string, unknown>>
+        | undefined;
+      if (dependencies) {
+        for (const dep of dependencies) {
+          const depName = dep.name as string;
+          if (depName === ctxName) {
+            violations.push({
+              id: `${ctxName}-self-dependency`,
+              type: "error",
+              message: `Context "${ctxName}" depends on itself`,
+              severity: "HIGH",
+            });
+          }
+        }
+      }
+    }
 
     return NextResponse.json({
       violations,
-      isCompliant: report.isCompliant,
+      isCompliant: violations.filter((v) => v.type === "error").length === 0,
     });
   } catch {
-    // If anything unexpected happens, return an empty successful response
-    return NextResponse.json(
-      {
-        violations: [],
-        isCompliant: true,
-      },
-      { status: 200 },
-    );
+    return NextResponse.json({
+      violations: [],
+      isCompliant: true,
+    });
   }
+}
+
+export async function GET() {
+  return NextResponse.json(
+    {
+      error: "Use POST with manifestYaml in request body",
+      violations: [],
+      isCompliant: true,
+    },
+    { status: 200 },
+  );
 }

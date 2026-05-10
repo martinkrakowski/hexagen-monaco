@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
-import { readFile } from "fs/promises";
-import path from "path";
 
 interface AISuggestion {
   id: string;
@@ -15,36 +13,35 @@ interface AISuggestion {
     | "general";
 }
 
-export async function GET() {
+interface SuggestionsRequestBody {
+  manifestYaml: string;
+  openFileContent?: string;
+}
+
+export async function POST(request: Request) {
   try {
+    const body = (await request.json()) as SuggestionsRequestBody;
+
+    if (!body.manifestYaml) {
+      return NextResponse.json(
+        { error: "manifestYaml is required" },
+        { status: 400 },
+      );
+    }
+
     const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
     const baseUrl =
       process.env.NEXT_PUBLIC_LLM_BASE_URL || "https://api.openai.com/v1";
     const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
 
     if (!apiKey) {
-      return NextResponse.json(
-        {
-          suggestions: [],
-          error: "LLM API key not configured",
-        },
-        { status: 200 },
-      );
+      return NextResponse.json({
+        suggestions: [],
+        error: "LLM API key not configured",
+      });
     }
 
     const llmProvider = new ServerLLMAdapter(apiKey, baseUrl, model);
-
-    const manifestPath = path.join(
-      process.cwd(),
-      ".architecture",
-      "manifest.yaml",
-    );
-    let manifestContent = "";
-    try {
-      manifestContent = await readFile(manifestPath, "utf-8");
-    } catch {
-      manifestContent = "No manifest found";
-    }
 
     const useCase = new GenerateSuggestionUseCase(llmProvider, {
       generateSuggestions: async () => ({
@@ -58,20 +55,21 @@ export async function GET() {
       }),
     });
 
+    let prompt = `Analyze this architecture manifest and suggest improvements:\n\n${body.manifestYaml}`;
+    if (body.openFileContent) {
+      prompt += `\n\n--- Currently open file ---\n${body.openFileContent}`;
+    }
+
     const result = await useCase.execute({
-      prompt: `Analyze this architecture manifest and suggest improvements:\n\n${manifestContent}`,
+      prompt,
       context: {},
       maxSuggestions: 5,
     });
 
     if (!result.success) {
-      const errorMessage =
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error);
       return NextResponse.json({
         suggestions: [],
-        error: errorMessage,
+        error: result.error instanceof Error ? result.error.message : "Failed to generate suggestions",
       });
     }
 
@@ -86,4 +84,8 @@ export async function GET() {
   } catch {
     return NextResponse.json({ suggestions: [] }, { status: 200 });
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ suggestions: [] });
 }
