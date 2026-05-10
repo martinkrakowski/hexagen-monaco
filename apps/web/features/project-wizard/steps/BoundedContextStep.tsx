@@ -1,11 +1,11 @@
 "use client";
 
-import { useFormContext, useFieldArray, useWatch } from "react-hook-form";
-import type { ProjectConfig } from "@hexagen/project-configuration";
+import { useState, useEffect } from "react";
+import { useFormContext, useWatch } from "react-hook-form";
+import type { BoundedContext, ProjectConfig } from "@hexagen/project-configuration";
 
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
-import { useMenuFormView } from "../hooks/useMenuFormView";
 import {
   ContextList,
   ContextForm,
@@ -37,72 +37,73 @@ export function BoundedContextStep({
   description,
   readOnly,
 }: BoundedContextStepProps) {
-  const { control } = useFormContext<ProjectConfig>();
+  const { control, getValues, setValue } = useFormContext<ProjectConfig>();
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "boundedContexts",
-    keyName: "_rfId",
-  });
+  const boundedContexts = useWatch({ control, name: "boundedContexts" }) || [];
 
-  const watchedContexts = useWatch({ control, name: "boundedContexts" }) || [];
+  const [viewMode, setViewMode] = useState<"menu" | "form">("menu");
+  const [localActiveId, setLocalActiveId] = useState<string>(
+    activeContextId || "",
+  );
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const boundedContexts = fields.map((field, index) => ({
-    ...field,
-    ...(watchedContexts[index] || {}),
-  }));
-
-  const {
-    view,
-    confirmDeleteId,
-    openMenu,
-    openForm,
-    requestDelete,
-    cancelDelete,
-  } = useMenuFormView<string>();
+  useEffect(() => {
+    if (activeContextId && activeContextId !== localActiveId) {
+      setLocalActiveId(activeContextId);
+    }
+  }, [activeContextId]);
 
   const activeIndex = boundedContexts.findIndex(
-    (c) => c.id === activeContextId,
+    (c: BoundedContext) => c.id === localActiveId,
   );
-  const activeContext =
+  const activeContext: BoundedContext | undefined =
     activeIndex >= 0 ? boundedContexts[activeIndex] : undefined;
 
+  useEffect(() => {
+    if (viewMode === "form" && !activeContext) {
+      setViewMode("menu");
+    }
+  }, [activeContext, viewMode]);
+
   const isNextDisabled =
-    !canProceed || boundedContexts.some((c) => !c.name?.trim());
+    !canProceed || boundedContexts.some((c: BoundedContext) => !c.name?.trim());
 
   const handleSelectContext = (id: string) => {
+    if (!id) return;
+    setLocalActiveId(id);
+    setViewMode("form");
     onContextSelect?.(id);
-    openForm();
   };
 
   const handleAddContext = () => {
+    const current = getValues("boundedContexts") || [];
     const next = createEmptyContext();
-    append(next);
+    setValue("boundedContexts", [...current, next], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setLocalActiveId(next.id);
+    setViewMode("form");
     onContextSelect?.(next.id);
-    openForm();
   };
 
   const handleConfirmDelete = (contextId: string) => {
-    const indexToDelete = boundedContexts.findIndex(
-      (c) => c.id === contextId,
-    );
-    if (indexToDelete < 0) {
-      cancelDelete();
-      return;
+    const current = getValues("boundedContexts") || [];
+    const index = current.findIndex((c: BoundedContext) => c.id === contextId);
+    if (index >= 0) {
+      const updated = [...current];
+      updated.splice(index, 1);
+      setValue("boundedContexts", updated, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     }
-    remove(indexToDelete);
-
-    if (activeContextId === contextId) {
-      const remaining = boundedContexts.filter((c) => c.id !== contextId);
-      if (remaining.length > 0) {
-        const newActiveIndex = Math.min(indexToDelete, remaining.length - 1);
-        onContextSelect?.(remaining[newActiveIndex].id);
-        openMenu();
-      } else {
-        onContextSelect?.("");
-      }
+    setDeleteId(null);
+    if (localActiveId === contextId) {
+      setLocalActiveId("");
+      setViewMode("menu");
+      onContextSelect?.("");
     }
-    cancelDelete();
   };
 
   return (
@@ -116,23 +117,30 @@ export function BoundedContextStep({
       />
 
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {view === "menu" || !activeContext ? (
+        {viewMode === "menu" || !activeContext ? (
           <ContextList
             contexts={boundedContexts}
-            activeContextId={activeContextId}
-            confirmDeleteId={confirmDeleteId}
+            activeContextId={localActiveId}
+            confirmDeleteId={deleteId}
             onSelectContext={handleSelectContext}
             onAddContext={handleAddContext}
-            onRequestDelete={requestDelete}
+            onRequestDelete={setDeleteId}
             onConfirmDelete={handleConfirmDelete}
-            onCancelDelete={cancelDelete}
+            onCancelDelete={() => setDeleteId(null)}
             readOnly={readOnly}
           />
         ) : (
           <ContextForm
+            // key={activeContext.id} forces a full remount on context switch,
+            // preventing RHF's uncontrolled DOM nodes from retaining stale
+            // values across fieldPrefix changes.
+            //
+            // CRITICAL: Do NOT use activeIndex as the key. If a context is
+            // deleted, array indices shift, causing false cache busts or
+            // missed busts — leaking ambient state between contexts.
             key={activeContext.id}
             fieldPrefix={`boundedContexts.${activeIndex}`}
-            onBack={openMenu}
+            onBack={() => setViewMode("menu")}
             readOnly={readOnly}
           />
         )}
