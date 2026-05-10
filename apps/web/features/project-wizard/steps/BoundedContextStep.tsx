@@ -49,7 +49,7 @@ export function BoundedContextStep({
   description,
   readOnly,
 }: BoundedContextStepProps) {
-  const { watch, setValue } = useFormContext<ProjectConfig>();
+  const { watch, setValue, getValues } = useFormContext<ProjectConfig>();
   const boundedContexts = watch("boundedContexts") || [];
 
   const {
@@ -61,8 +61,9 @@ export function BoundedContextStep({
     cancelDelete,
   } = useMenuFormView<string>();
 
-  const activeContext = boundedContexts.find((c) => c.id === activeContextId);
-  const activeIndex = boundedContexts.findIndex(
+  const currentContexts = getValues("boundedContexts") || [];
+  const activeContext = currentContexts.find((c) => c.id === activeContextId);
+  const activeIndex = currentContexts.findIndex(
     (c) => c.id === activeContextId,
   );
 
@@ -75,8 +76,9 @@ export function BoundedContextStep({
   };
 
   const handleAddContext = () => {
+    const snapshot = getValues("boundedContexts") || [];
     const next = createEmptyContext();
-    setValue("boundedContexts", [...boundedContexts, next]);
+    setValue("boundedContexts", [...snapshot, next]);
     onContextSelect?.(next.id);
     openForm();
   };
@@ -84,9 +86,11 @@ export function BoundedContextStep({
   const handleUpdateContext = (
     updater: (ctx: BoundedContext) => BoundedContext,
   ) => {
-    if (activeIndex < 0) return;
-    const next = boundedContexts.map((ctx, i) =>
-      i === activeIndex ? updater(ctx) : ctx,
+    const snapshot = getValues("boundedContexts") || [];
+    const idx = snapshot.findIndex((c) => c.id === activeContextId);
+    if (idx < 0) return;
+    const next = snapshot.map((ctx, i) =>
+      i === idx ? updater(ctx) : ctx,
     );
     setValue("boundedContexts", next, {
       shouldDirty: true,
@@ -95,12 +99,13 @@ export function BoundedContextStep({
   };
 
   const handleConfirmDelete = (contextId: string) => {
-    const indexToDelete = boundedContexts.findIndex((c) => c.id === contextId);
+    const snapshot = getValues("boundedContexts") || [];
+    const indexToDelete = snapshot.findIndex((c) => c.id === contextId);
     if (indexToDelete < 0) {
       cancelDelete();
       return;
     }
-    const next = [...boundedContexts];
+    const next = [...snapshot];
     next.splice(indexToDelete, 1);
     setValue("boundedContexts", next);
 
