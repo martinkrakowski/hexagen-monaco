@@ -61,11 +61,10 @@ export function BoundedContextStep({
     cancelDelete,
   } = useMenuFormView<string>();
 
-  const currentContexts = getValues("boundedContexts") || [];
-  const activeContext = currentContexts.find((c) => c.id === activeContextId);
-  const activeIndex = currentContexts.findIndex(
+  const activeIndex = boundedContexts.findIndex(
     (c) => c.id === activeContextId,
   );
+  const activeContext = activeIndex >= 0 ? boundedContexts[activeIndex] : undefined;
 
   const isNextDisabled =
     !canProceed || boundedContexts.some((c) => !c.name?.trim());
@@ -146,6 +145,7 @@ export function BoundedContextStep({
           />
         ) : (
           <ContextForm
+            key={activeContext.id}
             context={activeContext}
             fieldPrefix={`boundedContexts.${activeIndex}`}
             onBack={openMenu}
