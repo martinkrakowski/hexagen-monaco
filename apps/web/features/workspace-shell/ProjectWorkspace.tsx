@@ -2,17 +2,18 @@
 
 import { useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { FormProvider } from "react-hook-form";
 
+import {
+  WizardLifecycleProvider,
+  useWizardLifecycleContext,
+} from "./contexts/WizardLifecycleContext";
 import { ResizableLayout } from "./ResizableLayout";
 import { GovernancePanelWrapper } from "../governance-assistant/GovernancePanelWrapper";
 import { WizardStepRouter } from "../project-wizard/WizardStepRouter";
 import { wizardSteps } from "../project-wizard/config";
 
-import { useWizardForm } from "./hooks/useWizardForm";
-import { useEditorSession } from "./hooks/useEditorSession";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
-import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
+import { useEditorSession } from "./hooks/useEditorSession";
 import { ExportProvider } from "@/contexts/ExportContext";
 
 import { Header } from "./Header";
@@ -45,18 +46,9 @@ export function ProjectWorkspace({
   const router = useRouter();
   const totalSteps = wizardSteps.length;
 
-  const { form, wizardData, canProceed, contentHash } = useWizardForm();
   const ui = useWorkspaceShellUi({ currentStepIndex, viewMode });
   const editor = useEditorSession();
-  const lifecycle = useProjectLifecycle({
-    form,
-    contentHash,
-    ui,
-    uiState: ui.state,
-    editor,
-    totalSteps,
-    onGoToStep,
-  });
+  const lifecycle = useWizardLifecycleContext();
 
   const isEditing = ui.state.kind === "edit";
 
@@ -92,11 +84,17 @@ export function ProjectWorkspace({
             onRightPanelClose={onCloseRightPanel}
             onLeftPanelClose={onCloseMiddlePanel}
             left={
-              <FormProvider {...form}>
+              <WizardLifecycleProvider
+                ui={ui}
+                uiState={ui.state}
+                editor={editor}
+                totalSteps={totalSteps}
+                onGoToStep={onGoToStep}
+              >
                 <WizardStepRouter
                   currentStepIndex={currentStepIndex}
                   totalSteps={totalSteps}
-                  canProceed={canProceed(currentStepIndex)}
+                  canProceed={lifecycle.canProceed(currentStepIndex)}
                   isGenerating={lifecycle.isGenerating}
                   activeContextId={ui.activeContextId ?? ""}
                   activeMappingId={ui.activeMappingId ?? ""}
@@ -108,11 +106,11 @@ export function ProjectWorkspace({
                   onGenerate={lifecycle.handleGenerate}
                   onViewModeChange={onViewModeChange}
                 />
-              </FormProvider>
+              </WizardLifecycleProvider>
             }
             middle={
               <ArchitecturePreviewPane
-                wizardData={wizardData}
+                wizardData={lifecycle.wizardData}
                 viewMode={viewMode}
                 selectedFileId={editor.selectedFileId}
                 editedFiles={editor.editedFiles}
@@ -124,7 +122,7 @@ export function ProjectWorkspace({
             }
             right={
               <GovernancePanelWrapper
-                wizardData={wizardData}
+                wizardData={lifecycle.wizardData}
                 currentStepIndex={currentStepIndex}
               />
             }

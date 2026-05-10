@@ -15,7 +15,6 @@ import { useManifestImport } from "./useManifestImport";
 
 interface UseProjectDialogHandlersOptions {
   form: UseFormReturn<ProjectConfig>;
-  contentHash: string;
   ui: UseWorkspaceShellUiReturn;
   uiState: WorkspaceShellState;
   onGoToStep: (index: number) => void;
@@ -24,7 +23,7 @@ interface UseProjectDialogHandlersOptions {
 export function useProjectDialogHandlers(
   options: UseProjectDialogHandlersOptions,
 ) {
-  const { form, contentHash, ui, onGoToStep } = options;
+  const { form, ui, onGoToStep } = options;
   const { importManifest } = useManifestImport();
 
   const formRef = useRef(form);
@@ -50,7 +49,7 @@ export function useProjectDialogHandlers(
         );
       }
     },
-    [importManifest, contentHash, ui, onGoToStep],
+    [importManifest, ui, onGoToStep],
   );
 
   const handleCancelNewProject = useCallback(() => {
