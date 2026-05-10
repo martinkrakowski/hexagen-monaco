@@ -1,36 +1,25 @@
 "use client";
 
+import { useFormContext } from "react-hook-form";
+import type { ProjectConfig } from "@hexagen/project-configuration";
 import { ArrowLeft } from "lucide-react";
-import type { BoundedContext } from "@hexagen/project-configuration";
 
 import { ContextFormInfrastructure } from "./ContextFormInfrastructure";
 import { ContextFormDomain } from "./ContextFormDomain";
 
 interface ContextFormProps {
-  context: BoundedContext;
   fieldPrefix: string;
   onBack: () => void;
-  onUpdate: (updater: (ctx: BoundedContext) => BoundedContext) => void;
   readOnly?: boolean;
 }
 
-/**
- * Detail view for a single bounded context. Renders:
- *   1. A "Back to context list" button
- *   2. The context name input
- *   3. Infrastructure choices (ContextFormInfrastructure)
- *   4. Domain model / logic (ContextFormDomain)
- *
- * Pure presentational — all state/update orchestration happens in
- * the parent BoundedContextStep via onUpdate.
- */
 export function ContextForm({
-  context,
   fieldPrefix,
   onBack,
-  onUpdate,
   readOnly,
 }: ContextFormProps) {
+  const { register } = useFormContext<ProjectConfig>();
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="shrink-0 p-2 border-b border-border">
@@ -51,22 +40,15 @@ export function ContextForm({
           </span>
           <input
             type="text"
-            value={context.name}
-            onChange={(e) =>
-              onUpdate((ctx) => ({ ...ctx, name: e.target.value }))
-            }
+            {...register(`${fieldPrefix}.name` as keyof ProjectConfig)}
             className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent outline-none bg-background"
             placeholder="e.g. SalesContext"
           />
         </label>
 
-        <ContextFormInfrastructure context={context} onUpdate={onUpdate} />
+        <ContextFormInfrastructure fieldPrefix={fieldPrefix} />
 
-        <ContextFormDomain
-          context={context}
-          fieldPrefix={fieldPrefix}
-          onUpdate={onUpdate}
-        />
+        <ContextFormDomain fieldPrefix={fieldPrefix} />
       </fieldset>
     </div>
   );

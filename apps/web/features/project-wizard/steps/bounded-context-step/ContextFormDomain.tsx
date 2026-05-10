@@ -1,28 +1,29 @@
 "use client";
 
-import type { BoundedContext } from "@hexagen/project-configuration";
+import { useFormContext } from "react-hook-form";
+import type { FieldPath } from "react-hook-form";
+import type { ProjectConfig } from "@hexagen/project-configuration";
 
 import { ChipInput } from "../ChipInput";
 
 interface ContextFormDomainProps {
-  context: BoundedContext;
   fieldPrefix: string;
-  onUpdate: (updater: (ctx: BoundedContext) => BoundedContext) => void;
 }
 
-/**
- * Domain modelling fields for a bounded context. Four ChipInput
- * collections split into two subsections: "Nouns & State" (entities
- * and value objects) and "Verbs & Action" (use cases and events).
- *
- * `fieldPrefix` is the react-hook-form path prefix (e.g.
- * "boundedContexts.2") used by ChipInput's internal name plumbing.
- */
 export function ContextFormDomain({
-  context,
   fieldPrefix,
-  onUpdate,
 }: ContextFormDomainProps) {
+  const { setValue, watch } = useFormContext<ProjectConfig>();
+
+  const coreDomainEntities =
+    (watch(`${fieldPrefix}.coreDomainEntities` as FieldPath<ProjectConfig>) as string[]) || [];
+  const valueObjects =
+    (watch(`${fieldPrefix}.valueObjects` as FieldPath<ProjectConfig>) as string[]) || [];
+  const useCases =
+    (watch(`${fieldPrefix}.useCases` as FieldPath<ProjectConfig>) as string[]) || [];
+  const domainEvents =
+    (watch(`${fieldPrefix}.domainEvents` as FieldPath<ProjectConfig>) as string[]) || [];
+
   return (
     <div className="space-y-6 p-2">
       <div className="w-full">
@@ -39,18 +40,22 @@ export function ContextFormDomain({
             label="Core Domain Entities"
             placeholder="e.g. User, Product"
             name={`${fieldPrefix}.coreDomainEntities`}
-            values={context.coreDomainEntities || []}
+            values={coreDomainEntities}
             onChange={(values) =>
-              onUpdate((ctx) => ({ ...ctx, coreDomainEntities: values }))
+              setValue(`${fieldPrefix}.coreDomainEntities` as FieldPath<ProjectConfig>, values, {
+                shouldDirty: true,
+              })
             }
           />
           <ChipInput
             label="Value Objects"
             placeholder="e.g. Money, Address"
             name={`${fieldPrefix}.valueObjects`}
-            values={context.valueObjects || []}
+            values={valueObjects}
             onChange={(values) =>
-              onUpdate((ctx) => ({ ...ctx, valueObjects: values }))
+              setValue(`${fieldPrefix}.valueObjects` as FieldPath<ProjectConfig>, values, {
+                shouldDirty: true,
+              })
             }
           />
         </div>
@@ -70,18 +75,22 @@ export function ContextFormDomain({
             label="Primary Use Cases"
             placeholder="e.g. PlaceOrder"
             name={`${fieldPrefix}.useCases`}
-            values={context.useCases || []}
+            values={useCases}
             onChange={(values) =>
-              onUpdate((ctx) => ({ ...ctx, useCases: values }))
+              setValue(`${fieldPrefix}.useCases` as FieldPath<ProjectConfig>, values, {
+                shouldDirty: true,
+              })
             }
           />
           <ChipInput
             label="Domain Events"
             placeholder="e.g. OrderPlaced"
             name={`${fieldPrefix}.domainEvents`}
-            values={context.domainEvents || []}
+            values={domainEvents}
             onChange={(values) =>
-              onUpdate((ctx) => ({ ...ctx, domainEvents: values }))
+              setValue(`${fieldPrefix}.domainEvents` as FieldPath<ProjectConfig>, values, {
+                shouldDirty: true,
+              })
             }
           />
         </div>

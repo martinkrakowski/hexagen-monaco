@@ -1,10 +1,7 @@
 "use client";
 
 import { useFormContext, useFieldArray, useWatch } from "react-hook-form";
-import type {
-  ProjectConfig,
-  BoundedContext,
-} from "@hexagen/project-configuration";
+import type { ProjectConfig } from "@hexagen/project-configuration";
 
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
@@ -42,7 +39,7 @@ export function BoundedContextStep({
 }: BoundedContextStepProps) {
   const { control } = useFormContext<ProjectConfig>();
 
-  const { fields, append, update, remove } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control,
     name: "boundedContexts",
     keyName: "_rfId",
@@ -83,13 +80,6 @@ export function BoundedContextStep({
     append(next);
     onContextSelect?.(next.id);
     openForm();
-  };
-
-  const handleUpdateContext = (
-    updater: (ctx: BoundedContext) => BoundedContext,
-  ) => {
-    if (activeIndex < 0 || !activeContext) return;
-    update(activeIndex, updater(activeContext));
   };
 
   const handleConfirmDelete = (contextId: string) => {
@@ -141,10 +131,8 @@ export function BoundedContextStep({
         ) : (
           <ContextForm
             key={activeContext.id}
-            context={activeContext}
             fieldPrefix={`boundedContexts.${activeIndex}`}
             onBack={openMenu}
-            onUpdate={handleUpdateContext}
             readOnly={readOnly}
           />
         )}
