@@ -95,11 +95,16 @@ export async function POST(request: Request) {
       violations,
       isCompliant: violations.filter((v) => v.type === "error").length === 0,
     });
-  } catch {
-    return NextResponse.json({
-      violations: [],
-      isCompliant: true,
-    });
+  } catch (err) {
+    console.error("Governance violations error:", err);
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        violations: [],
+        isCompliant: false,
+      },
+      { status: 500 },
+    );
   }
 }
 
@@ -110,6 +115,9 @@ export async function GET() {
       violations: [],
       isCompliant: true,
     },
-    { status: 200 },
+    {
+      status: 405,
+      headers: { Allow: "POST" },
+    },
   );
 }

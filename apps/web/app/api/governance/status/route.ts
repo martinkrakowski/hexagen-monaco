@@ -69,11 +69,18 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ status });
-  } catch {
-    return NextResponse.json({ status: [] });
+  } catch (err) {
+    console.error("Governance status error:", err);
+    return NextResponse.json(
+      { error: "Internal Server Error", status: [] },
+      { status: 500 },
+    );
   }
 }
 
 export async function GET() {
-  return NextResponse.json({ status: [] });
+  return NextResponse.json(
+    { error: "Use POST with manifestYaml in request body", status: [] },
+    { status: 405, headers: { Allow: "POST" } },
+  );
 }

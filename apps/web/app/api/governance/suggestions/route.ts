@@ -81,11 +81,18 @@ export async function POST(request: Request) {
     }));
 
     return NextResponse.json({ suggestions });
-  } catch {
-    return NextResponse.json({ suggestions: [] }, { status: 200 });
+  } catch (err) {
+    console.error("Governance suggestions error:", err);
+    return NextResponse.json(
+      { error: "Internal Server Error", suggestions: [] },
+      { status: 500 },
+    );
   }
 }
 
 export async function GET() {
-  return NextResponse.json({ suggestions: [] });
+  return NextResponse.json(
+    { error: "Use POST with manifestYaml and optional openFileContent", suggestions: [] },
+    { status: 405, headers: { Allow: "POST" } },
+  );
 }
