@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useFieldArray, useWatch } from "react-hook-form";
 import type {
   ProjectConfig,
   BoundedContext,
@@ -28,15 +28,6 @@ interface BoundedContextStepProps {
   readOnly?: boolean;
 }
 
-/**
- * Wizard step for defining and configuring bounded contexts.
- * Orchestrates two views — a list view (menu) and a per-context form
- * view — plus an inline delete-confirm overlay. The list/form state
- * machine lives in useMenuFormView (shared with PeerContextMappingStep).
- *
- * Sub-components (ContextList, ContextForm, ContextCard, etc.) live
- * under ./bounded-context-step/.
- */
 export function BoundedContextStep({
   onNext,
   onBack,
@@ -49,8 +40,15 @@ export function BoundedContextStep({
   description,
   readOnly,
 }: BoundedContextStepProps) {
-  const { watch, setValue, getValues } = useFormContext<ProjectConfig>();
-  const boundedContexts = watch("boundedContexts") || [];
+  const { control } = useFormContext<ProjectConfig>();
+
+  const { append, update, remove } = useFieldArray({
+    control,
+    name: "boundedContexts",
+    keyName: "_rfId",
+  });
+
+  const boundedContexts = useWatch({ control, name: "boundedContexts" }) || [];
 
   const {
     view,
@@ -64,7 +62,8 @@ export function BoundedContextStep({
   const activeIndex = boundedContexts.findIndex(
     (c) => c.id === activeContextId,
   );
-  const activeContext = activeIndex >= 0 ? boundedContexts[activeIndex] : undefined;
+  const activeContext =
+    activeIndex >= 0 ? boundedContexts[activeIndex] : undefined;
 
   const isNextDisabled =
     !canProceed || boundedContexts.some((c) => !c.name?.trim());
@@ -75,9 +74,8 @@ export function BoundedContextStep({
   };
 
   const handleAddContext = () => {
-    const snapshot = getValues("boundedContexts") || [];
     const next = createEmptyContext();
-    setValue("boundedContexts", [...snapshot, next]);
+    append(next);
     onContextSelect?.(next.id);
     openForm();
   };
@@ -85,33 +83,25 @@ export function BoundedContextStep({
   const handleUpdateContext = (
     updater: (ctx: BoundedContext) => BoundedContext,
   ) => {
-    const snapshot = getValues("boundedContexts") || [];
-    const idx = snapshot.findIndex((c) => c.id === activeContextId);
-    if (idx < 0) return;
-    const next = snapshot.map((ctx, i) =>
-      i === idx ? updater(ctx) : ctx,
-    );
-    setValue("boundedContexts", next, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
+    if (activeIndex < 0 || !activeContext) return;
+    update(activeIndex, updater(activeContext));
   };
 
   const handleConfirmDelete = (contextId: string) => {
-    const snapshot = getValues("boundedContexts") || [];
-    const indexToDelete = snapshot.findIndex((c) => c.id === contextId);
+    const indexToDelete = boundedContexts.findIndex(
+      (c) => c.id === contextId,
+    );
     if (indexToDelete < 0) {
       cancelDelete();
       return;
     }
-    const next = [...snapshot];
-    next.splice(indexToDelete, 1);
-    setValue("boundedContexts", next);
+    remove(indexToDelete);
 
     if (activeContextId === contextId) {
-      if (next.length > 0) {
-        const newActiveIndex = Math.min(indexToDelete, next.length - 1);
-        onContextSelect?.(next[newActiveIndex].id);
+      const remaining = boundedContexts.filter((c) => c.id !== contextId);
+      if (remaining.length > 0) {
+        const newActiveIndex = Math.min(indexToDelete, remaining.length - 1);
+        onContextSelect?.(remaining[newActiveIndex].id);
         openMenu();
       } else {
         onContextSelect?.("");
