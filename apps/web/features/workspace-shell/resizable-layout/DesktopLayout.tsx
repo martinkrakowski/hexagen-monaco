@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
 
 import { Card, CardContent } from "@hexagen/ui";
@@ -30,7 +31,7 @@ export interface DesktopLayoutProps {
  * panels are collapsible; the middle pane holds the primary content.
  * Panel sizes persist across reloads via LAYOUT_AUTO_SAVE_ID.
  */
-export function DesktopLayout({
+export const DesktopLayout = React.memo(function DesktopLayout({
   left,
   middle,
   right,
@@ -129,4 +130,4 @@ export function DesktopLayout({
       )}
     </div>
   );
-}
+});

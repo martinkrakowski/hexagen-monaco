@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import {
   useForm,
   useWatch,
@@ -25,6 +25,7 @@ export interface UseWizardFormReturn {
   governance: ProjectConfig["governance"];
   wizardData: WizardData;
   canProceed: (stepIndex: number) => boolean;
+  contentHash: string;
 }
 
 /**
@@ -56,17 +57,36 @@ export function useWizardForm(): UseWizardFormReturn {
   });
   const governance = useWatch({ control: form.control, name: "governance" });
 
-  // Memo: re-computes only when a watched form slice changes
-  const wizardData = useMemo(
-    () =>
-      buildWizardData(
-        boundedContexts,
-        externalContexts,
-        peerMappings,
-        governance,
-      ),
-    [boundedContexts, externalContexts, peerMappings, governance],
+  // Canvas-relevant hash: only rebuild wizardData when bounded contexts,
+  // external contexts, or peer mappings change. Governance field changes
+  // (like workspaceName) do NOT trigger wizardData rebuild →
+  // ArchitecturePreviewPane receives stable reference → React.memo bails out.
+  const canvasHash = JSON.stringify(
+    form.getValues(["boundedContexts", "externalContexts", "peerMappings"]),
   );
+
+  // Full content hash for global lifecycle needs (saving/loading)
+  const contentHash = JSON.stringify({
+    boundedContexts,
+    externalContexts,
+    peerMappings,
+    governance,
+  });
+
+  const wizardDataRef = useRef<WizardData | null>(null);
+  const prevCanvasHashRef = useRef<string>(canvasHash);
+
+  // ONLY rebuild wizardData if canvas-relevant fields mutated
+  if (wizardDataRef.current === null || canvasHash !== prevCanvasHashRef.current) {
+    prevCanvasHashRef.current = canvasHash;
+    wizardDataRef.current = buildWizardData(
+      boundedContexts,
+      externalContexts,
+      peerMappings,
+      governance,
+    );
+  }
+  const wizardData = wizardDataRef.current!;
 
   // Returns a validation predicate by step index; closures over the
   // reactive boundedContexts slice so it updates as the user edits.
@@ -88,5 +108,6 @@ export function useWizardForm(): UseWizardFormReturn {
     governance,
     wizardData,
     canProceed,
+    contentHash,
   };
 }

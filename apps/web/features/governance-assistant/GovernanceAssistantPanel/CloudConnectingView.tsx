@@ -43,6 +43,7 @@ export function CloudConnectingView({
           vault={vault}
           onConnect={onCloudConnect}
           isConnecting={isConnecting}
+          isConnected={false}
           connectionError={connectionError?.message ?? null}
           onRetry={connectionError?.retryable ? onRetryConnection : undefined}
           onCancelConnection={undefined}

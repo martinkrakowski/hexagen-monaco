@@ -7,6 +7,7 @@ export interface CloudModelSettingsViewProps {
   vault: UserSecretVaultPort;
   onConnect: (provider: string, model: string) => Promise<void>;
   isConnecting?: boolean;
+  isConnected?: boolean;
   connectionError?: string | null;
   onRetry?: () => void;
   onCancelConnection?: () => void;

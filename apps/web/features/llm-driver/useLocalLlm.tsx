@@ -27,14 +27,24 @@ import { useChatMessages } from "./local-llm/useChatMessages";
 export type { ChatMessage };
 export { AUTO_LOAD_KEY, HAS_ENABLED_KEY } from "./local-llm/storage-keys";
 
-interface LocalLLMContextValue {
+interface LocalLLMConfigValue {
   engineState: LLMEngineState;
-  messages: ChatMessage[];
-  isStreaming: boolean;
   loadedModel: ModelMetadata | null;
   initializeModel: (modelId?: DomainModelId) => Promise<void>;
   cancelDownload: () => void;
   enterRequiresModel: () => void;
+  clearError: () => void;
+  switchModel: (modelId: DomainModelId) => Promise<void>;
+  deleteCachedModel: (modelId: DomainModelId) => Promise<void>;
+  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
+  hasAnyCachedModel: () => Promise<boolean>;
+  returnToModelSettings: () => void;
+  resetLocalAIConfig: () => string[];
+}
+
+interface LocalLLMStreamingValue {
+  messages: ChatMessage[];
+  isStreaming: boolean;
   sendMessage: (content: string) => Promise<void>;
   sendGovernanceMessage: (
     content: string,
@@ -46,14 +56,18 @@ interface LocalLLMContextValue {
     systemPrompt: string,
     signal?: AbortSignal,
   ) => Promise<string>;
-  clearError: () => void;
-  switchModel: (modelId: DomainModelId) => Promise<void>;
-  deleteCachedModel: (modelId: DomainModelId) => Promise<void>;
-  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
-  hasAnyCachedModel: () => Promise<boolean>;
-  returnToModelSettings: () => void;
-  resetLocalAIConfig: () => string[];
 }
+
+interface LocalLLMContextValue
+  extends LocalLLMConfigValue, LocalLLMStreamingValue {}
+
+const LocalLLMConfigContext = createContext<LocalLLMConfigValue | undefined>(
+  undefined,
+);
+
+const LocalLLMStreamingContext = createContext<
+  LocalLLMStreamingValue | undefined
+>(undefined);
 
 const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
   undefined,
@@ -122,18 +136,13 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
 
   clearMessagesRef.current = chat.clearMessages;
 
-  const value = useMemo<LocalLLMContextValue>(
+  const configValue = useMemo<LocalLLMConfigValue>(
     () => ({
       engineState: engine.engineState,
-      messages: chat.messages,
-      isStreaming: chat.isStreaming,
       loadedModel: engine.loadedModel,
       initializeModel: engine.initializeModel,
       cancelDownload: engine.cancelDownload,
       enterRequiresModel: engine.enterRequiresModel,
-      sendMessage: chat.sendMessage,
-      sendGovernanceMessage: chat.sendGovernanceMessage,
-      sendStructuredPrompt: chat.sendStructuredPrompt,
       clearError: engine.clearError,
       switchModel: engine.switchModel,
       deleteCachedModel: engine.deleteCachedModel,
@@ -152,14 +161,34 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       engine.switchModel,
       engine.deleteCachedModel,
       engine.returnToModelSettings,
+      cache.hasModelInCache,
+      cache.hasAnyCachedModel,
+    ],
+  );
+
+  const streamingValue = useMemo<LocalLLMStreamingValue>(
+    () => ({
+      messages: chat.messages,
+      isStreaming: chat.isStreaming,
+      sendMessage: chat.sendMessage,
+      sendGovernanceMessage: chat.sendGovernanceMessage,
+      sendStructuredPrompt: chat.sendStructuredPrompt,
+    }),
+    [
       chat.messages,
       chat.isStreaming,
       chat.sendMessage,
       chat.sendGovernanceMessage,
       chat.sendStructuredPrompt,
-      cache.hasModelInCache,
-      cache.hasAnyCachedModel,
     ],
+  );
+
+  const fullValue = useMemo<LocalLLMContextValue>(
+    () => ({
+      ...configValue,
+      ...streamingValue,
+    }),
+    [configValue, streamingValue],
   );
 
   if (!mounted) {
@@ -171,14 +200,43 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
   }
 
   return (
-    <LocalLLMContext.Provider value={value}>
-      {children}
-    </LocalLLMContext.Provider>
+    <LocalLLMConfigContext.Provider value={configValue}>
+      <LocalLLMStreamingContext.Provider value={streamingValue}>
+        <LocalLLMContext.Provider value={fullValue}>
+          {children}
+        </LocalLLMContext.Provider>
+      </LocalLLMStreamingContext.Provider>
+    </LocalLLMConfigContext.Provider>
   );
 }
 
-export function useLocalLLM(): LocalLLMContextValue {
-  const context = useContext(LocalLLMContext);
+const CONFIG_FALLBACK: LocalLLMConfigValue = {
+  engineState: LLM_ENGINE_INITIAL_STATE,
+  loadedModel: null,
+  initializeModel: async () => {},
+  cancelDownload: () => {},
+  enterRequiresModel: () => {},
+  clearError: () => {},
+  switchModel: async () => {},
+  deleteCachedModel: async () => {},
+  hasModelInCache: async () => false,
+  hasAnyCachedModel: async () => false,
+  returnToModelSettings: () => {},
+  resetLocalAIConfig: () => [],
+};
+
+const STREAMING_FALLBACK: LocalLLMStreamingValue = {
+  messages: [],
+  isStreaming: false,
+  sendMessage: async () => {},
+  sendGovernanceMessage: async () => {},
+  sendStructuredPrompt: async () => {
+    throw new Error("Not mounted");
+  },
+};
+
+export function useLocalLLMConfig(): LocalLLMConfigValue {
+  const context = useContext(LocalLLMConfigContext);
   const mounted = useSyncExternalStore(
     subscribeMounted,
     getMountedSnapshot,
@@ -187,29 +245,37 @@ export function useLocalLLM(): LocalLLMContextValue {
 
   if (!context) {
     if (mounted) {
-      throw new Error("useLocalLLM must be used within a LocalLLMProvider");
+      throw new Error(
+        "useLocalLLMConfig must be used within a LocalLLMProvider",
+      );
     }
-    return {
-      engineState: LLM_ENGINE_INITIAL_STATE,
-      messages: [],
-      isStreaming: false,
-      loadedModel: null,
-      initializeModel: async () => {},
-      cancelDownload: () => {},
-      enterRequiresModel: () => {},
-      sendMessage: async () => {},
-      sendGovernanceMessage: async () => {},
-      sendStructuredPrompt: async () => {
-        throw new Error("Not mounted");
-      },
-      clearError: () => {},
-      switchModel: async () => {},
-      deleteCachedModel: async () => {},
-      hasModelInCache: async () => false,
-      hasAnyCachedModel: async () => false,
-      returnToModelSettings: () => {},
-      resetLocalAIConfig: () => [],
-    };
+    return CONFIG_FALLBACK;
   }
   return context;
+}
+
+export function useLocalLLMStreaming(): LocalLLMStreamingValue {
+  const context = useContext(LocalLLMStreamingContext);
+  const mounted = useSyncExternalStore(
+    subscribeMounted,
+    getMountedSnapshot,
+    getMountedServerSnapshot,
+  );
+
+  if (!context) {
+    if (mounted) {
+      throw new Error(
+        "useLocalLLMStreaming must be used within a LocalLLMProvider",
+      );
+    }
+    return STREAMING_FALLBACK;
+  }
+  return context;
+}
+
+export function useLocalLLM(): LocalLLMContextValue {
+  const config = useLocalLLMConfig();
+  const streaming = useLocalLLMStreaming();
+
+  return useMemo(() => ({ ...config, ...streaming }), [config, streaming]);
 }

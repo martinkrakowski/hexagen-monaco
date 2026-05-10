@@ -1,5 +1,8 @@
 "use client";
 
+import React from "react";
+import { useController, type Control } from "react-hook-form";
+import type { ProjectConfig } from "@hexagen/project-configuration";
 import {
   workspaceTemplates,
   getWorkspaceTemplate,
@@ -9,8 +12,7 @@ import {
 import { TemplateCard } from "./TemplateCard";
 
 interface TemplateSelectorProps {
-  selectedTemplateId: string;
-  onSelectTemplate: (id: string) => void;
+  control: Control<ProjectConfig>;
 }
 
 interface TemplateDetailsProps {
@@ -44,16 +46,15 @@ function TemplateDetails({ template }: TemplateDetailsProps) {
   );
 }
 
-/**
- * Architectural-template picker. Renders a 3-column grid of
- * TemplateCards and a details preview of the currently-selected
- * template below. Uses the workspaceTemplates catalogue from
- * @hexagen/shared as its source of options.
- */
-export function TemplateSelector({
-  selectedTemplateId,
-  onSelectTemplate,
+export const TemplateSelector = React.memo(function TemplateSelector({
+  control,
 }: TemplateSelectorProps) {
+  const { field } = useController({
+    name: "governance.workspaceTemplate",
+    control,
+  });
+
+  const selectedTemplateId = (field.value as string) || "modular-monolith";
   const selectedTemplate = getWorkspaceTemplate(selectedTemplateId);
 
   return (
@@ -73,11 +74,15 @@ export function TemplateSelector({
             key={template.id}
             template={template}
             isSelected={selectedTemplateId === template.id}
-            onSelect={() => onSelectTemplate(template.id)}
+            onSelect={() =>
+              field.onChange(
+                template.id as ProjectConfig["governance"]["workspaceTemplate"],
+              )
+            }
           />
         ))}
       </div>
       {selectedTemplate && <TemplateDetails template={selectedTemplate} />}
     </div>
   );
-}
+});

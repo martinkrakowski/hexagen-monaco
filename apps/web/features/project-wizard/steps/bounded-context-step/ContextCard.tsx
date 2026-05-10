@@ -36,14 +36,21 @@ export function ContextCard({
     (context.coreDomainEntities?.length ?? 0) + (context.useCases?.length ?? 0);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={`relative w-full text-left p-4 border rounded-lg cursor-pointer transition-colors ${
         isActive
           ? "border-primary bg-primary/10"
           : "border-border bg-background hover:border-input"
       }`}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
     >
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-muted-foreground">
@@ -105,6 +112,6 @@ export function ContextCard({
             className="absolute top-2 right-2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
           />
         ))}
-    </button>
+    </div>
   );
 }

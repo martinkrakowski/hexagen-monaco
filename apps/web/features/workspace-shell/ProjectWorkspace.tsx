@@ -1,24 +1,21 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import React, { useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { FormProvider } from "react-hook-form";
-
+import {
+  WizardLifecycleProvider,
+  WizardStepFormProvider,
+} from "./contexts/WizardLifecycleContext";
 import { ResizableLayout } from "./ResizableLayout";
 import { GovernancePanelWrapper } from "../governance-assistant/GovernancePanelWrapper";
 import { WizardStepRouter } from "../project-wizard/WizardStepRouter";
 import { wizardSteps } from "../project-wizard/config";
-
-import { useWizardForm } from "./hooks/useWizardForm";
-import { useEditorSession } from "./hooks/useEditorSession";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
-import { useProjectLifecycle } from "./hooks/useProjectLifecycle";
+import { useEditorSession } from "./hooks/useEditorSession";
 import { ExportProvider } from "@/contexts/ExportContext";
-
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
-
 import type { ViewMode } from "@/types/view-mode";
 
 export interface ProjectWorkspaceProps {
@@ -44,21 +41,9 @@ export function ProjectWorkspace({
 }: ProjectWorkspaceProps) {
   const router = useRouter();
   const totalSteps = wizardSteps.length;
-
-  const { form, wizardData, canProceed } = useWizardForm();
   const ui = useWorkspaceShellUi({ currentStepIndex, viewMode });
   const editor = useEditorSession();
-  const lifecycle = useProjectLifecycle({
-    form,
-    ui,
-    uiState: ui.state,
-    editor,
-    totalSteps,
-    onGoToStep,
-  });
-
   const isEditing = ui.state.kind === "edit";
-
   const pendingRoute = useRef<string | null>(null);
 
   const navigateWithConfirm = useCallback(
@@ -74,43 +59,99 @@ export function ProjectWorkspace({
   );
 
   return (
-    <ExportProvider>
-      <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-        <Header
-          onLoadManifest={() => navigateWithConfirm("/projects/new/import")}
-          isEditing={isEditing}
-          onNewProject={() => navigateWithConfirm("/projects/new")}
-          onOpenWelcomeManifest={() => navigateWithConfirm("/projects/new/ai")}
-          onNavigateToProjects={onNavigateToProjects}
-        />
+    <WizardLifecycleProvider
+      ui={ui}
+      uiState={ui.state}
+      editor={editor}
+      totalSteps={totalSteps}
+      onGoToStep={onGoToStep}
+    >
+      <ProjectWorkspaceLayout
+        currentStepIndex={currentStepIndex}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
+        onCloseMiddlePanel={onCloseMiddlePanel}
+        onCloseRightPanel={onCloseRightPanel}
+        onNavigateToProjects={onNavigateToProjects}
+        ui={ui}
+        editor={editor}
+        isEditing={isEditing}
+        navigateWithConfirm={navigateWithConfirm}
+        pendingRoute={pendingRoute}
+        router={router}
+      >
+        {children}
+      </ProjectWorkspaceLayout>
+    </WizardLifecycleProvider>
+  );
+}
 
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <FormProvider {...form}>
+interface ProjectWorkspaceLayoutProps {
+  currentStepIndex: number;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+  onCloseMiddlePanel: () => void;
+  onCloseRightPanel: () => void;
+  onNavigateToProjects?: () => void;
+  ui: ReturnType<typeof useWorkspaceShellUi>;
+  editor: ReturnType<typeof useEditorSession>;
+  isEditing: boolean;
+  navigateWithConfirm: (route: string) => void;
+  pendingRoute: React.RefObject<string | null>;
+  router: ReturnType<typeof useRouter>;
+  children?: React.ReactNode;
+}
+
+const ProjectWorkspaceLayout = React.memo(
+  function ProjectWorkspaceLayout({
+    currentStepIndex,
+    viewMode,
+    onViewModeChange,
+    onCloseMiddlePanel,
+    onCloseRightPanel,
+    onNavigateToProjects,
+    ui,
+    editor,
+    isEditing,
+    navigateWithConfirm,
+    pendingRoute,
+    router,
+    children,
+  }: ProjectWorkspaceLayoutProps) {
+    return (
+      <ExportProvider>
+        <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
+          <Header
+            onLoadManifest={() => navigateWithConfirm("/projects/new/import")}
+            isEditing={isEditing}
+            onNewProject={() => navigateWithConfirm("/projects/new")}
+            onOpenWelcomeManifest={() =>
+              navigateWithConfirm("/projects/new/ai")
+            }
+            onNavigateToProjects={onNavigateToProjects}
+          />
+
+          <main className="flex-1 flex flex-col overflow-hidden">
             <ResizableLayout
               leftTitle="HexaGen Project Wizard"
               rightTitle="AI Governance"
               onRightPanelClose={onCloseRightPanel}
               onLeftPanelClose={onCloseMiddlePanel}
               left={
-                <WizardStepRouter
-                  currentStepIndex={currentStepIndex}
-                  totalSteps={totalSteps}
-                  canProceed={canProceed(currentStepIndex)}
-                  isGenerating={lifecycle.isGenerating}
-                  activeContextId={ui.activeContextId ?? ""}
-                  activeMappingId={ui.activeMappingId ?? ""}
-                  autoGeneratedSteps={lifecycle.autoGeneratedSteps}
-                  onContextSelect={ui.setContextId}
-                  onMappingSelect={ui.setMappingId}
-                  onNext={lifecycle.handleNext}
-                  onBack={lifecycle.handleBack}
-                  onGenerate={lifecycle.handleGenerate}
-                  onViewModeChange={onViewModeChange}
-                />
+                <WizardStepFormProvider>
+                  <WizardStepRouter
+                    currentStepIndex={currentStepIndex}
+                    totalSteps={wizardSteps.length}
+                    onViewModeChange={onViewModeChange}
+                    activeContextId={ui.activeContextId ?? ""}
+                    activeMappingId={ui.activeMappingId ?? ""}
+                    onContextSelect={(id) => ui.setContextId(id)}
+                    onMappingSelect={(id) => ui.setMappingId(id)}
+                  />
+                </WizardStepFormProvider>
               }
               middle={
                 <ArchitecturePreviewPane
-                  wizardData={wizardData}
                   viewMode={viewMode}
                   selectedFileId={editor.selectedFileId}
                   editedFiles={editor.editedFiles}
@@ -122,40 +163,32 @@ export function ProjectWorkspace({
               }
               right={
                 <GovernancePanelWrapper
-                  wizardData={wizardData}
                   currentStepIndex={currentStepIndex}
                 />
               }
             />
-          </FormProvider>
-        </main>
+          </main>
 
-        <NewProjectConfirmDialog
-          open={ui.dialog.kind === "new-project"}
-          onClose={lifecycle.handleCancelNewProject}
-          loadedProject={lifecycle.loadedProject}
-          onSaveAndNew={async () => {
-            const route = pendingRoute.current;
-            try {
-              await lifecycle.handleSaveAndNew();
-            } finally {
-              pendingRoute.current = null;
-            }
-            if (route) router.push(route);
-          }}
-          onDiscardAndNew={async () => {
-            const route = pendingRoute.current;
-            try {
-              await lifecycle.handleDiscardAndNew();
-            } finally {
-              pendingRoute.current = null;
-            }
-            if (route) router.push(route);
-          }}
-          onCancel={lifecycle.handleCancelNewProject}
-        />
-      </div>
-      {children}
-    </ExportProvider>
-  );
-}
+          <NewProjectConfirmDialog
+            isOpen={ui.dialog.kind === "new-project"}
+            onClose={ui.closeDialog}
+            pendingRoute={pendingRoute}
+            router={router}
+          />
+        </div>
+        {children}
+      </ExportProvider>
+    );
+  },
+  (prev, next) => {
+    if (prev.currentStepIndex !== next.currentStepIndex) return false;
+    if (prev.viewMode !== next.viewMode) return false;
+    if (prev.onViewModeChange !== next.onViewModeChange) return false;
+    if (prev.onCloseMiddlePanel !== next.onCloseMiddlePanel) return false;
+    if (prev.onCloseRightPanel !== next.onCloseRightPanel) return false;
+    if (prev.onNavigateToProjects !== next.onNavigateToProjects) return false;
+    if (prev.isEditing !== next.isEditing) return false;
+    if (prev.children !== next.children) return false;
+    return true;
+  },
+);

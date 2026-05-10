@@ -22,6 +22,7 @@
         "./features/*",
         "./types/*"
       ],
+      "@/contexts/*": ["./app/contexts/*"],
       "@/types/*": ["./types/*"],
       "monaco-editor": ["./node_modules/monaco-editor"]
     }

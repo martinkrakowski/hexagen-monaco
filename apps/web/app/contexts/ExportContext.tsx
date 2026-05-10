@@ -65,18 +65,24 @@ const ProjectExportContext = createContext<ProjectExportContextValue | null>(
  */
 export function ExportProvider({ children }: { children: ReactNode }) {
   const { activeWorkspace } = useActiveWorkspace();
+  // Destructure only the export-relevant fields so that isDirty/lastModifiedAt
+  // changes (triggered on every editor keystroke) do not invalidate the
+  // callback identities that feed into the context value.
+  const activeProjectId = activeWorkspace?.projectId;
+  const activeProjectName = activeWorkspace?.name;
+  const activeWizardData = activeWorkspace?.wizardData;
   const { isAuthenticated, signIn } = useExternalIntegration();
   const [state, setState] = useState<ExportState>({ kind: "idle" });
 
   const canExport = activeWorkspace !== null;
 
   const exportZip = useCallback(async () => {
-    if (!activeWorkspace) return;
+    if (!activeProjectId) return;
     setState({ kind: "exporting", destination: "zip" });
 
     const result = await postForBlob("/api/export/zip", {
-      projectId: activeWorkspace.projectId,
-      wizardData: activeWorkspace.wizardData,
+      projectId: activeProjectId,
+      wizardData: activeWizardData,
     });
 
     if (result.kind !== "success") {
@@ -84,7 +90,7 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const filename = `${activeWorkspace.name || activeWorkspace.projectId}.zip`;
+    const filename = `${activeProjectName || activeProjectId}.zip`;
     const download = downloadBlob(result.data, filename);
     if (!download.success) {
       setState({ kind: "error", message: download.error.message });
@@ -92,29 +98,29 @@ export function ExportProvider({ children }: { children: ReactNode }) {
     }
 
     setState({ kind: "success", message: "ZIP downloaded" });
-  }, [activeWorkspace]);
+  }, [activeProjectId, activeProjectName, activeWizardData]);
 
   const requestGithubExport = useCallback(async () => {
     if (!isAuthenticated) {
       await signIn();
       return;
     }
-    if (!activeWorkspace) return;
+    if (!activeProjectId) return;
     setState({ kind: "dialog-open" });
-  }, [isAuthenticated, signIn, activeWorkspace]);
+  }, [isAuthenticated, signIn, activeProjectId]);
 
   const submitGithubExport = useCallback(
     async ({ repoName, isPrivate }: ExportDialogSubmitPayload) => {
-      if (!activeWorkspace) return;
+      if (!activeProjectId) return;
       setState({ kind: "exporting", destination: "github" });
 
       const result = await postJson<GithubExportResponse>(
         "/api/export/github",
         {
-          projectId: activeWorkspace.projectId,
+          projectId: activeProjectId,
           repoName,
           isPrivate,
-          wizardData: activeWorkspace.wizardData,
+          wizardData: activeWizardData,
         },
       );
 
@@ -131,7 +137,7 @@ export function ExportProvider({ children }: { children: ReactNode }) {
         setState({ kind: "success", message: "Pushed to GitHub" });
       }
     },
-    [activeWorkspace],
+    [activeProjectId, activeWizardData],
   );
 
   const closeDialog = useCallback(() => {

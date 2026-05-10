@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useBreakpoint } from "./hooks/useBreakpoint";
 import { usePanelCollapse } from "./hooks/usePanelCollapse";
 
@@ -29,7 +30,7 @@ interface ResizableLayoutProps {
  * DesktopLayout and the tab-based MobileLayout based on viewport.
  * All panel-specific rendering lives in `./resizable-layout/`.
  */
-export function ResizableLayout(props: ResizableLayoutProps) {
+export const ResizableLayout = React.memo(function ResizableLayout(props: ResizableLayoutProps) {
   const { onRightPanelClose, onLeftPanelClose, ...rest } = props;
   const breakpoint = useBreakpoint();
   const isDesktop = breakpoint === "lg";
@@ -56,4 +57,4 @@ export function ResizableLayout(props: ResizableLayoutProps) {
       )}
     </div>
   );
-}
+});

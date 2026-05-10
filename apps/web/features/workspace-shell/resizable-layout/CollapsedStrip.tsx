@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CollapsedStripProps {
@@ -8,11 +9,7 @@ interface CollapsedStripProps {
   onExpand: () => void;
 }
 
-/**
- * Thin vertical strip rendered when a side panel is collapsed. Its
- * expand button points outward — toward where the panel will open.
- */
-export function CollapsedStrip({ side, title, onExpand }: CollapsedStripProps) {
+export const CollapsedStrip = React.memo(function CollapsedStrip({ side, title, onExpand }: CollapsedStripProps) {
   const Icon = side === "left" ? ChevronRight : ChevronLeft;
   return (
     <div className="flex items-start justify-center w-8 shrink-0 border border-border rounded-md bg-card pt-2">
@@ -27,4 +24,4 @@ export function CollapsedStrip({ side, title, onExpand }: CollapsedStripProps) {
       </button>
     </div>
   );
-}
+});

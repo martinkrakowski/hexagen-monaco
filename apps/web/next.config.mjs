@@ -89,6 +89,7 @@ const nextConfig = {
     ];
 
     config.resolve.extensionAlias = {
+      ...(config.resolve.extensionAlias || {}),
       '.js': ['.ts', '.tsx', '.js'],
       '.mjs': ['.mts', '.mjs'],
     };
@@ -111,7 +112,7 @@ const nextConfig = {
   redirects: async () => [
     {
       source: '/',
-      destination: '/projects',
+      destination: '/projects/new',
       permanent: true,
     },
   ],

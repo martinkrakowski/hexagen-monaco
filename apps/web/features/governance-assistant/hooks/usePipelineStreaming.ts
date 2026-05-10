@@ -47,13 +47,16 @@ interface UsePipelineStreamingOptions {
 }
 
 export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
-  const {
-    endpoint,
-    onStepRunning,
-    onStepComplete,
-    onPipelineComplete,
-    onPipelineError,
-  } = options;
+  const { endpoint } = options;
+
+  const onStepRunningRef = useRef(options.onStepRunning);
+  onStepRunningRef.current = options.onStepRunning;
+  const onStepCompleteRef = useRef(options.onStepComplete);
+  onStepCompleteRef.current = options.onStepComplete;
+  const onPipelineCompleteRef = useRef(options.onPipelineComplete);
+  onPipelineCompleteRef.current = options.onPipelineComplete;
+  const onPipelineErrorRef = useRef(options.onPipelineError);
+  onPipelineErrorRef.current = options.onPipelineError;
 
   const [streamingState, setStreamingState] = useState<StreamingState>({
     steps: [],
@@ -88,7 +91,7 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
             // Ignore JSON parse errors on error responses.
           }
           setStreamingState((prev) => ({ ...prev, error: errorMsg }));
-          onPipelineError?.(errorMsg);
+          onPipelineErrorRef.current?.(errorMsg);
           return;
         }
 
@@ -96,7 +99,7 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
         if (!reader) {
           const errorMsg = "No response body";
           setStreamingState((prev) => ({ ...prev, error: errorMsg }));
-          onPipelineError?.(errorMsg);
+          onPipelineErrorRef.current?.(errorMsg);
           return;
         }
 
@@ -131,7 +134,7 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
 
               if (currentEvent === "step_running") {
                 const stepName = parsed.name as string;
-                onStepRunning?.(stepName);
+                onStepRunningRef.current?.(stepName);
                 setStreamingState((prev) => ({
                   ...prev,
                   steps: prev.steps.map((s) =>
@@ -159,7 +162,7 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
                   );
                   return { ...prev, steps: updatedSteps };
                 });
-                onStepComplete?.(
+                onStepCompleteRef.current?.(
                   stepName,
                   stepStatus,
                   durationMs,
@@ -171,14 +174,11 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
                   currentSteps = prev.steps;
                   return prev;
                 });
-                onPipelineComplete?.(parsed, currentSteps);
+                onPipelineCompleteRef.current?.(parsed, currentSteps);
               } else if (currentEvent === "pipeline_error") {
                 const errorMsg = (parsed.error as string) ?? "Pipeline error";
-                setStreamingState((prev) => ({
-                  ...prev,
-                  error: errorMsg,
-                }));
-                onPipelineError?.(errorMsg);
+                setStreamingState((prev) => ({ ...prev, error: errorMsg }));
+                onPipelineErrorRef.current?.(errorMsg);
               }
 
               currentEvent = "";
@@ -191,18 +191,12 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
         }
         const errorMsg = error instanceof Error ? error.message : String(error);
         setStreamingState((prev) => ({ ...prev, error: errorMsg }));
-        onPipelineError?.(errorMsg);
+        onPipelineErrorRef.current?.(errorMsg);
       } finally {
         abortControllerRef.current = null;
       }
     },
-    [
-      endpoint,
-      onStepRunning,
-      onStepComplete,
-      onPipelineComplete,
-      onPipelineError,
-    ],
+    [endpoint],
   );
 
   const abort = useCallback(() => {

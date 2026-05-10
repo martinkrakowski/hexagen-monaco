@@ -1,15 +1,14 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Card, CardContent } from "@hexagen/ui";
 import { ViewToggle } from "@hexagen/ui";
 import { GraphCanvasWrapper } from "../hexagon-canvas/GraphCanvasWrapper";
 import { CodeView } from "../code-view/CodeView";
 import { EditableMonaco } from "../monaco-editor/EditableMonaco";
+import { useWizardData } from "./contexts/WizardLifecycleContext";
 
-import type { WizardData } from "@hexagen/project-configuration";
 import type { ViewMode } from "@/types/view-mode";
 
 interface ArchitecturePreviewPaneProps {
-  wizardData: WizardData;
   viewMode: ViewMode;
   selectedFileId: string | null;
   editedFiles: Record<string, string>;
@@ -27,46 +26,51 @@ function recordToMap(record: Record<string, string>): Map<string, string> {
   return m;
 }
 
-export function ArchitecturePreviewPane({
-  wizardData,
-  viewMode,
-  selectedFileId,
-  editedFiles,
-  onViewModeChange,
-  onFileSelect,
-  onFileContentChange,
-  onFileSave,
-}: ArchitecturePreviewPaneProps) {
-  const editedFilesMap = useMemo(() => recordToMap(editedFiles), [editedFiles]);
+export const ArchitecturePreviewPane = React.memo(
+  function ArchitecturePreviewPane({
+    viewMode,
+    selectedFileId,
+    editedFiles,
+    onViewModeChange,
+    onFileSelect,
+    onFileContentChange,
+    onFileSave,
+  }: ArchitecturePreviewPaneProps) {
+    const wizardData = useWizardData();
+    const editedFilesMap = useMemo(
+      () => recordToMap(editedFiles),
+      [editedFiles],
+    );
 
-  return (
-    <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 h-12">
-        <span className="font-semibold text-sm truncate">
-          Architecture Preview
-        </span>
-        <ViewToggle
-          view={viewMode}
-          options={["visual", "code"] as const}
-          onChange={onViewModeChange as (view: string) => void}
-          ariaLabel="Toggle between visual and code view"
-        />
-      </div>
-      <CardContent className="flex-1 p-0 overflow-hidden relative">
-        {viewMode === "visual" ? (
-          <GraphCanvasWrapper wizardData={wizardData} />
-        ) : (
-          <CodeView
-            wizardData={wizardData}
-            selectedFileId={selectedFileId}
-            editedFiles={editedFilesMap}
-            onFileSelect={onFileSelect}
-            onFileContentChange={onFileContentChange}
-            onFileSave={onFileSave}
-            editorSlot={(props) => <EditableMonaco {...props} />}
+    return (
+      <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 h-12">
+          <span className="font-semibold text-sm truncate">
+            Architecture Preview
+          </span>
+          <ViewToggle
+            view={viewMode}
+            options={["visual", "code"] as const}
+            onChange={onViewModeChange as (view: string) => void}
+            ariaLabel="Toggle between visual and code view"
           />
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+        </div>
+        <CardContent className="flex-1 p-0 overflow-hidden relative">
+          {viewMode === "visual" ? (
+            <GraphCanvasWrapper wizardData={wizardData} />
+          ) : (
+            <CodeView
+              wizardData={wizardData}
+              selectedFileId={selectedFileId}
+              editedFiles={editedFilesMap}
+              onFileSelect={onFileSelect}
+              onFileContentChange={onFileContentChange}
+              onFileSave={onFileSave}
+              editorSlot={(props) => <EditableMonaco {...props} />}
+            />
+          )}
+        </CardContent>
+      </Card>
+    );
+  },
+);

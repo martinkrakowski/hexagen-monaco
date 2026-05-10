@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WizardData } from "@hexagen/project-configuration";
 
-import { useLocalLLM } from "@/llm-driver/useLocalLlm";
+import {
+  useLocalLLMStreaming,
+  useLocalLLMConfig,
+} from "@/llm-driver/useLocalLlm";
 import {
   findQuestionById,
   STEP_FOLLOW_UPS,
@@ -46,8 +49,9 @@ export function useGovernanceAssistant(
   wizardData: WizardData,
   currentStepIndex: number,
 ) {
-  const { messages, sendGovernanceMessage, engineState, isStreaming } =
-    useLocalLLM();
+  const { messages, sendGovernanceMessage, isStreaming } =
+    useLocalLLMStreaming();
+  const { engineState } = useLocalLLMConfig();
 
   const [activeItem, setActiveItem] = useState<ActiveItem | null>(null);
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(

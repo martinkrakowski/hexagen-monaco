@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 import { StepHeader } from "./StepHeader";
@@ -10,7 +10,6 @@ import {
   TemplateSelector,
   PackageManagerSelect,
   NamingConventionsFieldset,
-  type PackageManager,
 } from "./workspace-governance-step";
 
 interface WorkspaceGovernanceStepProps {
@@ -23,12 +22,6 @@ interface WorkspaceGovernanceStepProps {
   readOnly?: boolean;
 }
 
-/**
- * Wizard step for workspace-wide settings: identity (name/description/
- * namespace), architectural template, package manager, and code-gen
- * naming conventions. Each concern lives in its own sub-component
- * under ./workspace-governance-step/.
- */
 export function WorkspaceGovernanceStep({
   onNext,
   canProceed,
@@ -38,27 +31,27 @@ export function WorkspaceGovernanceStep({
   description,
   readOnly,
 }: WorkspaceGovernanceStepProps) {
-  const { watch, setValue } = useFormContext<ProjectConfig>();
+  const { control, setValue, getValues } = useFormContext<ProjectConfig>();
 
-  const workspaceName = watch("governance.workspaceName") || "";
-  const workspaceDescription = watch("governance.workspaceDescription") || "";
-  const namespacePrefix = watch("governance.namespacePrefix") || "@hexagen";
-  const workspaceTemplate =
-    watch("governance.workspaceTemplate") || "modular-monolith";
-  const packageManager = (watch("governance.packageManager") ||
-    "yarn") as PackageManager;
-  const contextDirectoryPattern =
-    watch("governance.namingConventions.contextDirectoryPattern") ||
-    "packages/";
-  const adapterSuffix =
-    watch("governance.namingConventions.adapterSuffix") || ".adapter.ts";
+  const [workspaceName, namespacePrefix] = useWatch({
+    control,
+    name: ["governance.workspaceName", "governance.namespacePrefix"],
+  });
 
-  // Trim free-text fields on submit. Select/template fields don't need
-  // trimming — the values come from controlled dropdowns.
   const handleNext = () => {
-    setValue("governance.workspaceName", workspaceName.trim());
-    setValue("governance.workspaceDescription", workspaceDescription.trim());
-    setValue("governance.namespacePrefix", namespacePrefix.trim());
+    const values = getValues();
+    setValue(
+      "governance.workspaceName",
+      values.governance.workspaceName.trim(),
+    );
+    setValue(
+      "governance.workspaceDescription",
+      (values.governance.workspaceDescription ?? "").trim(),
+    );
+    setValue(
+      "governance.namespacePrefix",
+      values.governance.namespacePrefix.trim(),
+    );
     onNext();
   };
 
@@ -77,54 +70,17 @@ export function WorkspaceGovernanceStep({
 
       <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
         <fieldset disabled={readOnly} className="space-y-6">
-          <IdentityFields
-            workspaceName={workspaceName}
-            workspaceDescription={workspaceDescription}
-            namespacePrefix={namespacePrefix}
-            onChangeName={(v) => setValue("governance.workspaceName", v)}
-            onChangeDescription={(v) =>
-              setValue("governance.workspaceDescription", v)
-            }
-            onChangeNamespacePrefix={(v) =>
-              setValue("governance.namespacePrefix", v)
-            }
-          />
-
-          <TemplateSelector
-            selectedTemplateId={workspaceTemplate}
-            onSelectTemplate={(id) =>
-              setValue(
-                "governance.workspaceTemplate",
-                id as ProjectConfig["governance"]["workspaceTemplate"],
-              )
-            }
-          />
-
-          <PackageManagerSelect
-            value={packageManager}
-            onChange={(v) => setValue("governance.packageManager", v)}
-          />
-
-          <NamingConventionsFieldset
-            contextDirectoryPattern={contextDirectoryPattern}
-            adapterSuffix={adapterSuffix}
-            onChangeContextDirectoryPattern={(v) =>
-              setValue(
-                "governance.namingConventions.contextDirectoryPattern",
-                v,
-              )
-            }
-            onChangeAdapterSuffix={(v) =>
-              setValue("governance.namingConventions.adapterSuffix", v)
-            }
-          />
+          <IdentityFields control={control} />
+          <TemplateSelector control={control} />
+          <PackageManagerSelect control={control} />
+          <NamingConventionsFieldset control={control} />
         </fieldset>
       </div>
 
       <WizardFooter
         onNext={handleNext}
         canProceed={Boolean(
-          canProceed && workspaceName.trim() && namespacePrefix.trim(),
+          canProceed && workspaceName?.trim() && namespacePrefix?.trim(),
         )}
         currentStep={currentStep}
         totalSteps={totalSteps}

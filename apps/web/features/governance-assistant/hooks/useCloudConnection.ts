@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "error";
@@ -192,14 +192,26 @@ export function useCloudConnection() {
     }));
   }, []);
 
-  return {
-    state: connectionState.state,
-    config: connectionState.config,
-    error: connectionState.error,
-    connect,
-    retry,
-    cancel,
-    disconnect,
-    clearError,
-  };
+  return useMemo(
+    () => ({
+      state: connectionState.state,
+      config: connectionState.config,
+      error: connectionState.error,
+      connect,
+      retry,
+      cancel,
+      disconnect,
+      clearError,
+    }),
+    [
+      connectionState.state,
+      connectionState.config,
+      connectionState.error,
+      connect,
+      retry,
+      cancel,
+      disconnect,
+      clearError,
+    ],
+  );
 }

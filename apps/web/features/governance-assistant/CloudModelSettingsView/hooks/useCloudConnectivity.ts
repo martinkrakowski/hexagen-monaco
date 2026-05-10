@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
-import type { CloudConnectionState } from "../types";
+import { useState, useCallback, useMemo } from "react";
 
 export function useCloudConnectivity(
   isConnecting?: boolean,
   connectionError?: string | null,
+  isConnectedProp?: boolean,
 ) {
   const [internalError, setInternalError] = useState<string | null>(null);
 
@@ -15,18 +15,26 @@ export function useCloudConnectivity(
     setInternalError(error);
   }, []);
 
-  const getState = useCallback((): CloudConnectionState => {
-    return {
-      connected: !connectionError && !internalError,
-      loading: isConnecting ?? false,
-      error: connectionError || internalError || undefined,
-    };
-  }, [isConnecting, connectionError, internalError]);
+  const isConnected = isConnectedProp ?? (!connectionError && !internalError);
 
-  return {
-    state: getState(),
-    clearError,
-    setError,
-    isConnected: !connectionError && !internalError,
-  };
+  return useMemo(
+    () => ({
+      state: {
+        connected: isConnected,
+        loading: isConnecting ?? false,
+        error: connectionError || internalError || undefined,
+      },
+      clearError,
+      setError,
+      isConnected,
+    }),
+    [
+      isConnected,
+      isConnecting,
+      connectionError,
+      internalError,
+      clearError,
+      setError,
+    ],
+  );
 }

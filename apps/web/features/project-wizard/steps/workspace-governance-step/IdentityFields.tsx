@@ -1,39 +1,29 @@
 "use client";
 
-import { LabeledInput } from "./LabeledInput";
+import React from "react";
+import type { Control } from "react-hook-form";
+import type { ProjectConfig } from "@hexagen/project-configuration";
+import { ControlledLabeledInput } from "./ControlledLabeledInput";
 
 interface IdentityFieldsProps {
-  workspaceName: string;
-  workspaceDescription: string;
-  namespacePrefix: string;
-  onChangeName: (value: string) => void;
-  onChangeDescription: (value: string) => void;
-  onChangeNamespacePrefix: (value: string) => void;
+  control: Control<ProjectConfig>;
 }
 
-/**
- * Three identity fields for the workspace: name (required),
- * description (optional), and namespace prefix (required). Presented
- * in-order as a vertically-stacked group.
- */
-export function IdentityFields({
-  workspaceName,
-  workspaceDescription,
-  namespacePrefix,
-  onChangeName,
-  onChangeDescription,
-  onChangeNamespacePrefix,
+export const IdentityFields = React.memo(function IdentityFields({
+  control,
 }: IdentityFieldsProps) {
   return (
     <>
-      <LabeledInput
+      <ControlledLabeledInput
+        name="governance.workspaceName"
+        control={control}
         label="Workspace Name"
-        value={workspaceName}
-        onChange={onChangeName}
         placeholder="@mycompany"
       />
 
-      <LabeledInput
+      <ControlledLabeledInput
+        name="governance.workspaceDescription"
+        control={control}
         label={
           <>
             Description{" "}
@@ -42,17 +32,15 @@ export function IdentityFields({
             </span>
           </>
         }
-        value={workspaceDescription}
-        onChange={onChangeDescription}
         placeholder="Core enterprise platform monorepo"
       />
 
-      <LabeledInput
+      <ControlledLabeledInput
+        name="governance.namespacePrefix"
+        control={control}
         label="Namespace Prefix"
-        value={namespacePrefix}
-        onChange={onChangeNamespacePrefix}
         placeholder="@hexagen"
       />
     </>
   );
-}
+});

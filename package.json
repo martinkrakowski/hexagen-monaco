@@ -44,7 +44,7 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^25.3.5",
+    "@types/node": "^22.19.0",
     "@types/uuid": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
@@ -55,7 +55,7 @@
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-turbo": "^2.9.6",
     "husky": "^9.1.7",
-    "jsdom": "^29.0.0",
+    "jsdom": "^26.1.0",
     "lint-staged": "^16.4.0",
     "lru-cache": "^7.18.3",
     "prettier": "^3.2.5",
@@ -63,6 +63,9 @@
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.0.0",
     "vite-tsconfig-paths": "^6.1.1"
+  },
+  "engines": {
+    "node": ">=22.7.0"
   },
   "resolutions": {
     "js-yaml": "^4.1.0",

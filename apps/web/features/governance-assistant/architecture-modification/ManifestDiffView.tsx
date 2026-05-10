@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { ArrowRight, Plus, Minus } from "lucide-react";
 
 interface ManifestEntry {
@@ -102,9 +103,15 @@ function DiffRow({ entry }: { entry: DiffEntry }) {
 }
 
 export function ManifestDiffView({ current, proposed }: ManifestDiffViewProps) {
-  const diff = computeDiff(current, proposed);
-  const added = diff.filter((d) => d.change === "added");
-  const removed = diff.filter((d) => d.change === "removed");
+  const diff = useMemo(
+    () => computeDiff(current, proposed),
+    [current, proposed],
+  );
+  const added = useMemo(() => diff.filter((d) => d.change === "added"), [diff]);
+  const removed = useMemo(
+    () => diff.filter((d) => d.change === "removed"),
+    [diff],
+  );
 
   if (diff.length === 0) {
     return (

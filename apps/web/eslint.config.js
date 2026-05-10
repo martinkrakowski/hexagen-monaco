@@ -39,6 +39,7 @@ export default [
     rules: {
       "hexagen-ui/no-feature-slice-imports": "error",
       "hexagen-ui/no-arbitrary-tailwind-values": "error",
+      "hexagen-ui/rhf-stable-array-keys": "error",
       "no-restricted-imports": [
         "error",
         {

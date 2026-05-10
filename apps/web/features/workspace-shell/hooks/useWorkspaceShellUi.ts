@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 export type WorkspaceShellState =
   | { kind: "genesis" }
@@ -61,18 +61,34 @@ export function useWorkspaceShellUi(
     setDialog({ kind: "none" });
   }, []);
 
-  return {
-    state,
-    dialog,
-    viewMode: options.viewMode,
-    currentStepIndex: options.currentStepIndex,
-    activeContextId,
-    activeMappingId,
-    setContextId: setActiveContextId,
-    setMappingId: setActiveMappingId,
-    openDialog,
-    closeDialog,
-    enterEditMode,
-    enterGenesisMode,
-  };
+  return useMemo(
+    () => ({
+      state,
+      dialog,
+      viewMode: options.viewMode,
+      currentStepIndex: options.currentStepIndex,
+      activeContextId,
+      activeMappingId,
+      setContextId: setActiveContextId,
+      setMappingId: setActiveMappingId,
+      openDialog,
+      closeDialog,
+      enterEditMode,
+      enterGenesisMode,
+    }),
+    [
+      state,
+      dialog,
+      options.viewMode,
+      options.currentStepIndex,
+      activeContextId,
+      activeMappingId,
+      setActiveContextId,
+      setActiveMappingId,
+      openDialog,
+      closeDialog,
+      enterEditMode,
+      enterGenesisMode,
+    ],
+  );
 }
