@@ -54,8 +54,9 @@ export function NewProjectConfirmDialog({
               const route = pendingRoute.current;
               try {
                 await lifecycle.handleSaveAndNew();
-              } finally {
                 pendingRoute.current = null;
+              } catch {
+                return;
               }
               if (route) router.push(route);
             }}
@@ -69,8 +70,9 @@ export function NewProjectConfirmDialog({
               const route = pendingRoute.current;
               try {
                 await lifecycle.handleDiscardAndNew();
-              } finally {
                 pendingRoute.current = null;
+              } catch {
+                return;
               }
               if (route) router.push(route);
             }}
