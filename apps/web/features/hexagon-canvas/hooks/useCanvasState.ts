@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type {
   HexagonNode,
   HexagonEdge,
@@ -72,7 +73,10 @@ export function useCanvasState(
     [wizardData],
   );
 
-  // Zustand store for structural state
+  // Zustand store for structural state — useShallow prevents re-render when
+  // only action function identities change (actions are stable in Zustand, but
+  // the destructured object from a bare useCanvasGraphStore() call creates a
+  // new reference every render).
   const {
     nodes,
     edges,
@@ -82,7 +86,18 @@ export function useCanvasState(
     updateNodePosition,
     setManifestHash,
     setLayoutCalculating,
-  } = useCanvasGraphStore();
+  } = useCanvasGraphStore(
+    useShallow((s) => ({
+      nodes: s.nodes,
+      edges: s.edges,
+      manifestHash: s.manifestHash,
+      isLayoutCalculating: s.isLayoutCalculating,
+      setGraph: s.setGraph,
+      updateNodePosition: s.updateNodePosition,
+      setManifestHash: s.setManifestHash,
+      setLayoutCalculating: s.setLayoutCalculating,
+    })),
+  );
 
   // Legacy persistence (will be replaced in Phase 3)
   const {

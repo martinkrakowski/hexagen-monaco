@@ -1,9 +1,14 @@
 "use client";
 
 import { ModelSelectionPage } from "@/manifest-generation/ModelSelectionPage";
-import { useLocalLLM } from "@/llm-driver/useLocalLlm";
+import {
+  useLocalLLMConfig,
+  useLocalLLMStreaming,
+} from "@/llm-driver/useLocalLlm";
 
 export function ModelSelectionPageClient() {
-  const llmContext = useLocalLLM();
+  const config = useLocalLLMConfig();
+  const streaming = useLocalLLMStreaming();
+  const llmContext = { ...config, ...streaming };
   return <ModelSelectionPage llmContext={llmContext} />;
 }

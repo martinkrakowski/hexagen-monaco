@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useGovernanceAssistant } from "../hooks/useGovernanceAssistant";
-import { useLocalLLM } from "@/llm-driver/useLocalLlm";
+import {
+  useLocalLLMConfig,
+  useLocalLLMStreaming,
+} from "@/llm-driver/useLocalLlm";
 import { useCloudLLM } from "../hooks/useCloudLlm";
 import { useCloudConnection } from "../hooks/useCloudConnection";
 import { useSecretVault } from "@/lib/vault-context";
@@ -54,8 +57,9 @@ export function GovernanceAssistantPanel({
     threadLoaded,
   } = useGovernanceAssistant(wizardData as WizardData, currentStepIndex);
 
+  const { messages } = useLocalLLMStreaming();
+
   const {
-    messages,
     initializeModel,
     cancelDownload,
     engineState: llmEngineState,
@@ -65,7 +69,7 @@ export function GovernanceAssistantPanel({
     hasModelInCache,
     resetLocalAIConfig,
     returnToModelSettings,
-  } = useLocalLLM();
+  } = useLocalLLMConfig();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
   const [followUpQuestions, setFollowUpQuestions] = useState<

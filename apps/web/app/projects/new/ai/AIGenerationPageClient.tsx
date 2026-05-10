@@ -1,9 +1,14 @@
 "use client";
 
 import { AIGenerationPage } from "@/manifest-generation/AIGenerationPage";
-import { useLocalLLM } from "@/llm-driver/useLocalLlm";
+import {
+  useLocalLLMConfig,
+  useLocalLLMStreaming,
+} from "@/llm-driver/useLocalLlm";
 
 export function AIGenerationPageClient() {
-  const llmContext = useLocalLLM();
+  const config = useLocalLLMConfig();
+  const streaming = useLocalLLMStreaming();
+  const llmContext = { ...config, ...streaming };
   return <AIGenerationPage llmContext={llmContext} />;
 }
