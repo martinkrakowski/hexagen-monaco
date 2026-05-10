@@ -164,7 +164,7 @@ if (contentHash !== prevHashRef.current) {
 
 **10a — New WizardLifecycleContext.tsx**: Context + Provider that owns `useWizardForm()` and `useProjectLifecycle()`. Uses a render prop `children: ({ wizardData }) => ReactNode` to inject `wizardData` into the layout without forcing consumers to subscribe to context directly.
 
-```
+```text
 ProjectWorkspace (stable — no form subscriptions)
 └── WizardLifecycleProvider (owns hooks, re-renders on keystrokes)
     ├── WizardLifecycleContext.Provider (lifecycle callbacks — stable)
@@ -183,6 +183,7 @@ ProjectWorkspace (stable — no form subscriptions)
 **10e — Module resolution fix** (commit `9f2c00d8`): Resolved `WizardLifecycleContext` import path errors across 5 consumer files. Used relative paths only — no webpack aliases.
 
 **Measured impact** (post-Step 10 profiler, single keystroke):
+
 | Metric | Baseline (Step 1) | Post-Step 9 | Post-Step 10 | Delta |
 |--------|-------------------|-------------|--------------|-------|
 | Total commits | 14 | 11 | 9 | −5 (−36%) |
@@ -203,7 +204,7 @@ ProjectWorkspace (stable — no form subscriptions)
 
 **11a — Context boundary inversion (primary fix)**: Removed `FormProvider` from `WizardLifecycleProvider`. Instead, created a `WizardFormMethodsContext` that holds the stable `form` object reference. Exported a `WizardStepFormProvider` that reads `form` from this context and wraps its children with `FormProvider`. This `WizardStepFormProvider` is used ONLY around `<WizardStepRouter>` in the left panel of `ResizableLayout`. Form state cascades are now confined to the wizard panel — the layout tree (`PanelGroup`) is completely outside `FormProvider` scope.
 
-```
+```text
 ProjectWorkspace (stable — no form subscriptions)
 └── WizardLifecycleProvider (owns hooks, re-renders on keystrokes)
     ├── WizardLifecycleContext.Provider (lifecycle callbacks)
@@ -225,6 +226,7 @@ ProjectWorkspace (stable — no form subscriptions)
 **11d — React.memo on layout components**: `VerticalResizeHandle`, `PanelHeader`, `CollapsedStrip`, `DesktopLayout`, `ResizableLayout`.
 
 **Measured impact** (post-Step 11.2 profiler, single keystroke):
+
 | Metric | Baseline (Step 1) | Post-Step 10 | Post-Step 11.2 | Delta |
 |--------|-------------------|--------------|----------------|-------|
 | Total commits | 14 | 9 | 13 | +4 (environmental noise) |

@@ -29,8 +29,8 @@ describe("rhf-stable-array-keys", () => {
             type: "JSXExpressionContainer",
             expression: {
               type: "TemplateLiteral",
-              quasis: [],
-              expressions: [],
+              quasis: [{ type: "TemplateElement" } as never],
+              expressions: [{ type: "Identifier", name: "activeIndex" }],
             },
           },
         },
@@ -58,7 +58,7 @@ describe("rhf-stable-array-keys", () => {
             type: "JSXExpressionContainer",
             expression: {
               type: "TemplateLiteral",
-              quasis: [],
+              quasis: [{ type: "TemplateElement" } as never],
               expressions: [{ type: "Identifier", name: "activeIndex" }],
             },
           },
@@ -99,7 +99,7 @@ describe("rhf-stable-array-keys", () => {
             type: "JSXExpressionContainer",
             expression: {
               type: "TemplateLiteral",
-              quasis: [],
+              quasis: [{ type: "TemplateElement" } as never],
               expressions: [{ type: "Identifier", name: "activeIndex" }],
             },
           },
@@ -169,5 +169,67 @@ describe("rhf-stable-array-keys", () => {
     } as never);
 
     assert.strictEqual(reported.length, 0);
+  });
+
+  it("does not report static template literals (no interpolation)", () => {
+    const reported: string[] = [];
+    const context = {
+      report: (args: { messageId: string }) => reported.push(args.messageId),
+    } as never;
+    const visitor = rule.create(context);
+
+    visitor.JSXOpeningElement({
+      type: "JSXOpeningElement" as never,
+      attributes: [
+        {
+          type: "JSXAttribute",
+          name: { type: "JSXIdentifier", name: "fieldPrefix" },
+          value: {
+            type: "JSXExpressionContainer",
+            expression: {
+              type: "TemplateLiteral",
+              quasis: [{ type: "TemplateElement" } as never],
+              expressions: [],
+            },
+          },
+        },
+      ],
+    } as never);
+
+    assert.strictEqual(reported.length, 0);
+  });
+
+  it("reports static string key on component with dynamic fieldPrefix", () => {
+    const reported: string[] = [];
+    const context = {
+      report: (args: { messageId: string }) => reported.push(args.messageId),
+    } as never;
+    const visitor = rule.create(context);
+
+    visitor.JSXOpeningElement({
+      type: "JSXOpeningElement" as never,
+      attributes: [
+        {
+          type: "JSXAttribute",
+          name: { type: "JSXIdentifier", name: "fieldPrefix" },
+          value: {
+            type: "JSXExpressionContainer",
+            expression: {
+              type: "TemplateLiteral",
+              quasis: [],
+              expressions: [{ type: "Identifier", name: "activeIndex" }],
+            },
+          },
+        },
+        {
+          type: "JSXAttribute",
+          name: { type: "JSXIdentifier", name: "key" },
+          value: { type: "Literal", value: "static-key" },
+        },
+      ],
+    } as never);
+
+    assert.strictEqual(reported.length, 1);
+    assert.strictEqual(reported[0], "staticKey");
   });
 });

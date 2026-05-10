@@ -1,6 +1,6 @@
 import type { TSESLint, TSESTree } from "@typescript-eslint/utils";
 
-type MessageIds = "missingKey" | "indexKey";
+type MessageIds = "missingKey" | "indexKey" | "staticKey";
 
 const INDEX_IDENTIFIERS = new Set(["index", "i", "idx", "activeIndex", "rowIndex", "colIndex"]);
 
@@ -36,6 +36,8 @@ const rule: TSESLint.RuleModule<MessageIds> = {
         "Component with dynamic RHF array path prop (fieldPrefix) must have a stable semantic `key` prop (e.g., entity ID) to prevent stale DOM state retention across array mutations.",
       indexKey:
         "Do not use array indices as keys for components with dynamic RHF array paths. Deletions/insertions shift indices and leak ambient state. Use a stable semantic ID instead.",
+      staticKey:
+        "Static string keys are invalid for components with dynamic RHF array paths. The key must change when the bound entity changes — use a dynamic semantic ID instead.",
     },
     schema: [],
   },
@@ -50,7 +52,10 @@ const rule: TSESLint.RuleModule<MessageIds> = {
 
           const value = attr.value;
           if (!value || value.type !== "JSXExpressionContainer") return false;
-          return value.expression.type === "TemplateLiteral";
+          return (
+            value.expression.type === "TemplateLiteral" &&
+            value.expression.expressions.length > 0
+          );
         });
 
         if (!hasDynamicRHFPath) return;
@@ -68,7 +73,17 @@ const rule: TSESLint.RuleModule<MessageIds> = {
         }
 
         const keyValue = keyAttr.value;
-        if (!keyValue || keyValue.type !== "JSXExpressionContainer") return;
+        if (!keyValue) {
+          context.report({ node: keyAttr, messageId: "staticKey" });
+          return;
+        }
+
+        if (keyValue.type === "Literal" && typeof keyValue.value === "string") {
+          context.report({ node: keyAttr, messageId: "staticKey" });
+          return;
+        }
+
+        if (keyValue.type !== "JSXExpressionContainer") return;
 
         const expr = keyValue.expression;
         if (expr.type === "JSXEmptyExpression") return;

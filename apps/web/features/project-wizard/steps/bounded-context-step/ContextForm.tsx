@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormContext } from "react-hook-form";
+import { useFormContext, type FieldPath } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import { ArrowLeft } from "lucide-react";
 
@@ -40,7 +40,7 @@ export function ContextForm({
           </span>
           <input
             type="text"
-            {...register(`${fieldPrefix}.name` as keyof ProjectConfig)}
+            {...register(`${fieldPrefix}.name` as FieldPath<ProjectConfig>)}
             className="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent outline-none bg-background"
             placeholder="e.g. SalesContext"
           />
