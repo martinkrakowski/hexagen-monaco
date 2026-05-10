@@ -164,6 +164,7 @@ const ProjectWorkspaceLayout = React.memo(
               right={
                 <GovernancePanelWrapper
                   currentStepIndex={currentStepIndex}
+                  enabled={isEditing}
                 />
               }
             />

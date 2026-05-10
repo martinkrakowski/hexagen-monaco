@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
-import { readFile } from "fs/promises";
-import path from "path";
 
 interface AISuggestion {
   id: string;
@@ -15,8 +13,22 @@ interface AISuggestion {
     | "general";
 }
 
-export async function GET() {
+interface SuggestionsRequestBody {
+  manifestYaml: string;
+  openFileContent?: string;
+}
+
+export async function POST(request: Request) {
   try {
+    const body = (await request.json()) as SuggestionsRequestBody;
+
+    if (!body.manifestYaml) {
+      return NextResponse.json(
+        { error: "manifestYaml is required" },
+        { status: 400 },
+      );
+    }
+
     const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
     const baseUrl =
       process.env.NEXT_PUBLIC_LLM_BASE_URL || "https://api.openai.com/v1";
@@ -31,18 +43,6 @@ export async function GET() {
 
     const llmProvider = new ServerLLMAdapter(apiKey, baseUrl, model);
 
-    const manifestPath = path.join(
-      process.cwd(),
-      ".architecture",
-      "manifest.yaml",
-    );
-    let manifestContent = "";
-    try {
-      manifestContent = await readFile(manifestPath, "utf-8");
-    } catch {
-      manifestContent = "No manifest found";
-    }
-
     const useCase = new GenerateSuggestionUseCase(llmProvider, {
       generateSuggestions: async () => ({
         success: false,
@@ -55,20 +55,21 @@ export async function GET() {
       }),
     });
 
+    let prompt = `Analyze this architecture manifest and suggest improvements:\n\n${body.manifestYaml}`;
+    if (body.openFileContent) {
+      prompt += `\n\n--- Currently open file ---\n${body.openFileContent}`;
+    }
+
     const result = await useCase.execute({
-      prompt: `Analyze this architecture manifest and suggest improvements:\n\n${manifestContent}`,
+      prompt,
       context: {},
       maxSuggestions: 5,
     });
 
     if (!result.success) {
-      const errorMessage =
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error);
       return NextResponse.json({
         suggestions: [],
-        error: errorMessage,
+        error: result.error instanceof Error ? result.error.message : "Failed to generate suggestions",
       });
     }
 
@@ -80,15 +81,18 @@ export async function GET() {
     }));
 
     return NextResponse.json({ suggestions });
-  } catch (error) {
+  } catch (err) {
+    console.error("Governance suggestions error:", err);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to generate suggestions",
-      },
+      { error: "Internal Server Error", suggestions: [] },
       { status: 500 },
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { error: "Use POST with manifestYaml and optional openFileContent", suggestions: [] },
+    { status: 405, headers: { Allow: "POST" } },
+  );
 }

@@ -6,7 +6,6 @@ interface Violation {
   id: string;
   type: "error" | "warning" | "info";
   message: string;
-  context?: string;
   severity: "HIGH" | "MEDIUM" | "LOW";
 }
 
@@ -34,17 +33,17 @@ interface GovernanceData {
   portAdapterStatus: PortAdapterStatus[];
 }
 
+interface UseGovernanceDataOptions {
+  /** If false, skip auto-fetch on mount (for new projects without manifest) */
+  enabled?: boolean;
+}
+
 interface UseGovernanceDataReturn {
   data: GovernanceData;
   isLoading: boolean;
   error: string | null;
-  /** Manual refresh — re-fetches from the legacy GET endpoints (disk-based). */
-  refresh: () => void;
-  /** Refresh with dynamic data — posts manifestYaml + openFileContent to /api/governance/refresh. */
-  refreshWithData: (
-    manifestYaml: string,
-    openFileContent?: string,
-  ) => Promise<void>;
+  /** Refresh with manifest data — posts to governance endpoints */
+  refresh: (manifestYaml: string, openFileContent?: string) => Promise<void>;
 }
 
 const emptyData: GovernanceData = {
@@ -53,100 +52,101 @@ const emptyData: GovernanceData = {
   portAdapterStatus: [],
 };
 
-export function useGovernanceData(): UseGovernanceDataReturn {
+export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGovernanceDataReturn {
+  const { enabled = true } = options;
   const [data, setData] = useState<GovernanceData>(emptyData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Legacy refresh — GET from separate endpoints (reads from disk)
-  const fetchAll = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const [violationsRes, suggestionsRes, statusRes] = await Promise.all([
-        fetch("/api/governance/violations"),
-        fetch("/api/governance/suggestions"),
-        fetch("/api/governance/status"),
-      ]);
-
-      const [violationsData, suggestionsData, statusData] = await Promise.all([
-        violationsRes.json(),
-        suggestionsRes.json(),
-        statusRes.json(),
-      ]);
-
-      setData({
-        violations: violationsData.violations || [],
-        suggestions: suggestionsData.suggestions || [],
-        portAdapterStatus: statusData.status || [],
-      });
-
-      if (violationsData.error || suggestionsData.error || statusData.error) {
-        setError(
-          violationsData.error ||
-            suggestionsData.error ||
-            statusData.error ||
-            "Failed to fetch governance data",
-        );
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch governance data",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Auto-fetch governance data on mount — CR1 fix
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-
-  // Dynamic refresh — POST manifest + open file content to combined endpoint
-  const refreshWithData = useCallback(
+  // Refresh — POST manifest to governance endpoints (no filesystem dependencies)
+  const refresh = useCallback(
     async (manifestYaml: string, openFileContent?: string) => {
+      if (!enabled || !manifestYaml) {
+        setData(emptyData);
+        setError(null);
+        return;
+      }
       setIsLoading(true);
       setError(null);
 
       try {
-        const res = await fetch("/api/governance/refresh", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ manifestYaml, openFileContent }),
-        });
+        const [violationsRes, suggestionsRes, statusRes] = await Promise.all([
+          fetch("/api/governance/violations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ manifestYaml }),
+          }),
+          fetch("/api/governance/suggestions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ manifestYaml, openFileContent }),
+          }),
+          fetch("/api/governance/status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ manifestYaml }),
+          }),
+        ]);
 
-        const result = await res.json();
+        // Check for non-OK responses
+        const responses = [
+          { res: violationsRes, name: "violations" },
+          { res: suggestionsRes, name: "suggestions" },
+          { res: statusRes, name: "status" },
+        ];
 
-        if (!res.ok) {
-          setError(result.error || "Governance refresh failed");
-          return;
+        for (const { res, name } of responses) {
+          if (!res.ok) {
+            const errorMsg = `Failed to fetch ${name}: ${res.status}`;
+            setError(errorMsg);
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        const [violationsData, suggestionsData, statusData] = await Promise.all([
+          violationsRes.json(),
+          suggestionsRes.json(),
+          statusRes.json(),
+        ]);
+
+        if (violationsData.error || suggestionsData.error || statusData.error) {
+          setError(
+            violationsData.error ||
+              suggestionsData.error ||
+              statusData.error ||
+              "Failed to fetch governance data",
+          );
         }
 
         setData({
-          violations: result.violations || [],
-          suggestions: result.suggestions || [],
-          portAdapterStatus: result.portAdapterStatus || [],
+          violations: violationsData.violations || [],
+          suggestions: suggestionsData.suggestions || [],
+          portAdapterStatus: statusData.status || [],
         });
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to refresh governance data",
+          err instanceof Error ? err.message : "Failed to fetch governance data",
         );
       } finally {
         setIsLoading(false);
       }
     },
-    [],
+    [enabled],
   );
+
+  // Initial state when disabled or no manifest
+  useEffect(() => {
+    if (!enabled) {
+      setData(emptyData);
+      setError(null);
+    }
+  }, [enabled]);
 
   return {
     data,
     isLoading,
     error,
-    refresh: fetchAll,
-    refreshWithData,
+    refresh,
   };
 }

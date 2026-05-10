@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { readdir, readFile } from "fs/promises";
-import path from "path";
-import yaml from "js-yaml";
-import type { Manifest } from "@hexagen/project-configuration";
+import * as yaml from "js-yaml";
 
 interface PortAdapterStatus {
   context: string;
@@ -11,65 +8,60 @@ interface PortAdapterStatus {
   complete: boolean;
 }
 
-export async function GET() {
-  try {
-    const manifestPath = path.join(
-      process.cwd(),
-      ".architecture",
-      "manifest.yaml",
-    );
-    let manifest: Manifest;
+interface StatusRequestBody {
+  manifestYaml: string;
+}
 
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as StatusRequestBody;
+
+    if (!body.manifestYaml) {
+      return NextResponse.json(
+        { error: "manifestYaml is required" },
+        { status: 400 },
+      );
+    }
+
+    let parsed: Record<string, unknown>;
     try {
-      const content = await readFile(manifestPath, "utf-8");
-      const parsed = yaml.load(content) as Manifest;
-      manifest = parsed;
+      parsed = yaml.load(body.manifestYaml) as Record<string, unknown>;
     } catch {
       return NextResponse.json({ status: [] });
     }
 
-    const packagesDir = path.join(process.cwd(), "packages");
-    let packageNames: string[] = [];
+    const boundedContexts = parsed.bounded_contexts as
+      | Array<Record<string, unknown>>
+      | undefined;
 
-    try {
-      packageNames = await readdir(packagesDir);
-    } catch {
+    if (!boundedContexts) {
       return NextResponse.json({ status: [] });
     }
 
     const status: PortAdapterStatus[] = [];
 
-    for (const ctx of manifest.bounded_contexts || []) {
-      const ports = ctx.layers?.application?.ports
-        ? (ctx.layers.application.ports.in?.length || 0) +
-          (ctx.layers.application.ports.out?.length || 0)
-        : 0;
+    for (const ctx of boundedContexts) {
+      const ctxName = ctx.name as string;
+      const layers = ctx.layers as Record<string, unknown> | undefined;
 
-      const hasPackage = packageNames.includes(
-        ctx.name.replace("@hexagen/", ""),
-      );
-      let adapterCount = 0;
+      const portsConfig = (layers?.application as Record<string, unknown>)?.ports as
+        | Record<string, unknown>
+        | undefined;
+      const inPorts = portsConfig?.in as string[] | undefined;
+      const outPorts = portsConfig?.out as string[] | undefined;
 
-      if (hasPackage) {
-        const adapterPath = path.join(
-          packagesDir,
-          ctx.name.replace("@hexagen/", ""),
-          "src",
-          "infrastructure",
-          "adapters",
-        );
-        try {
-          const files = await readdir(adapterPath);
-          adapterCount = files.filter(
-            (f) => f.endsWith(".ts") || f.endsWith(".tsx"),
-          ).length;
-        } catch {
-          adapterCount = 0;
-        }
-      }
+      const ports = (inPorts?.length || 0) + (outPorts?.length || 0);
+
+      const domainLayer = layers?.domain as
+        | Record<string, unknown>
+        | undefined;
+      const adapters = domainLayer?.adapters as
+        | Record<string, unknown>
+        | undefined;
+      const adapterCount = adapters ? Object.keys(adapters).length : 0;
 
       status.push({
-        context: ctx.name,
+        context: ctxName,
         ports,
         adapters: adapterCount,
         complete: ports > 0 && adapterCount >= Math.ceil(ports / 2),
@@ -77,12 +69,18 @@ export async function GET() {
     }
 
     return NextResponse.json({ status });
-  } catch (error) {
+  } catch (err) {
+    console.error("Governance status error:", err);
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to get status",
-      },
+      { error: "Internal Server Error", status: [] },
       { status: 500 },
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { error: "Use POST with manifestYaml in request body", status: [] },
+    { status: 405, headers: { Allow: "POST" } },
+  );
 }

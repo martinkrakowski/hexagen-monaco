@@ -27,6 +27,18 @@ interface GovernancePayload {
   timestamp: string;
 }
 
+function createEmptyPayload(): GovernancePayload {
+  return {
+    system: "",
+    scope: "",
+    architecture: "",
+    boundedContexts: [],
+    ports: {},
+    invariants: [],
+    timestamp: new Date().toISOString(),
+  };
+}
+
 async function findWorkspaceRoot(start: string): Promise<string | null> {
   const manifestPath = path.join(start, ".architecture", "manifest.yaml");
   try {
@@ -39,14 +51,11 @@ async function findWorkspaceRoot(start: string): Promise<string | null> {
   }
 }
 
-export async function GET(): Promise<NextResponse<GovernancePayload>> {
+export async function GET(): Promise<NextResponse<GovernancePayload | { error: string }>> {
   try {
     const workspaceRoot = await findWorkspaceRoot(process.cwd());
     if (!workspaceRoot) {
-      return NextResponse.json(
-        { error: "Workspace root not found" } as unknown as GovernancePayload,
-        { status: 500 },
-      );
+      return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
 
     const manifestPath = path.join(
@@ -59,20 +68,14 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
     try {
       manifestContent = await readFile(manifestPath, "utf-8");
     } catch {
-      return NextResponse.json(
-        { error: "Manifest not found" } as unknown as GovernancePayload,
-        { status: 500 },
-      );
+      return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
 
     let manifest: Record<string, unknown>;
     try {
       manifest = yaml.load(manifestContent) as Record<string, unknown>;
     } catch {
-      return NextResponse.json(
-        { error: "Invalid manifest format" } as unknown as GovernancePayload,
-        { status: 500 },
-      );
+      return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
 
     const boundedContextsArray = manifest.bounded_contexts as
@@ -129,14 +132,9 @@ export async function GET(): Promise<NextResponse<GovernancePayload>> {
         "Cache-Control": "public, max-age=3600",
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load governance context",
-      } as unknown as GovernancePayload,
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }
