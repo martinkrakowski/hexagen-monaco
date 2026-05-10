@@ -61,11 +61,9 @@ export function useWizardForm(): UseWizardFormReturn {
   // external contexts, or peer mappings change. Governance field changes
   // (like workspaceName) do NOT trigger wizardData rebuild →
   // ArchitecturePreviewPane receives stable reference → React.memo bails out.
-  const canvasHash = JSON.stringify({
-    boundedContexts,
-    externalContexts,
-    peerMappings,
-  });
+  const canvasHash = JSON.stringify(
+    form.getValues(["boundedContexts", "externalContexts", "peerMappings"]),
+  );
 
   // Full content hash for global lifecycle needs (saving/loading)
   const contentHash = JSON.stringify({
