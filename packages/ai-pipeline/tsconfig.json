@@ -9,7 +9,7 @@
     "composite": true,
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "paths": {},
-    "types": ["jest", "node"]
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", ".turbo"],
