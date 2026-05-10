@@ -5,30 +5,28 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@hexagen/ui";
-import type { SavedProject } from "@/hooks/useSavedProjects";
+import { useWizardLifecycleContext } from "./contexts/WizardLifecycleContext";
 
 interface NewProjectConfirmDialogProps {
-  open: boolean;
-  onClose: () => void;
-  loadedProject: SavedProject | null;
-  onSaveAndNew: () => void;
-  onDiscardAndNew: () => void;
-  onCancel: () => void;
+  pendingRoute: React.MutableRefObject<string | null>;
+  router: ReturnType<typeof import("next/navigation").useRouter>;
+  onNavigateToProjects?: () => void;
 }
 
 export function NewProjectConfirmDialog({
-  open,
-  onClose,
-  loadedProject,
-  onSaveAndNew,
-  onDiscardAndNew,
-  onCancel,
+  pendingRoute,
+  router,
 }: NewProjectConfirmDialogProps) {
+  const lifecycle = useWizardLifecycleContext();
   const projectName =
-    loadedProject?.formState?.governance?.workspaceName ?? loadedProject?.name;
+    lifecycle.loadedProject?.formState?.governance?.workspaceName ??
+    lifecycle.loadedProject?.name;
 
   return (
-    <Dialog open={open} onClose={onClose}>
+    <Dialog
+      open={lifecycle.loadedProject !== null}
+      onClose={lifecycle.handleCancelNewProject}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Start a New Project?</DialogTitle>
@@ -45,21 +43,37 @@ export function NewProjectConfirmDialog({
         <div className="flex flex-col gap-2 mt-4">
           <button
             type="button"
-            onClick={onSaveAndNew}
+            onClick={async () => {
+              const route = pendingRoute.current;
+              try {
+                await lifecycle.handleSaveAndNew();
+              } finally {
+                pendingRoute.current = null;
+              }
+              if (route) router.push(route);
+            }}
             className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium"
           >
             Save Changes &amp; Start New
           </button>
           <button
             type="button"
-            onClick={onDiscardAndNew}
+            onClick={async () => {
+              const route = pendingRoute.current;
+              try {
+                await lifecycle.handleDiscardAndNew();
+              } finally {
+                pendingRoute.current = null;
+              }
+              if (route) router.push(route);
+            }}
             className="w-full px-4 py-2 border border-destructive text-destructive rounded-md hover:bg-destructive/10 text-sm"
           >
             Discard Changes &amp; Start New
           </button>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={lifecycle.handleCancelNewProject}
             className="w-full px-4 py-2 border border-input bg-background rounded-md hover:bg-muted text-sm"
           >
             Cancel

@@ -1,17 +1,18 @@
-import { createContext, useContext, useMemo } from "react";
-import type { UseProjectLifecycleReturn } from "../hooks/useProjectLifecycle";
-import { useWizardForm } from "../hooks/useWizardForm";
-import { useProjectLifecycle } from "../hooks/useProjectLifecycle";
+import React, { createContext, useContext, useMemo } from "react";
 import { FormProvider } from "react-hook-form";
+import { useWizardForm } from "../hooks/useWizardForm";
+import {
+  useProjectLifecycle,
+  type UseProjectLifecycleReturn,
+} from "../hooks/useProjectLifecycle";
+import type { WizardData } from "@hexagen/project-configuration";
 import type {
   UseWorkspaceShellUiReturn,
   WorkspaceShellState,
 } from "../hooks/useWorkspaceShellUi";
 import type { UseEditorSessionReturn } from "../hooks/useEditorSession";
-import type { WizardData } from "@hexagen/project-configuration";
 
 interface WizardLifecycleContextValue extends UseProjectLifecycleReturn {
-  wizardData: WizardData;
   canProceed: (stepIndex: number) => boolean;
 }
 
@@ -29,27 +30,22 @@ export function useWizardLifecycleContext(): WizardLifecycleContextValue {
 }
 
 export interface WizardLifecycleProviderProps {
-  children: React.ReactNode;
   ui: UseWorkspaceShellUiReturn;
   uiState: WorkspaceShellState;
-  editor: Pick<
-    UseEditorSessionReturn,
-    | "setSessionId"
-    | "clearSession"
-    | "setActiveWorkspace"
-    | "clearActiveWorkspace"
-  >;
+  editor: UseEditorSessionReturn;
   totalSteps: number;
   onGoToStep: (index: number) => void;
+  // Render prop: receives { wizardData } for injection
+  children: (injectedProps: { wizardData: WizardData }) => React.ReactNode;
 }
 
 export function WizardLifecycleProvider({
-  children,
   ui,
   uiState,
   editor,
   totalSteps,
   onGoToStep,
+  children,
 }: WizardLifecycleProviderProps) {
   const { form, wizardData, canProceed } = useWizardForm();
 
@@ -62,18 +58,19 @@ export function WizardLifecycleProvider({
     onGoToStep,
   });
 
+  // Memoize the context value. Because contentHash was removed from
+  // lifecycle hook deps in Step 10, this context identity is highly stable.
   const value = useMemo(
     () => ({
       ...lifecycle,
-      wizardData,
       canProceed,
     }),
-    [lifecycle, wizardData, canProceed],
+    [lifecycle, canProceed],
   );
 
   return (
     <WizardLifecycleContext.Provider value={value}>
-      <FormProvider {...form}>{children}</FormProvider>
+      <FormProvider {...form}>{children({ wizardData })}</FormProvider>
     </WizardLifecycleContext.Provider>
   );
 }

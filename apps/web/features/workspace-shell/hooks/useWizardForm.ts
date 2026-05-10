@@ -17,17 +17,6 @@ import {
 import { emptyFormValues } from "../../project-wizard/config";
 import { buildWizardData } from "@hexagen/wizard-orchestration";
 
-function stableHash(data: unknown): string {
-  const str = JSON.stringify(data);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return hash.toString(36);
-}
-
 export interface UseWizardFormReturn {
   form: UseFormReturn<ProjectConfig>;
   boundedContexts: ProjectConfig["boundedContexts"];
@@ -68,21 +57,24 @@ export function useWizardForm(): UseWizardFormReturn {
   });
   const governance = useWatch({ control: form.control, name: "governance" });
 
-  // Content-keyed memo: re-computes only when the serialized form content
-  // actually changes. useWatch returns new object identity on every
-  // keystroke (e.g. typing in governance.workspaceName), but we only
-  // need a new wizardData when the *content* differs — the canvas
-  // and code-view consumers react to structural changes, not identity.
-  const contentHash = useMemo(
-    () =>
-      stableHash({
-        boundedContexts,
-        externalContexts,
-        peerMappings,
-        governance,
-      }),
-    [boundedContexts, externalContexts, peerMappings, governance],
-  );
+  // Canvas-relevant hash: only rebuild wizardData when bounded contexts,
+  // external contexts, or peer mappings change. Governance field changes
+  // (like workspaceName) do NOT trigger wizardData rebuild →
+  // ArchitecturePreviewPane receives stable reference → React.memo bails out.
+  const canvasHash = JSON.stringify({
+    boundedContexts,
+    externalContexts,
+    peerMappings,
+  });
+
+  // Full content hash for global lifecycle needs (saving/loading)
+  const contentHash = JSON.stringify({
+    boundedContexts,
+    externalContexts,
+    peerMappings,
+    governance,
+  });
+
   const wizardDataRef = useRef<WizardData>(
     buildWizardData(
       boundedContexts,
@@ -91,9 +83,11 @@ export function useWizardForm(): UseWizardFormReturn {
       governance,
     ),
   );
-  const prevHashRef = useRef<string>(contentHash);
-  if (contentHash !== prevHashRef.current) {
-    prevHashRef.current = contentHash;
+  const prevCanvasHashRef = useRef<string>(canvasHash);
+
+  // ONLY rebuild wizardData if canvas-relevant fields mutated
+  if (canvasHash !== prevCanvasHashRef.current) {
+    prevCanvasHashRef.current = canvasHash;
     wizardDataRef.current = buildWizardData(
       boundedContexts,
       externalContexts,
