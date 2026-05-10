@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 import {
   type EditorState as EditorContextState,
@@ -22,6 +22,10 @@ const INITIAL_EDITOR_STATE: EditorContextState = {
 };
 
 export interface UseGovernancePayloadReturn {
+  /** Optional error message when fetching fails */
+  error?: string | null;
+  /** Function to retry fetching the governance payload */
+  retry?: () => void;
   governancePayload: GovernancePayload | null;
   /**
    * Ref holding the latest editor snapshot. Readers access via
@@ -43,6 +47,7 @@ export interface UseGovernancePayloadReturn {
 export function useGovernancePayload(): UseGovernancePayloadReturn {
   const [governancePayload, setGovernancePayload] =
     useState<GovernancePayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const editorStateRef = useRef<EditorContextState>(INITIAL_EDITOR_STATE);
   useCodeChangeSubscription((event) => {
@@ -52,23 +57,29 @@ export function useGovernancePayload(): UseGovernancePayloadReturn {
     };
   });
 
-  useEffect(() => {
+  // Fetch governance payload – exposed as a retryable callback
+  const fetchGovernance = useCallback(async () => {
     if (governancePayload) return;
-
-    const fetchGovernance = async () => {
-      try {
-        const res = await fetch("/api/llm/context");
-        if (res.ok) {
-          const payload = await res.json();
-          setGovernancePayload(payload);
-        }
-      } catch (err) {
-        console.warn("Failed to fetch governance context:", err);
+    try {
+      const res = await fetch("/api/llm/context");
+      if (res.ok) {
+        const payload = await res.json();
+        setGovernancePayload(payload);
+        setError(null);
+      } else {
+        const errMsg = `Unexpected response ${res.status}`;
+        setError(errMsg);
       }
-    };
-
-    fetchGovernance();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    }
   }, [governancePayload]);
 
-  return { governancePayload, editorStateRef };
+  // Run once on mount
+  useEffect(() => {
+    fetchGovernance();
+  }, [fetchGovernance]);
+
+  return { governancePayload, editorStateRef, error, retry: fetchGovernance };
 }
