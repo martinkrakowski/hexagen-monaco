@@ -8,12 +8,15 @@ import {
 import { useWizardLifecycleContext } from "./contexts/WizardLifecycleContext";
 
 interface NewProjectConfirmDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
   pendingRoute: React.MutableRefObject<string | null>;
   router: ReturnType<typeof import("next/navigation").useRouter>;
-  onNavigateToProjects?: () => void;
 }
 
 export function NewProjectConfirmDialog({
+  isOpen,
+  onClose,
   pendingRoute,
   router,
 }: NewProjectConfirmDialogProps) {
@@ -24,8 +27,8 @@ export function NewProjectConfirmDialog({
 
   return (
     <Dialog
-      open={lifecycle.loadedProject !== null}
-      onClose={lifecycle.handleCancelNewProject}
+      open={isOpen}
+      onClose={onClose}
     >
       <DialogContent>
         <DialogHeader>
@@ -73,7 +76,7 @@ export function NewProjectConfirmDialog({
           </button>
           <button
             type="button"
-            onClick={lifecycle.handleCancelNewProject}
+            onClick={onClose}
             className="w-full px-4 py-2 border border-input bg-background rounded-md hover:bg-muted text-sm"
           >
             Cancel
