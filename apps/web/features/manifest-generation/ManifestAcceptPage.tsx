@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Spinner } from "@hexagen/ui";
 import {
@@ -33,9 +33,14 @@ export function ManifestAcceptPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
+  const isNavigatingAway = useRef(false);
 
   useEffect(() => {
-    if (pendingManifest.yaml === null && !isSaving) {
+    if (
+      pendingManifest.yaml === null &&
+      !isSaving &&
+      !isNavigatingAway.current
+    ) {
       setRedirecting(true);
       router.replace("/projects/new/ai");
     }
@@ -77,6 +82,7 @@ export function ManifestAcceptPage() {
         return;
       }
 
+      isNavigatingAway.current = true;
       pendingManifest.clear();
       router.push(`/wizard/1?project=${projectId}`);
     },
