@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import type { SyncFlags } from "./config.js";
 import type { Manifest } from "./types/manifest.js";
+import { ManifestSchema } from "@hexagen/project-configuration";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,6 +102,16 @@ export function validateManifest(manifest: Manifest, flags: SyncFlags): void {
     }
     if (!ctx?.type) {
       logger.warn(`Bounded context "${ctx.name}" missing type field`);
+    }
+  }
+
+  try {
+    ManifestSchema.parse(manifest);
+    logger.debug("[Manifest] Zod Schema Validation passed");
+  } catch (err) {
+    if (err instanceof Error) {
+      logger.error(`[Manifest] Schema Validation failed: ${err.message}`);
+      throw new Error(`Invalid manifest structure according to schema.`);
     }
   }
 

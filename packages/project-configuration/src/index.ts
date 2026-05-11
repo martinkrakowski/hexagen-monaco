@@ -25,16 +25,28 @@ export type {
   PeerMapping,
 } from "./schema";
 // Re-export schema constants
-export {
-  PortConfigurationSchema,
-} from "./schema";
+export { PortConfigurationSchema } from "./schema";
 // Re-export manifest schema types for consumers
 export {
   BoundedContextTypeSchema,
   LayerTypeSchema,
   ManifestSchema,
+  PlaneTypeSchema,
+  StatusTypeSchema,
+  RelationshipPatternSchema,
+  RelationshipRoleSchema,
+  RelationshipSchema,
+  PortDefinitionSchema,
+  LegacyOrNewPortSchema,
+  BoundedContextSchema,
+  IndexManifestSchema,
 } from "./domain/model/manifest-schema/manifest-schema";
-export type { Manifest } from "./domain/model/manifest-schema/manifest-schema";
+export type {
+  Manifest,
+  PortDefinition,
+  Relationship,
+  IndexManifest,
+} from "./domain/model/manifest-schema/manifest-schema";
 // Re-export manifest-diff utilities
 export type {
   ManifestDiff,
