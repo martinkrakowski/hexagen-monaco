@@ -255,6 +255,7 @@ export function ManifestAcceptPage() {
         hideActions
         hideHeader
         embedded
+        isApproveDisabled={!canSave || !canAccept || !viewData}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />

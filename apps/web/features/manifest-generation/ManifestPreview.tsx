@@ -34,6 +34,7 @@ interface ManifestPreviewProps {
   activeTab?: ViewTab;
   onTabChange?: (tab: ViewTab) => void;
   embedded?: boolean;
+  isApproveDisabled?: boolean;
 }
 
 export type ViewTab = "context-map" | "mermaid" | "validation";
@@ -49,6 +50,7 @@ export function ManifestPreview({
   activeTab: externalActiveTab,
   onTabChange,
   embedded,
+  isApproveDisabled,
 }: ManifestPreviewProps) {
   const [internalActiveTab, setInternalActiveTab] =
     useState<ViewTab>("context-map");
@@ -226,7 +228,7 @@ export function ManifestPreview({
           </div>
           <Button
             onClick={() => onApprove(localManifestYaml)}
-            disabled={hasFailures}
+            disabled={hasFailures || isApproveDisabled}
           >
             Use This Manifest <ArrowRight className="w-4 h-4 ml-1.5" />
           </Button>
