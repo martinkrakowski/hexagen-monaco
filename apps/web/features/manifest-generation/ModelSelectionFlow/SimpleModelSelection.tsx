@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, CardContent } from "@hexagen/ui";
+import { Button, CardContent, Spinner } from "@hexagen/ui";
 import type { DomainModelId } from "@hexagen/local-llm";
 import type {
   ModelSelectionFlowState,
@@ -83,7 +83,7 @@ export function SimpleModelSelection({
           Please wait while we validate your API key...
         </p>
         <div className="flex justify-center">
-          <span className="animate-spin text-2xl">⏳</span>
+          <Spinner className="h-8 w-8" />
         </div>
       </CardContent>
     );

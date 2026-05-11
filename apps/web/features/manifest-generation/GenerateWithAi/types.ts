@@ -40,15 +40,6 @@ export interface HeaderSectionProps {
   subtitle: string;
 }
 
-export interface ModelCapabilityCheckProps {
-  modelNativelyCapable: boolean;
-  manifestCapable: boolean;
-  loadedModelId: string | null;
-  overrideModelCheck: boolean;
-  onOverrideChange: (value: boolean) => void;
-  onSwitchModel: () => void;
-}
-
 export interface ActionBarProps {
   canGenerate: boolean;
   isGenerating: boolean;

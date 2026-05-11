@@ -12,9 +12,9 @@ import {
 } from "@hexagen/manifest-generation";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
+import { Button } from "@hexagen/ui";
 import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
-import { ModelCapabilityCheck } from "./ModelCapabilityCheck";
 import { ActionBar } from "./ActionBar";
 import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
@@ -44,7 +44,6 @@ export function GenerateWithAi({
   const modelSelectionIntent = useModelSelectionIntent();
   const [formState, formHandlers] = useGenerateWithAiForm();
   const [mounted, setMounted] = useState(false);
-  const [overrideModelCheck, setOverrideModelCheck] = useState(false);
   const [previewActiveTab, setPreviewActiveTab] =
     useState<ViewTab>("context-map");
 
@@ -147,30 +146,12 @@ export function GenerateWithAi({
   }, [stagedGen.generatedManifest, flowState.state, actions]);
 
   const loadedModelId = llmContext.engineState.loadedModelId;
-  const capability = assessModelCapability(loadedModelId, overrideModelCheck);
+  const capability = assessModelCapability(loadedModelId, false);
   const manifestCapable = capability.isCapable;
 
-  const isNativelyCapable =
-    capability.isCapable && !capability.reason.includes("Override");
-
-  useEffect(() => {
-    if (isNativelyCapable) {
-      setOverrideModelCheck(false);
-    }
-  }, [isNativelyCapable]);
-
-  // Gate on both model capability AND LLM provider availability.
-  // THREE-TIER GATE: button enabled if ANY tier has keys/capability
-  // Tier 1 (sync): env key → enabled immediately (fast-pass, don't wait)
-  // Tier 2 (async): BYOK configured → enabled after probe completes
-  // Tier 3 (sync): WebLLM available → enabled immediately (local fallback)
-  // If all tiers missing, button disabled with helpful tooltip
   const hasAnyProvider = hasCloudKeys || hasLocalLLM;
   const canGenerate =
-    formHandlers.isValid &&
-    flowState.state === "idle" &&
-    manifestCapable &&
-    hasAnyProvider;
+    formHandlers.isValid && flowState.state === "idle" && hasAnyProvider;
 
   // Tooltip messaging based on which providers are unavailable
   const disabledTooltip = !hasAnyProvider
@@ -373,16 +354,26 @@ export function GenerateWithAi({
         onChangeModel={() => navigateToModelSelection(false)}
       />
 
-      <ModelCapabilityCheck
-        modelNativelyCapable={
-          capability.isCapable && !capability.reason.includes("Override")
-        }
-        manifestCapable={manifestCapable}
-        loadedModelId={loadedModelId}
-        overrideModelCheck={overrideModelCheck}
-        onOverrideChange={setOverrideModelCheck}
-        onSwitchModel={() => navigateToModelSelection(false)}
-      />
+      {!manifestCapable && loadedModelId && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <p className="font-medium text-amber-600 dark:text-amber-400">
+            Model may produce unreliable results
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            The current model may not reliably produce structured JSON. For best
+            results, use a 3B+ parameter model.
+          </p>
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigateToModelSelection(false)}
+            >
+              Switch to 3B+ Model
+            </Button>
+          </div>
+        </div>
+      )}
 
       {mounted &&
         (isModelLoading || isModelError) &&

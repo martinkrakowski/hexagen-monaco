@@ -21,3 +21,6 @@ export type { LabelProps } from "./Label.js";
 
 export { Icon } from "./Icon.js";
 export type { IconProps, IconName } from "./Icon.js";
+
+export { Spinner } from "./Spinner.js";
+export type { SpinnerProps } from "./Spinner.js";

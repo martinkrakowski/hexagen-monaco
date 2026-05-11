@@ -1,4 +1,4 @@
-import { Button, Badge } from "@hexagen/ui";
+import { Button, Badge, Spinner } from "@hexagen/ui";
 import { ManifestPreview } from "../ManifestPreview";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
@@ -181,7 +181,7 @@ export function StateView({
           Please wait while we validate your API key...
         </p>
         <div className="flex justify-center">
-          <span className="animate-spin text-2xl">⏳</span>
+          <Spinner className="h-8 w-8" />
         </div>
       </div>
     );

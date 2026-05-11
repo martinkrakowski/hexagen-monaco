@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@hexagen/ui";
+import { Button, Spinner } from "@hexagen/ui";
 import {
   ArrowLeft,
   ArrowRight,
@@ -28,14 +28,19 @@ const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
 export function ManifestAcceptPage() {
   const router = useRouter();
   const pendingManifest = usePendingManifest();
-  const { saveProject } = useSavedProjects();
+  const { saveProject, isLoading: isLoadingProjects } = useSavedProjects();
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
+  const isNavigatingAway = useRef(false);
 
   useEffect(() => {
-    if (pendingManifest.yaml === null && !isSaving) {
+    if (
+      pendingManifest.yaml === null &&
+      !isSaving &&
+      !isNavigatingAway.current
+    ) {
       setRedirecting(true);
       router.replace("/projects/new/ai");
     }
@@ -50,7 +55,22 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml]);
 
-  const handleAccept = useCallback(async () => {
+  const hasFailures =
+    viewData?.validationItems.some((v) => v.status === "fail") ?? false;
+
+  const canAccept =
+    !!pendingManifest.yaml &&
+    !!pendingManifest.projectName &&
+    !!pendingManifest.formValues &&
+    !hasFailures &&
+    !isLoadingProjects;
+
+  const canSave = !isSaving && !isLoadingProjects;
+
+  // Core save logic extracted so every entry point (footer button OR any
+  // ManifestPreview internal path) goes through the same guards.
+  const executeSave = useCallback(() => {
+    if (!canSave || !canAccept || !viewData) return;
     if (
       !pendingManifest.yaml ||
       !pendingManifest.projectName ||
@@ -61,22 +81,35 @@ export function ManifestAcceptPage() {
 
     setIsSaving(true);
     setSaveError(null);
-    try {
-      const projectId = saveProject(
-        pendingManifest.projectName,
-        pendingManifest.formValues as ProjectSpec,
-        pendingManifest.yaml,
-      );
 
-      router.push(`/wizard/1?project=${projectId}`);
-      pendingManifest.clear();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to save project";
-      setSaveError(message);
+    const projectId = saveProject(
+      pendingManifest.projectName,
+      pendingManifest.formValues as ProjectSpec,
+      pendingManifest.yaml,
+    );
+
+    if (!projectId) {
+      setSaveError("Failed to create project. Please try again.");
       setIsSaving(false);
+      return;
     }
-  }, [pendingManifest, saveProject, router]);
+
+    isNavigatingAway.current = true;
+    pendingManifest.clear();
+    router.push(`/wizard/1?project=${projectId}`);
+  }, [canSave, canAccept, viewData, pendingManifest, saveProject, router]);
+
+  // Wrapper accepted by ManifestPreview's onApprove (string) and the footer
+  // button's onClick (MouseEvent). Both paths converge here and both are
+  // guarded by executeSave — so ManifestPreview's internal rendering path
+  // (embedded, non-embedded, or any future variant) cannot bypass the guards.
+  const handleApprove = useCallback(
+    (arg: string | React.MouseEvent | undefined) => {
+      void arg;
+      executeSave();
+    },
+    [executeSave],
+  );
 
   const handleBack = useCallback(() => {
     pendingManifest.clear();
@@ -87,15 +120,6 @@ export function ManifestAcceptPage() {
     pendingManifest.clear();
     router.push("/projects/new/ai?generate=1");
   }, [pendingManifest, router]);
-
-  const hasFailures =
-    viewData?.validationItems.some((v) => v.status === "fail") ?? false;
-
-  const canAccept =
-    !!pendingManifest.yaml &&
-    !!pendingManifest.projectName &&
-    !!pendingManifest.formValues &&
-    !hasFailures;
 
   const renderHeaderContent = () => {
     if (!viewData) {
@@ -177,7 +201,7 @@ export function ManifestAcceptPage() {
               Please wait while we save your project.
             </p>
             <div className="flex justify-center mt-4">
-              <span className="animate-spin text-2xl">⏳</span>
+              <Spinner className="h-6 w-6" />
             </div>
           </div>
         </div>
@@ -188,6 +212,8 @@ export function ManifestAcceptPage() {
   if (!pendingManifest.yaml) {
     return null;
   }
+
+  const isFooterDisabled = !canSave || !canAccept || !viewData;
 
   return (
     <ProjectsShell
@@ -213,33 +239,11 @@ export function ManifestAcceptPage() {
             </Button>
           </div>
           <Button
-            onClick={handleAccept}
-            disabled={isSaving || !canAccept || !viewData}
+            type="button"
+            onClick={handleApprove}
+            disabled={isFooterDisabled}
           >
-            {isSaving ? (
-              <svg
-                className="animate-spin h-4 w-4 ml-2"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-            ) : (
-              <ArrowRight className="w-4 h-4 ml-2" />
-            )}
+            <ArrowRight className="w-4 h-4 ml-2" />
             Use This Manifest
           </Button>
         </>
@@ -252,7 +256,7 @@ export function ManifestAcceptPage() {
       )}
       <ManifestPreview
         manifestYaml={pendingManifest.yaml ?? ""}
-        onApprove={handleAccept}
+        onApprove={handleApprove}
         onRegenerate={handleRegenerate}
         onStartOver={handleBack}
         onYamlChange={pendingManifest.updateYaml}
