@@ -50,33 +50,34 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml]);
 
-  const handleAccept = useCallback(async () => {
+  const handleAccept = useCallback(() => {
     if (
       !pendingManifest.yaml ||
       !pendingManifest.projectName ||
-      !pendingManifest.formValues
+      !pendingManifest.formValues ||
+      isSaving
     ) {
       return;
     }
 
     setIsSaving(true);
     setSaveError(null);
-    try {
-      const projectId = saveProject(
-        pendingManifest.projectName,
-        pendingManifest.formValues as ProjectSpec,
-        pendingManifest.yaml,
-      );
 
-      router.push(`/wizard/1?project=${projectId}`);
-      pendingManifest.clear();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to save project";
-      setSaveError(message);
+    const projectId = saveProject(
+      pendingManifest.projectName,
+      pendingManifest.formValues as ProjectSpec,
+      pendingManifest.yaml,
+    );
+
+    if (!projectId) {
+      setSaveError("Failed to create project");
       setIsSaving(false);
+      return;
     }
-  }, [pendingManifest, saveProject, router]);
+
+    pendingManifest.clear();
+    router.push(`/wizard/1?project=${projectId}`);
+  }, [pendingManifest, saveProject, router, isSaving]);
 
   const handleBack = useCallback(() => {
     pendingManifest.clear();
@@ -214,6 +215,7 @@ export function ManifestAcceptPage() {
             </Button>
           </div>
           <Button
+            type="button"
             onClick={handleAccept}
             disabled={isSaving || !canAccept || !viewData || isLoadingProjects}
           >
