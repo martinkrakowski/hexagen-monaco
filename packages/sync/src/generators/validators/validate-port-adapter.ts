@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BoundedContext } from "../../types/manifest.js";
+import { portName } from "../../types/manifest.js";
 import type { ValidationIssue, ValidationResult } from "./validation-types.js";
 import { createValidationResult } from "./validation-types.js";
 
@@ -12,11 +13,12 @@ async function validatePortAdapterCorrespondence(
 
   const adapters = context.layers?.infrastructure?.adapters || [];
   const outPorts = context.layers?.application?.ports?.out || [];
+  const outPortNames = outPorts.map(portName);
 
   for (const adapter of adapters) {
     const expectedPort = adapter.replace(/Adapter$/, "Port");
 
-    if (!outPorts.includes(expectedPort)) {
+    if (!outPortNames.includes(expectedPort)) {
       issues.push({
         severity: "warning",
         code: "ADAPTER_NO_PORT",
@@ -44,7 +46,8 @@ async function validatePortAdapterCorrespondence(
     }
   }
 
-  for (const port of outPorts) {
+  for (const raw of outPorts) {
+    const port = portName(raw);
     const portPath = path.join(
       moduleDir,
       "src/application/ports/out",

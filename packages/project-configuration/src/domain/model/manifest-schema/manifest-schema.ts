@@ -5,6 +5,7 @@ export const BoundedContextTypeSchema = z.enum([
   "supporting",
   "generic",
   "shared-kernel",
+  "driver",
 ]);
 
 export const PlaneTypeSchema = z.enum([

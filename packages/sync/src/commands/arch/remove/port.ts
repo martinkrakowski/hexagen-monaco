@@ -1,14 +1,14 @@
+/* eslint-disable no-console */
 import { Command } from "commander";
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
+import { portName } from "../../../types/manifest.js";
 import { generateManifestYaml } from "../port/persistence.js";
 import {
   getProjectRoot,
   yamlService,
   confirm,
   promptService,
-  formatWarning,
-  formatInfo,
 } from "../../shared/index.js";
 
 export interface RemovePortOptions {
@@ -43,19 +43,21 @@ async function getPortSelection(manifest: Manifest): Promise<{
   for (const ctx of contexts) {
     const appPorts = ctx.layers?.application?.ports;
     if (appPorts?.in) {
-      for (const portName of appPorts.in) {
+      for (const raw of appPorts.in) {
+        const portNameStr = portName(raw);
         allPorts.push({
           contextName: ctx.name,
-          portName,
+          portName: portNameStr,
           direction: "in",
         });
       }
     }
     if (appPorts?.out) {
-      for (const portName of appPorts.out) {
+      for (const raw of appPorts.out) {
+        const portNameStr = portName(raw);
         allPorts.push({
           contextName: ctx.name,
-          portName,
+          portName: portNameStr,
           direction: "out",
         });
       }
@@ -103,7 +105,7 @@ async function confirmRemoval(port: {
 function removePortFromManifest(
   manifest: Manifest,
   contextName: string,
-  portName: string,
+  targetPortName: string,
   direction: "in" | "out",
 ): Manifest {
   return {
@@ -114,7 +116,9 @@ function removePortFromManifest(
       }
 
       const currentPorts = ctx.layers?.application?.ports?.[direction] ?? [];
-      const filteredPorts = currentPorts.filter((p) => p !== portName);
+      const filteredPorts = currentPorts.filter(
+        (p) => portName(p) !== targetPortName,
+      );
 
       return {
         ...ctx,
@@ -140,16 +144,16 @@ export async function removePortCommand(
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
   // Get force from parent command hook or direct option
   const force =
-    options.force ?? (removePortCommander as any).forceOption ?? false;
-
-  let manifest: Manifest;
+    options.force ??
+    (removePortCommander as unknown as Record<string, unknown>).forceOption ??
+    false;
 
   const loadResult = yamlService.loadManifest(manifestPath);
   if (!loadResult.success) {
-    console.error("⚠️  Failed to read manifest:", loadResult.error.message);
+    console.error("⚠️ Failed to read manifest:", loadResult.error.message);
     process.exit(1);
   }
-  manifest = loadResult.value;
+  const manifest = loadResult.value;
 
   try {
     const selection = await getPortSelection(manifest);

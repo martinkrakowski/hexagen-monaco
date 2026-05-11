@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BoundedContext } from "../../types/manifest.js";
+import { portName } from "../../types/manifest.js";
 import type { ValidationIssue, ValidationResult } from "./validation-types.js";
 import { createValidationResult } from "./validation-types.js";
 
@@ -74,7 +75,8 @@ async function validateManifestToCodeSync(
   }
 
   const inPorts = context.layers?.application?.ports?.in || [];
-  for (const port of inPorts) {
+  for (const raw of inPorts) {
+    const port = portName(raw);
     const portPath = path.join(
       moduleDir,
       "src/application/ports/in",

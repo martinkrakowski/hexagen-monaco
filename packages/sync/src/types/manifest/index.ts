@@ -1,5 +1,7 @@
 export type {
   DomainLayer,
+  PortDefinition,
+  LegacyOrNewPort,
   ApplicationPorts,
   ApplicationLayer,
   InfrastructureLayer,
@@ -8,6 +10,10 @@ export type {
 
 export type {
   BoundedContextType,
+  RelationshipPattern,
+  RelationshipRole,
+  AclDefinition,
+  Relationship,
   BoundedContext,
   BoundedContextGenerator,
   BoundedContextWiring,
@@ -56,9 +62,14 @@ export type {
   Invariant,
   OwnershipRegistry,
   GeneratorGlobalConfig,
+  PlaneType,
+  IndexBoundedContextEntry,
+  IndexAppEntry,
+  IndexManifest,
 } from "./manifest.js";
 
 export {
+  portName,
   extractPorts,
   extractDependencies,
   isSharedKernel,
