@@ -149,18 +149,9 @@ export function GenerateWithAi({
   const capability = assessModelCapability(loadedModelId, false);
   const manifestCapable = capability.isCapable;
 
-  // Gate on both model capability AND LLM provider availability.
-  // THREE-TIER GATE: button enabled if ANY tier has keys/capability
-  // Tier 1 (sync): env key → enabled immediately (fast-pass, don't wait)
-  // Tier 2 (async): BYOK configured → enabled after probe completes
-  // Tier 3 (sync): WebLLM available → enabled immediately (local fallback)
-  // If all tiers missing, button disabled with helpful tooltip
   const hasAnyProvider = hasCloudKeys || hasLocalLLM;
   const canGenerate =
-    formHandlers.isValid &&
-    flowState.state === "idle" &&
-    manifestCapable &&
-    hasAnyProvider;
+    formHandlers.isValid && flowState.state === "idle" && hasAnyProvider;
 
   // Tooltip messaging based on which providers are unavailable
   const disabledTooltip = !hasAnyProvider
