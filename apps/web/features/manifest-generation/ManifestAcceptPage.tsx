@@ -50,34 +50,38 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml]);
 
-  const handleAccept = useCallback(() => {
-    if (
-      !pendingManifest.yaml ||
-      !pendingManifest.projectName ||
-      !pendingManifest.formValues ||
-      isSaving
-    ) {
-      return;
-    }
+  const handleAccept = useCallback(
+    (arg: string | React.MouseEvent | undefined) => {
+      void arg;
+      if (
+        !pendingManifest.yaml ||
+        !pendingManifest.projectName ||
+        !pendingManifest.formValues ||
+        isSaving
+      ) {
+        return;
+      }
 
-    setIsSaving(true);
-    setSaveError(null);
+      setIsSaving(true);
+      setSaveError(null);
 
-    const projectId = saveProject(
-      pendingManifest.projectName,
-      pendingManifest.formValues as ProjectSpec,
-      pendingManifest.yaml,
-    );
+      const projectId = saveProject(
+        pendingManifest.projectName,
+        pendingManifest.formValues as ProjectSpec,
+        pendingManifest.yaml,
+      );
 
-    if (!projectId) {
-      setSaveError("Failed to create project");
-      setIsSaving(false);
-      return;
-    }
+      if (!projectId) {
+        setSaveError("Failed to create project");
+        setIsSaving(false);
+        return;
+      }
 
-    pendingManifest.clear();
-    router.push(`/wizard/1?project=${projectId}`);
-  }, [pendingManifest, saveProject, router, isSaving]);
+      pendingManifest.clear();
+      router.push(`/wizard/1?project=${projectId}`);
+    },
+    [pendingManifest, saveProject, router, isSaving],
+  );
 
   const handleBack = useCallback(() => {
     pendingManifest.clear();
@@ -216,7 +220,7 @@ export function ManifestAcceptPage() {
           </div>
           <Button
             type="button"
-            onClick={handleAccept}
+            onClick={(e) => handleAccept(e)}
             disabled={isSaving || !canAccept || !viewData || isLoadingProjects}
           >
             {isSaving ? (
