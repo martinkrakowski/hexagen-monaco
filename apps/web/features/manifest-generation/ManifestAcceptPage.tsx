@@ -103,6 +103,8 @@ export function ManifestAcceptPage() {
     !hasFailures &&
     !isLoadingProjects;
 
+  const canSave = !isSaving && !isLoadingProjects;
+
   const renderHeaderContent = () => {
     if (!viewData) {
       return (
@@ -221,7 +223,7 @@ export function ManifestAcceptPage() {
           <Button
             type="button"
             onClick={(e) => handleAccept(e)}
-            disabled={isSaving || !canAccept || !viewData || isLoadingProjects}
+            disabled={!canSave || !canAccept || !viewData}
           >
             {isSaving ? (
               <Spinner className="h-4 w-4 ml-2" />
