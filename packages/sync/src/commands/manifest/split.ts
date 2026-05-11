@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import yaml from "js-yaml";
 import { findWorkspaceRoot } from "../../sync-engine-init.js";
 import { ManifestSchema } from "@hexagen/project-configuration";
-import type { IndexManifest } from "@hexagen/project-configuration";
+import type { IndexManifest, PlaneType } from "@hexagen/project-configuration";
 import type { App } from "../../types/manifest/apps.js";
 import { buildPlaneLookup, extractContextData } from "./split-utils.js";
 
@@ -133,7 +133,9 @@ export const manifestSplitCommander = new Command("split")
       };
 
       for (const ctx of contexts) {
-        const plane = planeLookup.get(ctx.name) ?? ctx.plane ?? "core";
+        const plane = (planeLookup.get(ctx.name) ??
+          ctx.plane ??
+          "core") as PlaneType;
         const ctxDir = path.join(contextsDir, plane, ctx.name);
 
         const contextData = extractContextData(

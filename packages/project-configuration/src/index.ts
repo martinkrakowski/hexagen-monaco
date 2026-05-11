@@ -46,6 +46,7 @@ export type {
   PortDefinition,
   Relationship,
   IndexManifest,
+  PlaneType,
 } from "./domain/model/manifest-schema/manifest-schema";
 // Re-export manifest-diff utilities
 export type {

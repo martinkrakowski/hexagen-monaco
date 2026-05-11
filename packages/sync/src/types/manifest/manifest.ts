@@ -53,8 +53,8 @@ export type PlaneType =
 export interface IndexBoundedContextEntry {
   name: string;
   type: string;
-  plane?: string;
-  status?: string;
+  plane?: PlaneType;
+  status?: "active" | "frozen" | "deprecated" | "experimental";
   file: string;
   frozen_since?: string;
 }
@@ -68,6 +68,7 @@ export interface IndexManifest {
   version?: string;
   system?: string;
   scope?: string;
+  architecture?: ArchitectureType;
   planes?: Record<string, string[]>;
   bounded_contexts?: IndexBoundedContextEntry[];
   apps?: IndexAppEntry[];
@@ -82,4 +83,5 @@ export interface IndexManifest {
       linter?: string;
     }
   >;
+  legacy_config?: string;
 }
