@@ -46,18 +46,6 @@ export function ProjectWorkspace({
   const isEditing = ui.state.kind === "edit";
   const pendingRoute = useRef<string | null>(null);
 
-  const navigateWithConfirm = useCallback(
-    (route: string) => {
-      if (isEditing) {
-        pendingRoute.current = route;
-        ui.openDialog({ kind: "new-project" });
-      } else {
-        router.push(route);
-      }
-    },
-    [isEditing, ui, router],
-  );
-
   return (
     <WizardLifecycleProvider
       ui={ui}
@@ -76,7 +64,6 @@ export function ProjectWorkspace({
         ui={ui}
         editor={editor}
         isEditing={isEditing}
-        navigateWithConfirm={navigateWithConfirm}
         pendingRoute={pendingRoute}
         router={router}
       >
@@ -96,7 +83,6 @@ interface ProjectWorkspaceLayoutProps {
   ui: ReturnType<typeof useWorkspaceShellUi>;
   editor: ReturnType<typeof useEditorSession>;
   isEditing: boolean;
-  navigateWithConfirm: (route: string) => void;
   pendingRoute: React.RefObject<string | null>;
   router: ReturnType<typeof useRouter>;
   children?: React.ReactNode;
@@ -113,21 +99,30 @@ const ProjectWorkspaceLayout = React.memo(
     ui,
     editor,
     isEditing,
-    navigateWithConfirm,
     pendingRoute,
     router,
     children,
   }: ProjectWorkspaceLayoutProps) {
+    const handleNavigate = useCallback(
+      (route: string) => {
+        if (isEditing) {
+          pendingRoute.current = route;
+          ui.openDialog({ kind: "new-project" });
+        } else {
+          router.push(route);
+        }
+      },
+      [isEditing, ui, router, pendingRoute],
+    );
+
     return (
       <ExportProvider>
         <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
           <Header
-            onLoadManifest={() => navigateWithConfirm("/projects/new/import")}
+            onLoadManifest={() => handleNavigate("/projects/new/import")}
             isEditing={isEditing}
-            onNewProject={() => navigateWithConfirm("/projects/new")}
-            onOpenWelcomeManifest={() =>
-              navigateWithConfirm("/projects/new/ai")
-            }
+            onNewProject={() => handleNavigate("/projects/new")}
+            onOpenWelcomeManifest={() => handleNavigate("/projects/new/ai")}
             onNavigateToProjects={onNavigateToProjects}
           />
 
@@ -189,6 +184,7 @@ const ProjectWorkspaceLayout = React.memo(
     if (prev.onCloseRightPanel !== next.onCloseRightPanel) return false;
     if (prev.onNavigateToProjects !== next.onNavigateToProjects) return false;
     if (prev.isEditing !== next.isEditing) return false;
+    if (prev.ui.dialog.kind !== next.ui.dialog.kind) return false;
     if (prev.children !== next.children) return false;
     return true;
   },
