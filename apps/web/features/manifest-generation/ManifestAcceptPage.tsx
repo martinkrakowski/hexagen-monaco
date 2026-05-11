@@ -28,7 +28,7 @@ const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
 export function ManifestAcceptPage() {
   const router = useRouter();
   const pendingManifest = usePendingManifest();
-  const { saveProject } = useSavedProjects();
+  const { saveProject, isLoading: isLoadingProjects } = useSavedProjects();
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
@@ -95,7 +95,8 @@ export function ManifestAcceptPage() {
     !!pendingManifest.yaml &&
     !!pendingManifest.projectName &&
     !!pendingManifest.formValues &&
-    !hasFailures;
+    !hasFailures &&
+    !isLoadingProjects;
 
   const renderHeaderContent = () => {
     if (!viewData) {
@@ -214,7 +215,7 @@ export function ManifestAcceptPage() {
           </div>
           <Button
             onClick={handleAccept}
-            disabled={isSaving || !canAccept || !viewData}
+            disabled={isSaving || !canAccept || !viewData || isLoadingProjects}
           >
             {isSaving ? (
               <svg
