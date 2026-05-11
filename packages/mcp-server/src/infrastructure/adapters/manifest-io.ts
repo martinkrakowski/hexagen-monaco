@@ -1,6 +1,7 @@
-import fs from "node:fs/promises";
 import path from "node:path";
+import fs from "node:fs/promises";
 import yaml from "js-yaml";
+import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 
 export interface ManifestDocument {
   bounded_contexts?: Array<{
@@ -16,18 +17,8 @@ export async function readManifestDocument(
   workspaceRoot: string,
 ): Promise<ManifestDocument> {
   const manifestPath = path.join(workspaceRoot, ".architecture/manifest.yaml");
-  const content = await fs.readFile(manifestPath, "utf-8");
-
-  if (!content.trim()) {
-    throw new Error("manifest.yaml is empty");
-  }
-
-  const parsed = yaml.load(content);
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("manifest.yaml does not contain a YAML object");
-  }
-
-  return parsed as ManifestDocument;
+  const manifest = await mergeSplitManifest(workspaceRoot, manifestPath);
+  return manifest as unknown as ManifestDocument;
 }
 
 export async function writeManifestDocument(

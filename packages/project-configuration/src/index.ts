@@ -47,7 +47,12 @@ export type {
   Relationship,
   IndexManifest,
   PlaneType,
+  IndexBoundedContextEntry,
+  ManifestBoundedContext,
+  App,
 } from "./domain/model/manifest-schema/manifest-schema";
+export { AppSchema } from "./domain/model/manifest-schema/manifest-schema";
+export { isIndexManifest } from "./domain/model/manifest-schema/index.js";
 // Re-export manifest-diff utilities
 export type {
   ManifestDiff,

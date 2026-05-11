@@ -148,7 +148,7 @@ export async function removePortCommand(
     (removePortCommander as unknown as Record<string, unknown>).forceOption ??
     false;
 
-  const loadResult = yamlService.loadManifest(manifestPath);
+  const loadResult = await yamlService.loadManifest(manifestPath);
   if (!loadResult.success) {
     console.error("⚠️ Failed to read manifest:", loadResult.error.message);
     process.exit(1);

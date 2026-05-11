@@ -1,5 +1,21 @@
 # Rules for @hexagen/arch-linter
 
+# TODO: ADR-0037 — normalize @hexagen/local-llm/shared to @hexagen/local-llm/client
+# Blocked by: breaking change requiring consumer updates
+
+subpath_conventions:
+  server:
+    allowed_consumers:
+      - sync
+      - mcp-server
+      - tui
+      - api-gateway
+      - project-generation
+    enforcement: error
+  client:
+    allowed_consumers: []
+    enforcement: warn
+
 global_whitelist:
   - '@hexagen/shared'
   - '@hexagen/shared/**'

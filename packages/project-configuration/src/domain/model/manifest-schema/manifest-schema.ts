@@ -156,7 +156,23 @@ export const ManifestSchema = z
   .passthrough();
 
 export type Manifest = z.infer<typeof ManifestSchema>;
+export type ManifestBoundedContext = z.infer<typeof BoundedContextSchema>;
 export type PortDefinition = z.infer<typeof PortDefinitionSchema>;
 export type Relationship = z.infer<typeof RelationshipSchema>;
 export type IndexManifest = z.infer<typeof IndexManifestSchema>;
 export type PlaneType = z.infer<typeof PlaneTypeSchema>;
+export type IndexBoundedContextEntry = z.infer<
+  typeof IndexManifestSchema
+>["bounded_contexts"] extends Array<infer T> | undefined
+  ? T
+  : never;
+
+export const AppSchema = z.object({
+  name: z.string(),
+  driver: z.enum(["next.js", "fastify", "express", "cli"]).optional(),
+  framework: z.enum(["next.js", "fastify", "express", "plain-ts"]).optional(),
+  version: z.string().optional(),
+  description: z.string().optional(),
+  depends_on: z.array(z.string()).optional(),
+});
+export type App = z.infer<typeof AppSchema>;

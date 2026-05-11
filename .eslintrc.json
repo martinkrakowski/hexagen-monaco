@@ -18,9 +18,11 @@
             "group": [
               "@hexagen/*/*",
               "!@hexagen/shared/*",
-              "!@hexagen/local-llm/shared"
+              "!@hexagen/local-llm/shared",
+              "!@hexagen/*/server",
+              "!@hexagen/*/client"
             ],
-            "message": "Cross-package imports must be done via the barrel file. Only deep imports from `shared` are allowed."
+            "message": "Deep subpath imports are not allowed. Import from the package barrel or a declared /server or /client subpath."
           }
         ]
       }

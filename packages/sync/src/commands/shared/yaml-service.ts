@@ -1,5 +1,6 @@
+/* eslint-disable no-console */
+import { readFile as readFileAsync } from "fs/promises";
 import {
-  readFileSync,
   writeFileSync,
   mkdirSync,
   renameSync,
@@ -43,16 +44,16 @@ export class YamlSaveError extends Error {
 }
 
 export class YamlService {
-  loadManifest(path: string): Result<Manifest, YamlLoadError> {
+  async loadManifest(path: string): Promise<Result<Manifest, YamlLoadError>> {
     try {
-      if (!existsSync(path)) {
-        return err(new YamlLoadError(`File not found: ${path}`, path));
-      }
-      const content = readFileSync(path, "utf-8");
+      const content = await readFileAsync(path, "utf-8");
       const manifest = yaml.load(content) as Manifest;
       return ok(manifest);
     } catch (e) {
-      const error = e as Error;
+      const error = e as NodeJS.ErrnoException;
+      if (error.code === "ENOENT") {
+        return err(new YamlLoadError(`File not found: ${path}`, path));
+      }
       return err(new YamlLoadError(error.message, path));
     }
   }

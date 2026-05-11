@@ -9,6 +9,12 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['@hexagen/*/server'],
+          message: '@hexagen/*/server subpaths are server-only. visualization runs in the client bundle. (ADR-0037)'
+        }]
+      }]
     },
   },
   {

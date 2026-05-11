@@ -1,10 +1,10 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import yaml from "js-yaml";
 import type { SyncFlags } from "./config.js";
 import type { Manifest } from "./types/manifest.js";
 import { ManifestSchema } from "@hexagen/project-configuration";
+import { mergeSplitManifest } from "./loaders/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,8 +56,12 @@ export async function loadManifest(
   logger.debug(`[debug] resolved manifestPath: ${manifestPath}`);
 
   try {
-    await fs.access(manifestPath);
-    logger.debug("[debug] fs.access succeeded");
+    const manifest = (await mergeSplitManifest(
+      workspaceRoot,
+      manifestPath,
+    )) as Manifest;
+    logger.info(`Loaded manifest from ${manifestPath}`);
+    return manifest;
   } catch (err) {
     if (
       err instanceof Error &&
@@ -68,15 +72,6 @@ export async function loadManifest(
       logger.warn(`Manifest not found — using empty for dry-run`);
       return { bounded_contexts: [] };
     }
-    throw err;
-  }
-
-  try {
-    const content = await fs.readFile(manifestPath, "utf8");
-    const loaded = yaml.load(content);
-    logger.info(`Loaded manifest from ${manifestPath}`);
-    return (loaded as Manifest) ?? {};
-  } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown parse error";
     throw new Error(`Failed to parse manifest: ${message}`);
   }

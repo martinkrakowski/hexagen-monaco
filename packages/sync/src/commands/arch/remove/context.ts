@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Command } from "commander";
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
@@ -71,16 +72,17 @@ export async function removeContextCommand(
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
   // Get force from parent command hook or direct option
   const force =
-    options.force ?? (removeContextCommander as any).forceOption ?? false;
+    options.force ??
+    (removeContextCommander as unknown as Record<string, unknown>)
+      .forceOption ??
+    false;
 
-  let manifest: Manifest;
-
-  const loadResult = yamlService.loadManifest(manifestPath);
+  const loadResult = await yamlService.loadManifest(manifestPath);
   if (!loadResult.success) {
     console.error("⚠️  Failed to read manifest:", loadResult.error.message);
     process.exit(1);
   }
-  manifest = loadResult.value;
+  const manifest = loadResult.value;
 
   try {
     const selection = await getContextSelection(manifest);
