@@ -55,50 +55,6 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml]);
 
-  const handleAccept = useCallback(
-    (arg: string | React.MouseEvent | undefined) => {
-      void arg;
-      if (
-        !pendingManifest.yaml ||
-        !pendingManifest.projectName ||
-        !pendingManifest.formValues ||
-        isSaving
-      ) {
-        return;
-      }
-
-      setIsSaving(true);
-      setSaveError(null);
-
-      const projectId = saveProject(
-        pendingManifest.projectName,
-        pendingManifest.formValues as ProjectSpec,
-        pendingManifest.yaml,
-      );
-
-      if (!projectId) {
-        setSaveError("Failed to create project");
-        setIsSaving(false);
-        return;
-      }
-
-      isNavigatingAway.current = true;
-      pendingManifest.clear();
-      router.push(`/wizard/1?project=${projectId}`);
-    },
-    [pendingManifest, saveProject, router, isSaving],
-  );
-
-  const handleBack = useCallback(() => {
-    pendingManifest.clear();
-    router.push("/projects/new/ai");
-  }, [pendingManifest, router]);
-
-  const handleRegenerate = useCallback(() => {
-    pendingManifest.clear();
-    router.push("/projects/new/ai?generate=1");
-  }, [pendingManifest, router]);
-
   const hasFailures =
     viewData?.validationItems.some((v) => v.status === "fail") ?? false;
 
@@ -110,6 +66,60 @@ export function ManifestAcceptPage() {
     !isLoadingProjects;
 
   const canSave = !isSaving && !isLoadingProjects;
+
+  // Core save logic extracted so every entry point (footer button OR any
+  // ManifestPreview internal path) goes through the same guards.
+  const executeSave = useCallback(() => {
+    if (!canSave || !canAccept || !viewData) return;
+    if (
+      !pendingManifest.yaml ||
+      !pendingManifest.projectName ||
+      !pendingManifest.formValues
+    ) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    const projectId = saveProject(
+      pendingManifest.projectName,
+      pendingManifest.formValues as ProjectSpec,
+      pendingManifest.yaml,
+    );
+
+    if (!projectId) {
+      setSaveError("Failed to create project. Please try again.");
+      setIsSaving(false);
+      return;
+    }
+
+    isNavigatingAway.current = true;
+    pendingManifest.clear();
+    router.push(`/wizard/1?project=${projectId}`);
+  }, [canSave, canAccept, viewData, pendingManifest, saveProject, router]);
+
+  // Wrapper accepted by ManifestPreview's onApprove (string) and the footer
+  // button's onClick (MouseEvent). Both paths converge here and both are
+  // guarded by executeSave — so ManifestPreview's internal rendering path
+  // (embedded, non-embedded, or any future variant) cannot bypass the guards.
+  const handleApprove = useCallback(
+    (arg: string | React.MouseEvent | undefined) => {
+      void arg;
+      executeSave();
+    },
+    [executeSave],
+  );
+
+  const handleBack = useCallback(() => {
+    pendingManifest.clear();
+    router.push("/projects/new/ai");
+  }, [pendingManifest, router]);
+
+  const handleRegenerate = useCallback(() => {
+    pendingManifest.clear();
+    router.push("/projects/new/ai?generate=1");
+  }, [pendingManifest, router]);
 
   const renderHeaderContent = () => {
     if (!viewData) {
@@ -203,6 +213,8 @@ export function ManifestAcceptPage() {
     return null;
   }
 
+  const isFooterDisabled = !canSave || !canAccept || !viewData;
+
   return (
     <ProjectsShell
       headerContent={renderHeaderContent()}
@@ -228,14 +240,10 @@ export function ManifestAcceptPage() {
           </div>
           <Button
             type="button"
-            onClick={(e) => handleAccept(e)}
-            disabled={!canSave || !canAccept || !viewData}
+            onClick={handleApprove}
+            disabled={isFooterDisabled}
           >
-            {isSaving ? (
-              <Spinner className="h-4 w-4 ml-2" />
-            ) : (
-              <ArrowRight className="w-4 h-4 ml-2" />
-            )}
+            <ArrowRight className="w-4 h-4 ml-2" />
             Use This Manifest
           </Button>
         </>
@@ -248,14 +256,13 @@ export function ManifestAcceptPage() {
       )}
       <ManifestPreview
         manifestYaml={pendingManifest.yaml ?? ""}
-        onApprove={handleAccept}
+        onApprove={handleApprove}
         onRegenerate={handleRegenerate}
         onStartOver={handleBack}
         onYamlChange={pendingManifest.updateYaml}
         hideActions
         hideHeader
         embedded
-        isApproveDisabled={!canSave || !canAccept || !viewData}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
