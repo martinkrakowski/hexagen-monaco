@@ -13,7 +13,7 @@ Source of truth for items referenced by `TODO: ADR-XXXX` comments in source file
 - **Origin**: ADR-0035 (pre-convention). ADR-0037 records the normalization intent.
 - **Scope**: 26 consumer files — `agentic-interaction` (18), `manifest-generation` (8)
 - **Key symbols**: `DomainModelId`, `SendStructuredRequestPort`, `createLLMRequest`, `LLMRequest`, `LLMResponse`
-- **Blocked by**: FEAT-001 (arch-linter v2) — rename should be verified by linter immediately after codemod
+- **Blocked by**: ~~FEAT-001~~ (RESOLVED) → now unblocked
 - **Remediation**:
   1. Add `./client` subpath to `packages/local-llm/package.json` exports (mirror `./shared`)
   2. Codemod: `@hexagen/local-llm/shared` → `@hexagen/local-llm/client` across 26 files
@@ -21,46 +21,20 @@ Source of truth for items referenced by `TODO: ADR-XXXX` comments in source file
   4. Mark FEAT-001 as the verification gate
 - **ESLint marker**: `!@hexagen/local-llm/shared` in root `.eslintrc.json:21` with `TODO: ADR-0037`
 
-### FEAT-001: Arch-Linter v2 — subpath_conventions enforcement
-
-- **Context**: ADR-0037 declares `subpath_conventions` in `linter-config.yaml`. The arch-linter silently ignores this block. Per-package ESLint configs are the only current enforcement.
-- **Implementation target**: `tools/arch-linter/src/index.ts`
-- **Integration point**: import loop at line 338 — subpath check runs before `isCrossPackageViolation()`
-- **Interface change** (additive, no breaking):
-
-  ```typescript
-  interface SubpathConvention {
-    allowed_consumers: string[];
-    enforcement: "error" | "warn";
-  }
-
-  interface LinterConfig {
-    // ... existing fields ...
-    subpath_conventions?: {
-      server?: SubpathConvention;
-      client?: SubpathConvention;
-    };
-  }
-  ```
-
-- **New function**: `isSubpathViolation(fromPackage, moduleSpecifier, config)` — ~40 lines
-- **Test cases required**:
-  - Server consumer in `allowed_consumers` importing `/server` → pass
-  - Client package not in `allowed_consumers` importing `/server` → error
-  - `@hexagen/local-llm/shared` treated as legacy exception → pass (until DEBT-001 lands)
-  - Package importing `/client` → warn (enforcement: warn)
-- **Estimate**: ~130 lines including tests
-- **Unlocks**: DEBT-001 verification gate
-
 ### FEAT-002: @hexagen-server-only marker enforcement (arch-linter v2.1)
 
 - **Context**: ADR-0037 defines a machine-readable `@hexagen-server-only` comment marker in server barrel files. Arch-linter v2.1 could validate that files with this marker belong to a package declaring a `/server` subpath, and vice versa.
-- **Blocked by**: FEAT-001
+- **Blocked by**: ~~FEAT-001~~ (RESOLVED) → now unblocked
 - **Estimate**: ~50 lines (requires AST comment parsing via ts-morph)
 
 ---
 
 ## RESOLVED
+
+### FEAT-001: Arch-Linter v2 — subpath_conventions enforcement
+
+- **Resolution**: Implemented in `tools/arch-linter/src/index.ts`. Added `SubpathConvention` + `SubpathConventionConfig` interfaces, extended `LinterConfig` with `subpath_conventions` field. Implemented `isSubpathViolation()` as a pure function taking `(fromPackage, moduleSpecifier, scope, config)`. Integrated at import loop before `isCrossPackageViolation()`. Added `warnings[]` collection for `enforcement: warn`. Legacy bypass for `@hexagen/local-llm/shared` (DEBT-001). 9 unit tests pass using `node:test` + `node:assert/strict`.
+- **Unlocks**: DEBT-001, FEAT-002
 
 ### FEAT-003: manifest-schema.ts alignment — dead schema in arch-linter
 

@@ -108,7 +108,17 @@ interface LayerRules {
   }[];
 }
 
-interface LinterConfig {
+export interface SubpathConvention {
+  allowed_consumers: string[];
+  enforcement: "error" | "warn";
+}
+
+export interface SubpathConventionConfig {
+  server?: SubpathConvention;
+  client?: SubpathConvention;
+}
+
+export interface LinterConfig {
   global_whitelist?: string[];
   package_rules?: {
     name: string;
@@ -119,6 +129,7 @@ interface LinterConfig {
     paths?: string[];
     allowed_cross_package_imports?: boolean;
   };
+  subpath_conventions?: SubpathConventionConfig;
 }
 
 // ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
@@ -307,10 +318,46 @@ function isSharedKernelAllowed(): boolean {
   return layerRules?.shared_kernel?.allowed_in_all_layers ?? true;
 }
 
+function isSubpathViolation(
+  fromPackage: string,
+  moduleSpecifier: string,
+  scope: string,
+  config: LinterConfig,
+): {
+  violation: true;
+  enforcement: "error" | "warn";
+  subpathType: "server" | "client";
+} | null {
+  const conventions = config.subpath_conventions;
+  if (!conventions) return null;
+
+  // TODO: DEBT-001 — remove this bypass when @hexagen/local-llm/shared is normalized to /client
+  if (moduleSpecifier === `${scope}/local-llm/shared`) return null;
+
+  const subpathMatch = moduleSpecifier.match(
+    new RegExp(`^${scope}/([\\w-]+)/(server|client)$`),
+  );
+  if (!subpathMatch) return null;
+
+  const [, , subpathType] = subpathMatch;
+  const convention = conventions[subpathType as "server" | "client"];
+  if (!convention) return null;
+
+  const allowedConsumers = convention.allowed_consumers ?? [];
+  if (allowedConsumers.includes(fromPackage)) return null;
+
+  return {
+    violation: true,
+    enforcement: convention.enforcement,
+    subpathType: subpathType as "server" | "client",
+  };
+}
+
 // ─── Main Lint Check ────────────────────────────────────────────────────────
 
 function checkArchitecturalIntegrity() {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const modules = manifest.bounded_contexts ?? [];
 
   modules.forEach((moduleInfo) => {
@@ -343,6 +390,26 @@ function checkArchitecturalIntegrity() {
         const moduleSpecifier = imp.getModuleSpecifierValue();
 
         if (isTestDbl) return;
+
+        const subpathResult = isSubpathViolation(
+          moduleName,
+          moduleSpecifier,
+          SCOPE,
+          linterConfig,
+        );
+        if (subpathResult?.violation) {
+          const message =
+            subpathResult.enforcement === "error"
+              ? `Subpath Violation in [${moduleName}]:\n File: ${path.relative(ROOT_DIR, filePath)}\n Package '${moduleName}' cannot import '${moduleSpecifier}' (${subpathResult.subpathType} subpath, enforcement: error)`
+              : `Subpath Warning in [${moduleName}]:\n File: ${path.relative(ROOT_DIR, filePath)}\n Package '${moduleName}' imports '${moduleSpecifier}' (${subpathResult.subpathType} subpath, enforcement: warn)`;
+
+          if (subpathResult.enforcement === "error") {
+            errors.push(message);
+          } else {
+            warnings.push(message);
+          }
+          return;
+        }
 
         if (moduleSpecifier.startsWith(SCOPE)) {
           const importedPkg = moduleSpecifier.split("/")[1];
@@ -434,6 +501,11 @@ function checkArchitecturalIntegrity() {
       });
     });
   });
+
+  if (warnings.length > 0) {
+    logger.warn("Subpath convention warnings (enforcement: warn):");
+    warnings.forEach((w) => logger.warn(` - ${w}`));
+  }
 
   if (errors.length > 0) {
     logger.error("Architectural Integrity Check Failed. Found violations:");
