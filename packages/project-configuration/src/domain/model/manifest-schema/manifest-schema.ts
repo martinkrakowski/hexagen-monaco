@@ -120,6 +120,7 @@ export const AppSchema = z
 export const IndexManifestSchema = z
   .object({
     version: z.string().optional(),
+    description: z.string(),
     system: z.string().optional(),
     scope: z.string().optional(),
     architecture: z.string().optional(),
@@ -182,7 +183,7 @@ export const IndexManifestSchema = z
 export const ManifestSchema = z
   .object({
     version: z.string().optional(),
-    description: z.string().optional(),
+    description: z.string(),
     system: z.string().optional(),
     scope: z.string().optional(),
     architecture: z.string().optional(),

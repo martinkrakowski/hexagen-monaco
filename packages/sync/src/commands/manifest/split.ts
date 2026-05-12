@@ -154,6 +154,7 @@ export const manifestSplitCommander = new Command("split")
 
       const indexManifest: IndexManifest = {
         version: "2.0",
+        description: manifest.description,
         system: manifest.system,
         scope: manifest.scope,
         architecture: rawYaml.architecture as string | undefined,

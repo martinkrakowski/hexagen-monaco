@@ -115,6 +115,7 @@ export async function mergeSplitManifest(
 
   const index = indexResult.data as IndexManifest;
   const result: Manifest = {
+    description: index.description,
     system: index.system,
     scope: index.scope,
     architecture: index.architecture as Manifest["architecture"],
