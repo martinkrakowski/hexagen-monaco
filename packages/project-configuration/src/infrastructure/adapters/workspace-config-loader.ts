@@ -44,12 +44,6 @@ function assertPathWithinWorkspace(
           ) {
             break;
           }
-          if (
-            statErr instanceof Error &&
-            statErr.message.includes("escapes workspace")
-          ) {
-            throw statErr;
-          }
           throw statErr;
         }
       }
