@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { realpathSync, lstatSync } from "node:fs";
 import yaml from "js-yaml";
 import {
   ManifestSchema,
@@ -23,11 +24,69 @@ function assertPathWithinArchitecture(
   relativePath: string,
 ): void {
   const resolved = path.resolve(workspaceRoot, ".architecture", relativePath);
-  const archRoot = path.resolve(workspaceRoot, ".architecture") + path.sep;
-  if (!resolved.startsWith(archRoot)) {
-    throw new Error(
-      `Path traversal detected: "${relativePath}" resolves outside .architecture/`,
-    );
+  const archRoot = path.resolve(workspaceRoot, ".architecture");
+
+  // Try canonical path resolution if the file exists
+  try {
+    const realResolved = realpathSync(resolved);
+    const realArchRoot = realpathSync(archRoot);
+    const archRootWithSep = realArchRoot + path.sep;
+
+    if (
+      realResolved !== realArchRoot &&
+      !realResolved.startsWith(archRootWithSep)
+    ) {
+      throw new Error(
+        `Path traversal detected: "${relativePath}" resolves outside .architecture/`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      // File doesn't exist yet - check for symlinks in parent paths
+      let checkPath = archRoot;
+      const pathSegments = path.relative(archRoot, resolved).split(path.sep);
+
+      for (const segment of pathSegments) {
+        checkPath = path.join(checkPath, segment);
+        try {
+          const stat = lstatSync(checkPath);
+          if (stat.isSymbolicLink()) {
+            throw new Error(
+              `Path traversal detected: "${relativePath}" contains a symbolic link`,
+            );
+          }
+        } catch (statErr) {
+          if (
+            statErr instanceof Error &&
+            "code" in statErr &&
+            statErr.code === "ENOENT"
+          ) {
+            // This path segment doesn't exist yet, which is fine
+            break;
+          }
+          // Re-throw our traversal error
+          if (
+            statErr instanceof Error &&
+            statErr.message.includes("Path traversal")
+          ) {
+            throw statErr;
+          }
+          // Re-throw other errors (permissions issues, etc.)
+          throw statErr;
+        }
+      }
+
+      // Lexically verify the resolved path is within archRoot
+      const archRootWithSep = archRoot + path.sep;
+      if (resolved !== archRoot && !resolved.startsWith(archRootWithSep)) {
+        throw new Error(
+          `Path traversal detected: "${relativePath}" resolves outside .architecture/`,
+        );
+      }
+    } else {
+      // Re-throw unexpected errors
+      throw err;
+    }
   }
 }
 
