@@ -75,30 +75,32 @@ export const BoundedContextSchema = z.object({
   status: StatusTypeSchema.optional(),
   description: z.string().optional(),
   relationships: z.array(RelationshipSchema).optional(),
-  layers: z.object({
-    domain: z
-      .object({
-        entities: z.array(z.string()).optional(),
-        value_objects: z.array(z.string()).optional(),
-      })
-      .optional(),
-    application: z
-      .object({
-        use_cases: z.array(z.string()).optional(),
-        ports: z
-          .object({
-            in: z.array(LegacyOrNewPortSchema).optional(),
-            out: z.array(LegacyOrNewPortSchema).optional(),
-          })
-          .optional(),
-      })
-      .optional(),
-    infrastructure: z
-      .object({
-        adapters: z.array(z.string()).optional(),
-      })
-      .optional(),
-  }),
+  layers: z
+    .object({
+      domain: z
+        .object({
+          entities: z.array(z.string()).optional(),
+          value_objects: z.array(z.string()).optional(),
+        })
+        .optional(),
+      application: z
+        .object({
+          use_cases: z.array(z.string()).optional(),
+          ports: z
+            .object({
+              in: z.array(LegacyOrNewPortSchema).optional(),
+              out: z.array(LegacyOrNewPortSchema).optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+      infrastructure: z
+        .object({
+          adapters: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   depends_on: z.array(z.string()).optional(),
   wiring: z.array(z.string()).optional(),
   generator: z.record(z.unknown()).optional(),
