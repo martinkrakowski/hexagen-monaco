@@ -1,0 +1,17 @@
+name: layout-engine
+type: core
+description: 'Graph layout solver — dagre-based automatic layout for hexagonal context maps. Narrowed: constraint/affordance/stability/violation paths removed (aspirational, no consumers).'
+layers:
+  domain: {}
+  application:
+    use_cases:
+      - SolveGraphLayoutUseCase
+    ports:
+      in:
+        - GraphLayoutPort
+      out: []
+  infrastructure:
+    adapters:
+      - DagreGraphLayoutAdapter
+depends_on: []
+plane: core

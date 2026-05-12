@@ -1,0 +1,17 @@
+name: manifest-generation
+type: core
+description: Client-side manifest generation orchestration, topology building, and view-data parsing
+layers:
+  domain:
+    value_objects: []
+  application:
+    use_cases: []
+    ports:
+      in: []
+      out: []
+  infrastructure:
+    adapters: []
+depends_on:
+  - agentic-interaction
+  - local-llm
+plane: core

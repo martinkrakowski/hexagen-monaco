@@ -1,0 +1,14 @@
+name: messaging
+type: supporting
+description: Domain events, intent bus, pluggable transports
+layers:
+  domain:
+    value_objects:
+      - DomainEvent
+      - Intent
+  application:
+    ports:
+      out:
+        - EventBusPort
+        - IntentBusPort
+plane: infrastructure

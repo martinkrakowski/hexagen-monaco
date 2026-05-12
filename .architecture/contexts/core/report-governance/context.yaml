@@ -1,0 +1,29 @@
+name: report-governance
+type: supporting
+description: Feature-based report governance — tracks architectural report lifecycle (blueprint, implementation, verification, remediation) per feature worktree with file-system persistence under .reports/[feature-id]/
+layers:
+  domain:
+    entities:
+      - FeatureReport
+    value_objects:
+      - FeatureId
+      - ReportPhase
+      - ReportManifest
+      - Timestamp
+  application:
+    use_cases:
+      - InitializeFeatureWorktreeUseCase
+      - SubmitArchitecturalSpecUseCase
+      - LogAgentRemediationUseCase
+      - GetFeatureContextUseCase
+    ports:
+      in:
+        - ReportInboundPort
+      out:
+        - ReportRepositoryPort
+  infrastructure:
+    adapters:
+      - FileSystemReportAdapter
+depends_on:
+  - shared
+plane: core

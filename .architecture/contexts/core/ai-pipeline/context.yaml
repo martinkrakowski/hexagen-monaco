@@ -1,0 +1,21 @@
+name: ai-pipeline
+type: core
+description: 'NL-to-DomainCommand parser and intent processing for architecture modification. Phase 2b: Bridges the gap between user intent (chat) and domain commands that can be executed by the architecture modification system.'
+layers:
+  domain:
+    value_objects:
+      - ParsedIntent
+  application:
+    use_cases:
+      - ParseNLIntentUseCase
+    ports:
+      in:
+        - NLToDomainCommandParserPort
+      out: []
+  infrastructure:
+    adapters:
+      - NLToDomainCommandParserAdapter
+depends_on:
+  - core-domain
+  - shared
+plane: core

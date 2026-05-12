@@ -19,6 +19,7 @@ const INDEX_FIELDS = new Set([
   "generatorConfig",
   "turboConfig",
   "mvk",
+  "workspace_config",
   "legacy_config",
 ]);
 

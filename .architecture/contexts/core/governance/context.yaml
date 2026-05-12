@@ -1,0 +1,8 @@
+name: governance
+type: supporting
+description: Governance read surface — exposes architectural decisions, invariants, linter config, and workspace context as typed resources for tool consumption
+layers:
+  domain: {}
+depends_on:
+  - shared
+plane: core

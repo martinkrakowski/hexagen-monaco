@@ -1,0 +1,8 @@
+name: tui
+driver: cli
+framework: plain-ts
+description: Terminal UI — MCP server integration for tool interaction via ink and React
+depends_on:
+  - shared
+  - agentic-interaction
+  - mcp-server

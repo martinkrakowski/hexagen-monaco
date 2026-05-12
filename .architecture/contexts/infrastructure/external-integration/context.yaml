@@ -1,0 +1,23 @@
+name: external-integration
+type: supporting
+description: External authentication and identity providers — GitHub OAuth, session management
+layers:
+  domain:
+    value_objects:
+      - AuthSession
+      - ProviderIdentity
+      - GitHubProvider
+  application:
+    use_cases:
+      - InitiateAuthUseCase
+      - GetAuthSessionUseCase
+      - RevokeAuthUseCase
+    ports:
+      in:
+        - QueryAuthSessionPort
+        - InitiateAuthPort
+        - RevokeAuthPort
+      out:
+        - OAuthProviderPort
+        - SessionReadPort
+plane: infrastructure

@@ -1,0 +1,25 @@
+name: byok
+type: core
+description: BYOK server-proxy encryption — AES-256-GCM key encryption with AAD binding, server-side proxy, key rotation and revocation
+layers:
+  domain:
+    entities: []
+    value_objects: []
+  application:
+    use_cases: []
+    ports:
+      in:
+        - EncryptKeyPort
+        - ProxyRequestPort
+        - RevokeKeyPort
+      out:
+        - ServerEncryptionPort
+        - KeyMetadataStorePort
+        - RevocationStorePort
+        - ProviderProxyPort
+        - AuditLogPort
+  infrastructure:
+    adapters: []
+depends_on:
+  - shared
+plane: core

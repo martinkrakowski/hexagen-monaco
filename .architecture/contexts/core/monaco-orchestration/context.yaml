@@ -1,0 +1,28 @@
+name: monaco-orchestration
+type: core
+description: Semantic code editing with patch-based mutations, confidence gating, undo
+layers:
+  domain:
+    entities:
+      - MonacoSession
+    value_objects:
+      - SemanticPatch
+      - ConfidenceScore
+      - PatchIntentMetadata
+  application:
+    use_cases:
+      - ApplySemanticPatchUseCase
+      - ValidatePatchIntentUseCase
+      - UndoLastPatchUseCase
+      - ProjectCurrentBufferStateUseCase
+    ports:
+      in:
+        - ValidatePatchIntentPort
+        - UndoLastPatchPort
+        - ProjectCurrentBufferStatePort
+        - ApplySemanticPatchPort
+      out:
+        - MonacoPersistencePort
+        - SemanticModelAdapterPort
+        - TsMorphPort
+plane: core

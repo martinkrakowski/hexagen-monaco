@@ -1,0 +1,11 @@
+name: shared
+type: shared-kernel
+description: Shared primitives, custom errors, base classes, utilities
+layers:
+  domain:
+    value_objects:
+      - CustomError
+      - Identifier
+      - PersistedEditorWorkspace
+      - PersistedCanvasLayout
+plane: shared-kernel

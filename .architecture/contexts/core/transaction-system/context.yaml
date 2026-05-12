@@ -1,0 +1,35 @@
+name: transaction-system
+type: core
+status: frozen
+description: 'Transaction orchestration — speculative state machine, backpressure control, semantic caching for intent processing pipeline. FROZEN: Zero runtime consumers; REM + prompt-compiler determinism pending Phase 5.'
+layers:
+  domain:
+    entities:
+      - Transaction
+      - SpeculativeState
+    value_objects:
+      - TransactionId
+      - BackpressureSignal
+      - CacheEntry
+  application:
+    use_cases:
+      - ExecuteTransactionUseCase
+      - RollbackTransactionUseCase
+      - CommitTransactionUseCase
+      - CommitPatchesUseCase
+      - QueryCacheUseCase
+    ports:
+      in:
+        - TransactionManagerPort
+        - SpeculativeStateMachinePort
+        - BackpressureControllerPort
+        - SemanticCachePort
+      out:
+        - ManifestMutationPort
+        - LintValidationPort
+  infrastructure:
+    adapters:
+      - SyncDelegatingManifestMutationAdapter
+      - CliLintValidationAdapter
+      - DomainCommandToManifestPatchAdapter
+plane: core

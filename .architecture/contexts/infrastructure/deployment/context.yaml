@@ -1,0 +1,7 @@
+name: deployment
+type: supporting
+description: Deployment infrastructure — CI/CD pipelines, container definitions
+layers:
+  domain: {}
+  infrastructure: {}
+plane: infrastructure

@@ -1,0 +1,9 @@
+name: architectural-enforcement
+type: supporting
+status: frozen
+description: Architectural enforcement tooling — frozen as of 2026-04-25. ESLint plugin lives in @hexagen/eslint-plugin-ui. Boundary validation in tools/arch-linter.
+layers:
+  domain: {}
+  application: {}
+  infrastructure: {}
+plane: core

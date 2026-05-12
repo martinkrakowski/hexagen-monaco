@@ -108,6 +108,15 @@ export const manifestSplitCommander = new Command("split")
         await fs.mkdir(invariantsDir, { recursive: true });
       }
 
+      const CATEGORY_B_KEYS = new Set(["monorepo", "generator"]);
+
+      const workspaceConfig: Record<string, unknown> = {};
+      for (const key of CATEGORY_B_KEYS) {
+        if (rawYaml[key] !== undefined) {
+          workspaceConfig[key] = rawYaml[key];
+        }
+      }
+
       const indexManifest: IndexManifest = {
         version: "2.0",
         system: manifest.system,
@@ -123,6 +132,7 @@ export const manifestSplitCommander = new Command("split")
         agent_instructions: {
           read_order: [
             "manifest.yaml",
+            "workspace.config.yaml",
             "invariants/layer-rules.yaml",
             "contexts/{plane}/{target}/context.yaml",
           ],
@@ -130,7 +140,12 @@ export const manifestSplitCommander = new Command("split")
         },
         relationship_patterns: RELATIONSHIP_PATTERNS,
         legacy_config: "generator.config.yaml",
+        workspace_config: "workspace.config.yaml",
       };
+
+      if (rawYaml.mvk !== undefined) {
+        indexManifest.mvk = rawYaml.mvk as Record<string, unknown>;
+      }
 
       for (const ctx of contexts) {
         const plane = (planeLookup.get(ctx.name) ??
@@ -194,6 +209,21 @@ export const manifestSplitCommander = new Command("split")
         }
       }
 
+      const workspaceConfigPath = path.join(archDir, "workspace.config.yaml");
+      const workspaceConfigYaml = yaml.dump(workspaceConfig, {
+        noRefs: true,
+        sortKeys: false,
+        lineWidth: -1,
+      });
+
+      if (dryRun) {
+        console.log(`[dry-run] Would create: ${workspaceConfigPath}`);
+        console.log("\n--- Preview of workspace.config.yaml ---\n");
+        console.log(workspaceConfigYaml);
+      } else {
+        await fs.writeFile(workspaceConfigPath, workspaceConfigYaml, "utf-8");
+      }
+
       const indexYaml = yaml.dump(indexManifest, {
         noRefs: true,
         sortKeys: false,
@@ -228,6 +258,9 @@ export const manifestSplitCommander = new Command("split")
       console.log(`Processed ${contexts.length} bounded contexts.`);
       console.log(
         `Index manifest ${dryRun ? "would be" : "created at"} .architecture/manifest.yaml`,
+      );
+      console.log(
+        `Workspace config ${dryRun ? "would be" : "created at"} .architecture/workspace.config.yaml`,
       );
     } catch (err) {
       console.error(

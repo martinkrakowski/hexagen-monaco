@@ -1,0 +1,69 @@
+name: mcp-server
+type: core
+description: MCP server — exposes architectural tools and resources over stdio transport for external tool interaction (audit, scaffold, dependency management, governance reads, manifest diff)
+layers:
+  domain: {}
+  application:
+    use_cases:
+      - GetManifestResourceUseCase
+      - GetGraphResourceUseCase
+      - GetLinterReportResourceUseCase
+      - GetDecisionsResourceUseCase
+      - GetInvariantsResourceUseCase
+      - GetLinterConfigResourceUseCase
+      - GetWorkspaceContextResourceUseCase
+      - DiffManifestToolUseCase
+      - AuditBoundariesToolUseCase
+      - ScaffoldModuleToolUseCase
+      - AddDependencyToolUseCase
+      - CreatePortToolUseCase
+      - CreateAdapterToolUseCase
+      - RemovePortToolUseCase
+      - RemoveContextToolUseCase
+      - InitializeFeatureWorktreeToolUseCase
+      - SubmitArchitecturalSpecToolUseCase
+      - LogAgentRemediationToolUseCase
+      - GetTransactionToolUseCase
+      - ListTransactionsToolUseCase
+      - AcceptTransactionToolUseCase
+      - RejectTransactionToolUseCase
+      - GenerateTopologyToolUseCase
+      - GenerateAdaptersToolUseCase
+      - GenerateManifestPipelineToolUseCase
+    ports:
+      in:
+        - McpServerPort
+      out:
+        - ProjectConfigurationReadPort
+        - ManifestWritePort
+        - LinterPort
+        - ArchitectureQueryPort
+        - ScaffoldingPort
+        - GovernanceReadPort
+        - ManifestDiffPort
+        - ReportGovernancePort
+        - TransactionManagerPort
+        - ManifestGenerationPort
+  infrastructure:
+    adapters:
+      - MCPServerAdapter
+      - ProjectConfigurationReadAdapter
+      - ManifestWriteAdapter
+      - LinterAdapter
+      - SyncEngineAdapter
+      - InMemoryEventBusAdapter
+      - GovernanceReadAdapter
+      - ManifestDiffAdapter
+      - ReportGovernanceAdapter
+      - OpenAIManifestGenerationAdapter
+depends_on:
+  - shared
+  - messaging
+  - project-configuration
+  - governance
+  - visualization
+  - sync
+  - report-governance
+  - transaction-system
+  - agentic-interaction
+plane: probabilistic

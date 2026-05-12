@@ -1,0 +1,16 @@
+name: runtime
+type: shared-kernel
+description: Runtime type guards and generators for MVK contracts — provides runtime validation of DomainAST, NodeKind, EdgeKind, TopologyInvariants, CardinalityInvariants, and IntentLineage.
+layers:
+  domain:
+    value_objects:
+      - NodeKindGuard
+      - EdgeKindGuard
+      - TopologyInvariantGuard
+      - CardinalityInvariantGuard
+      - IntentLineageRuntime
+  infrastructure:
+    adapters: []
+depends_on:
+  - core-domain
+plane: infrastructure

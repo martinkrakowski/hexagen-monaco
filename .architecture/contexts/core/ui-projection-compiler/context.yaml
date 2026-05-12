@@ -1,0 +1,23 @@
+name: ui-projection-compiler
+type: core
+description: 'Projection compiler — maps domain node types to visual variants for canvas rendering. Narrowed: icon/affordance/realizability/compatibility paths removed (aspirational, no consumers). Zero runtime or projection-framework imports (React/xyflow banned).'
+layers:
+  domain:
+    value_objects:
+      - VisualVariant
+  application:
+    use_cases:
+      - MapNodeVisualUseCase
+    ports:
+      in:
+        - MapNodeVisualPort
+        - ResolveVariantPort
+      out: []
+  infrastructure:
+    adapters:
+      - CvaVariantResolverAdapter
+      - DefaultNodeVisualMapperAdapter
+depends_on:
+  - core-domain
+  - shared
+plane: core

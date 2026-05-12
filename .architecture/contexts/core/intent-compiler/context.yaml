@@ -1,0 +1,35 @@
+name: intent-compiler
+type: core
+description: 'Semantic intent compilation pipeline — gesture parsing, topology and cardinality invariant validation, rejection emission. Phase 2a: Unfrozen with concrete adapters for manifest-aware gesture parsing, topology/cardinality validation, and console rejection emission.'
+layers:
+  domain:
+    entities:
+      - Gesture
+      - Rejection
+    value_objects:
+      - ParsedGesture
+      - TopologyCheckResult
+      - CardinalityCheckResult
+  application:
+    use_cases:
+      - ParseGestureUseCase
+      - ValidateTopologyUseCase
+      - ValidateCardinalityUseCase
+      - EmitRejectionUseCase
+    ports:
+      in:
+        - GestureParserPort
+        - TopologyCheckerPort
+        - CardinalityCheckerPort
+        - RejectEmitterPort
+      out: []
+  infrastructure:
+    adapters:
+      - ManifestAwareGestureParserAdapter
+      - TopologyValidatorAdapter
+      - CardinalityValidatorAdapter
+      - ConsoleRejectEmitterAdapter
+depends_on:
+  - core-domain
+  - shared
+plane: core

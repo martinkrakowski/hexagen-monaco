@@ -1,10 +1,8 @@
-import fs from "node:fs/promises";
 import path from "node:path";
-import yaml from "js-yaml";
 import { ok, err, type Result } from "@hexagen/shared";
 import type { Manifest } from "../../domain/model/manifest-schema/manifest-schema";
-import { ManifestSchema } from "../../domain/model/manifest-schema/manifest-schema";
 import type { ProjectConfigurationReadPort } from "../ports/out/project-configuration-read.port";
+import { mergeSplitManifest } from "../../infrastructure/adapters/manifest-merge-loader.js";
 
 export class ReadManifestUseCase implements ProjectConfigurationReadPort {
   async execute(): Promise<Result<Manifest>> {
@@ -17,24 +15,8 @@ export class ReadManifestUseCase implements ProjectConfigurationReadPort {
         process.cwd(),
         ".architecture/manifest.yaml",
       );
-      const content = await fs.readFile(manifestPath, "utf-8");
-
-      if (!content.trim()) {
-        return err(new Error("manifest.yaml is empty"));
-      }
-
-      const parsed = yaml.load(content);
-      // Validate against Zod schema
-      const validationResult = ManifestSchema.safeParse(parsed);
-      if (!validationResult.success) {
-        return err(
-          new Error(
-            `Manifest validation failed: ${validationResult.error.message}`,
-          ),
-        );
-      }
-      // Return validated manifest
-      return ok(validationResult.data);
+      const manifest = await mergeSplitManifest(process.cwd(), manifestPath);
+      return ok(manifest);
     } catch (error) {
       if (
         error instanceof Error &&

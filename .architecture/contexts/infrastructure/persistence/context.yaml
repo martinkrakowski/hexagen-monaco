@@ -1,0 +1,11 @@
+name: persistence
+type: supporting
+description: Architecture snapshots, manifest versioning, change history, evolution ledger
+layers:
+  domain:
+    entities:
+      - Snapshot
+      - Version
+  infrastructure:
+    adapters: []
+plane: infrastructure

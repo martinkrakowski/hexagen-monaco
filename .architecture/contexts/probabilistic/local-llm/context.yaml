@@ -1,0 +1,50 @@
+name: local-llm
+type: supporting
+description: 'Browser-based WebGPU LLM inference via WebLLM (MLC AI). Provides offline-capable local inference with worker-based architecture and IndexedDB model caching. Enforces ACL: all LLM inputs must come through prompt-compiler''s structured request port. Schema validation at response boundary rejects schema-drift.'
+layers:
+  domain:
+    value_objects:
+      - LLMProgress
+      - ModelMetadata
+      - LLMEngineState
+      - HardwareProfile
+      - ChatMessage
+      - GovernanceEntry
+      - DomainModelId
+      - LLMRequest
+      - LLMResponse
+      - SchemaValidationResult
+      - ModelCatalog
+      - ModelDescriptor
+      - CloudProviderCatalog
+      - CloudProviderConfig
+      - RecommendationResult
+      - CompatibilityIssue
+  application:
+    use_cases:
+      - InitializeModelUseCase
+      - StreamGenerateUseCase
+      - RecommendModelUseCase
+    ports:
+      in:
+        - SendStructuredRequestPort
+        - CompiledPromptAdapterPort
+      out:
+        - LocalLLMProviderPort
+        - WebGPUDetectorPort
+        - HardwareProfilerPort
+        - ChatPersistencePort
+  infrastructure:
+    adapters:
+      - WebLLMAdapter
+      - WebGPUCapabilityAdapter
+      - BrowserHardwareProfilerAdapter
+      - IDBChatPersistenceAdapter
+      - CompiledPromptAdapter
+depends_on:
+  - prompt-compiler
+  - shared
+  - project-configuration
+  - visualization
+  - governance
+plane: probabilistic
