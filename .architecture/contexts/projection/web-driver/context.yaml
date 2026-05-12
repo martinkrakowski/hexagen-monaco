@@ -13,7 +13,9 @@ layers:
   infrastructure:
     adapters:
       - LocalStoragePersistenceAdapter
-      - LocalStorageCanvasLayoutAdapter - ArchitectureGraphProviderAdapter - LocalStorageByokStoreAdapter
+      - LocalStorageCanvasLayoutAdapter
+      - ArchitectureGraphProviderAdapter
+      - LocalStorageByokStoreAdapter
 depends_on:
   - agentic-interaction
   - monaco-orchestration

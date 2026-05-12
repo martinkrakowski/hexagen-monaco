@@ -3,7 +3,6 @@ import { describe, it, before, after } from "node:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { mergeSplitManifest } from "../../../src/infrastructure/adapters/manifest-merge-loader.js";
@@ -16,20 +15,13 @@ import type { Manifest } from "../../../src/domain/model/manifest-schema/manifes
 const FIELDS_EXTRACTED_TO_WORKSPACE_CONFIG = ["monorepo", "generator"] as const;
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(TEST_DIR, "../../../../..");
-const SPLIT_MANIFEST_PATH = path.join(
-  PROJECT_ROOT,
-  ".architecture",
-  "manifest.yaml",
+const FIXTURE_PATH = path.join(
+  TEST_DIR,
+  "..",
+  "..",
+  "__fixtures__",
+  "manifest.monolithic.yaml",
 );
-const PRE_SPLIT_BACKUP_PATH = path.join(
-  PROJECT_ROOT,
-  ".architecture",
-  "manifest.yaml.pre-split-backup",
-);
-const REAL_MANIFEST_PATH = existsSync(PRE_SPLIT_BACKUP_PATH)
-  ? PRE_SPLIT_BACKUP_PATH
-  : SPLIT_MANIFEST_PATH;
 
 type RawRecord = Record<string, unknown>;
 
@@ -186,13 +178,13 @@ describe("Manifest Split Round-Trip", () => {
   let indexData: RawRecord;
 
   before(async () => {
-    const rawContent = await fs.readFile(REAL_MANIFEST_PATH, "utf-8");
+    const rawContent = await fs.readFile(FIXTURE_PATH, "utf-8");
     rawManifest = yaml.load(rawContent) as RawRecord;
 
     const manifestResult = ManifestSchema.safeParse(rawManifest);
     assert.ok(
       manifestResult.success,
-      "Real monolithic manifest must validate against ManifestSchema",
+      "Fixture monolithic manifest must validate against ManifestSchema",
     );
 
     const planes = rawManifest.planes as Record<string, string[]> | undefined;

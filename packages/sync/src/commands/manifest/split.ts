@@ -9,6 +9,33 @@ import type { IndexManifest, PlaneType } from "@hexagen/project-configuration";
 import type { App } from "../../types/manifest/apps.js";
 import { buildPlaneLookup, extractContextData } from "./split-utils.js";
 
+function flattenStringArray(val: unknown): unknown[] {
+  if (!Array.isArray(val)) return val as unknown[];
+  const result: unknown[] = [];
+  for (const item of val) {
+    if (typeof item === "string") {
+      result.push(item);
+    } else if (Array.isArray(item)) {
+      result.push(...flattenStringArray(item));
+    }
+  }
+  return result;
+}
+
+function normalizeContextData(
+  ctx: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...ctx };
+  const layers = out.layers as Record<string, unknown> | undefined;
+  if (layers) {
+    const infra = layers.infrastructure as Record<string, unknown> | undefined;
+    if (infra && Array.isArray(infra.adapters)) {
+      infra.adapters = flattenStringArray(infra.adapters);
+    }
+  }
+  return out;
+}
+
 const RELATIONSHIP_PATTERNS: IndexManifest["relationship_patterns"] = {
   "U/D": {
     description:
@@ -153,8 +180,8 @@ export const manifestSplitCommander = new Command("split")
           "core") as PlaneType;
         const ctxDir = path.join(contextsDir, plane, ctx.name);
 
-        const contextData = extractContextData(
-          ctx as unknown as Record<string, unknown>,
+        const contextData = normalizeContextData(
+          extractContextData(ctx as unknown as Record<string, unknown>),
         );
         contextData.plane = plane;
 

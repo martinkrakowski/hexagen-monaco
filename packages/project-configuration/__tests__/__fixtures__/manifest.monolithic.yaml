@@ -1,0 +1,91 @@
+system: test-system
+scope: test
+architecture: modular-monolith
+
+planes:
+  core:
+    - project-configuration
+  shared-kernel:
+    - shared
+  projection:
+    - web-driver
+
+monorepo:
+  packageManager: yarn@4.12.0
+  linker: node-modules
+  buildTool: turbo
+  workspaces:
+    - apps/*
+    - packages/*
+  tsConfigRoot:
+    compilerOptions:
+      target: es2022
+      module: esnext
+      moduleResolution: bundler
+
+generator:
+  version: 0.2.0
+  sync:
+    idempotent: true
+  layers:
+    domain:
+      folder: src/domain
+
+mvk:
+  spec: .architecture/mvk/spec-v1.md
+  package: packages/core-domain
+
+bounded_contexts:
+  - name: shared
+    type: shared-kernel
+    description: Shared primitives
+    layers:
+      domain:
+        value_objects:
+          - CustomError
+          - Identifier
+
+  - name: project-configuration
+    type: core
+    description: Manifest parsing and validation
+    layers:
+      domain:
+        entities:
+          - ProjectSpec
+      application:
+        use_cases:
+          - ValidateSpecUseCase
+        ports:
+          in:
+            - ValidateSpecPort
+          out:
+            - ProjectGeneratorPort
+    generator:
+      dependencies:
+        js-yaml: ^4.1.0
+        zod: ^3.23.8
+
+  - name: web-driver
+    type: driver
+    description: Next.js frontend
+    layers:
+      domain:
+        entities:
+          - Project
+      infrastructure:
+        adapters:
+          - LocalStoragePersistenceAdapter
+          - LocalStorageCanvasLayoutAdapter
+          - ArchitectureGraphProviderAdapter
+    driver_for: apps/web
+    depends_on:
+      - shared
+
+apps:
+  - name: web
+    driver: next.js
+    framework: next.js
+    description: Frontend application
+    depends_on:
+      - shared
+      - web-driver
