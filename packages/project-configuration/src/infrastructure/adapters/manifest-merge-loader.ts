@@ -38,6 +38,10 @@ export async function mergeSplitManifest(
   const content = await fs.readFile(manifestPath, "utf-8");
   const parsed = yaml.load(content);
 
+  if (parsed == null) {
+    throw new Error("Manifest file is empty");
+  }
+
   if (!isIndexManifest(parsed)) {
     const validated = ManifestSchema.parse(parsed);
     return validated as Manifest;

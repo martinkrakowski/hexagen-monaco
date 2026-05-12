@@ -476,7 +476,7 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
     );
   });
 
-  it("loadManifest reads back what saveManifest wrote (round-trip)", () => {
+  it("loadManifest reads back what saveManifest wrote (round-trip)", async () => {
     const manifest = addContextToManifest(
       makeEmptyManifest(),
       "users",
@@ -487,9 +487,9 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
     const saveResult = saveManifest(tmpDir, manifest);
     assert.equal(saveResult.success, true);
 
-    const loadResult = loadManifest(tmpDir);
+    const loadResult = await loadManifest(tmpDir);
     assert.equal(loadResult.success, true);
-    if (!loadResult.success) return; // type narrowing
+    if (!loadResult.success) return;
 
     const contexts = loadResult.data.bounded_contexts ?? [];
     assert.equal(contexts.length, 1);
@@ -498,11 +498,11 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
     assert.equal(contexts[0].description, "User management");
   });
 
-  it("loadManifest returns Result.error for a missing manifest", () => {
-    const result = loadManifest(tmpDir);
+  it("loadManifest returns Result.error for a missing manifest", async () => {
+    const result = await loadManifest(tmpDir);
 
     assert.equal(result.success, false);
-    if (result.success) return; // type narrowing
+    if (result.success) return;
     assert.ok(result.error instanceof Error);
   });
 
@@ -514,12 +514,12 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
       "utf-8",
     );
 
-    const result = loadManifest(tmpDir);
+    const result = await loadManifest(tmpDir);
 
     assert.equal(result.success, false);
   });
 
-  it("saveManifest → loadManifest preserves multiple contexts in order", () => {
+  it("saveManifest → loadManifest preserves multiple contexts in order", async () => {
     let manifest = makeEmptyManifest();
     manifest = addContextToManifest(manifest, "ctx-a", "core");
     manifest = addContextToManifest(manifest, "ctx-b", "supporting");
@@ -527,7 +527,7 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
 
     assert.equal(saveManifest(tmpDir, manifest).success, true);
 
-    const loaded = loadManifest(tmpDir);
+    const loaded = await loadManifest(tmpDir);
     assert.equal(loaded.success, true);
     if (!loaded.success) return;
 
@@ -541,7 +541,7 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
     );
   });
 
-  it("saveManifest is atomic: second write overwrites cleanly", () => {
+  it("saveManifest is atomic: second write overwrites cleanly", async () => {
     // First save.
     let manifest = addContextToManifest(makeEmptyManifest(), "v1", "core");
     assert.equal(saveManifest(tmpDir, manifest).success, true);
@@ -550,7 +550,7 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
     manifest = addContextToManifest(makeEmptyManifest(), "v2", "driver");
     assert.equal(saveManifest(tmpDir, manifest).success, true);
 
-    const loaded = loadManifest(tmpDir);
+    const loaded = await loadManifest(tmpDir);
     assert.equal(loaded.success, true);
     if (!loaded.success) return;
     assert.equal(loaded.data.bounded_contexts?.length, 1);
