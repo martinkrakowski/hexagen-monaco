@@ -206,6 +206,7 @@ export const ManifestSchema = z
       .optional(),
     bounded_contexts: z.array(BoundedContextSchema),
     apps: z.array(AppSchema).optional(),
+    workspaceDefaults: z.record(z.unknown()).optional(),
     legacy_config: z.string().optional(),
   })
   .strict();
