@@ -11,6 +11,13 @@ import { createConsoleLogger } from "./logger.js";
 // the authoritative schema lives with the domain that owns the manifest.
 import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
+import type { LinterConfig } from "./subpath-violation.js";
+import { isSubpathViolation } from "./subpath-violation.js";
+export type {
+  SubpathConvention,
+  SubpathConventionConfig,
+  LinterConfig,
+} from "./subpath-violation.js";
 
 const logger = createConsoleLogger();
 
@@ -108,30 +115,6 @@ interface LayerRules {
   }[];
 }
 
-export interface SubpathConvention {
-  allowed_consumers: string[];
-  enforcement: "error" | "warn";
-}
-
-export interface SubpathConventionConfig {
-  server?: SubpathConvention;
-  client?: SubpathConvention;
-}
-
-export interface LinterConfig {
-  global_whitelist?: string[];
-  package_rules?: {
-    name: string;
-    restricted_to?: string[];
-    cannot_import?: string[];
-  }[];
-  test_double_rules?: {
-    paths?: string[];
-    allowed_cross_package_imports?: boolean;
-  };
-  subpath_conventions?: SubpathConventionConfig;
-}
-
 // ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
 
 if (!fs.existsSync(MANIFEST_PATH)) {
@@ -217,7 +200,7 @@ function isTestDoubleOrTest(filePath: string): boolean {
 
 function isGlobalWhitelisted(moduleSpecifier: string): boolean {
   const whitelist = linterConfig.global_whitelist ?? [`${SCOPE}/shared`];
-  return whitelist.some((pattern) => {
+  return whitelist.some((pattern: string) => {
     if (pattern.endsWith("/**")) {
       const prefix = pattern.slice(0, -2);
       return moduleSpecifier.startsWith(prefix);
@@ -232,7 +215,8 @@ function getPackageRestrictions(packageName: string): {
   allowedImports: string[];
 } {
   const pkgRule = linterConfig.package_rules?.find(
-    (r) => r.name === packageName,
+    (r: NonNullable<LinterConfig["package_rules"]>[number]) =>
+      r.name === packageName,
   );
   return {
     restrictedTo: pkgRule?.restricted_to ?? [],
@@ -269,7 +253,7 @@ function isCrossPackageViolation(
 
   if (
     linterConfig.package_rules?.some(
-      (r) =>
+      (r: NonNullable<LinterConfig["package_rules"]>[number]) =>
         r.name === fromPackage && r.restricted_to && r.restricted_to.length > 0,
     )
   ) {
@@ -318,40 +302,7 @@ function isSharedKernelAllowed(): boolean {
   return layerRules?.shared_kernel?.allowed_in_all_layers ?? true;
 }
 
-function isSubpathViolation(
-  fromPackage: string,
-  moduleSpecifier: string,
-  scope: string,
-  config: LinterConfig,
-): {
-  violation: true;
-  enforcement: "error" | "warn";
-  subpathType: "server" | "client";
-} | null {
-  const conventions = config.subpath_conventions;
-  if (!conventions) return null;
-
-  // TODO: DEBT-001 — remove this bypass when @hexagen/local-llm/shared is normalized to /client
-  if (moduleSpecifier === `${scope}/local-llm/shared`) return null;
-
-  const subpathMatch = moduleSpecifier.match(
-    new RegExp(`^${scope}/([\\w-]+)/(server|client)$`),
-  );
-  if (!subpathMatch) return null;
-
-  const [, , subpathType] = subpathMatch;
-  const convention = conventions[subpathType as "server" | "client"];
-  if (!convention) return null;
-
-  const allowedConsumers = convention.allowed_consumers ?? [];
-  if (allowedConsumers.includes(fromPackage)) return null;
-
-  return {
-    violation: true,
-    enforcement: convention.enforcement,
-    subpathType: subpathType as "server" | "client",
-  };
-}
+export { isSubpathViolation } from "./subpath-violation.js";
 
 // ─── Main Lint Check ────────────────────────────────────────────────────────
 

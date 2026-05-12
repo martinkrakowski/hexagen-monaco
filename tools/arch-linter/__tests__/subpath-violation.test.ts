@@ -1,42 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { LinterConfig } from "../src/index.js";
+import { isSubpathViolation } from "../src/subpath-violation.js";
 
 const SCOPE = "@hexagen";
-
-function isSubpathViolation(
-  fromPackage: string,
-  moduleSpecifier: string,
-  scope: string,
-  config: LinterConfig,
-): {
-  violation: true;
-  enforcement: "error" | "warn";
-  subpathType: "server" | "client";
-} | null {
-  const conventions = config.subpath_conventions;
-  if (!conventions) return null;
-
-  if (moduleSpecifier === `${scope}/local-llm/shared`) return null;
-
-  const subpathMatch = moduleSpecifier.match(
-    new RegExp(`^${scope}/([\\w-]+)/(server|client)$`),
-  );
-  if (!subpathMatch) return null;
-
-  const [, , subpathType] = subpathMatch;
-  const convention = conventions[subpathType as "server" | "client"];
-  if (!convention) return null;
-
-  const allowedConsumers = convention.allowed_consumers ?? [];
-  if (allowedConsumers.includes(fromPackage)) return null;
-
-  return {
-    violation: true,
-    enforcement: convention.enforcement,
-    subpathType: subpathType as "server" | "client",
-  };
-}
 
 const FULL_CONFIG: LinterConfig = {
   subpath_conventions: {

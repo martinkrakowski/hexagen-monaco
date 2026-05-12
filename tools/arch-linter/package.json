@@ -19,7 +19,7 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test __tests__/**/*.test.ts",
+    "test": "node --test --import tsx __tests__/**/*.test.ts",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint:arch": "node dist/index.js",
     "lint:yaml": "eslint --config eslint.yaml.config.js ../../.architecture/**/*.yaml"
