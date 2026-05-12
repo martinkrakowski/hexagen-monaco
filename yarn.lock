@@ -1237,6 +1237,7 @@ __metadata:
     js-yaml: "npm:^4.1.0"
     lodash: "npm:^4.17.21"
     ts-morph: "npm:^27.0.2"
+    tsx: "npm:^4.19.2"
     typescript: "npm:^5.5.3"
     yaml-eslint-parser: "npm:^2.0.0"
     zod: "npm:^3.23.8"

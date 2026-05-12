@@ -11,6 +11,13 @@ import { createConsoleLogger } from "./logger.js";
 // the authoritative schema lives with the domain that owns the manifest.
 import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
+import type { LinterConfig } from "./subpath-violation.js";
+import { isSubpathViolation } from "./subpath-violation.js";
+export type {
+  SubpathConvention,
+  SubpathConventionConfig,
+  LinterConfig,
+} from "./subpath-violation.js";
 
 const logger = createConsoleLogger();
 
@@ -108,19 +115,6 @@ interface LayerRules {
   }[];
 }
 
-interface LinterConfig {
-  global_whitelist?: string[];
-  package_rules?: {
-    name: string;
-    restricted_to?: string[];
-    cannot_import?: string[];
-  }[];
-  test_double_rules?: {
-    paths?: string[];
-    allowed_cross_package_imports?: boolean;
-  };
-}
-
 // ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
 
 if (!fs.existsSync(MANIFEST_PATH)) {
@@ -206,7 +200,7 @@ function isTestDoubleOrTest(filePath: string): boolean {
 
 function isGlobalWhitelisted(moduleSpecifier: string): boolean {
   const whitelist = linterConfig.global_whitelist ?? [`${SCOPE}/shared`];
-  return whitelist.some((pattern) => {
+  return whitelist.some((pattern: string) => {
     if (pattern.endsWith("/**")) {
       const prefix = pattern.slice(0, -2);
       return moduleSpecifier.startsWith(prefix);
@@ -221,7 +215,8 @@ function getPackageRestrictions(packageName: string): {
   allowedImports: string[];
 } {
   const pkgRule = linterConfig.package_rules?.find(
-    (r) => r.name === packageName,
+    (r: NonNullable<LinterConfig["package_rules"]>[number]) =>
+      r.name === packageName,
   );
   return {
     restrictedTo: pkgRule?.restricted_to ?? [],
@@ -258,7 +253,7 @@ function isCrossPackageViolation(
 
   if (
     linterConfig.package_rules?.some(
-      (r) =>
+      (r: NonNullable<LinterConfig["package_rules"]>[number]) =>
         r.name === fromPackage && r.restricted_to && r.restricted_to.length > 0,
     )
   ) {
@@ -307,10 +302,13 @@ function isSharedKernelAllowed(): boolean {
   return layerRules?.shared_kernel?.allowed_in_all_layers ?? true;
 }
 
+export { isSubpathViolation } from "./subpath-violation.js";
+
 // ─── Main Lint Check ────────────────────────────────────────────────────────
 
 function checkArchitecturalIntegrity() {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const modules = manifest.bounded_contexts ?? [];
 
   modules.forEach((moduleInfo) => {
@@ -343,6 +341,26 @@ function checkArchitecturalIntegrity() {
         const moduleSpecifier = imp.getModuleSpecifierValue();
 
         if (isTestDbl) return;
+
+        const subpathResult = isSubpathViolation(
+          moduleName,
+          moduleSpecifier,
+          SCOPE,
+          linterConfig,
+        );
+        if (subpathResult?.violation) {
+          const message =
+            subpathResult.enforcement === "error"
+              ? `Subpath Violation in [${moduleName}]:\n File: ${path.relative(ROOT_DIR, filePath)}\n Package '${moduleName}' cannot import '${moduleSpecifier}' (${subpathResult.subpathType} subpath, enforcement: error)`
+              : `Subpath Warning in [${moduleName}]:\n File: ${path.relative(ROOT_DIR, filePath)}\n Package '${moduleName}' imports '${moduleSpecifier}' (${subpathResult.subpathType} subpath, enforcement: warn)`;
+
+          if (subpathResult.enforcement === "error") {
+            errors.push(message);
+          } else {
+            warnings.push(message);
+          }
+          return;
+        }
 
         if (moduleSpecifier.startsWith(SCOPE)) {
           const importedPkg = moduleSpecifier.split("/")[1];
@@ -434,6 +452,11 @@ function checkArchitecturalIntegrity() {
       });
     });
   });
+
+  if (warnings.length > 0) {
+    logger.warn("Subpath convention warnings (enforcement: warn):");
+    warnings.forEach((w) => logger.warn(` - ${w}`));
+  }
 
   if (errors.length > 0) {
     logger.error("Architectural Integrity Check Failed. Found violations:");

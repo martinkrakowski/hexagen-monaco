@@ -19,6 +19,8 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx __tests__/**/*.test.ts",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint:arch": "node dist/index.js",
     "lint:yaml": "eslint --config eslint.yaml.config.js ../../.architecture/**/*.yaml"
   },
@@ -37,6 +39,7 @@
     "@types/node": "^20.12.7",
     "eslint": "^9.7.0",
     "eslint-plugin-yml": "^3.3.1",
+    "tsx": "^4.19.2",
     "typescript": "^5.5.3",
     "yaml-eslint-parser": "^2.0.0"
   }
