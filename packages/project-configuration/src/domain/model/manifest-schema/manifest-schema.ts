@@ -106,6 +106,15 @@ export const BoundedContextSchema = z.object({
   generator: z.record(z.unknown()).optional(),
 });
 
+export const AppSchema = z.object({
+  name: z.string(),
+  driver: z.enum(["next.js", "fastify", "express", "cli"]).optional(),
+  framework: z.enum(["next.js", "fastify", "express", "plain-ts"]).optional(),
+  version: z.string().optional(),
+  description: z.string().optional(),
+  depends_on: z.array(z.string()).optional(),
+});
+
 export const IndexManifestSchema = z
   .object({
     version: z.string().optional(),
@@ -167,15 +176,32 @@ export const IndexManifestSchema = z
     },
   );
 
-export const ManifestSchema = z
-  .object({
-    system: z.string().optional(),
-    scope: z.string().optional(),
-    architecture: z.string().optional(),
-    bounded_contexts: z.array(BoundedContextSchema),
-    apps: z.array(z.unknown()).optional(),
-  })
-  .passthrough();
+export const ManifestSchema = z.object({
+  version: z.string().optional(),
+  description: z.string().optional(),
+  system: z.string().optional(),
+  scope: z.string().optional(),
+  architecture: z.string().optional(),
+  planes: z.record(z.array(z.string())).optional(),
+  monorepo: z.record(z.unknown()).optional(),
+  generator: z.record(z.unknown()).optional(),
+  mvk: z.record(z.unknown()).optional(),
+  invariants: z.record(z.string()).optional(),
+  governance: z.record(z.string()).optional(),
+  agent_instructions: z.record(z.unknown()).optional(),
+  relationship_patterns: z
+    .record(
+      z.object({
+        description: z.string(),
+        acl_required: z.union([z.boolean(), z.literal("optional")]).optional(),
+        linter: z.string().optional(),
+      }),
+    )
+    .optional(),
+  bounded_contexts: z.array(BoundedContextSchema),
+  apps: z.array(AppSchema).optional(),
+  legacy_config: z.string().optional(),
+});
 
 export type Manifest = z.infer<typeof ManifestSchema>;
 export type ManifestBoundedContext = z.infer<typeof BoundedContextSchema>;
@@ -189,12 +215,4 @@ export type IndexBoundedContextEntry = z.infer<
   ? T
   : never;
 
-export const AppSchema = z.object({
-  name: z.string(),
-  driver: z.enum(["next.js", "fastify", "express", "cli"]).optional(),
-  framework: z.enum(["next.js", "fastify", "express", "plain-ts"]).optional(),
-  version: z.string().optional(),
-  description: z.string().optional(),
-  depends_on: z.array(z.string()).optional(),
-});
 export type App = z.infer<typeof AppSchema>;
