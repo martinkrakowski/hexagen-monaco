@@ -17,8 +17,9 @@ export interface RemovePortOptions {
 
 export const removePortCommander = new Command("port")
   .description("Remove a port from a bounded context")
-  .action(async (options: RemovePortOptions) => {
-    await removePortCommand(options);
+  .action(async (_options: RemovePortOptions, cmd: Command) => {
+    const { force } = cmd.optsWithGlobals();
+    await removePortCommand({ force });
   });
 
 async function getPortSelection(manifest: Manifest): Promise<{
@@ -142,11 +143,7 @@ export async function removePortCommand(
 ): Promise<void> {
   const cwd = getProjectRoot();
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
-  // Get force from parent command hook or direct option
-  const force =
-    options.force ??
-    (removePortCommander as unknown as Record<string, unknown>).forceOption ??
-    false;
+  const force = options.force ?? false;
 
   const loadResult = await yamlService.loadManifest(manifestPath);
   if (!loadResult.success) {

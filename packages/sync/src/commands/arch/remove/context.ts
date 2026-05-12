@@ -13,8 +13,9 @@ export interface RemoveContextOptions {
 
 export const removeContextCommander = new Command("context")
   .description("Remove a bounded context from the manifest")
-  .action(async (options: RemoveContextOptions) => {
-    await removeContextCommand(options);
+  .action(async (_options: RemoveContextOptions, cmd: Command) => {
+    const { force } = cmd.optsWithGlobals();
+    await removeContextCommand({ force });
   });
 
 async function getContextSelection(manifest: Manifest): Promise<string | null> {
@@ -70,12 +71,7 @@ export async function removeContextCommand(
 ): Promise<void> {
   const cwd = getProjectRoot();
   const manifestPath = `${cwd}/.architecture/manifest.yaml`;
-  // Get force from parent command hook or direct option
-  const force =
-    options.force ??
-    (removeContextCommander as unknown as Record<string, unknown>)
-      .forceOption ??
-    false;
+  const force = options.force ?? false;
 
   const loadResult = await yamlService.loadManifest(manifestPath);
   if (!loadResult.success) {

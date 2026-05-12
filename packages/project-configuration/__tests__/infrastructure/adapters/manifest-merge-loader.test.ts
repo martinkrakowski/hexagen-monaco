@@ -289,9 +289,7 @@ describe("mergeSplitManifest", () => {
       `      - TestEntity`,
     ].join("\n");
 
-    const appYaml = [`name: web`, `framework: next.js`, `driver_for: ui`].join(
-      "\n",
-    );
+    const appYaml = [`name: web`, `framework: next.js`].join("\n");
 
     await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
     await writeFile(join(ctxDir, "context.yaml"), contextYaml, "utf-8");
@@ -311,6 +309,119 @@ describe("mergeSplitManifest", () => {
     assert.strictEqual(
       (result.apps![0] as Record<string, unknown>).framework,
       "next.js",
+    );
+  });
+
+  it("throws on path traversal in context file reference", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    await mkdir(archDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `system: traversal-test`,
+      `bounded_contexts:`,
+      `  - name: evil`,
+      `    type: core`,
+      `    file: ../../etc/passwd`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, join(archDir, "manifest.yaml")),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /Path traversal detected/);
+        return true;
+      },
+    );
+  });
+
+  it("throws on path traversal in app file reference", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const ctxDir = join(archDir, "contexts", "core", "my-context");
+    await mkdir(ctxDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `system: traversal-test`,
+      `bounded_contexts:`,
+      `  - name: my-context`,
+      `    type: core`,
+      `    file: contexts/core/my-context/context.yaml`,
+      `apps:`,
+      `  - name: evil-app`,
+      `    file: ../../../etc/shadow`,
+    ].join("\n");
+
+    const contextYaml = [
+      `name: my-context`,
+      `type: core`,
+      `description: Test context`,
+      `layers:`,
+      `  domain:`,
+      `    entities:`,
+      `      - TestEntity`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(join(ctxDir, "context.yaml"), contextYaml, "utf-8");
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, join(archDir, "manifest.yaml")),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /Path traversal detected/);
+        return true;
+      },
+    );
+  });
+
+  it("throws on invalid app YAML that fails AppSchema validation", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const appsDir = join(archDir, "apps");
+    const ctxDir = join(archDir, "contexts", "core", "my-context");
+    await mkdir(appsDir, { recursive: true });
+    await mkdir(ctxDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `system: bad-app-test`,
+      `bounded_contexts:`,
+      `  - name: my-context`,
+      `    type: core`,
+      `    file: contexts/core/my-context/context.yaml`,
+      `apps:`,
+      `  - name: bad-app`,
+      `    file: apps/bad.app.yaml`,
+    ].join("\n");
+
+    const contextYaml = [
+      `name: my-context`,
+      `type: core`,
+      `description: Test context`,
+      `layers:`,
+      `  domain:`,
+      `    entities:`,
+      `      - TestEntity`,
+    ].join("\n");
+
+    const badAppYaml = `driver: not-a-valid-driver`;
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(join(ctxDir, "context.yaml"), contextYaml, "utf-8");
+    await writeFile(join(appsDir, "bad.app.yaml"), badAppYaml, "utf-8");
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, join(archDir, "manifest.yaml")),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /App file.*validation failed/);
+        return true;
+      },
     );
   });
 });

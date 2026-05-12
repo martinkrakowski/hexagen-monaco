@@ -5,6 +5,7 @@ import {
   ManifestSchema,
   IndexManifestSchema,
   BoundedContextSchema,
+  AppSchema,
 } from "../../domain/model/manifest-schema/manifest-schema.js";
 import type {
   Manifest,
@@ -16,6 +17,19 @@ import type {
 import { isIndexManifest } from "../../domain/model/manifest-schema/index.js";
 
 export { isIndexManifest };
+
+function assertPathWithinArchitecture(
+  workspaceRoot: string,
+  relativePath: string,
+): void {
+  const resolved = path.resolve(workspaceRoot, ".architecture", relativePath);
+  const archRoot = path.resolve(workspaceRoot, ".architecture") + path.sep;
+  if (!resolved.startsWith(archRoot)) {
+    throw new Error(
+      `Path traversal detected: "${relativePath}" resolves outside .architecture/`,
+    );
+  }
+}
 
 export async function mergeSplitManifest(
   workspaceRoot: string,
@@ -51,6 +65,8 @@ export async function mergeSplitManifest(
     if (typeof indexEntry.file !== "string") {
       continue;
     }
+
+    assertPathWithinArchitecture(workspaceRoot, indexEntry.file);
 
     const contextFilePath = path.join(
       workspaceRoot,
@@ -91,9 +107,17 @@ export async function mergeSplitManifest(
   const indexApps = index.apps ?? [];
   for (const appEntry of indexApps) {
     if (typeof appEntry.file !== "string") {
-      result.apps!.push(appEntry as unknown as App);
+      const inlinedResult = AppSchema.safeParse(appEntry);
+      if (!inlinedResult.success) {
+        throw new Error(
+          `Inline app "${appEntry.name ?? "<unnamed>"}" validation failed: ${inlinedResult.error.message}`,
+        );
+      }
+      result.apps!.push(inlinedResult.data as App);
       continue;
     }
+
+    assertPathWithinArchitecture(workspaceRoot, appEntry.file);
 
     const appFilePath = path.join(
       workspaceRoot,
@@ -112,7 +136,13 @@ export async function mergeSplitManifest(
     }
 
     const appParsed = yaml.load(appContent);
-    result.apps!.push(appParsed as App);
+    const appResult = AppSchema.safeParse(appParsed);
+    if (!appResult.success) {
+      throw new Error(
+        `App file "${appEntry.file}" validation failed: ${appResult.error.message}`,
+      );
+    }
+    result.apps!.push(appResult.data as App);
   }
 
   return result;

@@ -82,10 +82,10 @@ The `@hexagen/local-llm/shared` exception is retained for now as technical debt.
 
 ### Package barrel split pattern
 
-```
+```text
 packages/foo/src/
-├── index.ts          ← client barrel (default export, zero Node deps)
-└── server.ts         ← server barrel (may import Node built-ins)
+├── index.ts ← client barrel (default export, zero Node deps)
+└── server.ts ← server barrel (may import Node built-ins)
 ```
 
 `package.json` exports:
