@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Command } from "commander";
 import {
   loadManifest,
@@ -15,7 +16,7 @@ export async function contextCommand(): Promise<void> {
   const cwd = getProjectRoot();
 
   // Load current manifest state
-  const manifestResult = loadManifest(cwd);
+  const manifestResult = await loadManifest(cwd);
 
   if (!manifestResult.success) {
     console.error("⚠️  Failed to read manifest:", manifestResult.error.message);

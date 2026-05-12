@@ -5,6 +5,11 @@ import { Project } from "ts-morph";
 import * as yaml from "js-yaml";
 import path from "node:path";
 import { createConsoleLogger } from "./logger.js";
+// Manifest validation uses the schema from @hexagen/project-configuration
+// (packages/project-configuration/src/domain/model/manifest-schema/manifest-schema.ts)
+// via mergeSplitManifest(). Do not add a local schema to this package —
+// the authoritative schema lives with the domain that owns the manifest.
+import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
 
 const logger = createConsoleLogger();
@@ -128,27 +133,14 @@ if (!fs.existsSync(MANIFEST_PATH)) {
 
 let manifest: Manifest;
 try {
-  const manifestContent = await fsPromises.readFile(MANIFEST_PATH, "utf8");
-  manifest = (yaml.load(manifestContent) as Manifest) ?? {
-    bounded_contexts: [],
-  };
+  manifest = (await mergeSplitManifest(ROOT_DIR, MANIFEST_PATH)) as Manifest;
 } catch (e) {
-  const yamlError = e as Error & {
-    mark?: { line?: number; column?: number; snippet?: string };
-  };
+  const error = e as Error;
   logger.error(
-    `FATAL ERROR: Could not parse architecture manifest from ${MANIFEST_PATH}`,
+    `FATAL ERROR: Could not load architecture manifest from ${MANIFEST_PATH}`,
   );
-  if (yamlError.message) {
-    logger.error(`  YAML parse error: ${yamlError.message}`);
-  }
-  if (yamlError.mark) {
-    logger.error(
-      `  at line ${yamlError.mark.line ?? "?"}, column ${yamlError.mark.column ?? "?"}`,
-    );
-    if (yamlError.mark.snippet) {
-      logger.error(`  ${yamlError.mark.snippet}`);
-    }
+  if (error.message) {
+    logger.error(`  ${error.message}`);
   }
   process.exit(1);
 }

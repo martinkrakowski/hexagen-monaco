@@ -3,7 +3,21 @@ import assert from "node:assert";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import yaml from "js-yaml";
 import { ManifestWriteAdapter } from "../../../src/infrastructure/adapters/manifest-write.adapter.js";
+
+function minimalContext(name: string) {
+  return {
+    name,
+    type: "core" as const,
+    description: "",
+    layers: {
+      domain: {},
+      application: { ports: { in: [], out: [] } },
+      infrastructure: { adapters: [] },
+    },
+  };
+}
 
 async function withTempWorkspace<T>(
   initialManifest: Record<string, unknown>,
@@ -14,7 +28,12 @@ async function withTempWorkspace<T>(
   );
   const manifestPath = path.join(tmpDir, ".architecture", "manifest.yaml");
   await fs.mkdir(path.join(tmpDir, ".architecture"), { recursive: true });
-  await fs.writeFile(manifestPath, JSON.stringify(initialManifest), "utf-8");
+  const content = yaml.dump(initialManifest, {
+    indent: 2,
+    sortKeys: false,
+    lineWidth: 0,
+  });
+  await fs.writeFile(manifestPath, content, "utf-8");
   try {
     return await fn(tmpDir);
   } finally {
@@ -26,7 +45,7 @@ describe("manifest write adapter", () => {
   it("should return valid when both contexts exist for validateDependency", async () => {
     const result = await withTempWorkspace(
       {
-        bounded_contexts: [{ name: "foo" }, { name: "bar" }],
+        bounded_contexts: [minimalContext("foo"), minimalContext("bar")],
       },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
@@ -43,7 +62,7 @@ describe("manifest write adapter", () => {
 
   it("should return error when source does not exist for validateDependency", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "bar" }] },
+      { bounded_contexts: [minimalContext("bar")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.validateDependency({
@@ -59,7 +78,7 @@ describe("manifest write adapter", () => {
 
   it("should return error when target does not exist for validateDependency", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "foo" }] },
+      { bounded_contexts: [minimalContext("foo")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.validateDependency({
@@ -75,7 +94,7 @@ describe("manifest write adapter", () => {
 
   it("should return error when source equals target for validateDependency", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "foo" }] },
+      { bounded_contexts: [minimalContext("foo")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.validateDependency({
@@ -92,7 +111,7 @@ describe("manifest write adapter", () => {
   it("should add target to source depends_on for addDependency", async () => {
     const result = await withTempWorkspace(
       {
-        bounded_contexts: [{ name: "foo" }, { name: "bar" }],
+        bounded_contexts: [minimalContext("foo"), minimalContext("bar")],
       },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
@@ -109,7 +128,7 @@ describe("manifest write adapter", () => {
   it("should return error when source does not exist for addDependency", async () => {
     const result = await withTempWorkspace(
       {
-        bounded_contexts: [{ name: "bar" }],
+        bounded_contexts: [minimalContext("bar")],
       },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
@@ -125,7 +144,7 @@ describe("manifest write adapter", () => {
 
   it("should register new context with registerBoundedContext", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "existing" }] },
+      { bounded_contexts: [minimalContext("existing")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.registerBoundedContext({ name: "new-ctx" });
@@ -138,7 +157,7 @@ describe("manifest write adapter", () => {
 
   it("should return alreadyExisted when context exists for registerBoundedContext", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "foo" }] },
+      { bounded_contexts: [minimalContext("foo")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.registerBoundedContext({ name: "foo" });
@@ -155,8 +174,12 @@ describe("manifest write adapter", () => {
         bounded_contexts: [
           {
             name: "billing",
+            type: "core" as const,
+            description: "",
             layers: {
+              domain: {},
               application: { ports: { in: [], out: [] } },
+              infrastructure: { adapters: [] },
             },
           },
         ],
@@ -180,8 +203,12 @@ describe("manifest write adapter", () => {
         bounded_contexts: [
           {
             name: "billing",
+            type: "core" as const,
+            description: "",
             layers: {
+              domain: {},
               application: { ports: { in: ["PaymentPort"], out: [] } },
+              infrastructure: { adapters: [] },
             },
           },
         ],
@@ -201,7 +228,7 @@ describe("manifest write adapter", () => {
 
   it("should return error when context not found for registerPort", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "billing" }] },
+      { bounded_contexts: [minimalContext("billing")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.registerPort({
@@ -221,7 +248,11 @@ describe("manifest write adapter", () => {
         bounded_contexts: [
           {
             name: "billing",
+            type: "core" as const,
+            description: "",
             layers: {
+              domain: {},
+              application: { ports: { in: [], out: [] } },
               infrastructure: { adapters: [] },
             },
           },
@@ -242,7 +273,7 @@ describe("manifest write adapter", () => {
 
   it("should return error when context not found for registerAdapter", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "billing" }] },
+      { bounded_contexts: [minimalContext("billing")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.registerAdapter({
@@ -262,8 +293,12 @@ describe("manifest write adapter", () => {
         bounded_contexts: [
           {
             name: "billing",
+            type: "core" as const,
+            description: "",
             layers: {
+              domain: {},
               application: { ports: { in: [], out: ["PaymentPort"] } },
+              infrastructure: { adapters: [] },
             },
           },
         ],
@@ -287,8 +322,12 @@ describe("manifest write adapter", () => {
         bounded_contexts: [
           {
             name: "billing",
+            type: "core" as const,
+            description: "",
             layers: {
+              domain: {},
               application: { ports: { in: [], out: [] } },
+              infrastructure: { adapters: [] },
             },
           },
         ],
@@ -308,7 +347,7 @@ describe("manifest write adapter", () => {
 
   it("should return error when context not found for removePort", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "billing" }] },
+      { bounded_contexts: [minimalContext("billing")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.removePort({
@@ -325,7 +364,10 @@ describe("manifest write adapter", () => {
   it("should remove existing context with removeContext", async () => {
     const result = await withTempWorkspace(
       {
-        bounded_contexts: [{ name: "billing" }, { name: "shipping" }],
+        bounded_contexts: [
+          minimalContext("billing"),
+          minimalContext("shipping"),
+        ],
       },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
@@ -338,7 +380,7 @@ describe("manifest write adapter", () => {
 
   it("should return removed=false when context not found for removeContext", async () => {
     const result = await withTempWorkspace(
-      { bounded_contexts: [{ name: "billing" }] },
+      { bounded_contexts: [minimalContext("billing")] },
       async (workspaceRoot) => {
         const adapter = new ManifestWriteAdapter(workspaceRoot);
         return adapter.removeContext({ contextName: "nonexistent" });

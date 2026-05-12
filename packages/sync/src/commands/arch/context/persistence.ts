@@ -1,10 +1,4 @@
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  renameSync,
-  unlinkSync,
-} from "fs";
+import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import type { Manifest } from "@hexagen/sync";
 import type { BoundedContext } from "../../../types/manifest.js";
@@ -35,11 +29,13 @@ function getManifestPath(cwd: string): string {
   return join(cwd, ".architecture", "manifest.yaml");
 }
 
-export function loadManifest(
+export async function loadManifest(
   cwd: string,
-): { success: true; data: Manifest } | { success: false; error: Error } {
+): Promise<
+  { success: true; data: Manifest } | { success: false; error: Error }
+> {
   const manifestPath = getManifestPath(cwd);
-  const result = yamlService.loadManifest(manifestPath);
+  const result = await yamlService.loadManifest(manifestPath);
 
   if (!result.success) {
     return { success: false, error: result.error };

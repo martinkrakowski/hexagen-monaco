@@ -7,6 +7,7 @@
  */
 
 import type { BoundedContext } from "../../types/manifest.js";
+import { portName } from "../../types/manifest.js";
 
 export type EmissionSite =
   | "domain/entities"
@@ -92,14 +93,14 @@ export function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
       plan.push({
         kind: "inPort",
         subdir: "application/ports/in",
-        names: application.ports.in,
+        names: application.ports.in.map(portName),
       });
     }
     if (application.ports?.out?.length) {
       plan.push({
         kind: "outPort",
         subdir: "application/ports/out",
-        names: application.ports.out,
+        names: application.ports.out.map(portName),
       });
     }
   }

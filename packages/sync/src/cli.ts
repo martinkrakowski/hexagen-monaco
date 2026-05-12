@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 
 import { Command } from "commander";
 import { SyncEngine } from "./sync-engine.js";
@@ -9,6 +10,7 @@ import { removeCommander } from "./commands/arch/remove.js";
 import { diffCommander } from "./commands/arch/diff.js";
 import { editCommander } from "./commands/arch/edit.js";
 import { refactorCommander } from "./commands/arch/refactor.js";
+import { manifestCommander } from "./commands/manifest/index.js";
 import type { LoggerPort } from "@hexagen/shared";
 
 function createLogger(): LoggerPort {
@@ -97,6 +99,8 @@ function buildProgram(): Command {
   archCommand.addCommand(diffCommander);
   archCommand.addCommand(editCommander);
   archCommand.addCommand(refactorCommander);
+
+  program.addCommand(manifestCommander);
 
   return program;
 }

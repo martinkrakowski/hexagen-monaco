@@ -1,7 +1,7 @@
+/* eslint-disable no-console */
 import { Command } from "commander";
-import { readFileSync } from "fs";
 import { execSync } from "child_process";
-import { join, dirname } from "path";
+import { join } from "path";
 import type { Manifest } from "@hexagen/sync";
 import { Result, ok, err } from "../../domain/result.js";
 import { getProjectRoot } from "../shared/project-root.js";
@@ -28,8 +28,10 @@ function getManifestPath(cwd: string): string {
   return join(cwd, ".architecture", "manifest.yaml");
 }
 
-function loadManifestFromPath(path: string): Result<Manifest, Error> {
-  const result = yamlService.loadManifest(path);
+async function loadManifestFromPath(
+  path: string,
+): Promise<Result<Manifest, Error>> {
+  const result = await yamlService.loadManifest(path);
   if (!result.success) {
     return err(result.error);
   }
@@ -47,7 +49,7 @@ function loadManifestFromGit(cwd: string): Result<Manifest, Error> {
       return err(parseResult.error);
     }
     return ok(parseResult.value);
-  } catch (e) {
+  } catch {
     return err(new Error("No previous manifest found in git history"));
   }
 }
@@ -158,7 +160,7 @@ function diffContexts(
     }
   }
 
-  for (const [name, ctx] of previousContexts) {
+  for (const name of previousContexts.keys()) {
     if (!currentContexts.has(name)) {
       removed.push({ type: "context", operation: "remove", contextName: name });
     }
@@ -244,7 +246,7 @@ async function runDiffGit(): Promise<void> {
   const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
 
-  const currentResult = loadManifestFromPath(manifestPath);
+  const currentResult = await loadManifestFromPath(manifestPath);
   if (!currentResult.success) {
     console.error(
       `Failed to read current manifest: ${currentResult.error.message}`,
@@ -268,7 +270,7 @@ async function runDiffFile(filePath: string): Promise<void> {
   const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
 
-  const currentResult = loadManifestFromPath(manifestPath);
+  const currentResult = await loadManifestFromPath(manifestPath);
   if (!currentResult.success) {
     console.error(
       `Failed to read current manifest: ${currentResult.error.message}`,
@@ -276,7 +278,7 @@ async function runDiffFile(filePath: string): Promise<void> {
     process.exit(1);
   }
 
-  const previousResult = loadManifestFromPath(filePath);
+  const previousResult = await loadManifestFromPath(filePath);
   if (!previousResult.success) {
     console.error(
       `Failed to read file ${filePath}: ${previousResult.error.message}`,
@@ -292,7 +294,7 @@ async function runDiffStdin(): Promise<void> {
   const cwd = getProjectRoot();
   const manifestPath = getManifestPath(cwd);
 
-  const currentResult = loadManifestFromPath(manifestPath);
+  const currentResult = await loadManifestFromPath(manifestPath);
   if (!currentResult.success) {
     console.error(
       `Failed to read current manifest: ${currentResult.error.message}`,

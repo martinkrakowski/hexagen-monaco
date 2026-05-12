@@ -76,7 +76,9 @@ describe("manifest service", () => {
     await withTempManifest("", async (_workspaceRoot, tempDir) => {
       const result = await loadManifest(tempDir);
       assert.strictEqual(result.success, false, "Should fail with empty file");
-      assert.match(result.error.message, /empty/i);
+      const err = result.error;
+      const msg = err instanceof Error ? err.message : String(err);
+      assert.match(msg, /empty/i);
     });
   });
 

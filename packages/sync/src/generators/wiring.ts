@@ -14,6 +14,7 @@ import path from "node:path";
 import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import type { ReportRecorder } from "../domain/types.js";
+import { portName } from "../types/manifest.js";
 
 /**
  * Wiring configuration from manifest
@@ -212,7 +213,7 @@ export async function generateWiring(
   }
 
   const useCases = context.layers?.application?.use_cases || [];
-  const outPorts = context.layers?.application?.ports?.out || [];
+  const outPorts = context.layers?.application?.ports?.out?.map(portName) || [];
 
   if (useCases.length === 0) {
     config.logger.debug(
@@ -281,7 +282,6 @@ ${useCases.map((uc) => `  get${uc}`).join(",\n")}
 
       const testDoubleContent = generateTestDouble(port, []);
 
-      // Write test double file
       fs.mkdirSync(path.dirname(testDoublePath), { recursive: true });
       fs.writeFileSync(testDoublePath, testDoubleContent, "utf-8");
 

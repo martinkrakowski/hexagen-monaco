@@ -1,43 +1,28 @@
-import fs from "node:fs/promises";
 import path from "node:path";
-import yaml from "js-yaml";
 import { ok, err, type Result } from "@hexagen/shared";
 import type { ProjectSpecLike } from "@hexagen/prompt-compiler";
 import type { LinterReport } from "@hexagen/governance";
+import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type {
   ArchitectureGraphProviderPort,
   LinterReportProviderPort,
 } from "@hexagen/sync";
+import type { ManifestBoundedContext } from "@hexagen/project-configuration";
 import { type ArchitectureGraph } from "@hexagen/visualization";
-import { ManifestSchema } from "@hexagen/project-configuration";
-
-interface ManifestYaml {
-  boundedContexts?: Array<{ name: string }>;
-}
 
 export class ManifestProviderAdapter {
   async getManifest(): Promise<ProjectSpecLike> {
     try {
+      const workspaceRoot = process.cwd();
       const manifestPath = path.join(
-        process.cwd(),
+        workspaceRoot,
         ".architecture/manifest.yaml",
       );
-      const content = await fs.readFile(manifestPath, "utf-8");
+      const manifest = await mergeSplitManifest(workspaceRoot, manifestPath);
 
-      if (!content.trim()) {
-        return { boundedContexts: [] };
-      }
-
-      const parsed = yaml.load(content) as ManifestYaml;
-      const validationResult = ManifestSchema.safeParse(parsed);
-      if (!validationResult.success) {
-        return { boundedContexts: [] };
-      }
-
-      const validated = validationResult.data as ManifestYaml;
       return {
         boundedContexts:
-          validated.boundedContexts?.map((ctx) => ({
+          manifest.bounded_contexts?.map((ctx: ManifestBoundedContext) => ({
             id: ctx.name,
             name: ctx.name,
           })) || [],
@@ -52,17 +37,17 @@ export class ServerArchitectureGraphProviderAdapter implements ArchitectureGraph
   async getArchitectureGraph(
     _projectId: string,
   ): Promise<Result<ArchitectureGraph>> {
-    void _projectId; // satisfy no-unused-vars with underscore prefix
+    void _projectId;
     try {
+      const workspaceRoot = process.cwd();
       const manifestPath = path.join(
-        process.cwd(),
+        workspaceRoot,
         ".architecture/manifest.yaml",
       );
-      const content = await fs.readFile(manifestPath, "utf-8");
-      const parsed = yaml.load(content) as ManifestYaml;
+      const manifest = await mergeSplitManifest(workspaceRoot, manifestPath);
 
       const nodes =
-        parsed.boundedContexts?.map((ctx) => ({
+        manifest.bounded_contexts?.map((ctx: ManifestBoundedContext) => ({
           id: ctx.name,
           label: ctx.name,
           type: "core" as const,

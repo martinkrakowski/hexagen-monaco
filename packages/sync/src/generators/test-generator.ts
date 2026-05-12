@@ -9,6 +9,7 @@ import {
   generateEnhancedTestDouble,
 } from "./test-templates/index.js";
 import type { ReportRecorder } from "../domain/types.js";
+import { portName } from "../types/manifest.js";
 
 interface TestConfig {
   enabled?: boolean;
@@ -56,7 +57,7 @@ export async function generateTests(
   }
 
   const useCases = context.layers?.application?.use_cases || [];
-  const outPorts = context.layers?.application?.ports?.out || [];
+  const outPorts = context.layers?.application?.ports?.out?.map(portName) || [];
   const entities = context.layers?.domain?.entities || [];
 
   if (useCases.length === 0) {

@@ -10,6 +10,7 @@ import type {
   FileTemplate,
   Manifest,
 } from "../types/manifest.js";
+import { portName } from "../types/manifest.js";
 import {
   LAYER_RULES_STRICT_ENTERPRISE,
   LAYER_RULES_MICRO_FRONTEND,
@@ -58,11 +59,11 @@ function buildOwnershipBlock(manifest: Manifest): string {
     const infrastructure = bc.layers?.infrastructure;
 
     for (const p of application?.ports?.in ?? []) {
-      const name = toPascalCase(p.replace(/\.in-port\.ts$/, ""));
+      const name = toPascalCase(portName(p).replace(/\.in-port\.ts$/, ""));
       entries.push(`      ${name}: ${bc.name}`);
     }
     for (const p of application?.ports?.out ?? []) {
-      const name = toPascalCase(p.replace(/\.out-port\.ts$/, ""));
+      const name = toPascalCase(portName(p).replace(/\.out-port\.ts$/, ""));
       entries.push(`      ${name}: ${bc.name}`);
     }
     for (const a of infrastructure?.adapters ?? []) {

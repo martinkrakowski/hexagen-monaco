@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Command } from "commander";
 import { spawn } from "child_process";
 import { tmpdir } from "os";
@@ -6,7 +7,6 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import {
   getProjectRoot,
-  findProjectRoot,
   yamlService,
   spinner,
   promptService,
@@ -22,8 +22,8 @@ function getManifestPath(cwd: string): string {
   return join(cwd, ".architecture", "manifest.yaml");
 }
 
-function loadManifest(path: string): Manifest {
-  const result = yamlService.loadManifest(path);
+async function loadManifest(path: string): Promise<Manifest> {
+  const result = await yamlService.loadManifest(path);
   if (!result.success) {
     throw result.error;
   }
@@ -31,6 +31,7 @@ function loadManifest(path: string): Manifest {
 }
 
 function detectEditor(): { editor: string; args: string[] } {
+  // eslint-disable-next-line turbo/no-undeclared-env-vars
   const editor = process.env.VISUAL || process.env.EDITOR;
 
   if (editor) {
@@ -104,7 +105,7 @@ export async function editCommand(options: EditOptions = {}): Promise<void> {
 
   let manifest: Manifest;
   try {
-    manifest = loadManifest(manifestPath);
+    manifest = await loadManifest(manifestPath);
     spinner.succeed("Manifest loaded");
   } catch (err) {
     spinner.fail("Failed to load manifest");

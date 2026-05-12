@@ -8,9 +8,16 @@ export interface DomainLayer {
   };
 }
 
+export interface PortDefinition {
+  name: string;
+  owner?: string;
+}
+
+export type LegacyOrNewPort = string | PortDefinition;
+
 export interface ApplicationPorts {
-  in?: string[];
-  out?: string[];
+  in?: LegacyOrNewPort[];
+  out?: LegacyOrNewPort[];
 }
 
 export interface ApplicationLayer {

@@ -4,6 +4,24 @@ export type BoundedContextType =
   | "supporting"
   | "driver";
 
+export type RelationshipPattern = "U/D" | "ACL" | "SK" | "P" | "OHS";
+
+export type RelationshipRole = "upstream" | "downstream" | "peer";
+
+export interface AclDefinition {
+  adapter: string;
+  location?: string;
+  notes?: string;
+}
+
+export interface Relationship {
+  context: string;
+  pattern: RelationshipPattern;
+  role?: RelationshipRole;
+  acl?: AclDefinition;
+  notes?: string;
+}
+
 export interface BoundedContextGenerator {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -29,4 +47,7 @@ export interface BoundedContext {
   wiring?: string[];
   generator?: BoundedContextGenerator;
   packageJson?: Record<string, unknown>;
+  plane?: string;
+  status?: string;
+  relationships?: Relationship[];
 }

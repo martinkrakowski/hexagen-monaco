@@ -256,13 +256,20 @@ export class SyncEngine {
         lockFile = new LockFile(this.workspaceRoot);
         try {
           await lockFile.acquire();
-        } catch (lockErr) {
+        } catch (err) {
+          // Distinguish lock contention from other errors
+          if (
+            err instanceof Error &&
+            err.message.includes("Sync already in progress")
+          ) {
+            logger.error("Sync aborted: another sync is in progress");
+            throw new Error("Sync aborted: another sync is in progress");
+          }
+          // Other errors (permission, I/O, etc) should not be masked
           logger.error(
-            lockErr instanceof Error
-              ? lockErr.message
-              : "Failed to acquire lock",
+            `Lock acquire failed: ${err instanceof Error ? err.message : String(err)}`,
           );
-          throw new Error("Sync aborted: another sync is in progress");
+          throw err;
         }
       }
 

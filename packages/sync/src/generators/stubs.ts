@@ -9,6 +9,7 @@ import type {
   StubTemplates,
   StubsConfig,
 } from "../types/manifest.js";
+import { portName } from "../types/manifest.js";
 import {
   analyzePortFile,
   generateAdapterFromPort,
@@ -77,21 +78,21 @@ async function tryAnalyzeRelatedPort(
   const portType = kind === "adapter" ? "out" : "in";
   const portSubdir = `application/ports/${portType}`;
 
-  const portName = name.replace(/Adapter$|UseCase$/, "Port");
+  const derivedPortName = name.replace(/Adapter$|UseCase$/, "Port");
 
   const declaredPorts =
     portType === "in"
       ? context.layers?.application?.ports?.in || []
       : context.layers?.application?.ports?.out || [];
 
-  if (!declaredPorts.includes(portName)) {
+  if (!declaredPorts.some((p) => portName(p) === derivedPortName)) {
     return null;
   }
 
   const possibleFilenames = [
-    `${portName}.${portType}-port.ts`,
-    `${portName.toLowerCase()}.${portType}-port.ts`,
-    `${portName}.ts`,
+    `${derivedPortName}.${portType}-port.ts`,
+    `${derivedPortName.toLowerCase()}.${portType}-port.ts`,
+    `${derivedPortName}.ts`,
   ];
 
   for (const filename of possibleFilenames) {
@@ -167,7 +168,8 @@ export async function generateStubs(
           if (kind === "adapter") {
             content = generateAdapterFromPort(portAnalysis, name);
           } else {
-            const outPorts = context.layers?.application?.ports?.out || [];
+            const outPorts =
+              context.layers?.application?.ports?.out?.map(portName) || [];
             content = generateUseCaseFromPort(portAnalysis, name, outPorts);
           }
           config.logger.debug(`Generated ${kind} '${name}' from port analysis`);

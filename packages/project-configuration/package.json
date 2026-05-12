@@ -9,13 +9,11 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "source": "./src/index.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     },
     "./server": {
-      "types": "./dist/index.server.d.ts",
-      "source": "./src/index.server.ts",
-      "default": "./dist/index.server.js"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     }
   },
   "scripts": {

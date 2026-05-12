@@ -41,3 +41,47 @@ export interface GeneratorGlobalConfig {
   "failure-behavior"?: Record<InvariantPriority, FailureBehavior>;
   "ownership-registry"?: OwnershipRegistry;
 }
+
+export type PlaneType =
+  | "projection"
+  | "probabilistic"
+  | "infrastructure"
+  | "shared-kernel"
+  | "core"
+  | "supporting";
+
+export interface IndexBoundedContextEntry {
+  name: string;
+  type: string;
+  plane?: PlaneType;
+  status?: "active" | "frozen" | "deprecated" | "experimental";
+  file: string;
+  frozen_since?: string;
+}
+
+export interface IndexAppEntry {
+  name: string;
+  file?: string;
+}
+
+export interface IndexManifest {
+  version?: string;
+  system?: string;
+  scope?: string;
+  architecture?: ArchitectureType;
+  planes?: Record<string, string[]>;
+  bounded_contexts?: IndexBoundedContextEntry[];
+  apps?: IndexAppEntry[];
+  invariants?: Record<string, string>;
+  governance?: Record<string, string>;
+  agent_instructions?: Record<string, unknown>;
+  relationship_patterns?: Record<
+    string,
+    {
+      description: string;
+      acl_required?: boolean | "optional";
+      linter?: string;
+    }
+  >;
+  legacy_config?: string;
+}

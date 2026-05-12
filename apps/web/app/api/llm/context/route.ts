@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
-import yaml from "js-yaml";
+import { mergeSplitManifest } from "@hexagen/project-configuration/server";
+import { portName } from "@hexagen/sync";
+import type {
+  Manifest,
+  ManifestBoundedContext,
+} from "@hexagen/project-configuration";
 
 interface CompactBoundedContext {
   name: string;
@@ -51,7 +56,9 @@ async function findWorkspaceRoot(start: string): Promise<string | null> {
   }
 }
 
-export async function GET(): Promise<NextResponse<GovernancePayload | { error: string }>> {
+export async function GET(): Promise<
+  NextResponse<GovernancePayload | { error: string }>
+> {
   try {
     const workspaceRoot = await findWorkspaceRoot(process.cwd());
     if (!workspaceRoot) {
@@ -64,47 +71,32 @@ export async function GET(): Promise<NextResponse<GovernancePayload | { error: s
       "manifest.yaml",
     );
 
-    let manifestContent: string;
+    let manifest: Manifest;
     try {
-      manifestContent = await readFile(manifestPath, "utf-8");
+      manifest = await mergeSplitManifest(workspaceRoot, manifestPath);
     } catch {
       return NextResponse.json(createEmptyPayload(), { status: 200 });
     }
-
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = yaml.load(manifestContent) as Record<string, unknown>;
-    } catch {
-      return NextResponse.json(createEmptyPayload(), { status: 200 });
-    }
-
-    const boundedContextsArray = manifest.bounded_contexts as
-      | Array<Record<string, unknown>>
-      | undefined;
 
     const boundedContexts: CompactBoundedContext[] = (
-      boundedContextsArray || []
-    ).map((ctx) => ({
-      name: ctx.name as string,
+      manifest.bounded_contexts || []
+    ).map((ctx: ManifestBoundedContext) => ({
+      name: ctx.name,
       type: (ctx.type as CompactBoundedContext["type"]) || "supporting",
     }));
 
     const ports: PortOwnership = {};
-    for (const ctx of boundedContextsArray || []) {
-      const layers = ctx.layers as Record<string, unknown> | undefined;
-      const appLayer = layers?.application as
-        | Record<string, unknown>
-        | undefined;
-      const portConfig = appLayer?.ports as Record<string, unknown> | undefined;
+    for (const ctx of manifest.bounded_contexts || []) {
+      const appPorts = ctx.layers?.application?.ports;
 
-      const inPorts = (portConfig?.in as string[] | undefined) || [];
-      const outPorts = (portConfig?.out as string[] | undefined) || [];
+      const inPorts = [...(appPorts?.in || []).map(portName)];
+      const outPorts = [...(appPorts?.out || []).map(portName)];
 
-      for (const portName of inPorts) {
-        ports[portName] = ctx.name as string;
+      for (const portStr of inPorts) {
+        ports[portStr] = ctx.name;
       }
-      for (const portName of outPorts) {
-        ports[portName] = ctx.name as string;
+      for (const portStr of outPorts) {
+        ports[portStr] = ctx.name;
       }
     }
 
@@ -118,9 +110,9 @@ export async function GET(): Promise<NextResponse<GovernancePayload | { error: s
     ];
 
     const payload: GovernancePayload = {
-      system: (manifest.system as string) || "unknown",
-      scope: (manifest.scope as string) || "hexagen",
-      architecture: (manifest.architecture as string) || "modular-monolith",
+      system: manifest.system || "unknown",
+      scope: manifest.scope || "hexagen",
+      architecture: manifest.architecture || "modular-monolith",
       boundedContexts,
       ports,
       invariants: defaultInvariants,

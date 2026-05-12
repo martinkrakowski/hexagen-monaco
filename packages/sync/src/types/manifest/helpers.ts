@@ -1,4 +1,9 @@
 import type { BoundedContext } from "./bounded-context.js";
+import type { LegacyOrNewPort } from "./layers.js";
+
+export function portName(port: LegacyOrNewPort): string {
+  return typeof port === "string" ? port : port.name;
+}
 
 export function extractPorts(context: BoundedContext): {
   inPorts: string[];
@@ -13,8 +18,10 @@ export function extractPorts(context: BoundedContext): {
   }
 
   if (context.layers?.application?.ports) {
-    inPorts.push(...(context.layers.application.ports.in ?? []));
-    outPorts.push(...(context.layers.application.ports.out ?? []));
+    inPorts.push(...(context.layers.application.ports.in ?? []).map(portName));
+    outPorts.push(
+      ...(context.layers.application.ports.out ?? []).map(portName),
+    );
   }
 
   return { inPorts, outPorts };

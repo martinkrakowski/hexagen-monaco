@@ -1,14 +1,11 @@
+/* eslint-disable no-console */
 import { Command } from "commander";
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import type { Manifest } from "@hexagen/sync";
 import { generateManifestYaml } from "./port/persistence.js";
 import { getProjectRoot } from "../shared/project-root.js";
 import { yamlService } from "../shared/yaml-service.js";
-import {
-  promptService,
-  isValidPortName,
-  validatePortName,
-} from "../shared/index.js";
+import { promptService, isValidPortName } from "../shared/index.js";
 
 // Local interface definition (temporary until validation.ts is created)
 interface PortDefinition {
@@ -224,7 +221,7 @@ export async function portCommand(): Promise<void> {
   // Load current manifest state
   try {
     const manifestPath = `${cwd}/.architecture/manifest.yaml`;
-    const manifestResult = yamlService.loadManifest(manifestPath);
+    const manifestResult = await yamlService.loadManifest(manifestPath);
     if (!manifestResult.success) {
       console.error(
         "⚠️ Failed to parse manifest:",

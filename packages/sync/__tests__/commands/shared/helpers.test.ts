@@ -480,17 +480,16 @@ describe("YamlService", () => {
         "utf8",
       );
 
-      const result = svc.loadManifest(p);
+      const result = await svc.loadManifest(p);
       assert.equal(result.success, true);
       if (!result.success) return;
       assert.equal(result.value.system, "hexagen");
       assert.deepEqual(result.value.bounded_contexts, [{ name: "shared" }]);
     });
 
-    it("returns err(YamlLoadError) with filePath when the file does not exist", () => {
+    it("returns err(YamlLoadError) with filePath when the file does not exist", async () => {
       const p = path.join(tmpRoot, "does-not-exist.yaml");
-      const result = svc.loadManifest(p);
-
+      const result = await svc.loadManifest(p);
       assert.equal(result.success, false);
       if (result.success) return;
       assert.ok(result.error instanceof YamlLoadError);
@@ -503,7 +502,7 @@ describe("YamlService", () => {
       // Unbalanced bracket is a hard parse error in js-yaml.
       await fs.writeFile(p, "key: [oops\n", "utf8");
 
-      const result = svc.loadManifest(p);
+      const result = await svc.loadManifest(p);
       assert.equal(result.success, false);
       if (result.success) return;
       assert.ok(result.error instanceof YamlLoadError);
@@ -573,7 +572,7 @@ describe("YamlService", () => {
       const saved = svc.saveManifest(manifest, p);
       assert.equal(saved.success, true);
 
-      const loaded = svc.loadManifest(p);
+      const loaded = await svc.loadManifest(p);
       assert.equal(loaded.success, true);
       if (!loaded.success) return;
       assert.equal(loaded.value.system, "hexagen");
