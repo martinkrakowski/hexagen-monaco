@@ -5,6 +5,10 @@ import { Project } from "ts-morph";
 import * as yaml from "js-yaml";
 import path from "node:path";
 import { createConsoleLogger } from "./logger.js";
+// Manifest validation uses the schema from @hexagen/project-configuration
+// (packages/project-configuration/src/domain/model/manifest-schema/manifest-schema.ts)
+// via mergeSplitManifest(). Do not add a local schema to this package —
+// the authoritative schema lives with the domain that owns the manifest.
 import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
 

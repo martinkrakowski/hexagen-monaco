@@ -22,15 +22,16 @@ Any `@hexagen/*` package may declare `/server` and/or `/client` subpath exports 
 - `/client` — Client-safe code. Zero Node.js built-in imports. Safe for browser/Next.js client bundles.
 - Default barrel (`.`) — Equivalent to `/client` for packages that don't need the split. Client-safe by default.
 
-Packages allowed to consume `/server` subpaths (explicit enumeration):
+Packages and tools allowed to consume `/server` subpaths (explicit enumeration):
 
-| Package              | Justification                                             |
-| -------------------- | --------------------------------------------------------- |
-| `sync`               | CLI tool, server-only by nature (`plane: infrastructure`) |
-| `mcp-server`         | MCP server, no client bundle                              |
-| `tui`                | Terminal UI, runs in Node.js                              |
-| `api-gateway`        | Fastify server, no client bundle                          |
-| `project-generation` | Code generation, runs in Node.js                          |
+| Package / Tool       | Justification                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sync`               | CLI tool, server-only by nature (`plane: infrastructure`)                                                                                                   |
+| `mcp-server`         | MCP server, no client bundle                                                                                                                                |
+| `tui`                | Terminal UI, runs in Node.js                                                                                                                                |
+| `api-gateway`        | Fastify server, no client bundle                                                                                                                            |
+| `project-generation` | Code generation, runs in Node.js                                                                                                                            |
+| `tools/arch-linter`  | CLI tool in `tools/`, not subject to ESLint cross-package rules, but governed by this convention. Imports `@hexagen/project-configuration/server` directly. |
 
 Packages **prohibited** from `/server` subpaths:
 
@@ -101,6 +102,8 @@ packages/foo/src/
   }
 }
 ```
+
+`require` is intentionally omitted. All packages in this monorepo declare `"type": "module"`. CommonJS interop is not supported.
 
 ### `@hexagen-server-only` marker
 

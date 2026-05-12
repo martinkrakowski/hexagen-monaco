@@ -6,11 +6,12 @@
 subpath_conventions:
   server:
     allowed_consumers:
-      - sync
-      - mcp-server
-      - tui
-      - api-gateway
-      - project-generation
+    - sync
+    - mcp-server
+    - tui
+    - api-gateway
+    - project-generation
+    - arch-linter
     enforcement: error
   client:
     allowed_consumers: []
