@@ -137,7 +137,8 @@ export async function safeWriteFileAtomic(
   }
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp.${Date.now()}`;
+  const tmpName = `.${path.basename(filePath)}.${crypto.randomUUID()}.tmp`;
+  const tmpPath = path.join(path.dirname(filePath), tmpName);
   await fs.writeFile(tmpPath, content, { encoding: "utf8" });
   try {
     await fs.rename(tmpPath, filePath);

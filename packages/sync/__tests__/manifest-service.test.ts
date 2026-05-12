@@ -11,6 +11,7 @@ import {
 import type { Manifest } from "../src/types/manifest.js";
 
 const validManifestYaml = `
+description: "HexaGen Monorepo"
 system: hexagen-monaco
 scope: hexagen
 architecture: modular-monolith
@@ -101,6 +102,7 @@ describe("manifest service", () => {
       validManifestYaml,
       async (_workspaceRoot, tempDir) => {
         const writeResult = await saveManifest(tempDir, {
+          description: "Test manifest",
           system: "test-system",
           bounded_contexts: [],
         } as Manifest);

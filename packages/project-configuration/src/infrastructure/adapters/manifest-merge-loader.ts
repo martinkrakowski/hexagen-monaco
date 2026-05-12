@@ -102,7 +102,12 @@ export async function mergeSplitManifest(
   }
 
   if (!isIndexManifest(parsed)) {
-    const validated = ManifestSchema.parse(parsed);
+    const manifestData = {
+      ...parsed,
+      description:
+        (parsed as Manifest).description ?? "Auto-generated manifest",
+    };
+    const validated = ManifestSchema.parse(manifestData);
     return validated as Manifest;
   }
 
@@ -115,7 +120,7 @@ export async function mergeSplitManifest(
 
   const index = indexResult.data as IndexManifest;
   const result: Manifest = {
-    description: index.description,
+    description: index.description ?? "Auto-generated manifest",
     system: index.system,
     scope: index.scope,
     architecture: index.architecture as Manifest["architecture"],

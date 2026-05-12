@@ -70,7 +70,7 @@ export async function loadManifest(
       dryRun
     ) {
       logger.warn(`Manifest not found — using empty for dry-run`);
-      return { bounded_contexts: [] };
+      return { description: "Empty manifest", bounded_contexts: [] };
     }
     const message = err instanceof Error ? err.message : "Unknown parse error";
     throw new Error(`Failed to parse manifest: ${message}`);

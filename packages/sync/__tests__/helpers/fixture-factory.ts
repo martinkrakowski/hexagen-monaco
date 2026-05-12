@@ -91,6 +91,7 @@ export function makeValidManifest(
   contexts: Manifest["bounded_contexts"],
 ): Manifest {
   return {
+    description: "Test manifest",
     workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
     generator: {
       sync: {
