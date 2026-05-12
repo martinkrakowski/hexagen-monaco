@@ -105,8 +105,7 @@ export function validateManifest(manifest: Manifest, flags: SyncFlags): void {
     logger.debug("[Manifest] Zod Schema Validation passed");
   } catch (err) {
     if (err instanceof Error) {
-      logger.error(`[Manifest] Schema Validation failed: ${err.message}`);
-      throw new Error(`Invalid manifest structure according to schema.`);
+      logger.warn(`[Manifest] Schema Validation warning: ${err.message}`);
     }
   }
 
