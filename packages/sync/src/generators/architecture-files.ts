@@ -60,11 +60,11 @@ function buildOwnershipBlock(manifest: Manifest): string {
 
     for (const p of application?.ports?.in ?? []) {
       const name = toPascalCase(portName(p).replace(/\.in-port\.ts$/, ""));
-      entries.push(` ${name}: ${bc.name}`);
+      entries.push(`      ${name}: ${bc.name}`);
     }
     for (const p of application?.ports?.out ?? []) {
       const name = toPascalCase(portName(p).replace(/\.out-port\.ts$/, ""));
-      entries.push(` ${name}: ${bc.name}`);
+      entries.push(`      ${name}: ${bc.name}`);
     }
     for (const a of infrastructure?.adapters ?? []) {
       const name = toPascalCase(a.replace(/\.adapter\.ts$/, ""));

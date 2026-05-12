@@ -487,7 +487,7 @@ describe("YamlService", () => {
       assert.deepEqual(result.value.bounded_contexts, [{ name: "shared" }]);
     });
 
-    it("returns err(YamlLoadError) with filePath when the file does not exist", () => {
+    it("returns err(YamlLoadError) with filePath when the file does not exist", async () => {
       const p = path.join(tmpRoot, "does-not-exist.yaml");
       const result = await svc.loadManifest(p);
       assert.equal(result.success, false);

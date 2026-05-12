@@ -70,10 +70,10 @@ export const LayerTypeSchema = z.enum([
 
 export const BoundedContextSchema = z.object({
   name: z.string(),
-  type: BoundedContextTypeSchema,
+  type: BoundedContextTypeSchema.optional(),
   plane: PlaneTypeSchema.optional(),
   status: StatusTypeSchema.optional(),
-  description: z.string(),
+  description: z.string().optional(),
   relationships: z.array(RelationshipSchema).optional(),
   layers: z.object({
     domain: z
@@ -114,7 +114,7 @@ export const IndexManifestSchema = z.object({
     .array(
       z.object({
         name: z.string(),
-        type: BoundedContextTypeSchema,
+        type: BoundedContextTypeSchema.optional(),
         plane: PlaneTypeSchema.optional(),
         status: StatusTypeSchema.optional(),
         file: z.string(),
