@@ -1,0 +1,18 @@
+name: llm-driver
+type: driver
+description: LLM driver abstraction for cloud and local LLM providers
+layers:
+  domain: {}
+  application:
+    use_cases: []
+    ports:
+      in: []
+      out:
+        - CloudKeyRetrievalPort
+  infrastructure:
+    adapters: []
+depends_on:
+  - local-llm
+  - byok
+  - agentic-interaction
+plane: core

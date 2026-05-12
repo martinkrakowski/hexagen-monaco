@@ -106,46 +106,66 @@ export const BoundedContextSchema = z.object({
   generator: z.record(z.unknown()).optional(),
 });
 
-export const IndexManifestSchema = z.object({
-  version: z.string().optional(),
-  system: z.string().optional(),
-  scope: z.string().optional(),
-  architecture: z.string().optional(),
-  planes: z.record(z.array(z.string())).optional(),
-  bounded_contexts: z
-    .array(
-      z.object({
-        name: z.string(),
-        type: BoundedContextTypeSchema.optional(),
-        plane: PlaneTypeSchema.optional(),
-        status: StatusTypeSchema.optional(),
-        file: z.string(),
-        frozen_since: z.string().optional(),
-      }),
-    )
-    .optional(),
-  apps: z
-    .array(
-      z.object({
-        name: z.string(),
-        file: z.string().optional(),
-      }),
-    )
-    .optional(),
-  invariants: z.record(z.string()).optional(),
-  governance: z.record(z.string()).optional(),
-  agent_instructions: z.record(z.unknown()).optional(),
-  relationship_patterns: z
-    .record(
-      z.object({
-        description: z.string(),
-        acl_required: z.union([z.boolean(), z.literal("optional")]).optional(),
-        linter: z.string().optional(),
-      }),
-    )
-    .optional(),
-  legacy_config: z.string().optional(),
-});
+export const IndexManifestSchema = z
+  .object({
+    version: z.string().optional(),
+    system: z.string().optional(),
+    scope: z.string().optional(),
+    architecture: z.string().optional(),
+    planes: z.record(z.array(z.string())).optional(),
+    bounded_contexts: z
+      .array(
+        z.object({
+          name: z.string(),
+          type: BoundedContextTypeSchema.optional(),
+          plane: PlaneTypeSchema.optional(),
+          status: StatusTypeSchema.optional(),
+          file: z.string(),
+          frozen_since: z.string().optional(),
+        }),
+      )
+      .optional(),
+    apps: z
+      .array(
+        z.object({
+          name: z.string(),
+          file: z.string().optional(),
+        }),
+      )
+      .optional(),
+    invariants: z.record(z.string()).optional(),
+    governance: z.record(z.string()).optional(),
+    agent_instructions: z.record(z.unknown()).optional(),
+    relationship_patterns: z
+      .record(
+        z.object({
+          description: z.string(),
+          acl_required: z
+            .union([z.boolean(), z.literal("optional")])
+            .optional(),
+          linter: z.string().optional(),
+        }),
+      )
+      .optional(),
+    mvk: z.record(z.unknown()).optional(),
+    workspace_config: z.string().optional(),
+    legacy_config: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      const contexts = data.bounded_contexts ?? [];
+      return contexts.every((ctx) => {
+        if (ctx.plane && ctx.file) {
+          return ctx.file.startsWith(`contexts/${ctx.plane}/`);
+        }
+        return true;
+      });
+    },
+    {
+      message: "Context plane does not match file path subdirectory",
+      path: ["bounded_contexts"],
+    },
+  );
 
 export const ManifestSchema = z
   .object({

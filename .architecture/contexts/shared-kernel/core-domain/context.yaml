@@ -1,0 +1,26 @@
+name: core-domain
+type: core
+description: Semantic kernel — MVK contracts, domain AST, governance AST, topology and cardinality invariants
+layers:
+  domain:
+    entities:
+      - DomainAST
+      - DomainNode
+      - DomainEdge
+    value_objects:
+      - NodeKind
+      - EdgeKind
+      - TopologyInvariants
+      - CardinalityInvariants
+      - IntentLineage
+      - RRP
+      - REM
+      - NodeVisualSpec
+      - DomainCommand
+  application:
+    ports:
+      in: []
+      out: []
+  infrastructure:
+    adapters: []
+plane: shared-kernel

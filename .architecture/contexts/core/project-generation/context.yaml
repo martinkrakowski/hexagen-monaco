@@ -1,0 +1,17 @@
+name: project-generation
+type: core
+description: Project scaffolding engine — generates full project structure from specification
+layers:
+  domain:
+    value_objects:
+      - ProjectSpecification
+      - ExportIntent
+  application:
+    use_cases:
+      - GenerateProjectUseCase
+      - InitiateExportUseCase
+  infrastructure:
+    adapters:
+      - ExternalSyncEngineAdapter
+      - JsZipCreatorAdapter
+plane: core

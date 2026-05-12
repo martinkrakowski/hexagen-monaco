@@ -1,0 +1,26 @@
+name: sync
+type: core
+description: SyncEngine — idempotent regeneration, structured reporting, aggregation of generator results
+layers:
+  domain:
+    entities:
+      - GeneratorResult
+      - SyncReport
+  application:
+    use_cases:
+      - GetArchitectureGraphUseCase
+      - GetLinterReportUseCase
+      - GetManifestResourceUseCase
+    ports:
+      in:
+        - GeneratorPort
+  infrastructure:
+    adapters:
+      - FileSystemGeneratorAdapter
+      - ArchLinterAdapter
+depends_on:
+  - shared
+  - project-configuration
+  - visualization
+  - governance
+plane: infrastructure

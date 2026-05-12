@@ -1,0 +1,40 @@
+name: agentic-interaction
+type: supporting
+description: Assistant integration — ports for LLM providers, suggestion engine, cloud chat, and architecture modification pipeline orchestration (Phase 5)
+layers:
+  domain:
+    value_objects:
+      - Suggestion
+      - ConfidenceScore
+      - CloudProviderEndpoint
+      - ProviderFallbackChain
+  application:
+    use_cases:
+      - ModifyArchitectureUseCase
+      - GenerateSuggestionUseCase
+      - SecureChatDispatchUseCase
+    ports:
+      in:
+        - ArchitectureModificationPort
+      out:
+        - LLMProviderPort
+        - SuggestionEnginePort
+        - CloudLLMProviderPort
+        - SecretVaultPort
+  infrastructure:
+    adapters:
+      - OpenAICompatibleAdapter
+      - CloudLLMPipelineAdapter
+      - InMemoryNLParserAdapter
+      - InMemoryPromptCompilerAdapter
+      - InMemoryLLMSenderAdapter
+      - InMemoryReconciliationAdapter
+      - InMemoryManifestMutationAdapter
+      - InMemoryLintValidationAdapter
+depends_on:
+  - local-llm
+  - ai-pipeline
+  - prompt-compiler
+  - reconciliation-engine
+  - transaction-system
+plane: probabilistic

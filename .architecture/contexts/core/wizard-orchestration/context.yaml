@@ -1,0 +1,34 @@
+name: wizard-orchestration
+type: core
+description: Deterministic wizard flows, intent processing, state projections
+layers:
+  domain:
+    entities:
+      - WizardSession
+    value_objects:
+      - WizardStep
+      - IntentPayload
+      - ProjectionViewModel
+      - ActiveWorkspace
+  application:
+    use_cases:
+      - ProcessIntentUseCase
+      - ProjectWizardStateUseCase
+      - ValidateStepUseCase
+    ports:
+      in:
+        - ProcessIntentPort
+        - ProjectWizardStatePort
+        - ValidateStepPort
+        - IProjectWizardController
+        - QueryActiveWorkspacePort
+        - SetActiveWorkspacePort
+        - ClearActiveWorkspacePort
+      out:
+        - WizardPersistencePort
+        - WizardTelemetryPort
+        - MonacoSyncPort
+        - WizardCompletionSignalPort
+depends_on:
+  - messaging
+plane: core

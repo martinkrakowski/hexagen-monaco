@@ -1,0 +1,42 @@
+name: prompt-compiler
+type: core
+description: Prompt compilation — builds contextual prompts from ProjectSpec, ArchitectureGraph, LinterReport, and user intent for LLM consumption. Enforces ACL by producing schema-validated prompts that are the only legal input to LLM inference.
+layers:
+  domain:
+    value_objects:
+      - PromptTemplate
+      - PromptVariable
+      - PromptContext
+      - SystemInstruction
+      - StructuredOutputSchema
+      - PromptCacheKey
+      - GovernanceQuestionTemplates
+      - WizardContextSerializer
+  application:
+    use_cases:
+      - CompilePromptUseCase
+      - RenderPromptUseCase
+      - CachePromptUseCase
+    ports:
+      in:
+        - PromptCompilerPort
+        - BuildSystemInstructionPort
+        - GenerateZodSchemaPort
+        - CachePromptPort
+      out:
+        - PromptCachePort
+  infrastructure:
+    adapters:
+      - DefaultPromptCompilerAdapter
+      - GroundedPromptBuilderAdapter
+      - RRPSystemInstructionBuilderAdapter
+      - RRPZodSchemaGeneratorAdapter
+      - InMemoryPromptCacheAdapter
+      - WizardContextSerializerAdapter
+depends_on:
+  - core-domain
+  - shared
+  - project-configuration
+  - visualization
+  - governance
+plane: core

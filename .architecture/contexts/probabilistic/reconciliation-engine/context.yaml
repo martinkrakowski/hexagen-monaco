@@ -1,0 +1,32 @@
+name: reconciliation-engine
+type: core
+description: 'Reconciliation Engine — compares StructuredLLMOutput with ProjectSpec to produce patches for bounded context and architecture graph changes. Phase 3: Unfrozen with concrete adapters for structured diff reconciliation, verdict comparison, monotonic state promotion, governance-aware conflict resolution, and ManifestPatchPort (outbound).'
+layers:
+  domain:
+    value_objects:
+      - LLMResponse
+      - StructuredLLMOutput
+      - ReconciliationResult
+      - Patch
+      - Verdict
+      - ReconciliationState
+  application:
+    use_cases:
+      - CompareVerdictsUseCase
+      - PromoteStateUseCase
+      - ResolveConflictUseCase
+      - ReconcileUseCase
+    ports:
+      in:
+        - ReconciliationPort
+        - CompareVerdictsPort
+        - PromoteStatePort
+        - ResolveConflictPort
+        - LintFilterPort
+      out:
+        - ManifestPatchPort
+depends_on:
+  - core-domain
+  - governance
+  - shared
+plane: probabilistic

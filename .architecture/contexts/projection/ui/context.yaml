@@ -1,0 +1,8 @@
+name: ui
+type: supporting
+description: Projection layer — UI atoms, tokens, controllers isolated from semantic state via 3-layer information firewall
+layers:
+  domain: {}
+  infrastructure:
+    adapters: []
+plane: projection

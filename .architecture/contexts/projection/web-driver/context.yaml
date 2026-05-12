@@ -1,0 +1,29 @@
+name: web-driver
+type: driver
+description: Next.js frontend — Intent Bus, projections, Monaco wrapper, agentic UI
+layers:
+  domain:
+    entities:
+      - Project
+      - MonacoSessionState
+  application:
+    use_cases:
+      - ProjectViewProjectionUseCase
+      - PersistSessionIntentHandler
+  infrastructure:
+    adapters:
+      - LocalStoragePersistenceAdapter
+      - LocalStorageCanvasLayoutAdapter
+      - ArchitectureGraphProviderAdapter
+      - LocalStorageByokStoreAdapter
+depends_on:
+  - agentic-interaction
+  - monaco-orchestration
+  - visualization
+  - wizard-orchestration
+  - byok
+wiring:
+  - Intent Bus dispatches to projections/use-case factories only
+  - MonacoPersistencePort is owned by monaco-orchestration and implemented here by LocalStoragePersistenceAdapter
+  - ArchitectureGraphProviderPort is owned by visualization and implemented here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
+plane: projection

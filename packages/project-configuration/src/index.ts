@@ -52,6 +52,8 @@ export type {
   App,
 } from "./domain/model/manifest-schema/manifest-schema";
 export { AppSchema } from "./domain/model/manifest-schema/manifest-schema";
+export { WorkspaceConfigSchema } from "./domain/model/workspace-config/workspace-config.schema";
+export type { WorkspaceConfig } from "./domain/model/workspace-config/workspace-config.schema";
 export { isIndexManifest } from "./domain/model/manifest-schema/index.js";
 // Re-export manifest-diff utilities
 export type {

@@ -1,0 +1,20 @@
+name: web
+driver: next.js
+framework: next.js
+version: 16.x
+description: Frontend application — wizard, monaco editor, agentic UI, visualization canvas
+depends_on:
+  - shared
+  - project-configuration
+  - wizard-orchestration
+  - monaco-orchestration
+  - visualization
+  - sync
+  - agentic-interaction
+  - local-llm
+  - messaging
+  - model-settings
+  - project-generation
+  - prompt-compiler
+  - ui-projection-compiler
+  - web-driver

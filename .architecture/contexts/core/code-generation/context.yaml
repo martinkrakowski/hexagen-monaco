@@ -1,0 +1,9 @@
+name: code-generation
+type: supporting
+status: frozen
+description: Code generation tooling — frozen as of 2026-04-25. Code generation integrated into @hexagen/sync and @hexagen/project-generation.
+layers:
+  domain: {}
+  application: {}
+  infrastructure: {}
+plane: core

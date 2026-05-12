@@ -1,0 +1,33 @@
+name: project-configuration
+type: core
+description: Governance core — manifest parsing, validation, project topology
+layers:
+  domain:
+    entities:
+      - ProjectSpec
+      - BoundedContext
+      - Entity
+      - ValueObject
+      - Port
+      - UseCase
+      - Adapter
+      - Driver
+    value_objects: []
+  application:
+    use_cases:
+      - GenerateProjectUseCase
+      - ValidateSpecUseCase
+      - RenderManifestUseCase
+    ports:
+      in:
+        - ValidateSpecPort
+        - RenderManifestPort
+        - TelemetryPort
+        - GenerateProjectPort
+        - LoggerPort
+      out:
+        - ProjectGeneratorPort
+        - DownloadProviderPort
+  infrastructure:
+    adapters: []
+plane: core
