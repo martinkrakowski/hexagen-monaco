@@ -9,14 +9,22 @@ import type { IndexManifest, PlaneType } from "@hexagen/project-configuration";
 import type { App } from "../../types/manifest/apps.js";
 import { buildPlaneLookup, extractContextData } from "./split-utils.js";
 
-function flattenStringArray(val: unknown): unknown[] {
-  if (!Array.isArray(val)) return val as unknown[];
-  const result: unknown[] = [];
+function flattenStringArray(val: unknown): string[] {
+  if (!Array.isArray(val)) {
+    throw new TypeError(
+      `Expected array for adapter list, got "${typeof val}": ${JSON.stringify(val)}`,
+    );
+  }
+  const result: string[] = [];
   for (const item of val) {
     if (typeof item === "string") {
       result.push(item);
     } else if (Array.isArray(item)) {
       result.push(...flattenStringArray(item));
+    } else {
+      throw new TypeError(
+        `Invalid adapter entry type "${typeof item}" in layers.infrastructure.adapters, value: ${JSON.stringify(item)}`,
+      );
     }
   }
   return result;
