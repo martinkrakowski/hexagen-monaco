@@ -1,6 +1,13 @@
+export interface MarkerExclusion {
+  package: string;
+  reason: string;
+}
+
 export interface SubpathConvention {
   allowed_consumers: string[];
   enforcement: "error" | "warn";
+  require_marker?: boolean;
+  marker_exclusions?: MarkerExclusion[];
 }
 
 export interface SubpathConventionConfig {
