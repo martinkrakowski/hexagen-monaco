@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm/shared";
+import type { DomainModelId } from "@hexagen/local-llm/client";
 import type { GenerateWithAiScreenState } from "../../domain/services/model-selection-state-machine";
 import type { ModelPreferencesPort } from "../ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../ports/out/model-verification.port";

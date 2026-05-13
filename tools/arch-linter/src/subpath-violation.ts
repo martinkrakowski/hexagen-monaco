@@ -38,7 +38,7 @@ export function isSubpathViolation(
   const conventions = config.subpath_conventions;
   if (!conventions) return null;
 
-  // TODO: DEBT-001 — remove this bypass when @hexagen/local-llm/shared is normalized to /client
+  // TODO: DEBT-001 — remove this bypass when @hexagen/local-llm/client is normalized to /client
   if (moduleSpecifier === `${scope}/local-llm/shared`) return null;
 
   const escapedScope = escapeRegExp(scope);

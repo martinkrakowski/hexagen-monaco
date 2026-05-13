@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm/shared";
+import type { DomainModelId } from "@hexagen/local-llm/client";
 
 export type GenerateWithAiScreenState =
   | "idle"
