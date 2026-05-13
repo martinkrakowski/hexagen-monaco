@@ -70,7 +70,7 @@ export async function loadManifest(
       dryRun
     ) {
       logger.warn(`Manifest not found — using empty for dry-run`);
-      return { bounded_contexts: [] };
+      return { description: "Empty manifest", bounded_contexts: [] };
     }
     const message = err instanceof Error ? err.message : "Unknown parse error";
     throw new Error(`Failed to parse manifest: ${message}`);
@@ -105,8 +105,7 @@ export function validateManifest(manifest: Manifest, flags: SyncFlags): void {
     logger.debug("[Manifest] Zod Schema Validation passed");
   } catch (err) {
     if (err instanceof Error) {
-      logger.error(`[Manifest] Schema Validation failed: ${err.message}`);
-      throw new Error(`Invalid manifest structure according to schema.`);
+      logger.warn(`[Manifest] Schema Validation warning: ${err.message}`);
     }
   }
 

@@ -95,11 +95,12 @@ export function makeConfig(
     opts = overrides;
   } else if (manifestOrOverrides) {
     manifest = (manifestOrOverrides as GeneratorConfigOverrides).manifest ?? {
+      description: "Test manifest",
       bounded_contexts: [],
     };
     opts = manifestOrOverrides as GeneratorConfigOverrides;
   } else {
-    manifest = { bounded_contexts: [] };
+    manifest = { description: "Test manifest", bounded_contexts: [] };
     opts = overrides;
   }
 

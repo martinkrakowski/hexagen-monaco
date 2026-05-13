@@ -190,6 +190,7 @@ describe("SyncEngine end-to-end external scaffold", () => {
     // framework templates for all three built-ins.
     // -------------------------------------------------------------------
     const manifest: Manifest = {
+      description: "Test manifest",
       system: "scaffold-demo",
       scope: "scaffold-demo",
       architecture: "modular-monolith",

@@ -7,34 +7,11 @@ import { findWorkspaceRoot } from "../../sync-engine-init.js";
 import { ManifestSchema } from "@hexagen/project-configuration";
 import type { IndexManifest, PlaneType } from "@hexagen/project-configuration";
 import type { App } from "../../types/manifest/apps.js";
-import { buildPlaneLookup, extractContextData } from "./split-utils.js";
-
-function flattenStringArray(val: unknown): unknown[] {
-  if (!Array.isArray(val)) return val as unknown[];
-  const result: unknown[] = [];
-  for (const item of val) {
-    if (typeof item === "string") {
-      result.push(item);
-    } else if (Array.isArray(item)) {
-      result.push(...flattenStringArray(item));
-    }
-  }
-  return result;
-}
-
-function normalizeContextData(
-  ctx: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...ctx };
-  const layers = out.layers as Record<string, unknown> | undefined;
-  if (layers) {
-    const infra = layers.infrastructure as Record<string, unknown> | undefined;
-    if (infra && Array.isArray(infra.adapters)) {
-      infra.adapters = flattenStringArray(infra.adapters);
-    }
-  }
-  return out;
-}
+import {
+  buildPlaneLookup,
+  extractContextData,
+  normalizeContextData,
+} from "./split-utils.js";
 
 const RELATIONSHIP_PATTERNS: IndexManifest["relationship_patterns"] = {
   "U/D": {
@@ -146,6 +123,7 @@ export const manifestSplitCommander = new Command("split")
 
       const indexManifest: IndexManifest = {
         version: "2.0",
+        description: manifest.description ?? "Auto-generated manifest",
         system: manifest.system,
         scope: manifest.scope,
         architecture: rawYaml.architecture as string | undefined,

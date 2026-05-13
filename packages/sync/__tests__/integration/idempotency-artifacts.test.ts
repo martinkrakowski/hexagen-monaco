@@ -28,6 +28,7 @@ describe("SyncEngine idempotency — expected artifacts", () => {
     );
 
     const manifest: Manifest = {
+      description: "Test manifest",
       workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
       generator: {
         sync: {
@@ -72,8 +73,8 @@ describe("SyncEngine idempotency — expected artifacts", () => {
       ["alpha", "shared"],
       "hexagen-sync-idempotency-",
     );
-
     const manifest: Manifest = {
+      description: "Test manifest",
       workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
       generator: {
         sync: {

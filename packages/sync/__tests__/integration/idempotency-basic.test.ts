@@ -29,6 +29,7 @@ describe("SyncEngine idempotency (ADR-0024 Phase 1.5)", () => {
     );
 
     const manifest: Manifest = {
+      description: "Test manifest",
       workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
       generator: {
         sync: {
@@ -71,6 +72,7 @@ describe("SyncEngine idempotency (ADR-0024 Phase 1.5)", () => {
     );
 
     const manifest: Manifest = {
+      description: "Test manifest",
       workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
       generator: {
         sync: {
