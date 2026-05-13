@@ -14,6 +14,10 @@ import type { Manifest } from "../../../src/domain/model/manifest-schema/manifes
 
 const FIELDS_EXTRACTED_TO_WORKSPACE_CONFIG = ["monorepo", "generator"] as const;
 
+// NOTE: flattenStringArray and normalizeContextData are duplicated from
+// packages/sync/src/commands/manifest/split-utils.ts to maintain test
+// independence. If these utilities grow, extract to a shared module.
+
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = path.join(
   TEST_DIR,

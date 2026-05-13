@@ -27,6 +27,7 @@ describe("SyncEngine idempotency — stubs, rootFiles, apps", () => {
     fixtureRoot = await createFixture(["orders"], "hexagen-sync-idempotency-");
 
     const manifest: Manifest = {
+      description: "Test manifest",
       workspaceDefaults: { tsConfig: WORKSPACE_TSCONFIG },
       generator: {
         sync: {
@@ -100,6 +101,7 @@ describe("SyncEngine idempotency — stubs, rootFiles, apps", () => {
     fixtureRoot = await createEmptyFixture();
 
     const manifest: Manifest = {
+      description: "Test manifest",
       system: "idempotent-fixture",
       scope: "idempotent-fixture",
       monorepo: {
@@ -180,6 +182,7 @@ describe("SyncEngine idempotency — stubs, rootFiles, apps", () => {
     fixtureRoot = await createEmptyFixture();
 
     const manifest: Manifest = {
+      description: "Test manifest",
       system: "apps-fixture",
       scope: "apps-fixture",
       monorepo: {

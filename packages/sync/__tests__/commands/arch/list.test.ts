@@ -6,6 +6,7 @@ import path from "node:path";
 import { listCommand } from "../../../src/commands/arch/list.js";
 
 const validManifestYaml = `
+description: "HexaGen Monorepo"
 system: hexagen-monaco
 scope: hexagen
 architecture: modular-monolith
@@ -32,6 +33,7 @@ apps:
 `;
 
 const emptyManifestYaml = `
+description: "Empty manifest"
 system: test
 bounded_contexts: []
 apps: []

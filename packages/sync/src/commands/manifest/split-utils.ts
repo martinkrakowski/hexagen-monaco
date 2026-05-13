@@ -1,3 +1,5 @@
+type RawRecord = Record<string, unknown>;
+
 const INDEX_FIELDS = new Set([
   "system",
   "scope",
@@ -6,21 +8,21 @@ const INDEX_FIELDS = new Set([
   "bounded_contexts",
   "apps",
   "invariants",
-  "agent_instructions",
   "governance",
+  "agent_instructions",
   "relationship_patterns",
   "monorepo",
   "workspaceDefaults",
   "rootFiles",
   "tsConfigRoot",
   "eslint",
-  "archInvariants",
-  "linterConfig",
   "generatorConfig",
   "turboConfig",
   "mvk",
-  "workspace_config",
   "legacy_config",
+  "workspace_config",
+  "archInvariants",
+  "linterConfig",
 ]);
 
 export function buildPlaneLookup(
@@ -46,6 +48,47 @@ export function extractContextData(
     }
   }
   return result;
+}
+
+export function flattenStringArray(val: unknown): string[] {
+  if (!Array.isArray(val)) {
+    throw new TypeError(
+      `Expected array for adapter list, got "${typeof val}": ${JSON.stringify(val)}`,
+    );
+  }
+  const result: string[] = [];
+  for (const item of val) {
+    if (typeof item === "string") {
+      result.push(item);
+    } else if (Array.isArray(item)) {
+      result.push(...flattenStringArray(item));
+    } else {
+      throw new TypeError(
+        `Invalid adapter entry type "${typeof item}" in layers.infrastructure.adapters, value: ${JSON.stringify(item)}`,
+      );
+    }
+  }
+  return result;
+}
+
+export function normalizeContextData(ctx: RawRecord): RawRecord {
+  const out: RawRecord = { ...ctx };
+  const layers = out.layers as RawRecord | undefined;
+  if (layers) {
+    const infra = layers.infrastructure as RawRecord | undefined;
+    if (infra && Array.isArray(infra.adapters)) {
+      const newInfra: RawRecord = {
+        ...infra,
+        adapters: flattenStringArray(infra.adapters),
+      };
+      const newLayers: RawRecord = {
+        ...layers,
+        infrastructure: newInfra,
+      };
+      out.layers = newLayers;
+    }
+  }
+  return out;
 }
 
 export { INDEX_FIELDS };

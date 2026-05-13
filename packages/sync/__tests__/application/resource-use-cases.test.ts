@@ -13,6 +13,7 @@ import type { ProjectConfigurationReadPort } from "../../src/application/ports/o
 describe("resource use cases", () => {
   it("should return manifest data", async () => {
     const manifestPayload = {
+      description: "Test manifest",
       bounded_contexts: [
         {
           name: "sync",
