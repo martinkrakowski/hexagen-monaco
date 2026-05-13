@@ -21,6 +21,8 @@ const INDEX_FIELDS = new Set([
   "mvk",
   "legacy_config",
   "workspace_config",
+  "archInvariants",
+  "linterConfig",
 ]);
 
 export function buildPlaneLookup(
