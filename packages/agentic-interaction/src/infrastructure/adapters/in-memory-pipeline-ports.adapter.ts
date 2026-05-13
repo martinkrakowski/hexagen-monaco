@@ -16,8 +16,8 @@ import type {
   LLMRequest,
   LLMResponse,
   DomainModelId,
-} from "@hexagen/local-llm/shared";
-import { createLLMResponse } from "@hexagen/local-llm/shared";
+} from "@hexagen/local-llm/client";
+import { createLLMResponse } from "@hexagen/local-llm/client";
 import type {
   ReconciliationPort,
   ReconcileRequest,

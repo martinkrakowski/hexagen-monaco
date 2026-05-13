@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm/shared";
+import type { DomainModelId } from "@hexagen/local-llm/client";
 
 export interface ModelVerificationPort {
   isModelVerified(modelId: DomainModelId, maxAgeHours?: number): boolean;

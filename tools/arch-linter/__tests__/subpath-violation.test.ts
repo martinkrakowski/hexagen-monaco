@@ -53,7 +53,7 @@ describe("isSubpathViolation", () => {
   it("returns null for legacy local-llm/shared bypass (DEBT-001)", () => {
     const result = isSubpathViolation(
       "agentic-interaction",
-      "@hexagen/local-llm/shared",
+      "@hexagen/local-llm/client",
       SCOPE,
       FULL_CONFIG,
     );

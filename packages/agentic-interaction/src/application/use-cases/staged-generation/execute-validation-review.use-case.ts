@@ -1,6 +1,6 @@
 import { ok, err } from "@hexagen/shared";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
-import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/shared";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
 import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,

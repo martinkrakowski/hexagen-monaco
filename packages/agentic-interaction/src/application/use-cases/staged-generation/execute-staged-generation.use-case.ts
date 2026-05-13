@@ -1,4 +1,4 @@
-import type { SendStructuredRequestPort } from "@hexagen/local-llm/shared";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type {
   PipelineState,
   ValidationReport,

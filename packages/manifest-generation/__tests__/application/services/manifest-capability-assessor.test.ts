@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { assessModelCapability } from "../../../src/application/services/manifest-capability-assessor.service";
-import { DomainModelId } from "@hexagen/local-llm/shared";
+import { DomainModelId } from "@hexagen/local-llm/client";
 
 describe("assessModelCapability", () => {
   it("returns capable when no model is loaded", () => {

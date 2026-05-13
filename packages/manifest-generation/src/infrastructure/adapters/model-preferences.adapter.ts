@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm/shared";
+import type { DomainModelId } from "@hexagen/local-llm/client";
 import { MODEL_PREFERENCE_KEYS } from "@hexagen/shared";
 import type { ModelPreferencesPort } from "../../application/ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../../application/ports/out/model-verification.port";

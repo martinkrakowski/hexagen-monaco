@@ -1,5 +1,5 @@
-import { isManifestCapableModel } from "@hexagen/local-llm/shared";
-import type { DomainModelId } from "@hexagen/local-llm/shared";
+import { isManifestCapableModel } from "@hexagen/local-llm/client";
+import type { DomainModelId } from "@hexagen/local-llm/client";
 
 export interface ManifestCapabilityAssessment {
   isCapable: boolean;
