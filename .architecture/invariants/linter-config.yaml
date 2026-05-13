@@ -13,7 +13,7 @@ subpath_conventions:
     - project-generation
     - arch-linter
   enforcement: error
-  require_marker: false
+  require_marker: true
   marker_exclusions: []
 client:
     allowed_consumers: []
