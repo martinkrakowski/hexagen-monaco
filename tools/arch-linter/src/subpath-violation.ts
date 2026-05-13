@@ -38,8 +38,14 @@ export function isSubpathViolation(
   const conventions = config.subpath_conventions;
   if (!conventions) return null;
 
-  // TODO: DEBT-001 — remove this bypass when @hexagen/local-llm/client is normalized to /client
-  if (moduleSpecifier === `${scope}/local-llm/shared`) return null;
+  // TODO: DEBT-001 — remove this bypass when @hexagen/local-llm/client is added to allowed_consumers
+  const debtMigratingPackages = ["agentic-interaction", "manifest-generation"];
+  if (
+    moduleSpecifier === `${scope}/local-llm/client` &&
+    debtMigratingPackages.includes(fromPackage)
+  ) {
+    return null;
+  }
 
   const escapedScope = escapeRegExp(scope);
   const subpathMatch = moduleSpecifier.match(
