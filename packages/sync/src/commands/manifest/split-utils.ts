@@ -77,10 +77,15 @@ export function normalizeContextData(ctx: RawRecord): RawRecord {
   if (layers) {
     const infra = layers.infrastructure as RawRecord | undefined;
     if (infra && Array.isArray(infra.adapters)) {
-      layers.infrastructure = {
+      const newInfra: RawRecord = {
         ...infra,
         adapters: flattenStringArray(infra.adapters),
       };
+      const newLayers: RawRecord = {
+        ...layers,
+        infrastructure: newInfra,
+      };
+      out.layers = newLayers;
     }
   }
   return out;
