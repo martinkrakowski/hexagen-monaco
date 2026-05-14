@@ -1,8 +1,5 @@
 # Rules for @hexagen/arch-linter
 
-# TODO: ADR-0037 — normalize @hexagen/local-llm/shared to @hexagen/local-llm/client
-# Blocked by: breaking change requiring consumer updates
-
 subpath_conventions:
   server:
     allowed_consumers:
@@ -15,8 +12,10 @@ subpath_conventions:
   enforcement: error
   require_marker: true
   marker_exclusions: []
-client:
-    allowed_consumers: []
+  client:
+    allowed_consumers:
+      - agentic-interaction
+      - manifest-generation
     enforcement: warn
 
 global_whitelist:

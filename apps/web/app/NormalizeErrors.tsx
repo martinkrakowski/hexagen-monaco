@@ -13,7 +13,7 @@ export function NormalizeErrors() {
       // `error.message = message`, which throws for getter-only properties.
       // The server-side root cause was fixed by converting static imports to
       // dynamic imports, but this browser-level handler remains as a safety net.
-      // TODO: Remove once SSR import chain is fully verified stable (track in PR #56)
+      // SAFETY-NET: Keep until Next.js tree-shaking of static value imports from @hexagen/local-llm in client components is verified stable across all build modes
       const proto = Object.getPrototypeOf(error);
       const desc = Object.getOwnPropertyDescriptor(proto, "message");
       if (desc && typeof desc.get === "function" && desc.set === undefined) {

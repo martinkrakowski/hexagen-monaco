@@ -19,7 +19,7 @@ const FULL_CONFIG: LinterConfig = {
       enforcement: "error",
     },
     client: {
-      allowed_consumers: [],
+      allowed_consumers: ["agentic-interaction", "manifest-generation"],
       enforcement: "warn",
     },
   },
@@ -50,9 +50,19 @@ describe("isSubpathViolation", () => {
     });
   });
 
-  it("returns null for legacy local-llm/shared bypass (DEBT-001)", () => {
+  it("returns null for allowed client consumer (agentic-interaction)", () => {
     const result = isSubpathViolation(
       "agentic-interaction",
+      "@hexagen/local-llm/client",
+      SCOPE,
+      FULL_CONFIG,
+    );
+    assert.strictEqual(result, null);
+  });
+
+  it("returns null for allowed client consumer (manifest-generation)", () => {
+    const result = isSubpathViolation(
+      "manifest-generation",
       "@hexagen/local-llm/client",
       SCOPE,
       FULL_CONFIG,
