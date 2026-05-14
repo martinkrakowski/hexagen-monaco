@@ -39,7 +39,7 @@ export function ValidationReportView({
   const offset = 283 - (283 * score) / 100;
 
   return (
-    <div className="max-w-2xl mx-auto p-8 animate-fade-in-up">
+    <div className="max-w-2xl mx-auto p-4 sm:p-8 animate-fade-in-up">
       <div className="flex items-center gap-5 mb-7">
         <div className="relative w-24 h-24 shrink-0">
           <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
@@ -99,8 +99,7 @@ export function ValidationReportView({
           return (
             <div
               key={i}
-              className={`p-4 rounded-xl bg-card border-l-4 animate-fade-in-up ${isPass ? "border-success" : isWarn ? "border-warning" : "border-destructive"}`}
-              style={{ animationDelay: `${i * 40}ms` }}
+              className={`p-4 rounded-xl bg-card border-l-4 animate-fade-in-up validation-delay-${Math.min(i * 40, 480)} ${isPass ? "border-success" : isWarn ? "border-warning" : "border-destructive"}`}
             >
               <div className="flex items-start gap-3">
                 {isPass ? (
@@ -137,10 +136,7 @@ export function ValidationReportView({
       </div>
 
       {f > 0 && (
-        <div
-          className="mt-8 p-5 rounded-xl bg-destructive/5 border border-destructive/20 animate-fade-in-up"
-          style={{ animationDelay: "500ms" }}
-        >
+        <div className="mt-8 p-5 rounded-xl bg-destructive/5 border border-destructive/20 animate-fade-in-up validation-delay-final">
           <div className="flex items-center gap-2 mb-2">
             <ShieldAlert className="w-4 h-4 text-destructive" />
             <span className="text-sm font-bold text-destructive">

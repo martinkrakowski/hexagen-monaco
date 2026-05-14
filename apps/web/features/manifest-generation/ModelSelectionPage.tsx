@@ -89,7 +89,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
         footer={footer}
       >
         <div className="h-full flex flex-col">
-          <div className="text-center my-6">
+          <div className="text-center my-3 sm:my-6">
             <h2 className="text-2xl font-bold text-foreground">
               Choose a Model
             </h2>
@@ -99,12 +99,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
           </div>
 
           <div
-            className="flex-1 min-h-0 overflow-hidden"
-            style={
-              isModelLoading || isModelError
-                ? { pointerEvents: "none", opacity: 0.5 }
-                : undefined
-            }
+            className={`flex-1 min-h-0 overflow-hidden ${isModelLoading || isModelError ? "pointer-events-none opacity-50" : ""}`}
           >
             {useMemo(
               () => (
