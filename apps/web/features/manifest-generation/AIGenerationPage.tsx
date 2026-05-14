@@ -92,6 +92,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
             <button
               key={id}
               onClick={() => previewActions.onTabChange(id)}
+              aria-label={label}
               className={`flex items-center px-2 py-1 rounded-md text-xs transition-colors shrink-0 ${
                 previewActions.activeTab === id
                   ? "bg-accent text-accent-foreground border border-accent"

@@ -220,13 +220,21 @@ export function ManifestPreview({
         onClick={() => setShowYamlMobile(!showYamlMobile)}
         className="md:hidden fixed bottom-16 right-4 z-40 flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border shadow-lg text-xs font-medium text-foreground hover:bg-accent transition-colors"
         aria-label={showYamlMobile ? "Hide YAML" : "View YAML"}
+        aria-expanded={showYamlMobile}
+        aria-controls="yaml-mobile-overlay"
       >
         <FileCode className="w-4 h-4 text-accent" />
         {showYamlMobile ? "Hide YAML" : "YAML"}
       </button>
 
       {showYamlMobile && (
-        <div className="md:hidden fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
+        <div
+          id="yaml-mobile-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="YAML source"
+          className="md:hidden fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="text-sm font-semibold text-foreground font-mono">
               manifest.yaml

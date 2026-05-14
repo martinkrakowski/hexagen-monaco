@@ -113,8 +113,10 @@ export function checkMissingMarker(
 ): MissingMarkerViolation | BrokenServerExportViolation | null {
   if (!config.subpath_conventions?.server?.require_marker) return null;
 
+  if (!Object.prototype.hasOwnProperty.call(packageExports, "./server")) {
+    return null;
+  }
   const serverExport = packageExports["./server"];
-  if (!serverExport) return null;
 
   const exclusions: MarkerExclusion[] =
     config.subpath_conventions.server.marker_exclusions ?? [];

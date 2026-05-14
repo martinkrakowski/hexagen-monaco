@@ -158,6 +158,7 @@ export function ManifestAcceptPage() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
+              aria-label={label}
               className={`flex items-center px-2 py-1 rounded-md text-xs transition-colors shrink-0 ${
                 activeTab === id
                   ? "bg-accent text-accent-foreground border border-accent"
