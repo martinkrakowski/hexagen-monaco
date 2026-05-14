@@ -8,28 +8,21 @@ Source of truth for items referenced by `TODO: ADR-XXXX` comments in source file
 
 ## OPEN
 
-### DEBT-001: @hexagen/local-llm/shared → @hexagen/local-llm/client
-
-- **Origin**: ADR-0035 (pre-convention). ADR-0037 records the normalization intent.
-- **Scope**: 26 consumer files — `agentic-interaction` (18), `manifest-generation` (8)
-- **Key symbols**: `DomainModelId`, `SendStructuredRequestPort`, `createLLMRequest`, `LLMRequest`, `LLMResponse`
-- **Blocked by**: ~~FEAT-001~~ (RESOLVED) → now unblocked
-- **Remediation**:
-  1. Add `./client` subpath to `packages/local-llm/package.json` exports (mirror `./shared`)
-  2. Codemod: `@hexagen/local-llm/shared` → `@hexagen/local-llm/client` across 26 files
-  3. Remove `./shared` export and ESLint exception
-  4. Mark FEAT-001 as the verification gate
-- **ESLint marker**: `!@hexagen/local-llm/shared` in root `.eslintrc.json:21` with `TODO: ADR-0037`
-
-### FEAT-002: @hexagen-server-only marker enforcement (arch-linter v2.1)
-
-- **Context**: ADR-0037 defines a machine-readable `@hexagen-server-only` comment marker in server barrel files. Arch-linter v2.1 could validate that files with this marker belong to a package declaring a `/server` subpath, and vice versa.
-- **Blocked by**: ~~FEAT-001~~ (RESOLVED) → now unblocked
-- **Estimate**: ~50 lines (requires AST comment parsing via ts-morph)
+_(none)_
 
 ---
 
 ## RESOLVED
+
+### DEBT-001: @hexagen/local-llm/shared → @hexagen/local-llm/client
+
+- **Origin**: ADR-0035 (pre-convention). ADR-0037 records the normalization intent.
+- **Resolution**: Codemod completed in PR #68. `./shared` export replaced by `./client`. Arch-linter bypass updated to package-specific check (only `agentic-interaction` and `manifest-generation` exempt). `marker_exclusions: []` is correctly empty — no server barrel needs exemption.
+
+### FEAT-002: @hexagen-server-only marker enforcement (arch-linter v2.1)
+
+- **Origin**: ADR-0037 defines a machine-readable `@hexagen-server-only` comment marker in server barrel files.
+- **Resolution**: Implemented in `tools/arch-linter/src/server-marker-violation.ts`. Forward check (`checkUnexpectedMarker`) flags non-server files carrying the marker. Backward check (`checkMissingMarker`) flags server barrels missing the marker. `require_marker: true` activated after verifying the sole server barrel (`project-configuration/src/server.ts`) has the marker. 19 unit tests pass. Integrated into `index.ts` linter loop with enforcement-level routing.
 
 ### FEAT-001: Arch-Linter v2 — subpath_conventions enforcement
 

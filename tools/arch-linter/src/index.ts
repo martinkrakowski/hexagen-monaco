@@ -13,11 +13,22 @@ import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
 import type { LinterConfig } from "./subpath-violation.js";
 import { isSubpathViolation } from "./subpath-violation.js";
+import {
+  checkUnexpectedMarker,
+  checkMissingMarker,
+} from "./server-marker-violation.js";
 export type {
   SubpathConvention,
   SubpathConventionConfig,
   LinterConfig,
+  MarkerExclusion,
 } from "./subpath-violation.js";
+export type {
+  ServerMarkerViolation,
+  UnexpectedMarkerViolation,
+  MissingMarkerViolation,
+  BrokenServerExportViolation,
+} from "./server-marker-violation.js";
 
 const logger = createConsoleLogger();
 
@@ -451,6 +462,62 @@ function checkArchitecturalIntegrity() {
         }
       });
     });
+
+    moduleSourceFiles.forEach((file) => {
+      const filePath = file.getFilePath();
+      if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) return;
+
+      const fileText = file.getFullText();
+      const markerViolation = checkUnexpectedMarker(
+        filePath,
+        fileText,
+        linterConfig,
+      );
+      if (markerViolation) {
+        const message = `[${moduleName}]\n File: ${path.relative(ROOT_DIR, filePath)}\n ${markerViolation.message}`;
+        if (markerViolation.enforcement === "error") {
+          errors.push(message);
+        } else {
+          warnings.push(message);
+        }
+      }
+    });
+  });
+
+  // ─── Server Marker Backward Check (per-package) ───────────────────────────
+  modules.forEach((moduleInfo) => {
+    const moduleName = moduleInfo.name;
+    const modulePath = path.join(PKG_ROOT_PATH, moduleName);
+    if (!fs.existsSync(modulePath)) return;
+
+    const pkgJsonPath = path.join(modulePath, "package.json");
+    if (!fs.existsSync(pkgJsonPath)) return;
+
+    let packageJson: { name?: string; exports?: Record<string, unknown> };
+    try {
+      packageJson = JSON.parse(fs.readFileSync(pkgJsonPath, "utf8"));
+    } catch {
+      return;
+    }
+
+    const packageName =
+      packageJson.name?.replace(`${SCOPE}/`, "") ?? moduleName;
+
+    const markerViolation = checkMissingMarker(
+      modulePath,
+      packageName,
+      packageJson.exports ?? {},
+      linterConfig,
+      (filePath: string) => fs.readFileSync(filePath, "utf8"),
+    );
+    if (markerViolation) {
+      const message = `[${packageName}]\n File: ${path.relative(ROOT_DIR, markerViolation.filePath)}\n ${markerViolation.message}`;
+      if (markerViolation.enforcement === "error") {
+        errors.push(message);
+      } else {
+        warnings.push(message);
+      }
+    }
   });
 
   if (warnings.length > 0) {
