@@ -57,7 +57,7 @@ export function MermaidDiagramView({ mermaidCode }: MermaidDiagramViewProps) {
         onLoad={() => setScriptLoaded(true)}
       />
 
-      <div className="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/85 backdrop-blur-md shrink-0">
+      <div className="flex items-center gap-3 px-3 sm:px-5 py-2 border-b border-border bg-card/85 backdrop-blur-md shrink-0">
         <Share2 className="w-4 h-4 text-primary" />
         <span className="text-xs font-semibold text-foreground">
           Mermaid Class Diagram
@@ -91,10 +91,7 @@ export function MermaidDiagramView({ mermaidCode }: MermaidDiagramViewProps) {
         )}
       </div>
 
-      <div
-        className="relative border-t border-border bg-surface shrink-0 overflow-hidden resize-y"
-        style={{ height: "12rem", minHeight: "4rem", maxHeight: "60%" }}
-      >
+      <div className="mermaid-source-panel relative border-t border-border bg-surface shrink-0 overflow-hidden resize-y">
         <div className="absolute top-2 left-4 text-xs font-semibold text-muted-foreground font-mono tracking-wider">
           MERMAID SOURCE
         </div>

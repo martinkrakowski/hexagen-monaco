@@ -34,7 +34,7 @@ export function Header({
 
   return (
     <div className="shrink-0">
-      <header className="w-full px-6 py-1 bg-card border-b border-border flex items-center justify-between">
+      <header className="w-full px-3 sm:px-6 py-1 bg-card border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           {onNavigateToProjects ? (
             <button

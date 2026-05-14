@@ -518,6 +518,48 @@ dialog::backdrop {
   }
 }
 
+/* ── Mermaid Source Panel ─────────────────────────────────────────────────────── */
+.mermaid-source-panel {
+  height: 12rem;
+  min-height: 4rem;
+  max-height: 60%;
+}
+
+/* ── Validation Report Staggered Delays ──────────────────────────────────────── */
+.validation-delay-0 { animation-delay: 0ms; }
+.validation-delay-40 { animation-delay: 40ms; }
+.validation-delay-80 { animation-delay: 80ms; }
+.validation-delay-120 { animation-delay: 120ms; }
+.validation-delay-160 { animation-delay: 160ms; }
+.validation-delay-200 { animation-delay: 200ms; }
+.validation-delay-240 { animation-delay: 240ms; }
+.validation-delay-280 { animation-delay: 280ms; }
+.validation-delay-320 { animation-delay: 320ms; }
+.validation-delay-360 { animation-delay: 360ms; }
+.validation-delay-400 { animation-delay: 400ms; }
+.validation-delay-440 { animation-delay: 440ms; }
+.validation-delay-480 { animation-delay: 480ms; }
+.validation-delay-final { animation-delay: 500ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .validation-delay-0,
+  .validation-delay-40,
+  .validation-delay-80,
+  .validation-delay-120,
+  .validation-delay-160,
+  .validation-delay-200,
+  .validation-delay-240,
+  .validation-delay-280,
+  .validation-delay-320,
+  .validation-delay-360,
+  .validation-delay-400,
+  .validation-delay-440,
+  .validation-delay-480,
+  .validation-delay-final {
+    animation-delay: 0ms;
+  }
+}
+
 /* ── Manifest Preview YAML Viewer ───────────────────────────────────────────── */
 .manifest-yaml-line { display: flex; min-height: 20px; }
 .manifest-yaml-ln { width: 28px; text-align: right; padding-right: 8px; color: hsl(var(--muted-foreground) / 0.4); font-size: 10px; user-select: none; flex-shrink: 0; }

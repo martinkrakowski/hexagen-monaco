@@ -87,18 +87,20 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
             {previewActions.contextCount} contexts
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto shrink-0">
           {TAB_CONFIG.map(({ id, icon: Icon, label }) => (
             <button
               key={id}
               onClick={() => previewActions.onTabChange(id)}
-              className={`flex items-center px-2.5 py-1 rounded-md text-xs transition-colors ${
+              aria-label={label}
+              className={`flex items-center px-2 py-1 rounded-md text-xs transition-colors shrink-0 ${
                 previewActions.activeTab === id
                   ? "bg-accent text-accent-foreground border border-accent"
                   : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
               }`}
             >
-              <Icon className="w-3 h-3 mr-1" /> {label}
+              <Icon className="w-3 h-3 sm:mr-1" />{" "}
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>

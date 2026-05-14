@@ -8,6 +8,8 @@ import {
   RefreshCw,
   Maximize2,
   Minimize2,
+  FileCode,
+  X,
 } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import { ManifestYamlSidebar } from "./ManifestYamlSidebar";
@@ -57,6 +59,7 @@ export function ManifestPreview({
   const activeTab = externalActiveTab ?? internalActiveTab;
   const setActiveTab = onTabChange ?? setInternalActiveTab;
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showYamlMobile, setShowYamlMobile] = useState(false);
 
   // Local state for manifest to allow inline auto-fixes
   const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
@@ -107,13 +110,6 @@ export function ManifestPreview({
   return (
     <div
       className={`flex flex-col bg-background text-foreground overflow-hidden ${isFullScreen ? "fixed inset-0 z-50 w-screen h-screen" : embedded ? "relative w-full h-full" : "relative w-full rounded-xl border border-border"}`}
-      style={
-        isFullScreen
-          ? { marginTop: 0 }
-          : embedded
-            ? undefined
-            : { height: "60vh", minHeight: "450px" }
-      }
     >
       {/* Decorative ambient background */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
@@ -186,7 +182,7 @@ export function ManifestPreview({
         </header>
       )}
 
-      <main className="relative z-10 flex flex-1 overflow-hidden">
+      <main className="relative z-10 flex flex-col md:flex-row flex-1 overflow-hidden">
         <ManifestYamlSidebar
           yamlString={localManifestYaml}
           viewData={viewData}
@@ -218,6 +214,47 @@ export function ManifestPreview({
           )}
         </div>
       </main>
+
+      <button
+        type="button"
+        onClick={() => setShowYamlMobile(!showYamlMobile)}
+        className="md:hidden fixed bottom-16 right-4 z-40 flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border shadow-lg text-xs font-medium text-foreground hover:bg-accent transition-colors"
+        aria-label={showYamlMobile ? "Hide YAML" : "View YAML"}
+        aria-expanded={showYamlMobile}
+        aria-controls="yaml-mobile-overlay"
+      >
+        <FileCode className="w-4 h-4 text-accent" />
+        {showYamlMobile ? "Hide YAML" : "YAML"}
+      </button>
+
+      {showYamlMobile && (
+        <div
+          id="yaml-mobile-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="YAML source"
+          className="md:hidden fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col"
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <span className="text-sm font-semibold text-foreground font-mono">
+              manifest.yaml
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowYamlMobile(false)}
+              className="p-2 rounded-md hover:bg-muted transition-colors"
+              aria-label="Close YAML view"
+            >
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed custom-scrollbar">
+            <pre className="whitespace-pre text-foreground">
+              {localManifestYaml}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {!hideActions && (
         <footer className="relative z-10 flex items-center justify-between px-5 py-3 border-t border-border bg-surface shrink-0">

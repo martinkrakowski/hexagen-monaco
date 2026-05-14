@@ -19,7 +19,9 @@ export function CreationStepIndicator({
 
         return (
           <div key={step.step} className="flex items-center">
-            {index > 0 && <div className="w-16 h-px bg-border mx-3" />}
+            {index > 0 && (
+              <div className="w-8 sm:w-16 h-px bg-border mx-1 sm:mx-3" />
+            )}
             <div className="flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full ${

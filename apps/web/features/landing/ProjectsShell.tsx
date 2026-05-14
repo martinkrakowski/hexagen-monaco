@@ -15,7 +15,7 @@ export function ProjectsShell({
 }: ProjectsShellProps) {
   return (
     <Card className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 h-12">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/30 shrink-0 min-h-12">
         {headerContent ?? (
           <span className="font-semibold text-sm truncate">{title}</span>
         )}
@@ -24,7 +24,7 @@ export function ProjectsShell({
         {children}
       </CardContent>
       {footer && (
-        <footer className="shrink-0 bg-background border-t border-border p-4 flex justify-between items-center">
+        <footer className="shrink-0 bg-background border-t border-border p-4 flex flex-wrap justify-between items-center gap-2">
           {footer}
         </footer>
       )}

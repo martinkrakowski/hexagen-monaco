@@ -70,7 +70,7 @@ export function ImportManifestPage() {
   const renderContent = () => {
     if (!manifestYaml) {
       return (
-        <div className="p-8 space-y-6">
+        <div className="p-4 sm:p-8 space-y-6">
           <FileDropZone
             onFileLoaded={handleFileLoaded}
             accept=".yaml,.yml"
@@ -107,7 +107,7 @@ export function ImportManifestPage() {
             <textarea
               placeholder="Paste your manifest.yaml content here..."
               onChange={(e) => handleTextPaste(e.target.value)}
-              className="w-full h-64 p-4 bg-background border border-border rounded-md font-mono text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 resize-none"
+              className="w-full h-48 sm:h-64 p-4 bg-background border border-border rounded-md font-mono text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 resize-none"
             />
           </div>
         </div>
@@ -116,7 +116,7 @@ export function ImportManifestPage() {
 
     if (parseError) {
       return (
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           <div className="text-center space-y-4">
             <p className="text-sm font-medium text-destructive">
               Failed to parse manifest:

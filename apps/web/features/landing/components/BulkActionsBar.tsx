@@ -17,7 +17,7 @@ export function BulkActionsBar({
 
   return (
     <div
-      className="flex items-center gap-4 px-4 py-3 bg-muted/80 rounded-lg border border-border mt-4"
+      className="flex flex-wrap items-center gap-4 px-4 py-3 bg-muted/80 rounded-lg border border-border mt-4"
       role="status"
       aria-live="polite"
     >
