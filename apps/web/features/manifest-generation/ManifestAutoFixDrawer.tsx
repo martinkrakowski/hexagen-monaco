@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { X, Check, ArrowRight, AlertTriangle } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import { diffLines, type Change } from "diff";
-import { applyDeterministicFix, canAutoFix } from "@hexagen/manifest-generation";
+import {
+  applyDeterministicFix,
+  canAutoFix,
+} from "@hexagen/manifest-generation";
 import type { ValidationItem } from "@hexagen/manifest-generation";
 
 export interface ManifestAutoFixDrawerProps {
@@ -35,8 +38,8 @@ export function ManifestAutoFixDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute inset-y-0 right-0 w-full max-w-2xl bg-card border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface shrink-0">
+    <div className="absolute inset-y-0 right-0 w-full md:max-w-2xl bg-card border-l border-border shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-border bg-surface shrink-0">
         <div>
           <h2 className="text-lg font-bold flex items-center gap-2">
             <span className="text-accent">✨</span> Auto-Fix
@@ -53,7 +56,7 @@ export function ManifestAutoFixDrawer({
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 bg-background">
+      <div className="flex-1 overflow-auto p-4 md:p-6 bg-background">
         {!isFixable ? (
           <div className="p-4 rounded-lg bg-warning/10 border border-warning/20 text-warning text-sm space-y-2">
             <div className="flex items-center gap-2 font-semibold">
@@ -96,7 +99,7 @@ export function ManifestAutoFixDrawer({
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-surface shrink-0">
+      <div className="flex items-center justify-end gap-3 px-4 md:px-6 py-4 border-t border-border bg-surface shrink-0">
         <Button variant="ghost" onClick={onClose}>
           Discard
         </Button>
