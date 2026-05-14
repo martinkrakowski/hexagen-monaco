@@ -28,12 +28,12 @@ export function NewProjectPage() {
       }
     >
       <div className="h-full overflow-y-auto dot-grid bg-ambient">
-        <div className="flex items-center justify-center min-h-full py-12">
-          <div className="max-w-3xl mx-auto px-6 w-full">
+        <div className="flex items-center justify-center min-h-full py-6 sm:py-12">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 w-full">
             <CreationStepIndicator currentStep={1} steps={CREATION_STEPS} />
 
             <div className="text-center mb-12 animate-fade-in-up delay-100">
-              <h1 className="text-4xl font-bold tracking-tight mb-4">
+              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight mb-4">
                 Choose Your Creation Path
               </h1>
               <p className="text-muted-foreground text-lg max-w-lg mx-auto leading-relaxed">
