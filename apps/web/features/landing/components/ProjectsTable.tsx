@@ -57,7 +57,7 @@ export function ProjectsTable({
   const isAllSelected = allSelected(allIds);
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <div className="rounded-lg border border-border overflow-x-auto">
       <table className="w-full" role="grid">
         <thead className="bg-muted/50">
           <tr>
@@ -81,12 +81,14 @@ export function ProjectsTable({
               field="updated"
               currentSort={sort}
               onToggleSort={onToggleSort}
+              className="hidden md:table-cell"
             />
             <SortableColumnHeader
               label="Created"
               field="created"
               currentSort={sort}
               onToggleSort={onToggleSort}
+              className="hidden lg:table-cell"
             />
             <th className="w-20 px-3 py-2">
               <span className="sr-only">Actions</span>

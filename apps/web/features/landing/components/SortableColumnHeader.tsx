@@ -8,6 +8,7 @@ interface SortableColumnHeaderProps {
   field: SortField;
   currentSort: SortState;
   onToggleSort: (field: SortField) => void;
+  className?: string;
 }
 
 export function SortableColumnHeader({
@@ -15,6 +16,7 @@ export function SortableColumnHeader({
   field,
   currentSort,
   onToggleSort,
+  className,
 }: SortableColumnHeaderProps) {
   const isActive = currentSort.field === field;
   const Icon = isActive
@@ -32,7 +34,7 @@ export function SortableColumnHeader({
             : "descending"
           : undefined
       }
-      className={`text-sm font-medium px-3 py-2 ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+      className={`text-sm font-medium px-3 py-2 ${isActive ? "text-foreground" : "text-muted-foreground"} ${className ?? ""}`}
     >
       <button
         type="button"
