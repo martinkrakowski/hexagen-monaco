@@ -69,16 +69,22 @@ export function checkUnexpectedMarker(
   };
 }
 
+function distToSource(distPath: string): string {
+  return distPath
+    .replace("./dist/", "./src/")
+    .replace(".d.ts", ".ts")
+    .replace(".js", ".ts")
+    .replace(".cjs", ".ts")
+    .replace(".mjs", ".ts");
+}
+
 export function resolveServerBarrelPath(
   packageDir: string,
   serverExport: unknown,
   fileExists: (p: string) => boolean = fs.existsSync,
 ): string | null {
   if (typeof serverExport === "string") {
-    const sourcePath = serverExport
-      .replace("./dist/", "./src/")
-      .replace(".js", ".ts");
-
+    const sourcePath = distToSource(serverExport);
     const absolutePath = path.join(packageDir, sourcePath);
     return fileExists(absolutePath) ? absolutePath : null;
   }
@@ -88,10 +94,7 @@ export function resolveServerBarrelPath(
     const typesPath = cond.types || cond.import;
 
     if (typeof typesPath === "string") {
-      const sourcePath = typesPath
-        .replace("./dist/", "./src/")
-        .replace(".d.ts", ".ts");
-
+      const sourcePath = distToSource(typesPath);
       const absolutePath = path.join(packageDir, sourcePath);
       return fileExists(absolutePath) ? absolutePath : null;
     }

@@ -229,6 +229,15 @@ describe("resolveServerBarrelPath", () => {
     assert.ok(result?.endsWith("src/server.ts"));
   });
 
+  it("resolves import-only conditional export", () => {
+    const result = resolveServerBarrelPath(
+      "/packages/foo",
+      { import: "./dist/server.js" },
+      () => true,
+    );
+    assert.ok(result?.endsWith("src/server.ts"));
+  });
+
   it("returns null if source file missing", () => {
     const result = resolveServerBarrelPath(
       "/packages/foo",
