@@ -24,7 +24,7 @@ export function ProjectsShell({
         {children}
       </CardContent>
       {footer && (
-        <footer className="shrink-0 bg-background border-t border-border p-4 flex justify-between items-center">
+        <footer className="shrink-0 bg-background border-t border-border p-4 flex flex-wrap justify-between items-center gap-2">
           {footer}
         </footer>
       )}
