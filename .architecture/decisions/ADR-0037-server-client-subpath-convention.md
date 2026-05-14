@@ -70,13 +70,7 @@ The `no-restricted-imports` pattern allowlist is updated to:
 
 This replaces the `!@hexagen/local-llm/shared` one-off. The `exports` field in each package's `package.json` remains the authority on whether a subpath exists; ESLint only governs the shape of allowed subpaths.
 
-The `@hexagen/local-llm/shared` exception is retained for now as technical debt. It is annotated with a traceability comment:
-
-```json
-// TODO: ADR-0037 — normalize to @hexagen/local-llm/client
-// Blocked by: breaking change requiring consumer updates
-"!@hexagen/local-llm/shared"
-```
+The `@hexagen/local-llm/shared` exception has been removed. Codemod completed in PR #68; all consumers now import from `@hexagen/local-llm/client`.
 
 ## Implementation Details
 
@@ -167,4 +161,4 @@ Not yet read by arch-linter. Serves as documented intent for arch-linter v2.
 
 ## Debt
 
-- **ADR-0035 normalization**: `@hexagen/local-llm/shared` → `@hexagen/local-llm/client`. Requires consumer import updates. Track separately. The ESLint exception is annotated with `TODO: ADR-0037` for traceability.
+- **ADR-0035 normalization**: `@hexagen/local-llm/shared` → `@hexagen/local-llm/client`. **Resolved in PR #68.** All consumers migrated. Bypass removed from arch-linter; ESLint exception removed; `agentic-interaction` and `manifest-generation` added to `client.allowed_consumers` in linter-config.yaml.

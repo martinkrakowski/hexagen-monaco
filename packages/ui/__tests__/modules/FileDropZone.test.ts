@@ -133,14 +133,15 @@ describe("FileDropZone component", () => {
     assert.strictEqual(dropZone?.getAttribute("data-drag-over"), "true");
   });
 
-  // TODO: Fix drag leave test
-  // it("handles drag leave state", () => {
-  //   const { container } = render(React.createElement(FileDropZone, defaultProps));
-  //   const dropZone = container.querySelector('[role="button"]');
-  //   fireEvent.dragOver(dropZone);
-  //   fireEvent.dragLeave(dropZone);
-  //   assert.ok(!dropZone.className.includes("border-primary"));
-  // });
+  it("handles drag leave state", () => {
+    const { container } = render(
+      React.createElement(FileDropZone, defaultProps),
+    );
+    const dropZone = container.querySelector('[role="button"]');
+    fireEvent.dragOver(dropZone);
+    fireEvent.dragLeave(dropZone);
+    assert.strictEqual(dropZone?.getAttribute("data-drag-over"), "false");
+  });
 
   it("applies correct aria-label", () => {
     const { container } = render(
