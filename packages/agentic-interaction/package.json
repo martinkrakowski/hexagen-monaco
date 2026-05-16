@@ -17,7 +17,7 @@
     "build": "tsc",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts || true",
+    "test": "tsc -p tsconfig.test.json --noEmit; tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts || true",
     "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },

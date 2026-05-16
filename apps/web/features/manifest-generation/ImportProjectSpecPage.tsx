@@ -105,22 +105,20 @@ export function ImportProjectSpecPage() {
     setIsSaving(true);
     try {
       let config: ProjectConfig;
+      let parsed: ParsedSpecConfig | null = null;
       try {
-        const parsed = yaml.load(specContent || "") as ParsedSpecConfig;
+        parsed = yaml.load(specContent || "") as ParsedSpecConfig;
         config = parsed as unknown as ProjectConfig;
       } catch {
         config = {} as ProjectConfig;
       }
 
       const projectName =
-        (specContent
-          ? (yaml.load(specContent) as ParsedSpecConfig)?.intent
-          : undefined) || `Spec Import ${new Date().toLocaleTimeString()}`;
+        parsed?.intent || `Spec Import ${new Date().toLocaleTimeString()}`;
 
       const projectId = saveProject(projectName, config, generatedManifest);
       router.push(`/wizard/1?project=${projectId}`);
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error("Failed to save spec-imported project:", error);
       setIsSaving(false);
     }

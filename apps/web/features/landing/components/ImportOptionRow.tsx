@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { ImportSubOption } from "@/landing/domain/creation-path";
 
 const iconMap = {
+  // FileText icon unavailable in lucide-react; FileCode used as visual substitute
   FileText: FileCode,
   FileCode,
   Braces,

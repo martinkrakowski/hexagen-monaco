@@ -2,18 +2,23 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type {
   SendStructuredRequestPort,
-  StructuredResponse,
-} from "../../../domain/ports/send-structured-request.port.js";
-import { ExecuteStructuredConfigGenerationUseCase } from "../execute-structured-config-generation.use-case.js";
+  LLMRequest,
+  LLMResponse,
+} from "@hexagen/local-llm";
+import type { Result } from "@hexagen/shared";
+import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
-function createMockSendStructuredRequest(
-  responses: Partial<StructuredResponse>[],
-): SendStructuredRequestPort {
-  let callCount = 0;
+function createMockSendStructuredRequest(): SendStructuredRequestPort {
   return {
-    send: async (): Promise<StructuredResponse> => {
-      const response = responses[callCount++] ?? { ok: true, completion: "" };
-      return response as StructuredResponse;
+    sendRequest: async (_req: LLMRequest): Promise<Result<LLMResponse>> => {
+      void _req;
+      return { success: true, value: {} as LLMResponse };
+    },
+    streamStructuredRequest: async function* (
+      _req: LLMRequest,
+    ): AsyncGenerator<Result<string>> {
+      void _req;
+      yield { success: true, value: "" };
     },
   };
 }
@@ -23,53 +28,31 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
   describe("constructor", () => {
     it("accepts a SendStructuredRequestPort", () => {
-      const port = createMockSendStructuredRequest([]);
+      const port = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(port);
       assert.ok(useCase);
     });
   });
 
   describe("execute", () => {
-    it("returns error when config is empty string", async () => {
-      mockPort = createMockSendStructuredRequest([]);
+    it("returns error when intent is empty", async () => {
+      mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
-      const result = await useCase.execute({
-        config: "",
-      });
-
-      assert.strictEqual(result.success, false);
-    });
-
-    it("returns error when config is not valid YAML or JSON", async () => {
-      mockPort = createMockSendStructuredRequest([]);
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute({
-        config: "not: valid: yaml: or: json",
-      });
-
-      assert.strictEqual(result.success, false);
-    });
-
-    it("returns error when structured config fails to parse", async () => {
-      mockPort = createMockSendStructuredRequest([]);
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute({
-        config: "{ invalid json }",
-      });
-
-      assert.strictEqual(result.success, false);
-    });
-
-    it("rejects unparseable config with invalid YAML structure", async () => {
-      mockPort = createMockSendStructuredRequest([]);
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute({
-        config: "- item1\n- item2\n  badly: indented",
-      });
+      const result = await useCase.execute(
+        {
+          intent: "",
+          explicitTechnologies: [],
+          subdomains: [],
+          classifiedContexts: [],
+        },
+        {
+          userDescription: "",
+          platform: undefined,
+          deployment: undefined,
+          additionalContext: undefined,
+        },
+      );
 
       assert.strictEqual(result.success, false);
     });
@@ -77,12 +60,23 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
   describe("build helpers", () => {
     it("accepts a structured config with intent only", async () => {
-      mockPort = createMockSendStructuredRequest([]);
+      mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
-      const result = await useCase.execute({
-        config: 'intent: "My project"',
-      });
+      const result = await useCase.execute(
+        {
+          intent: "My project",
+          explicitTechnologies: [],
+          subdomains: [],
+          classifiedContexts: [],
+        },
+        {
+          userDescription: "My project",
+          platform: undefined,
+          deployment: undefined,
+          additionalContext: undefined,
+        },
+      );
 
       assert.strictEqual(result.success, true);
       if (result.success) {
@@ -91,15 +85,23 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     });
 
     it("accepts a structured config with explicitTechnologies", async () => {
-      mockPort = createMockSendStructuredRequest([]);
+      mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
-      const result = await useCase.execute({
-        config: JSON.stringify({
+      const result = await useCase.execute(
+        {
           intent: "My project",
           explicitTechnologies: ["React", "PostgreSQL"],
-        }),
-      });
+          subdomains: [],
+          classifiedContexts: [],
+        },
+        {
+          userDescription: "My project",
+          platform: undefined,
+          deployment: undefined,
+          additionalContext: undefined,
+        },
+      );
 
       assert.strictEqual(result.success, true);
       if (result.success) {
@@ -111,15 +113,23 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     });
 
     it("accepts a structured config with subdomains", async () => {
-      mockPort = createMockSendStructuredRequest([]);
+      mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
-      const result = await useCase.execute({
-        config: JSON.stringify({
+      const result = await useCase.execute(
+        {
           intent: "My project",
+          explicitTechnologies: [],
           subdomains: ["billing", "inventory"],
-        }),
-      });
+          classifiedContexts: [],
+        },
+        {
+          userDescription: "My project",
+          platform: undefined,
+          deployment: undefined,
+          additionalContext: undefined,
+        },
+      );
 
       assert.strictEqual(result.success, true);
       if (result.success) {
@@ -131,12 +141,14 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     });
 
     it("accepts a structured config with classifiedContexts", async () => {
-      mockPort = createMockSendStructuredRequest([]);
+      mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
-      const result = await useCase.execute({
-        config: JSON.stringify({
+      const result = await useCase.execute(
+        {
           intent: "My project",
+          explicitTechnologies: [],
+          subdomains: [],
           classifiedContexts: [
             {
               name: "billing",
@@ -144,8 +156,14 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
               reasoning: "Main billing domain",
             },
           ],
-        }),
-      });
+        },
+        {
+          userDescription: "My project",
+          platform: undefined,
+          deployment: undefined,
+          additionalContext: undefined,
+        },
+      );
 
       assert.strictEqual(result.success, true);
       if (result.success) {
@@ -156,15 +174,23 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     });
 
     it("rejects empty classifiedContexts array", async () => {
-      mockPort = createMockSendStructuredRequest([]);
+      mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
-      const result = await useCase.execute({
-        config: JSON.stringify({
+      const result = await useCase.execute(
+        {
           intent: "My project",
+          explicitTechnologies: [],
+          subdomains: [],
           classifiedContexts: [],
-        }),
-      });
+        },
+        {
+          userDescription: "My project",
+          platform: undefined,
+          deployment: undefined,
+          additionalContext: undefined,
+        },
+      );
 
       assert.strictEqual(result.success, true);
       if (result.success) {

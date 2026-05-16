@@ -53,7 +53,6 @@ export function ImportManifestPage() {
 
       router.push(`/wizard/1?project=${projectId}`);
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error("Failed to save imported project:", error);
       setIsSaving(false);
     }

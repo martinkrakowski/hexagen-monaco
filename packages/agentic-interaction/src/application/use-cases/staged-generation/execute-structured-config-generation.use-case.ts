@@ -85,6 +85,10 @@ export class ExecuteStructuredConfigGenerationUseCase {
   > {
     const state: PipelineState = {};
 
+    if (!input.intent) {
+      return { success: false, error: "Intent is required" };
+    }
+
     const runStage = async <T>(
       stageNum: number,
       label: string,
