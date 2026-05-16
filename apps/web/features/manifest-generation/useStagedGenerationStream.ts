@@ -23,7 +23,16 @@ export interface StagedGenerationStreamReturn {
   generate: (
     body: Record<string, unknown>,
     signal?: AbortSignal,
-  ) => Promise<void>;
+  ) => Promise<{
+    generatedManifest: string | null;
+    phase: StagedPhase;
+    stepDetail: string;
+    stageProgress: Record<number, StageProgress>;
+    validationErrors: string[];
+    contextCount: number;
+    portCount: number;
+    adapterCount: number;
+  }>;
   reset: () => void;
 }
 
@@ -54,54 +63,6 @@ export function useStagedGenerationStream(
 
   const abortRef = useRef<AbortController | null>(null);
 
-  const handleEvent = useCallback((event: Record<string, unknown>) => {
-    const type = event.type as string;
-
-    if (type === "stage-start") {
-      const stage = event.stage as number;
-      const label =
-        (event.label as string) || stageLabels[stage] || `Stage ${stage}`;
-      setPhase(stageToPhase(stage));
-      setStepDetail(`${label}...`);
-      setStageProgress((prev) => ({
-        ...prev,
-        [stage]: { stage, label, chunks: [] },
-      }));
-    } else if (type === "stage-complete") {
-      const stage = event.stage as number;
-      const durationMs = event.durationMs as number;
-      setStageProgress((prev) => ({
-        ...prev,
-        [stage]: { ...prev[stage], durationMs },
-      }));
-    } else if (type === "chunk") {
-      const stage = event.stage as number;
-      const data = event.data as string;
-      setStageProgress((prev) => ({
-        ...prev,
-        [stage]: {
-          ...prev[stage],
-          chunks: [...(prev[stage]?.chunks || []), data],
-        },
-      }));
-    } else if (type === "validation-error") {
-      const errors = event.errors as string[];
-      setValidationErrors(errors);
-    } else if (type === "done") {
-      setGeneratedManifest(event.yaml as string);
-      setContextCount(event.contextCount as number);
-      setPortCount(event.portCount as number);
-      setAdapterCount(event.adapterCount as number);
-      setPhase("complete");
-      setStepDetail("Manifest generation complete");
-      setIsGenerating(false);
-    } else if (type === "error") {
-      setGenerationError(event.message as string);
-      setPhase("failed");
-      setIsGenerating(false);
-    }
-  }, []);
-
   const generate = useCallback(
     async (body: Record<string, unknown>, signal?: AbortSignal) => {
       setGenerationError(null);
@@ -119,10 +80,26 @@ export function useStagedGenerationStream(
       abortRef.current = controller;
 
       if (signal) {
-        signal.addEventListener("abort", () => controller.abort(), {
-          once: true,
-        });
+        if (signal.aborted) {
+          controller.abort();
+        } else {
+          signal.addEventListener("abort", () => controller.abort(), {
+            once: true,
+          });
+        }
       }
+
+      // Result object to collect final state
+      const result = {
+        generatedManifest: null as string | null,
+        phase: "idle" as StagedPhase,
+        stepDetail: "",
+        stageProgress: {} as Record<number, StageProgress>,
+        validationErrors: [] as string[],
+        contextCount: 0,
+        portCount: 0,
+        adapterCount: 0,
+      };
 
       try {
         const response = await fetch(endpoint, {
@@ -153,7 +130,62 @@ export function useStagedGenerationStream(
           for (const line of lines) {
             if (!line.trim()) continue;
             try {
-              handleEvent(JSON.parse(line));
+              const event = JSON.parse(line) as Record<string, unknown>;
+              const type = event.type as string;
+
+              if (type === "stage-start") {
+                const stage = event.stage as number;
+                const label =
+                  (event.label as string) ||
+                  stageLabels[stage] ||
+                  `Stage ${stage}`;
+                setPhase(stageToPhase(stage));
+                setStepDetail(`${label}...`);
+                setStageProgress((prev) => ({
+                  ...prev,
+                  [stage]: { stage, label, chunks: [] },
+                }));
+              } else if (type === "stage-complete") {
+                const stage = event.stage as number;
+                const durationMs = event.durationMs as number;
+                setStageProgress((prev) => ({
+                  ...prev,
+                  [stage]: { ...prev[stage], durationMs },
+                }));
+              } else if (type === "chunk") {
+                const stage = event.stage as number;
+                const data = event.data as string;
+                setStageProgress((prev) => ({
+                  ...prev,
+                  [stage]: {
+                    ...prev[stage],
+                    chunks: [...(prev[stage]?.chunks || []), data],
+                  },
+                }));
+              } else if (type === "validation-error") {
+                const errors = event.errors as string[];
+                setValidationErrors(errors);
+              } else if (type === "done") {
+                result.generatedManifest = event.yaml as string;
+                result.contextCount = event.contextCount as number;
+                result.portCount = event.portCount as number;
+                result.adapterCount = event.adapterCount as number;
+                result.phase = "complete";
+                result.stepDetail = "Manifest generation complete";
+                setGeneratedManifest(result.generatedManifest);
+                setContextCount(result.contextCount);
+                setPortCount(result.portCount);
+                setAdapterCount(result.adapterCount);
+                setPhase(result.phase);
+                setStepDetail(result.stepDetail);
+                setIsGenerating(false);
+              } else if (type === "error") {
+                result.phase = "failed";
+                result.stepDetail = event.message as string;
+                setGenerationError(event.message as string);
+                setPhase(result.phase);
+                setIsGenerating(false);
+              }
             } catch {
               logger.warn("[staged-gen] Failed to parse NDJSON line", { line });
             }
@@ -162,7 +194,17 @@ export function useStagedGenerationStream(
 
         if (buffer.trim()) {
           try {
-            handleEvent(JSON.parse(buffer));
+            const event = JSON.parse(buffer) as Record<string, unknown>;
+            const type = event.type as string;
+
+            if (type === "done") {
+              result.generatedManifest = event.yaml as string;
+              result.contextCount = event.contextCount as number;
+              result.portCount = event.portCount as number;
+              result.adapterCount = event.adapterCount as number;
+              result.phase = "complete";
+              result.stepDetail = "Manifest generation complete";
+            }
           } catch {
             // Acknowledge unprocessed buffer after parse failure
           }
@@ -170,21 +212,26 @@ export function useStagedGenerationStream(
       } catch (error) {
         if (controller.signal.aborted) {
           logger.info("[staged-gen] Generation aborted");
+          result.phase = "idle";
           setPhase("idle");
           setIsGenerating(false);
-          return;
+          return result;
         }
         const message =
           error instanceof Error ? error.message : "Unknown error";
         logger.error(`[staged-gen] Failed: ${message}`);
+        result.phase = "failed";
+        result.stepDetail = message;
         setGenerationError(message);
-        setPhase("failed");
+        setPhase(result.phase);
       } finally {
         setIsGenerating(false);
         abortRef.current = null;
       }
+
+      return result;
     },
-    [handleEvent, endpoint],
+    [endpoint],
   );
 
   const reset = useCallback(() => {

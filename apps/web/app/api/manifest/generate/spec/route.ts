@@ -88,7 +88,6 @@ export async function POST(request: NextRequest) {
             type: "error",
             message: "Config must be valid YAML or JSON",
           });
-          controller.close();
           return;
         }
 
@@ -97,7 +96,6 @@ export async function POST(request: NextRequest) {
             type: "error",
             message: "Config must contain intent string",
           });
-          controller.close();
           return;
         }
 
@@ -105,12 +103,29 @@ export async function POST(request: NextRequest) {
           intent: parsedConfig.intent,
           explicitTechnologies: Array.isArray(parsedConfig.explicitTechnologies)
             ? parsedConfig.explicitTechnologies
+                .filter((item): item is string => typeof item === "string")
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
             : [],
           subdomains: Array.isArray(parsedConfig.subdomains)
             ? parsedConfig.subdomains
+                .filter((item): item is string => typeof item === "string")
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
             : [],
           classifiedContexts: Array.isArray(parsedConfig.classifiedContexts)
-            ? parsedConfig.classifiedContexts
+            ? parsedConfig.classifiedContexts.filter(
+                (item): boolean =>
+                  typeof item === "object" &&
+                  item !== null &&
+                  "name" in item &&
+                  typeof (item as { name: unknown }).name === "string" &&
+                  "type" in item &&
+                  typeof (item as { type: unknown }).type === "string" &&
+                  "reasoning" in item &&
+                  typeof (item as { reasoning: unknown }).reasoning ===
+                    "string",
+              )
             : [],
         };
 

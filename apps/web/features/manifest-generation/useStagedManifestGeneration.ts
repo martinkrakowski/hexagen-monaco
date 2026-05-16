@@ -184,7 +184,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setIsGenerating(false);
         } else {
           // Cloud: call server endpoint (staged generation with cloud keys)
-          await cloudStream.generate(
+          const result = await cloudStream.generate(
             {
               description,
               platform: options?.platform,
@@ -195,15 +195,15 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             controller.signal,
           );
 
-          // Sync cloud stream state to local state
-          setGeneratedManifest(cloudStream.generatedManifest);
-          setContextCount(cloudStream.contextCount);
-          setPortCount(cloudStream.portCount);
-          setAdapterCount(cloudStream.adapterCount);
-          setPhase(cloudStream.phase);
-          setStepDetail(cloudStream.stepDetail);
-          setStageProgress(cloudStream.stageProgress);
-          setValidationErrors(cloudStream.validationErrors);
+          // Use returned values from generate() instead of stale closure
+          setGeneratedManifest(result.generatedManifest);
+          setContextCount(result.contextCount);
+          setPortCount(result.portCount);
+          setAdapterCount(result.adapterCount);
+          setPhase(result.phase);
+          setStepDetail(result.stepDetail);
+          setStageProgress(result.stageProgress);
+          setValidationErrors(result.validationErrors);
         }
       } catch (error) {
         if (controller.signal.aborted) {

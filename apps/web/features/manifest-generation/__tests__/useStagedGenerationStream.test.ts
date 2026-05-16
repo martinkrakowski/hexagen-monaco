@@ -34,10 +34,9 @@ describe("useStagedGenerationStream", () => {
       });
     });
 
-    if (result.current.generatedManifest) {
-      assert.ok(result.current.generatedManifest.length >= 0);
-      assert.strictEqual(result.current.phase, "complete");
-    }
+    assert.ok(result.current.generatedManifest);
+    assert.ok(result.current.generatedManifest.length >= 0);
+    assert.strictEqual(result.current.phase, "complete");
   });
 
   test("handles error event from NDJSON stream", async () => {
@@ -51,10 +50,9 @@ describe("useStagedGenerationStream", () => {
       });
     });
 
-    if (result.current.generationError) {
-      assert.ok(result.current.generationError.length > 0);
-      assert.strictEqual(result.current.phase, "failed");
-    }
+    assert.ok(result.current.generationError);
+    assert.ok(result.current.generationError.length > 0);
+    assert.strictEqual(result.current.phase, "failed");
   });
 
   test("abort signal cancels generation", async () => {
