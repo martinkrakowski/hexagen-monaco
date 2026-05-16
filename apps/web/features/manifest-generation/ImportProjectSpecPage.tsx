@@ -14,7 +14,6 @@ import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { logger } from "../../lib/structured-logger";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import type { StructuredConfigInput } from "@hexagen/agentic-interaction";
 
 type SpecPagePhase = "upload" | "generating" | "preview" | "error";
 
@@ -95,7 +94,7 @@ export function ImportProjectSpecPage() {
     setIsSaving(true);
     try {
       let config: ProjectConfig;
-      let parsed: StructuredConfigInput | null = null;
+      let parsed: Record<string, unknown> | null = null;
       try {
         const content = specContent || "";
         const trimmed = content.trim();
@@ -104,7 +103,7 @@ export function ImportProjectSpecPage() {
         } else {
           yaml.load(trimmed);
         }
-        parsed = yaml.load(trimmed) as StructuredConfigInput;
+        parsed = yaml.load(trimmed) as Record<string, unknown>;
         config = parsed as unknown as ProjectConfig;
       } catch (e) {
         const errorMsg =
@@ -115,7 +114,9 @@ export function ImportProjectSpecPage() {
       }
 
       const projectName =
-        parsed?.intent || `Spec Import ${new Date().toLocaleTimeString()}`;
+        typeof parsed?.intent === "string" && parsed.intent.trim().length > 0
+          ? parsed.intent.trim()
+          : `Spec Import ${new Date().toLocaleTimeString()}`;
 
       const projectId = saveProject(projectName, config, generatedManifest);
       await router.push(`/wizard/1?project=${projectId}`);
