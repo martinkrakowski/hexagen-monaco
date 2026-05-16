@@ -14,7 +14,7 @@ import type { NoSemanticState } from "../types/forbidden-brand.js";
 export interface FileDropZoneProps extends NoSemanticState<
   React.HTMLAttributes<HTMLDivElement>
 > {
-  onFileLoaded: (content: string) => void;
+  onFileLoaded: (content: string, filename: string) => void;
   accept?: string;
   validateFile?: (file: File) => string | null;
   label?: string;
@@ -52,7 +52,7 @@ const FileDropZoneRender: ForwardRefRenderFunction<
       const content = e.target?.result;
       if (typeof content === "string") {
         setError(null);
-        onFileLoaded(content);
+        onFileLoaded(content, file.name);
       }
     };
     reader.onerror = () => setError("Failed to read file");
