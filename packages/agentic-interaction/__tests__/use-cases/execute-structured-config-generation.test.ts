@@ -1,212 +1,152 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import type {
-  SendStructuredRequestPort,
-  LLMRequest,
-  LLMResponse,
-} from "@hexagen/local-llm";
-import type { Identifier } from "@hexagen/shared";
-import type { DomainModelId } from "@hexagen/local-llm";
-import type { Result } from "@hexagen/shared";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+import {
+  buildDomainAnalysisFromConfig,
+  buildClassificationFromConfig,
+  buildNormalizedPromptFromConfig,
+} from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
 function createMockSendStructuredRequest(): SendStructuredRequestPort {
   return {
-    sendRequest: async (_req: LLMRequest): Promise<Result<LLMResponse>> => {
-      void _req;
-      return {
+    sendRequest: async () => ({
+      success: true,
+      value: { content: "{}" },
+    }),
+    streamStructuredRequest: async function* () {
+      yield {
         success: true,
-        value: {
-          id: `mock-${Date.now()}` as Identifier,
-          modelId: "mock-model" as DomainModelId,
-          content: "{}",
-          finishReason: "stop",
-          timestamp: Date.now(),
-        } as LLMResponse,
+        value: JSON.stringify({
+          contextName: "billing",
+          direction: "in",
+          name: "ProcessBillingPort",
+          portType: "command",
+          description: "Process billing",
+        }),
+      };
+      yield {
+        success: true,
+        value: JSON.stringify({
+          contextName: "billing",
+          direction: "out",
+          name: "BillingRepository",
+          portType: "repository",
+          description: "Persist billing",
+        }),
+      };
+      yield {
+        success: true,
+        value: JSON.stringify({
+          contextName: "billing",
+          adapterName: "InMemoryBillingRepoAdapter",
+          adapterType: "Repository",
+          implements: "BillingRepository",
+        }),
+      };
+      yield {
+        success: true,
+        value: JSON.stringify({ type: "result", passed: true }),
       };
     },
-    streamStructuredRequest: async function* (
-      _req: LLMRequest,
-    ): AsyncGenerator<Result<string>> {
-      void _req;
-      yield { success: true, value: "{}" };
-    },
-  };
+  } as unknown as SendStructuredRequestPort;
 }
 
 describe("ExecuteStructuredConfigGenerationUseCase", () => {
-  let mockPort: SendStructuredRequestPort;
-
-  describe("constructor", () => {
-    it("accepts a SendStructuredRequestPort", () => {
-      const port = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(port);
-      assert.ok(useCase);
-    });
+  it("rejects invalid JSON config", async () => {
+    const mockPort = createMockSendStructuredRequest();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+    const result = await useCase.execute("not valid json");
+    assert.strictEqual(result.success, false);
   });
 
-  describe("execute", () => {
-    it("returns error when intent is empty", async () => {
-      mockPort = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute(
-        {
-          intent: "",
-          explicitTechnologies: [],
-          subdomains: [],
-          classifiedContexts: [],
-        },
-        {
-          userDescription: "",
-          platform: undefined,
-          deployment: undefined,
-          additionalContext: undefined,
-        },
-      );
-
-      assert.strictEqual(result.success, false);
-    });
+  it("returns success for valid structured config JSON", async () => {
+    const mockPort = createMockSendStructuredRequest();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+    const config = {
+      bounded_contexts: [{ id: "ctx1", name: "billing" }],
+      use_cases: [{ id: "uc1", name: "Process Billing", context_id: "ctx1" }],
+      context_mappings: [],
+    };
+    const result = await useCase.execute(JSON.stringify(config));
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.ok(result.value.yaml);
+      assert.ok(result.value.parsedObject);
+    }
   });
 
-  describe("build helpers", () => {
-    it("accepts a structured config with intent only", async () => {
-      mockPort = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute(
-        {
-          intent: "My project",
-          explicitTechnologies: [],
-          subdomains: [],
-          classifiedContexts: [],
-        },
-        {
-          userDescription: "My project",
-          platform: undefined,
-          deployment: undefined,
-          additionalContext: undefined,
-        },
-      );
-
-      assert.strictEqual(result.success, true);
-      if (result.success) {
-        assert.strictEqual(result.state.stage0.intent, "My project");
-      }
+  it("invokes onProgress callbacks during stages", async () => {
+    const mockPort = createMockSendStructuredRequest();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+    const config = {
+      bounded_contexts: [{ id: "ctx1", name: "billing" }],
+      use_cases: [{ id: "uc1", name: "Process Billing", context_id: "ctx1" }],
+      context_mappings: [],
+    };
+    const stages: number[] = [];
+    const result = await useCase.execute(JSON.stringify(config), {
+      onProgress: (stage) => {
+        stages.push(stage);
+      },
     });
+    assert.strictEqual(result.success, true);
+    assert.ok(stages.length > 0);
+  });
+});
 
-    it("accepts a structured config with explicitTechnologies", async () => {
-      mockPort = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+describe("buildDomainAnalysisFromConfig", () => {
+  it("maps bounded_contexts to nouns/subdomains and use_cases to verbs", () => {
+    const config = {
+      bounded_contexts: [
+        { id: "ctx1", name: "billing" },
+        { id: "ctx2", name: "inventory" },
+      ],
+      use_cases: [{ id: "uc1", name: "Process Billing", context_id: "ctx1" }],
+      context_mappings: [],
+    };
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepStrictEqual(analysis.verbs, ["Process Billing"]);
+    assert.deepStrictEqual(analysis.nouns, ["billing", "inventory"]);
+    assert.deepStrictEqual(analysis.subdomains, ["billing", "inventory"]);
+  });
+});
 
-      const result = await useCase.execute(
-        {
-          intent: "My project",
-          explicitTechnologies: ["React", "PostgreSQL"],
-          subdomains: [],
-          classifiedContexts: [],
-        },
-        {
-          userDescription: "My project",
-          platform: undefined,
-          deployment: undefined,
-          additionalContext: undefined,
-        },
-      );
+describe("buildClassificationFromConfig", () => {
+  it("maps bounded_contexts to accepted core contexts", () => {
+    const config = {
+      bounded_contexts: [{ id: "ctx1", name: "billing" }],
+      use_cases: [],
+      context_mappings: [],
+    };
+    const classification = buildClassificationFromConfig(config);
+    assert.strictEqual(classification.accepted.length, 1);
+    assert.strictEqual(classification.accepted[0].name, "billing");
+    assert.strictEqual(classification.accepted[0].type, "core");
+  });
 
-      assert.strictEqual(result.success, true);
-      if (result.success) {
-        assert.deepStrictEqual(result.state.stage0.explicitTechnologies, [
-          "React",
-          "PostgreSQL",
-        ]);
-      }
-    });
+  it("returns empty accepted for empty bounded_contexts", () => {
+    const config = {
+      bounded_contexts: [],
+      use_cases: [],
+      context_mappings: [],
+    };
+    const classification = buildClassificationFromConfig(config);
+    assert.strictEqual(classification.accepted.length, 0);
+  });
+});
 
-    it("accepts a structured config with subdomains", async () => {
-      mockPort = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute(
-        {
-          intent: "My project",
-          explicitTechnologies: [],
-          subdomains: ["billing", "inventory"],
-          classifiedContexts: [],
-        },
-        {
-          userDescription: "My project",
-          platform: undefined,
-          deployment: undefined,
-          additionalContext: undefined,
-        },
-      );
-
-      assert.strictEqual(result.success, true);
-      if (result.success) {
-        assert.deepStrictEqual(result.state.stage1.subdomains, [
-          "billing",
-          "inventory",
-        ]);
-      }
-    });
-
-    it("accepts a structured config with classifiedContexts", async () => {
-      mockPort = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute(
-        {
-          intent: "My project",
-          explicitTechnologies: [],
-          subdomains: [],
-          classifiedContexts: [
-            {
-              name: "billing",
-              type: "core",
-              reasoning: "Main billing domain",
-            },
-          ],
-        },
-        {
-          userDescription: "My project",
-          platform: undefined,
-          deployment: undefined,
-          additionalContext: undefined,
-        },
-      );
-
-      assert.strictEqual(result.success, true);
-      if (result.success) {
-        assert.strictEqual(result.state.stage2.accepted.length, 1);
-        assert.strictEqual(result.state.stage2.accepted[0].name, "billing");
-        assert.strictEqual(result.state.stage2.accepted[0].type, "core");
-      }
-    });
-
-    it("accepts empty classifiedContexts array and returns zero accepted items", async () => {
-      mockPort = createMockSendStructuredRequest();
-      const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
-
-      const result = await useCase.execute(
-        {
-          intent: "My project",
-          explicitTechnologies: [],
-          subdomains: [],
-          classifiedContexts: [],
-        },
-        {
-          userDescription: "My project",
-          platform: undefined,
-          deployment: undefined,
-          additionalContext: undefined,
-        },
-      );
-
-      assert.strictEqual(result.success, true);
-      if (result.success) {
-        assert.strictEqual(result.state.stage2.accepted.length, 0);
-      }
-    });
+describe("buildNormalizedPromptFromConfig", () => {
+  it("builds intent from context names", () => {
+    const config = {
+      bounded_contexts: [{ id: "ctx1", name: "billing" }],
+      use_cases: [],
+      context_mappings: [],
+    };
+    const prompt = buildNormalizedPromptFromConfig(config);
+    assert.ok(prompt.intent.includes("billing"));
+    assert.deepStrictEqual(prompt.explicitTechnologies, []);
+    assert.deepStrictEqual(prompt.explicitPatterns, []);
+    assert.deepStrictEqual(prompt.ambiguities, []);
   });
 });

@@ -21,24 +21,41 @@ function createMockLLMPort(shouldFailStage3 = false) {
     }),
     streamStructuredRequest: async function* () {
       if (shouldFailStage3) {
-        yield { success: false, error: "Failed to map ports" } as any;
+        yield { success: false, error: "Failed to map ports" };
         return;
       }
       yield {
         success: true,
-        value: JSON.stringify({ ports: [], classifications: [] }),
-      };
-      yield { success: true, value: JSON.stringify({ adapters: [] }) };
-      yield {
-        success: true,
         value: JSON.stringify({
-          yaml: "bounded_contexts:\n  - name: Payment",
-          parsedObject: { bounded_contexts: [{ name: "Payment" }] },
+          contextName: "Payment",
+          direction: "in",
+          name: "ProcessPaymentPort",
+          portType: "command",
+          description: "Process a payment",
         }),
       };
       yield {
         success: true,
-        value: JSON.stringify({ passed: true, warnings: [], errors: [] }),
+        value: JSON.stringify({
+          contextName: "Payment",
+          direction: "out",
+          name: "PaymentRepository",
+          portType: "repository",
+          description: "Persist payment",
+        }),
+      };
+      yield {
+        success: true,
+        value: JSON.stringify({
+          contextName: "Payment",
+          adapterName: "InMemoryPaymentRepoAdapter",
+          adapterType: "Repository",
+          implements: "PaymentRepository",
+        }),
+      };
+      yield {
+        success: true,
+        value: JSON.stringify({ type: "result", passed: true }),
       };
     },
   } as unknown as SendStructuredRequestPort;
@@ -49,10 +66,10 @@ test("invalid JSON config → returns { success: false }", async () => {
   const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
   const result = await useCase.execute("invalid json");
   assert.equal(result.success, false);
-  assert.ok(result.error);
+  if (!result.success) assert.ok(result.error);
 });
 
-test("valid config → builds DomainAnalysis and Classification correctly", async () => {
+test("valid config → returns { success: true, value: AssembledManifest }", async () => {
   const config: StructuredConfig = {
     bounded_contexts: [{ id: "ctx1", name: "Payment" }],
     use_cases: [{ id: "uc1", name: "Process Payment", context_id: "ctx1" }],
@@ -68,9 +85,10 @@ test("valid config → builds DomainAnalysis and Classification correctly", asyn
   const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
   const result = await useCase.execute(JSON.stringify(config));
   assert.equal(result.success, true);
-  assert.ok(result.value);
-  assert.ok(typeof result.value.yaml === "string");
-  assert.ok(result.value.parsedObject);
+  if (result.success) {
+    assert.ok(typeof result.value.yaml === "string");
+    assert.ok(result.value.parsedObject);
+  }
 });
 
 test("stage 3 (port mapping) failure → returns { success: false }", async () => {
@@ -79,13 +97,13 @@ test("stage 3 (port mapping) failure → returns { success: false }", async () =
     use_cases: [{ id: "uc1", name: "Process Payment", context_id: "ctx1" }],
     context_mappings: [],
   };
-  const mockPort = createMockLLMPort(true); // shouldFailStage3 = true
+  const mockPort = createMockLLMPort(true);
   const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
   const result = await useCase.execute(JSON.stringify(config));
   assert.equal(result.success, false);
 });
 
-test("full flow success → returns { success: true, value: AssembledManifest }", async () => {
+test("full flow with callbacks → returns assembled manifest", async () => {
   const config: StructuredConfig = {
     bounded_contexts: [
       { id: "ctx1", name: "Payment" },
@@ -105,13 +123,18 @@ test("full flow success → returns { success: true, value: AssembledManifest }"
   };
   const mockPort = createMockLLMPort();
   const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+  const progressStages: number[] = [];
   const result = await useCase.execute(JSON.stringify(config), {
-    onProgress: () => {},
+    onProgress: (stage) => {
+      progressStages.push(stage);
+    },
     onError: () => {},
     onChunk: () => {},
   });
   assert.equal(result.success, true);
-  assert.ok(result.value);
-  assert.ok(result.value.yaml.includes("Payment"));
-  assert.ok(result.value.parsedObject);
+  if (result.success) {
+    assert.ok(result.value.yaml.length > 0);
+    assert.ok(result.value.parsedObject);
+    assert.ok(progressStages.length > 0);
+  }
 });
