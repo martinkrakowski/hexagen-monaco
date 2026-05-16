@@ -4,6 +4,9 @@ import {
   CREATION_PATH_OPTIONS,
   CREATION_STEPS,
   type CreationPathId,
+  IMPORT_SUB_OPTIONS,
+  type ImportSubOptionId,
+  detectInputMode,
 } from "./creation-path.js";
 
 describe("creation-path domain", () => {
@@ -47,6 +50,119 @@ describe("creation-path domain", () => {
           `Invalid colorTheme for ${option.id}: ${option.colorTheme}`,
         );
       }
+    });
+  });
+
+  describe("IMPORT_SUB_OPTIONS", () => {
+    it("has exactly 3 sub-options", () => {
+      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 3);
+    });
+
+    it("has unique ids", () => {
+      const ids = IMPORT_SUB_OPTIONS.map((o) => o.id);
+      assert.strictEqual(new Set(ids).size, ids.length);
+    });
+
+    it("covers all ImportSubOptionId values", () => {
+      const expected: ImportSubOptionId[] = ["manifest", "spec", "github"];
+      const actual = IMPORT_SUB_OPTIONS.map((o) => o.id);
+      assert.deepStrictEqual(actual.sort(), expected.sort());
+    });
+
+    it("each sub-option has a non-empty label and description", () => {
+      for (const option of IMPORT_SUB_OPTIONS) {
+        assert.ok(option.label.length > 0, `Empty label for ${option.id}`);
+        assert.ok(
+          option.description.length > 0,
+          `Empty description for ${option.id}`,
+        );
+      }
+    });
+
+    it("each sub-option has a non-empty href", () => {
+      for (const option of IMPORT_SUB_OPTIONS) {
+        assert.ok(option.href.length > 0, `Empty href for ${option.id}`);
+      }
+    });
+
+    it("github sub-option is marked unavailable", () => {
+      const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
+      assert.ok(github);
+      assert.strictEqual(github!.isAvailable, false);
+    });
+
+    it("manifest and spec sub-options are available", () => {
+      for (const option of IMPORT_SUB_OPTIONS) {
+        if (option.id === "github") continue;
+        assert.strictEqual(
+          option.isAvailable,
+          true,
+          `${option.id} should be available`,
+        );
+      }
+    });
+  });
+
+  describe("detectInputMode", () => {
+    it("detects manifest from .yaml extension", () => {
+      assert.strictEqual(
+        detectInputMode("workspace:\n  name: foo", "manifest.yaml"),
+        "manifest",
+      );
+    });
+
+    it("detects manifest from .yml extension", () => {
+      assert.strictEqual(
+        detectInputMode("workspace:\n  name: foo", "manifest.yml"),
+        "manifest",
+      );
+    });
+
+    it("detects structured-config from .json extension", () => {
+      assert.strictEqual(
+        detectInputMode('{"workspace": {}}', "config.json"),
+        "structured-config",
+      );
+    });
+
+    it("detects structured-config from YAML file starting with JSON object", () => {
+      assert.strictEqual(
+        detectInputMode('{"contexts": []}', "config.yaml"),
+        "structured-config",
+      );
+    });
+
+    it("detects structured-config from content starting with { without extension", () => {
+      assert.strictEqual(
+        detectInputMode('{"contexts": []}'),
+        "structured-config",
+      );
+    });
+
+    it("detects structured-config from content starting with [ without extension", () => {
+      assert.strictEqual(detectInputMode("[]"), "structured-config");
+    });
+
+    it("detects manifest from content with YAML key-value pattern", () => {
+      assert.strictEqual(
+        detectInputMode("workspace:\n  name: foo"),
+        "manifest",
+      );
+    });
+
+    it("returns unknown for ambiguous content", () => {
+      assert.strictEqual(detectInputMode("just some text"), "unknown");
+    });
+
+    it("returns unknown for invalid JSON starting with {", () => {
+      assert.strictEqual(detectInputMode("{invalid json}"), "unknown");
+    });
+
+    it("detects structured-config from content starting with [ with valid JSON", () => {
+      assert.strictEqual(
+        detectInputMode('[{"name": "ctx"}]'),
+        "structured-config",
+      );
     });
   });
 

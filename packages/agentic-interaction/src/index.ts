@@ -105,6 +105,16 @@ export { ExecuteManifestAssemblyUseCase } from "./application/use-cases/staged-g
 export { ExecuteValidationReviewUseCase } from "./application/use-cases/staged-generation/execute-validation-review.use-case.js";
 export { ExecuteStagedGenerationUseCase } from "./application/use-cases/staged-generation/execute-staged-generation.use-case.js";
 export type { StagedGenerationCallbacks } from "./application/use-cases/staged-generation/execute-staged-generation.use-case.js";
+export { ExecuteStructuredConfigGenerationUseCase } from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+export type {
+  StructuredConfigGenerationCallbacks,
+  StructuredConfigInput,
+} from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+export {
+  buildDomainAnalysisFromConfig,
+  buildClassificationFromConfig,
+  buildNormalizedPromptFromConfig,
+} from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 export {
   serializeProjectContext,
   buildContextForLLM,

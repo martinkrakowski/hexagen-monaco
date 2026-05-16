@@ -63,7 +63,7 @@ export function ImportManifestPage() {
     if (manifestYaml) {
       setManifestYaml(null);
     } else {
-      router.push("/projects/new");
+      router.push("/projects/new/import");
     }
   };
 

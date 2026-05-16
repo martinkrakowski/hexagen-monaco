@@ -10,6 +10,75 @@ export interface CreationPathOption {
   readonly href: string;
 }
 
+export type ImportSubOptionId = "manifest" | "spec" | "github";
+
+export interface ImportSubOption {
+  readonly id: ImportSubOptionId;
+  readonly label: string;
+  readonly description: string;
+  readonly iconName: string;
+  readonly href: string;
+  readonly isAvailable: boolean;
+}
+
+export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
+  {
+    id: "manifest",
+    label: "Import Manifest",
+    description:
+      "Upload a manifest.yaml file. Resume work or adapt a previously generated architecture.",
+    iconName: "FileText",
+    href: "/projects/new/import/manifest",
+    isAvailable: true,
+  },
+  {
+    id: "spec",
+    label: "Import Structured Config",
+    description:
+      "Upload a structured config (JSON/YAML). AI maps ports and adapters, then assembles a manifest.",
+    iconName: "Braces",
+    href: "/projects/new/import/spec",
+    isAvailable: true,
+  },
+  {
+    id: "github",
+    label: "Import from GitHub",
+    description:
+      "Clone a repository and extract architecture from code. Coming soon.",
+    iconName: "GitBranch",
+    href: "/projects/new/import/github",
+    isAvailable: false,
+  },
+] as const;
+
+export type InputMode = "manifest" | "structured-config" | "unknown";
+
+export function detectInputMode(content: string, filename?: string): InputMode {
+  const ext = filename?.toLowerCase().split(".").pop();
+  if (ext === "yaml" || ext === "yml") {
+    if (content.trim().startsWith("{") || content.trim().startsWith("[")) {
+      return "structured-config";
+    }
+    return "manifest";
+  }
+  if (ext === "json") {
+    return "structured-config";
+  }
+  const trimmed = content.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      JSON.parse(trimmed);
+      return "structured-config";
+    } catch {
+      return "unknown";
+    }
+  }
+  if (/^\s*[\w-]+:/.test(trimmed)) {
+    return "manifest";
+  }
+  return "unknown";
+}
+
 export interface StepLabel {
   readonly label: string;
   readonly step: number;

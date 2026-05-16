@@ -1,5 +1,5 @@
-import { ImportManifestPage } from "@/manifest-generation/ImportManifestPage";
+import { ImportSelectionPage } from "@/landing/ImportSelectionPage";
 
 export default function Page() {
-  return <ImportManifestPage />;
+  return <ImportSelectionPage />;
 }
