@@ -7,6 +7,8 @@ import assert from "node:assert";
 import {
   createProjectDescription,
   ProjectDescriptionValidator,
+  DESCRIPTION_MIN_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
 } from "../../../src/domain/value-objects/project-description";
 
 describe("ProjectDescription", () => {
@@ -34,7 +36,7 @@ describe("ProjectDescription", () => {
     });
 
     it("should throw error for description that is too long", () => {
-      const longText = "a".repeat(2001);
+      const longText = "a".repeat(DESCRIPTION_MAX_LENGTH + 1);
       assert.throws(() => createProjectDescription(longText), /too long/i);
     });
 
@@ -84,9 +86,25 @@ describe("ProjectDescription", () => {
     });
 
     it("should accept valid descriptions at maximum length", () => {
-      const maxDescription = "A".repeat(2000);
+      const maxDescription = "A".repeat(DESCRIPTION_MAX_LENGTH);
       const description = createProjectDescription(maxDescription);
-      assert.strictEqual(description.text.length, 2000);
+      assert.strictEqual(description.text.length, DESCRIPTION_MAX_LENGTH);
+    });
+  });
+
+  describe("exported constants", () => {
+    it("should export DESCRIPTION_MIN_LENGTH matching class static", () => {
+      assert.strictEqual(
+        DESCRIPTION_MIN_LENGTH,
+        ProjectDescriptionValidator.MIN_LENGTH,
+      );
+    });
+
+    it("should export DESCRIPTION_MAX_LENGTH matching class static", () => {
+      assert.strictEqual(
+        DESCRIPTION_MAX_LENGTH,
+        ProjectDescriptionValidator.MAX_LENGTH,
+      );
     });
   });
 
