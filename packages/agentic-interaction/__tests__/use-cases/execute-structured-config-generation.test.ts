@@ -5,6 +5,8 @@ import type {
   LLMRequest,
   LLMResponse,
 } from "@hexagen/local-llm";
+import type { Identifier } from "@hexagen/shared";
+import type { DomainModelId } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
@@ -12,13 +14,22 @@ function createMockSendStructuredRequest(): SendStructuredRequestPort {
   return {
     sendRequest: async (_req: LLMRequest): Promise<Result<LLMResponse>> => {
       void _req;
-      return { success: true, value: {} as LLMResponse };
+      return {
+        success: true,
+        value: {
+          id: `mock-${Date.now()}` as Identifier,
+          modelId: "mock-model" as DomainModelId,
+          content: "{}",
+          finishReason: "stop",
+          timestamp: Date.now(),
+        } as LLMResponse,
+      };
     },
     streamStructuredRequest: async function* (
       _req: LLMRequest,
     ): AsyncGenerator<Result<string>> {
       void _req;
-      yield { success: true, value: "" };
+      yield { success: true, value: "{}" };
     },
   };
 }
