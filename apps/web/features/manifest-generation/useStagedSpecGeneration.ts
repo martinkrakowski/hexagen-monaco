@@ -182,7 +182,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           try {
             handleEvent(JSON.parse(buffer));
           } catch {
-            void buffer;
+            // Acknowledge unprocessed buffer after parse failure
           }
         }
       } catch (error) {

@@ -13,18 +13,7 @@ import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-
-interface ParsedSpecConfig {
-  intent?: string;
-  explicitTechnologies?: string[];
-  subdomains?: string[];
-  classifiedContexts?: Array<{
-    name: string;
-    type: "core" | "supporting" | "generic" | "shared-kernel";
-    reasoning: string;
-  }>;
-  [key: string]: unknown;
-}
+import type { StructuredConfigInput } from "@hexagen/agentic-interaction";
 
 type SpecPagePhase = "upload" | "generating" | "preview" | "error";
 
@@ -105,24 +94,40 @@ export function ImportProjectSpecPage() {
     setIsSaving(true);
     try {
       let config: ProjectConfig;
-      let parsed: ParsedSpecConfig | null = null;
+      let parsed: StructuredConfigInput | null = null;
       try {
-        parsed = yaml.load(specContent || "") as ParsedSpecConfig;
+        const content = specContent || "";
+        const trimmed = content.trim();
+        if (trimmed.startsWith("{")) {
+          JSON.parse(trimmed);
+        } else {
+          yaml.load(trimmed);
+        }
+        parsed = yaml.load(trimmed) as StructuredConfigInput;
         config = parsed as unknown as ProjectConfig;
-      } catch {
-        config = {} as ProjectConfig;
+      } catch (e) {
+        const errorMsg =
+          e instanceof Error ? e.message : "Invalid config format";
+        setParseError(`Failed to parse spec: ${errorMsg}`);
+        setIsSaving(false);
+        return;
       }
 
       const projectName =
         parsed?.intent || `Spec Import ${new Date().toLocaleTimeString()}`;
 
       const projectId = saveProject(projectName, config, generatedManifest);
-      router.push(`/wizard/1?project=${projectId}`);
+      await router.push(`/wizard/1?project=${projectId}`);
+      setIsSaving(false);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("Failed to save spec-imported project:", error);
+      setParseError(
+        `Failed to save project: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       setIsSaving(false);
     }
-  }, [generatedManifest, specContent, saveProject, router]);
+  }, [generatedManifest, specContent, saveProject, router, setParseError]);
 
   const handleCancel = useCallback(() => {
     if (pagePhase === "generating") {
