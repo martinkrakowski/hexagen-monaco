@@ -10,6 +10,8 @@ export type {
 export {
   ProjectDescriptionValidator,
   createProjectDescription,
+  DESCRIPTION_MIN_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
 } from "./project-description.js";
 
 export type {

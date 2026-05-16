@@ -13,6 +13,16 @@ export { ExecuteManifestAssemblyUseCase } from "./staged-generation/execute-mani
 export { ExecuteValidationReviewUseCase } from "./staged-generation/execute-validation-review.use-case.js";
 export { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case.js";
 export type { StagedGenerationCallbacks } from "./staged-generation/execute-staged-generation.use-case.js";
+export { ExecuteStructuredConfigGenerationUseCase } from "./staged-generation/execute-structured-config-generation.use-case.js";
+export type {
+  StructuredConfigGenerationCallbacks,
+  StructuredConfigInput,
+} from "./staged-generation/execute-structured-config-generation.use-case.js";
+export {
+  buildDomainAnalysisFromConfig,
+  buildClassificationFromConfig,
+  buildNormalizedPromptFromConfig,
+} from "./staged-generation/execute-structured-config-generation.use-case.js";
 export {
   ManifestWarningCategory,
   type ManifestWarning,

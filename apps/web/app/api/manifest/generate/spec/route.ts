@@ -1,14 +1,16 @@
 import { NextRequest } from "next/server";
 import {
-  ExecuteStagedGenerationUseCase,
-  type StagedGenerationCallbacks,
+  ExecuteStructuredConfigGenerationUseCase,
+  type StructuredConfigGenerationCallbacks,
+  type StructuredConfigInput,
 } from "@hexagen/agentic-interaction";
 import type { PromptVariables } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
+import yaml from "js-yaml";
 import { logger } from "../../../../../lib/structured-logger";
 
-interface StageRequestBody {
-  description: string;
+interface SpecRequestBody {
+  config: string;
   platform?: string;
   deployment?: string;
   additionalContext?: string;
@@ -30,7 +32,7 @@ type NDJSONEvent =
   | { type: "error"; message: string };
 
 export async function POST(request: NextRequest) {
-  let body: StageRequestBody;
+  let body: SpecRequestBody;
   try {
     body = await request.json();
   } catch {
@@ -40,9 +42,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!body.description || typeof body.description !== "string") {
+  if (!body.config || typeof body.config !== "string") {
     return new Response(
-      JSON.stringify({ type: "error", message: "Missing description" }),
+      JSON.stringify({ type: "error", message: "Missing config" }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       };
 
-      const callbacks: StagedGenerationCallbacks = {
+      const callbacks: StructuredConfigGenerationCallbacks = {
         onStageStart: (stage, label) =>
           send({ type: "stage-start", stage, label }),
         onStageComplete: (stage, label, durationMs) =>
@@ -71,17 +73,71 @@ export async function POST(request: NextRequest) {
           validateLocalLLM: false,
         });
 
-        const useCase = new ExecuteStagedGenerationUseCase(llmAdapter);
+        const useCase = new ExecuteStructuredConfigGenerationUseCase(
+          llmAdapter,
+        );
+
+        // Parse body.config into StructuredConfigInput fields
+        let parsedConfig: Partial<StructuredConfigInput>;
+        try {
+          parsedConfig = yaml.load(
+            body.config,
+          ) as Partial<StructuredConfigInput>;
+        } catch {
+          send({
+            type: "error",
+            message: "Config must be valid YAML or JSON",
+          });
+          return;
+        }
+
+        if (!parsedConfig.intent || typeof parsedConfig.intent !== "string") {
+          send({
+            type: "error",
+            message: "Config must contain intent string",
+          });
+          return;
+        }
+
+        const structuredInput: StructuredConfigInput = {
+          intent: parsedConfig.intent,
+          explicitTechnologies: Array.isArray(parsedConfig.explicitTechnologies)
+            ? parsedConfig.explicitTechnologies
+                .filter((item): item is string => typeof item === "string")
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
+            : [],
+          subdomains: Array.isArray(parsedConfig.subdomains)
+            ? parsedConfig.subdomains
+                .filter((item): item is string => typeof item === "string")
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
+            : [],
+          classifiedContexts: Array.isArray(parsedConfig.classifiedContexts)
+            ? parsedConfig.classifiedContexts.filter(
+                (item): boolean =>
+                  typeof item === "object" &&
+                  item !== null &&
+                  "name" in item &&
+                  typeof (item as { name: unknown }).name === "string" &&
+                  "type" in item &&
+                  typeof (item as { type: unknown }).type === "string" &&
+                  "reasoning" in item &&
+                  typeof (item as { reasoning: unknown }).reasoning ===
+                    "string",
+              )
+            : [],
+        };
 
         const variables: PromptVariables = {
-          userDescription: body.description,
+          userDescription: parsedConfig.intent,
           platform: body.platform,
           deployment: body.deployment,
           additionalContext: body.additionalContext,
         };
 
         const result = await useCase.execute(
-          body.description,
+          structuredInput,
           variables,
           callbacks,
         );
@@ -116,7 +172,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         if (process.env.NODE_ENV !== "production") {
-          logger.error("Staged generation error:", { error });
+          logger.error("Structured config generation error:", { error });
         }
         send({
           type: "error",

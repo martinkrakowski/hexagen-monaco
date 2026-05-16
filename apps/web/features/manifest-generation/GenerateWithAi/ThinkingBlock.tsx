@@ -2,10 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Loader2, Check } from "lucide-react";
-import type {
-  StagedPhase,
-  StageProgress,
-} from "../useStagedManifestGeneration";
+import type { StagedPhase, StageProgress } from "../staged-generation-types";
 
 const STAGE_ORDER: StagedPhase[] = [
   "stage-0",
