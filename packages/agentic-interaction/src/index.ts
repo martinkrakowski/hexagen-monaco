@@ -1,6 +1,9 @@
 // Domain exports
 export type { BoundedContextType } from "./domain/manifest/coerce-raw-topology.js";
-export { coerceContextType, coercePort } from "./domain/manifest/coerce-raw-topology.js";
+export {
+  coerceContextType,
+  coercePort,
+} from "./domain/manifest/coerce-raw-topology.js";
 export type {
   LLMProviderPort,
   LLMMessage,
@@ -33,6 +36,8 @@ export type {
 export {
   ProjectDescriptionValidator,
   createProjectDescription,
+  DESCRIPTION_MIN_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
   GeneratedManifestValidator,
   createGeneratedManifest,
 } from "./domain/value-objects/index.js";
@@ -140,24 +145,24 @@ export {
 
 // Staged pipeline prompt exports (from domain)
 export {
-STAGE0_NORMALIZATION_SYSTEM_PROMPT,
-compileStage0Prompt,
-STAGE1_DOMAIN_SYSTEM_PROMPT,
-compileStage1Prompt,
-STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
-compileStage2Prompt,
-STAGE3_PORTS_SYSTEM_PROMPT,
-compileStage3Prompt,
-STAGE4_ADAPTERS_SYSTEM_PROMPT,
-compileStage4Prompt,
-STAGE6_VALIDATION_SYSTEM_PROMPT,
-compileStage6Prompt,
-RETRY_PROMPTS,
-MAX_RETRY_ATTEMPTS,
-CONTEXT_LIST_SYSTEM_PROMPT,
-compileContextListPrompt,
-PORTS_LIST_SYSTEM_PROMPT,
-compilePortsPrompt,
+  STAGE0_NORMALIZATION_SYSTEM_PROMPT,
+  compileStage0Prompt,
+  STAGE1_DOMAIN_SYSTEM_PROMPT,
+  compileStage1Prompt,
+  STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
+  compileStage2Prompt,
+  STAGE3_PORTS_SYSTEM_PROMPT,
+  compileStage3Prompt,
+  STAGE4_ADAPTERS_SYSTEM_PROMPT,
+  compileStage4Prompt,
+  STAGE6_VALIDATION_SYSTEM_PROMPT,
+  compileStage6Prompt,
+  RETRY_PROMPTS,
+  MAX_RETRY_ATTEMPTS,
+  CONTEXT_LIST_SYSTEM_PROMPT,
+  compileContextListPrompt,
+  PORTS_LIST_SYSTEM_PROMPT,
+  compilePortsPrompt,
 } from "./domain/index.js";
 export type { PromptVariables, RetryResult } from "./domain/index.js";
 

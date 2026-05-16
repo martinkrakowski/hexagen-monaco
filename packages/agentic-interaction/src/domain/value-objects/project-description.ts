@@ -44,9 +44,12 @@ export interface ProjectDescription {
   additionalContext?: string;
 }
 
+export const DESCRIPTION_MIN_LENGTH = 10;
+export const DESCRIPTION_MAX_LENGTH = 50_000;
+
 export class ProjectDescriptionValidator {
-  private static readonly MIN_LENGTH = 10;
-  private static readonly MAX_LENGTH = 2000;
+  static readonly MIN_LENGTH = DESCRIPTION_MIN_LENGTH;
+  static readonly MAX_LENGTH = DESCRIPTION_MAX_LENGTH;
   private static readonly DANGEROUS_PATTERNS = [
     /ignore previous instructions/i,
     /system prompt/i,
@@ -69,7 +72,7 @@ export class ProjectDescriptionValidator {
 
     if (description.text.length > this.MAX_LENGTH) {
       throw new Error(
-        `Description too long. Maximum ${this.MAX_LENGTH} characters allowed.`,
+        `Description too long. Maximum ${this.MAX_LENGTH.toLocaleString()} characters allowed.`,
       );
     }
 
