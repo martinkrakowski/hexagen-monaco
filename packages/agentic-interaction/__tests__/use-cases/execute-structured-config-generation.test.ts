@@ -173,7 +173,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
       }
     });
 
-    it("rejects empty classifiedContexts array", async () => {
+    it("accepts empty classifiedContexts array and returns zero accepted items", async () => {
       mockPort = createMockSendStructuredRequest();
       const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
 
