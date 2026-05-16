@@ -10,6 +10,7 @@ import {
   assessModelCapability,
   parseYamlToViewData,
 } from "@hexagen/manifest-generation";
+import { DESCRIPTION_MIN_LENGTH } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { Button } from "@hexagen/ui";
@@ -156,7 +157,11 @@ export function GenerateWithAi({
   // Tooltip messaging based on which providers are unavailable
   const disabledTooltip = !hasAnyProvider
     ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
-    : undefined;
+    : formHandlers.isTooShort
+      ? `Minimum ${DESCRIPTION_MIN_LENGTH} characters required to generate`
+      : formHandlers.isTooLong
+        ? "Description exceeds character limit"
+        : undefined;
 
   const navigateToModelSelection = useCallback(
     (autoGenerate = false) => {
@@ -283,10 +288,14 @@ export function GenerateWithAi({
         onChange={(value) => {
           formHandlers.setValue("description", value);
           formHandlers.setValue("selectedExample", null);
+          formHandlers.setValue("loadedFileName", null);
         }}
         charCount={formHandlers.charCount}
         disabled={isGenerating}
         isAiReady={hasAnyProvider}
+        loadedFileName={formState.loadedFileName}
+        onLoadFromFile={formHandlers.loadFromFile}
+        onClearFile={formHandlers.clearFile}
       />
 
       {hasError && (
@@ -337,6 +346,7 @@ export function GenerateWithAi({
         onUseExample={(example, index) => {
           formHandlers.setValue("description", example);
           formHandlers.setValue("selectedExample", index);
+          formHandlers.setValue("loadedFileName", null);
         }}
         isDisabled={isGenerating}
       />
