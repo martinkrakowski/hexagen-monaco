@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
+/** Optional parameters for structured config generation */
 export interface SpecGenerationOptions {
   platform?: string;
   deployment?: string;
@@ -11,6 +12,7 @@ export interface SpecGenerationOptions {
   signal?: AbortSignal;
 }
 
+/** Return type of the useStagedSpecGeneration hook */
 export interface UseStagedSpecGenerationReturn {
   generateFromSpec: (
     config: string,
@@ -44,6 +46,10 @@ function stageToPhase(stage: number): StagedPhase {
   return "idle";
 }
 
+/**
+ * Hook that manages structured config generation with SSE streaming.
+ * Tracks per-stage progress, emits NDJSON events, and supports abort.
+ */
 export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -126,7 +132,9 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       const controller = new AbortController();
       abortRef.current = controller;
       if (options?.signal) {
-        options.signal.addEventListener("abort", () => controller.abort());
+        options.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
       }
 
       try {

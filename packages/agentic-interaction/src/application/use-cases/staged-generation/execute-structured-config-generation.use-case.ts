@@ -13,6 +13,7 @@ import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.us
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case.js";
 import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case.js";
 
+/** Lifecycle callbacks emitted during structured config generation */
 export interface StructuredConfigGenerationCallbacks {
   onStageStart?: (stage: number, label: string) => void;
   onStageComplete?: (stage: number, label: string, durationMs: number) => void;
@@ -20,6 +21,7 @@ export interface StructuredConfigGenerationCallbacks {
   onValidationError?: (stage: number, errors: string[]) => void;
 }
 
+/** Pre-parsed input for structured config generation */
 export interface StructuredConfigInput {
   intent: string;
   explicitTechnologies: string[];
@@ -27,6 +29,7 @@ export interface StructuredConfigInput {
   classifiedContexts: ClassifiedContext[];
 }
 
+/** Build a deterministic DomainAnalysis from parsed structured input */
 export function buildDomainAnalysisFromConfig(
   input: StructuredConfigInput,
 ): DomainAnalysis {
@@ -37,6 +40,7 @@ export function buildDomainAnalysisFromConfig(
   };
 }
 
+/** Build a deterministic ClassificationResult from parsed structured input */
 export function buildClassificationFromConfig(
   input: StructuredConfigInput,
 ): ClassificationResult {
@@ -47,6 +51,7 @@ export function buildClassificationFromConfig(
   };
 }
 
+/** Build a deterministic NormalizedPrompt from parsed structured input */
 export function buildNormalizedPromptFromConfig(
   input: StructuredConfigInput,
 ): NormalizedPrompt {
@@ -58,6 +63,10 @@ export function buildNormalizedPromptFromConfig(
   };
 }
 
+/**
+ * Use case that generates a complete manifest from a pre-parsed structured config.
+ * Stages 0–2 are deterministic (derived from input); stages 3–6 use LLM calls.
+ */
 export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage3: ExecutePortMappingUseCase;
   private readonly stage4: ExecuteAdapterAssignmentUseCase;

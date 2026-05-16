@@ -132,6 +132,13 @@ describe("creation-path domain", () => {
       );
     });
 
+    it("returns unknown for malformed JSON in .yaml file", () => {
+      assert.strictEqual(
+        detectInputMode("{invalid json}", "config.yaml"),
+        "unknown",
+      );
+    });
+
     it("detects structured-config from content starting with { without extension", () => {
       assert.strictEqual(
         detectInputMode('{"contexts": []}'),

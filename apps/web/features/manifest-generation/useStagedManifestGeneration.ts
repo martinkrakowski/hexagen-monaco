@@ -11,6 +11,7 @@ import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
+/** Return type of the useStagedManifestGeneration hook */
 export interface UseStagedManifestGenerationReturn {
   generateManifest: (
     description: string,
@@ -50,6 +51,10 @@ function stageToPhase(stage: number): StagedPhase {
   return "idle";
 }
 
+/**
+ * Hook that manages manifest generation with SSE streaming.
+ * Supports both local WebLLM and cloud LLM paths with per-stage progress tracking.
+ */
 export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -93,7 +98,9 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       const controller = new AbortController();
       abortRef.current = controller;
       if (options?.signal) {
-        options.signal.addEventListener("abort", () => controller.abort());
+        options.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
       }
 
       try {

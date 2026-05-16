@@ -24,6 +24,7 @@ interface DescriptionInputProps {
   onClearFile: () => void;
 }
 
+/** Textarea with file-upload overlay, character counter, and filename badge */
 export function DescriptionInput({
   value,
   onChange,
@@ -65,7 +66,8 @@ export function DescriptionInput({
             <button
               type="button"
               onClick={onClearFile}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              disabled={disabled}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               aria-label={`Remove ${loadedFileName}`}
             >
               ✕
@@ -93,7 +95,7 @@ export function DescriptionInput({
           character limit
         </p>
       )}
-      {!loadedFileName && (
+      {!loadedFileName && !disabled && (
         <FileDropZone
           onFileLoaded={onLoadFromFile}
           accept=".yaml,.yml,.json,.txt,.md"

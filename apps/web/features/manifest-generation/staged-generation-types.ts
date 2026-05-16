@@ -1,3 +1,4 @@
+/** Current phase of a staged manifest generation pipeline */
 export type StagedPhase =
   | "idle"
   | "stage-0"
@@ -10,6 +11,7 @@ export type StagedPhase =
   | "complete"
   | "failed";
 
+/** Progress snapshot for a single stage within a staged generation */
 export interface StageProgress {
   stage: number;
   label: string;
