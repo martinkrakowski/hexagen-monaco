@@ -5,20 +5,12 @@ import {
   type StructuredConfigInput,
 } from "@hexagen/agentic-interaction";
 import type { PromptVariables } from "@hexagen/agentic-interaction";
-import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
-import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
+import { createLLMProviderSelector } from "../../../../lib/wire.server";
+import yaml from "js-yaml";
 import { logger } from "../../../../../lib/structured-logger";
 
 interface SpecRequestBody {
   config: string;
-  intent?: string;
-  explicitTechnologies?: string[];
-  subdomains?: string[];
-  classifiedContexts?: Array<{
-    name: string;
-    type: "core" | "supporting" | "generic" | "shared-kernel";
-    reasoning: string;
-  }>;
   platform?: string;
   deployment?: string;
   additionalContext?: string;
@@ -75,47 +67,55 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const secretVault = new EnvironmentSecretVaultAdapter();
-        const llmAdapter = new LLMProviderSelectorAdapter({
-          webLlmAdapter: null,
+        const llmAdapter = createLLMProviderSelector({
           preferLocal: body.preferLocal ?? false,
+          webLlmAdapter: null,
           validateLocalLLM: false,
-          fallbackChain: {
-            primary: {
-              providerId: "openai" as const,
-              baseUrl: "https://api.openai.com/v1",
-              model: "gpt-4o",
-              apiKeyEnvVar: "OPENAI_API_KEY",
-              temperature: 0.3,
-              maxTokens: 4000,
-            },
-            fallbacks: [
-              {
-                providerId: "anthropic" as const,
-                baseUrl: "https://api.anthropic.com/v1",
-                model: "claude-3-5-sonnet-20241022",
-                apiKeyEnvVar: "ANTHROPIC_API_KEY",
-                temperature: 0.3,
-                maxTokens: 4000,
-              },
-            ],
-          },
-          secretVault,
         });
 
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
         );
 
+        // Parse body.config into StructuredConfigInput fields
+        let parsedConfig: Partial<StructuredConfigInput>;
+        try {
+          parsedConfig = yaml.load(
+            body.config,
+          ) as Partial<StructuredConfigInput>;
+        } catch {
+          send({
+            type: "error",
+            message: "Config must be valid YAML or JSON",
+          });
+          controller.close();
+          return;
+        }
+
+        if (!parsedConfig.intent || typeof parsedConfig.intent !== "string") {
+          send({
+            type: "error",
+            message: "Config must contain intent string",
+          });
+          controller.close();
+          return;
+        }
+
         const structuredInput: StructuredConfigInput = {
-          intent: body.intent ?? "Imported Structured Config",
-          explicitTechnologies: body.explicitTechnologies ?? [],
-          subdomains: body.subdomains ?? [],
-          classifiedContexts: body.classifiedContexts ?? [],
+          intent: parsedConfig.intent,
+          explicitTechnologies: Array.isArray(parsedConfig.explicitTechnologies)
+            ? parsedConfig.explicitTechnologies
+            : [],
+          subdomains: Array.isArray(parsedConfig.subdomains)
+            ? parsedConfig.subdomains
+            : [],
+          classifiedContexts: Array.isArray(parsedConfig.classifiedContexts)
+            ? parsedConfig.classifiedContexts
+            : [],
         };
 
         const variables: PromptVariables = {
-          userDescription: body.intent ?? "Imported Structured Config",
+          userDescription: parsedConfig.intent,
           platform: body.platform,
           deployment: body.deployment,
           additionalContext: body.additionalContext,

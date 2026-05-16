@@ -10,6 +10,7 @@ import type {
 import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
+import { useStagedGenerationStream } from "./useStagedGenerationStream";
 
 /** Return type of the useStagedManifestGeneration hook */
 export interface UseStagedManifestGenerationReturn {
@@ -46,11 +47,6 @@ const STAGE_LABELS: Record<number, string> = {
   6: "Validation Review",
 };
 
-function stageToPhase(stage: number): StagedPhase {
-  if (stage >= 0 && stage <= 6) return `stage-${stage}` as StagedPhase;
-  return "idle";
-}
-
 /**
  * Hook that manages manifest generation with SSE streaming.
  * Supports both local WebLLM and cloud LLM paths with per-stage progress tracking.
@@ -72,6 +68,12 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
   const [adapterCount, setAdapterCount] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
+
+  // Cloud streaming hook
+  const cloudStream = useStagedGenerationStream({
+    endpoint: "/api/manifest/generate/stage",
+    stageLabels: STAGE_LABELS,
+  });
 
   const generateManifest = useCallback(
     async (
@@ -165,70 +167,43 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
               sum + (c.adapters?.length || 0),
             0,
           );
-          handleEvent({
-            type: "done",
-            yaml,
-            contextCount: draft.boundedContexts.length,
-            portCount: draft.boundedContexts.reduce(
-              (sum: number, c: ManifestDraftContext) =>
-                sum + (c.ports?.in?.length || 0) + (c.ports?.out?.length || 0),
-              0,
-            ),
-            adapterCount,
-          });
+
+          const contextCount = draft.boundedContexts.length;
+          const portCount = draft.boundedContexts.reduce(
+            (sum: number, c: ManifestDraftContext) =>
+              sum + (c.ports?.in?.length || 0) + (c.ports?.out?.length || 0),
+            0,
+          );
+
+          setGeneratedManifest(yaml);
+          setContextCount(contextCount);
+          setPortCount(portCount);
+          setAdapterCount(adapterCount);
+          setPhase("complete");
+          setStepDetail("Manifest generation complete");
+          setIsGenerating(false);
         } else {
           // Cloud: call server endpoint (staged generation with cloud keys)
-          const response = await fetch("/api/manifest/generate/stage", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          await cloudStream.generate(
+            {
               description,
               platform: options?.platform,
               deployment: options?.deployment,
               additionalContext: options?.additionalContext,
               preferLocal: options?.preferLocal,
-            }),
-            signal: controller.signal,
-          });
+            },
+            controller.signal,
+          );
 
-          if (!response.ok || !response.body) {
-            const text = await response.text();
-            throw new Error(text || `HTTP ${response.status}`);
-          }
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          // eslint-disable-next-line no-constant-condition
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              try {
-                const event = JSON.parse(line);
-                handleEvent(event);
-              } catch {
-                logger.warn("[staged-gen] Failed to parse NDJSON line", {
-                  line,
-                });
-              }
-            }
-          }
-
-          if (buffer.trim()) {
-            try {
-              handleEvent(JSON.parse(buffer));
-            } catch {
-              void buffer;
-            }
-          }
+          // Sync cloud stream state to local state
+          setGeneratedManifest(cloudStream.generatedManifest);
+          setContextCount(cloudStream.contextCount);
+          setPortCount(cloudStream.portCount);
+          setAdapterCount(cloudStream.adapterCount);
+          setPhase(cloudStream.phase);
+          setStepDetail(cloudStream.stepDetail);
+          setStageProgress(cloudStream.stageProgress);
+          setValidationErrors(cloudStream.validationErrors);
         }
       } catch (error) {
         if (controller.signal.aborted) {
@@ -243,60 +218,14 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
         setGenerationError(message);
         setPhase("failed");
       } finally {
-        setIsGenerating(false);
+        if (!controller.signal.aborted) {
+          setIsGenerating(false);
+        }
         abortRef.current = null;
       }
     },
-    [],
+    [cloudStream],
   );
-
-  const handleEvent = useCallback((event: Record<string, unknown>) => {
-    const type = event.type as string;
-
-    if (type === "stage-start") {
-      const stage = event.stage as number;
-      const label =
-        (event.label as string) || STAGE_LABELS[stage] || `Stage ${stage}`;
-      setPhase(stageToPhase(stage));
-      setStepDetail(`${label}...`);
-      setStageProgress((prev) => ({
-        ...prev,
-        [stage]: { stage, label, chunks: [] },
-      }));
-    } else if (type === "stage-complete") {
-      const stage = event.stage as number;
-      const durationMs = event.durationMs as number;
-      setStageProgress((prev) => ({
-        ...prev,
-        [stage]: { ...prev[stage], durationMs },
-      }));
-    } else if (type === "chunk") {
-      const stage = event.stage as number;
-      const data = event.data as string;
-      setStageProgress((prev) => ({
-        ...prev,
-        [stage]: {
-          ...prev[stage],
-          chunks: [...(prev[stage]?.chunks || []), data],
-        },
-      }));
-    } else if (type === "validation-error") {
-      const errors = event.errors as string[];
-      setValidationErrors(errors);
-    } else if (type === "done") {
-      setGeneratedManifest(event.yaml as string);
-      setContextCount(event.contextCount as number);
-      setPortCount(event.portCount as number);
-      setAdapterCount(event.adapterCount as number);
-      setPhase("complete");
-      setStepDetail("Manifest generation complete");
-      setIsGenerating(false);
-    } else if (type === "error") {
-      setGenerationError(event.message as string);
-      setPhase("failed");
-      setIsGenerating(false);
-    }
-  }, []);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
@@ -310,7 +239,8 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
-  }, []);
+    cloudStream.reset();
+  }, [cloudStream]);
 
   return {
     generateManifest,

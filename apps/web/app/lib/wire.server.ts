@@ -29,15 +29,15 @@ import {
   GovernanceAwareConflictResolverAdapter,
   LinterReportFilterAdapter,
 } from "@hexagen/reconciliation-engine";
+import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import type {
   ModifyArchitectureDeps,
   CloudLLMPipelineAdapterConfig,
   ProviderFallbackChain,
 } from "@hexagen/agentic-interaction";
+import type { LocalLLMProviderPort } from "@hexagen/local-llm";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import type {
-  ArchitectureGraphLike,
-} from "@hexagen/prompt-compiler";
+import type { ArchitectureGraphLike } from "@hexagen/prompt-compiler";
 import type { LinterReportLike } from "@hexagen/core-domain";
 import {
   ManifestProviderAdapter,
@@ -156,6 +156,48 @@ export const getLintValidation = (): CliLintValidationAdapter => {
 };
 
 // ============================================================================
+// LLM Provider Wiring
+// ============================================================================
+
+export interface LLMProviderSelectorConfig {
+  preferLocal: boolean;
+  webLlmAdapter?: (LocalLLMProviderPort & SendStructuredRequestPort) | null;
+  validateLocalLLM?: boolean;
+}
+
+export const createLLMProviderSelector = (
+  config: LLMProviderSelectorConfig,
+): LLMProviderSelectorAdapter => {
+  const secretVault = getEnvironmentVault();
+  return new LLMProviderSelectorAdapter({
+    webLlmAdapter: config.webLlmAdapter ?? null,
+    preferLocal: config.preferLocal,
+    validateLocalLLM: config.validateLocalLLM ?? false,
+    fallbackChain: {
+      primary: {
+        providerId: "openai" as const,
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4o",
+        apiKeyEnvVar: "OPENAI_API_KEY",
+        temperature: 0.3,
+        maxTokens: 4000,
+      },
+      fallbacks: [
+        {
+          providerId: "anthropic" as const,
+          baseUrl: "https://api.anthropic.com/v1",
+          model: "claude-3-5-sonnet-20241022",
+          apiKeyEnvVar: "ANTHROPIC_API_KEY",
+          temperature: 0.3,
+          maxTokens: 4000,
+        },
+      ],
+    },
+    secretVault,
+  });
+};
+
+// ============================================================================
 // Adapter Singletons
 // ============================================================================
 
@@ -167,21 +209,24 @@ const getManifestProviderAdapter = (): ManifestProviderAdapter => {
   return _manifestProvider;
 };
 
-let _architectureGraphProvider: ServerArchitectureGraphProviderAdapter | null = null;
-const getArchitectureGraphProviderAdapter = (): ServerArchitectureGraphProviderAdapter => {
-  if (!_architectureGraphProvider) {
-    _architectureGraphProvider = new ServerArchitectureGraphProviderAdapter();
-  }
-  return _architectureGraphProvider;
-};
+let _architectureGraphProvider: ServerArchitectureGraphProviderAdapter | null =
+  null;
+const getArchitectureGraphProviderAdapter =
+  (): ServerArchitectureGraphProviderAdapter => {
+    if (!_architectureGraphProvider) {
+      _architectureGraphProvider = new ServerArchitectureGraphProviderAdapter();
+    }
+    return _architectureGraphProvider;
+  };
 
 let _linterReportProvider: ServerLinterReportProviderAdapter | null = null;
-const getLinterReportProviderAdapter = (): ServerLinterReportProviderAdapter => {
-  if (!_linterReportProvider) {
-    _linterReportProvider = new ServerLinterReportProviderAdapter();
-  }
-  return _linterReportProvider;
-};
+const getLinterReportProviderAdapter =
+  (): ServerLinterReportProviderAdapter => {
+    if (!_linterReportProvider) {
+      _linterReportProvider = new ServerLinterReportProviderAdapter();
+    }
+    return _linterReportProvider;
+  };
 
 export type PipelineMode = "in-memory" | "cloud";
 

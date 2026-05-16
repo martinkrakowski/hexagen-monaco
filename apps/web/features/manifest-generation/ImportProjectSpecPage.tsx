@@ -12,6 +12,7 @@ import { ManifestPreview } from "./ManifestPreview";
 import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
+import { logger } from "../../lib/structured-logger";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import type { StructuredConfigInput } from "@hexagen/agentic-interaction";
 
@@ -120,8 +121,9 @@ export function ImportProjectSpecPage() {
       await router.push(`/wizard/1?project=${projectId}`);
       setIsSaving(false);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Failed to save spec-imported project:", error);
+      logger.error(
+        `Failed to save spec-imported project: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       setParseError(
         `Failed to save project: ${error instanceof Error ? error.message : "Unknown error"}`,
       );

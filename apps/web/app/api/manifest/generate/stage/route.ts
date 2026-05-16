@@ -4,8 +4,7 @@ import {
   type StagedGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import type { PromptVariables } from "@hexagen/agentic-interaction";
-import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
-import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
+import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 
 interface StageRequestBody {
@@ -21,7 +20,13 @@ type NDJSONEvent =
   | { type: "stage-complete"; stage: number; label: string; durationMs: number }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
-  | { type: "done"; yaml: string; contextCount: number; portCount: number; adapterCount: number }
+  | {
+      type: "done";
+      yaml: string;
+      contextCount: number;
+      portCount: number;
+      adapterCount: number;
+    }
   | { type: "error"; message: string };
 
 export async function POST(request: NextRequest) {
@@ -50,7 +55,8 @@ export async function POST(request: NextRequest) {
       };
 
       const callbacks: StagedGenerationCallbacks = {
-        onStageStart: (stage, label) => send({ type: "stage-start", stage, label }),
+        onStageStart: (stage, label) =>
+          send({ type: "stage-start", stage, label }),
         onStageComplete: (stage, label, durationMs) =>
           send({ type: "stage-complete", stage, label, durationMs }),
         onChunk: (stage, data) => send({ type: "chunk", stage, data }),
@@ -59,32 +65,10 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const secretVault = new EnvironmentSecretVaultAdapter();
-        const llmAdapter = new LLMProviderSelectorAdapter({
-          webLlmAdapter: null,
+        const llmAdapter = createLLMProviderSelector({
           preferLocal: body.preferLocal ?? false,
+          webLlmAdapter: null,
           validateLocalLLM: false,
-          fallbackChain: {
-            primary: {
-              providerId: "openai" as const,
-              baseUrl: "https://api.openai.com/v1",
-              model: "gpt-4o",
-              apiKeyEnvVar: "OPENAI_API_KEY",
-              temperature: 0.3,
-              maxTokens: 4000,
-            },
-            fallbacks: [
-              {
-                providerId: "anthropic" as const,
-                baseUrl: "https://api.anthropic.com/v1",
-                model: "claude-3-5-sonnet-20241022",
-                apiKeyEnvVar: "ANTHROPIC_API_KEY",
-                temperature: 0.3,
-                maxTokens: 4000,
-              },
-            ],
-          },
-          secretVault,
         });
 
         const useCase = new ExecuteStagedGenerationUseCase(llmAdapter);
@@ -105,14 +89,16 @@ export async function POST(request: NextRequest) {
         if (result.success) {
           const yaml = result.state.stage5?.yaml || "";
           const ctxCount = result.state.stage2?.accepted.length ?? 0;
-          const portCount = result.state.stage3?.contexts.reduce(
-            (sum, c) => sum + c.in.length + c.out.length,
-            0,
-          ) ?? 0;
-          const adapterCount = result.state.stage4?.contexts.reduce(
-            (sum, c) => sum + c.adapters.length,
-            0,
-          ) ?? 0;
+          const portCount =
+            result.state.stage3?.contexts.reduce(
+              (sum, c) => sum + c.in.length + c.out.length,
+              0,
+            ) ?? 0;
+          const adapterCount =
+            result.state.stage4?.contexts.reduce(
+              (sum, c) => sum + c.adapters.length,
+              0,
+            ) ?? 0;
 
           send({
             type: "done",
@@ -134,8 +120,7 @@ export async function POST(request: NextRequest) {
         }
         send({
           type: "error",
-          message:
-            error instanceof Error ? error.message : "Unknown error",
+          message: error instanceof Error ? error.message : "Unknown error",
         });
       } finally {
         controller.close();
