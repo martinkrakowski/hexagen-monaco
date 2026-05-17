@@ -44,6 +44,8 @@ export function DescriptionInput({
         <div className="p-4 pb-2 flex items-center justify-between border-b border-card-border">
           <AiReadyIndicator isReady={isAiReady} />
           <span
+            aria-live="polite"
+            aria-atomic="true"
             className={[
               "text-xs font-mono",
               isTooLong
@@ -80,7 +82,7 @@ export function DescriptionInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
-          className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/60 p-4 text-sm leading-relaxed resize-none focus:outline-none max-h-96 overflow-y-auto"
+          className="description-textarea w-full bg-transparent text-foreground placeholder:text-muted-foreground/60 p-4 text-sm leading-relaxed resize-y focus:outline-none overflow-y-auto"
           disabled={disabled}
         />
       </div>

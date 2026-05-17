@@ -131,6 +131,7 @@
 
   /* Form & Panel Tokens */
   --textarea-min-height: 150px;
+  --textarea-max-height: 60vh;
   --resizable-panel-height: calc(100% - 3rem);
 
   /* Card Width Tokens (Phase 3 Remediation) */
@@ -516,6 +517,12 @@ dialog::backdrop {
   .textarea-glow:focus-within {
     transition: none;
   }
+}
+
+/* ── Resizable Description Textarea ──────────────────────────────────────────── */
+.description-textarea {
+  min-height: var(--textarea-min-height);
+  max-height: var(--textarea-max-height);
 }
 
 /* ── Mermaid Source Panel ─────────────────────────────────────────────────────── */
