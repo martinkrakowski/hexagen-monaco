@@ -139,6 +139,8 @@ export class ExecuteStructuredConfigGenerationUseCase {
     callbacks?.onProgress?.(3, 0);
     const s3 = await this.stage3.execute(
       {
+        stage0: normalizedPrompt,
+        stage1: buildDomainAnalysisFromConfig(config),
         stage2: classification,
       },
       callbacks?.onChunk,
@@ -157,7 +159,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
       userDescription: JSON.stringify(config),
     };
     const s4 = await this.stage4.execute(
-      { stage0: normalizedPrompt, stage3: s3.value },
+      {
+        stage0: normalizedPrompt,
+        stage2: classification,
+        stage3: s3.value.portMap,
+        contextMappings: s3.value.contextMappings,
+      },
       variables,
       callbacks?.onChunk,
     );
@@ -174,7 +181,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const assembledManifest = this.stage5.execute({
       stage0: normalizedPrompt,
       stage2: classification,
-      stage3: s3.value,
+      stage3: s3.value.portMap,
       stage4: s4.value,
     });
     const s5Duration = Date.now() - s5Start;

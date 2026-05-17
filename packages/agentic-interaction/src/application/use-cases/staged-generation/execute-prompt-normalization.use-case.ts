@@ -20,7 +20,7 @@ export class ExecutePromptNormalizationUseCase {
     | { success: true; value: NormalizedPrompt }
     | { success: false; error: unknown }
   > {
-    const prompt = compileStage0Prompt({}, variables || { userDescription });
+    const prompt = compileStage0Prompt(variables || { userDescription });
 
     const request = createLLMRequest(
       DomainModelId.QWEN_CODER_3B,

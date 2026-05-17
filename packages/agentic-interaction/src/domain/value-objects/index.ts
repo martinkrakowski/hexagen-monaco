@@ -25,8 +25,13 @@ export {
 
 export type {
   NormalizedPrompt,
+  AggregateRoot,
+  DomainEntity,
+  DomainValueObject,
+  DomainEvent,
   DomainAnalysis,
   ClassifiedContext,
+  AcceptedContext,
   RejectedContext,
   UncertainContext,
   ClassificationResult,
@@ -38,7 +43,9 @@ export type {
   AdapterBinding,
   ContextAdapters,
   AdapterBindings,
+  AssemblyWarning,
   AssembledManifest,
   ValidationReport,
+  ContextMappingEntry,
   PipelineState,
 } from "./pipeline-state.js";

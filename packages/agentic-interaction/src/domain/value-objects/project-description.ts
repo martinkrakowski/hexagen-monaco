@@ -44,8 +44,8 @@ export interface ProjectDescription {
   additionalContext?: string;
 }
 
-export const DESCRIPTION_MIN_LENGTH = 10;
-export const DESCRIPTION_MAX_LENGTH = 50_000;
+export const DESCRIPTION_MIN_LENGTH = 30;
+export const DESCRIPTION_MAX_LENGTH = 5000;
 
 export class ProjectDescriptionValidator {
   static readonly MIN_LENGTH = DESCRIPTION_MIN_LENGTH;

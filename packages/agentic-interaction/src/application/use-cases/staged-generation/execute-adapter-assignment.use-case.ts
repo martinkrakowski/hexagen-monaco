@@ -7,6 +7,7 @@ import {
   compileStage4Prompt,
 } from "../../../domain/index.js";
 import type {
+  AdapterBinding,
   AdapterBindings,
   PipelineState,
   ContextAdapters,
@@ -17,7 +18,10 @@ export class ExecuteAdapterAssignmentUseCase {
   constructor(private readonly llmPort: SendStructuredRequestPort) {}
 
   async execute(
-    state: Pick<PipelineState, "stage0" | "stage3">,
+    state: Pick<
+      PipelineState,
+      "stage0" | "stage2" | "stage3" | "contextMappings"
+    >,
     variables: PromptVariables,
     onChunk?: (chunk: string) => void,
   ): Promise<
@@ -53,21 +57,44 @@ export class ExecuteAdapterAssignmentUseCase {
       }
     }
 
+    const VALID_ADAPTER_TYPES = new Set<string>([
+      "Repository",
+      "Listener",
+      "Publisher",
+      "HttpClient",
+      "Notifier",
+      "Controller",
+    ]);
+
     const lines = fullResponse.split("\n").filter((line) => line.trim() !== "");
     const contextAdaptersMap = new Map<
       string,
-      Array<{ name: string; type: string; implements: string }>
+      Array<{
+        name: string;
+        type: string;
+        implements: string;
+        adapterType?:
+          | "Repository"
+          | "Listener"
+          | "Publisher"
+          | "HttpClient"
+          | "Notifier"
+          | "Controller";
+        technology?: string;
+      }>
     >();
 
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line);
+        const entry = parsed.adapter ?? parsed;
         const {
           contextName,
           adapterName,
           adapterType,
+          technology,
           implements: impl,
-        } = parsed;
+        } = entry;
 
         if (!contextName || !adapterName || !adapterType || !impl) continue;
 
@@ -75,11 +102,36 @@ export class ExecuteAdapterAssignmentUseCase {
           contextAdaptersMap.set(contextName, []);
         }
 
-        contextAdaptersMap.get(contextName)!.push({
+        const binding: {
+          name: string;
+          type: string;
+          implements: string;
+          adapterType?:
+            | "Repository"
+            | "Listener"
+            | "Publisher"
+            | "HttpClient"
+            | "Notifier"
+            | "Controller";
+          technology?: string;
+        } = {
           name: adapterName,
           type: adapterType,
           implements: impl,
-        });
+        };
+
+        if (
+          typeof adapterType === "string" &&
+          VALID_ADAPTER_TYPES.has(adapterType)
+        ) {
+          binding.adapterType = adapterType as AdapterBinding["adapterType"];
+        }
+
+        if (typeof technology === "string" && technology.length > 0) {
+          binding.technology = technology;
+        }
+
+        contextAdaptersMap.get(contextName)!.push(binding);
       } catch {
         // ignore malformed NDJSON lines
       }

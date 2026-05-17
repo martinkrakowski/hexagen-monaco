@@ -13,6 +13,7 @@ import type {
   PortDefinition,
   InboundPortType,
   OutboundPortType,
+  ContextMappingEntry,
 } from "../../../domain/value-objects/pipeline-state.js";
 
 const VALID_INBOUND_TYPES = new Set<string>(["command", "query", "event"]);
@@ -38,14 +39,20 @@ function coercePortType(
   return null;
 }
 
+export interface PortMappingResult {
+  portMap: PortMap;
+  contextMappings: ContextMappingEntry[];
+}
+
 export class ExecutePortMappingUseCase {
   constructor(private readonly llmPort: SendStructuredRequestPort) {}
 
   async execute(
-    state: Pick<PipelineState, "stage2">,
+    state: Pick<PipelineState, "stage0" | "stage1" | "stage2">,
     onChunk?: (chunk: string) => void,
   ): Promise<
-    { success: true; value: PortMap } | { success: false; error: unknown }
+    | { success: true; value: PortMappingResult }
+    | { success: false; error: unknown }
   > {
     const prompt = compileStage3Prompt(state);
 
@@ -81,10 +88,38 @@ export class ExecutePortMappingUseCase {
       string,
       { in: PortDefinition[]; out: PortDefinition[] }
     >();
+    const contextMappings: ContextMappingEntry[] = [];
 
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line);
+        const entryType = parsed.type || "port";
+
+        if (entryType === "contextMapping") {
+          if (
+            typeof parsed.upstream === "string" &&
+            typeof parsed.downstream === "string"
+          ) {
+            const mapping: ContextMappingEntry = {
+              upstream: parsed.upstream,
+              downstream: parsed.downstream,
+            };
+            if (typeof parsed.pattern === "string")
+              mapping.pattern = parsed.pattern;
+            if (typeof parsed.mechanism === "string")
+              mapping.mechanism = parsed.mechanism;
+            if (typeof parsed.notes === "string") mapping.notes = parsed.notes;
+            if (
+              Array.isArray(parsed.events) &&
+              parsed.events.every((v: unknown) => typeof v === "string")
+            ) {
+              mapping.events = parsed.events;
+            }
+            contextMappings.push(mapping);
+          }
+          continue;
+        }
+
         const { contextName, direction, name, portType, description } = parsed;
 
         if (!contextName || !direction || !name || !portType) continue;
@@ -97,18 +132,21 @@ export class ExecutePortMappingUseCase {
         const coercedType = coercePortType(direction, portType);
         if (!coercedType) continue;
 
+        const portDef: PortDefinition = {
+          name,
+          type: coercedType as InboundPortType | OutboundPortType,
+          description: description || "",
+        };
+        if (typeof parsed.forAggregate === "string") {
+          portDef.forAggregate = parsed.forAggregate;
+        }
+
         if (direction === "in") {
-          ports.in.push({
-            name,
-            type: coercedType as InboundPortType,
-            description: description || "",
-          });
+          portDef.type = coercedType as InboundPortType;
+          ports.in.push(portDef);
         } else if (direction === "out") {
-          ports.out.push({
-            name,
-            type: coercedType as OutboundPortType,
-            description: description || "",
-          });
+          portDef.type = coercedType as OutboundPortType;
+          ports.out.push(portDef);
         }
       } catch {
         // ignore malformed NDJSON lines
@@ -120,6 +158,6 @@ export class ExecutePortMappingUseCase {
       contexts.push({ contextName, in: ports.in, out: ports.out });
     }
 
-    return ok({ contexts });
+    return ok({ portMap: { contexts }, contextMappings });
   }
 }

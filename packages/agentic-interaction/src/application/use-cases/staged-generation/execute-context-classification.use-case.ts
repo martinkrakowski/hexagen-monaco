@@ -100,11 +100,33 @@ export class ExecuteContextClassificationUseCase {
           ) {
             ctxType = parsed.contextType;
           }
-          accepted.push({
+          const acceptedCtx: ClassifiedContext = {
             name: parsed.name,
             type: ctxType,
             reasoning: parsed.reasoning,
-          });
+          };
+          if (typeof parsed.responsibility === "string") {
+            acceptedCtx.responsibility = parsed.responsibility;
+          }
+          if (
+            Array.isArray(parsed.aggregateRoots) &&
+            parsed.aggregateRoots.every((v: unknown) => typeof v === "string")
+          ) {
+            acceptedCtx.aggregateRoots = parsed.aggregateRoots;
+          }
+          if (
+            Array.isArray(parsed.useCaseNames) &&
+            parsed.useCaseNames.every((v: unknown) => typeof v === "string")
+          ) {
+            acceptedCtx.useCaseNames = parsed.useCaseNames;
+          }
+          if (
+            Array.isArray(parsed.eventsPublished) &&
+            parsed.eventsPublished.every((v: unknown) => typeof v === "string")
+          ) {
+            acceptedCtx.eventsPublished = parsed.eventsPublished;
+          }
+          accepted.push(acceptedCtx);
         } else if (parsed.status === "rejected") {
           rejected.push({
             name: parsed.name,

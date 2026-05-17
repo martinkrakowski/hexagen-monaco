@@ -9,6 +9,10 @@ import {
 import type {
   DomainAnalysis,
   PipelineState,
+  AggregateRoot,
+  DomainEntity,
+  DomainValueObject,
+  DomainEvent,
 } from "../../../domain/value-objects/pipeline-state.js";
 
 export class ExecuteDomainExtractionUseCase {
@@ -54,6 +58,11 @@ export class ExecuteDomainExtractionUseCase {
     const verbs: string[] = [];
     const nouns: string[] = [];
     const subdomains: string[] = [];
+    const aggregateRoots: AggregateRoot[] = [];
+    const entities: DomainEntity[] = [];
+    const valueObjects: DomainValueObject[] = [];
+    const domainEvents: DomainEvent[] = [];
+    const useCases: DomainAnalysis["useCases"] = [];
 
     for (const line of lines) {
       try {
@@ -64,12 +73,73 @@ export class ExecuteDomainExtractionUseCase {
           nouns.push(parsed.value);
         } else if (parsed.type === "subdomain") {
           subdomains.push(parsed.value);
+        } else if (
+          parsed.type === "aggregateRoot" &&
+          typeof parsed.name === "string" &&
+          typeof parsed.subdomain === "string"
+        ) {
+          aggregateRoots.push({
+            name: parsed.name,
+            subdomain: parsed.subdomain,
+            identityFields: Array.isArray(parsed.identityFields)
+              ? parsed.identityFields
+              : undefined,
+          });
+        } else if (
+          parsed.type === "entity" &&
+          typeof parsed.name === "string" &&
+          typeof parsed.parentAggregate === "string"
+        ) {
+          entities.push({
+            name: parsed.name,
+            parentAggregate: parsed.parentAggregate,
+          });
+        } else if (
+          parsed.type === "valueObject" &&
+          typeof parsed.name === "string"
+        ) {
+          valueObjects.push({
+            name: parsed.name,
+            rules: typeof parsed.rules === "string" ? parsed.rules : undefined,
+          });
+        } else if (
+          parsed.type === "domainEvent" &&
+          typeof parsed.name === "string" &&
+          typeof parsed.emitter === "string"
+        ) {
+          domainEvents.push({
+            name: parsed.name,
+            emitter: parsed.emitter,
+            trigger:
+              typeof parsed.trigger === "string" ? parsed.trigger : undefined,
+          });
+        } else if (
+          parsed.type === "useCase" &&
+          typeof parsed.name === "string" &&
+          typeof parsed.subdomain === "string"
+        ) {
+          useCases.push({
+            name: parsed.name,
+            subdomain: parsed.subdomain,
+            actor: typeof parsed.actor === "string" ? parsed.actor : undefined,
+            commandName:
+              typeof parsed.commandName === "string"
+                ? parsed.commandName
+                : undefined,
+          });
         }
       } catch {
         // ignore malformed NDJSON lines
       }
     }
 
-    return ok({ verbs, nouns, subdomains });
+    const result: DomainAnalysis = { verbs, nouns, subdomains };
+    if (aggregateRoots.length > 0) result.aggregateRoots = aggregateRoots;
+    if (entities.length > 0) result.entities = entities;
+    if (valueObjects.length > 0) result.valueObjects = valueObjects;
+    if (domainEvents.length > 0) result.domainEvents = domainEvents;
+    if (useCases.length > 0) result.useCases = useCases;
+
+    return ok(result);
   }
 }

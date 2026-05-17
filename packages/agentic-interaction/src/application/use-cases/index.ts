@@ -8,6 +8,7 @@ export { ExecutePromptNormalizationUseCase } from "./staged-generation/execute-p
 export { ExecuteDomainExtractionUseCase } from "./staged-generation/execute-domain-extraction.use-case.js";
 export { ExecuteContextClassificationUseCase } from "./staged-generation/execute-context-classification.use-case.js";
 export { ExecutePortMappingUseCase } from "./staged-generation/execute-port-mapping.use-case.js";
+export type { PortMappingResult } from "./staged-generation/execute-port-mapping.use-case.js";
 export { ExecuteAdapterAssignmentUseCase } from "./staged-generation/execute-adapter-assignment.use-case.js";
 export { ExecuteManifestAssemblyUseCase } from "./staged-generation/execute-manifest-assembly.use-case.js";
 export { ExecuteValidationReviewUseCase } from "./staged-generation/execute-validation-review.use-case.js";

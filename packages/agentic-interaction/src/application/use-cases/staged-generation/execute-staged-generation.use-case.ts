@@ -99,17 +99,26 @@ export class ExecuteStagedGenerationUseCase {
 
     // Stage 3: Port Mapping
     const s3 = await runStage(3, "Port Mapping", () =>
-      this.stage3.execute({ stage2: state.stage2 }, (chunk) =>
-        callbacks?.onChunk?.(3, chunk),
+      this.stage3.execute(
+        { stage0: state.stage0, stage1: state.stage1, stage2: state.stage2 },
+        (chunk) => callbacks?.onChunk?.(3, chunk),
       ),
     );
     if (!s3.success) return { success: false, error: s3.error, state };
-    state.stage3 = s3.value;
+    state.stage3 = s3.value.portMap;
+    if (s3.value.contextMappings.length > 0) {
+      state.contextMappings = s3.value.contextMappings;
+    }
 
     // Stage 4: Adapter Assignment
     const s4 = await runStage(4, "Adapter Assignment", () =>
       this.stage4.execute(
-        { stage0: state.stage0, stage3: state.stage3 },
+        {
+          stage0: state.stage0,
+          stage2: state.stage2,
+          stage3: state.stage3,
+          contextMappings: state.contextMappings,
+        },
         variables,
         (chunk) => callbacks?.onChunk?.(4, chunk),
       ),
