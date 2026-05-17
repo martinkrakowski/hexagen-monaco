@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import ImportProjectSpecPage from "../ImportProjectSpecPage";
 import fs from "node:fs";
 import path from "node:path";
+import { rest } from "msw";
+import { setupServer } from "msw/node";
 
 // Mock Next.js router
 const mockPush = jest.fn();
@@ -16,6 +18,30 @@ const yamlPath = path.join(
   "/Users/martin/Projects/hexagen-monaco/packages/agentic-interaction/src/application/use-cases/staged-generation/__tests__/fixtures",
   "krakowski-portal.yaml",
 );
+
+const server = setupServer(
+  rest.post("/api/manifest/generate/spec", async (req, res, ctx) => {
+    const { config } = await req.json();
+    if (!config) {
+      return res(
+        ctx.status(400),
+        ctx.json({ type: "error", message: "Missing config" }),
+      );
+    }
+    return res(
+      ctx.status(200),
+      ctx.body(
+        'data: {"type":"stage-start","stage":0}\n' +
+          'data: {"type":"stage-complete","stage":0}\n' +
+          'data: {"type":"done","yaml":"bounded_contexts:\n  - name: test\n","transactionId":"txn-123"}\n',
+      ),
+    );
+  }),
+);
+
+beforeAll(() => server.listen());
+afterAll(() => server.close());
+beforeEach(() => server.resetHandlers());
 
 describe("ImportProjectSpecPage", () => {
   it("test file loads without error", () => {
@@ -42,7 +68,6 @@ describe("ImportProjectSpecPage", () => {
       type: "text/yaml",
     });
 
-    // Mock file input change
     const fileInput = screen.getByLabelText(/file/i);
     await user.upload(fileInput as HTMLElement, file);
 
@@ -63,9 +88,7 @@ describe("ImportProjectSpecPage", () => {
 
     await waitFor(() => {
       assert.ok(screen.getByText(/7 bounded contexts detected/i));
-      // Krakowski YAML has 7 contexts, check aggregates (assuming ≥12)
       assert.ok(screen.getByText(/\d+ aggregates/i));
-      // Check mappings (assuming ≥14)
       assert.ok(screen.getByText(/\d+ context mappings/i));
     });
   });
@@ -148,6 +171,61 @@ describe("ImportProjectSpecPage", () => {
     await waitFor(() => {
       assert.ok(screen.getByLabelText(/file/i));
       assert.strictEqual(screen.queryByText(/description detected/i), null);
+    });
+  });
+
+  it("renders manifest preview after generating from spec", async () => {
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    const file = new File([yamlContent], "krakowski-portal.yaml", {
+      type: "text/yaml",
+    });
+    const fileInput = screen.getByLabelText(/file/i);
+    await user.upload(fileInput, file);
+
+    await waitFor(() => {
+      assert.ok(screen.getByText(/spec review/i));
+    });
+
+    const generateButton = screen.getByText(/map ports & adapters/i);
+    await user.click(generateButton);
+
+    await waitFor(() => {
+      assert.ok(screen.getByText(/manifest preview/i));
+      assert.ok(screen.getByText(/bounded_contexts/i));
+    });
+  });
+
+  it("shows error on invalid config during generation", async () => {
+    server.use(
+      rest.post("/api/manifest/generate/spec", (req, res, ctx) => {
+        return res(
+          ctx.status(400),
+          ctx.json({ message: "Missing config" }),
+        );
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    const file = new File([yamlContent], "krakowski-portal.yaml", {
+      type: "text/yaml",
+    });
+    const fileInput = screen.getByLabelText(/file/i);
+    await user.upload(fileInput, file);
+
+    await waitFor(() => {
+      assert.ok(screen.getByText(/spec review/i));
+    });
+
+    const generateButton = screen.getByText(/map ports & adapters/i);
+    await user.click(generateButton);
+
+    await waitFor(() => {
+      assert.ok(screen.getByText(/error/i));
+      assert.ok(screen.getByText(/missing config/i));
     });
   });
 });

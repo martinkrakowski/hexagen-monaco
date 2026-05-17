@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
@@ -13,7 +13,7 @@ import {
 import { DESCRIPTION_MIN_LENGTH } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
-import { Button } from "@hexagen/ui";
+import { Button, Skeleton } from "@hexagen/ui";
 import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import { ActionBar } from "./ActionBar";
@@ -47,6 +47,7 @@ export function GenerateWithAi({
   const [mounted, setMounted] = useState(false);
   const [previewActiveTab, setPreviewActiveTab] =
     useState<ViewTab>("context-map");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -208,9 +209,11 @@ export function GenerateWithAi({
   ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
+    setRetryCount(prev => prev + 1);
+    if (retryCount >= 3) return;
     stagedGen.reset();
     actions.regenerateManifest();
-  }, [stagedGen, actions]);
+  }, [stagedGen, actions, retryCount]);
 
   const handleRetryRef = useRef(handleRetryOrRegenerate);
   handleRetryRef.current = handleRetryOrRegenerate;
@@ -319,19 +322,26 @@ export function GenerateWithAi({
               <p className="text-sm text-muted-foreground mt-1">
                 {stagedGen.generationError}
               </p>
+              {retryCount >= 3 && (
+                <p className="text-sm text-destructive mt-2">
+                  Maximum retry attempts reached. Please check your connection or try again later.
+                </p>
+              )}
             </div>
           </div>
           <div className="flex gap-2 pt-2">
             <button
               onClick={() => handleRetryOrRegenerate()}
-              className="text-sm font-medium px-3 py-1 text-destructive hover:bg-destructive/10 rounded transition-colors"
+              disabled={retryCount >= 3}
+              className="text-sm font-medium px-3 py-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Try Again
+              Try Again ({3 - retryCount} attempts left)
             </button>
             <button
               onClick={() => {
                 stagedGen.reset();
                 formHandlers.reset();
+                setRetryCount(0);
               }}
               className="text-sm font-medium px-3 py-1 text-muted-foreground hover:bg-muted rounded transition-colors"
             >
@@ -422,11 +432,21 @@ export function GenerateWithAi({
         )}
 
       {isGenerating && (
-        <ThinkingBlock
-          phase={stagedGen.phase}
-          stepDetail={stagedGen.stepDetail}
-          stageProgress={stagedGen.stageProgress}
-        />
+        <Suspense
+          fallback={
+            <div className="space-y-4">
+              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-32 w-48" />
+              <Skeleton className="h-96 w-full" />
+            </div>
+          }
+        >
+          <ThinkingBlock
+            phase={stagedGen.phase}
+            stepDetail={stagedGen.stepDetail}
+            stageProgress={stagedGen.stageProgress}
+          />
+        </Suspense>
       )}
 
       <ActionBar

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
@@ -8,6 +8,7 @@ import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
+import { Skeleton } from "@hexagen/ui";
 import type { StagedPhase } from "./staged-generation-types";
 
 type SpecPageState =
@@ -271,12 +272,22 @@ export default function ImportProjectSpecPage() {
               Error: {generationError}
             </div>
           )}
-          <ThinkingBlock
-            phase={phase}
-            stepDetail={stepDetail}
-            stageProgress={stageProgress}
-            stageLabels={SPEC_STAGE_LABELS}
-          />
+          <Suspense
+            fallback={
+              <div className="space-y-4">
+                <Skeleton className="h-64 w-full" />
+                <Skeleton className="h-32 w-48" />
+                <Skeleton className="h-96 w-full" />
+              </div>
+            }
+          >
+            <ThinkingBlock
+              phase={phase}
+              stepDetail={stepDetail}
+              stageProgress={stageProgress}
+              stageLabels={SPEC_STAGE_LABELS}
+            />
+          </Suspense>
           {(specGeneration.isGenerating || manifestGeneration.isGenerating) && (
             <button
               onClick={() => {

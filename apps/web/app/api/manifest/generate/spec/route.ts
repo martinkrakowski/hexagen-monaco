@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   type StructuredConfigGenerationCallbacks,
@@ -31,6 +32,22 @@ type NDJSONEvent =
   | { type: "error"; message: string };
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateCheck = checkRateLimit(request, 10, 60 * 1000);
+  if (!rateCheck.allowed) {
+    const retryAfter = Math.ceil(rateCheck.retryAfter! / 1000);
+    return new Response(
+      JSON.stringify({ type: "error", message: "Rate limit exceeded" }) + "\n",
+      { 
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": retryAfter.toString(),
+        },
+      }
+    );
+  }
+  
   let body: SpecRequestBody;
   try {
     body = await request.json();

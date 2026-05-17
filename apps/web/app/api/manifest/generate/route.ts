@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "../../../../lib/rate-limiter";
 import { GenerateManifestFromDescriptionUseCase } from "@hexagen/agentic-interaction";
 import {
   createProjectDescription,
@@ -69,6 +70,20 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
+  // Rate limiting
+  const rateCheck = checkRateLimit(request, 10, 60 * 1000);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { success: false, error: "Rate limit exceeded" },
+      { 
+        status: 429,
+        headers: {
+          "Retry-After": Math.ceil(rateCheck.retryAfter! / 1000).toString(),
+        },
+      }
+    );
+  }
+  
   let body: GenerateManifestRequestBody;
   try {
     body = await request.json();

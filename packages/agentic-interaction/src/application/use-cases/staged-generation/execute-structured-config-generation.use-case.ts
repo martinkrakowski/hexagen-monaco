@@ -459,31 +459,7 @@ export function buildContextMappingsFromConfig(
   }));
 }
 
-// Module-level cache — survives across request instances within the same process
-const CONFIG_CACHE = new Map<string, AssembledManifest>();
-const MAX_CACHE_SIZE = 50;
 
-function configCacheKey(rawConfig: string): string {
-  // Simple djb2 hash — fast, no crypto dependency
-  let hash = 5381;
-  for (let i = 0; i < rawConfig.length; i++) {
-    hash = (hash * 33) ^ rawConfig.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(36);
-}
-
-function cacheGet(rawConfig: string): AssembledManifest | undefined {
-  return CONFIG_CACHE.get(configCacheKey(rawConfig));
-}
-
-function cacheSet(rawConfig: string, result: AssembledManifest): void {
-  if (CONFIG_CACHE.size >= MAX_CACHE_SIZE) {
-    // Evict oldest entry (Map preserves insertion order)
-    const firstKey = CONFIG_CACHE.keys().next().value;
-    if (firstKey !== undefined) CONFIG_CACHE.delete(firstKey);
-  }
-  CONFIG_CACHE.set(configCacheKey(rawConfig), result);
-}
 
 export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage3: ExecutePortMappingUseCase;
@@ -510,45 +486,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     | { success: true; value: AssembledManifest; transactionId: string }
     | { success: false; error: unknown }
   > {
-    // Idempotency check
-    const cached = cacheGet(rawConfig);
-    if (cached) {
-      callbacks?.onProgress?.(0, 0);
-      callbacks?.onProgress?.(1, 0);
-      callbacks?.onProgress?.(2, 0);
-      callbacks?.onProgress?.(3, 0);
-      callbacks?.onProgress?.(4, 0);
-      callbacks?.onProgress?.(5, 0);
-      callbacks?.onProgress?.(6, 0);
-      // Create transaction for cached result
-      const intentId = `spec-cached-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      const yaml = cached.yaml || "";
-      const parsed = (cached.parsedObject as Record<string, unknown>) || {};
-      const transaction = this.transactionManager.begin(intentId, {
-        intentId,
-        origin: "structured-config-generation-cached",
-        yaml,
-        contextCount: Array.isArray(parsed.bounded_contexts)
-          ? parsed.bounded_contexts.length
-          : 0,
-        portCount: Array.isArray(parsed.context_mappings)
-          ? parsed.context_mappings.length
-          : 0,
-        adapterCount: Array.isArray(parsed.bounded_contexts)
-          ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
-              (sum, ctx) =>
-                sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
-              0,
-            )
-          : 0,
-      });
-      this.transactionManager.transition(transaction.id, "speculative");
-      return {
-        success: true,
-        value: cached,
-        transactionId: transaction.id,
-      };
-    }
+
 
     // Stage 0: Parse config + build NormalizedPrompt (synchronous, deterministic)
     const s0Start = Date.now();
@@ -666,8 +604,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     }
     callbacks?.onProgress?.(6, s6Duration);
 
-    // Cache successful result
-    cacheSet(rawConfig, assembledManifest);
+
 
     // Create transaction for the generated manifest
     const intentId = `spec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;

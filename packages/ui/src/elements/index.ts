@@ -24,3 +24,6 @@ export type { IconProps, IconName } from "./Icon.js";
 
 export { Spinner } from "./Spinner.js";
 export type { SpinnerProps } from "./Spinner.js";
+
+export { Skeleton } from "./feedback/Skeleton.js";
+export type { SkeletonProps } from "./feedback/Skeleton.js";
