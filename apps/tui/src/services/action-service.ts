@@ -1,6 +1,25 @@
 import type { ViolationItem } from "../state/use-tui-store.js";
 import type { MCPClientService } from "./mcp-client.service.js";
 
+export const ALLOWED_REFACTOR_TOOLS = [
+  "hexagen_audit_boundaries",
+  "hexagen_add_dependency",
+  "hexagen_create_port",
+  "hexagen_create_adapter",
+  "hexagen_scaffold_module",
+] as const;
+
+export type AllowedRefactorTool = (typeof ALLOWED_REFACTOR_TOOLS)[number];
+const ALLOWED_TOOL_SET = new Set<string>(ALLOWED_REFACTOR_TOOLS);
+
+const REFACTOR_SYSTEM_PROMPT = [
+  "You are an architecture fixer for hexagonal DDD projects using the Hexagen toolchain.",
+  "When given a DDD boundary violation, you select the correct MCP tool and construct its arguments.",
+  'Return ONLY a raw JSON object with exactly two keys: "tool" and "arguments".',
+  "Do not explain. Do not add markdown fences. Do not add any text before or after the JSON.",
+  `Allowed tools: ${ALLOWED_REFACTOR_TOOLS.join(", ")}.`,
+].join("\n");
+
 type Result<T, E = Error> =
   | { success: true; value: T }
   | { success: false; error: E };
@@ -80,28 +99,52 @@ interface MCPToolSuggestion {
 }
 
 function parseToolSuggestion(content: string): MCPToolSuggestion | null {
-  const jsonBlockMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonBlockMatch) {
-    return null;
-  }
-
+  // Attempt 1: direct parse of the full response
   try {
-    const parsed = JSON.parse(jsonBlockMatch[0]) as {
+    const parsed = JSON.parse(content.trim()) as {
       tool?: string;
       arguments?: Record<string, unknown>;
     };
-
-    if (!parsed.tool || !parsed.arguments) {
-      return null;
+    if (parsed.tool && parsed.arguments) {
+      return { tool: parsed.tool, arguments: parsed.arguments };
     }
+  } catch {
+    // Not clean JSON — try extraction
+  }
 
-    return {
-      tool: parsed.tool,
-      arguments: parsed.arguments,
+  // Attempt 2: extract the outermost JSON object by walking braces
+  const start = content.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < content.length; i++) {
+    if (content[i] === "{") depth++;
+    else if (content[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+
+  if (end === -1) return null;
+
+  try {
+    const extracted = content.slice(start, end + 1);
+    const parsed = JSON.parse(extracted) as {
+      tool?: string;
+      arguments?: Record<string, unknown>;
     };
+    if (parsed.tool && typeof parsed.arguments === "object") {
+      return { tool: parsed.tool, arguments: parsed.arguments };
+    }
   } catch {
     return null;
   }
+
+  return null;
 }
 
 export async function refactorWithAI(
@@ -115,19 +158,25 @@ export async function refactorWithAI(
   }
 
   const llm = new LocalLLMProviderAdapter(apiKey);
-  const prompt = [
-    "You are an architecture fixer.",
-    "Return ONLY valid JSON with keys tool and arguments.",
-    "Allowed tools: hexagen_audit_boundaries, hexagen_add_dependency, hexagen_create_port, hexagen_create_adapter, hexagen_scaffold_module.",
-    "Violation:",
-    JSON.stringify(violation, null, 2),
-  ].join("\n");
 
   const completion = await llm.complete({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: REFACTOR_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          "Violation to fix:",
+          "<violation>",
+          JSON.stringify(violation, null, 2),
+          "</violation>",
+          "",
+          "Return the MCP tool call JSON:",
+        ].join("\n"),
+      },
+    ],
     temperature: 0,
-    maxTokens: 350,
+    maxTokens: 1024,
   });
 
   if (!completion.success) {
@@ -142,6 +191,13 @@ export async function refactorWithAI(
   const suggestion = parseToolSuggestion(content);
   if (!suggestion) {
     return "LLM response did not include a valid MCP tool JSON suggestion.";
+  }
+
+  if (!ALLOWED_TOOL_SET.has(suggestion.tool)) {
+    return (
+      `LLM suggested an unknown tool: "${suggestion.tool}". ` +
+      `Allowed tools: ${ALLOWED_REFACTOR_TOOLS.join(", ")}.`
+    );
   }
 
   const result = (await mcpClient.callTool({

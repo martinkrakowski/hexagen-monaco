@@ -49,3 +49,7 @@ export type {
   ContextMappingEntry,
   PipelineState,
 } from "./pipeline-state.js";
+
+// Phase P17: Stage telemetry
+export type { StageTelemetry } from "./stage-telemetry.js";
+export { estimateTokenCount } from "./stage-telemetry.js";

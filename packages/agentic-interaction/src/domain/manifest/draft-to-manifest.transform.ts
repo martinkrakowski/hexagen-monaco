@@ -25,6 +25,13 @@ export interface ManifestOutput {
   architecture: string;
   bounded_contexts: ManifestContextOutput[];
   apps: unknown[];
+  context_mappings?: Array<{
+    upstream: string;
+    downstream: string;
+    pattern?: string;
+    mechanism?: string;
+    notes?: string;
+  }>;
 }
 
 function transformPortNames(ports: { name: string }[]): string[] {
@@ -70,6 +77,15 @@ export function draftToManifest(draft: ManifestDraft): ManifestOutput {
     architecture: "modular-monolith",
     bounded_contexts: draft.boundedContexts.map(transformContext),
     apps: [],
+    ...(draft.contextMappings && {
+      context_mappings: draft.contextMappings.map((m) => ({
+        upstream: m.upstream,
+        downstream: m.downstream,
+        pattern: m.pattern,
+        mechanism: m.mechanism,
+        notes: m.notes,
+      })),
+    }),
   };
 }
 

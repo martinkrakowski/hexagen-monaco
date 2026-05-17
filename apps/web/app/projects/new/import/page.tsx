@@ -1,5 +1,3 @@
-import { ImportSelectionPage } from "@/landing/ImportSelectionPage";
-
-export default function Page() {
-  return <ImportSelectionPage />;
+export default function ImportPage() {
+  return null;
 }

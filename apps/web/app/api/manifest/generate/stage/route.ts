@@ -18,6 +18,11 @@ interface StageRequestBody {
 type NDJSONEvent =
   | { type: "stage-start"; stage: number; label: string }
   | { type: "stage-complete"; stage: number; label: string; durationMs: number }
+  | {
+      type: "stage-telemetry";
+      stage: number;
+      telemetry: Record<string, unknown>;
+    }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
   | {
@@ -62,6 +67,12 @@ export async function POST(request: NextRequest) {
         onChunk: (stage, data) => send({ type: "chunk", stage, data }),
         onValidationError: (stage, errors) =>
           send({ type: "validation-error", stage, errors }),
+        onStageTelemetry: (telemetry) =>
+          send({
+            type: "stage-telemetry",
+            stage: telemetry.stage,
+            telemetry: telemetry as unknown as Record<string, unknown>,
+          }),
       };
 
       try {

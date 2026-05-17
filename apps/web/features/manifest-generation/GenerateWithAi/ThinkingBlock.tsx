@@ -39,6 +39,12 @@ interface ThinkingBlockProps {
   phase: StagedPhase;
   stepDetail: string;
   stageProgress?: Record<number, StageProgress>;
+  /**
+   * Override labels for specific stages.
+   * Used by the structured config pipeline to show accurate labels
+   * for Stages 0-2 (which run as deterministic parsers, not LLM calls).
+   */
+  stageLabels?: Partial<Record<StagedPhase, string>>;
 }
 
 function StepIndicator({
@@ -68,24 +74,13 @@ function StepIndicator({
 function DetailLine({ text }: { text: string }) {
   const prevText = usePrevious(text);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [timer, setTimer] = useState<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
 
   useEffect(() => {
-    if (prevText !== undefined && prevText !== text) {
-      setIsTransitioning(true);
-      const t = setTimeout(() => setIsTransitioning(false), 400);
-      setTimer(t);
-      return () => clearTimeout(t);
-    }
+    if (prevText === undefined || prevText === text) return;
+    setIsTransitioning(true);
+    const t = setTimeout(() => setIsTransitioning(false), 400);
+    return () => clearTimeout(t);
   }, [text, prevText]);
-
-  useEffect(() => {
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [timer]);
 
   return (
     <div className="relative overflow-hidden h-5">
@@ -115,6 +110,7 @@ export function ThinkingBlock({
   phase,
   stepDetail,
   stageProgress,
+  stageLabels,
 }: ThinkingBlockProps) {
   if (phase === "idle" || phase === "failed") return null;
 
@@ -132,7 +128,7 @@ export function ThinkingBlock({
   }
 
   const currentStageIndex = STAGE_ORDER.indexOf(phase);
-  const label = STAGE_LABELS[phase];
+  const label = (stageLabels?.[phase] ?? STAGE_LABELS[phase]) || phase;
 
   return (
     <div className="flex flex-col items-center gap-4 py-3">

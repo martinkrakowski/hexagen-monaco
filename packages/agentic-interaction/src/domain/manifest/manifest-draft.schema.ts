@@ -29,24 +29,34 @@ export const ManifestDraftAdapterSchema = z
   })
   .strict();
 
+export const ManifestDraftContextMappingSchema = z
+  .object({
+    upstream: z.string().min(1),
+    downstream: z.string().min(1),
+    pattern: z.string().optional(),
+    mechanism: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .strict();
+
 export const ManifestDraftContextSchema = z
   .object({
     name: z.string().min(1),
-type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
-  description: z.string().min(1),
-  ports: z.object({
-    in: z.array(ManifestDraftPortSchema),
-    out: z.array(ManifestDraftPortSchema),
-  }),
-  adapters: z.array(ManifestDraftAdapterSchema),
-  dependsOn: z.array(z.string()).optional(),
-})
-.strict();
+    type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+    description: z.string().min(1),
+    ports: z.object({
+      in: z.array(ManifestDraftPortSchema),
+      out: z.array(ManifestDraftPortSchema),
+    }),
+    adapters: z.array(ManifestDraftAdapterSchema),
+    dependsOn: z.array(z.string()).optional(),
+  })
+  .strict();
 
 export const ManifestTopologyDraftContextSchema = z
-.object({
-  name: z.string().min(1),
-  type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+  .object({
+    name: z.string().min(1),
+    type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
     description: z.string().min(1),
     ports: z.object({
       in: z.array(ManifestDraftPortSchema),
@@ -65,6 +75,7 @@ export function createManifestDraftSchema(
       description: z.string().min(1),
     }),
     boundedContexts: z.array(ManifestDraftContextSchema).min(1).max(max),
+    contextMappings: z.array(ManifestDraftContextMappingSchema).optional(),
   });
 }
 
@@ -94,12 +105,12 @@ export function createContextListSchema(
     .array(
       z.object({
         name: z.string().min(1),
-type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
-    description: z.string().min(1),
-  }),
-)
-.min(1)
-.max(max);
+        type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+        description: z.string().min(1),
+      }),
+    )
+    .min(1)
+    .max(max);
 }
 
 export const ContextListSchema = createContextListSchema();

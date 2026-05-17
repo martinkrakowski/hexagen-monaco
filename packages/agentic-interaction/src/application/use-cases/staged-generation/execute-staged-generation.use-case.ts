@@ -17,6 +17,9 @@ export interface StagedGenerationCallbacks {
   onStageComplete?: (stage: number, label: string, durationMs: number) => void;
   onChunk?: (stage: number, chunk: string) => void;
   onValidationError?: (stage: number, errors: string[]) => void;
+  onStageTelemetry?: (
+    telemetry: import("../../../domain/value-objects/stage-telemetry.js").StageTelemetry,
+  ) => void;
 }
 
 type StageResult<T> =
@@ -71,8 +74,11 @@ export class ExecuteStagedGenerationUseCase {
 
     // Stage 0: Prompt Normalization
     const s0 = await runStage(0, "Prompt Normalization", () =>
-      this.stage0.execute(userDescription, variables, (chunk) =>
-        callbacks?.onChunk?.(0, chunk),
+      this.stage0.execute(
+        userDescription,
+        variables,
+        (chunk) => callbacks?.onChunk?.(0, chunk),
+        (telemetry) => callbacks?.onStageTelemetry?.(telemetry),
       ),
     );
     if (!s0.success) return { success: false, error: s0.error, state };
@@ -80,8 +86,10 @@ export class ExecuteStagedGenerationUseCase {
 
     // Stage 1: Domain Extraction
     const s1 = await runStage(1, "Domain Extraction", () =>
-      this.stage1.execute({ stage0: state.stage0 }, (chunk) =>
-        callbacks?.onChunk?.(1, chunk),
+      this.stage1.execute(
+        { stage0: state.stage0 },
+        (chunk) => callbacks?.onChunk?.(1, chunk),
+        (telemetry) => callbacks?.onStageTelemetry?.(telemetry),
       ),
     );
     if (!s1.success) return { success: false, error: s1.error, state };
@@ -92,6 +100,7 @@ export class ExecuteStagedGenerationUseCase {
       this.stage2.execute(
         { stage0: state.stage0, stage1: state.stage1 },
         (chunk) => callbacks?.onChunk?.(2, chunk),
+        (telemetry) => callbacks?.onStageTelemetry?.(telemetry),
       ),
     );
     if (!s2.success) return { success: false, error: s2.error, state };
@@ -102,6 +111,7 @@ export class ExecuteStagedGenerationUseCase {
       this.stage3.execute(
         { stage0: state.stage0, stage1: state.stage1, stage2: state.stage2 },
         (chunk) => callbacks?.onChunk?.(3, chunk),
+        (telemetry) => callbacks?.onStageTelemetry?.(telemetry),
       ),
     );
     if (!s3.success) return { success: false, error: s3.error, state };
@@ -121,6 +131,7 @@ export class ExecuteStagedGenerationUseCase {
         },
         variables,
         (chunk) => callbacks?.onChunk?.(4, chunk),
+        (telemetry) => callbacks?.onStageTelemetry?.(telemetry),
       ),
     );
     if (!s4.success) return { success: false, error: s4.error, state };
@@ -140,8 +151,15 @@ export class ExecuteStagedGenerationUseCase {
 
     // Stage 6: Validation Review
     const s6 = await runStage(6, "Validation Review", () =>
-      this.stage6.execute({ stage5: state.stage5 }, (chunk) =>
-        callbacks?.onChunk?.(6, chunk),
+      this.stage6.execute(
+        {
+          stage5: state.stage5,
+          stage0: state.stage0,
+          stage2: state.stage2,
+          contextMappings: state.contextMappings,
+        },
+        (chunk) => callbacks?.onChunk?.(6, chunk),
+        (telemetry) => callbacks?.onStageTelemetry?.(telemetry),
       ),
     );
     if (!s6.success) return { success: false, error: s6.error, state };

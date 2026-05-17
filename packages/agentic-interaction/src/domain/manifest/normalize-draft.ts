@@ -90,6 +90,7 @@ export function normalizeDraft(draft: ManifestDraft): ManifestDraft {
       description: safeTrim(draft.workspace.description),
     },
     boundedContexts: draft.boundedContexts.map(normalizeContext),
+    ...(draft.contextMappings && { contextMappings: draft.contextMappings }),
   };
 }
 

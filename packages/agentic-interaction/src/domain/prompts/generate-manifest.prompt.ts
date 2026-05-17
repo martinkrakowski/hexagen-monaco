@@ -5,6 +5,33 @@
  * ensuring the type system catches cross-stage wiring errors.
  */
 
+/**
+ * INJECTION PROTECTION CONTRACT
+ *
+ * All compile functions in this file follow these rules:
+ *
+ * 1. User-originated text (from variables.userDescription or any string
+ *    that has passed through user input) is ALWAYS wrapped in XML tags
+ *    before injection into a prompt string:
+ *
+ *    `<user_input>\n${variables.userDescription}\n</user_input>`
+ *
+ * 2. The instruction line ("Output NDJSON:", "Return JSON:") ALWAYS
+ *    appears after the final closing XML tag. Instructions inside
+ *    delimited blocks are not followed by most models.
+ *
+ * 3. Stage outputs from previous stages are wrapped in named tags:
+ *    <original_intent>, <domain_analysis>, <accepted_contexts>,
+ *    <defined_ports>, <manifest_yaml>, <assembly_warnings>,
+ *    <promoted_from_uncertain>, <context_mappings>.
+ *
+ * 4. The ProjectDescriptionValidator.DANGEROUS_PATTERNS list is the
+ *    first gate. XML delimiters are the second gate. Together they
+ *    provide defence-in-depth against prompt injection.
+ *
+ * When adding a new compile function, all four rules are mandatory.
+ */
+
 import type {
   PipelineState,
   NormalizedPrompt,
@@ -20,10 +47,18 @@ export interface PromptVariables {
 
 function buildTechnologyContext(variables: PromptVariables): string {
   const parts: string[] = [];
-  if (variables.platform) parts.push(`Target Platform: ${variables.platform}`);
-  if (variables.deployment) parts.push(`Deployment: ${variables.deployment}`);
+  if (variables.platform)
+    parts.push(
+      `<technology_context>Target Platform: ${variables.platform}</technology_context>`,
+    );
+  if (variables.deployment)
+    parts.push(
+      `<technology_context>Deployment: ${variables.deployment}</technology_context>`,
+    );
   if (variables.additionalContext)
-    parts.push(`Additional Notes: ${variables.additionalContext}`);
+    parts.push(
+      `<technology_context>Additional Notes: ${variables.additionalContext}</technology_context>`,
+    );
   return parts.length > 0 ? parts.join("\n") : "None specified";
 }
 
@@ -76,7 +111,7 @@ export function isStructuredConfigPipeline(
 }
 
 export function compileStage0Prompt(variables: PromptVariables): string {
-  return `Raw User Description:\n<raw-user-input>\n${variables.userDescription}\n</raw-user-input>\n\nOutput NDJSON:`;
+  return `Raw User Description:\n<user_input>\n${variables.userDescription}\n</user_input>\n\nOutput NDJSON:`;
 }
 
 // ==========================================
@@ -126,7 +161,7 @@ export function compileStage1Prompt(
   const ambiguitySection = ambiguities
     ? `\n\nAmbiguities flagged by Stage 0:\n${ambiguities}`
     : "";
-  return `${header}${ambiguitySection}\n\nExtract Domain Concepts and DDD Building Blocks (NDJSON):`;
+  return `<original_intent>\n${header}${ambiguitySection}\n</original_intent>\n\nExtract Domain Concepts and DDD Building Blocks (NDJSON):`;
 }
 
 // ==========================================
@@ -235,7 +270,7 @@ export function compileStage2Prompt(
       hintsSection += `Ambiguities:\n${ambiguities.map((a) => `- ${a}`).join("\n")}`;
   }
 
-  return `${header}\n${domainSection}${hintsSection}\n\nClassify Contexts (NDJSON):`;
+  return `<original_intent>\n${header}${hintsSection}\n</original_intent>\n<domain_analysis>\n${domainSection}\n</domain_analysis>\n\nClassify Contexts (NDJSON):`;
 }
 
 // ==========================================
@@ -330,7 +365,7 @@ export function compileStage3Prompt(
     techSection = `\n\nEXPLICIT TECHNOLOGIES (influence port types and context mapping mechanisms):\n${explicitTech.join(", ")}`;
   }
 
-  return `${header}${contextSection}${domainInfo}${techSection}\n\nGenerate Ports and Context Mappings (NDJSON):`;
+  return `<original_intent>\n${header}${techSection}\n</original_intent>\n<accepted_contexts>\n${contextSection}\n</accepted_contexts>\n<domain_analysis>\n${domainInfo}\n</domain_analysis>\n\nGenerate Ports and Context Mappings (NDJSON):`;
 }
 
 // ==========================================
@@ -437,49 +472,241 @@ export function compileStage4Prompt(
   const infraContext = buildTechnologyContext(variables);
   const infraSection =
     infraContext !== "None specified"
-      ? `\n\nINFRASTRUCTURE CONTEXT:\n${infraContext}`
+      ? `\n\n<technology_context>\n${infraContext}\n</technology_context>`
       : "";
 
-  return `${header}\n\nDEFINED PORTS:\n${portsMapStr}${contextSection}${mappingSection}${techSection}${infraSection}\n\nAssign Adapters (NDJSON):`;
+  return `<original_intent>\n${header}${techSection}\n</original_intent>\n<defined_ports>\n${portsMapStr}\n</defined_ports>\n<accepted_contexts>\n${contextSection}\n</accepted_contexts>\n<context_mappings>\n${mappingSection}\n</context_mappings>\n${infraSection}\n\nAssign Adapters (NDJSON):`;
 }
 
 // ==========================================
 // STAGE 6: VALIDATION REVIEW
 // ==========================================
-export const STAGE6_VALIDATION_SYSTEM_PROMPT = `You are an architectural linter reviewing a generated Hexagonal Architecture manifest YAML.
-Critique the YAML against these rules:
-1. No context names contain technology nouns (postgres, redis, mqtt).
-2. All contexts have at least one entity or are shared-kernel.
-3. Every outbound port has an assigned adapter.
-4. shared-kernel has no framework dependencies.
+export const STAGE6_VALIDATION_SYSTEM_PROMPT = `You are an adversarial architectural linter for hexagonal DDD manifests.
+Your job is to FIND PROBLEMS, not to confirm correctness. Assume there are errors until you have verified otherwise.
 
-CRITICAL OUTPUT FORMAT - NDJSON ONLY.
-Emit objects one per line:
-{"type": "error", "message": "Context 'postgres-adapter' violates rule: no technology nouns."}
-{"type": "warning", "message": "Port 'TelemetryHistoryPort' has no assigned adapter."}
-{"type": "result", "passed": false}
+SEVERITY LEVELS:
+"error"   — structural violation that will cause runtime failure or fundamental DDD misuse. The manifest must be rejected.
+"warning" — design smell or missing best practice. The manifest can proceed but should be reviewed by a human.
+"info"    — notable observation that does not block generation. Surfaces facts the user should know.
 
-RULES:
-- Always end with exactly one "result" object indicating if there were any structural errors.
+VALIDATION RULES — check every rule explicitly. Do not skip any.
+
+STRUCTURAL RULES (emit "error" if violated):
+R01: No context name in the manifest contains a technology noun.
+      Banned technology words: postgres, redis, mongo, rabbit, kafka, mqtt, s3, stripe, supabase, firebase, sendgrid, mysql, elasticsearch, dynamo, sqs, sns.
+      Check: every context name in boundedContexts[*].name must not contain any banned word (case-insensitive).
+
+R02: Every non-shared-kernel context has at least one inbound port.
+      Check: for each context where type != "shared-kernel", ports.in must have length >= 1.
+
+R03: Every non-shared-kernel context has at least one outbound repository port.
+      Check: for each context where type != "shared-kernel", ports.out must contain at least one entry with type "repository".
+
+R04: Every outbound port has exactly one adapter assigned.
+      Check: for each port in ports.out across all contexts, exactly one adapter must list it in "implements".
+
+R05: Every inbound port has exactly one adapter assigned.
+      Check: for each port in ports.in across all contexts, exactly one adapter must list it in "implements".
+
+R06: No adapter's "implements" value references a port that belongs to a different context.
+      Check: for each adapter, find its port by name — that port must be in the same context.
+
+R07: Every dependsOn reference points to an existing context name.
+      Check: for each entry in dependsOn arrays, the referenced name must appear in boundedContexts[*].name.
+
+R08: The manifest has a workspace entry with non-empty name and non-empty description.
+      Check: workspace.name and workspace.description must both be non-empty strings.
+
+R09: shared-kernel contexts have no ports.
+      Check: for each context where type == "shared-kernel", ports.in and ports.out must both be empty.
+
+DESIGN RULES (emit "warning" if violated):
+R10: Every non-shared-kernel context with a domain event in its eventsPublished list has an outbound publisher port.
+      Check: if a context declares published events and has no port of type "publisher", emit a warning.
+
+R11: Every domain event consumed by a context (inbound event port) must be published by at least one other context.
+      Check: for each inbound port of type "event", the event name it receives must appear in another context's published events.
+
+R12: No two contexts share the same adapter name.
+      Check: adapter names must be globally unique across all contexts.
+
+R13: Contexts promoted from uncertain (marked with a promotedFromUncertain flag) are present in the manifest.
+      Emit: "warning" for each promoted-from-uncertain context, noting it requires human domain expert review.
+
+R14: Assembly warnings from Stage 5 are surfaced.
+      For each assembly warning provided, emit it at its original severity level.
+
+SEMANTIC FIDELITY (emit "info"):
+R15: The original project intent is reflected in at least one context name or responsibility description.
+      If key concepts from the intent appear in no context name and no responsibility field, emit an "info" noting the potential gap.
+
+CRITICAL OUTPUT FORMAT — NDJSON ONLY.
+{"type": "error", "rule": "R01", "message": "Context 'postgres-repo' violates R01: name contains technology noun 'postgres'."}
+{"type": "warning", "rule": "R10", "message": "Context 'notification-delivery' publishes 'NotificationSent' but has no publisher port."}
+{"type": "info", "rule": "R15", "message": "Intent mentions 'payment processing' but no context name or responsibility references payments."}
+{"type": "warning", "rule": "R13", "message": "Context 'drift-analytics' was promoted from uncertain status and requires domain expert review."}
+{"type": "result", "passed": true, "errorCount": 0, "warningCount": 2, "infoCount": 1}
+
+OUTPUT RULES:
+- Check every rule R01 through R15. Do not skip any rule even if you believe it is satisfied.
+- Always emit exactly one "result" object as the final line.
+- "passed" is true only if errorCount is 0.
+- "errorCount" counts objects of type "error".
+- "warningCount" counts objects of type "warning".
+- "infoCount" counts objects of type "info".
 - NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
 export function compileStage6Prompt(
-  state: Pick<PipelineState, "stage5">,
+  state: Pick<
+    PipelineState,
+    "stage0" | "stage2" | "stage5" | "contextMappings"
+  >,
 ): string {
-  const yaml = state.stage5?.yaml || "";
-  return `MANIFEST YAML TO REVIEW:\n\n${yaml}\n\nReview (NDJSON):`;
-}
+  const yaml = state.stage5?.yaml ?? "";
+  const assemblyWarnings = state.stage5?.assemblyWarnings ?? [];
+  const promotedContexts = (state.stage2?.uncertain ?? []).map((u) => u.name);
+  const contextMappings = state.contextMappings ?? [];
+  const normalized = state.stage0;
+  const header = normalized ? buildIntentHeader(normalized) : "";
 
+  const warningsSection =
+    assemblyWarnings.length > 0
+      ? [
+          `<assembly_warnings>`,
+          assemblyWarnings
+            .map(
+              (w) =>
+                `{"severity": "${w.severity}", "context": "${w.contextName}", "message": "${w.message}"}`,
+            )
+            .join("\n"),
+          `</assembly_warnings>`,
+        ].join("\n")
+      : "";
+
+  const promotedSection =
+    promotedContexts.length > 0
+      ? `<promoted_from_uncertain>\n${promotedContexts.join(", ")}\n</promoted_from_uncertain>`
+      : "";
+
+  const mappingSection =
+    contextMappings.length > 0
+      ? [
+          `<context_mappings>`,
+          contextMappings
+            .map(
+              (m) =>
+                `${m.upstream} → ${m.downstream} (${m.pattern ?? "unspecified"} via ${m.mechanism ?? "unspecified"})`,
+            )
+            .join("\n"),
+          `</context_mappings>`,
+        ].join("\n")
+      : "";
+
+  return [
+    `<original_intent>`,
+    header,
+    `</original_intent>`,
+    ``,
+    `<manifest_yaml>`,
+    yaml,
+    `</manifest_yaml>`,
+    ``,
+    warningsSection,
+    promotedSection,
+    mappingSection,
+    ``,
+    `Run all rules R01–R15. Output NDJSON:`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 // Retry prompts (Fallback if NDJSON is malformed)
 export const MAX_RETRY_ATTEMPTS = 3;
 
+export interface StageRetryContext {
+  /** Stage number 0–6 */
+  stage: number;
+  /** Attempt number (1-based) */
+  attempt: number;
+  /** Raw output from the failed attempt, truncated to 800 chars */
+  failedOutput: string;
+  /** Human-readable description of why the output was rejected */
+  errorDetail: string;
+  /** Original user prompt that produced the failed output */
+  originalPrompt: string;
+}
+
 export type RetryResult = { kind: "prompt"; content: string };
 
+/**
+ * Stage-specific retry hint strings injected into the correction prompt.
+ * Each describes the minimum correct output for that stage.
+ */
+const STAGE_RETRY_HINTS: Record<number, string> = {
+  0: `Emit: one "intent" object, one "project-name" object, zero or more "technology" / "pattern" / "ambiguity" objects. No other object types.`,
+  1: `Emit: "subdomain", "aggregate-root", "entity", "value-object", "domain-event", "use-case", "verb", "noun" objects only. Each aggregate-root must have "subdomain" and "identityField". Each entity must have "parentAggregate". Each domain-event must have past-tense "value".`,
+  2: `Emit: "accepted", "rejected", or "uncertain" objects only. Every "accepted" must have: name (kebab-case), contextType (core|supporting|generic|shared-kernel), responsibility, aggregateRoots (array), useCaseNames (array), eventsPublished (array), reasoning. Every "uncertain" must have "recommendation".`,
+  3: `Emit port objects only. Every port must have: contextName (matching an accepted context), direction (in|out), portType (command|query|event for in; repository|publisher|external-client|notifier for out), name (PascalCase), description, forUseCase or forAggregate.`,
+  4: `Emit adapter objects only. Every adapter must have: contextName, adapterName (PascalCase ending in Adapter), adapterType (Repository|Listener|Publisher|HttpClient|Notifier|Controller), implements (exact port name), technology.`,
+  5: `Stage 5 is a pure TypeScript function and does not call the LLM. If this retry is triggered, there is a bug in the assembly code, not the prompt. Do not retry Stage 5 via LLM.`,
+  6: `Emit validation objects only: "error", "warning", or "info" with "rule" and "message" fields. End with exactly one "result" object containing passed, errorCount, warningCount, infoCount.`,
+};
+
+/**
+ * Builds a targeted correction prompt for a failed stage output.
+ * Includes the specific error, the failed output, and the stage-specific
+ * format reminder. This replaces the generic generalNDJSON retry.
+ */
+export function buildStageRetryPrompt(ctx: StageRetryContext): RetryResult {
+  const hint =
+    STAGE_RETRY_HINTS[ctx.stage] ??
+    "Output only valid NDJSON — one JSON object per line.";
+  const truncatedOutput =
+    ctx.failedOutput.length > 800
+      ? ctx.failedOutput.slice(0, 800) + "\n... [truncated]"
+      : ctx.failedOutput;
+
+  const content = [
+    `CORRECTION REQUIRED — Attempt ${ctx.attempt} of ${MAX_RETRY_ATTEMPTS}`,
+    `Stage: ${ctx.stage}`,
+    ``,
+    `Your previous output was rejected for this reason:`,
+    `<rejection_reason>`,
+    ctx.errorDetail,
+    `</rejection_reason>`,
+    ``,
+    `Your previous output was:`,
+    `<failed_output>`,
+    truncatedOutput,
+    `</failed_output>`,
+    ``,
+    `The original input that produced this output was:`,
+    `<original_input>`,
+    ctx.originalPrompt.slice(0, 1000),
+    `</original_input>`,
+    ``,
+    `Stage ${ctx.stage} format reminder:`,
+    hint,
+    ``,
+    `Correct ONLY the invalid portions. Do not regenerate correct objects.`,
+    `Output corrected NDJSON:`,
+  ].join("\n");
+
+  return { kind: "prompt", content };
+}
+
+/** @deprecated Use buildStageRetryPrompt instead */
 export const RETRY_PROMPTS = {
   generalNDJSON: (attempt: number): RetryResult => ({
     kind: "prompt",
-    content: `Your previous output contained invalid JSON or markdown. You MUST output ONLY valid JSON objects, one per line. No backticks, no markdown blocks. Attempt ${attempt} of ${MAX_RETRY_ATTEMPTS}. Output:`,
+    content: buildStageRetryPrompt({
+      stage: -1,
+      attempt,
+      failedOutput: "(not provided)",
+      errorDetail: "Output contained invalid JSON or markdown.",
+      originalPrompt: "(not provided)",
+    }).content,
   }),
 };
 

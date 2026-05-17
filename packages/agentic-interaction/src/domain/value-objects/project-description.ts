@@ -44,13 +44,13 @@ export interface ProjectDescription {
   additionalContext?: string;
 }
 
-export const DESCRIPTION_MIN_LENGTH = 30;
-export const DESCRIPTION_MAX_LENGTH = 5000;
+export const DESCRIPTION_MIN_LENGTH = 10;
+export const DESCRIPTION_MAX_LENGTH = 50_000;
 
 export class ProjectDescriptionValidator {
   static readonly MIN_LENGTH = DESCRIPTION_MIN_LENGTH;
   static readonly MAX_LENGTH = DESCRIPTION_MAX_LENGTH;
-  private static readonly DANGEROUS_PATTERNS = [
+  static readonly DANGEROUS_PATTERNS = [
     /ignore previous instructions/i,
     /system prompt/i,
     /you are now/i,

@@ -12,9 +12,13 @@ export type StagedPhase =
   | "failed";
 
 /** Progress snapshot for a single stage within a staged generation */
+import type { StageTelemetry } from "@hexagen/agentic-interaction";
+
 export interface StageProgress {
   stage: number;
   label: string;
   durationMs?: number;
   chunks: string[];
+  /** Full telemetry, available after stage completion */
+  telemetry?: StageTelemetry;
 }

@@ -32,6 +32,7 @@ export type {
   ValidationResult,
   GeneratedManifest,
   GenerationMetadata,
+  StageTelemetry,
 } from "./domain/value-objects/index.js";
 export {
   ProjectDescriptionValidator,

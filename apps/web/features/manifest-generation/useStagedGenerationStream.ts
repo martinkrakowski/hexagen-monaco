@@ -152,6 +152,13 @@ export function useStagedGenerationStream(
                   ...prev,
                   [stage]: { ...prev[stage], durationMs },
                 }));
+              } else if (type === "stage-telemetry") {
+                const stage = event.stage as number;
+                const telemetry = event.telemetry as StageProgress["telemetry"];
+                setStageProgress((prev) => ({
+                  ...prev,
+                  [stage]: { ...prev[stage], telemetry },
+                }));
               } else if (type === "chunk") {
                 const stage = event.stage as number;
                 const data = event.data as string;

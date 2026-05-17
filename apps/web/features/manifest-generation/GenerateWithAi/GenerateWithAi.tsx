@@ -294,7 +294,7 @@ export function GenerateWithAi({
         disabled={isGenerating}
         isAiReady={hasAnyProvider}
         loadedFileName={formState.loadedFileName}
-        onLoadFromFile={formHandlers.loadFromFile}
+        onFileLoaded={formHandlers.loadFromFile}
         onClearFile={formHandlers.clearFile}
       />
 

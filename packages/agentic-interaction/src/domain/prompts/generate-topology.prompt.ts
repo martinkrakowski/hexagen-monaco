@@ -7,6 +7,32 @@
  * in generate-manifest.prompt.ts.
  */
 
+/**
+ * INJECTION PROTECTION CONTRACT
+ *
+ * All compile functions in this file follow these rules:
+ *
+ * 1. User-originated text (from variables.userDescription or any string
+ *    that has passed through user input) is ALWAYS wrapped in XML tags
+ *    before injection into a prompt string:
+ *
+ *    `<user_input>\n${variables.userDescription}\n</user_input>`
+ *
+ * 2. The instruction line ("Output NDJSON:", "Return JSON:") ALWAYS
+ *    appears after the final closing XML tag. Instructions inside
+ *    delimited blocks are not followed by most models.
+ *
+ * 3. Stage outputs from previous stages are wrapped in named tags:
+ *    <original_intent>, <domain_analysis>, <accepted_contexts>,
+ *    <defined_ports>, <manifest_yaml>, <assembly_warnings>.
+ *
+ * 4. The ProjectDescriptionValidator.DANGEROUS_PATTERNS list is the
+ *    first gate. XML delimiters are the second gate. Together they
+ *    provide defence-in-depth against prompt injection.
+ *
+ * When adding a new compile function, all four rules are mandatory.
+ */
+
 export interface TopologyPromptVariables {
   userDescription: string;
   validationErrors?: string;
@@ -54,10 +80,10 @@ Output:`;
 export function compileTopologyUserPrompt(
   variables: TopologyPromptVariables,
 ): string {
-  let prompt = `Project Description:\n${variables.userDescription}\n\nReturn ONLY valid JSON matching the topology schema. No markdown fences, no explanations.\n\nOutput:`;
+  let prompt = `Project Description:\n<user_input>\n${variables.userDescription}\n</user_input>\n\nReturn ONLY valid JSON matching the topology schema. No markdown fences, no explanations.\n\nOutput:`;
 
   if (variables.validationErrors) {
-    prompt += `\n\nPrevious output had these validation errors:\n${variables.validationErrors}\n\nFix these errors and return valid JSON.`;
+    prompt += `\n\nPrevious output had these validation errors:\n<user_input>${variables.validationErrors}</user_input>\n\nFix these errors and return valid JSON.`;
   }
 
   return prompt;

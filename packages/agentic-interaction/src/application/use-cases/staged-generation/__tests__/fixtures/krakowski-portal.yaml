@@ -1,0 +1,110 @@
+project: krakowski-portal
+bounded_contexts:
+  - name: IdentityAccess
+    type: core
+    responsibility: User identity and access management
+    aggregateRoots: [User]
+    entities: [OnboardingState]
+    domainEvents: []
+    useCases: [{name: RegisterUser, actor: system}]
+  - name: CustomerOnboarding
+    type: core
+    responsibility: Customer onboarding process
+    aggregateRoots: [Customer]
+    entities: [OnboardingState]
+    domainEvents: []
+    useCases: []
+  - name: InvoicingBilling
+    type: core
+    responsibility: Invoicing and billing management
+    aggregateRoots: [Invoice]
+    entities: []
+    domainEvents: [InvoicePaid]
+    useCases: []
+    eventsPublished: [InvoicePaid]
+  - name: PaymentProcessing
+    type: core
+    responsibility: Payment processing via Stripe
+    aggregateRoots: [Payment]
+    entities: []
+    domainEvents: [PaymentReceived]
+    useCases: []
+    eventsPublished: [PaymentReceived]
+  - name: NotificationDelivery
+    type: supporting
+    responsibility: Notification delivery via email and in-app
+    aggregateRoots: []
+    entities: []
+    domainEvents: []
+    useCases: []
+  - name: ProjectDelivery
+    type: core
+    responsibility: Project lifecycle management
+    aggregateRoots: [Project]
+    entities: []
+    domainEvents: []
+    useCases: []
+  - name: ReportingAnalytics
+    type: generic
+    responsibility: Reporting and analytics
+    aggregateRoots: []
+    entities: []
+    domainEvents: []
+    useCases: []
+context_mappings:
+  - upstream: Stripe
+    downstream: PaymentProcessing
+    pattern: OHS_ACL
+    mechanism: webhook
+  - upstream: PaymentProcessing
+    downstream: InvoicingBilling
+    pattern: OH
+    mechanism: event
+  - upstream: InvoicingBilling
+    downstream: NotificationDelivery
+    pattern: ACL
+    mechanism: event
+  - upstream: CustomerOnboarding
+    downstream: IdentityAccess
+    pattern: OH
+    mechanism: api
+  - upstream: IdentityAccess
+    downstream: CustomerOnboarding
+    pattern: OH
+    mechanism: api
+  - upstream: ProjectDelivery
+    downstream: NotificationDelivery
+    pattern: ACL
+    mechanism: event
+  - upstream: InvoicingBilling
+    downstream: ProjectDelivery
+    pattern: OH
+    mechanism: event
+  - upstream: PaymentProcessing
+    downstream: NotificationDelivery
+    pattern: ACL
+    mechanism: event
+  - upstream: ReportingAnalytics
+    downstream: InvoicingBilling
+    pattern: ACL
+    mechanism: event
+  - upstream: ReportingAnalytics
+    downstream: PaymentProcessing
+    pattern: ACL
+    mechanism: event
+  - upstream: ReportingAnalytics
+    downstream: ProjectDelivery
+    pattern: ACL
+    mechanism: event
+  - upstream: CustomerOnboarding
+    downstream: NotificationDelivery
+    pattern: OH
+    mechanism: event
+  - upstream: ProjectDelivery
+    downstream: CustomerOnboarding
+    pattern: OH
+    mechanism: api
+  - upstream: NotificationDelivery
+    downstream: ReportingAnalytics
+    pattern: OH
+    mechanism: event

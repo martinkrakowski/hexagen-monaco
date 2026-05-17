@@ -20,39 +20,44 @@ export interface ImportSubOption {
   readonly id: ImportSubOptionId;
   readonly label: string;
   readonly description: string;
-  readonly iconName: string;
+  readonly detail: string;
   readonly href: string;
-  readonly isAvailable: boolean;
+  readonly iconName: string;
+  readonly status: "available" | "coming-soon";
 }
 
 /** Pre-defined import sub-options: manifest upload, structured config, and GitHub import */
 export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
   {
     id: "manifest",
-    label: "Import Manifest",
+    label: "Import Manifest YAML",
     description:
-      "Upload a manifest.yaml file. Resume work or adapt a previously generated architecture.",
-    iconName: "FileText",
+      "Resume or adapt a previously generated hexagen manifest.yaml.",
+    detail: "No AI involved — direct schema parse and load.",
     href: "/projects/new/import/manifest",
-    isAvailable: true,
+    iconName: "FileCode",
+    status: "available",
   },
   {
     id: "spec",
-    label: "Import Structured Config",
+    label: "Import Project Specification",
     description:
-      "Upload a structured config (JSON/YAML). AI maps ports and adapters, then assembles a manifest.",
-    iconName: "Braces",
+      "Upload a structured YAML or JSON domain spec you have already authored.",
+    detail:
+      "AI maps your bounded contexts to hexagonal ports and adapters. Domain derivation is skipped.",
     href: "/projects/new/import/spec",
-    isAvailable: true,
+    iconName: "Braces",
+    status: "available",
   },
   {
     id: "github",
     label: "Import from GitHub",
     description:
-      "Clone a repository and extract architecture from code. Coming soon.",
-    iconName: "GitBranch",
+      "Connect a repository and extract its existing architecture as a starting point.",
+    detail: "OAuth connection and repository analysis.",
     href: "/projects/new/import/github",
-    isAvailable: false,
+    iconName: "Github",
+    status: "coming-soon",
   },
 ] as const;
 
@@ -116,7 +121,7 @@ export const CREATION_PATH_OPTIONS: readonly CreationPathOption[] = [
     id: "import",
     label: "Import",
     description:
-      "Upload an existing manifest file. Resume work or adapt a previously generated architecture.",
+      "Import an existing manifest, upload a structured domain spec, or connect a GitHub repository.",
     colorTheme: "info",
     iconName: "Upload",
     isRecommended: false,
