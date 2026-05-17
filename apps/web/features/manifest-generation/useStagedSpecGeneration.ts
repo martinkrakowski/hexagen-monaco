@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 import { useStagedGenerationStream } from "./useStagedGenerationStream";
+import type { PullRequestMetadata } from "@hexagen/external-integration";
+import type { AssembledManifest } from "@hexagen/manifest-generation";
 
 /** Optional parameters for structured config generation */
 export interface SpecGenerationOptions {
@@ -28,6 +31,13 @@ export interface UseStagedSpecGenerationReturn {
   portCount: number;
   adapterCount: number;
   reset: () => void;
+  proposePR: (
+    manifest: AssembledManifest,
+    intent: string,
+  ) => Promise<{ ok: boolean; value?: PullRequestMetadata; error?: Error }>;
+  isProposing: boolean;
+  prMetadata: PullRequestMetadata | null;
+  proposeError: Error | null;
 }
 
 const STAGE_LABELS: Record<number, string> = {
@@ -50,6 +60,16 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     stageLabels: STAGE_LABELS,
   });
 
+  const [prState, setPrState] = useState<{
+    isProposing: boolean;
+    prMetadata: PullRequestMetadata | null;
+    error: Error | null;
+  }>({
+    isProposing: false,
+    prMetadata: null,
+    error: null,
+  });
+
   const generateFromSpec = async (
     config: string,
     options?: SpecGenerationOptions,
@@ -65,6 +85,36 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     );
   };
 
+  const proposePR = async (manifest: AssembledManifest, intent: string) => {
+    setPrState((prev) => ({ ...prev, isProposing: true, error: null }));
+
+    try {
+      const response = await fetch("/api/gitops/propose-pr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manifest, intent }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Failed to create PR");
+      }
+
+      setPrState({
+        isProposing: false,
+        prMetadata: result,
+        error: null,
+      });
+
+      return { ok: true as const, value: result };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      setPrState((prev) => ({ ...prev, isProposing: false, error: err }));
+      return { ok: false as const, error: err };
+    }
+  };
+
   return {
     generateFromSpec,
     isGenerating: stream.isGenerating,
@@ -78,5 +128,9 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     portCount: stream.portCount,
     adapterCount: stream.adapterCount,
     reset: stream.reset,
+    proposePR,
+    isProposing: prState.isProposing,
+    prMetadata: prState.prMetadata,
+    proposeError: prState.error,
   };
 }

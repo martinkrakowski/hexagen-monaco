@@ -16,6 +16,7 @@ import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { logger } from "../../lib/structured-logger";
 import type { ProjectConfig } from "@hexagen/project-configuration";
+import type { AssembledManifest } from "@hexagen/manifest-generation";
 import {
   extractSpecSummary,
   type SpecSummary,
@@ -27,6 +28,8 @@ type Phase =
   | "description-fallback"
   | "generating"
   | "preview"
+  | "proposing"
+  | "pr-created"
   | "error";
 
 interface ImportProjectSpecPageProps {
@@ -48,6 +51,9 @@ export function ImportProjectSpecPage({
     stepDetail,
     stageProgress,
     reset: resetGeneration,
+    proposePR,
+    isProposing,
+    prMetadata,
   } = useStagedSpecGeneration();
 
   const [specContent, setSpecContent] = useState<string | null>(null);
@@ -57,6 +63,7 @@ export function ImportProjectSpecPage({
   const [phase, setPhase] = useState<Phase>("upload");
 
   useEffect(() => {
+    if (phase === "proposing" || phase === "pr-created") return;
     if (generationError) setPhase("error");
     else if (
       isGenerating ||
@@ -64,7 +71,13 @@ export function ImportProjectSpecPage({
     )
       setPhase("generating");
     else if (generatedManifest) setPhase("preview");
-  }, [generationError, isGenerating, generationPhase, generatedManifest]);
+  }, [
+    generationError,
+    isGenerating,
+    generationPhase,
+    generatedManifest,
+    phase,
+  ]);
 
   const handleContentReceived = useCallback(
     (content: string, filename?: string) => {
@@ -169,6 +182,21 @@ export function ImportProjectSpecPage({
     setPhase("upload");
   }, [resetGeneration]);
 
+  const handleProposePR = async () => {
+    if (!generatedManifest) return;
+
+    const result = await proposePR(
+      JSON.parse(generatedManifest) as AssembledManifest,
+      "Import structured config",
+    );
+
+    if (result.ok) {
+      setPhase("pr-created");
+    } else {
+      setPhase("preview");
+    }
+  };
+
   const renderContent = () => {
     if (phase === "generating") {
       return (
@@ -182,6 +210,45 @@ export function ImportProjectSpecPage({
                 stageProgress={stageProgress}
               />
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (phase === "proposing") {
+      return (
+        <div className="flex items-center justify-center min-h-full py-12">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 w-full text-center space-y-4">
+            <CreationStepIndicator currentStep={4} steps={CREATION_STEPS} />
+            <p className="text-sm text-muted-foreground">
+              Creating pull request...
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (phase === "pr-created" && prMetadata) {
+      return (
+        <div className="flex items-center justify-center min-h-full py-12">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 w-full text-center space-y-4">
+            <CreationStepIndicator currentStep={5} steps={CREATION_STEPS} />
+            <div className="text-green-600">
+              <Check className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-semibold">Pull Request Created!</h3>
+            <p className="text-muted-foreground">
+              Your manifest changes have been proposed in PR #
+              {prMetadata.prNumber}
+            </p>
+            <a
+              href={prMetadata.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              View Pull Request →
+            </a>
           </div>
         </div>
       );
@@ -407,18 +474,30 @@ export function ImportProjectSpecPage({
           <Button
             variant="outline"
             onClick={handleBackToUpload}
-            disabled={isSaving}
+            disabled={isSaving || isProposing}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Upload
           </Button>
-          <Button
-            onClick={handleAccept}
-            disabled={isSaving || !generatedManifest}
-          >
-            <Check className="h-4 w-4 mr-2" />
-            {isSaving ? "Saving..." : "Import & Continue"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPhase("proposing");
+                handleProposePR();
+              }}
+              disabled={isSaving || isProposing || !generatedManifest}
+            >
+              {isProposing ? "Creating PR..." : "Create Pull Request"}
+            </Button>
+            <Button
+              onClick={handleAccept}
+              disabled={isSaving || isProposing || !generatedManifest}
+            >
+              <Check className="h-4 w-4 mr-2" />
+              {isSaving ? "Saving..." : "Import & Continue"}
+            </Button>
+          </div>
         </>
       );
     }
