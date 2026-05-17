@@ -49,7 +49,7 @@ export function useGenerateWithAiForm(): [FormState, FormHandlers] {
   const loadFromFile = (content: string, filename: string) => {
     setFormState((prev) => ({
       ...prev,
-      description: content,
+      description: content.slice(0, DESCRIPTION_MAX_LENGTH),
       loadedFileName: filename,
       selectedExample: null,
     }));

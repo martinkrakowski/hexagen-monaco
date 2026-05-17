@@ -11,8 +11,15 @@ import {
   IMPORT_SUB_OPTIONS,
 } from "@/landing/domain/creation-path";
 
-export function ImportSelectionPage() {
-  const router = useRouter();
+interface ImportSelectionPageProps {
+  readonly router?: { push: (url: string) => void };
+}
+
+export function ImportSelectionPage({
+  router: injectedRouter,
+}: ImportSelectionPageProps) {
+  const defaultRouter = useRouter();
+  const router = injectedRouter ?? defaultRouter;
 
   return (
     <ProjectsShell
@@ -40,7 +47,11 @@ export function ImportSelectionPage() {
 
             <div className="flex flex-col gap-3 animate-fade-in-up delay-200">
               {IMPORT_SUB_OPTIONS.map((option) => (
-                <ImportOptionRow key={option.id} option={option} />
+                <ImportOptionRow
+                  key={option.id}
+                  option={option}
+                  router={injectedRouter}
+                />
               ))}
             </div>
 

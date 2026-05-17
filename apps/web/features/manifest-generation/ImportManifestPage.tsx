@@ -10,8 +10,15 @@ import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { ProjectsShell } from "@/landing/ProjectsShell";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-export function ImportManifestPage() {
-  const router = useRouter();
+interface ImportManifestPageProps {
+  readonly router?: { push: (url: string) => void };
+}
+
+export function ImportManifestPage({
+  router: injectedRouter,
+}: ImportManifestPageProps) {
+  const defaultRouter = useRouter();
+  const router = injectedRouter ?? defaultRouter;
   const { saveProject } = useSavedProjects();
   const {
     parseManifest,

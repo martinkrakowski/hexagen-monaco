@@ -31,7 +31,7 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // output: 'standalone', // Temporarily disabled to fix build
   reactStrictMode: true,
 
   // Allow LAN IP access in dev (Next.js 15+ host validation)

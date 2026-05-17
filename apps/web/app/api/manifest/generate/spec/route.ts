@@ -2,11 +2,8 @@ import { NextRequest } from "next/server";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   type StructuredConfigGenerationCallbacks,
-  type StructuredConfigInput,
 } from "@hexagen/agentic-interaction";
-import type { PromptVariables } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
-import yaml from "js-yaml";
 import { logger } from "../../../../../lib/structured-logger";
 
 interface SpecRequestBody {
@@ -57,13 +54,21 @@ export async function POST(request: NextRequest) {
       };
 
       const callbacks: StructuredConfigGenerationCallbacks = {
-        onStageStart: (stage, label) =>
-          send({ type: "stage-start", stage, label }),
-        onStageComplete: (stage, label, durationMs) =>
-          send({ type: "stage-complete", stage, label, durationMs }),
-        onChunk: (stage, data) => send({ type: "chunk", stage, data }),
-        onValidationError: (stage, errors) =>
-          send({ type: "validation-error", stage, errors }),
+        onProgress: (stage, _durationMs) => {
+          if (_durationMs === 0) {
+            send({ type: "stage-start", stage, label: `Stage ${stage}` });
+          } else {
+            send({
+              type: "stage-complete",
+              stage,
+              label: `Stage ${stage}`,
+              durationMs: _durationMs,
+            });
+          }
+        },
+        onError: (stage, error) =>
+          send({ type: "validation-error", stage, errors: [error] }),
+        onChunk: (chunk) => send({ type: "chunk", stage: -1, data: chunk }),
       };
 
       try {
@@ -77,84 +82,27 @@ export async function POST(request: NextRequest) {
           llmAdapter,
         );
 
-        // Parse body.config into StructuredConfigInput fields
-        let parsedConfig: Partial<StructuredConfigInput>;
-        try {
-          parsedConfig = yaml.load(
-            body.config,
-          ) as Partial<StructuredConfigInput>;
-        } catch {
-          send({
-            type: "error",
-            message: "Config must be valid YAML or JSON",
-          });
-          return;
-        }
-
-        if (!parsedConfig.intent || typeof parsedConfig.intent !== "string") {
-          send({
-            type: "error",
-            message: "Config must contain intent string",
-          });
-          return;
-        }
-
-        const structuredInput: StructuredConfigInput = {
-          intent: parsedConfig.intent,
-          explicitTechnologies: Array.isArray(parsedConfig.explicitTechnologies)
-            ? parsedConfig.explicitTechnologies
-                .filter((item): item is string => typeof item === "string")
-                .map((item) => item.trim())
-                .filter((item) => item.length > 0)
-            : [],
-          subdomains: Array.isArray(parsedConfig.subdomains)
-            ? parsedConfig.subdomains
-                .filter((item): item is string => typeof item === "string")
-                .map((item) => item.trim())
-                .filter((item) => item.length > 0)
-            : [],
-          classifiedContexts: Array.isArray(parsedConfig.classifiedContexts)
-            ? parsedConfig.classifiedContexts.filter(
-                (item): boolean =>
-                  typeof item === "object" &&
-                  item !== null &&
-                  "name" in item &&
-                  typeof (item as { name: unknown }).name === "string" &&
-                  "type" in item &&
-                  typeof (item as { type: unknown }).type === "string" &&
-                  "reasoning" in item &&
-                  typeof (item as { reasoning: unknown }).reasoning ===
-                    "string",
-              )
-            : [],
-        };
-
-        const variables: PromptVariables = {
-          userDescription: parsedConfig.intent,
-          platform: body.platform,
-          deployment: body.deployment,
-          additionalContext: body.additionalContext,
-        };
-
-        const result = await useCase.execute(
-          structuredInput,
-          variables,
-          callbacks,
-        );
+        const result = await useCase.execute(body.config, callbacks);
 
         if (result.success) {
-          const yaml = result.state.stage5?.yaml || "";
-          const ctxCount = result.state.stage2?.accepted.length ?? 0;
-          const portCount =
-            result.state.stage3?.contexts.reduce(
-              (sum, c) => sum + c.in.length + c.out.length,
-              0,
-            ) ?? 0;
-          const adapterCount =
-            result.state.stage4?.contexts.reduce(
-              (sum, c) => sum + c.adapters.length,
-              0,
-            ) ?? 0;
+          const yaml = result.value.yaml || "";
+          const parsed =
+            (result.value.parsedObject as Record<string, unknown>) || {};
+          const ctxCount = Array.isArray(parsed.bounded_contexts)
+            ? parsed.bounded_contexts.length
+            : 0;
+          const portCount = Array.isArray(parsed.context_mappings)
+            ? parsed.context_mappings.length
+            : 0;
+          const adapterCount = Array.isArray(parsed.bounded_contexts)
+            ? (
+                parsed.bounded_contexts as Array<Record<string, unknown>>
+              ).reduce(
+                (sum, ctx) =>
+                  sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
+                0,
+              )
+            : 0;
 
           send({
             type: "done",

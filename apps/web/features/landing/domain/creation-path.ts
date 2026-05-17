@@ -114,7 +114,7 @@ export const CREATION_PATH_OPTIONS: readonly CreationPathOption[] = [
   },
   {
     id: "import",
-    label: "Import Manifest",
+    label: "Import",
     description:
       "Upload an existing manifest file. Resume work or adapt a previously generated architecture.",
     colorTheme: "info",

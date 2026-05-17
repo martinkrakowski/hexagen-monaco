@@ -1,3 +1,4 @@
+import React from "react";
 import { Textarea, FileDropZone } from "@hexagen/ui";
 import {
   DESCRIPTION_MIN_LENGTH,
@@ -35,6 +36,23 @@ export function DescriptionInput({
   onLoadFromFile,
   onClearFile,
 }: DescriptionInputProps) {
+  const ACCEPTED_EXTENSIONS = [
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".json",
+    ".md",
+    ".txt",
+  ];
+
+  const validateFile = (file: File): string | null => {
+    const lower = file.name.toLowerCase();
+    const ok = ACCEPTED_EXTENSIONS.some((ext) => lower.endsWith(ext));
+    return ok
+      ? null
+      : `Unsupported file type. Accepted: ${ACCEPTED_EXTENSIONS.join(", ")}`;
+  };
+
   const isTooShort = charCount > 0 && charCount < DESCRIPTION_MIN_LENGTH;
   const isTooLong = charCount > DESCRIPTION_MAX_LENGTH;
 
@@ -44,6 +62,8 @@ export function DescriptionInput({
         <div className="p-4 pb-2 flex items-center justify-between border-b border-card-border">
           <AiReadyIndicator isReady={isAiReady} />
           <span
+            aria-live="polite"
+            aria-atomic="true"
             className={[
               "text-xs font-mono",
               isTooLong
@@ -80,7 +100,7 @@ export function DescriptionInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
-          className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/60 p-4 text-sm leading-relaxed resize-none focus:outline-none max-h-96 overflow-y-auto"
+          className="description-textarea w-full bg-transparent text-foreground placeholder:text-muted-foreground/60 p-4 text-sm leading-relaxed resize-y focus:outline-none overflow-y-auto"
           disabled={disabled}
         />
       </div>
@@ -97,10 +117,14 @@ export function DescriptionInput({
       )}
       {!loadedFileName && !disabled && (
         <FileDropZone
-          onFileLoaded={onLoadFromFile}
-          accept=".yaml,.yml,.json,.txt,.md"
-          hint="Upload a config file to pre-fill description"
-          className="text-xs"
+          accept={ACCEPTED_EXTENSIONS.join(",")}
+          validateFile={validateFile}
+          onFileLoaded={(content, filename) =>
+            onLoadFromFile(content, filename)
+          }
+          label="Upload a project config — click or drop to browse"
+          hint={<>Drop a .yaml, .md, .txt, or .json config</>}
+          className={loadedFileName ? "hidden" : "mb-0"}
         />
       )}
     </div>
