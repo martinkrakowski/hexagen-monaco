@@ -16,7 +16,7 @@ import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { logger } from "../../lib/structured-logger";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import type { AssembledManifest } from "@hexagen/manifest-generation";
+import type { AssembledManifest } from "@hexagen/shared";
 import {
   extractSpecSummary,
   type SpecSummary,
