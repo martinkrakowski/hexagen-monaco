@@ -1,13 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
-// Simple mock components/stubs that don't rely on mock.module
-// For now, just test that the test file can at least be loaded and basic structure works
+// TODO: ADR-0038 — Using jest-mock jest.fn() due to Node.js v25 mock.module() restriction
+// Once Node.js stabilizes experimental module mocking, migrate back to node:test + mock.module()
 
 describe("ImportProjectSpecPage", () => {
   it("test file loads without error", () => {
-    // This is a placeholder test since the actual component requires
-    // complex Next.js and React context setup that doesn't work with tsx
+    // Placeholder - component requires complex Next.js context setup
+    // Will be expanded once jest.fn() router injection is complete
     assert.ok(true);
   });
 });

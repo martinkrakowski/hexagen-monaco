@@ -91,6 +91,7 @@
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
+    "jest-mock": "^30.4.1",
     "jsdom": "^26.1.0",
     "postcss": "^8.4.39",
     "tailwind-merge": "^2.5.2",

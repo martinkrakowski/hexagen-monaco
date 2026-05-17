@@ -15,10 +15,15 @@ const iconMap = {
 
 interface ImportOptionRowProps {
   readonly option: ImportSubOption;
+  readonly router?: { push: (url: string) => void };
 }
 
-export function ImportOptionRow({ option }: ImportOptionRowProps) {
-  const router = useRouter();
+export function ImportOptionRow({
+  option,
+  router: injectedRouter,
+}: ImportOptionRowProps) {
+  const defaultRouter = useRouter();
+  const router = injectedRouter ?? defaultRouter;
   const IconComponent =
     iconMap[option.iconName as keyof typeof iconMap] ?? FileCode;
 

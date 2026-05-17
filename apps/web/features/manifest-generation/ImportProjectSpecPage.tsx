@@ -29,8 +29,15 @@ type Phase =
   | "preview"
   | "error";
 
-export function ImportProjectSpecPage() {
-  const router = useRouter();
+interface ImportProjectSpecPageProps {
+  readonly router?: { push: (url: string) => void };
+}
+
+export function ImportProjectSpecPage({
+  router: injectedRouter,
+}: ImportProjectSpecPageProps) {
+  const defaultRouter = useRouter();
+  const router = injectedRouter ?? defaultRouter;
   const { saveProject } = useSavedProjects();
   const {
     generateFromSpec,
