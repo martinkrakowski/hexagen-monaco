@@ -6,6 +6,7 @@ import {
 import type { PromptVariables } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 interface StageRequestBody {
   description: string;
@@ -31,6 +32,7 @@ type NDJSONEvent =
       contextCount: number;
       portCount: number;
       adapterCount: number;
+      transactionId: string;
     }
   | { type: "error"; message: string };
 
@@ -82,7 +84,11 @@ export async function POST(request: NextRequest) {
           validateLocalLLM: false,
         });
 
-        const useCase = new ExecuteStagedGenerationUseCase(llmAdapter);
+        const transactionManager = new InMemoryTransactionManager();
+        const useCase = new ExecuteStagedGenerationUseCase(
+          llmAdapter,
+          transactionManager,
+        );
 
         const variables: PromptVariables = {
           userDescription: body.description,
@@ -117,6 +123,7 @@ export async function POST(request: NextRequest) {
             contextCount: ctxCount,
             portCount,
             adapterCount,
+            transactionId: result.transactionId,
           });
         } else {
           const msg =

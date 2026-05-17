@@ -12,6 +12,7 @@ import {
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
 import type { WebLLMAdapter, DomainModelId } from "@hexagen/local-llm";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { logger } from "../../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
@@ -68,17 +69,6 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
-  if (typeof window === "undefined") {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          "Local generation is not available in the server runtime. Use client-side generation.",
-      },
-      { status: 501 },
-    );
-  }
-
   let body: GenerateManifestRequestBody;
   try {
     body = await request.json();
@@ -166,11 +156,17 @@ export async function POST(
       secretVault,
     });
 
+    // Create transaction manager
+    const transactionManager = new InMemoryTransactionManager();
+
     // Create and execute use case
     logger.info(
       `[manifest-gen] API route: executing use case with model ${body.modelId || "default"}`,
     );
-    const useCase = new GenerateManifestFromDescriptionUseCase(selectorAdapter);
+    const useCase = new GenerateManifestFromDescriptionUseCase(
+      selectorAdapter,
+      transactionManager,
+    );
     const result = await useCase.execute({
       description: projectDescription,
     });

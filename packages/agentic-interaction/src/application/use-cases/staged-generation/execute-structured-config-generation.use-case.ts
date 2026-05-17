@@ -7,8 +7,8 @@ import type {
   ContextMappingEntry,
   AggregateRoot,
   DomainEntity,
-  DomainValueObject,
   DomainEvent,
+  DomainValueObject,
   AcceptedContext,
   PipelineState,
 } from "../../../domain/value-objects/pipeline-state.js";
@@ -18,6 +18,7 @@ import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-
 import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case.js";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import * as yaml from "js-yaml";
 
 export interface StructuredConfigGenerationCallbacks {
@@ -210,10 +211,6 @@ function validateStructuredConfigShape(
     );
   }
 }
-
-type StageResult<T> =
-  | { success: true; value: T }
-  | { success: false; error: unknown };
 
 export function buildNormalizedPromptFromConfig(
   config: StructuredConfig,
@@ -493,18 +490,26 @@ export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage4: ExecuteAdapterAssignmentUseCase;
   private readonly stage5: ExecuteManifestAssemblyUseCase;
   private readonly stage6: ExecuteValidationReviewUseCase;
+  private readonly transactionManager: TransactionManagerPort;
 
-  constructor(llmPort: SendStructuredRequestPort) {
+  constructor(
+    llmPort: SendStructuredRequestPort,
+    transactionManager: TransactionManagerPort,
+  ) {
     this.stage3 = new ExecutePortMappingUseCase(llmPort);
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
     this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
+    this.transactionManager = transactionManager;
   }
 
   async execute(
     rawConfig: string,
     callbacks?: StructuredConfigGenerationCallbacks,
-  ): Promise<StageResult<AssembledManifest>> {
+  ): Promise<
+    | { success: true; value: AssembledManifest; transactionId: string }
+    | { success: false; error: unknown }
+  > {
     // Idempotency check
     const cached = cacheGet(rawConfig);
     if (cached) {
@@ -515,7 +520,34 @@ export class ExecuteStructuredConfigGenerationUseCase {
       callbacks?.onProgress?.(4, 0);
       callbacks?.onProgress?.(5, 0);
       callbacks?.onProgress?.(6, 0);
-      return { success: true, value: cached };
+      // Create transaction for cached result
+      const intentId = `spec-cached-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const yaml = cached.yaml || "";
+      const parsed = (cached.parsedObject as Record<string, unknown>) || {};
+      const transaction = this.transactionManager.begin(intentId, {
+        intentId,
+        origin: "structured-config-generation-cached",
+        yaml,
+        contextCount: Array.isArray(parsed.bounded_contexts)
+          ? parsed.bounded_contexts.length
+          : 0,
+        portCount: Array.isArray(parsed.context_mappings)
+          ? parsed.context_mappings.length
+          : 0,
+        adapterCount: Array.isArray(parsed.bounded_contexts)
+          ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
+              (sum, ctx) =>
+                sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
+              0,
+            )
+          : 0,
+      });
+      this.transactionManager.transition(transaction.id, "speculative");
+      return {
+        success: true,
+        value: cached,
+        transactionId: transaction.id,
+      };
     }
 
     // Stage 0: Parse config + build NormalizedPrompt (synchronous, deterministic)
@@ -637,6 +669,35 @@ export class ExecuteStructuredConfigGenerationUseCase {
     // Cache successful result
     cacheSet(rawConfig, assembledManifest);
 
-    return { success: true, value: assembledManifest };
+    // Create transaction for the generated manifest
+    const intentId = `spec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const yaml = assembledManifest.yaml || "";
+    const parsed =
+      (assembledManifest.parsedObject as Record<string, unknown>) || {};
+    const transaction = this.transactionManager.begin(intentId, {
+      intentId,
+      origin: "structured-config-generation",
+      yaml,
+      contextCount: Array.isArray(parsed.bounded_contexts)
+        ? parsed.bounded_contexts.length
+        : 0,
+      portCount: Array.isArray(parsed.context_mappings)
+        ? parsed.context_mappings.length
+        : 0,
+      adapterCount: Array.isArray(parsed.bounded_contexts)
+        ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
+            (sum, ctx) =>
+              sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
+            0,
+          )
+        : 0,
+    });
+    this.transactionManager.transition(transaction.id, "speculative");
+
+    return {
+      success: true,
+      value: assembledManifest,
+      transactionId: transaction.id,
+    };
   }
 }

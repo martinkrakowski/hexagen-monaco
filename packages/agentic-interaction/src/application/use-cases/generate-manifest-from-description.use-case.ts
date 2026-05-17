@@ -18,12 +18,19 @@ import {
 } from "./generate-manifest-types.js";
 import { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case.js";
 import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt.js";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 export class GenerateManifestFromDescriptionUseCase {
   private readonly stagedUseCase: ExecuteStagedGenerationUseCase;
 
-  constructor(private readonly llmPipeline: SendStructuredRequestPort) {
-    this.stagedUseCase = new ExecuteStagedGenerationUseCase(llmPipeline);
+  constructor(
+    private readonly llmPipeline: SendStructuredRequestPort,
+    private readonly transactionManager: TransactionManagerPort,
+  ) {
+    this.stagedUseCase = new ExecuteStagedGenerationUseCase(
+      llmPipeline,
+      transactionManager,
+    );
   }
 
   async execute(

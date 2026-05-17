@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ExecuteStructuredConfigGenerationUseCase } from "../execute-structured-config-generation.use-case.js";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 type StructuredConfig = {
   bounded_contexts: Array<{ id: string; name: string }>;
@@ -61,9 +62,45 @@ function createMockLLMPort(shouldFailStage3 = false) {
   } as unknown as SendStructuredRequestPort;
 }
 
+function createMockTransactionManager(): TransactionManagerPort {
+  const transactions = new Map<string, { id: string; status: string }>();
+  return {
+    begin: (intentId: string) => {
+      const tx = {
+        id: `txn-${intentId}`,
+        intentId,
+        status: "pending" as const,
+      };
+      transactions.set(tx.id, tx);
+      return tx as any;
+    },
+    transition: (txId: string, status: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = status;
+      return tx as any;
+    },
+    get: (txId: string) => (transactions.get(txId) as any) ?? null,
+    list: () => Array.from(transactions.values()) as any,
+    commit: (txId: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = "committed";
+      return tx as any;
+    },
+    rollback: (txId: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = "rolled_back";
+      return tx as any;
+    },
+  } as unknown as TransactionManagerPort;
+}
+
 test("invalid JSON config → returns { success: false }", async () => {
   const mockPort = createMockLLMPort();
-  const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+  const mockTxManager = createMockTransactionManager();
+  const useCase = new ExecuteStructuredConfigGenerationUseCase(
+    mockPort,
+    mockTxManager,
+  );
   const result = await useCase.execute("invalid json");
   assert.equal(result.success, false);
   if (!result.success) assert.ok(result.error);
@@ -82,12 +119,17 @@ test("valid config → returns { success: true, value: AssembledManifest }", asy
     ],
   };
   const mockPort = createMockLLMPort();
-  const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+  const mockTxManager = createMockTransactionManager();
+  const useCase = new ExecuteStructuredConfigGenerationUseCase(
+    mockPort,
+    mockTxManager,
+  );
   const result = await useCase.execute(JSON.stringify(config));
   assert.equal(result.success, true);
   if (result.success) {
     assert.ok(typeof result.value.yaml === "string");
     assert.ok(result.value.parsedObject);
+    assert.ok(result.transactionId);
   }
 });
 
@@ -98,7 +140,11 @@ test("stage 3 (port mapping) failure → returns { success: false }", async () =
     context_mappings: [],
   };
   const mockPort = createMockLLMPort(true);
-  const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+  const mockTxManager = createMockTransactionManager();
+  const useCase = new ExecuteStructuredConfigGenerationUseCase(
+    mockPort,
+    mockTxManager,
+  );
   const result = await useCase.execute(JSON.stringify(config));
   assert.equal(result.success, false);
 });
@@ -122,7 +168,11 @@ test("full flow with callbacks → returns assembled manifest", async () => {
     ],
   };
   const mockPort = createMockLLMPort();
-  const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+  const mockTxManager = createMockTransactionManager();
+  const useCase = new ExecuteStructuredConfigGenerationUseCase(
+    mockPort,
+    mockTxManager,
+  );
   const progressStages: number[] = [];
   const result = await useCase.execute(JSON.stringify(config), {
     onProgress: (stage) => {

@@ -12,6 +12,7 @@ import {
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
 import type { WebLLMAdapter } from "@hexagen/local-llm";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { logger } from "../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
@@ -162,8 +163,14 @@ export async function POST(
       secretVault,
     });
 
+    // Create transaction manager
+    const transactionManager = new InMemoryTransactionManager();
+
     // Create and execute use case
-    const useCase = new GenerateManifestFromDescriptionUseCase(llmAdapter);
+    const useCase = new GenerateManifestFromDescriptionUseCase(
+      llmAdapter,
+      transactionManager,
+    );
     const result = await useCase.execute({
       description: projectDescription,
     });

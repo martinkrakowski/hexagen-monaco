@@ -4,6 +4,7 @@ import type {
   ValidationReport,
 } from "../../../domain/value-objects/pipeline-state.js";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case.js";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case.js";
 import { ExecuteContextClassificationUseCase } from "./execute-context-classification.use-case.js";
@@ -34,8 +35,12 @@ export class ExecuteStagedGenerationUseCase {
   private readonly stage4: ExecuteAdapterAssignmentUseCase;
   private readonly stage5: ExecuteManifestAssemblyUseCase;
   private readonly stage6: ExecuteValidationReviewUseCase;
+  private readonly transactionManager: TransactionManagerPort;
 
-  constructor(llmPort: SendStructuredRequestPort) {
+  constructor(
+    llmPort: SendStructuredRequestPort,
+    transactionManager: TransactionManagerPort,
+  ) {
     this.stage0 = new ExecutePromptNormalizationUseCase(llmPort);
     this.stage1 = new ExecuteDomainExtractionUseCase(llmPort);
     this.stage2 = new ExecuteContextClassificationUseCase(llmPort);
@@ -43,6 +48,7 @@ export class ExecuteStagedGenerationUseCase {
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
     this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
+    this.transactionManager = transactionManager;
   }
 
   async execute(
@@ -54,6 +60,7 @@ export class ExecuteStagedGenerationUseCase {
         success: true;
         state: PipelineState;
         validation: ValidationReport;
+        transactionId: string;
       }
     | { success: false; error: unknown; state?: PipelineState }
   > {
@@ -169,10 +176,30 @@ export class ExecuteStagedGenerationUseCase {
       callbacks?.onValidationError?.(6, s6.value.errors);
     }
 
+    // Create transaction for the generated manifest
+    const intentId = `staged-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const yaml = state.stage5?.yaml || "";
+    const transaction = this.transactionManager.begin(intentId, {
+      intentId,
+      origin: "staged-generation",
+      yaml,
+      contextCount: state.stage2?.accepted.length ?? 0,
+      portCount:
+        state.stage3?.contexts.reduce(
+          (sum, c) => sum + c.in.length + c.out.length,
+          0,
+        ) ?? 0,
+      adapterCount:
+        state.stage4?.contexts.reduce((sum, c) => sum + c.adapters.length, 0) ??
+        0,
+    });
+    this.transactionManager.transition(transaction.id, "speculative");
+
     return {
       success: true,
       state,
       validation: s6.value,
+      transactionId: transaction.id,
     };
   }
 }

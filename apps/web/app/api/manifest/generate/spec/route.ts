@@ -5,6 +5,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 interface SpecRequestBody {
   config: string;
@@ -25,6 +26,7 @@ type NDJSONEvent =
       contextCount: number;
       portCount: number;
       adapterCount: number;
+      transactionId: string;
     }
   | { type: "error"; message: string };
 
@@ -78,8 +80,10 @@ export async function POST(request: NextRequest) {
           validateLocalLLM: false,
         });
 
+        const transactionManager = new InMemoryTransactionManager();
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
+          transactionManager,
         );
 
         const result = await useCase.execute(body.config, callbacks);
@@ -110,6 +114,7 @@ export async function POST(request: NextRequest) {
             contextCount: ctxCount,
             portCount,
             adapterCount,
+            transactionId: result.transactionId,
           });
         } else {
           const msg =
