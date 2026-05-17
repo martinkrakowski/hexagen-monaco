@@ -8,7 +8,8 @@ import {
 
 describe("SanitizedConfig", () => {
   it("createCleanConfig produces isClean=true", () => {
-    const config: SanitizedConfig = createCleanConfig(1000);
+    const rawConfig = "x".repeat(1000);
+    const config: SanitizedConfig = createCleanConfig(rawConfig);
     assert.strictEqual(config.isClean, true);
     assert.strictEqual(config.redactedCount, 0);
     assert.strictEqual(config.redactedKeys.length, 0);
@@ -17,7 +18,8 @@ describe("SanitizedConfig", () => {
   });
 
   it("createDirtyConfig produces isClean=false", () => {
-    const config = createDirtyConfig(2000, ["API_KEY", "SECRET_TOKEN"]);
+    const rawConfig = "x".repeat(2000);
+    const config = createDirtyConfig(rawConfig, ["API_KEY", "SECRET_TOKEN"]);
     assert.strictEqual(config.isClean, false);
     assert.strictEqual(config.redactedCount, 2);
     assert.strictEqual(config.redactedKeys.length, 2);
