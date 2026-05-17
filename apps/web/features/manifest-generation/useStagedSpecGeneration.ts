@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 import { useStagedGenerationStream } from "./useStagedGenerationStream";
 import type { PullRequestMetadata } from "@hexagen/external-integration";
-import type { AssembledManifest } from "@hexagen/manifest-generation";
+import type { AssembledManifest } from "@hexagen/shared";
 
 /** Optional parameters for structured config generation */
 export interface SpecGenerationOptions {
