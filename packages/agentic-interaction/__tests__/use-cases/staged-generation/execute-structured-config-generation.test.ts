@@ -1,16 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ExecuteStructuredConfigGenerationUseCase } from "../execute-structured-config-generation.use-case.js";
+import { ExecuteStructuredConfigGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 type StructuredConfig = {
-  bounded_contexts: Array<{ id: string; name: string }>;
-  use_cases: Array<{ id: string; name: string; context_id: string }>;
+  bounded_contexts: Array<{ name: string }>;
+  use_cases: Record<string, Array<{ name: string }>>;
   context_mappings: Array<{
-    source_context_id: string;
-    target_context_id: string;
-    mapping_type: string;
+    upstream: string;
+    downstream: string;
   }>;
 };
 
@@ -27,36 +26,29 @@ function createMockLLMPort(shouldFailStage3 = false) {
       }
       yield {
         success: true,
-        value: JSON.stringify({
-          contextName: "Payment",
-          direction: "in",
-          name: "ProcessPaymentPort",
-          portType: "command",
-          description: "Process a payment",
-        }),
+        value:
+          JSON.stringify({
+            contextName: "Payment",
+            direction: "in",
+            name: "ProcessPaymentPort",
+            portType: "command",
+            description: "Process a payment",
+          }) + "\n",
       };
       yield {
         success: true,
-        value: JSON.stringify({
-          contextName: "Payment",
-          direction: "out",
-          name: "PaymentRepository",
-          portType: "repository",
-          description: "Persist payment",
-        }),
+        value:
+          JSON.stringify({
+            contextName: "Payment",
+            direction: "out",
+            name: "PaymentRepository",
+            portType: "repository",
+            description: "Persist payment",
+          }) + "\n",
       };
       yield {
         success: true,
-        value: JSON.stringify({
-          contextName: "Payment",
-          adapterName: "InMemoryPaymentRepoAdapter",
-          adapterType: "Repository",
-          implements: "PaymentRepository",
-        }),
-      };
-      yield {
-        success: true,
-        value: JSON.stringify({ type: "result", passed: true }),
+        value: JSON.stringify({ type: "result", passed: true }) + "\n",
       };
     },
   } as unknown as SendStructuredRequestPort;
@@ -108,15 +100,9 @@ test("invalid JSON config → returns { success: false }", async () => {
 
 test("valid config → returns { success: true, value: AssembledManifest }", async () => {
   const config: StructuredConfig = {
-    bounded_contexts: [{ id: "ctx1", name: "Payment" }],
-    use_cases: [{ id: "uc1", name: "Process Payment", context_id: "ctx1" }],
-    context_mappings: [
-      {
-        source_context_id: "ctx1",
-        target_context_id: "ctx2",
-        mapping_type: "upstream",
-      },
-    ],
+    bounded_contexts: [{ name: "Payment" }],
+    use_cases: { Payment: [{ name: "Process Payment" }] },
+    context_mappings: [],
   };
   const mockPort = createMockLLMPort();
   const mockTxManager = createMockTransactionManager();
@@ -135,8 +121,8 @@ test("valid config → returns { success: true, value: AssembledManifest }", asy
 
 test("stage 3 (port mapping) failure → returns { success: false }", async () => {
   const config: StructuredConfig = {
-    bounded_contexts: [{ id: "ctx1", name: "Payment" }],
-    use_cases: [{ id: "uc1", name: "Process Payment", context_id: "ctx1" }],
+    bounded_contexts: [{ name: "Payment" }],
+    use_cases: { Payment: [{ name: "Process Payment" }] },
     context_mappings: [],
   };
   const mockPort = createMockLLMPort(true);
@@ -151,21 +137,12 @@ test("stage 3 (port mapping) failure → returns { success: false }", async () =
 
 test("full flow with callbacks → returns assembled manifest", async () => {
   const config: StructuredConfig = {
-    bounded_contexts: [
-      { id: "ctx1", name: "Payment" },
-      { id: "ctx2", name: "Shipping" },
-    ],
-    use_cases: [
-      { id: "uc1", name: "Process Payment", context_id: "ctx1" },
-      { id: "uc2", name: "Ship Order", context_id: "ctx2" },
-    ],
-    context_mappings: [
-      {
-        source_context_id: "ctx1",
-        target_context_id: "ctx2",
-        mapping_type: "upstream-downstream",
-      },
-    ],
+    bounded_contexts: [{ name: "Payment" }, { name: "Shipping" }],
+    use_cases: {
+      Payment: [{ name: "Process Payment" }],
+      Shipping: [{ name: "Ship Order" }],
+    },
+    context_mappings: [],
   };
   const mockPort = createMockLLMPort();
   const mockTxManager = createMockTransactionManager();

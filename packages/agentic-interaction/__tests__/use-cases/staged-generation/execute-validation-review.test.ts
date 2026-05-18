@@ -1,37 +1,43 @@
-import { test, describe } from 'node:test';
-import assert from 'node:assert';
-import { ExecuteValidationReviewUseCase } from '../execute-validation-review.use-case.js';
-import type { SendStructuredRequestPort } from '@hexagen/local-llm/client';
-import { StageMaxRetriesError } from '../../../../domain/errors/stage-errors.js';
-import type { StageTelemetry } from '../../../../domain/value-objects/stage-telemetry.js';
+import { test, describe } from "node:test";
+import assert from "node:assert";
+import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cases/staged-generation/execute-validation-review.use-case.js";
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
 
 const createMockPipelineState = () => ({
   stage0: {
-    intent: 'Invoice system',
+    intent: "Invoice system",
     explicitTechnologies: [],
     explicitPatterns: [],
     ambiguities: [],
-    projectName: 'invoice-app'
+    projectName: "invoice-app",
   },
   stage2: {
-    accepted: [{ name: 'invoice-management', type: 'core' as const, reasoning: 'Manages invoices' }],
+    accepted: [
+      {
+        name: "invoice-management",
+        type: "core" as const,
+        reasoning: "Manages invoices",
+      },
+    ],
     rejected: [],
-    uncertain: []
+    uncertain: [],
   },
   stage5: {
-    yaml: 'openapi: 3.0.0\ninfo:\n  title: Invoice System\n  version: 1.0.0',
+    yaml: "openapi: 3.0.0\ninfo:\n  title: Invoice System\n  version: 1.0.0",
     parsedObject: {},
-    assemblyWarnings: []
+    assemblyWarnings: [],
   },
-  contextMappings: []
+  contextMappings: [],
 });
 
-describe('ExecuteValidationReviewUseCase', () => {
-  test('happy path: returns successful validation report', async () => {
+describe("ExecuteValidationReviewUseCase", () => {
+  test("happy path: returns successful validation report", async () => {
     const mockLLM: SendStructuredRequestPort = {
       streamStructuredRequest: async function* () {
         yield { success: true, value: '{"type":"result","passed":true}\n' };
-      }
+      },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
@@ -46,17 +52,17 @@ describe('ExecuteValidationReviewUseCase', () => {
     }
   });
 
-  test('retry path: fails 2x then succeeds', async () => {
+  test("retry path: fails 2x then succeeds", async () => {
     let attemptCount = 0;
     const mockLLM: SendStructuredRequestPort = {
       streamStructuredRequest: async function* () {
         attemptCount++;
         if (attemptCount <= 2) {
-          yield { success: false, error: new Error('LLM request failed') };
+          yield { success: false, error: new Error("LLM request failed") };
         } else {
           yield { success: true, value: '{"type":"result","passed":true}\n' };
         }
-      }
+      },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
@@ -67,11 +73,11 @@ describe('ExecuteValidationReviewUseCase', () => {
     assert.strictEqual(attemptCount, 3); // 2 fails + 1 success
   });
 
-  test('max retries exceeded: returns StageMaxRetriesError', async () => {
+  test("max retries exceeded: returns StageMaxRetriesError", async () => {
     const mockLLM: SendStructuredRequestPort = {
       streamStructuredRequest: async function* () {
-        yield { success: false, error: new Error('LLM request failed') };
-      }
+        yield { success: false, error: new Error("LLM request failed") };
+      },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
@@ -84,7 +90,7 @@ describe('ExecuteValidationReviewUseCase', () => {
     }
   });
 
-  test('telemetry callback is invoked with validation metrics', async () => {
+  test("telemetry callback is invoked with validation metrics", async () => {
     const telemetryCalls: StageTelemetry[] = [];
     const onStageTelemetry = (telemetry: StageTelemetry) => {
       telemetryCalls.push(telemetry);
@@ -93,7 +99,7 @@ describe('ExecuteValidationReviewUseCase', () => {
     const mockLLM: SendStructuredRequestPort = {
       streamStructuredRequest: async function* () {
         yield { success: true, value: '{"type":"result","passed":true}\n' };
-      }
+      },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
@@ -102,17 +108,21 @@ describe('ExecuteValidationReviewUseCase', () => {
 
     assert.strictEqual(telemetryCalls.length, 1);
     assert.strictEqual(telemetryCalls[0].stage, 6);
-    assert.strictEqual(telemetryCalls[0].label, 'Validation Review');
+    assert.strictEqual(telemetryCalls[0].label, "Validation Review");
     assert.ok(telemetryCalls[0].durationMs >= 0);
     assert.strictEqual(telemetryCalls[0].usedLLM, true);
-    assert.ok(telemetryCalls[0].summary.includes('passed'));
+    assert.ok(telemetryCalls[0].summary.includes("passed"));
   });
 
-  test('handles NDJSON with errors and warnings', async () => {
+  test("handles NDJSON with errors and warnings", async () => {
     const mockLLM: SendStructuredRequestPort = {
       streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"error","message":"Invalid port"}\n{"type":"warning","message":"Deprecated adapter"}\n{"type":"result","passed":false}\n' };
-      }
+        yield {
+          success: true,
+          value:
+            '{"type":"error","message":"Invalid port"}\n{"type":"warning","message":"Deprecated adapter"}\n{"type":"result","passed":false}\n',
+        };
+      },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
@@ -127,11 +137,11 @@ describe('ExecuteValidationReviewUseCase', () => {
     }
   });
 
-  test('handles LLM timeout', async () => {
+  test("handles LLM timeout", async () => {
     const timeoutAdapter = {
       streamStructuredRequest: async function* () {
         await new Promise(() => {});
-        yield { success: true, value: '' };
+        yield { success: true, value: "" };
       },
     } as unknown as SendStructuredRequestPort;
 
@@ -140,16 +150,16 @@ describe('ExecuteValidationReviewUseCase', () => {
 
     const result = await Promise.race([
       useCase.execute(state),
-      new Promise<{ success: false; error: unknown }>((_, reject) => 
-        setTimeout(() => reject(new Error('Test timeout')), 100)
+      new Promise<{ success: false; error: unknown }>((_, reject) =>
+        setTimeout(() => reject(new Error("Test timeout")), 100),
       ),
-    ]).catch((err) => ({ success: false, error: err } as const));
+    ]).catch((err) => ({ success: false, error: err }) as const);
 
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
 
-  test('retry fails on persistent timeout', async () => {
+  test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
       streamStructuredRequest: async function* () {
@@ -171,10 +181,10 @@ describe('ExecuteValidationReviewUseCase', () => {
     assert.ok(result.error);
   });
 
-  test('handles malformed LLM response', async () => {
+  test("handles malformed LLM response", async () => {
     const badAdapter = {
       streamStructuredRequest: async function* () {
-        yield { success: true, value: 'not valid json at all' };
+        yield { success: true, value: "not valid json at all" };
       },
     } as unknown as SendStructuredRequestPort;
 
@@ -188,10 +198,14 @@ describe('ExecuteValidationReviewUseCase', () => {
     }
   });
 
-  test('returns validation failure with errors', async () => {
+  test("returns validation failure with errors", async () => {
     const invalidManifestAdapter = {
       streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n' };
+        yield {
+          success: true,
+          value:
+            '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n',
+        };
       },
     } as unknown as SendStructuredRequestPort;
 
@@ -205,7 +219,7 @@ describe('ExecuteValidationReviewUseCase', () => {
       assert.ok(result.value.errors.length > 0);
       // Check that errors contain the expected rule (stringify to avoid type issues)
       const errorsString = JSON.stringify(result.value.errors);
-      assert.ok(errorsString.includes('R01'));
+      assert.ok(errorsString.includes("R01"));
     }
   });
 });

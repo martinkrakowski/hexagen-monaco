@@ -35,8 +35,16 @@
 
 export interface TopologyPromptVariables {
   userDescription: string;
+  maxContexts?: number;
   validationErrors?: string;
 }
+
+const XML_TAG = {
+  USER_INPUT_OPEN: "<user_input>",
+  USER_INPUT_CLOSE: "</user_input>",
+  VALIDATION_ERRORS_OPEN: "<validation_errors>",
+  VALIDATION_ERRORS_CLOSE: "</validation_errors>",
+} as const;
 
 export const TOPOLOGY_SYSTEM_PROMPT = `You are a JSON generator. You output ONLY valid JSON, nothing else.
 No explanations. No markdown. No code blocks. Raw JSON only.
@@ -71,7 +79,8 @@ Rules:
 - Context names: lowercase kebab-case with hyphens only (e.g. "order-management", not "OrderManagement")
 - Port names: PascalCase ending in "Port" (e.g. "CreateOrderPort")
 - Each context needs at least 1 inbound port
-- Maximum 5 bounded contexts
+- Inbound port type must be one of: "command", "query", "event"
+- Outbound port type must be one of: "repository", "publisher", "external-client", "notifier"
 - dependsOn is optional
 - No adapters in this step — they come later
 
@@ -80,10 +89,13 @@ Output:`;
 export function compileTopologyUserPrompt(
   variables: TopologyPromptVariables,
 ): string {
-  let prompt = `Project Description:\n<user_input>\n${variables.userDescription}\n</user_input>\n\nReturn ONLY valid JSON matching the topology schema. No markdown fences, no explanations.\n\nOutput:`;
+  const maxContextsLine = variables.maxContexts
+    ? `\n- Maximum ${variables.maxContexts} bounded contexts`
+    : "";
+  let prompt = `Project Description:\n${XML_TAG.USER_INPUT_OPEN}\n${variables.userDescription}\n${XML_TAG.USER_INPUT_CLOSE}\n${maxContextsLine}\n\nReturn ONLY valid JSON matching the topology schema. No markdown fences, no explanations.\n\nOutput:`;
 
   if (variables.validationErrors) {
-    prompt += `\n\nPrevious output had these validation errors:\n<user_input>${variables.validationErrors}</user_input>\n\nFix these errors and return valid JSON.`;
+    prompt += `\n\nPrevious output had these validation errors:\n${XML_TAG.VALIDATION_ERRORS_OPEN}${variables.validationErrors}${XML_TAG.VALIDATION_ERRORS_CLOSE}\n\nFix these errors and return valid JSON.`;
   }
 
   return prompt;

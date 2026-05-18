@@ -1,9 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { ExecuteAdapterAssignmentUseCase } from "../execute-adapter-assignment.use-case.js";
+import { ExecuteAdapterAssignmentUseCase } from "../../../src/application/use-cases/staged-generation/execute-adapter-assignment.use-case.js";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import { StageMaxRetriesError } from "../../../../domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../../domain/value-objects/stage-telemetry.js";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
 
 const validBindingLine = JSON.stringify({
   contextName: "invoice-management",
@@ -35,11 +35,14 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
     assert.strictEqual(result.success, true);
     if (result.success) {
       assert.strictEqual(result.value.contexts.length, 1);
-      assert.strictEqual(result.value.contexts[0].contextName, "invoice-management");
+      assert.strictEqual(
+        result.value.contexts[0].contextName,
+        "invoice-management",
+      );
       assert.strictEqual(result.value.contexts[0].adapters.length, 1);
       assert.strictEqual(
         result.value.contexts[0].adapters[0].name,
-        "InMemoryInvoiceAdapter"
+        "InMemoryInvoiceAdapter",
       );
     }
   });
@@ -91,7 +94,12 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
     const onStageTelemetry = (t: StageTelemetry) => telemetryCalls.push(t);
 
     const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
-    await useCase.execute(mockState, mockVariables, undefined, onStageTelemetry);
+    await useCase.execute(
+      mockState,
+      mockVariables,
+      undefined,
+      onStageTelemetry,
+    );
 
     assert.strictEqual(telemetryCalls.length, 1);
     const telemetry = telemetryCalls[0];
@@ -101,28 +109,28 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
     assert.strictEqual(telemetry.retryCount, 0);
   });
 
-  test('handles LLM timeout', async () => {
+  test("handles LLM timeout", async () => {
     const timeoutAdapter = {
       streamStructuredRequest: async function* () {
         await new Promise(() => {});
-        yield { success: true, value: '' };
+        yield { success: true, value: "" };
       },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
-    
+
     const result = await Promise.race([
       useCase.execute(mockState, mockVariables),
-      new Promise<{ success: false; error: unknown }>((_, reject) => 
-        setTimeout(() => reject(new Error('Test timeout')), 100)
+      new Promise<{ success: false; error: unknown }>((_, reject) =>
+        setTimeout(() => reject(new Error("Test timeout")), 100),
       ),
-    ]).catch((err) => ({ success: false, error: err } as const));
+    ]).catch((err) => ({ success: false, error: err }) as const);
 
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
 
-  test('retry fails on persistent timeout', async () => {
+  test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
       streamStructuredRequest: async function* () {
@@ -135,18 +143,20 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
-    const result = await useCase.execute(mockState, mockVariables).catch((err) => {
-      return { success: false, error: err };
-    });
+    const result = await useCase
+      .execute(mockState, mockVariables)
+      .catch((err) => {
+        return { success: false, error: err };
+      });
 
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
 
-  test('handles malformed LLM response', async () => {
+  test("handles malformed LLM response", async () => {
     const badAdapter = {
       streamStructuredRequest: async function* () {
-        yield { success: true, value: 'not valid json at all' };
+        yield { success: true, value: "not valid json at all" };
       },
     } as unknown as SendStructuredRequestPort;
 

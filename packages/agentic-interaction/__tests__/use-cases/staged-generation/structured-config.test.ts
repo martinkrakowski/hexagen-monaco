@@ -9,7 +9,7 @@ import {
   buildClassificationFromConfig,
   buildContextMappingsFromConfig,
   ExecuteStructuredConfigGenerationUseCase,
-} from "../execute-structured-config-generation.use-case";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
 const fixturesDir = path.join(__dirname, "fixtures");
 const yamlPath = path.join(fixturesDir, "krakowski-portal.yaml");
@@ -171,10 +171,10 @@ describe("buildContextMappingsFromConfig with krakowski fixture", () => {
   const yaml = fs.readFileSync(yamlPath, "utf-8");
   const krakowskiConfig = parseStructuredConfig(yaml);
 
-   it("produces 14 context mappings for krakowski", () => {
-     const mappings = buildContextMappingsFromConfig(krakowskiConfig);
-     assert.strictEqual(mappings.length, 14);
-   });
+  it("produces 14 context mappings for krakowski", () => {
+    const mappings = buildContextMappingsFromConfig(krakowskiConfig);
+    assert.strictEqual(mappings.length, 14);
+  });
 
   it("preserves pattern and mechanism", () => {
     const krakowskiConfig = parseStructuredConfig(
@@ -184,9 +184,9 @@ describe("buildContextMappingsFromConfig with krakowski fixture", () => {
       (m: any) =>
         m.upstream === "Stripe" && m.downstream === "PaymentProcessing",
     );
-     assert.strictEqual(mapping?.pattern, "OHS_ACL");
-     assert.strictEqual(mapping?.mechanism, "webhook");
-   });
+    assert.strictEqual(mapping?.pattern, "OHS_ACL");
+    assert.strictEqual(mapping?.mechanism, "webhook");
+  });
 });
 
 describe("ExecuteStructuredConfigGenerationUseCase", () => {
@@ -208,7 +208,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     const invalidYaml = "not: valid: yaml: [";
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       mockLLMAdapter,
-      mockTransactionManager
+      mockTransactionManager,
     );
     const result = await useCase.execute(invalidYaml);
     assert.strictEqual(result.success, false);
@@ -219,13 +219,13 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     const yamlWithoutContexts = "projectName: test";
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       mockLLMAdapter,
-      mockTransactionManager
+      mockTransactionManager,
     );
     const result = await useCase.execute(yamlWithoutContexts);
     assert.strictEqual(result.success, false);
     assert.ok(
-      result.error instanceof Error && 
-      result.error.message.includes("bounded_contexts")
+      result.error instanceof Error &&
+        result.error.message.includes("bounded_contexts"),
     );
   });
 
@@ -244,7 +244,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       failAtStage3Adapter,
-      mockTransactionManager
+      mockTransactionManager,
     );
     const result = await useCase.execute(validYaml);
     assert.strictEqual(result.success, false);
@@ -254,7 +254,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
   test("returns cached result on cache hit (if cache exists)", async () => {
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       mockLLMAdapter,
-      mockTransactionManager
+      mockTransactionManager,
     );
     const result1 = await useCase.execute(validYaml);
     assert.strictEqual(result1.success, true);

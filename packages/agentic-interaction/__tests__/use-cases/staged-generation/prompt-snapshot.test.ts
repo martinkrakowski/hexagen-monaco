@@ -8,8 +8,8 @@ import {
   compileStage4Prompt,
   compileStage6Prompt,
   buildStageRetryPrompt,
-} from "../../../../domain/prompts/generate-manifest.prompt";
-import { compileTopologyUserPrompt } from "../../../../domain/prompts/generate-topology.prompt";
+} from "../../../src/domain/prompts/generate-manifest.prompt.js";
+import { compileTopologyUserPrompt } from "../../../src/domain/prompts/generate-topology.prompt.js";
 
 // Minimal valid state for each stage — matches PipelineState interface
 

@@ -33,10 +33,12 @@
  */
 
 import type {
-  PipelineState,
   NormalizedPrompt,
+  PipelineState,
 } from "../value-objects/pipeline-state.js";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema.js";
+export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
+import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
 
 export interface PromptVariables {
   userDescription: string;
@@ -622,8 +624,6 @@ export function compileStage6Prompt(
     .join("\n");
 }
 // Retry prompts (Fallback if NDJSON is malformed)
-export const MAX_RETRY_ATTEMPTS = 3;
-
 export interface StageRetryContext {
   /** Stage number 0–6 */
   stage: number;
@@ -649,7 +649,7 @@ const STAGE_RETRY_HINTS: Record<number, string> = {
   2: `Emit: "accepted", "rejected", or "uncertain" objects only. Every "accepted" must have: name (kebab-case), contextType (core|supporting|generic|shared-kernel), responsibility, aggregateRoots (array), useCaseNames (array), eventsPublished (array), reasoning. Every "uncertain" must have "recommendation".`,
   3: `Emit port objects only. Every port must have: contextName (matching an accepted context), direction (in|out), portType (command|query|event for in; repository|publisher|external-client|notifier for out), name (PascalCase), description, forUseCase or forAggregate.`,
   4: `Emit adapter objects only. Every adapter must have: contextName, adapterName (PascalCase ending in Adapter), adapterType (Repository|Listener|Publisher|HttpClient|Notifier|Controller), implements (exact port name), technology.`,
-  5: `Stage 5 is a pure TypeScript function and does not call the LLM. If this retry is triggered, there is a bug in the assembly code, not the prompt. Do not retry Stage 5 via LLM.`,
+  5: `Stage 5 (Manifest Assembly) is a pure TypeScript function — it does not call the LLM. A failure here indicates a structural mismatch between upstream stages and the assembler. Expected input shape: { stage0: NormalizedPrompt, stage1: DomainAnalysis, stage2: ClassificationResult, stage3: PortMap, stage4: AdapterBindings }. Verify each upstream stage produced valid output before retrying.`,
   6: `Emit validation objects only: "error", "warning", or "info" with "rule" and "message" fields. End with exactly one "result" object containing passed, errorCount, warningCount, infoCount.`,
 };
 
