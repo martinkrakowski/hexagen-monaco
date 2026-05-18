@@ -38,8 +38,12 @@ export interface ModelCacheMetadata {
 }
 
 function getStorage(): Storage | null {
-  if (typeof globalThis !== "undefined" && globalThis.localStorage) {
-    return globalThis.localStorage;
+  try {
+    if (typeof globalThis !== "undefined" && globalThis.localStorage) {
+      return globalThis.localStorage;
+    }
+  } catch {
+    return null;
   }
   return null;
 }

@@ -307,8 +307,8 @@ describe("useModelSelectionFlowState", () => {
         cancelModelDownload();
       });
 
-      // Verify function was called
-      assert.ok(mockCancelDownload.mock.calls.length >= 0);
+      // Verify the mock was called
+      assert.ok(mockCancelDownload.mock.calls.length > 0);
     });
 
     it("should skip AI setup", () => {
