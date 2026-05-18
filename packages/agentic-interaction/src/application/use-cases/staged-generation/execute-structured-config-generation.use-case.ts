@@ -316,7 +316,9 @@ export function buildDomainAnalysisFromConfig(
   // Use cases from the top-level use_cases map
   const useCasesMap = config.use_cases ?? {};
   for (const [contextName, ucs] of Object.entries(useCasesMap)) {
-    for (const uc of ucs) {
+    // Handle both single use case object and array of use cases
+    const ucArray = Array.isArray(ucs) ? ucs : [ucs];
+    for (const uc of ucArray) {
       const actor = Array.isArray(uc.actor)
         ? uc.actor.join(", ")
         : (uc.actor ?? "system");
@@ -459,8 +461,6 @@ export function buildContextMappingsFromConfig(
   }));
 }
 
-
-
 export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage3: ExecutePortMappingUseCase;
   private readonly stage4: ExecuteAdapterAssignmentUseCase;
@@ -486,8 +486,6 @@ export class ExecuteStructuredConfigGenerationUseCase {
     | { success: true; value: AssembledManifest; transactionId: string }
     | { success: false; error: unknown }
   > {
-
-
     // Stage 0: Parse config + build NormalizedPrompt (synchronous, deterministic)
     const s0Start = Date.now();
     callbacks?.onProgress?.(0, 0);
@@ -603,8 +601,6 @@ export class ExecuteStructuredConfigGenerationUseCase {
       return { success: false, error: s6.error };
     }
     callbacks?.onProgress?.(6, s6Duration);
-
-
 
     // Create transaction for the generated manifest
     const intentId = `spec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
