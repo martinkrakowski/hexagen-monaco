@@ -1,3 +1,4 @@
+import React from "react";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert";

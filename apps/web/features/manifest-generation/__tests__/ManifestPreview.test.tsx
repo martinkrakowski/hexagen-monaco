@@ -1,4 +1,5 @@
-import { test, describe } from "node:test";
+import React from "react";
+import { test, describe, afterEach } from "node:test";
 import assert from "node:assert";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ManifestPreview } from "../ManifestPreview";
@@ -24,7 +25,7 @@ describe("ManifestPreview", () => {
     );
 
     assert.ok(screen.getByText(/generated manifest/i));
-    assert.ok(screen.getByText(/test-context/));
+    assert.ok(screen.getAllByText(/test-context/).length >= 1);
     assert.ok(screen.getByText(/\d+% score/i));
   });
 
