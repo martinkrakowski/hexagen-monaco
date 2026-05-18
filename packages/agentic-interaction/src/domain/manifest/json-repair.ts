@@ -63,13 +63,36 @@ export function repairJSON(raw: string): string | null {
   }
 }
 
+function countQuotesIgnoreEscaped(line: string): { total: number; endsWithOpenQuote: boolean } {
+  let count = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of line) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      count++;
+    }
+  }
+
+  return { total: count, endsWithOpenQuote: inString };
+}
+
 function fixUnterminatedStrings(json: string): string {
   const lines = json.split("\n");
   const fixedLines: string[] = [];
 
   for (const line of lines) {
-    const quotes = (line.match(/"/g) || []).length;
-    if (quotes % 2 !== 0) {
+    const { total: quotes, endsWithOpenQuote } = countQuotesIgnoreEscaped(line);
+    if (quotes % 2 !== 0 || endsWithOpenQuote) {
       const firstOpenQuote = line.indexOf('"');
       if (firstOpenQuote > 0) {
         fixedLines.push(line.substring(0, firstOpenQuote));

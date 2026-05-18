@@ -12,15 +12,23 @@ describe("modelPreferencesStorage", () => {
 
   beforeEach(() => {
     store.clear();
+    const mockStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    };
     Object.defineProperty(globalThis, "localStorage", {
-      value: {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => store.set(key, value),
-        removeItem: (key: string) => store.delete(key),
-      },
+      value: mockStorage,
       configurable: true,
       writable: true,
     });
+    if (typeof globalThis.window !== "undefined") {
+      Object.defineProperty(globalThis.window, "localStorage", {
+        value: mockStorage,
+        configurable: true,
+        writable: true,
+      });
+    }
   });
 
   afterEach(() => {
@@ -39,12 +47,24 @@ describe("modelPreferencesStorage", () => {
       assert.strictEqual(prefs.rememberChoice, false);
     });
 
-    it("should return defaults when localStorage is undefined", () => {
+    it("should return defaults when localStorage returns null (disabled)", () => {
+      const disabledStorage = {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      };
       Object.defineProperty(globalThis, "localStorage", {
-        value: undefined,
+        value: disabledStorage,
         configurable: true,
         writable: true,
       });
+      if (typeof globalThis.window !== "undefined") {
+        Object.defineProperty(globalThis.window, "localStorage", {
+          value: disabledStorage,
+          configurable: true,
+          writable: true,
+        });
+      }
       const prefs = getModelPreferences();
       assert.strictEqual(prefs.hasEnabledLocalModels, false);
       assert.strictEqual(prefs.lastModelId, null);
@@ -137,12 +157,24 @@ describe("modelPreferencesStorage", () => {
       assert.strictEqual(store.has(STORAGE_KEYS.CLOUD_PROVIDER), false);
     });
 
-    it("should be a no-op when localStorage is undefined", () => {
+    it("should be a no-op when localStorage returns null (disabled)", () => {
+      const disabledStorage = {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      };
       Object.defineProperty(globalThis, "localStorage", {
-        value: undefined,
+        value: disabledStorage,
         configurable: true,
         writable: true,
       });
+      if (typeof globalThis.window !== "undefined") {
+        Object.defineProperty(globalThis.window, "localStorage", {
+          value: disabledStorage,
+          configurable: true,
+          writable: true,
+        });
+      }
       assert.doesNotThrow(() => {
         saveModelPreferences({ skipAiSetup: true });
       });
@@ -211,12 +243,24 @@ describe("modelPreferencesStorage", () => {
       );
     });
 
-    it("should be a no-op when localStorage is undefined", () => {
+    it("should be a no-op when localStorage returns null (disabled)", () => {
+      const disabledStorage = {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      };
       Object.defineProperty(globalThis, "localStorage", {
-        value: undefined,
+        value: disabledStorage,
         configurable: true,
         writable: true,
       });
+      if (typeof globalThis.window !== "undefined") {
+        Object.defineProperty(globalThis.window, "localStorage", {
+          value: disabledStorage,
+          configurable: true,
+          writable: true,
+        });
+      }
       assert.doesNotThrow(() => {
         clearModelPreferences();
       });
