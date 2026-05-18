@@ -96,6 +96,7 @@ describe("ExecuteContextClassificationUseCase", () => {
   });
 
   test("max retries exceeded returns error", async () => {
+    const validContextLine = createValidContextLine(); // Define validContextLine here
     const mockLLMAdapter = {
       sendRequest: async () => ({
         success: true as const,
