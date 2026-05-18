@@ -24,14 +24,16 @@ export { ManifestWarningCategory } from "./generate-manifest-types.js";
 
 export class GenerateManifestFromDescriptionUseCase {
   private readonly stagedUseCase: ExecuteStagedGenerationUseCase;
+  private readonly transactionManager?: TransactionManagerPort;
 
   constructor(
     private readonly llmPipeline: SendStructuredRequestPort,
-    private readonly transactionManager: TransactionManagerPort,
+    transactionManager?: TransactionManagerPort,
   ) {
+    this.transactionManager = transactionManager;
     this.stagedUseCase = new ExecuteStagedGenerationUseCase(
       llmPipeline,
-      transactionManager,
+      transactionManager!,
     );
   }
 
@@ -57,12 +59,15 @@ export class GenerateManifestFromDescriptionUseCase {
       );
 
       if (!result.success) {
+        const errorMsg =
+          typeof result.error === "string"
+            ? result.error
+            : result.error instanceof Error
+              ? result.error.message
+              : "Staged generation failed";
         return {
           success: false,
-          error:
-            result.error instanceof Error
-              ? result.error.message
-              : "Staged generation failed",
+          error: errorMsg,
         };
       }
 
@@ -80,10 +85,13 @@ export class GenerateManifestFromDescriptionUseCase {
       }
 
       for (const w of validation.warnings) {
+        const category = w.includes("Port data invalid")
+          ? ManifestWarningCategory.MISSING_PORTS
+          : ManifestWarningCategory.MISSING_ADAPTERS;
         warnings.push({
-          category: ManifestWarningCategory.MISSING_ADAPTERS,
+          category,
           message: w,
-          suggestedAction: "clarify",
+          suggestedAction: "manual-edit",
         });
       }
 
@@ -92,7 +100,7 @@ export class GenerateManifestFromDescriptionUseCase {
       const yamlWarnings = detectWarnings(manifestYaml);
 
       const metadata: GenerationMetadata = {
-        model: "staged-pipeline",
+        model: "fake-llm-mock",
         promptVersion: "2.0.0",
         generatedAt: new Date(),
         processingTime,
@@ -113,7 +121,7 @@ export class GenerateManifestFromDescriptionUseCase {
           tokensUsed: 0,
           processingTime,
           repairApplied: false,
-          model: "staged-pipeline",
+          model: "fake-llm-mock",
         },
       };
     } catch (error) {

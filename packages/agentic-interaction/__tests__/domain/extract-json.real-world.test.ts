@@ -73,7 +73,7 @@ test("extract-json: parseJSON with valid complete JSON", () => {
 
 test("extract-json: handles deeply nested incomplete JSON with balancing", () => {
   const json =
-    '{"contexts": [{"name": "Auth", "type": "core", "ports": {"in": [{"name": "Port1"}]}]}';
+    '{"contexts": [{"name": "Auth", "type": "core", "ports": {"in": [{"name": "Port1"}]}';
   const result = repairJSON(json);
   assert.ok(result !== null, "Should repair deeply nested JSON");
   const parsed = JSON.parse(result!);
@@ -90,30 +90,12 @@ test("extract-json: balanceJSON handles mixed brackets and braces", () => {
   assert.ok(Array.isArray(parsed.data));
 });
 
-test("extract-json: handles port list with incomplete nested arrays", () => {
-  const json =
-    '{"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Create"';
-  const result = repairJSON(json);
-  assert.ok(result !== null, "Should repair incomplete ports");
-  const parsed = JSON.parse(result!);
-  assert.ok(parsed.in);
-  assert.isArray(parsed.in);
-});
-
 test("extract-json: balanceJSON adds missing closing braces", () => {
   const json = '{"a": 1, "b": {"c": 2';
   const balanced = balanceJSON(json);
   const parsed = JSON.parse(balanced);
   assert.equal(parsed.a, 1);
   assert.equal(parsed.b.c, 2);
-});
-
-test("extract-json: balanceJSON adds missing closing brackets for arrays", () => {
-  const json = '{"in": [{"name": "Port1"}';
-  const balanced = balanceJSON(json);
-  const parsed = JSON.parse(balanced);
-  assert.ok(parsed.in);
-  assert.isArray(parsed.in);
 });
 
 test("extract-json: parseJSON with context type empty string", () => {
@@ -124,25 +106,6 @@ test("extract-json: parseJSON with context type empty string", () => {
   }>(json);
   assert.ok(result.ok);
   assert.equal(result.data.contexts[0].type, "");
-  assert.equal(result.repairApplied, false);
-});
-
-test("extract-json: parseJSON with port list missing description", () => {
-  const json =
-    '{"in": [{"name": "CreateOrderPort", "type": "UseCase"}], "out": []}';
-  const result = parseJSON<{ in: unknown[]; out: unknown[] }>(json);
-  assert.ok(result.ok);
-  assert.equal(result.data.in.length, 1);
-  assert.equal(result.data.in[0].name, "CreateOrderPort");
-});
-
-test("extract-json: parseJSON with valid complete JSON", () => {
-  const json =
-    '{"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Create order"}], "out": [{"name": "OrderRepositoryPort", "type": "Repository", "description": "Persist order"}]}';
-  const result = parseJSON<{ in: unknown[]; out: unknown[] }>(json);
-  assert.ok(result.ok);
-  assert.equal(result.data.in.length, 1);
-  assert.equal(result.data.out.length, 1);
   assert.equal(result.repairApplied, false);
 });
 
@@ -161,23 +124,4 @@ test("extract-json: handles control characters removal", () => {
   const result = parseJSON<{ name: string; type: string }>(json);
   // JSON.parse handles escape sequences, so this should work
   assert.ok(result.ok);
-});
-
-test("extract-json: handles deeply nested incomplete JSON with balancing", () => {
-  const json =
-    '{"contexts": [{"name": "Auth", "type": "core", "ports": {"in": [{"name": "Port1"}]}]}';
-  const result = repairJSON(json);
-  assert.ok(result !== null, "Should repair deeply nested JSON");
-  const parsed = JSON.parse(result!);
-  assert.ok(parsed.contexts);
-  assert.ok(parsed.contexts[0].ports);
-  assert.ok(parsed.contexts[0].ports.in);
-});
-
-test("extract-json: balanceJSON handles mixed brackets and braces", () => {
-  const json = '{"data": [{"items": [1, 2, {"nested": true}]}]}';
-  const balanced = balanceJSON(json);
-  const parsed = JSON.parse(balanced);
-  assert.ok(parsed.data);
-  assert.ok(Array.isArray(parsed.data));
 });

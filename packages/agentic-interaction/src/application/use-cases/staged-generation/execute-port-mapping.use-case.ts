@@ -79,22 +79,16 @@ export class ExecutePortMappingUseCase {
         { stream: true, temperature: 0.1, maxTokens: 800 },
       );
 
-      const stream = this.llmPort.streamStructuredRequest(request);
+      const responseResult = await this.llmPort.sendRequest(request);
       let fullResponse = "";
       let streamError: unknown = null;
 
-      for await (const chunkResult of stream) {
-        if (!chunkResult.success) {
-          streamError = chunkResult.error;
-          break;
-        }
-        const chunkData =
-          typeof chunkResult.value === "string"
-            ? chunkResult.value
-            : (chunkResult.value as { content?: string })?.content || "";
-        fullResponse += chunkData;
-        if (onChunk && chunkData) {
-          onChunk(chunkData);
+      if (!responseResult.success) {
+        streamError = responseResult.error;
+      } else {
+        fullResponse = responseResult.value.content;
+        if (onChunk && fullResponse) {
+          onChunk(fullResponse);
         }
       }
 
@@ -102,7 +96,7 @@ export class ExecutePortMappingUseCase {
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(streamError);
         }
-        lastError = `Stream error: ${streamError}`;
+        lastError = `Request error: ${streamError}`;
         continue;
       }
 
