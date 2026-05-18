@@ -223,21 +223,23 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
   test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: validBindingLine,
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
+      sendRequest: async () => {
         callCount++;
         if (callCount <= 3) {
           throw new TimeoutError(`Attempt ${callCount} timed out`);
         }
+        return {
+          success: true as const,
+          value: {
+            id: "test",
+            modelId: "gpt-4o-mini" as any,
+            content: validBindingLine,
+            finishReason: "stop" as const,
+            timestamp: Date.now(),
+          },
+        };
+      },
+      streamStructuredRequest: async function* () {
         yield { success: true, value: validBindingLine };
       },
     } as unknown as SendStructuredRequestPort;

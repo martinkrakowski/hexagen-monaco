@@ -60,7 +60,9 @@ export class ExecuteDomainExtractionUseCase {
       } catch (thrownError) {
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
-            thrownError instanceof Error ? err : new Error(String(thrownError)),
+            thrownError instanceof Error
+              ? thrownError
+              : new Error(String(thrownError)),
           );
         }
         lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
@@ -120,13 +122,14 @@ export class ExecuteDomainExtractionUseCase {
             typeof parsed.subdomain === "string"
           ) {
             hasValidLine = true;
-            aggregateRoots.push({
+            const ar: AggregateRoot = {
               name: parsed.name,
               subdomain: parsed.subdomain,
-              identityFields: Array.isArray(parsed.identityFields)
-                ? parsed.identityFields
-                : undefined,
-            });
+            };
+            if (Array.isArray(parsed.identityFields)) {
+              ar.identityFields = parsed.identityFields;
+            }
+            aggregateRoots.push(ar);
           } else if (
             parsed.type === "entity" &&
             typeof parsed.name === "string" &&

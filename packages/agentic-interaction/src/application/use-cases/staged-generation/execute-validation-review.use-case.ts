@@ -59,7 +59,9 @@ export class ExecuteValidationReviewUseCase {
       } catch (thrownError) {
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
-            thrownError instanceof Error ? err : new Error(String(thrownError)),
+            thrownError instanceof Error
+              ? thrownError
+              : new Error(String(thrownError)),
           );
         }
         lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
