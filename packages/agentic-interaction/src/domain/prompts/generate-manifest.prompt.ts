@@ -37,8 +37,8 @@ import type {
   PipelineState,
 } from "../value-objects/pipeline-state.js";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema.js";
-export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
-import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
+import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
+export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 
 export interface PromptVariables {
   userDescription: string;
@@ -47,19 +47,33 @@ export interface PromptVariables {
   additionalContext?: string;
 }
 
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[c] as string,
+  );
+}
+
 function buildTechnologyContext(variables: PromptVariables): string {
   const parts: string[] = [];
   if (variables.platform)
     parts.push(
-      `<technology_context>Target Platform: ${variables.platform}</technology_context>`,
+      `<technology_context>Target Platform: ${escapeXml(variables.platform)}</technology_context>`,
     );
   if (variables.deployment)
     parts.push(
-      `<technology_context>Deployment: ${variables.deployment}</technology_context>`,
+      `<technology_context>Deployment: ${escapeXml(variables.deployment)}</technology_context>`,
     );
   if (variables.additionalContext)
     parts.push(
-      `<technology_context>Additional Notes: ${variables.additionalContext}</technology_context>`,
+      `<technology_context>Additional Notes: ${escapeXml(variables.additionalContext)}</technology_context>`,
     );
   return parts.length > 0 ? parts.join("\n") : "None specified";
 }
@@ -113,7 +127,7 @@ export function isStructuredConfigPipeline(
 }
 
 export function compileStage0Prompt(variables: PromptVariables): string {
-  return `Raw User Description:\n<user_input>\n${variables.userDescription}\n</user_input>\n\nOutput NDJSON:`;
+  return `Raw User Description:\n<user_input>\n${escapeXml(variables.userDescription)}\n</user_input>\n\nOutput NDJSON:`;
 }
 
 // ==========================================
@@ -644,11 +658,11 @@ export type RetryResult = { kind: "prompt"; content: string };
  * Each describes the minimum correct output for that stage.
  */
 const STAGE_RETRY_HINTS: Record<number, string> = {
-  0: `Emit: one "intent" object, one "project-name" object, zero or more "technology" / "pattern" / "ambiguity" objects. No other object types.`,
-  1: `Emit: "subdomain", "aggregate-root", "entity", "value-object", "domain-event", "use-case", "verb", "noun" objects only. Each aggregate-root must have "subdomain" and "identityField". Each entity must have "parentAggregate". Each domain-event must have past-tense "value".`,
-  2: `Emit: "accepted", "rejected", or "uncertain" objects only. Every "accepted" must have: name (kebab-case), contextType (core|supporting|generic|shared-kernel), responsibility, aggregateRoots (array), useCaseNames (array), eventsPublished (array), reasoning. Every "uncertain" must have "recommendation".`,
-  3: `Emit port objects only. Every port must have: contextName (matching an accepted context), direction (in|out), portType (command|query|event for in; repository|publisher|external-client|notifier for out), name (PascalCase), description, forUseCase or forAggregate.`,
-  4: `Emit adapter objects only. Every adapter must have: contextName, adapterName (PascalCase ending in Adapter), adapterType (Repository|Listener|Publisher|HttpClient|Notifier|Controller), implements (exact port name), technology.`,
+  0: `Emit: one "intent" object, one "projectName" object, zero or more "technology" / "pattern" / "ambiguity" objects. No other object types.`,
+  1: `Emit: "subdomain", "aggregateRoot", "entity", "valueObject", "domainEvent", "useCase", "verb", "noun" objects only. Each aggregateRoot must have "subdomain" and "identityFields". Each entity must have "parentAggregate". Each domainEvent must have past-tense "value".`,
+  2: `Emit: "accepted", "rejected", or "uncertain" objects only. Every "accepted" must have: name (kebab-case), contextType (core|supporting|generic|shared-kernel), responsibility, aggregateRoots (array), useCaseNames (array), eventsPublished (array), reasoning. Every "uncertain" must have "reasoning".`,
+  3: `Emit port and contextMapping objects only. Every port must have: contextName (matching an accepted context), direction (in|out), portType (command|query|event for in; repository|publisher|external-client|notifier for out), name (PascalCase), description, forAggregate. Every contextMapping must have: upstream, downstream, pattern, mechanism, events.`,
+  4: `Emit adapter objects only. Every adapter must have: contextName, name (PascalCase ending in Adapter), adapterType (Repository|Listener|Publisher|HttpClient|Notifier|Controller), implements (exact port name), technology.`,
   5: `Stage 5 (Manifest Assembly) is a pure TypeScript function — it does not call the LLM. A failure here indicates a structural mismatch between upstream stages and the assembler. Expected input shape: { stage0: NormalizedPrompt, stage1: DomainAnalysis, stage2: ClassificationResult, stage3: PortMap, stage4: AdapterBindings }. Verify each upstream stage produced valid output before retrying.`,
   6: `Emit validation objects only: "error", "warning", or "info" with "rule" and "message" fields. End with exactly one "result" object containing passed, errorCount, warningCount, infoCount.`,
 };

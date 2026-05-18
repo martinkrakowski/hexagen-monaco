@@ -46,6 +46,20 @@ const XML_TAG = {
   VALIDATION_ERRORS_CLOSE: "</validation_errors>",
 } as const;
 
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[c] as string,
+  );
+}
+
 export const TOPOLOGY_SYSTEM_PROMPT = `You are a JSON generator. You output ONLY valid JSON, nothing else.
 No explanations. No markdown. No code blocks. Raw JSON only.
 
@@ -92,10 +106,10 @@ export function compileTopologyUserPrompt(
   const maxContextsLine = variables.maxContexts
     ? `\n- Maximum ${variables.maxContexts} bounded contexts`
     : "";
-  let prompt = `Project Description:\n${XML_TAG.USER_INPUT_OPEN}\n${variables.userDescription}\n${XML_TAG.USER_INPUT_CLOSE}\n${maxContextsLine}\n\nReturn ONLY valid JSON matching the topology schema. No markdown fences, no explanations.\n\nOutput:`;
+  let prompt = `Project Description:\n${XML_TAG.USER_INPUT_OPEN}\n${escapeXml(variables.userDescription)}\n${XML_TAG.USER_INPUT_CLOSE}\n${maxContextsLine}\n\nReturn ONLY valid JSON matching the topology schema. No markdown fences, no explanations.\n\nOutput:`;
 
   if (variables.validationErrors) {
-    prompt += `\n\nPrevious output had these validation errors:\n${XML_TAG.VALIDATION_ERRORS_OPEN}${variables.validationErrors}${XML_TAG.VALIDATION_ERRORS_CLOSE}\n\nFix these errors and return valid JSON.`;
+    prompt += `\n\nPrevious output had these validation errors:\n${XML_TAG.VALIDATION_ERRORS_OPEN}${escapeXml(variables.validationErrors)}${XML_TAG.VALIDATION_ERRORS_CLOSE}\n\nFix these errors and return valid JSON.`;
   }
 
   return prompt;
