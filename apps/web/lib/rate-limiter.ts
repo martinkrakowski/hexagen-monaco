@@ -19,6 +19,16 @@ if (typeof setInterval !== "undefined") {
   }
 }
 
+function hashKey(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 export function checkRateLimit(
   request: NextRequest,
   maxRequests = 10,
@@ -32,22 +42,21 @@ export function checkRateLimit(
   if (!ip) {
     ip = request.headers.get("x-real-ip") ?? undefined;
   }
-  if (!ip) {
-    ip = request.headers.get("x-request-id") ?? undefined;
+
+  let key = ip;
+  if (!key) {
+    const userAgent = request.headers.get("user-agent") ?? "";
+    const acceptLanguage = request.headers.get("accept-language") ?? "";
+    key = hashKey(userAgent + acceptLanguage);
   }
-  if (!ip) {
-    ip =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
+
   const now = Date.now();
 
-  const record = requestCounts.get(ip);
+  const record = requestCounts.get(key);
 
   if (record) {
     if (now > record.resetTime) {
-      requestCounts.delete(ip);
+      requestCounts.delete(key);
     } else {
       if (record.count >= maxRequests) {
         return { allowed: false, retryAfter: record.resetTime - now };
@@ -57,6 +66,6 @@ export function checkRateLimit(
     }
   }
 
-  requestCounts.set(ip, { count: 1, resetTime: now + windowMs });
+  requestCounts.set(key, { count: 1, resetTime: now + windowMs });
   return { allowed: true };
 }

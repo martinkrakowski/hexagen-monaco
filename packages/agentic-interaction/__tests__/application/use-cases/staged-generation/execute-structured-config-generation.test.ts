@@ -1,6 +1,6 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert";
-import { ExecuteStructuredConfigGenerationUseCase } from "../../../../dist/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+import { ExecuteStructuredConfigGenerationUseCase } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
 // Mock TransactionManagerPort
 const mockTransactionManager = {
@@ -32,14 +32,14 @@ const mockTransactionManager = {
 const mockStreamStructuredRequest = mock.fn(() => {
   async function* mockGenerator() {
     yield {
-      ok: true,
+      success: true,
       value: JSON.stringify({ portMap: {}, contextMappings: [] }),
     };
   }
   return mockGenerator();
 });
 const mockSendRequest = mock.fn(() =>
-  Promise.resolve({ ok: true, value: { content: "mocked" } }),
+  Promise.resolve({ success: true, value: { content: "mocked" } }),
 );
 const mockLLMPort = {
   sendRequest: mockSendRequest,
@@ -94,7 +94,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
       sendRequest: mock.fn(() => Promise.reject(new Error("LLM API error"))),
       streamStructuredRequest: mock.fn(() => {
         async function* gen() {
-          yield { ok: false, error: new Error("LLM API error") };
+          yield { success: false, error: new Error("LLM API error") };
         }
         return gen();
       }),

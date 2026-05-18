@@ -135,8 +135,19 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
-    const result = await useCase.execute(mockState, mockVariables);
 
+    const sentinel = Symbol("timeout");
+    const timeoutPromise = new Promise<typeof sentinel>((resolve) =>
+      setTimeout(() => resolve(sentinel), 2000),
+    );
+    const executePromise = useCase.execute(mockState, mockVariables);
+    const result = await Promise.race([executePromise, timeoutPromise]);
+
+    assert.notStrictEqual(
+      result,
+      sentinel,
+      "Test timed out instead of completing",
+    );
     assert.strictEqual(result.success, false);
     assert.ok(
       result.error instanceof TimeoutError,

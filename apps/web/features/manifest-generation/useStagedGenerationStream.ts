@@ -35,7 +35,7 @@ export interface StagedGenerationStreamReturn {
   }>;
   reset: () => void;
   cancel: () => void;
-  retry: () => void;
+  retry: () => Promise<void>;
 }
 
 function stageToPhase(stage: number): StagedPhase {
@@ -110,7 +110,7 @@ export function useStagedGenerationStream(
         const READ_TIMEOUT_MS = 60000;
 
         let lastDataTime = Date.now();
-        let timeoutCheckInterval: NodeJS.Timeout | null = null;
+        let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
 
         const attemptReconnect = async (
           attempt: number,

@@ -145,6 +145,6 @@ export class ExecuteValidationReviewUseCase {
       }).content;
     }
 
-    return err(new StageMaxRetriesError(STAGE_NUMBER, lastError, ""));
+    throw new Error("Unreachable: all retry paths return within loop");
   }
 }

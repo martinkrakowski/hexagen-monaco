@@ -13,14 +13,8 @@ export function detectInputMode(content: string): InputMode {
     const hasContexts =
       Array.isArray(obj.bounded_contexts) &&
       (obj.bounded_contexts as unknown[]).length > 0;
-    const hasUseCases = obj.use_cases !== undefined && obj.use_cases !== null;
-    const hasMappings =
-      Array.isArray(obj.context_mappings) &&
-      (obj.context_mappings as unknown[]).length > 0;
 
-    return hasContexts && hasUseCases && hasMappings
-      ? "structured-config"
-      : "description";
+    return hasContexts ? "structured-config" : "description";
   } catch {
     return "description";
   }

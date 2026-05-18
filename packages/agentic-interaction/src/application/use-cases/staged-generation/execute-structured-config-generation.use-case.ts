@@ -617,37 +617,44 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const yaml = assembledManifest.yaml || "";
     const parsed =
       (assembledManifest.parsedObject as Record<string, unknown>) || {};
-    const transaction = this.transactionManager.begin(intentId, {
-      intentId,
-      origin: "structured-config-generation",
-      yaml,
-      contextCount: Array.isArray(parsed.bounded_contexts)
-        ? parsed.bounded_contexts.length
-        : 0,
-      portCount: Array.isArray(parsed.ports)
-        ? parsed.ports.length
-        : Array.isArray(parsed.bounded_contexts)
-          ? parsed.bounded_contexts.reduce(
+
+    let transaction: Awaited<ReturnType<TransactionManagerPort["begin"]>>;
+    try {
+      transaction = await this.transactionManager.begin(intentId, {
+        intentId,
+        origin: "structured-config-generation",
+        yaml,
+        contextCount: Array.isArray(parsed.bounded_contexts)
+          ? parsed.bounded_contexts.length
+          : 0,
+        portCount: Array.isArray(parsed.ports)
+          ? parsed.ports.length
+          : Array.isArray(parsed.bounded_contexts)
+            ? parsed.bounded_contexts.reduce(
+                (sum, ctx) =>
+                  sum +
+                  (Array.isArray(ctx.ports?.in) ? ctx.ports.in.length : 0) +
+                  (Array.isArray(ctx.ports?.out) ? ctx.ports.out.length : 0),
+                0,
+              )
+            : 0,
+        adapterCount: Array.isArray(parsed.bounded_contexts)
+          ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
               (sum, ctx) =>
-                sum +
-                (Array.isArray(ctx.ports?.in) ? ctx.ports.in.length : 0) +
-                (Array.isArray(ctx.ports?.out) ? ctx.ports.out.length : 0),
+                sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
               0,
             )
           : 0,
-      adapterCount: Array.isArray(parsed.bounded_contexts)
-        ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
-            (sum, ctx) =>
-              sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
-            0,
-          )
-        : 0,
-    });
+      });
+    } catch (beginError) {
+      return { success: false, error: beginError };
+    }
+
     try {
-      this.transactionManager.transition(transaction.id, "speculative");
+      await this.transactionManager.transition(transaction.id, "speculative");
     } catch (transitionError) {
-      this.transactionManager.rollback(transaction.id);
-      throw transitionError;
+      await this.transactionManager.rollback(transaction.id);
+      return { success: false, error: transitionError };
     }
 
     return {

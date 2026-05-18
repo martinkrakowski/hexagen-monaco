@@ -133,10 +133,11 @@ export default function ImportProjectSpecPage() {
 
     await manifestGeneration.generateManifest(specContent);
 
-    if (manifestGeneration.generatedManifest) {
-      setGeneratedManifest(manifestGeneration.generatedManifest);
+    const result = manifestGeneration;
+    if (result.generatedManifest) {
+      setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
-    } else if (manifestGeneration.generationError) {
+    } else if (result.generationError) {
       setPageState("DESCRIPTION_FALLBACK");
     }
   }, [specContent, manifestGeneration, pageState]);
@@ -189,7 +190,7 @@ export default function ImportProjectSpecPage() {
           <input
             id="project-spec-file"
             type="file"
-            accept=".yaml,.yml,.json"
+            accept=".yaml,.yml,.json,.txt"
             aria-describedby="file-help"
             onChange={(e) => {
               const file = e.target.files?.[0];
