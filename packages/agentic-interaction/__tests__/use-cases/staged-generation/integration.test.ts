@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AssembledManifest } from "../../../src/domain/value-objects/pipeline-state.js";
 
 // StageResult type (matches definition in use-case files)
@@ -129,7 +130,7 @@ async function runStage6WithState(state: {
 
 // Fixture path for structured config tests
 const fixturesDir = path.join(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   "fixtures",
 );
 const yamlPath = path.join(fixturesDir, "krakowski-portal.yaml");

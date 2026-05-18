@@ -5,6 +5,13 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
 
+class TimeoutError extends Error {
+  constructor(message = "LLM request timed out") {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
 const validBindingLine = JSON.stringify({
   contextName: "invoice-management",
   adapterName: "InMemoryInvoiceAdapter",
@@ -111,23 +118,30 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
 
   test("handles LLM timeout", async () => {
     const timeoutAdapter = {
-      streamStructuredRequest: async function* () {
+      streamStructuredRequest: async function* (...args: any[]) {
+        const options = args.find(
+          (arg: any) => arg?.signal instanceof AbortSignal,
+        );
+        const signal = options?.signal;
+        if (signal) {
+          signal.throwIfAborted();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          signal.throwIfAborted();
+          throw new TimeoutError();
+        }
         await new Promise(() => {});
         yield { success: true, value: "" };
       },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
-
-    const result = await Promise.race([
-      useCase.execute(mockState, mockVariables),
-      new Promise<{ success: false; error: unknown }>((_, reject) =>
-        setTimeout(() => reject(new Error("Test timeout")), 100),
-      ),
-    ]).catch((err) => ({ success: false, error: err }) as const);
+    const result = await useCase.execute(mockState, mockVariables);
 
     assert.strictEqual(result.success, false);
-    assert.ok(result.error);
+    assert.ok(
+      result.error instanceof TimeoutError,
+      "Expected TimeoutError for LLM timeout",
+    );
   });
 
   test("retry fails on persistent timeout", async () => {
@@ -136,21 +150,21 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 3) {
-          await new Promise(() => {});
+          throw new TimeoutError(`Attempt ${callCount} timed out`);
         }
         yield { success: true, value: validBindingLine };
       },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
-    const result = await useCase
-      .execute(mockState, mockVariables)
-      .catch((err) => {
-        return { success: false, error: err };
-      });
+    const result = await useCase.execute(mockState, mockVariables);
 
     assert.strictEqual(result.success, false);
-    assert.ok(result.error);
+    assert.ok(
+      result.error instanceof TimeoutError,
+      "Expected TimeoutError for persistent timeout",
+    );
+    assert.strictEqual(callCount, 3);
   });
 
   test("handles malformed LLM response", async () => {

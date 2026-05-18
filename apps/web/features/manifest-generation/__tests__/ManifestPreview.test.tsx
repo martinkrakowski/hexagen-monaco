@@ -1,7 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
-import { render, screen } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { ManifestPreview } from "../ManifestPreview";
+
+afterEach(cleanup);
 
 describe("ManifestPreview", () => {
   const validYaml = `bounded_contexts:
@@ -18,7 +20,7 @@ describe("ManifestPreview", () => {
         onApprove={() => {}}
         onRegenerate={() => {}}
         onStartOver={() => {}}
-      />
+      />,
     );
 
     assert.ok(screen.getByText(/generated manifest/i));
@@ -33,7 +35,7 @@ describe("ManifestPreview", () => {
         onApprove={() => {}}
         onRegenerate={() => {}}
         onStartOver={() => {}}
-      />
+      />,
     );
 
     assert.ok(screen.getByText(/generated manifest/i));
@@ -46,7 +48,7 @@ describe("ManifestPreview", () => {
         onApprove={() => {}}
         onRegenerate={() => {}}
         onStartOver={() => {}}
-      />
+      />,
     );
 
     const mermaidTab = screen.getByRole("button", { name: /mermaid/i });

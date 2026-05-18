@@ -158,7 +158,8 @@ describe("Stage 5: Manifest Assembly", () => {
     assert.ok(Array.isArray(result.assemblyWarnings));
     // Should use default project name
     assert.ok(
-      result.yaml.includes("hexagen-workspace") || result.yaml.length > 0,
+      result.yaml.includes("hexagen-workspace"),
+      "Fallback project name 'hexagen-workspace' not found in YAML",
     );
   });
 

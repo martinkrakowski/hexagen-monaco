@@ -62,7 +62,17 @@ describe("ExecutePortMappingUseCase", () => {
     assert.strictEqual(result.success, true);
     if (result.success) {
       assert.ok(result.value.portMap.contexts.length > 0);
-      assert.ok(result.value.contextMappings.length >= 0);
+      assert.ok(
+        result.value.contextMappings.length > 0,
+        "Expected non-empty context mappings",
+      );
+      assert.ok(
+        result.value.contextMappings.some(
+          (m) =>
+            m.upstream === "billing" && m.downstream === "invoice-management",
+        ),
+        "Expected context mapping between billing and invoice-management",
+      );
     }
   });
 

@@ -175,7 +175,7 @@ test("compileStage6Prompt includes validation rules", () => {
   assert.match(prompt, /validation/);
 });
 
-test("compileStage1Prompt includes user description", () => {
+test("compileStage1Prompt includes user description (stage0->stage1)", () => {
   const state = {
     stage0: { userDescription: "Invoice management system" },
     stage1: {},
@@ -184,7 +184,7 @@ test("compileStage1Prompt includes user description", () => {
   assert.match(prompt, /Invoice management system/);
 });
 
-test("compileStage2Prompt includes classification", () => {
+test("compileStage2Prompt includes classification (stage1->stage2)", () => {
   const state = {
     stage0: { userDescription: "Test" },
     stage1: {},
@@ -225,7 +225,7 @@ test("compileStage4Prompt includes domain analysis", () => {
   assert.match(prompt, /domain analysis/i);
 });
 
-test("compileStage6Prompt includes validation rules", () => {
+test("compileStage6Prompt includes R01 validation rule", () => {
   const state = {
     stage0: {
       intent: "Test",
