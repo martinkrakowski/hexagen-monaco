@@ -10,7 +10,7 @@
 export function createStubManifestGenerationUseCase() {
   return {
     generateTopology: async (
-      { description }: { description: string },
+      _params: { description: string },
       _signal?: AbortSignal,
       setStepDetail?: (detail: string) => void,
     ) => {

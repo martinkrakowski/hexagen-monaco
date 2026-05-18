@@ -262,7 +262,11 @@ describe("Welcome Screen Manifest Generation Integration", () => {
       );
 
       // Verify hook structure supports error state
-      assert.ok(typeof result.current.generationError === "object" || typeof result.current.generationError === "string" || result.current.generationError === null);
+      assert.ok(
+        typeof result.current.generationError === "object" ||
+          typeof result.current.generationError === "string" ||
+          result.current.generationError === null,
+      );
     });
 
     it("should reset state properly on error", async () => {
@@ -355,7 +359,10 @@ describe("Welcome Screen Manifest Generation Integration", () => {
 
       // Verify state properties exist and have correct types
       assert.strictEqual(typeof result.current.isGenerating, "boolean");
-      assert.strictEqual(typeof result.current.generationError, "object" || "string" || "null");
+      assert.strictEqual(
+        typeof result.current.generationError,
+        "object" || "string" || "null",
+      );
     });
   });
 
@@ -394,10 +401,6 @@ describe("Welcome Screen Manifest Generation Integration", () => {
         useClientManifestGeneration(mockContext),
       );
 
-      // User description from form
-      const userDescription =
-        "E-commerce platform with order and payment processing";
-
       // Verify hook contract
       assert.strictEqual(typeof result.current.generateManifest, "function");
       assert.strictEqual(result.current.isGenerating, false);
@@ -406,7 +409,10 @@ describe("Welcome Screen Manifest Generation Integration", () => {
       assert.ok(typeof result.current.phase === "string");
 
       // Verify manifest property structure
-      assert.ok(result.current.generatedManifest === null || typeof result.current.generatedManifest === "string");
+      assert.ok(
+        result.current.generatedManifest === null ||
+          typeof result.current.generatedManifest === "string",
+      );
     });
   });
 });

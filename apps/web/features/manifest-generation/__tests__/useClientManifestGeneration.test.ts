@@ -25,34 +25,9 @@ Object.defineProperties(globalThis, {
   },
 });
 
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
-
-// Helper: Extract YAML from response
-const realExtractYaml = (response: string): string | null => {
-  const codeBlockMatch = response.match(/```ya?ml\n([\s\S]*?)\n```/);
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim();
-  }
-  const genericBlockMatch = response.match(/```\n([\s\S]*?)\n```/);
-  if (genericBlockMatch) {
-    const content = genericBlockMatch[1].trim();
-    if (
-      content.includes("workspace:") ||
-      content.includes("boundedContexts:")
-    ) {
-      return content;
-    }
-  }
-  if (
-    response.includes("workspace:") &&
-    response.includes("boundedContexts:")
-  ) {
-    return response.trim();
-  }
-  return null;
-};
 
 import { useClientManifestGeneration } from "../useClientManifestGeneration";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
@@ -163,7 +138,11 @@ describe("useClientManifestGeneration", () => {
 
       // Verify error handling structure exists
       assert.strictEqual(result.current.generationError, null);
-      assert.ok(typeof result.current.generationError === "object" || typeof result.current.generationError === "string" || result.current.generationError === null);
+      assert.ok(
+        typeof result.current.generationError === "object" ||
+          typeof result.current.generationError === "string" ||
+          result.current.generationError === null,
+      );
     });
 
     it("should set generationError when sendGovernanceMessage throws", async () => {
@@ -172,7 +151,10 @@ describe("useClientManifestGeneration", () => {
       const { result } = renderHook(() => useClientManifestGeneration(ctx));
 
       // Verify hook initializes with error handling capability
-      assert.strictEqual(typeof result.current.generationError, "object" || "string" || "null");
+      assert.strictEqual(
+        typeof result.current.generationError,
+        "object" || "string" || "null",
+      );
     });
 
     it("should call sendGovernanceMessage with correct arguments", async () => {

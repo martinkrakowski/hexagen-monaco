@@ -25,34 +25,9 @@ Object.defineProperties(globalThis, {
   },
 });
 
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import { renderHook, act } from "@testing-library/react";
-
-// Helper: Extract YAML from response (used locally, not mocked)
-const realExtractYaml = (response: string): string | null => {
-  const codeBlockMatch = response.match(/```ya?ml\n([\s\S]*?)\n```/);
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim();
-  }
-  const genericBlockMatch = response.match(/```\n([\s\S]*?)\n```/);
-  if (genericBlockMatch) {
-    const content = genericBlockMatch[1].trim();
-    if (
-      content.includes("workspace:") ||
-      content.includes("boundedContexts:")
-    ) {
-      return content;
-    }
-  }
-  if (
-    response.includes("workspace:") &&
-    response.includes("boundedContexts:")
-  ) {
-    return response.trim();
-  }
-  return null;
-};
+import { renderHook } from "@testing-library/react";
 
 import { useClientManifestGeneration } from "../useClientManifestGeneration";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";

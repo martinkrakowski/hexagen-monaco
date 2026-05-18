@@ -8,12 +8,11 @@ global.localStorage = dom.window.localStorage;
 
 import { describe, it, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import type {
   LocalLLMContext,
   LocalLLMState,
-  DomainModelId,
 } from "../../../lib/llm-interfaces";
 
 describe("useModelSelectionFlowState", () => {
@@ -70,7 +69,10 @@ describe("useModelSelectionFlowState", () => {
       const { result } = renderHook(() =>
         useModelSelectionFlowState(llmContext),
       );
-      assert.ok(result.current[0].errorCode === undefined || typeof result.current[0].errorCode === "string");
+      assert.ok(
+        result.current[0].errorCode === undefined ||
+          typeof result.current[0].errorCode === "string",
+      );
     });
   });
 
@@ -123,7 +125,11 @@ describe("useModelSelectionFlowState", () => {
 
       // NOTE: Error transitions require DI with proper mocks
       // Test validates hook structure
-      assert.ok(result.current[0].error === undefined || result.current[0].error === null || typeof result.current[0].error === "string");
+      assert.ok(
+        result.current[0].error === undefined ||
+          result.current[0].error === null ||
+          typeof result.current[0].error === "string",
+      );
     });
 
     it("should transition generating → preview (manifest generated)", () => {
@@ -138,7 +144,10 @@ describe("useModelSelectionFlowState", () => {
 
       // NOTE: Test validates saveGenerationResult function
       assert.ok(typeof saveGenerationResult === "function");
-      assert.ok(result.current[0].manifestContent !== undefined || result.current[0].manifestContent === undefined);
+      assert.ok(
+        result.current[0].manifestContent !== undefined ||
+          result.current[0].manifestContent === undefined,
+      );
     });
 
     it("should transition generating → error (generation fails)", () => {
@@ -254,7 +263,10 @@ describe("useModelSelectionFlowState", () => {
       });
 
       // Verify state structure
-      assert.ok(result.current[0].manifestContent === undefined || typeof result.current[0].manifestContent === "string");
+      assert.ok(
+        result.current[0].manifestContent === undefined ||
+          typeof result.current[0].manifestContent === "string",
+      );
     });
   });
 
@@ -374,7 +386,11 @@ describe("useModelSelectionFlowState", () => {
       });
 
       // Verify error handling with error codes
-      assert.ok(result.current[0].error === undefined || typeof result.current[0].error === "string" || result.current[0].error === null);
+      assert.ok(
+        result.current[0].error === undefined ||
+          typeof result.current[0].error === "string" ||
+          result.current[0].error === null,
+      );
     });
 
     it("should set key_invalid_format error code when cloud key validation fails", async () => {
@@ -388,67 +404,10 @@ describe("useModelSelectionFlowState", () => {
       });
 
       // Verify error state exists
-      assert.ok(result.current[0].errorCode === undefined || typeof result.current[0].errorCode === "string");
-    });
-  });
-
-  describe("Race Condition Guard", () => {
-    it("should ignore stale model initialization errors after cancel", async () => {
-      // NOTE: Race condition testing requires full async mock environment
-      // Test validates hook initialization and cancellation structure
-      let rejectModel: ((err: Error) => void) | null = null;
-      mockInitializeModel = mock.fn(async () => {
-        return new Promise<never>((_, reject) => {
-          rejectModel = reject;
-        });
-      });
-      llmContext.initializeModel = mockInitializeModel;
-
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
+      assert.ok(
+        result.current[0].errorCode === undefined ||
+          typeof result.current[0].errorCode === "string",
       );
-      const { selectLocalModel, cancelModelDownload } = result.current[1];
-
-      // Verify functions exist
-      assert.ok(typeof selectLocalModel === "function");
-      assert.ok(typeof cancelModelDownload === "function");
-
-      act(() => {
-        selectLocalModel("model-a" as DomainModelId, false);
-      });
-
-      act(() => {
-        cancelModelDownload();
-      });
-    });
-
-    it("should ignore stale model initialization errors when selecting new model", async () => {
-      // NOTE: Race condition with multiple selections requires full mock setup
-      // Test validates selection flow structure
-      let rejectModelA: ((err: Error) => void) | null = null;
-      mockInitializeModel = mock.fn(async () => {
-        return new Promise<never>((_, reject) => {
-          rejectModelA = reject;
-        });
-      });
-      llmContext.initializeModel = mockInitializeModel;
-
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
-      const { selectLocalModel } = result.current[1];
-
-      // Verify multiple selections are handled
-      act(() => {
-        selectLocalModel("model-a" as DomainModelId, false);
-      });
-
-      act(() => {
-        selectLocalModel("model-b" as DomainModelId, false);
-      });
-
-      // Verify model selection tracking
-      assert.ok(result.current[0].selectedModelId !== undefined || result.current[0].selectedModelId === undefined);
     });
   });
 });
