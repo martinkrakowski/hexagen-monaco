@@ -119,7 +119,8 @@ export function useStagedGenerationStream(
            }
            
            const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-           console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+           // eslint-disable-next-line no-console
+          console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`);
            
            await new Promise(resolve => setTimeout(resolve, delay));
            
@@ -155,11 +156,13 @@ export function useStagedGenerationStream(
 
          timeoutCheckInterval = setInterval(() => {
            if (Date.now() - lastDataTime > READ_TIMEOUT_MS) {
-             console.warn('[SSE] Timeout: no data received for 60s');
+             // eslint-disable-next-line no-console
+          console.warn('[SSE] Timeout: no data received for 60s');
              reader.cancel();
            }
          }, 5000);
 
+          // eslint-disable-next-line no-constant-condition
           try {
             while (true) {
               try {
@@ -178,45 +181,55 @@ export function useStagedGenerationStream(
                    const type = event.type as string;
 
                    if (type === "stage-start") {
-                     const stage = event.stage as number;
-                     const label =
-                       (event.label as string) ||
-                       stageLabels[stage] ||
-                       `Stage ${stage}`;
-                     setPhase(stageToPhase(stage));
-                     setStepDetail(`${label}...`);
-                     setStageProgress((prev) => ({
-                       ...prev,
-                       [stage]: { stage, label, chunks: [] },
-                     }));
-                   } else if (type === "stage-complete") {
-                     const stage = event.stage as number;
-                     const durationMs = event.durationMs as number;
-                     setStageProgress((prev) => ({
-                       ...prev,
-                       [stage]: { ...prev[stage], durationMs },
-                     }));
-                   } else if (type === "stage-telemetry") {
-                     const stage = event.stage as number;
-                     const telemetry = event.telemetry as StageProgress["telemetry"];
-                     setStageProgress((prev) => ({
-                       ...prev,
-                       [stage]: { ...prev[stage], telemetry },
-                     }));
-                   } else if (type === "chunk") {
-                     const stage = event.stage as number;
-                     const data = event.data as string;
-                     setStageProgress((prev) => ({
-                       ...prev,
-                       [stage]: {
-                         ...prev[stage],
-                         chunks: [...(prev[stage]?.chunks || []), data],
-                       },
-                     }));
-                   } else if (type === "validation-error") {
-                     const errors = event.errors as string[];
-                     setValidationErrors(errors);
-                   } else if (type === "done") {
+                      const stage = event.stage as number;
+                      const label =
+                        (event.label as string) ||
+                        stageLabels[stage] ||
+                        `Stage ${stage}`;
+                      result.phase = stageToPhase(stage);
+                      result.stepDetail = `${label}...`;
+                      result.stageProgress = {
+                        ...result.stageProgress,
+                        [stage]: { stage, label, chunks: [] },
+                      };
+                      setPhase(result.phase);
+                      setStepDetail(result.stepDetail);
+                      setStageProgress(result.stageProgress);
+                    } else if (type === "stage-complete") {
+                      const stage = event.stage as number;
+                      const durationMs = event.durationMs as number;
+                      result.stageProgress = {
+                        ...result.stageProgress,
+                        [stage]: { ...result.stageProgress[stage], durationMs },
+                      };
+                      setStageProgress(result.stageProgress);
+                    } else if (type === "stage-telemetry") {
+                      const stage = event.stage as number;
+                      const telemetry = event.telemetry as StageProgress["telemetry"];
+                      result.stageProgress = {
+                        ...result.stageProgress,
+                        [stage]: { ...result.stageProgress[stage], telemetry },
+                      };
+                      setStageProgress(result.stageProgress);
+                    } else if (type === "chunk") {
+                      const stage = event.stage as number;
+                      const data = event.data as string;
+                      result.stageProgress = {
+                        ...result.stageProgress,
+                        [stage]: {
+                          ...result.stageProgress[stage],
+                          chunks: [
+                            ...(result.stageProgress[stage]?.chunks || []),
+                            data,
+                          ],
+                        },
+                      };
+                      setStageProgress(result.stageProgress);
+                    } else if (type === "validation-error") {
+                      const errors = event.errors as string[];
+                      result.validationErrors = errors;
+                      setValidationErrors(errors);
+                    } else if (type === "done") {
                      result.generatedManifest = event.yaml as string;
                      result.contextCount = event.contextCount as number;
                      result.portCount = event.portCount as number;
@@ -242,7 +255,8 @@ export function useStagedGenerationStream(
                  }
                }
               } catch {
-                console.warn('[SSE] Connection lost, attempting reconnect...');
+                // eslint-disable-next-line no-console
+              console.warn('[SSE] Connection lost, attempting reconnect...');
                const newReader = await attemptReconnect(0);
                if (!newReader) {
                  throw new Error('SSE connection lost and reconnection failed');
