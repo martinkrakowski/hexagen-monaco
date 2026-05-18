@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --import jsdom/register --test features/manifest-generation/__tests__/useStagedGenerationStream.test.ts"
+    "test": "node --import jsdom/register --test **/*.test.ts"
   },
   "dependencies": {
     "@auth/core": "^0.34.3",

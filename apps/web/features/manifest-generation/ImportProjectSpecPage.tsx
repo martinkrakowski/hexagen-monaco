@@ -78,6 +78,9 @@ const SPEC_STAGE_LABELS: Partial<Record<StagedPhase, string>> = {
 export default function ImportProjectSpecPage() {
   const router = useRouter();
   const [pageState, setPageState] = useState<SpecPageState>("UPLOAD");
+  const [previousState, setPreviousState] = useState<SpecPageState | null>(
+    null,
+  );
   const [specSummary, setSpecSummary] = useState<SpecSummary | null>(null);
   const [specContent, setSpecContent] = useState<string>("");
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
@@ -109,20 +112,22 @@ export default function ImportProjectSpecPage() {
   };
 
   const handleMapPorts = useCallback(async () => {
+    setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
 
-    await specGeneration.generateFromSpec(specContent);
+    const result = await specGeneration.generateFromSpec(specContent);
 
-    if (specGeneration.generatedManifest) {
-      setGeneratedManifest(specGeneration.generatedManifest);
+    if (result?.generatedManifest) {
+      setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
-    } else if (specGeneration.generationError) {
+    } else if (result?.phase === "failed") {
       setPageState("SPEC_REVIEW");
     }
-  }, [specContent, specGeneration]);
+  }, [specContent, specGeneration, pageState]);
 
   const handleContinue = useCallback(async () => {
+    setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
 
@@ -134,7 +139,7 @@ export default function ImportProjectSpecPage() {
     } else if (manifestGeneration.generationError) {
       setPageState("DESCRIPTION_FALLBACK");
     }
-  }, [specContent, manifestGeneration]);
+  }, [specContent, manifestGeneration, pageState]);
 
   const handleBack = () => {
     if (pageState === "SPEC_REVIEW" || pageState === "DESCRIPTION_FALLBACK") {
@@ -175,9 +180,17 @@ export default function ImportProjectSpecPage() {
           <p className="mb-4">
             Upload a YAML or JSON spec file to generate a manifest.
           </p>
+          <label
+            htmlFor="project-spec-file"
+            className="block mb-2 text-sm font-medium"
+          >
+            Upload Project Specification
+          </label>
           <input
+            id="project-spec-file"
             type="file"
             accept=".yaml,.yml,.json"
+            aria-describedby="file-help"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
@@ -188,6 +201,9 @@ export default function ImportProjectSpecPage() {
             }}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent/90"
           />
+          <p id="file-help" className="text-sm text-muted-foreground mt-2">
+            Upload a YAML or JSON spec file to generate a manifest.
+          </p>
         </div>
       )}
 
@@ -293,7 +309,8 @@ export default function ImportProjectSpecPage() {
               onClick={() => {
                 specGeneration.reset();
                 manifestGeneration.reset();
-                setPageState("SPEC_REVIEW");
+                setPageState(previousState ?? "SPEC_REVIEW");
+                setPreviousState(null);
               }}
               className="mt-4 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded"
             >

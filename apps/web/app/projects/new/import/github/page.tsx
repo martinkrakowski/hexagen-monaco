@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 export default function ImportGitHubPage() {
-  return null;
+  redirect("/projects/new/import");
 }

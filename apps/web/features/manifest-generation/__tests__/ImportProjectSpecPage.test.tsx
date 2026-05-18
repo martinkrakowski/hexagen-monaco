@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -8,16 +9,11 @@ import path from "node:path";
 import { rest } from "msw";
 import { setupServer } from "msw/node";
 
-// Mock Next.js router
-const mockPush = jest.fn();
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
-
-const yamlPath = path.join(
-  "/Users/martin/Projects/hexagen-monaco/packages/agentic-interaction/src/application/use-cases/staged-generation/__tests__/fixtures",
-  "krakowski-portal.yaml",
+const fixturesDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../../packages/agentic-interaction/src/application/use-cases/staged-generation/__tests__/fixtures",
 );
+const yamlPath = path.join(fixturesDir, "krakowski-portal.yaml");
 
 const server = setupServer(
   rest.post("/api/manifest/generate/spec", async (req, res, ctx) => {
@@ -126,9 +122,10 @@ describe("ImportProjectSpecPage", () => {
     const fileInput = screen.getByLabelText(/file/i);
     await user.upload(fileInput, file);
 
+    const aiButton = screen.getByText(/generate with ai instead/i);
+    await user.click(aiButton);
+
     await waitFor(() => {
-      const aiButton = screen.getByText(/generate with ai instead/i);
-      user.click(aiButton);
       assert.ok(
         mockPush.mock.calls.some((call) => call[0] === "/projects/new/ai"),
       );
@@ -146,9 +143,11 @@ describe("ImportProjectSpecPage", () => {
     await user.upload(fileInput, file);
 
     await waitFor(() => {
-      const backButton = screen.getByText(/back/i);
-      user.click(backButton);
+      assert.ok(screen.getByText(/spec review/i));
     });
+
+    const backButton = screen.getByText(/back/i);
+    await user.click(backButton);
 
     await waitFor(() => {
       assert.ok(screen.getByLabelText(/file/i));
@@ -164,9 +163,11 @@ describe("ImportProjectSpecPage", () => {
     await user.upload(fileInput, file);
 
     await waitFor(() => {
-      const backButton = screen.getByText(/back/i);
-      user.click(backButton);
+      assert.ok(screen.getByText(/description detected/i));
     });
+
+    const backButton = screen.getByText(/back/i);
+    await user.click(backButton);
 
     await waitFor(() => {
       assert.ok(screen.getByLabelText(/file/i));
@@ -200,10 +201,7 @@ describe("ImportProjectSpecPage", () => {
   it("shows error on invalid config during generation", async () => {
     server.use(
       rest.post("/api/manifest/generate/spec", (req, res, ctx) => {
-        return res(
-          ctx.status(400),
-          ctx.json({ message: "Missing config" }),
-        );
+        return res(ctx.status(400), ctx.json({ message: "Missing config" }));
       }),
     );
 

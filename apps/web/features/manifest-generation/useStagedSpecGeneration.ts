@@ -19,7 +19,16 @@ export interface UseStagedSpecGenerationReturn {
   generateFromSpec: (
     config: string,
     options?: SpecGenerationOptions,
-  ) => Promise<void>;
+  ) => Promise<{
+    generatedManifest: string | null;
+    phase: StagedPhase;
+    stepDetail: string;
+    stageProgress: Record<number, StageProgress>;
+    validationErrors: string[];
+    contextCount: number;
+    portCount: number;
+    adapterCount: number;
+  }>;
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
@@ -74,7 +83,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     config: string,
     options?: SpecGenerationOptions,
   ) => {
-    await stream.generate(
+    return stream.generate(
       {
         config,
         platform: options?.platform,

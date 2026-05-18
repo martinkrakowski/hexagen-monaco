@@ -17,19 +17,19 @@ test("IDs are 'manifest', 'spec', 'github'", () => {
 test("manifest is available", () => {
   const manifest = IMPORT_SUB_OPTIONS.find((o) => o.id === "manifest");
   assert.ok(manifest);
-  assert.equal(manifest.isAvailable, true);
+  assert.equal(manifest.status, "available");
 });
 
 test("spec is available", () => {
   const spec = IMPORT_SUB_OPTIONS.find((o) => o.id === "spec");
   assert.ok(spec);
-  assert.equal(spec.isAvailable, true);
+  assert.equal(spec.status, "available");
 });
 
 test("github is not available (coming soon)", () => {
   const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
   assert.ok(github);
-  assert.equal(github.isAvailable, false);
+  assert.equal(github.status, "coming-soon");
 });
 
 test("each option has non-empty label, description, iconName, and href", () => {

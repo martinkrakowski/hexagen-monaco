@@ -1,3 +1,5 @@
+import yaml from "js-yaml";
+
 export type InputMode = "description" | "structured-config";
 
 export function detectInputMode(content: string): InputMode {
@@ -35,14 +37,10 @@ function maybeParseJson(content: string): unknown | null {
 }
 
 function parseLeanYaml(content: string): Record<string, unknown> | null {
-  const result: Record<string, unknown> = {};
-  for (const line of content.split("\n")) {
-    const match = line.match(/^([a-z_][a-z0-9_]*):\s*(.*)$/);
-    if (match) {
-      const key = match[1];
-      const value = match[2].trim();
-      result[key] = value === "" ? [] : value;
-    }
+  try {
+    const parsed = yaml.load(content) as Record<string, unknown> | null;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
   }
-  return Object.keys(result).length > 0 ? result : null;
 }

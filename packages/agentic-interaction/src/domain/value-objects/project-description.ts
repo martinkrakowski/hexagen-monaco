@@ -50,13 +50,13 @@ export const DESCRIPTION_MAX_LENGTH = 50_000;
 export class ProjectDescriptionValidator {
   static readonly MIN_LENGTH = DESCRIPTION_MIN_LENGTH;
   static readonly MAX_LENGTH = DESCRIPTION_MAX_LENGTH;
-  static readonly DANGEROUS_PATTERNS = [
+  static readonly DANGEROUS_PATTERNS = Object.freeze([
     /ignore previous instructions/i,
     /system prompt/i,
     /you are now/i,
     /<script>/i,
     /javascript:/i,
-  ];
+  ]) as ReadonlyArray<RegExp>;
 
   /**
    * Validate project description
