@@ -43,6 +43,16 @@ const createMockLLMPort = (
 ) => {
   let callIdx = 0;
   return {
+    sendRequest: async () => ({
+      success: true as const,
+      value: {
+        id: "test",
+        modelId: "gpt-4o-mini" as any,
+        content: validPortMappingNdjson,
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
+      },
+    }),
     streamStructuredRequest: () => {
       const stream = streams[callIdx];
       callIdx++;
@@ -98,6 +108,16 @@ describe("ExecutePortMappingUseCase", () => {
 
   test("handles LLM timeout", async () => {
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validPortMappingNdjson,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         await new Promise(() => {});
         yield { success: true, value: "" };
@@ -120,6 +140,16 @@ describe("ExecutePortMappingUseCase", () => {
   test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validPortMappingNdjson,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 3) {

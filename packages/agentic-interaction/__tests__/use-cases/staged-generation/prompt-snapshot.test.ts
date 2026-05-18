@@ -101,6 +101,15 @@ test("compileStage3Prompt includes intent header and all accepted contexts", () 
           eventsPublished: [],
           reasoning: "test",
         },
+        {
+          name: "notification-delivery",
+          type: "supporting",
+          responsibility: "test",
+          aggregateRoots: [],
+          useCaseNames: [],
+          eventsPublished: [],
+          reasoning: "test",
+        },
       ],
       rejected: [],
       uncertain: [],
@@ -137,7 +146,9 @@ test("compileStage4Prompt includes intent header and context names", () => {
       rejected: [],
       uncertain: [],
     },
-    stage3: { contextName: "invoicing-billing", in: [], out: [] },
+    stage3: {
+      contexts: [{ contextName: "invoicing-billing", in: [], out: [] }],
+    },
   } as any;
   const prompt = compileStage4Prompt(state, { userDescription: "test" });
   assert.match(prompt, /<original_intent>/);
@@ -172,12 +183,18 @@ test("compileStage6Prompt includes validation rules", () => {
     contextMappings: [],
   } as any;
   const prompt = compileStage6Prompt(state);
-  assert.match(prompt, /validation/);
+  assert.match(prompt, /R01/);
 });
 
 test("compileStage1Prompt includes user description (stage0->stage1)", () => {
   const state = {
-    stage0: { userDescription: "Invoice management system" },
+    stage0: {
+      intent: "Invoice management system",
+      projectName: undefined,
+      explicitTechnologies: [],
+      explicitPatterns: [],
+      ambiguities: [],
+    },
     stage1: {},
   } as any;
   const prompt = compileStage1Prompt(state);
@@ -186,12 +203,22 @@ test("compileStage1Prompt includes user description (stage0->stage1)", () => {
 
 test("compileStage2Prompt includes classification (stage1->stage2)", () => {
   const state = {
-    stage0: { userDescription: "Test" },
-    stage1: {},
-    stage2: {
-      accepted: [{ name: "invoicing-billing", type: "core" }],
-      rejected: [],
-      uncertain: [],
+    stage0: {
+      intent: "Test",
+      projectName: undefined,
+      explicitTechnologies: [],
+      explicitPatterns: [],
+      ambiguities: [],
+    },
+    stage1: {
+      verbs: [],
+      nouns: [],
+      subdomains: ["invoicing-billing"],
+      aggregateRoots: [],
+      entities: [],
+      valueObjects: [],
+      domainEvents: [],
+      useCases: [],
     },
   } as any;
   const prompt = compileStage2Prompt(state);
@@ -217,12 +244,18 @@ test("compileStage3Prompt includes intent header", () => {
 
 test("compileStage4Prompt includes domain analysis", () => {
   const state = {
-    stage0: { userDescription: "Test" },
-    stage2: { accepted: [] },
-    stage3: { domainAnalysis: { subdomains: [], aggregateRoots: [] } },
+    stage0: {
+      intent: "Test",
+      projectName: undefined,
+      explicitTechnologies: [],
+      explicitPatterns: [],
+      ambiguities: [],
+    },
+    stage2: { accepted: [], rejected: [], uncertain: [] },
+    stage3: { contexts: [] },
   } as any;
   const prompt = compileStage4Prompt(state, { userDescription: "Test" });
-  assert.match(prompt, /domain analysis/i);
+  assert.match(prompt, /accepted_contexts/);
 });
 
 test("compileStage6Prompt includes R01 validation rule", () => {

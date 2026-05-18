@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MAX_BOUNDED_CONTEXTS_DRAFT = 10;
+export const MAX_BOUNDED_CONTEXTS_DRAFT = 5;
 export const DEFAULT_MAX_BOUNDED_CONTEXTS = MAX_BOUNDED_CONTEXTS_DRAFT;
 
 export const GENERIC_CONTEXT_NAMES = [
@@ -42,7 +42,7 @@ export const ManifestDraftContextMappingSchema = z
 export const ManifestDraftContextSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+    type: z.enum(["core", "supporting", "generic", "shared-kernel", "driver"]),
     description: z.string().min(1),
     ports: z.object({
       in: z.array(ManifestDraftPortSchema),
@@ -56,7 +56,7 @@ export const ManifestDraftContextSchema = z
 export const ManifestTopologyDraftContextSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+    type: z.enum(["core", "supporting", "generic", "shared-kernel", "driver"]),
     description: z.string().min(1),
     ports: z.object({
       in: z.array(ManifestDraftPortSchema),
@@ -105,7 +105,13 @@ export function createContextListSchema(
     .array(
       z.object({
         name: z.string().min(1),
-        type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+        type: z.enum([
+          "core",
+          "supporting",
+          "generic",
+          "shared-kernel",
+          "driver",
+        ]),
         description: z.string().min(1),
       }),
     )

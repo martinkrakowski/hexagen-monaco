@@ -56,7 +56,7 @@ test("parseStructuredConfig: empty bounded_contexts throws StructuredConfigShape
 
 test("parseStructuredConfig: completely invalid YAML throws descriptive error", () => {
   const invalidYaml = "{{ invalid yaml {{";
-  assert.throws(() => parseStructuredConfig(invalidYaml), /YAML parse error/);
+  assert.throws(() => parseStructuredConfig(invalidYaml), /Failed to parse/);
 });
 
 test("parseStructuredConfig: YAML without YAML prefix (JSON string) parsed as YAML", () => {
@@ -200,6 +200,16 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     streamStructuredRequest: async function* () {
       yield { success: true, value: JSON.stringify({}) };
     },
+    sendRequest: async () => ({
+      success: true,
+      value: {
+        id: "test-response-1",
+        modelId: "qwen-coder-3b",
+        content: JSON.stringify({ ports: [] }),
+        finishReason: "stop",
+        timestamp: new Date().toISOString(),
+      },
+    }),
   } as any;
 
   const mockTransactionManager = {
@@ -242,6 +252,10 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
         }
         yield { success: true, value: JSON.stringify({}) };
       },
+      sendRequest: async () => ({
+        success: false,
+        error: new Error("LLM failure at Stage 3"),
+      }),
     } as any;
 
     const useCase = new ExecuteStructuredConfigGenerationUseCase(

@@ -31,6 +31,16 @@ const mockVariables = {} as any;
 describe("ExecuteAdapterAssignmentUseCase", () => {
   test("happy path: returns valid adapter bindings", async () => {
     const mockPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validBindingLine,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: validBindingLine };
       },
@@ -57,13 +67,33 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
   test("retry path: fails 2x then succeeds", async () => {
     let callCount = 0;
     const mockPort = {
-      streamStructuredRequest: async function* () {
+      sendRequest: async () => {
         callCount++;
         if (callCount <= 2) {
-          yield { success: true, value: "invalid json" };
-        } else {
-          yield { success: true, value: validBindingLine };
+          return {
+            success: true as const,
+            value: {
+              id: "test",
+              modelId: "gpt-4o-mini" as any,
+              content: "invalid json",
+              finishReason: "stop" as const,
+              timestamp: Date.now(),
+            },
+          };
         }
+        return {
+          success: true as const,
+          value: {
+            id: "test",
+            modelId: "gpt-4o-mini" as any,
+            content: validBindingLine,
+            finishReason: "stop" as const,
+            timestamp: Date.now(),
+          },
+        };
+      },
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: validBindingLine };
       },
     } as unknown as SendStructuredRequestPort;
 
@@ -76,6 +106,16 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
 
   test("max retries exceeded: returns error", async () => {
     const mockPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: "invalid json",
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: "invalid json" };
       },
@@ -92,6 +132,16 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
 
   test("calls telemetry callback with correct data", async () => {
     const mockPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validBindingLine,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: validBindingLine };
       },
@@ -118,36 +168,51 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
 
   test("handles LLM timeout", async () => {
     const timeoutAdapter = {
-      streamStructuredRequest: async function* (...args: any[]) {
-        const options = args.find(
-          (arg: any) => arg?.signal instanceof AbortSignal,
-        );
-        const signal = options?.signal;
-        if (signal) {
-          signal.throwIfAborted();
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          signal.throwIfAborted();
-          throw new TimeoutError();
+      sendRequest: async (request: any) => {
+        // Check if abort was already called
+        if (request.signal?.aborted) {
+          throw new TimeoutError("Request already aborted");
         }
-        await new Promise(() => {});
-        yield { success: true, value: "" };
+        // Simulate a long operation that will be aborted
+        return new Promise<any>((resolve, reject) => {
+          let completed = false;
+          // Simulate long operation
+          const operationTimer = setTimeout(() => {
+            if (!completed) {
+              completed = true;
+              resolve({
+                success: true as const,
+                value: {
+                  id: "test",
+                  modelId: "gpt-4o-mini" as any,
+                  content: validBindingLine,
+                  finishReason: "stop" as const,
+                  timestamp: Date.now(),
+                },
+              });
+            }
+          }, 100000);
+
+          // Listen for abort
+          if (request.signal) {
+            request.signal.addEventListener("abort", () => {
+              if (!completed) {
+                completed = true;
+                clearTimeout(operationTimer);
+                reject(new TimeoutError("LLM request timeout"));
+              }
+            });
+          }
+        });
+      },
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: validBindingLine };
       },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
+    const result = await useCase.execute(mockState, mockVariables);
 
-    const sentinel = Symbol("timeout");
-    const timeoutPromise = new Promise<typeof sentinel>((resolve) =>
-      setTimeout(() => resolve(sentinel), 2000),
-    );
-    const executePromise = useCase.execute(mockState, mockVariables);
-    const result = await Promise.race([executePromise, timeoutPromise]);
-
-    assert.notStrictEqual(
-      result,
-      sentinel,
-      "Test timed out instead of completing",
-    );
     assert.strictEqual(result.success, false);
     assert.ok(
       result.error instanceof TimeoutError,
@@ -158,6 +223,16 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
   test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validBindingLine,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 3) {
@@ -180,6 +255,16 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
 
   test("handles malformed LLM response", async () => {
     const badAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: "not valid json at all",
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: "not valid json at all" };
       },

@@ -39,7 +39,16 @@ const mockStreamStructuredRequest = mock.fn(() => {
   return mockGenerator();
 });
 const mockSendRequest = mock.fn(() =>
-  Promise.resolve({ success: true, value: { content: "mocked" } }),
+  Promise.resolve({
+    success: true as const,
+    value: {
+      id: "test",
+      modelId: "gpt-4o-mini" as any,
+      content: "mocked",
+      finishReason: "stop" as const,
+      timestamp: Date.now(),
+    },
+  }),
 );
 const mockLLMPort = {
   sendRequest: mockSendRequest,

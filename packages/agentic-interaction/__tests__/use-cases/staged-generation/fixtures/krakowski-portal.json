@@ -5,73 +5,96 @@
       "name": "IdentityAccess",
       "type": "core",
       "responsibility": "User identity and access management",
-      "aggregateRoots": ["User"],
-      "entities": ["OnboardingState"],
-      "domainEvents": [],
-      "useCases": [
+      "aggregates": [
         {
-          "name": "RegisterUser",
-          "actor": "system"
-        }
-      ]
+          "name": "User",
+          "root": true,
+          "fields": [
+            { "name": "id", "key": true },
+            { "name": "username", "key": false }
+          ]
+        },
+        { "name": "OnboardingState", "root": false, "parent": "Customer" }
+      ],
+      "value_objects": [],
+      "events_published": []
     },
     {
       "name": "CustomerOnboarding",
       "type": "core",
       "responsibility": "Customer onboarding process",
-      "aggregateRoots": ["Customer"],
-      "entities": ["OnboardingState"],
-      "domainEvents": [],
-      "useCases": []
+      "aggregates": [
+        {
+          "name": "Customer",
+          "root": true,
+          "fields": [{ "name": "id", "key": true }]
+        }
+      ],
+      "value_objects": [],
+      "events_published": []
     },
     {
       "name": "InvoicingBilling",
       "type": "core",
       "responsibility": "Invoicing and billing management",
-      "aggregateRoots": ["Invoice"],
-      "entities": [],
-      "domainEvents": ["InvoicePaid"],
-      "useCases": [],
-      "eventsPublished": ["InvoicePaid"]
+      "aggregates": [
+        {
+          "name": "Invoice",
+          "root": true,
+          "fields": [{ "name": "id", "key": true }]
+        }
+      ],
+      "value_objects": [{ "name": "Money", "rules": ["Non-negative"] }],
+      "events_published": ["InvoicePaid"]
     },
     {
       "name": "PaymentProcessing",
       "type": "core",
       "responsibility": "Payment processing via Stripe",
-      "aggregateRoots": ["Payment"],
-      "entities": [],
-      "domainEvents": ["PaymentReceived"],
-      "useCases": [],
-      "eventsPublished": ["PaymentReceived"]
+      "aggregates": [
+        {
+          "name": "Payment",
+          "root": true,
+          "fields": [{ "name": "id", "key": true }]
+        }
+      ],
+      "value_objects": [],
+      "events_published": ["PaymentReceived"]
     },
     {
       "name": "NotificationDelivery",
       "type": "supporting",
       "responsibility": "Notification delivery via email and in-app",
-      "aggregateRoots": [],
-      "entities": [],
-      "domainEvents": [],
-      "useCases": []
+      "aggregates": [],
+      "value_objects": [],
+      "events_published": []
     },
     {
       "name": "ProjectDelivery",
       "type": "core",
       "responsibility": "Project lifecycle management",
-      "aggregateRoots": ["Project"],
-      "entities": [],
-      "domainEvents": [],
-      "useCases": []
+      "aggregates": [
+        {
+          "name": "Project",
+          "root": true,
+          "fields": [{ "name": "id", "key": true }]
+        }
+      ],
+      "value_objects": [],
+      "events_published": []
     },
     {
       "name": "ReportingAnalytics",
       "type": "generic",
       "responsibility": "Reporting and analytics",
-      "aggregateRoots": [],
-      "entities": [],
-      "domainEvents": [],
-      "useCases": []
+      "aggregates": [],
+      "value_objects": [],
+      "events_published": []
     }
   ],
+  "use_cases": {
+    "IdentityAccess": [{ "name": "RegisterUser", "actor": "system" }]
+  },
   "context_mappings": [
     {
       "upstream": "Stripe",
@@ -112,6 +135,24 @@
     {
       "upstream": "InvoicingBilling",
       "downstream": "ProjectDelivery",
+      "pattern": "ACL",
+      "mechanism": "event"
+    },
+    {
+      "upstream": "NotificationDelivery",
+      "downstream": "IdentityAccess",
+      "pattern": "OH",
+      "mechanism": "api"
+    },
+    {
+      "upstream": "ReportingAnalytics",
+      "downstream": "ProjectDelivery",
+      "pattern": "OH",
+      "mechanism": "api"
+    },
+    {
+      "upstream": "CustomerOnboarding",
+      "downstream": "InvoicingBilling",
       "pattern": "OH",
       "mechanism": "event"
     },
@@ -122,40 +163,22 @@
       "mechanism": "event"
     },
     {
-      "upstream": "ReportingAnalytics",
+      "upstream": "IdentityAccess",
       "downstream": "InvoicingBilling",
-      "pattern": "ACL",
-      "mechanism": "event"
-    },
-    {
-      "upstream": "ReportingAnalytics",
-      "downstream": "PaymentProcessing",
-      "pattern": "ACL",
-      "mechanism": "event"
-    },
-    {
-      "upstream": "ReportingAnalytics",
-      "downstream": "ProjectDelivery",
-      "pattern": "ACL",
-      "mechanism": "event"
-    },
-    {
-      "upstream": "CustomerOnboarding",
-      "downstream": "NotificationDelivery",
-      "pattern": "OH",
-      "mechanism": "event"
-    },
-    {
-      "upstream": "ProjectDelivery",
-      "downstream": "CustomerOnboarding",
       "pattern": "OH",
       "mechanism": "api"
     },
     {
-      "upstream": "NotificationDelivery",
+      "upstream": "InvoicingBilling",
       "downstream": "ReportingAnalytics",
       "pattern": "OH",
-      "mechanism": "event"
+      "mechanism": "api"
+    },
+    {
+      "upstream": "IdentityAccess",
+      "downstream": "ProjectDelivery",
+      "pattern": "OH",
+      "mechanism": "api"
     }
   ]
 }

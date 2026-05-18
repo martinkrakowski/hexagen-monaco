@@ -62,6 +62,10 @@ const validResponseBody = {
   usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 };
 
+function envVault(): { getSecret: (name: string) => string | null } {
+  return { getSecret: (name: string) => process.env[name] ?? null };
+}
+
 const testChain: ProviderFallbackChain = {
   primary: {
     providerId: "openai",
@@ -94,6 +98,7 @@ describe("cloud-llm-pipeline", () => {
       const fetchMock = makeFetchMock([{ body: validResponseBody }]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -124,7 +129,8 @@ describe("cloud-llm-pipeline", () => {
 
     const config: CloudLLMPipelineAdapterConfig = {
       fallbackChain: testChain,
-      fetchFn: makeFetchMock([]) as typeof fetch,
+      secretVault: envVault(),
+      fetchFn: fetchMock as typeof fetch,
     };
     const adapter = new CloudLLMPipelineAdapter(config);
     const result = await adapter.sendRequest(makeRequest());
@@ -151,6 +157,7 @@ describe("cloud-llm-pipeline", () => {
       ]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -186,6 +193,7 @@ describe("cloud-llm-pipeline", () => {
       ]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -212,6 +220,7 @@ describe("cloud-llm-pipeline", () => {
       ]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -251,6 +260,7 @@ describe("cloud-llm-pipeline", () => {
       const fetchMock = makeFetchMock([{ body: validSchemaResponse }]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -283,6 +293,7 @@ describe("cloud-llm-pipeline", () => {
       const fetchMock = makeFetchMock([{ body: validResponseBody }]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -348,6 +359,7 @@ describe("cloud-llm-pipeline", () => {
       };
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);
@@ -411,6 +423,7 @@ describe("cloud-llm-pipeline", () => {
       };
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
+        secretVault: envVault(),
         fetchFn: fetchMock as typeof fetch,
       };
       const adapter = new CloudLLMPipelineAdapter(config);

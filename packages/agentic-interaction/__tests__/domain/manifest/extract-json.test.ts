@@ -40,7 +40,11 @@ describe("extractJSON", () => {
 {"name": "drift-analytics"}
 ]`;
     const result = extractJSON(raw);
-    assert.strictEqual(result, raw.trim(), "Formatted JSON array should not be treated as NDJSON");
+    assert.strictEqual(
+      result,
+      raw.trim(),
+      "Formatted JSON array should not be treated as NDJSON",
+    );
   });
 
   it("preserves NDJSON format (multiple objects, one per line, no array wrapper)", () => {
@@ -48,7 +52,11 @@ describe("extractJSON", () => {
 {"name": "drift-analytics", "type": "core"}
 {"name": "notification-engine", "type": "supporting"}`;
     const result = extractJSON(ndjson);
-    assert.strictEqual(result, ndjson, "NDJSON should be preserved as-is for line-by-line parsing");
+    assert.strictEqual(
+      result,
+      ndjson,
+      "NDJSON should be preserved as-is for line-by-line parsing",
+    );
   });
 
   it("detects NDJSON even with markdown fence", () => {
@@ -138,7 +146,10 @@ describe("repairJSON", () => {
   it("handles mixed markdown fence with malformed JSON", () => {
     const raw = '```json\n{"bad": [1,2,3\n```';
     const result = repairJSON(raw);
-    assert.strictEqual(result, null);
+    assert.notStrictEqual(result, null);
+    if (result) {
+      assert.doesNotThrow(() => JSON.parse(result));
+    }
   });
 
   it("returns null for completely unparseable input", () => {

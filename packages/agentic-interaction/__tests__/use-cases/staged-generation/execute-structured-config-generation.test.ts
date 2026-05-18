@@ -16,8 +16,14 @@ type StructuredConfig = {
 function createMockLLMPort(shouldFailStage3 = false) {
   return {
     sendRequest: async () => ({
-      success: true,
-      value: { content: JSON.stringify({}) },
+      success: true as const,
+      value: {
+        id: "test",
+        modelId: "gpt-4o-mini" as any,
+        content: JSON.stringify({}),
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
+      },
     }),
     streamStructuredRequest: async function* () {
       if (shouldFailStage3) {

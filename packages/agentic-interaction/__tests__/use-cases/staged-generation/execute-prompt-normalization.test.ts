@@ -14,6 +14,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
 
   test("Happy path: executes successfully with valid user description", async () => {
     const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         for (const line of validNDJSONResponse) {
           yield { success: true, value: line };
@@ -41,6 +51,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
   test("Retry path: succeeds after retries", async () => {
     let callCount = 0;
     const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 2) {
@@ -62,6 +82,10 @@ describe("ExecutePromptNormalizationUseCase", () => {
 
   test("Error path: returns error after max retries", async () => {
     const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: false as const,
+        error: new Error("LLM failure"),
+      }),
       streamStructuredRequest: async function* () {
         yield { success: false, error: "Persistent failure" };
       },
@@ -79,6 +103,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
   test("Telemetry callback is called on success", async () => {
     const telemetryData: any[] = [];
     const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         for (const line of validNDJSONResponse) {
           yield { success: true, value: line };
@@ -107,6 +141,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
   test("onChunk callback is called for each chunk", async () => {
     const chunks: string[] = [];
     const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         for (const line of validNDJSONResponse) {
           yield { success: true, value: line };
@@ -128,6 +172,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
 
   test("handles LLM timeout", async () => {
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         // Simulate timeout by never yielding and never resolving
         await new Promise(() => {}); // Never resolves
@@ -155,6 +209,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
   test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 3) {
@@ -179,6 +243,16 @@ describe("ExecutePromptNormalizationUseCase", () => {
 
   test("handles malformed LLM response", async () => {
     const badAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: "not valid json at all",
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: "not valid json at all" };
       },

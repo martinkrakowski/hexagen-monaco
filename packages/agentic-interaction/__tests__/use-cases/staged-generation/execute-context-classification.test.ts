@@ -21,7 +21,16 @@ describe("ExecuteContextClassificationUseCase", () => {
   test("happy path: valid stage0 + stage1 returns successful classification", async () => {
     const validContextLine = createValidContextLine();
     const mockLLMAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: validContextLine };
       },
@@ -47,7 +56,16 @@ describe("ExecuteContextClassificationUseCase", () => {
     const validContextLine = createValidContextLine();
 
     const mockLLMAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         attemptCount++;
         if (attemptCount <= 2) {
@@ -69,7 +87,16 @@ describe("ExecuteContextClassificationUseCase", () => {
 
   test("max retries exceeded returns error", async () => {
     const mockLLMAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: "invalid-data" };
       },
@@ -90,7 +117,16 @@ describe("ExecuteContextClassificationUseCase", () => {
   test("calls telemetry callback with correct data", async () => {
     const validContextLine = createValidContextLine();
     const mockLLMAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: validContextLine };
       },
@@ -116,7 +152,16 @@ describe("ExecuteContextClassificationUseCase", () => {
 
   test("handles LLM timeout", async () => {
     const timeoutAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         await new Promise(() => {});
         yield { success: true, value: "" };
@@ -140,7 +185,16 @@ describe("ExecuteContextClassificationUseCase", () => {
   test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 3) {
@@ -163,7 +217,16 @@ describe("ExecuteContextClassificationUseCase", () => {
 
   test("handles malformed LLM response", async () => {
     const badAdapter = {
-      sendRequest: async () => ({ success: true, value: "" }),
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: createValidContextLine(),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: "not valid json at all" };
       },

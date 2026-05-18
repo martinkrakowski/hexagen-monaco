@@ -35,6 +35,16 @@ const createMockPipelineState = () => ({
 describe("ExecuteValidationReviewUseCase", () => {
   test("happy path: returns successful validation report", async () => {
     const mockLLM: SendStructuredRequestPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: '{"type":"result","passed":true}\n',
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: '{"type":"result","passed":true}\n' };
       },
@@ -55,13 +65,27 @@ describe("ExecuteValidationReviewUseCase", () => {
   test("retry path: fails 2x then succeeds", async () => {
     let attemptCount = 0;
     const mockLLM: SendStructuredRequestPort = {
-      streamStructuredRequest: async function* () {
+      sendRequest: async () => {
         attemptCount++;
         if (attemptCount <= 2) {
-          yield { success: false, error: new Error("LLM request failed") };
-        } else {
-          yield { success: true, value: '{"type":"result","passed":true}\n' };
+          return {
+            success: false as const,
+            error: new Error("LLM request failed"),
+          };
         }
+        return {
+          success: true as const,
+          value: {
+            id: "test",
+            modelId: "gpt-4o-mini" as any,
+            content: '{"type":"result","passed":true}\n',
+            finishReason: "stop" as const,
+            timestamp: Date.now(),
+          },
+        };
+      },
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: '{"type":"result","passed":true}\n' };
       },
     } as unknown as SendStructuredRequestPort;
 
@@ -75,6 +99,10 @@ describe("ExecuteValidationReviewUseCase", () => {
 
   test("max retries exceeded: returns StageMaxRetriesError", async () => {
     const mockLLM: SendStructuredRequestPort = {
+      sendRequest: async () => ({
+        success: false as const,
+        error: new Error("LLM request failed"),
+      }),
       streamStructuredRequest: async function* () {
         yield { success: false, error: new Error("LLM request failed") };
       },
@@ -97,6 +125,16 @@ describe("ExecuteValidationReviewUseCase", () => {
     };
 
     const mockLLM: SendStructuredRequestPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: '{"type":"result","passed":true}\n',
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: '{"type":"result","passed":true}\n' };
       },
@@ -116,6 +154,17 @@ describe("ExecuteValidationReviewUseCase", () => {
 
   test("handles NDJSON with errors and warnings", async () => {
     const mockLLM: SendStructuredRequestPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content:
+            '{"type":"error","message":"Invalid port"}\n{"type":"warning","message":"Deprecated adapter"}\n{"type":"result","passed":false}\n',
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield {
           success: true,
@@ -139,6 +188,16 @@ describe("ExecuteValidationReviewUseCase", () => {
 
   test("handles LLM timeout", async () => {
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: '{"type":"result","passed":true}\n',
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         await new Promise(() => {});
         yield { success: true, value: "" };
@@ -162,6 +221,16 @@ describe("ExecuteValidationReviewUseCase", () => {
   test("retry fails on persistent timeout", async () => {
     let callCount = 0;
     const timeoutAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: '{"type":"result","passed":true}\n',
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         callCount++;
         if (callCount <= 3) {
@@ -183,6 +252,16 @@ describe("ExecuteValidationReviewUseCase", () => {
 
   test("handles malformed LLM response", async () => {
     const badAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: "not valid json at all",
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield { success: true, value: "not valid json at all" };
       },
@@ -200,6 +279,17 @@ describe("ExecuteValidationReviewUseCase", () => {
 
   test("returns validation failure with errors", async () => {
     const invalidManifestAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content:
+            '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n',
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
       streamStructuredRequest: async function* () {
         yield {
           success: true,

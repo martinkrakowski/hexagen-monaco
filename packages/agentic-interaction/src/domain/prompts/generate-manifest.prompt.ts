@@ -207,7 +207,7 @@ Emit objects one per line:
 
 RULES:
 - "status" must be "accepted", "rejected", or "uncertain".
-- "contextType" is required for "accepted" status (must be: core, supporting, generic, shared-kernel).
+- "contextType" is required for "accepted" status (must be: core, supporting, generic, shared-kernel, driver).
 - "name" must be kebab-case.
 - For "accepted" entries, ALSO provide:
   - "responsibility": one-sentence mission statement for this bounded context.

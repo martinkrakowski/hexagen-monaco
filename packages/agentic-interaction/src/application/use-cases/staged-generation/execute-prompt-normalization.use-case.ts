@@ -35,6 +35,9 @@ export class ExecutePromptNormalizationUseCase {
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
+      const abortController = new AbortController();
+      const timeoutHandle = setTimeout(() => abortController.abort(), 5000); // 5s timeout per attempt
+
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
         [
@@ -44,8 +47,22 @@ export class ExecutePromptNormalizationUseCase {
         z.string(),
         { stream: true, temperature: 0.1, maxTokens: 800 },
       );
+      request.signal = abortController.signal;
 
-      const responseResult = await this.llmPort.sendRequest(request);
+      let responseResult;
+      try {
+        responseResult = await this.llmPort.sendRequest(request);
+      } catch (thrownError) {
+        if (attempt === MAX_RETRY_ATTEMPTS) {
+          return err(
+            thrownError instanceof Error ? err : new Error(String(thrownError)),
+          );
+        }
+        lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
+        continue;
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
       let fullResponse = "";
       let streamError: unknown = null;
 
