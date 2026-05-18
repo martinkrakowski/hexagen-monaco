@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "node --import jsdom/register --test **/*.test.ts"
+    "test": "tsx --import jsdom/register --test '**/*.test.ts'"
   },
   "dependencies": {
     "@auth/core": "^0.34.3",
