@@ -4,11 +4,17 @@ import {
   resolveApiKey,
   resolveFallbackChain,
   createDefaultFallbackChain,
+  type SecretVaultPort,
 } from "../../src/domain/provider-config.js";
 import type {
   CloudProviderEndpoint,
   ProviderFallbackChain,
 } from "../../src/domain/provider-config.js";
+
+// Mock vault that reads from process.env
+const createEnvVault = (): SecretVaultPort => ({
+  getSecret: (envVarName: string) => process.env[envVarName] ?? null,
+});
 
 const testEndpoint: CloudProviderEndpoint = {
   providerId: "openai",
@@ -45,10 +51,11 @@ const testChain: ProviderFallbackChain = {
 
 describe("provider-config", () => {
   it("should resolve API key with valid key", () => {
+    const vault = createEnvVault();
     const original = process.env.TEST_RESOLVE_API_KEY;
     process.env.TEST_RESOLVE_API_KEY = "sk-test-key";
     try {
-      const result = resolveApiKey(testEndpoint);
+      const result = resolveApiKey(vault, testEndpoint);
       assert.ok(result !== null, "Should resolve with valid key");
       assert.strictEqual(result!.apiKey, "sk-test-key");
       assert.strictEqual(result!.providerId, "openai");
@@ -60,8 +67,9 @@ describe("provider-config", () => {
   });
 
   it("should return null for missing API key", () => {
+    const vault = createEnvVault();
     delete process.env.TEST_RESOLVE_MISSING_KEY;
-    const result = resolveApiKey({
+    const result = resolveApiKey(vault, {
       ...testEndpoint,
       apiKeyEnvVar: "TEST_RESOLVE_MISSING_KEY",
     });
@@ -69,8 +77,9 @@ describe("provider-config", () => {
   });
 
   it("should return null for empty API key", () => {
+    const vault = createEnvVault();
     process.env.TEST_RESOLVE_EMPTY_KEY = "";
-    const result = resolveApiKey({
+    const result = resolveApiKey(vault, {
       ...testEndpoint,
       apiKeyEnvVar: "TEST_RESOLVE_EMPTY_KEY",
     });
@@ -79,12 +88,13 @@ describe("provider-config", () => {
   });
 
   it("should resolve fallback chain with both keys", () => {
+    const vault = createEnvVault();
     const origPrimary = process.env.TEST_PRIMARY_KEY;
     const origFallback = process.env.TEST_FALLBACK_KEY;
     process.env.TEST_PRIMARY_KEY = "sk-primary";
     process.env.TEST_FALLBACK_KEY = "sk-fallback";
     try {
-      const resolved = resolveFallbackChain(testChain);
+      const resolved = resolveFallbackChain(vault, testChain);
       assert.strictEqual(resolved.length, 2, "Should resolve both providers");
       assert.strictEqual(resolved[0].apiKey, "sk-primary");
       assert.strictEqual(resolved[1].apiKey, "sk-fallback");
@@ -98,12 +108,13 @@ describe("provider-config", () => {
   });
 
   it("should resolve fallback chain with primary only", () => {
+    const vault = createEnvVault();
     const origPrimary = process.env.TEST_PRIMARY_KEY;
     const origFallback = process.env.TEST_FALLBACK_KEY;
     process.env.TEST_PRIMARY_KEY = "sk-primary";
     delete process.env.TEST_FALLBACK_KEY;
     try {
-      const resolved = resolveFallbackChain(testChain);
+      const resolved = resolveFallbackChain(vault, testChain);
       assert.strictEqual(resolved.length, 1, "Should resolve primary only");
       assert.strictEqual(resolved[0].apiKey, "sk-primary");
     } finally {
@@ -116,9 +127,10 @@ describe("provider-config", () => {
   });
 
   it("should resolve no providers when no keys configured", () => {
+    const vault = createEnvVault();
     delete process.env.TEST_PRIMARY_KEY;
     delete process.env.TEST_FALLBACK_KEY;
-    const resolved = resolveFallbackChain(testChain);
+    const resolved = resolveFallbackChain(vault, testChain);
     assert.strictEqual(resolved.length, 0, "Should resolve no providers");
   });
 

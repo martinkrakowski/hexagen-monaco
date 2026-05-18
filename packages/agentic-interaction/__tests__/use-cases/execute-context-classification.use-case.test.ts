@@ -1,5 +1,5 @@
 import test from "node:test";
-import assert from "node:test";
+import assert from "node:assert/strict";
 import { ExecuteContextClassificationUseCase } from "../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 
@@ -43,11 +43,18 @@ test("ExecuteContextClassificationUseCase adversarial regression test - blocks i
 
   assert.strictEqual(classification.rejected.length, 3);
 
-  const rejectedNames = classification.rejected.map(r => r.name);
+  const rejectedNames = classification.rejected.map((r) => r.name);
   assert.ok(rejectedNames.includes("postgres-database"));
   assert.ok(rejectedNames.includes("mqtt-listener-adapter"));
   assert.ok(rejectedNames.includes("redis-cache"));
 
-  const firstRejected = classification.rejected.find(r => r.name === "postgres-database");
-  assert.ok(firstRejected?.reasoning.includes("Safety Filter: Context name contains infrastructure term"), "Must contain safety filter reasoning");
+  const firstRejected = classification.rejected.find(
+    (r) => r.name === "postgres-database",
+  );
+  assert.ok(
+    firstRejected?.reasoning.includes(
+      "Safety Filter: Context name contains infrastructure term",
+    ),
+    "Must contain safety filter reasoning",
+  );
 });
