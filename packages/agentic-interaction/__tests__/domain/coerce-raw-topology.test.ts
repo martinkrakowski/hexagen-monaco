@@ -21,7 +21,7 @@ test("coerce-raw-topology: coerceContextType handles null/undefined", () => {
 test("coerce-raw-topology: coerceContextType accepts valid types", () => {
   assert.equal(coerceContextType("core"), "core");
   assert.equal(coerceContextType("supporting"), "supporting");
-  assert.equal(coerceContextType("driver"), "driver");
+  assert.equal(coerceContextType("generic"), "generic");
   assert.equal(coerceContextType("shared-kernel"), "shared-kernel");
 });
 
@@ -29,7 +29,7 @@ test("coerce-raw-topology: coerceContextType is case-insensitive", () => {
   assert.equal(coerceContextType("CORE"), "core");
   assert.equal(coerceContextType("Core"), "core");
   assert.equal(coerceContextType("SUPPORTING"), "supporting");
-  assert.equal(coerceContextType("Driver"), "driver");
+  assert.equal(coerceContextType("GENERIC"), "generic");
 });
 
 test("coerce-raw-topology: coerceContextType invalid types default to core", () => {
