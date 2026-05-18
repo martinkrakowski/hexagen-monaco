@@ -8,10 +8,8 @@ import {
 } from "../../../domain/index.js";
 import type { NormalizedPrompt } from "../../../domain/value-objects/pipeline-state.js";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
-import {
-  buildStageRetryPrompt,
-  MAX_RETRY_ATTEMPTS,
-} from "../../../domain/prompts/generate-manifest.prompt.js";
+import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt.js";
+import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors.js";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors.js";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry.js";
@@ -67,10 +65,13 @@ export class ExecutePromptNormalizationUseCase {
       }
 
       if (streamError) {
+        const errorMsg = `Stream error: ${streamError}`;
         if (attempt === MAX_RETRY_ATTEMPTS) {
-          return err(streamError);
+          return err(
+            new StageMaxRetriesError(STAGE_NUMBER, errorMsg, fullResponse),
+          );
         }
-        lastError = `Stream error: ${streamError}`;
+        lastError = errorMsg;
         continue;
       }
 

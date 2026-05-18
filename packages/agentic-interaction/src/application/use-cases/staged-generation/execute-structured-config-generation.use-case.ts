@@ -540,7 +540,11 @@ export class ExecuteStructuredConfigGenerationUseCase {
     // Stage 3: Port Mapping (LLM)
     const s3Start = Date.now();
     callbacks?.onProgress?.(3, 0);
-    const s3 = await this.stage3.execute(pipelineState, callbacks?.onChunk);
+    const s3 = await this.stage3.execute(
+      pipelineState,
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
     const s3Duration = Date.now() - s3Start;
     if (!s3.success) {
       callbacks?.onError?.(3, String(s3.error), s3Duration);
@@ -559,9 +563,14 @@ export class ExecuteStructuredConfigGenerationUseCase {
         .join(", "),
     };
     const s4 = await this.stage4.execute(
-      { stage0: normalizedPrompt, stage3: s3.value.portMap },
+      {
+        stage0: normalizedPrompt,
+        stage3: s3.value.portMap,
+        contextMappings: s3.value.contextMappings,
+      },
       variables,
       callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
     );
     const s4Duration = Date.now() - s4Start;
     if (!s4.success) {
@@ -578,7 +587,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
       stage2: classification,
       stage3: s3.value.portMap,
       stage4: s4.value,
-      contextMappings,
+      contextMappings: s3.value.contextMappings ?? contextMappings,
     });
     const s5Duration = Date.now() - s5Start;
     callbacks?.onProgress?.(5, s5Duration);
@@ -591,9 +600,10 @@ export class ExecuteStructuredConfigGenerationUseCase {
         stage0: normalizedPrompt,
         stage2: classification,
         stage5: assembledManifest,
-        contextMappings,
+        contextMappings: s3.value.contextMappings ?? contextMappings,
       },
       callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
     );
     const s6Duration = Date.now() - s6Start;
     if (!s6.success) {
@@ -614,9 +624,17 @@ export class ExecuteStructuredConfigGenerationUseCase {
       contextCount: Array.isArray(parsed.bounded_contexts)
         ? parsed.bounded_contexts.length
         : 0,
-      portCount: Array.isArray(parsed.context_mappings)
-        ? parsed.context_mappings.length
-        : 0,
+      portCount: Array.isArray(parsed.ports)
+        ? parsed.ports.length
+        : Array.isArray(parsed.bounded_contexts)
+          ? parsed.bounded_contexts.reduce(
+              (sum, ctx) =>
+                sum +
+                (Array.isArray(ctx.ports?.in) ? ctx.ports.in.length : 0) +
+                (Array.isArray(ctx.ports?.out) ? ctx.ports.out.length : 0),
+              0,
+            )
+          : 0,
       adapterCount: Array.isArray(parsed.bounded_contexts)
         ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
             (sum, ctx) =>
@@ -625,7 +643,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
           )
         : 0,
     });
-    this.transactionManager.transition(transaction.id, "speculative");
+    try {
+      this.transactionManager.transition(transaction.id, "speculative");
+    } catch (transitionError) {
+      this.transactionManager.rollback(transaction.id);
+      throw transitionError;
+    }
 
     return {
       success: true,

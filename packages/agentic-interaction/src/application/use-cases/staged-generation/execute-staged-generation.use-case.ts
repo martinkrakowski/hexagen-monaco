@@ -193,7 +193,12 @@ export class ExecuteStagedGenerationUseCase {
         state.stage4?.contexts.reduce((sum, c) => sum + c.adapters.length, 0) ??
         0,
     });
-    this.transactionManager.transition(transaction.id, "speculative");
+    try {
+      this.transactionManager.transition(transaction.id, "speculative");
+    } catch (transitionError) {
+      this.transactionManager.rollback(transaction.id);
+      throw transitionError;
+    }
 
     return {
       success: true,

@@ -10,10 +10,8 @@ import type {
   ValidationReport,
   PipelineState,
 } from "../../../domain/value-objects/pipeline-state.js";
-import {
-  buildStageRetryPrompt,
-  MAX_RETRY_ATTEMPTS,
-} from "../../../domain/prompts/generate-manifest.prompt.js";
+import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt.js";
+import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors.js";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors.js";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry.js";
@@ -84,20 +82,25 @@ export class ExecuteValidationReviewUseCase {
         .filter((line) => line.trim() !== "");
       const errors: string[] = [];
       const warnings: string[] = [];
-      let passed = true;
+      let passed = false;
       let hasValidLine = false;
 
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
-          hasValidLine = true;
-          if (parsed.type === "error") {
-            errors.push(parsed.message);
-            passed = false;
-          } else if (parsed.type === "warning") {
-            warnings.push(parsed.message);
-          } else if (parsed.type === "result") {
-            passed = !!parsed.passed;
+          if (
+            parsed.type === "error" ||
+            parsed.type === "warning" ||
+            parsed.type === "result"
+          ) {
+            hasValidLine = true;
+            if (parsed.type === "error") {
+              errors.push(parsed.message);
+            } else if (parsed.type === "warning") {
+              warnings.push(parsed.message);
+            } else if (parsed.type === "result") {
+              passed = errors.length === 0;
+            }
           }
         } catch {
           // Ignore malformed lines

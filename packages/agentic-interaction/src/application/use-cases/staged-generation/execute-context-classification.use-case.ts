@@ -13,10 +13,8 @@ import type {
   RejectedContext,
   UncertainContext,
 } from "../../../domain/value-objects/pipeline-state.js";
-import {
-  buildStageRetryPrompt,
-  MAX_RETRY_ATTEMPTS,
-} from "../../../domain/prompts/generate-manifest.prompt.js";
+import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt.js";
+import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors.js";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors.js";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry.js";

@@ -14,10 +14,8 @@ import type {
   DomainValueObject,
   DomainEvent,
 } from "../../../domain/value-objects/pipeline-state.js";
-import {
-  buildStageRetryPrompt,
-  MAX_RETRY_ATTEMPTS,
-} from "../../../domain/prompts/generate-manifest.prompt.js";
+import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt.js";
+import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors.js";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors.js";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry.js";
@@ -96,18 +94,21 @@ export class ExecuteDomainExtractionUseCase {
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
-          hasValidLine = true;
           if (parsed.type === "verb") {
+            hasValidLine = true;
             verbs.push(parsed.value);
           } else if (parsed.type === "noun") {
+            hasValidLine = true;
             nouns.push(parsed.value);
           } else if (parsed.type === "subdomain") {
+            hasValidLine = true;
             subdomains.push(parsed.value);
           } else if (
             parsed.type === "aggregateRoot" &&
             typeof parsed.name === "string" &&
             typeof parsed.subdomain === "string"
           ) {
+            hasValidLine = true;
             aggregateRoots.push({
               name: parsed.name,
               subdomain: parsed.subdomain,
@@ -120,6 +121,7 @@ export class ExecuteDomainExtractionUseCase {
             typeof parsed.name === "string" &&
             typeof parsed.parentAggregate === "string"
           ) {
+            hasValidLine = true;
             entities.push({
               name: parsed.name,
               parentAggregate: parsed.parentAggregate,
@@ -128,6 +130,7 @@ export class ExecuteDomainExtractionUseCase {
             parsed.type === "valueObject" &&
             typeof parsed.name === "string"
           ) {
+            hasValidLine = true;
             valueObjects.push({
               name: parsed.name,
               rules:
@@ -138,6 +141,7 @@ export class ExecuteDomainExtractionUseCase {
             typeof parsed.name === "string" &&
             typeof parsed.emitter === "string"
           ) {
+            hasValidLine = true;
             domainEvents.push({
               name: parsed.name,
               emitter: parsed.emitter,
@@ -149,6 +153,7 @@ export class ExecuteDomainExtractionUseCase {
             typeof parsed.name === "string" &&
             typeof parsed.subdomain === "string"
           ) {
+            hasValidLine = true;
             useCases.push({
               name: parsed.name,
               subdomain: parsed.subdomain,

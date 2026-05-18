@@ -89,6 +89,7 @@ export class ExecuteManifestAssemblyUseCase {
         pattern: m.pattern,
         mechanism: m.mechanism,
         notes: m.notes,
+        events: m.events ?? [],
       })),
     };
 
