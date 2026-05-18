@@ -5,13 +5,13 @@ import { emptyFormValues } from "../config";
 
 test("analyzeManifestCompleteness - empty manifest", () => {
   const result = analyzeManifestCompleteness(emptyFormValues);
-  
-  assert.strictEqual(result.governance, false);
+
+  assert.strictEqual(result.governance, true); // emptyFormValues has default workspaceName="@hexagen"
   assert.strictEqual(result.boundedContexts, false);
-  assert.strictEqual(result.peerMappings, true); // True because there's only 1 default context, so no mappings needed
+  assert.strictEqual(result.peerMappings, true); // only 1 default context, so mappings not needed
   assert.strictEqual(result.portConfiguration, false);
   assert.strictEqual(result.isComplete, false);
-  assert.strictEqual(result.firstIncompleteStepIndex, 0);
+  assert.strictEqual(result.firstIncompleteStepIndex, 1); // governance is true, so next incomplete is boundedContexts
 });
 
 test("analyzeManifestCompleteness - partially populated (governance only)", () => {
@@ -22,7 +22,7 @@ test("analyzeManifestCompleteness - partially populated (governance only)", () =
       workspaceName: "My Workspace",
     },
   });
-  
+
   assert.strictEqual(result.governance, true);
   assert.strictEqual(result.boundedContexts, false);
   assert.strictEqual(result.peerMappings, true); // still only 1 context
@@ -49,11 +49,11 @@ test("analyzeManifestCompleteness - partially populated (contexts without ports)
         id: "2",
         name: "Billing",
         infrastructureTarget: "serverless",
-      }
+      },
     ],
     peerMappings: [],
   });
-  
+
   assert.strictEqual(result.governance, true);
   assert.strictEqual(result.boundedContexts, true);
   assert.strictEqual(result.peerMappings, false); // 2 contexts now require mappings or deliberate skip
@@ -76,7 +76,7 @@ test("analyzeManifestCompleteness - fully populated", () => {
         portConfiguration: {
           inboundPorts: ["REST_API"],
           outboundPorts: [],
-        }
+        },
       },
       {
         ...emptyFormValues.boundedContexts[0],
@@ -85,8 +85,8 @@ test("analyzeManifestCompleteness - fully populated", () => {
         portConfiguration: {
           inboundPorts: [],
           outboundPorts: ["DATABASE"],
-        }
-      }
+        },
+      },
     ],
     peerMappings: [
       {
@@ -94,10 +94,10 @@ test("analyzeManifestCompleteness - fully populated", () => {
         providerContext: emptyFormValues.boundedContexts[0].id,
         relationshipType: "D",
         integrationPattern: "ACL",
-      }
+      },
     ],
   });
-  
+
   assert.strictEqual(result.governance, true);
   assert.strictEqual(result.boundedContexts, true);
   assert.strictEqual(result.peerMappings, true);

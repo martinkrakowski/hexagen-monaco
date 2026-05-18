@@ -116,9 +116,10 @@ export function useStagedGenerationStream(
           attempt: number,
         ): Promise<ReadableStreamDefaultReader | null> => {
           if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+            // eslint-disable-next-line no-console
             console.error(
               `[SSE] Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`,
-            ); // eslint-disable-line no-console
+            );
             return null;
           }
 
@@ -168,7 +169,6 @@ export function useStagedGenerationStream(
           }
         }, 5000);
 
-        // eslint-disable-next-line no-constant-condition
         try {
           // eslint-disable-next-line no-constant-condition
           while (true) {

@@ -8,7 +8,7 @@ import path from "node:path";
 const fixturesDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../../../../..",
-  "packages/agentic-interaction/src/application/use-cases/staged-generation/__tests__/fixtures",
+  "packages/agentic-interaction/__tests__/use-cases/staged-generation/fixtures",
 );
 const yamlPath = path.join(fixturesDir, "krakowski-portal.yaml");
 

@@ -37,24 +37,21 @@ export interface ModelCacheMetadata {
   downloadCompleted: boolean;
 }
 
-const isBrowser: boolean = (() => {
-  try {
-    return (
-      typeof window !== "undefined" &&
-      typeof window.localStorage !== "undefined"
-    );
-  } catch {
-    return false;
+function getStorage(): Storage | null {
+  if (typeof globalThis !== "undefined" && globalThis.localStorage) {
+    return globalThis.localStorage;
   }
-})();
+  return null;
+}
 
 export function getModelCacheMetadata(modelId: string): ModelCacheMetadata {
-  if (!isBrowser) {
+  const storage = getStorage();
+  if (!storage) {
     return { verifiedAt: null, downloadCompleted: false };
   }
 
   const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
-  const stored = localStorage.getItem(key);
+  const stored = storage.getItem(key);
 
   if (!stored) {
     return { verifiedAt: null, downloadCompleted: false };
@@ -71,13 +68,14 @@ export function updateModelCacheMetadata(
   modelId: string,
   updates: Partial<ModelCacheMetadata>,
 ): void {
-  if (!isBrowser) return;
+  const storage = getStorage();
+  if (!storage) return;
 
   const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
   const current = getModelCacheMetadata(modelId);
   const updated = { ...current, ...updates };
 
-  localStorage.setItem(key, JSON.stringify(updated));
+  storage.setItem(key, JSON.stringify(updated));
 
   if (updates.verifiedAt !== undefined) {
     const isSuccessfulVerification = updates.downloadCompleted !== false;
@@ -89,10 +87,11 @@ export function updateModelCacheMetadata(
 }
 
 export function clearModelCacheMetadata(modelId: string): void {
-  if (!isBrowser) return;
+  const storage = getStorage();
+  if (!storage) return;
 
   const key = `${STORAGE_KEYS.MODEL_CACHE_METADATA_PREFIX}${modelId}`;
-  localStorage.removeItem(key);
+  storage.removeItem(key);
 }
 
 export function isModelVerified(
@@ -120,7 +119,8 @@ export function isModelVerified(
 }
 
 export function getModelPreferences(): ModelPreferences {
-  if (!isBrowser) {
+  const storage = getStorage();
+  if (!storage) {
     return {
       hasEnabledLocalModels: false,
       lastModelId: null,
@@ -134,28 +134,26 @@ export function getModelPreferences(): ModelPreferences {
 
   return {
     hasEnabledLocalModels:
-      localStorage.getItem(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS) === "true",
-    lastModelId: localStorage.getItem(
+      storage.getItem(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS) === "true",
+    lastModelId: storage.getItem(
       STORAGE_KEYS.LAST_MODEL_ID,
     ) as DomainModelId | null,
-    autoLoadEnabled:
-      localStorage.getItem(STORAGE_KEYS.AUTO_LOAD_ENABLED) === "true",
-    cloudProvider: localStorage.getItem(STORAGE_KEYS.CLOUD_PROVIDER),
-    rememberApiKey:
-      localStorage.getItem(STORAGE_KEYS.REMEMBER_API_KEY) === "true",
-    skipAiSetup: localStorage.getItem(STORAGE_KEYS.SKIP_AI_SETUP) === "true",
-    rememberChoice:
-      localStorage.getItem(STORAGE_KEYS.REMEMBER_CHOICE) === "true",
+    autoLoadEnabled: storage.getItem(STORAGE_KEYS.AUTO_LOAD_ENABLED) === "true",
+    cloudProvider: storage.getItem(STORAGE_KEYS.CLOUD_PROVIDER),
+    rememberApiKey: storage.getItem(STORAGE_KEYS.REMEMBER_API_KEY) === "true",
+    skipAiSetup: storage.getItem(STORAGE_KEYS.SKIP_AI_SETUP) === "true",
+    rememberChoice: storage.getItem(STORAGE_KEYS.REMEMBER_CHOICE) === "true",
   };
 }
 
 export function saveModelPreferences(
   preferences: Partial<ModelPreferences>,
 ): void {
-  if (!isBrowser) return;
+  const storage = getStorage();
+  if (!storage) return;
 
   if (preferences.hasEnabledLocalModels !== undefined) {
-    localStorage.setItem(
+    storage.setItem(
       STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS,
       preferences.hasEnabledLocalModels ? "true" : "false",
     );
@@ -163,14 +161,14 @@ export function saveModelPreferences(
 
   if (preferences.lastModelId !== undefined) {
     if (preferences.lastModelId) {
-      localStorage.setItem(STORAGE_KEYS.LAST_MODEL_ID, preferences.lastModelId);
+      storage.setItem(STORAGE_KEYS.LAST_MODEL_ID, preferences.lastModelId);
     } else {
-      localStorage.removeItem(STORAGE_KEYS.LAST_MODEL_ID);
+      storage.removeItem(STORAGE_KEYS.LAST_MODEL_ID);
     }
   }
 
   if (preferences.autoLoadEnabled !== undefined) {
-    localStorage.setItem(
+    storage.setItem(
       STORAGE_KEYS.AUTO_LOAD_ENABLED,
       preferences.autoLoadEnabled ? "true" : "false",
     );
@@ -178,31 +176,28 @@ export function saveModelPreferences(
 
   if (preferences.cloudProvider !== undefined) {
     if (preferences.cloudProvider) {
-      localStorage.setItem(
-        STORAGE_KEYS.CLOUD_PROVIDER,
-        preferences.cloudProvider,
-      );
+      storage.setItem(STORAGE_KEYS.CLOUD_PROVIDER, preferences.cloudProvider);
     } else {
-      localStorage.removeItem(STORAGE_KEYS.CLOUD_PROVIDER);
+      storage.removeItem(STORAGE_KEYS.CLOUD_PROVIDER);
     }
   }
 
   if (preferences.rememberApiKey !== undefined) {
-    localStorage.setItem(
+    storage.setItem(
       STORAGE_KEYS.REMEMBER_API_KEY,
       preferences.rememberApiKey ? "true" : "false",
     );
   }
 
   if (preferences.skipAiSetup !== undefined) {
-    localStorage.setItem(
+    storage.setItem(
       STORAGE_KEYS.SKIP_AI_SETUP,
       preferences.skipAiSetup ? "true" : "false",
     );
   }
 
   if (preferences.rememberChoice !== undefined) {
-    localStorage.setItem(
+    storage.setItem(
       STORAGE_KEYS.REMEMBER_CHOICE,
       preferences.rememberChoice ? "true" : "false",
     );
@@ -210,14 +205,15 @@ export function saveModelPreferences(
 }
 
 export function clearModelPreferences(): void {
-  if (!isBrowser) return;
+  const storage = getStorage();
+  if (!storage) return;
 
-  localStorage.removeItem(STORAGE_KEYS.LAST_MODEL_ID);
-  localStorage.removeItem(STORAGE_KEYS.AUTO_LOAD_ENABLED);
-  localStorage.removeItem(STORAGE_KEYS.CLOUD_PROVIDER);
-  localStorage.removeItem(STORAGE_KEYS.REMEMBER_API_KEY);
-  localStorage.removeItem(STORAGE_KEYS.SKIP_AI_SETUP);
-  localStorage.removeItem(STORAGE_KEYS.REMEMBER_CHOICE);
+  storage.removeItem(STORAGE_KEYS.LAST_MODEL_ID);
+  storage.removeItem(STORAGE_KEYS.AUTO_LOAD_ENABLED);
+  storage.removeItem(STORAGE_KEYS.CLOUD_PROVIDER);
+  storage.removeItem(STORAGE_KEYS.REMEMBER_API_KEY);
+  storage.removeItem(STORAGE_KEYS.SKIP_AI_SETUP);
+  storage.removeItem(STORAGE_KEYS.REMEMBER_CHOICE);
 }
 
 export interface ApiKeyManager {

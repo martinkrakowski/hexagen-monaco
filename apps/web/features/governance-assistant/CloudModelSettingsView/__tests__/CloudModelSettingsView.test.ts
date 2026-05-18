@@ -11,7 +11,7 @@ describe("CloudModelSettingsView", () => {
   it("should export component types correctly", async () => {
     const module = await import("../types");
     assert.strictEqual(typeof module, "object");
-    assert(module.CloudModelSettingsViewProps !== undefined);
+    assert(module.CLOUD_MODEL_SETTINGS_VIEW_PROPS !== undefined);
   });
 
   it("should compose all required hooks and components", async () => {

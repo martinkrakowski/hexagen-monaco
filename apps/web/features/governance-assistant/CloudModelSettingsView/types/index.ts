@@ -1,8 +1,13 @@
 import type { UserSecretVaultPort } from "@hexagen/web-driver";
 
-/**
- * Props for the CloudModelSettingsView component
- */
+export const CLOUD_MODEL_SETTINGS_VIEW_PROPS = Symbol(
+  "CloudModelSettingsViewProps",
+);
+export const CLOUD_SETTINGS = Symbol("CloudSettings");
+export const CLOUD_CONNECTION_STATE = Symbol("CloudConnectionState");
+export const VALIDATION_ERRORS = Symbol("ValidationErrors");
+export const CLOUD_SETTINGS_UI_STATE = Symbol("CloudSettingsUIState");
+
 export interface CloudModelSettingsViewProps {
   vault: UserSecretVaultPort;
   onConnect: (provider: string, model: string) => Promise<void>;
