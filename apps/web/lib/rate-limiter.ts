@@ -24,16 +24,16 @@ export function checkRateLimit(
   maxRequests = 10,
   windowMs = 60 * 1000, // 1 minute
 ): { allowed: boolean; retryAfter?: number } {
-  let ip = request.cf?.clientIp;
+  let ip = (request as { cf?: { clientIp?: string } }).cf?.clientIp;
   if (!ip) {
     const forwardedFor = request.headers.get("x-forwarded-for");
-    ip = forwardedFor?.split(",")[0]?.trim();
+    ip = forwardedFor?.split(",")[0]?.trim() ?? undefined;
   }
   if (!ip) {
-    ip = request.headers.get("x-real-ip");
+    ip = request.headers.get("x-real-ip") ?? undefined;
   }
   if (!ip) {
-    ip = request.headers.get("x-request-id");
+    ip = request.headers.get("x-request-id") ?? undefined;
   }
   if (!ip) {
     ip =

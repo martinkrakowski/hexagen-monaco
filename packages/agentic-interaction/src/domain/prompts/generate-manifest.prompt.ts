@@ -37,8 +37,8 @@ import type {
   PipelineState,
 } from "../value-objects/pipeline-state.js";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema.js";
-import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
-export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
+import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
+export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
 
 export interface PromptVariables {
   userDescription: string;

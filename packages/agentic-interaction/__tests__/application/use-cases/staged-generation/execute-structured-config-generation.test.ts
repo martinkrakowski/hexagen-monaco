@@ -2,17 +2,56 @@ import { describe, it, mock } from "node:test";
 import assert from "node:assert";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../../../dist/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
-// Mock the LLM port
-const mockSendStructuredRequest = mock.fn(() =>
-  Promise.resolve(JSON.stringify({ result: "mocked" })),
+// Mock TransactionManagerPort
+const mockTransactionManager = {
+  begin: mock.fn(() => ({
+    id: "mock-transaction-id",
+    status: "pending",
+    intentId: "mock-intent",
+    metadata: {},
+    lineage: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })),
+  transition: mock.fn((id, status) => ({
+    id,
+    status,
+    intentId: "mock-intent",
+    metadata: {},
+    lineage: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })),
+  get: mock.fn(() => null),
+  list: mock.fn(() => []),
+  commit: mock.fn(() => null),
+  rollback: mock.fn(() => null),
+};
+
+// Mock the LLM port (implements SendStructuredRequestPort)
+const mockStreamStructuredRequest = mock.fn(() => {
+  async function* mockGenerator() {
+    yield {
+      ok: true,
+      value: JSON.stringify({ portMap: {}, contextMappings: [] }),
+    };
+  }
+  return mockGenerator();
+});
+const mockSendRequest = mock.fn(() =>
+  Promise.resolve({ ok: true, value: { content: "mocked" } }),
 );
 const mockLLMPort = {
-  sendStructuredRequest: mockSendStructuredRequest,
+  sendRequest: mockSendRequest,
+  streamStructuredRequest: mockStreamStructuredRequest,
 };
 
 describe("ExecuteStructuredConfigGenerationUseCase", () => {
   it("returns result with non-null assembledManifest for valid input", async () => {
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockLLMPort);
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockLLMPort,
+      mockTransactionManager,
+    );
     const result = await useCase.execute(
       "bounded_contexts:\n  - name: test\nuse_cases: {}\ncontext_mappings: []",
       { onProgress: () => {} },
@@ -22,7 +61,10 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
   it("calls onProgress with stages 0-6", async () => {
     const calls: [number, string][] = [];
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockLLMPort);
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockLLMPort,
+      mockTransactionManager,
+    );
     await useCase.execute(
       "bounded_contexts:\n  - name: test\nuse_cases: {}\ncontext_mappings: []",
       {
@@ -36,7 +78,10 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
   });
 
   it("handles invalid YAML gracefully", async () => {
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockLLMPort);
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockLLMPort,
+      mockTransactionManager,
+    );
     const result = await useCase.execute("invalid: [yaml: broken", {
       onProgress: () => {},
     });
@@ -46,11 +91,18 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
   it("returns error result on LLM failure", async () => {
     const failingPort = {
-      sendStructuredRequest: mock.fn(() =>
-        Promise.reject(new Error("LLM API error")),
-      ),
+      sendRequest: mock.fn(() => Promise.reject(new Error("LLM API error"))),
+      streamStructuredRequest: mock.fn(() => {
+        async function* gen() {
+          yield { ok: false, error: new Error("LLM API error") };
+        }
+        return gen();
+      }),
     };
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(failingPort);
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      failingPort,
+      mockTransactionManager,
+    );
     const result = await useCase.execute(
       "bounded_contexts:\n  - name: test\nuse_cases: {}\ncontext_mappings: []",
       { onProgress: () => {} },
