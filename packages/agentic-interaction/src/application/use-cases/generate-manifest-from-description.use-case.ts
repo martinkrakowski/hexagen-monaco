@@ -20,6 +20,8 @@ import { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-stag
 import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt.js";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
+export { ManifestWarningCategory } from "./generate-manifest-types.js";
+
 export class GenerateManifestFromDescriptionUseCase {
   private readonly stagedUseCase: ExecuteStagedGenerationUseCase;
 
