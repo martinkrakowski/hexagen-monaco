@@ -1,4 +1,4 @@
-export type ImportSubOption = {
+export type ManifestImportSubOption = {
   status: "coming-soon" | "available";
   label: string;
   description: string;

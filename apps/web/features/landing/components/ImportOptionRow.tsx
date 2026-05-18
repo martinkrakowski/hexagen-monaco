@@ -20,6 +20,10 @@ const iconMap = {
   Github,
 } as const;
 
+function isValidIconName(name: string): name is keyof typeof iconMap {
+  return name in iconMap;
+}
+
 interface ImportOptionRowProps {
   readonly option: ImportSubOption;
   readonly router?: { push: (url: string) => void };
@@ -31,8 +35,9 @@ export function ImportOptionRow({
 }: ImportOptionRowProps) {
   const defaultRouter = useRouter();
   const router = injectedRouter ?? defaultRouter;
-  const IconComponent =
-    iconMap[option.iconName as keyof typeof iconMap] ?? FileCode;
+  const IconComponent = isValidIconName(option.iconName)
+    ? iconMap[option.iconName]
+    : FileCode;
 
   if (option.status !== "available") {
     return (

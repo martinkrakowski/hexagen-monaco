@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { ImportSubOption } from "../domain/creation-path";
+import type { ManifestImportSubOption } from "../domain/creation-path";
 
 interface ImportOptionRowProps {
-  option: ImportSubOption;
+  option: ManifestImportSubOption;
 }
 
 export default function ImportOptionRow({ option }: ImportOptionRowProps) {

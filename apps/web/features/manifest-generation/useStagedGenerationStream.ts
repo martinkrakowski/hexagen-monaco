@@ -104,171 +104,181 @@ export function useStagedGenerationStream(
         adapterCount: 0,
       };
 
-       try {
-         const MAX_RECONNECT_ATTEMPTS = 3;
-         const BASE_DELAY_MS = 1000;
-         const READ_TIMEOUT_MS = 60000;
+      try {
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        const BASE_DELAY_MS = 1000;
+        const READ_TIMEOUT_MS = 60000;
 
-         let lastDataTime = Date.now();
-         let timeoutCheckInterval: NodeJS.Timeout | null = null;
+        let lastDataTime = Date.now();
+        let timeoutCheckInterval: NodeJS.Timeout | null = null;
 
-         const attemptReconnect = async (attempt: number): Promise<ReadableStreamDefaultReader | null> => {
-           if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-             console.error(`[SSE] Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`); // eslint-disable-line no-console
-             return null;
-           }
-           
-           const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-           // eslint-disable-next-line no-console
-          console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`);
-           
-           await new Promise(resolve => setTimeout(resolve, delay));
-           
-           try {
-             const newResponse = await fetch(endpoint, { 
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify(body),
-               signal: abortRef.current?.signal 
-             });
-             if (!newResponse.ok || !newResponse.body) return null;
-             return newResponse.body.getReader();
-           } catch {
-             return attemptReconnect(attempt + 1);
-           }
-         };
-
-         const response = await fetch(endpoint, {
-           method: "POST",
-           headers: { "Content-Type": "application/json" },
-           body: JSON.stringify(body),
-           signal: controller.signal,
-         });
-
-         if (!response.ok || !response.body) {
-           const text = await response.text();
-           throw new Error(text || `HTTP ${response.status}`);
-         }
-
-         let reader = response.body.getReader();
-         const decoder = new TextDecoder();
-         let buffer = "";
-
-         timeoutCheckInterval = setInterval(() => {
-           if (Date.now() - lastDataTime > READ_TIMEOUT_MS) {
-             // eslint-disable-next-line no-console
-          console.warn('[SSE] Timeout: no data received for 60s');
-             reader.cancel();
-           }
-         }, 5000);
-
-          // eslint-disable-next-line no-constant-condition
-          try {
-            while (true) {
-              try {
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                lastDataTime = Date.now();
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
-
-               for (const line of lines) {
-                 if (!line.trim()) continue;
-                 try {
-                   const event = JSON.parse(line) as Record<string, unknown>;
-                   const type = event.type as string;
-
-                   if (type === "stage-start") {
-                      const stage = event.stage as number;
-                      const label =
-                        (event.label as string) ||
-                        stageLabels[stage] ||
-                        `Stage ${stage}`;
-                      result.phase = stageToPhase(stage);
-                      result.stepDetail = `${label}...`;
-                      result.stageProgress = {
-                        ...result.stageProgress,
-                        [stage]: { stage, label, chunks: [] },
-                      };
-                      setPhase(result.phase);
-                      setStepDetail(result.stepDetail);
-                      setStageProgress(result.stageProgress);
-                    } else if (type === "stage-complete") {
-                      const stage = event.stage as number;
-                      const durationMs = event.durationMs as number;
-                      result.stageProgress = {
-                        ...result.stageProgress,
-                        [stage]: { ...result.stageProgress[stage], durationMs },
-                      };
-                      setStageProgress(result.stageProgress);
-                    } else if (type === "stage-telemetry") {
-                      const stage = event.stage as number;
-                      const telemetry = event.telemetry as StageProgress["telemetry"];
-                      result.stageProgress = {
-                        ...result.stageProgress,
-                        [stage]: { ...result.stageProgress[stage], telemetry },
-                      };
-                      setStageProgress(result.stageProgress);
-                    } else if (type === "chunk") {
-                      const stage = event.stage as number;
-                      const data = event.data as string;
-                      result.stageProgress = {
-                        ...result.stageProgress,
-                        [stage]: {
-                          ...result.stageProgress[stage],
-                          chunks: [
-                            ...(result.stageProgress[stage]?.chunks || []),
-                            data,
-                          ],
-                        },
-                      };
-                      setStageProgress(result.stageProgress);
-                    } else if (type === "validation-error") {
-                      const errors = event.errors as string[];
-                      result.validationErrors = errors;
-                      setValidationErrors(errors);
-                    } else if (type === "done") {
-                     result.generatedManifest = event.yaml as string;
-                     result.contextCount = event.contextCount as number;
-                     result.portCount = event.portCount as number;
-                     result.adapterCount = event.adapterCount as number;
-                     result.phase = "complete";
-                     result.stepDetail = "Manifest generation complete";
-                     setGeneratedManifest(result.generatedManifest);
-                     setContextCount(result.contextCount);
-                     setPortCount(result.portCount);
-                     setAdapterCount(result.adapterCount);
-                     setPhase(result.phase);
-                     setStepDetail(result.stepDetail);
-                     setIsGenerating(false);
-                   } else if (type === "error") {
-                     result.phase = "failed";
-                     result.stepDetail = event.message as string;
-                     setGenerationError(event.message as string);
-                     setPhase(result.phase);
-                     setIsGenerating(false);
-                   }
-                 } catch {
-                   logger.warn("[staged-gen] Failed to parse NDJSON line", { line });
-                 }
-               }
-              } catch {
-                // eslint-disable-next-line no-console
-              console.warn('[SSE] Connection lost, attempting reconnect...');
-               const newReader = await attemptReconnect(0);
-               if (!newReader) {
-                 throw new Error('SSE connection lost and reconnection failed');
-               }
-               reader = newReader;
-               continue;
-             }
-           }
-          } finally {
-            if (timeoutCheckInterval) clearInterval(timeoutCheckInterval);
-            reader.releaseLock();
+        const attemptReconnect = async (
+          attempt: number,
+        ): Promise<ReadableStreamDefaultReader | null> => {
+          if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+            console.error(
+              `[SSE] Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`,
+            ); // eslint-disable-line no-console
+            return null;
           }
+
+          const delay = BASE_DELAY_MS * Math.pow(2, attempt);
+          // eslint-disable-next-line no-console
+          console.log(
+            `[SSE] Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`,
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, delay));
+
+          try {
+            const newResponse = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              signal: abortRef.current?.signal,
+            });
+            if (!newResponse.ok || !newResponse.body) return null;
+            return newResponse.body.getReader();
+          } catch {
+            return attemptReconnect(attempt + 1);
+          }
+        };
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+
+        if (!response.ok || !response.body) {
+          const text = await response.text();
+          throw new Error(text || `HTTP ${response.status}`);
+        }
+
+        let reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        timeoutCheckInterval = setInterval(() => {
+          if (Date.now() - lastDataTime > READ_TIMEOUT_MS) {
+            // eslint-disable-next-line no-console
+            console.warn("[SSE] Timeout: no data received for 60s");
+            reader.cancel();
+          }
+        }, 5000);
+
+        // eslint-disable-next-line no-constant-condition
+        try {
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            try {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              lastDataTime = Date.now();
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                  const event = JSON.parse(line) as Record<string, unknown>;
+                  const type = event.type as string;
+
+                  if (type === "stage-start") {
+                    const stage = event.stage as number;
+                    const label =
+                      (event.label as string) ||
+                      stageLabels[stage] ||
+                      `Stage ${stage}`;
+                    result.phase = stageToPhase(stage);
+                    result.stepDetail = `${label}...`;
+                    result.stageProgress = {
+                      ...result.stageProgress,
+                      [stage]: { stage, label, chunks: [] },
+                    };
+                    setPhase(result.phase);
+                    setStepDetail(result.stepDetail);
+                    setStageProgress(result.stageProgress);
+                  } else if (type === "stage-complete") {
+                    const stage = event.stage as number;
+                    const durationMs = event.durationMs as number;
+                    result.stageProgress = {
+                      ...result.stageProgress,
+                      [stage]: { ...result.stageProgress[stage], durationMs },
+                    };
+                    setStageProgress(result.stageProgress);
+                  } else if (type === "stage-telemetry") {
+                    const stage = event.stage as number;
+                    const telemetry =
+                      event.telemetry as StageProgress["telemetry"];
+                    result.stageProgress = {
+                      ...result.stageProgress,
+                      [stage]: { ...result.stageProgress[stage], telemetry },
+                    };
+                    setStageProgress(result.stageProgress);
+                  } else if (type === "chunk") {
+                    const stage = event.stage as number;
+                    const data = event.data as string;
+                    result.stageProgress = {
+                      ...result.stageProgress,
+                      [stage]: {
+                        ...result.stageProgress[stage],
+                        chunks: [
+                          ...(result.stageProgress[stage]?.chunks || []),
+                          data,
+                        ],
+                      },
+                    };
+                    setStageProgress(result.stageProgress);
+                  } else if (type === "validation-error") {
+                    const errors = event.errors as string[];
+                    result.validationErrors = errors;
+                    setValidationErrors(errors);
+                  } else if (type === "done") {
+                    result.generatedManifest = event.yaml as string;
+                    result.contextCount = event.contextCount as number;
+                    result.portCount = event.portCount as number;
+                    result.adapterCount = event.adapterCount as number;
+                    result.phase = "complete";
+                    result.stepDetail = "Manifest generation complete";
+                    setGeneratedManifest(result.generatedManifest);
+                    setContextCount(result.contextCount);
+                    setPortCount(result.portCount);
+                    setAdapterCount(result.adapterCount);
+                    setPhase(result.phase);
+                    setStepDetail(result.stepDetail);
+                    setIsGenerating(false);
+                  } else if (type === "error") {
+                    result.phase = "failed";
+                    result.stepDetail = event.message as string;
+                    setGenerationError(event.message as string);
+                    setPhase(result.phase);
+                    setIsGenerating(false);
+                  }
+                } catch {
+                  logger.warn("[staged-gen] Failed to parse NDJSON line", {
+                    line,
+                  });
+                }
+              }
+            } catch {
+              // eslint-disable-next-line no-console
+              console.warn("[SSE] Connection lost, attempting reconnect...");
+              const newReader = await attemptReconnect(0);
+              if (!newReader) {
+                throw new Error("SSE connection lost and reconnection failed");
+              }
+              reader = newReader;
+              continue;
+            }
+          }
+        } finally {
+          if (timeoutCheckInterval) clearInterval(timeoutCheckInterval);
+          reader.releaseLock();
+        }
 
         if (buffer.trim()) {
           try {
@@ -309,7 +319,7 @@ export function useStagedGenerationStream(
 
       return result;
     },
-    [endpoint],
+    [endpoint, stageLabels],
   );
 
   const reset = useCallback(() => {
