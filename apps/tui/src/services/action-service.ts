@@ -137,7 +137,11 @@ function parseToolSuggestion(content: string): MCPToolSuggestion | null {
       tool?: string;
       arguments?: Record<string, unknown>;
     };
-    if (parsed.tool && typeof parsed.arguments === "object") {
+    if (
+      parsed.tool &&
+      parsed.arguments !== null &&
+      typeof parsed.arguments === "object"
+    ) {
       return { tool: parsed.tool, arguments: parsed.arguments };
     }
   } catch {
