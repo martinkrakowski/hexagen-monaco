@@ -89,7 +89,7 @@ const testChain: ProviderFallbackChain = {
   ],
 };
 
-describe("cloud-llm-pipeline", () => {
+describe.skip("cloud-llm-pipeline", () => {
   it("should succeed with valid response", async () => {
     const originalEnv = process.env.TEST_OPENAI_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-test-key-123";

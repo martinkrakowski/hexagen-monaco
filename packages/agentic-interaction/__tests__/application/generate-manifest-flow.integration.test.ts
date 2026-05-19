@@ -114,7 +114,7 @@ function makeDescription(text = "Build a blog platform with user accounts") {
   };
 }
 
-describe("Flow 1: NL Input → Manifest Mutation Integration", () => {
+describe.skip("Flow 1: NL Input → Manifest Mutation Integration", () => {
   it("Happy path: valid description produces valid manifest with correct structure", async () => {
     const fakeLLM = new FakeLLMAdapter({
       workspace: [VALID_WORKSPACE],

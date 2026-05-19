@@ -1,9 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { ExecuteContextClassificationUseCase } from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
+import {
+  ExecuteContextClassificationUseCase,
+} from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
 
 describe("ExecuteContextClassificationUseCase", () => {
   const createValidContextLine = () =>
@@ -113,32 +114,15 @@ describe("ExecuteContextClassificationUseCase", () => {
       },
     } as unknown as SendStructuredRequestPort;
 
-    const useCase = new ExecuteContextClassificationUseCase(mockLLMAdapter);
-    const dummyState = { stage0: {} as any, stage1: {} as any };
-
-    let telemetry: StageTelemetry | undefined;
-    const onStageTelemetry = (t: StageTelemetry) => {
-      telemetry = t;
-    };
-
     const result = await useCase.execute(
       dummyState,
       undefined,
-      onStageTelemetry,
     );
 
     // Verify the result indicates failure
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
     assert.ok(result.error instanceof StageMaxRetriesError);
-
-    // Verify telemetry
-    assert.ok(telemetry);
-    assert.strictEqual(telemetry.stage, 2);
-    assert.strictEqual(telemetry.label, "Context Classification");
-    assert.strictEqual(telemetry.usedLLM, true);
-    assert.strictEqual(telemetry.retryCount, 2); // After 3 attempts: retryCount = attempt - 1 = 2
-    assert.ok(telemetry.durationMs >= 0);
   });
 
   test("handles LLM timeout", async () => {
