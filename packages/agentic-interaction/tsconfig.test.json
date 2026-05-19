@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist-test",
     "declaration": true,
     "composite": true,
@@ -9,6 +9,6 @@
     "moduleResolution": "bundler",
     "paths": {}
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "__tests__/**/*"],
   "exclude": ["node_modules", "dist", "dist-test"]
 }
