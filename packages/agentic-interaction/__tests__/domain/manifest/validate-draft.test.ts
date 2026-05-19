@@ -3,11 +3,11 @@ import { describe, it } from "node:test";
 import {
   validateDraft,
   checkClarificationTriggers,
-} from "../../../src/domain/manifest/validate-draft.js";
+} from "../../../src/domain/manifest/validate-draft";
 import type {
   ManifestDraft,
   ManifestTopologyDraft,
-} from "../../../src/domain/manifest/manifest-draft.types.js";
+} from "../../../src/domain/manifest/manifest-draft.types";
 
 const makePort = (name: string) => ({
   name,

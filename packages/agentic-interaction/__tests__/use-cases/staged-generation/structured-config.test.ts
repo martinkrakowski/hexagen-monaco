@@ -10,7 +10,7 @@ import {
   buildClassificationFromConfig,
   buildContextMappingsFromConfig,
   ExecuteStructuredConfigGenerationUseCase,
-} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
 
 const fixturesDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),

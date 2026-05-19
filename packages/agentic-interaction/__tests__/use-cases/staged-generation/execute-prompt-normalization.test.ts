@@ -1,13 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
-import { ExecutePromptNormalizationUseCase } from "../../../src/application/use-cases/staged-generation/execute-prompt-normalization.use-case.js";
+import { ExecutePromptNormalizationUseCase } from "../../../src/application/use-cases/staged-generation/execute-prompt-normalization.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 
 describe("ExecutePromptNormalizationUseCase", () => {
   const validNDJSONResponse = [
     '{"type": "intent", "value": "build a task management system"}',
     '{"type": "technology", "value": "React"}',
-    '{"type": "technology", "value": "Node.js"}',
+    '{"type": "technology", "value": "Node"}',
     '{"type": "pattern", "value": "CRUD"}',
     '{"type": "ambiguity", "value": "Authentication method not specified"}',
   ];
@@ -39,7 +39,7 @@ describe("ExecutePromptNormalizationUseCase", () => {
       assert.strictEqual(result.value.intent, "build a task management system");
       assert.deepStrictEqual(result.value.explicitTechnologies, [
         "React",
-        "Node.js",
+        "Node",
       ]);
       assert.deepStrictEqual(result.value.explicitPatterns, ["CRUD"]);
       assert.deepStrictEqual(result.value.ambiguities, [

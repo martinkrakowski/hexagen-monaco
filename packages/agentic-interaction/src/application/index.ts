@@ -3,7 +3,7 @@ export type {
   VaultState,
   VaultStatus,
   VaultError,
-} from "../domain/value-objects/index.js";
+} from "../domain/value-objects/index";
 
 // Export ports
 export type {
@@ -13,11 +13,11 @@ export type {
   ServerLLMUserInfo,
   ArchitectureModificationPort,
   ModificationResult,
-} from "./ports/index.js";
+} from "./ports/index";
 
 // Export use cases
-export { GenerateSuggestionUseCase } from "./use-cases/generate-suggestion.use-case.js";
-export { SecureChatDispatchUseCase } from "./use-cases/secure-chat-dispatch.use-case.js";
-export { HandleServerChatUseCase } from "./use-cases/index.js";
-export { ModifyArchitectureUseCase } from "./use-cases/modify-architecture.use-case.js";
-export type { ModifyArchitectureDeps } from "./use-cases/modify-architecture.use-case.js";
+export { GenerateSuggestionUseCase } from "./use-cases/generate-suggestion.use-case";
+export { SecureChatDispatchUseCase } from "./use-cases/secure-chat-dispatch.use-case";
+export { HandleServerChatUseCase } from "./use-cases/index";
+export { ModifyArchitectureUseCase } from "./use-cases/modify-architecture.use-case";
+export type { ModifyArchitectureDeps } from "./use-cases/modify-architecture.use-case";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { draftToManifest } from "../../../src/domain/manifest/draft-to-manifest.transform.js";
-import type { ManifestDraft } from "../../../src/domain/manifest/manifest-draft.types.js";
+import { draftToManifest } from "../../../src/domain/manifest/draft-to-manifest.transform";
+import type { ManifestDraft } from "../../../src/domain/manifest/manifest-draft.types";
 
 const makeDraft = (overrides?: Partial<ManifestDraft>): ManifestDraft => ({
   workspace: { name: "My Project", description: "A test project" },

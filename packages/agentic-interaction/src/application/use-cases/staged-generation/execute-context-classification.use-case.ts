@@ -5,19 +5,19 @@ import { z } from "zod";
 import {
   STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
   compileStage2Prompt,
-} from "../../../domain/index.js";
+} from "../../../domain/index";
 import type {
   PipelineState,
   ClassificationResult,
   ClassifiedContext,
   RejectedContext,
   UncertainContext,
-} from "../../../domain/value-objects/pipeline-state.js";
-import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt.js";
-import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors.js";
-import { StageMaxRetriesError } from "../../../domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry.js";
+} from "../../../domain/value-objects/pipeline-state";
+import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
+import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
+import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
+import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
+import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 2;
 

@@ -4,9 +4,9 @@ import type {
   CloudLLMProviderPort,
   CloudLLMCompletionRequest,
   CloudLLMCompletionResponse,
-} from "../../domain/ports/cloud-llm-provider.port.js";
-import type { SecretVaultPort } from "../ports/index.js";
-import type { VaultError } from "../../domain/index.js";
+} from "../../domain/ports/cloud-llm-provider.port";
+import type { SecretVaultPort } from "../ports/index";
+import type { VaultError } from "../../domain/index";
 
 /**
  * Use case that orchestrates secure cloud chat dispatch.

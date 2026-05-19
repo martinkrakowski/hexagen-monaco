@@ -4,7 +4,7 @@ import {
   parseJSON,
   balanceJSON,
   repairJSON,
-} from "../../src/domain/manifest/extract-json.js";
+} from "../../src/domain/manifest/extract-json";
 
 test("extract-json: repairJSON handles very incomplete JSON by returning null", () => {
   const json =

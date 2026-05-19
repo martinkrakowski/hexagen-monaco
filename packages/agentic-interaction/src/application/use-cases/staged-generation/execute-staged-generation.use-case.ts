@@ -2,13 +2,13 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type {
   PipelineState,
   ValidationReport,
-} from "../../../domain/value-objects/pipeline-state.js";
-import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
+} from "../../../domain/value-objects/pipeline-state";
+import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
-import { parseJSON } from "../../../domain/manifest/extract-json.js";
+import { parseJSON } from "../../../domain/manifest/extract-json";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
-import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case.js";
+import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
 
 // Phase system prompts matching test's detectPhase logic
 const WORKSPACE_SYSTEM_PROMPT = `You are a workspace architect. Define the overall project workspace. Return JSON with "name" and "description".`;
@@ -22,7 +22,7 @@ export interface StagedGenerationCallbacks {
   onChunk?: (stage: number, chunk: string) => void;
   onValidationError?: (stage: number, errors: string[]) => void;
   onStageTelemetry?: (
-    telemetry: import("../../../domain/value-objects/stage-telemetry.js").StageTelemetry,
+    telemetry: import("../../../domain/value-objects/stage-telemetry").StageTelemetry,
   ) => void;
 }
 

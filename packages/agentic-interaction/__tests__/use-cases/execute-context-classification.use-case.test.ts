@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ExecuteContextClassificationUseCase } from "../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
+import { ExecuteContextClassificationUseCase } from "../../src/application/use-cases/staged-generation/execute-context-classification.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 
 test("ExecuteContextClassificationUseCase adversarial regression test - blocks infrastructure nouns", async () => {

@@ -2,11 +2,11 @@ import type {
   ServerLLMRequestPort,
   ServerLLMRequest,
   ServerLLMUserInfo,
-} from "../ports/in/ServerLLMRequestPort.js";
+} from "../ports/in/ServerLLMRequestPort";
 import type {
   LLMProviderPort,
   LLMCompletionRequest,
-} from "../../domain/ports/llm-provider.port.js";
+} from "../../domain/ports/llm-provider.port";
 
 export class HandleServerChatUseCase implements ServerLLMRequestPort {
   constructor(

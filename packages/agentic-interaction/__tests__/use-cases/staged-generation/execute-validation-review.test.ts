@@ -1,9 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
-import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cases/staged-generation/execute-validation-review.use-case.js";
+import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cases/staged-generation/execute-validation-review.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
 const createMockPipelineState = () => ({
   stage0: {

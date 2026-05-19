@@ -6,16 +6,16 @@ import type {
 } from "@hexagen/local-llm/client";
 import { createLLMResponse } from "@hexagen/local-llm/client";
 import type { DomainModelId } from "@hexagen/local-llm/client";
-import type { ResolvedProvider } from "../../domain/provider-config.js";
-import { resolveFallbackChain } from "../../domain/provider-config.js";
+import type { ResolvedProvider } from "../../domain/provider-config";
+import { resolveFallbackChain } from "../../domain/provider-config";
 import {
   isRetryable,
   type CloudLLMPipelineAdapterConfig,
   type ChatCompletionResponse,
-} from "./cloud-llm-types.js";
-import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-llm-streaming.js";
+} from "./cloud-llm-types";
+import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-llm-streaming";
 
-export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types.js";
+export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
 export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
   private readonly fetchFn: typeof fetch;

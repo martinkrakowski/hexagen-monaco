@@ -3,16 +3,16 @@ import {
   draftToManifest,
   renderManifestYaml,
   toKebabCase,
-} from "../../../domain/index.js";
+} from "../../../domain/index";
 import type {
   ManifestDraft,
   ManifestDraftContext,
-} from "../../../domain/index.js";
+} from "../../../domain/index";
 import type {
   PipelineState,
   AssembledManifest,
   AssemblyWarning,
-} from "../../../domain/value-objects/pipeline-state.js";
+} from "../../../domain/value-objects/pipeline-state";
 
 const STOP_WORDS = new Set([
   "structured",

@@ -5,8 +5,8 @@ import type {
   DraftValidationResult,
   ClarificationTrigger,
   ManifestTopologyDraft,
-} from "./manifest-draft.types.js";
-import { GENERIC_CONTEXT_NAMES } from "./manifest-draft.schema.js";
+} from "./manifest-draft.types";
+import { GENERIC_CONTEXT_NAMES } from "./manifest-draft.schema";
 
 function diag(code: string, message: string, path?: string): DraftDiagnostic {
   return { code, message, path };

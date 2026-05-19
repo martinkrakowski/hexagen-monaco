@@ -2,8 +2,8 @@
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
-import { parseJSON } from "../../domain/index.js";
-import type { RetryResult } from "../../domain/prompts/generate-manifest.prompt.js";
+import { parseJSON } from "../../domain/index";
+import type { RetryResult } from "../../domain/prompts/generate-manifest.prompt";
 
 interface RetryCallResult<T> {
   data: T;

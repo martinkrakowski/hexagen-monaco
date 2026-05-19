@@ -6,7 +6,7 @@ import {
   parseJSON,
   extractArrayFromWrapper,
   extractObjectFromWrapper,
-} from "../../../src/domain/manifest/extract-json.js";
+} from "../../../src/domain/manifest/extract-json";
 
 describe("extractJSON", () => {
   it("extracts JSON from markdown code fence", () => {

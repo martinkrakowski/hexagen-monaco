@@ -3,24 +3,24 @@ import type {
   ProjectDescription,
   GeneratedManifest,
   GenerationMetadata,
-} from "../../domain/value-objects/index.js";
-import { ProjectDescriptionValidator } from "../../domain/value-objects/index.js";
-import { createGeneratedManifest } from "../../domain/value-objects/index.js";
+} from "../../domain/value-objects/index";
+import { ProjectDescriptionValidator } from "../../domain/value-objects/index";
+import { createGeneratedManifest } from "../../domain/value-objects/index";
 import {
   generateSuggestions,
   detectWarnings,
-} from "../../domain/manifest-yaml-extractor.js";
+} from "../../domain/manifest-yaml-extractor";
 import {
   ManifestWarningCategory,
   type ManifestWarning,
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
-} from "./generate-manifest-types.js";
-import { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case.js";
-import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt.js";
+} from "./generate-manifest-types";
+import { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case";
+import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
-export { ManifestWarningCategory } from "./generate-manifest-types.js";
+export { ManifestWarningCategory } from "./generate-manifest-types";
 
 export class GenerateManifestFromDescriptionUseCase {
   private readonly stagedUseCase: ExecuteStagedGenerationUseCase;

@@ -1,5 +1,5 @@
-export * from "./ServerLLMRequestPort.js";
+export * from "./ServerLLMRequestPort";
 export type {
   ArchitectureModificationPort,
   ModificationResult,
-} from "./architecture-modification.port.js";
+} from "./architecture-modification.port";

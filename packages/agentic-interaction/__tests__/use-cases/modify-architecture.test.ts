@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ModifyArchitectureUseCase } from "../../src/application/use-cases/modify-architecture.use-case.js";
-import type { ModifyArchitectureDeps } from "../../src/application/use-cases/modify-architecture.use-case.js";
+import { ModifyArchitectureUseCase } from "../../src/application/use-cases/modify-architecture.use-case";
+import type { ModifyArchitectureDeps } from "../../src/application/use-cases/modify-architecture.use-case";
 import type { NLToDomainCommandParserPort } from "@hexagen/ai-pipeline";
 import type { PipelineStep } from "@hexagen/ai-pipeline";
 import type { DomainCommand, IntentLineage } from "@hexagen/core-domain";

@@ -3,20 +3,20 @@ export type {
   LLMMessage,
   LLMCompletionRequest,
   LLMCompletionResponse,
-} from "./ports/llm-provider.port.js";
+} from "./ports/llm-provider.port";
 export type {
   SuggestionEnginePort,
   SuggestionContext,
   AISuggestion,
   SuggestionRequest,
-} from "./ports/suggestion-engine.port.js";
+} from "./ports/suggestion-engine.port";
 export type {
   CloudLLMProviderPort,
   CloudLLMMessage,
   CloudLLMCompletionRequest,
   CloudLLMCompletionResponse,
-} from "./ports/cloud-llm-provider.port.js";
-export { isCloudLLMProviderPort } from "./ports/cloud-llm-provider.port.js";
+} from "./ports/cloud-llm-provider.port";
+export { isCloudLLMProviderPort } from "./ports/cloud-llm-provider.port";
 export type {
   VaultState,
   VaultStatus,
@@ -40,23 +40,23 @@ export type {
   ValidationReport,
   ContextMappingEntry,
   PipelineState,
-} from "./value-objects/index.js";
+} from "./value-objects/index";
 export type {
   CloudProviderEndpoint,
   ProviderFallbackChain,
   ResolvedProvider,
   SecretVaultPort,
-} from "./provider-config.js";
+} from "./provider-config";
 export {
   resolveApiKey,
   resolveFallbackChain,
   createDefaultFallbackChain,
-} from "./provider-config.js";
+} from "./provider-config";
 export {
   extractYamlFromResponse as extractManifestYaml,
   generateSuggestions,
   detectWarnings,
-} from "./manifest-yaml-extractor.js";
+} from "./manifest-yaml-extractor";
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
@@ -79,17 +79,17 @@ export {
   compilePortsPrompt,
   type PromptVariables,
   type RetryResult,
-} from "./prompts/index.js";
+} from "./prompts/index";
 export {
   TOPOLOGY_SYSTEM_PROMPT,
   compileTopologyUserPrompt,
-} from "./prompts/index.js";
-export type { TopologyPromptVariables } from "./prompts/index.js";
+} from "./prompts/index";
+export type { TopologyPromptVariables } from "./prompts/index";
 export {
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,
-} from "./prompts/index.js";
-export type { AdapterPromptVariables } from "./prompts/index.js";
+} from "./prompts/index";
+export type { AdapterPromptVariables } from "./prompts/index";
 
 // Manifest draft pipeline exports
 export {
@@ -105,7 +105,7 @@ export {
   MAX_BOUNDED_CONTEXTS_DRAFT,
   DEFAULT_MAX_BOUNDED_CONTEXTS,
   GENERIC_CONTEXT_NAMES,
-} from "./manifest/index.js";
+} from "./manifest/index";
 export type {
   ManifestDraft,
   ManifestTopologyDraft,
@@ -119,7 +119,7 @@ export type {
   DraftValidationResult,
   ClarificationTrigger,
   RenderedManifest,
-} from "./manifest/index.js";
+} from "./manifest/index";
 export {
   normalizeDraft,
   normalizeTopologyDraft,
@@ -127,24 +127,17 @@ export {
   toKebabCase,
   ensurePortSuffix,
   normalizePortName,
-} from "./manifest/index.js";
-export { validateDraft, checkClarificationTriggers } from "./manifest/index.js";
-export { draftToManifest } from "./manifest/index.js";
-export type {
-  ManifestOutput,
-  ManifestContextOutput,
-} from "./manifest/index.js";
-export {
-  renderManifestYaml,
-  renderDraft,
-  verifyToken,
-} from "./manifest/index.js";
+} from "./manifest/index";
+export { validateDraft, checkClarificationTriggers } from "./manifest/index";
+export { draftToManifest } from "./manifest/index";
+export type { ManifestOutput, ManifestContextOutput } from "./manifest/index";
+export { renderManifestYaml, renderDraft, verifyToken } from "./manifest/index";
 export {
   extractJSON,
   parseJSON,
   extractArrayFromWrapper,
   extractObjectFromWrapper,
-} from "./manifest/index.js";
+} from "./manifest/index";
 
 export {
   coerceRawTopology,
@@ -152,4 +145,4 @@ export {
   coerceContextName,
   coercePortName,
   extractYamlFromResponse,
-} from "./manifest/index.js";
+} from "./manifest/index";

@@ -35,10 +35,10 @@
 import type {
   NormalizedPrompt,
   PipelineState,
-} from "../value-objects/pipeline-state.js";
-import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema.js";
-import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
-export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
+} from "../value-objects/pipeline-state.ts";
+import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema";
+import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
+export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 
 export interface PromptVariables {
   userDescription: string;
@@ -402,13 +402,13 @@ VALID adapterType VALUES (use EXACTLY one of these):
 Repository | Listener | Publisher | HttpClient | Notifier | Controller
 
 TECHNOLOGY FIELD:
-Each adapter SHOULD include a "technology" field naming the concrete technology used (e.g. "PostgreSQL", "RabbitMQ", "Axios", "SendGrid", "Express.js"). Technology choices MUST come from the project's explicit technology stack (provided below). If no explicit technology matches, infer a sensible default.
+Each adapter SHOULD include a "technology" field naming the concrete technology used (e.g. "PostgreSQL", "RabbitMQ", "Axios", "SendGrid", "Express"). Technology choices MUST come from the project's explicit technology stack (provided below). If no explicit technology matches, infer a sensible default.
 
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
 Emit objects one per line:
 {"adapter": {"contextName": "climate-control", "name": "PostgresClimateRepoAdapter", "adapterType": "Repository", "technology": "PostgreSQL", "implements": "ClimateStateRepository"}}
 {"adapter": {"contextName": "climate-control", "name": "MqttSensorListenerAdapter", "adapterType": "Listener", "technology": "MQTT", "implements": "SensorTelemetryPort"}}
-{"adapter": {"contextName": "climate-control", "name": "ExpressClimateControllerAdapter", "adapterType": "Controller", "technology": "Express.js", "implements": "CreateClimatePolicyPort"}}
+{"adapter": {"contextName": "climate-control", "name": "ExpressClimateControllerAdapter", "adapterType": "Controller", "technology": "Express", "implements": "CreateClimatePolicyPort"}}
 
 RULES:
 - "contextName" must match an accepted bounded context name exactly.

@@ -5,11 +5,11 @@ import {
   resolveFallbackChain,
   createDefaultFallbackChain,
   type SecretVaultPort,
-} from "../../src/domain/provider-config.js";
+} from "../../src/domain/provider-config";
 import type {
   CloudProviderEndpoint,
   ProviderFallbackChain,
-} from "../../src/domain/provider-config.js";
+} from "../../src/domain/provider-config";
 
 // Mock vault that reads from process.env
 const createEnvVault = (): SecretVaultPort => ({

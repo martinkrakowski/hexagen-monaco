@@ -1,4 +1,4 @@
-import { balanceJSON } from "./json-balancer.js";
+import { balanceJSON } from "./json-balancer";
 
 function fixUnclosedStrings(json: string): string {
   let inString = false;

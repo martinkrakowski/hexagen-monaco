@@ -4,7 +4,7 @@ import type {
   ManifestDraftPort,
   ManifestTopologyDraft,
   ManifestTopologyDraftContext,
-} from "./manifest-draft.types.js";
+} from "./manifest-draft.types";
 
 function toPascalCase(input: string): string {
   return input

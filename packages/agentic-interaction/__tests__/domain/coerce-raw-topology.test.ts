@@ -4,7 +4,7 @@ import {
   coerceContextType,
   coerceRawTopology,
   coerceRawPorts,
-} from "../../src/domain/manifest/coerce-raw-topology.js";
+} from "../../src/domain/manifest/coerce-raw-topology";
 
 test("coerce-raw-topology: coerceContextType defaults empty string to core", () => {
   const result = coerceContextType("");

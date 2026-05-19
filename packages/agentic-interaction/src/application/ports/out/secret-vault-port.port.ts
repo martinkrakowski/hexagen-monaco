@@ -1,5 +1,5 @@
 import type { Result } from "@hexagen/shared";
-import type { VaultStatus, VaultError } from "../../../domain/index.js";
+import type { VaultStatus, VaultError } from "../../../domain/index";
 
 /**
  * Port for managing API key storage and retrieval from a secret vault.

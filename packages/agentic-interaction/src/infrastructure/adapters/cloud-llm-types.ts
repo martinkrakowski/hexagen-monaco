@@ -1,7 +1,7 @@
 import type {
   ProviderFallbackChain,
   SecretVaultPort,
-} from "../../domain/provider-config.js";
+} from "../../domain/provider-config";
 
 export interface CloudLLMPipelineAdapterConfig {
   fallbackChain: ProviderFallbackChain;

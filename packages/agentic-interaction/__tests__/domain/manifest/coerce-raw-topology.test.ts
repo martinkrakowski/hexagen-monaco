@@ -5,7 +5,7 @@ import {
   coerceRawPorts,
   coerceContextName,
   coercePortName,
-} from "../../../src/domain/manifest/coerce-raw-topology.js";
+} from "../../../src/domain/manifest/coerce-raw-topology";
 
 describe("coerceContextName", () => {
   it("converts PascalCase to kebab-case", () => {

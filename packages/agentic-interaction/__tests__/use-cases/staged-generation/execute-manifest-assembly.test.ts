@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
-import { ExecuteManifestAssemblyUseCase } from "../../../src/application/use-cases/staged-generation/execute-manifest-assembly.use-case.js";
-import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state.js";
+import { ExecuteManifestAssemblyUseCase } from "../../../src/application/use-cases/staged-generation/execute-manifest-assembly.use-case.ts";
+import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 
 describe("Stage 5: Manifest Assembly", () => {
   const useCase = new ExecuteManifestAssemblyUseCase();

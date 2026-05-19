@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { FakeGenerateProjectPort } from "../../doubles/ports/generate-project.fake.js";
+import { FakeGenerateProjectPort } from "../../doubles/ports/generate-project.fake";
 
 describe("generate-project", () => {
   it("should return input unchanged with default behavior", async () => {

@@ -11,7 +11,7 @@ import type {
   ProjectSpecLike,
 } from "@hexagen/reconciliation-engine";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
-import { MAX_RETRY_ATTEMPTS } from "../../domain/errors/stage-errors.js";
+import { MAX_RETRY_ATTEMPTS } from "../../domain/errors/stage-errors";
 
 const STEP_PARSE = "parse-nl-intent";
 const STEP_COMPILE_PROMPT = "compile-prompt";
