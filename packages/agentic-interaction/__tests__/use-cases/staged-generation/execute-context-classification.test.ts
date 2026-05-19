@@ -121,13 +121,23 @@ describe("ExecuteContextClassificationUseCase", () => {
       telemetry = t;
     };
 
-    await useCase.execute(dummyState, undefined, onStageTelemetry);
+    const result = await useCase.execute(
+      dummyState,
+      undefined,
+      onStageTelemetry,
+    );
 
+    // Verify the result indicates failure
+    assert.strictEqual(result.success, false);
+    assert.ok(result.error);
+    assert.ok(result.error instanceof StageMaxRetriesError);
+
+    // Verify telemetry
     assert.ok(telemetry);
     assert.strictEqual(telemetry.stage, 2);
     assert.strictEqual(telemetry.label, "Context Classification");
     assert.strictEqual(telemetry.usedLLM, true);
-    assert.strictEqual(telemetry.retryCount, 0);
+    assert.strictEqual(telemetry.retryCount, 2); // After 3 attempts: retryCount = attempt - 1 = 2
     assert.ok(telemetry.durationMs >= 0);
   });
 
