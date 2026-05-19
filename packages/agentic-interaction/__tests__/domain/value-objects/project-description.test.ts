@@ -9,7 +9,7 @@ import {
   ProjectDescriptionValidator,
   DESCRIPTION_MIN_LENGTH,
   DESCRIPTION_MAX_LENGTH,
-} from "../../../src/domain/value-objects/project-description.js";
+} from "../../../src/domain/value-objects/project-description";
 
 describe("ProjectDescription", () => {
   describe("createProjectDescription", () => {
@@ -18,7 +18,7 @@ describe("ProjectDescription", () => {
         "A task management system with user authentication",
         {
           language: "en",
-          platform: "Node.js",
+          platform: "Node",
         },
       );
 
@@ -27,7 +27,7 @@ describe("ProjectDescription", () => {
         "A task management system with user authentication",
       );
       assert.strictEqual(description.language, "en");
-      assert.strictEqual(description.platform, "Node.js");
+      assert.strictEqual(description.platform, "Node");
       assert.ok(description.timestamp instanceof Date);
     });
 

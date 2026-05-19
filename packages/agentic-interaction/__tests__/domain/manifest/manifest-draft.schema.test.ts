@@ -9,7 +9,7 @@ import {
   ManifestTopologyDraftContextSchema,
   MAX_BOUNDED_CONTEXTS_DRAFT,
   GENERIC_CONTEXT_NAMES,
-} from "../../../src/domain/manifest/manifest-draft.schema.js";
+} from "../../../src/domain/manifest/manifest-draft.schema";
 
 const validPort = {
   name: "CreatePostPort",

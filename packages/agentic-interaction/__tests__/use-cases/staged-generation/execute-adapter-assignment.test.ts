@@ -1,9 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { ExecuteAdapterAssignmentUseCase } from "../../../src/application/use-cases/staged-generation/execute-adapter-assignment.use-case.js";
+import { ExecuteAdapterAssignmentUseCase } from "../../../src/application/use-cases/staged-generation/execute-adapter-assignment.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
 class TimeoutError extends Error {
   constructor(message = "LLM request timed out") {

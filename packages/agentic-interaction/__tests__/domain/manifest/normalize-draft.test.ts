@@ -7,11 +7,11 @@ import {
   toKebabCase,
   ensurePortSuffix,
   normalizePortName,
-} from "../../../src/domain/manifest/normalize-draft.js";
+} from "../../../src/domain/manifest/normalize-draft";
 import type {
   ManifestDraft,
   ManifestTopologyDraft,
-} from "../../../src/domain/manifest/manifest-draft.types.js";
+} from "../../../src/domain/manifest/manifest-draft.types";
 
 describe("toPascalCase", () => {
   it("converts kebab-case", () => {

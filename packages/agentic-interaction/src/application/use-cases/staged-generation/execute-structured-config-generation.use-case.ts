@@ -11,13 +11,13 @@ import type {
   DomainValueObject,
   AcceptedContext,
   PipelineState,
-} from "../../../domain/value-objects/pipeline-state.js";
-import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case.js";
-import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case.js";
-import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case.js";
-import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case.js";
-import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt.js";
-import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
+} from "../../../domain/value-objects/pipeline-state";
+import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
+import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
+import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
+import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case";
+import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
+import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import * as yaml from "js-yaml";
 
@@ -434,8 +434,7 @@ export function buildClassificationFromConfig(
       name: contextName,
       type: inferContextType(ctx),
       responsibility: ctx.responsibility ?? ctx.name,
-      reasoning:
-        ctx.responsibility ?? `Extracted from structured config: ${ctx.name}`,
+      reasoning: ctx.responsibility ?? `Context: ${ctx.name}`,
       aggregateRoots: ctxAggregateRoots,
       useCaseNames: ctxUseCaseNames,
       eventsPublished: ctxEventsPublished,

@@ -1,8 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { ExecuteContextClassificationUseCase } from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
+import { ExecuteContextClassificationUseCase } from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 
 describe("ExecuteContextClassificationUseCase", () => {
   const createValidContextLine = () =>

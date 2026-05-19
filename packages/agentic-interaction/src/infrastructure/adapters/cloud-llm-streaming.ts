@@ -1,13 +1,13 @@
 import type { Result } from "@hexagen/shared";
 import type { LLMRequest } from "@hexagen/local-llm/client";
-import type { ResolvedProvider } from "../../domain/provider-config.js";
-import { resolveFallbackChain } from "../../domain/provider-config.js";
+import type { ResolvedProvider } from "../../domain/provider-config";
+import { resolveFallbackChain } from "../../domain/provider-config";
 import {
   isRetryable,
   type CloudLLMPipelineAdapterConfig,
-} from "./cloud-llm-types.js";
+} from "./cloud-llm-types";
 
-export { type CloudLLMPipelineAdapterConfig } from "./cloud-llm-types.js";
+export { type CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
 function getErrorStatus(error: Error): number | null {
   const match = error.message.match(/(\d{3})/);

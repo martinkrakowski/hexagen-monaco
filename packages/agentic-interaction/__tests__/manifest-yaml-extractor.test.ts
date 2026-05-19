@@ -4,7 +4,7 @@ import {
   extractYamlFromResponse as extractManifestYaml,
   generateSuggestions as generateManifestSuggestions,
   detectWarnings as detectManifestWarnings,
-} from "../src/domain/manifest-yaml-extractor.js";
+} from "../src/domain/manifest-yaml-extractor";
 
 describe("manifest-yaml-extractor", () => {
   describe("extractManifestYaml", () => {

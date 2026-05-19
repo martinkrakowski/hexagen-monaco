@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { LLMProviderSelectorAdapter } from "../../../src/infrastructure/adapters/llm-provider-selector.adapter.js";
+import { LLMProviderSelectorAdapter } from "../../../src/infrastructure/adapters/llm-provider-selector.adapter";
 import type { LLMRequest, LLMResponse } from "@hexagen/local-llm";
 
 const mockLocalLLMAdapter = {

@@ -20,12 +20,12 @@ export interface GenerationDiagnostics {
 }
 
 export interface GenerateManifestFromDescriptionRequest {
-  description: import("../../domain/value-objects/index.js").ProjectDescription;
+  description: import("../../domain/value-objects/index").ProjectDescription;
 }
 
 export interface GenerateManifestFromDescriptionResponse {
   success: boolean;
-  manifest?: import("../../domain/value-objects/index.js").GeneratedManifest;
+  manifest?: import("../../domain/value-objects/index").GeneratedManifest;
   error?: string;
   warnings?: ManifestWarning[];
   diagnostics?: GenerationDiagnostics;

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   GenerateManifestFromDescriptionUseCase,
   ManifestWarningCategory,
-} from "../../src/application/use-cases/generate-manifest-from-description.use-case.js";
+} from "../../src/application/use-cases/generate-manifest-from-description.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type { LLMRequest } from "@hexagen/local-llm";
 import type { LLMResponse } from "@hexagen/local-llm";
@@ -112,7 +112,7 @@ function makeDescription(
     text,
     language: "en",
     timestamp: new Date(),
-    platform: "Node.js",
+    platform: "Node",
     deployment: "Cloud-native",
   };
 }

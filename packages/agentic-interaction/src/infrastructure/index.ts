@@ -7,13 +7,13 @@ export {
   InMemoryReconciliationAdapter,
   InMemoryManifestMutationAdapter,
   InMemoryLintValidationAdapter,
-} from "./adapters/in-memory-pipeline-ports.adapter.js";
+} from "./adapters/in-memory-pipeline-ports.adapter";
 export {
   CloudLLMPipelineAdapter,
   type CloudLLMPipelineAdapterConfig,
-} from "./adapters/cloud-llm-pipeline.adapter.js";
+} from "./adapters/cloud-llm-pipeline.adapter";
 export {
   LLMProviderSelectorAdapter,
   type LLMProviderSelectorAdapterConfig,
-} from "./adapters/llm-provider-selector.adapter.js";
-export { EnvironmentSecretVaultAdapter } from "./adapters/environment-secret-vault.adapter.js";
+} from "./adapters/llm-provider-selector.adapter";
+export { EnvironmentSecretVaultAdapter } from "./adapters/environment-secret-vault.adapter";

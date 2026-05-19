@@ -4,8 +4,8 @@ import {
   renderManifestYaml,
   renderDraft,
   verifyToken,
-} from "../../../src/domain/manifest/render-yaml.js";
-import type { ManifestOutput } from "../../../src/domain/manifest/draft-to-manifest.transform.js";
+} from "../../../src/domain/manifest/render-yaml";
+import type { ManifestOutput } from "../../../src/domain/manifest/draft-to-manifest.transform";
 
 const makeManifest = (): ManifestOutput => ({
   system: "test-project",

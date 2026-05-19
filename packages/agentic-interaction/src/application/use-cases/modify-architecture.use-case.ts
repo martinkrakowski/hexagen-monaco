@@ -25,7 +25,7 @@ import type {
 } from "@hexagen/reconciliation-engine";
 import type { Transaction } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
-import type { ModificationResult } from "../ports/in/architecture-modification.port.js";
+import type { ModificationResult } from "../ports/in/architecture-modification.port";
 import {
   STEP_PARSE,
   STEP_COMPILE_PROMPT,
@@ -35,9 +35,9 @@ import {
   RETRY_DELAYS_MS,
   withRetry,
   LLMServiceError,
-} from "./modify-architecture-types.js";
-import type { ModifyArchitectureDeps } from "./modify-architecture-types.js";
-import { MAX_RETRY_ATTEMPTS } from "../../domain/errors/stage-errors.js";
+} from "./modify-architecture-types";
+import type { ModifyArchitectureDeps } from "./modify-architecture-types";
+import { MAX_RETRY_ATTEMPTS } from "../../domain/errors/stage-errors";
 
 export class ModifyArchitectureUseCase {
   constructor(private readonly deps: ModifyArchitectureDeps) {}
@@ -280,4 +280,4 @@ export class ModifyArchitectureUseCase {
   }
 }
 
-export type { ModifyArchitectureDeps } from "./modify-architecture-types.js";
+export type { ModifyArchitectureDeps } from "./modify-architecture-types";

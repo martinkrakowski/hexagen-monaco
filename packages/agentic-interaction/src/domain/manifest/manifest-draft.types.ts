@@ -9,7 +9,7 @@ import type {
   ContextListSchema,
   PortsListSchema,
   PortsListEntrySchema,
-} from "./manifest-draft.schema.js";
+} from "./manifest-draft.schema";
 
 export type ManifestDraft = z.infer<typeof ManifestDraftSchema>;
 export type ManifestTopologyDraft = z.infer<typeof ManifestTopologyDraftSchema>;

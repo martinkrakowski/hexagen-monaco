@@ -1,27 +1,27 @@
-export type { VaultState, VaultStatus } from "./vault-state.vo.js";
-export type { VaultError } from "./vault-error.vo.js";
+export type { VaultState, VaultStatus } from "./vault-state.vo";
+export type { VaultError } from "./vault-error.vo";
 
 // Phase 9.2: Manifest generation value objects
 export type {
   ProjectDescription,
   ValidationError,
   ValidationResult,
-} from "./project-description.js";
+} from "./project-description";
 export {
   ProjectDescriptionValidator,
   createProjectDescription,
   DESCRIPTION_MIN_LENGTH,
   DESCRIPTION_MAX_LENGTH,
-} from "./project-description.js";
+} from "./project-description";
 
 export type {
   GeneratedManifest,
   GenerationMetadata,
-} from "./generated-manifest.js";
+} from "./generated-manifest";
 export {
   GeneratedManifestValidator,
   createGeneratedManifest,
-} from "./generated-manifest.js";
+} from "./generated-manifest";
 
 export type {
   NormalizedPrompt,
@@ -48,8 +48,8 @@ export type {
   ValidationReport,
   ContextMappingEntry,
   PipelineState,
-} from "./pipeline-state.js";
+} from "./pipeline-state";
 
 // Phase P17: Stage telemetry
-export type { StageTelemetry } from "./stage-telemetry.js";
-export { estimateTokenCount } from "./stage-telemetry.js";
+export type { StageTelemetry } from "./stage-telemetry";
+export { estimateTokenCount } from "./stage-telemetry";

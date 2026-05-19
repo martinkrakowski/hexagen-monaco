@@ -1,10 +1,10 @@
 import { test, describe } from "node:test";
 import * as assert from "node:assert/strict";
-import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/staged-generation/execute-port-mapping.use-case.js";
+import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/staged-generation/execute-port-mapping.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state.js";
-import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
+import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
 const validPortMappingNdjson = [
   '{"contextName":"invoice-management","direction":"in","name":"createInvoice","portType":"command","description":"Creates invoice"}',

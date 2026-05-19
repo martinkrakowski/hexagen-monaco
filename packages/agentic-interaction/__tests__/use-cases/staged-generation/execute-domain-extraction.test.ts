@@ -1,10 +1,10 @@
 import { test, describe } from "node:test";
 import * as assert from "node:assert/strict";
-import { ExecuteDomainExtractionUseCase } from "../../../src/application/use-cases/staged-generation/execute-domain-extraction.use-case.js";
+import { ExecuteDomainExtractionUseCase } from "../../../src/application/use-cases/staged-generation/execute-domain-extraction.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state.js";
-import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry.js";
+import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
+import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
 const validNdjson = [
   '{"type":"verb","value":"createUser"}',

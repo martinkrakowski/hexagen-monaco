@@ -5,16 +5,16 @@ import { z } from "zod";
 import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
-} from "../../../domain/index.js";
+} from "../../../domain/index";
 import type {
   ValidationReport,
   PipelineState,
-} from "../../../domain/value-objects/pipeline-state.js";
-import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt.js";
-import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors.js";
-import { StageMaxRetriesError } from "../../../domain/errors/stage-errors.js";
-import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry.js";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry.js";
+} from "../../../domain/value-objects/pipeline-state";
+import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
+import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
+import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
+import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
+import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 6;
 

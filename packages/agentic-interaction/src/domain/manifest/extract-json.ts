@@ -1,8 +1,8 @@
-import { balanceJSON } from "./json-balancer.js";
-import { repairJSON, extractFirstJSONBlock } from "./json-repair.js";
+import { balanceJSON } from "./json-balancer";
+import { repairJSON, extractFirstJSONBlock } from "./json-repair";
 
-export { balanceJSON } from "./json-balancer.js";
-export { repairJSON } from "./json-repair.js";
+export { balanceJSON } from "./json-balancer";
+export { repairJSON } from "./json-repair";
 
 export function extractJSON(raw: string): string {
   // Try to extract fenced code block first

@@ -9,8 +9,8 @@ import type {
 import type {
   ProviderFallbackChain,
   SecretVaultPort,
-} from "../../domain/provider-config.js";
-import { CloudLLMPipelineAdapter } from "./cloud-llm-pipeline.adapter.js";
+} from "../../domain/provider-config";
+import { CloudLLMPipelineAdapter } from "./cloud-llm-pipeline.adapter";
 
 export interface LLMProviderSelectorAdapterConfig {
   /**

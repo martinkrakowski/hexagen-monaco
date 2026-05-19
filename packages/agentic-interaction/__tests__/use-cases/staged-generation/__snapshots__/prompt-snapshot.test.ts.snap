@@ -1,0 +1,167 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`compileStage0Prompt includes user description 1`] = `
+"Raw User Description:
+<user_input>
+Test system
+</user_input>
+
+Output NDJSON:"
+`;
+
+exports[`compileStage1Prompt includes user description (stage0->stage1) 1`] = `
+"<original_intent>
+Intent: Invoice management system
+</original_intent>
+
+Extract Domain Concepts and DDD Building Blocks (NDJSON):"
+`;
+
+exports[`compileStage1Prompt includes user description 1`] = `
+"<original_intent>
+Intent: Invoice management system
+</original_intent>
+
+Extract Domain Concepts and DDD Building Blocks (NDJSON):"
+`;
+
+exports[`compileStage2Prompt includes classification (stage1->stage2) 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<domain_analysis>
+
+Subdomains:
+- invoicing-billing
+</domain_analysis>
+
+Classify Contexts (NDJSON):"
+`;
+
+exports[`compileStage2Prompt includes classification 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<domain_analysis>
+
+Subdomains:
+- invoicing-billing
+</domain_analysis>
+
+Classify Contexts (NDJSON):"
+`;
+
+exports[`compileStage3Prompt includes intent header 1`] = `
+"<original_intent>
+Intent: undefined
+</original_intent>
+<accepted_contexts>
+
+ACCEPTED BOUNDED CONTEXTS:
+
+- invoicing-billing (core)
+  Reasoning: test
+</accepted_contexts>
+<domain_analysis>
+
+</domain_analysis>
+
+Generate Ports and Context Mappings (NDJSON):"
+`;
+
+exports[`compileStage3Prompt includes intent header and all accepted contexts 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<accepted_contexts>
+
+ACCEPTED BOUNDED CONTEXTS:
+
+- invoicing-billing (core)
+  Responsibility: test
+  Reasoning: test
+- notification-delivery (supporting)
+  Responsibility: test
+  Reasoning: test
+</accepted_contexts>
+<domain_analysis>
+
+</domain_analysis>
+
+Generate Ports and Context Mappings (NDJSON):"
+`;
+
+exports[`compileStage4Prompt includes domain analysis 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<defined_ports>
+
+</defined_ports>
+<accepted_contexts>
+
+</accepted_contexts>
+<context_mappings>
+
+</context_mappings>
+
+
+Assign Adapters (NDJSON):"
+`;
+
+exports[`compileStage4Prompt includes intent header and context names 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<defined_ports>
+
+Context: invoicing-billing
+
+</defined_ports>
+<accepted_contexts>
+
+
+ACCEPTED BOUNDED CONTEXTS:
+
+- invoicing-billing (core)
+  Responsibility: test
+</accepted_contexts>
+<context_mappings>
+
+</context_mappings>
+
+
+Assign Adapters (NDJSON):"
+`;
+
+exports[`compileStage6Prompt includes R01 validation rule 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<manifest_yaml>
+test
+</manifest_yaml>
+Run all rules R01–R15. Output NDJSON:"
+`;
+
+exports[`compileStage6Prompt includes validation rules 1`] = `
+"<original_intent>
+Intent: Test
+</original_intent>
+<manifest_yaml>
+test
+</manifest_yaml>
+Run all rules R01–R15. Output NDJSON:"
+`;
+
+exports[`compileTopologyUserPrompt includes contexts 1`] = `
+"Project Description:
+<user_input>
+Test system
+</user_input>
+
+
+Return ONLY valid JSON matching the topology schema. No markdown fences, no explanations.
+
+Output:"
+`;

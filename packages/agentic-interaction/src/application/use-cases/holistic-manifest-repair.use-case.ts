@@ -4,7 +4,7 @@ import type {
 } from "@hexagen/local-llm/client";
 import { createLLMRequest } from "@hexagen/local-llm/client";
 import { z } from "zod";
-import { extractYamlFromResponse } from "../../domain/manifest-yaml-extractor.js";
+import { extractYamlFromResponse } from "../../domain/manifest-yaml-extractor";
 
 export interface HolisticManifestRepairRequest {
   fullManifestYaml: string;

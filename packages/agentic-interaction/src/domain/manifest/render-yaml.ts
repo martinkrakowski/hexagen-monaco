@@ -1,9 +1,6 @@
 import yaml from "js-yaml";
-import type { ManifestOutput } from "./draft-to-manifest.transform.js";
-import type {
-  RenderedManifest,
-  DraftDiagnostic,
-} from "./manifest-draft.types.js";
+import type { ManifestOutput } from "./draft-to-manifest.transform";
+import type { RenderedManifest, DraftDiagnostic } from "./manifest-draft.types";
 
 async function computeToken(content: string): Promise<string> {
   const encoder = new TextEncoder();

@@ -2,12 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
-import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import {
   buildDomainAnalysisFromConfig,
   buildClassificationFromConfig,
   buildNormalizedPromptFromConfig,
-} from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
+} from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 function createMockSendStructuredRequest(): SendStructuredRequestPort {
   const portMappingResponse = [

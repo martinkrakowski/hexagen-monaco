@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { GenerateManifestFromDescriptionUseCase } from "../../src/application/use-cases/generate-manifest-from-description.use-case.js";
-import { createProjectDescription } from "../../src/domain/value-objects/project-description.js";
+import { GenerateManifestFromDescriptionUseCase } from "../../src/application/use-cases/generate-manifest-from-description.use-case";
+import { createProjectDescription } from "../../src/domain/value-objects/project-description";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type { LLMRequest } from "@hexagen/local-llm";
 import type { LLMResponse } from "@hexagen/local-llm";

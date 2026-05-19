@@ -1,4 +1,4 @@
-import type { ManifestDraft } from "./manifest-draft.types.js";
+import type { ManifestDraft } from "./manifest-draft.types";
 
 export interface ManifestContextOutput {
   name: string;

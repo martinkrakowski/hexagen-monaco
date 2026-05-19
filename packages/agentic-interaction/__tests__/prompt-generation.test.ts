@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   CONTEXT_LIST_SYSTEM_PROMPT,
   PORTS_LIST_SYSTEM_PROMPT,
-} from "../src/domain/prompts/generate-manifest.prompt.js";
+} from "../src/domain/prompts/generate-manifest.prompt";
 
 function extractNdjsonExamples(prompt: string): string[] {
   const lines = prompt.split("\n");

@@ -5,7 +5,7 @@ import {
   createSecurityAuditor,
   createValidationSpecialist,
   type AgentContext,
-} from "../../../src/domain/value-objects/agent-role.js";
+} from "../../../src/domain/value-objects/agent-role";
 
 describe("AgentRole", () => {
   it("ARCHITECT agent has correct role", () => {

@@ -159,7 +159,7 @@ export function GenerateWithAi({
   const disabledTooltip = !hasAnyProvider
     ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
     : formHandlers.isTooShort
-      ? `Minimum ${DESCRIPTION_MIN_LENGTH} characters required to generate`
+      ? `Description must be at least ${DESCRIPTION_MIN_LENGTH} characters.`
       : formHandlers.isTooLong
         ? "Description exceeds character limit"
         : undefined;
@@ -209,7 +209,7 @@ export function GenerateWithAi({
   ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
-    setRetryCount(prev => prev + 1);
+    setRetryCount((prev) => prev + 1);
     if (retryCount >= 3) return;
     stagedGen.reset();
     actions.regenerateManifest();
@@ -324,7 +324,8 @@ export function GenerateWithAi({
               </p>
               {retryCount >= 3 && (
                 <p className="text-sm text-destructive mt-2">
-                  Maximum retry attempts reached. Please check your connection or try again later.
+                  Maximum retry attempts reached. Please check your connection
+                  or try again later.
                 </p>
               )}
             </div>

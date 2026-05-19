@@ -8,7 +8,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { GenerateManifestFromDescriptionUseCase } from "../src/application/use-cases/generate-manifest-from-description.use-case.js";
+import { GenerateManifestFromDescriptionUseCase } from "../src/application/use-cases/generate-manifest-from-description.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type { LLMRequest } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";

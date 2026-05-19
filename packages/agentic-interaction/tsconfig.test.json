@@ -1,11 +1,14 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true,
-    "rootDir": "../..",
-    "composite": false,
-    "skipLibCheck": true,
-    "moduleResolution": "bundler"
+    "rootDir": "src",
+    "outDir": "dist-test",
+    "declaration": true,
+    "composite": true,
+    "tsBuildInfoFile": "./dist-test/tsconfig.tsbuildinfo",
+    "moduleResolution": "bundler",
+    "paths": {}
   },
-  "include": ["src/**/*.ts", "__tests__/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "dist-test"]
 }

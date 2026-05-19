@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   serializeProjectContext,
   buildContextForLLM,
-} from "../src/application/context-serializer.js";
+} from "../src/application/context-serializer";
 
 describe("context-serializer", () => {
   it("should serialize empty context", () => {
@@ -47,7 +47,7 @@ describe("context-serializer", () => {
             description: "Handles user auth",
             infrastructureTarget: "nestjs" as const,
             apiFramework: "NestJS" as const,
-            uiFramework: "Next.js" as const,
+            uiFramework: "Next" as const,
             portConfiguration: {
               inboundPorts: ["rest-controller"],
               outboundPorts: ["relational-db"],

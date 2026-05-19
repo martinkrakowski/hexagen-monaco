@@ -13,7 +13,7 @@ export {
   createContextListSchema,
   createManifestDraftSchema,
   createManifestTopologyDraftSchema,
-} from "./manifest-draft.schema.js";
+} from "./manifest-draft.schema";
 
 export type {
   ManifestDraft,
@@ -28,7 +28,7 @@ export type {
   DraftValidationResult,
   ClarificationTrigger,
   RenderedManifest,
-} from "./manifest-draft.types.js";
+} from "./manifest-draft.types";
 
 export {
   normalizeDraft,
@@ -37,17 +37,17 @@ export {
   toKebabCase,
   ensurePortSuffix,
   normalizePortName,
-} from "./normalize-draft.js";
+} from "./normalize-draft";
 
-export { validateDraft, checkClarificationTriggers } from "./validate-draft.js";
+export { validateDraft, checkClarificationTriggers } from "./validate-draft";
 
-export { draftToManifest } from "./draft-to-manifest.transform.js";
+export { draftToManifest } from "./draft-to-manifest.transform";
 export type {
   ManifestOutput,
   ManifestContextOutput,
-} from "./draft-to-manifest.transform.js";
+} from "./draft-to-manifest.transform";
 
-export { renderManifestYaml, renderDraft, verifyToken } from "./render-yaml.js";
+export { renderManifestYaml, renderDraft, verifyToken } from "./render-yaml";
 
 export {
   extractJSON,
@@ -55,9 +55,9 @@ export {
   balanceJSON,
   extractArrayFromWrapper,
   extractObjectFromWrapper,
-} from "./extract-json.js";
+} from "./extract-json";
 
-export { extractYamlFromResponse } from "../manifest-yaml-extractor.js";
+export { extractYamlFromResponse } from "../manifest-yaml-extractor";
 
 export {
   coerceRawTopology,
@@ -65,6 +65,6 @@ export {
   coerceContextName,
   coercePortName,
   coerceContextType,
-} from "./coerce-raw-topology.js";
+} from "./coerce-raw-topology";
 
-export type { BoundedContextType } from "./coerce-raw-topology.js";
+export type { BoundedContextType } from "./coerce-raw-topology";
