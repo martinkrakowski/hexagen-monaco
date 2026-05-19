@@ -197,23 +197,35 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
   const validYaml = fs.readFileSync(yamlPath, "utf-8");
 
   const mockLLMAdapter = {
-    streamStructuredRequest: async function* () {
-      yield { success: true, value: JSON.stringify({}) };
-    },
     sendRequest: async () => ({
-      success: true,
+      success: true as const,
       value: {
         id: "test-response-1",
-        modelId: "qwen-coder-3b",
-        content: JSON.stringify({ ports: [] }),
-        finishReason: "stop",
-        timestamp: new Date().toISOString(),
+        modelId: "qwen-coder-3b" as any,
+        content: JSON.stringify({ type: "result", passed: true }),
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
       },
     }),
+    streamStructuredRequest: async function* () {
+      yield {
+        success: true,
+        value: JSON.stringify({ type: "result", passed: true }),
+      };
+    },
   } as any;
 
   const mockTransactionManager = {
-    run: async (fn: any) => fn(),
+    begin: async (intentId: string) => ({
+      id: `txn-${intentId}`,
+      intentId,
+      status: "pending" as const,
+    }),
+    transition: async () => {},
+    get: async () => null,
+    list: async () => [],
+    commit: async () => {},
+    rollback: async () => {},
   } as any;
 
   test("fails with invalid YAML", async () => {
@@ -267,7 +279,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     assert.ok(result.error);
   });
 
-  test("returns cached result on cache hit (if cache exists)", async () => {
+  test("returns result on repeated execution", async () => {
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       mockLLMAdapter,
       mockTransactionManager,
@@ -275,8 +287,6 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     const result1 = await useCase.execute(validYaml);
     assert.strictEqual(result1.success, true);
     const result2 = await useCase.execute(validYaml);
-    if ("fromCache" in result2) {
-      assert.strictEqual((result2 as any).fromCache, true);
-    }
+    assert.strictEqual(result2.success, true);
   });
 });

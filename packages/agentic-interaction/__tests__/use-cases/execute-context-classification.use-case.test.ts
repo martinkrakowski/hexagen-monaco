@@ -4,16 +4,25 @@ import { ExecuteContextClassificationUseCase } from "../../src/application/use-c
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 
 test("ExecuteContextClassificationUseCase adversarial regression test - blocks infrastructure nouns", async () => {
-  const mockLLMPort: SendStructuredRequestPort = {
-    sendRequest: async () => ({ success: false, error: new Error("Not used") }),
-    streamStructuredRequest: async function* () {
-      const adversarialNDJSON = `
+  const adversarialNDJSON = `
 {"status": "accepted", "name": "climate-policy", "contextType": "core", "reasoning": "Valid domain"}
 {"status": "accepted", "name": "postgres-database", "contextType": "supporting", "reasoning": "I hallucinated this infrastructure as a context"}
 {"status": "accepted", "name": "mqtt-listener-adapter", "contextType": "generic", "reasoning": "Adapter masquerading as context"}
 {"status": "accepted", "name": "redis-cache", "contextType": "shared-kernel", "reasoning": "Cache masquerading as context"}
 `.trim();
 
+  const mockLLMPort: SendStructuredRequestPort = {
+    sendRequest: async () => ({
+      success: true as const,
+      value: {
+        id: "test",
+        modelId: "qwen-coder-3b" as any,
+        content: adversarialNDJSON,
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
+      },
+    }),
+    streamStructuredRequest: async function* () {
       yield { success: true, value: adversarialNDJSON };
     },
   };

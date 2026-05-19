@@ -1,8 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import {
-  ExecuteContextClassificationUseCase,
-} from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
+import { ExecuteContextClassificationUseCase } from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case.js";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors.js";
 
@@ -114,10 +112,10 @@ describe("ExecuteContextClassificationUseCase", () => {
       },
     } as unknown as SendStructuredRequestPort;
 
-    const result = await useCase.execute(
-      dummyState,
-      undefined,
-    );
+    const useCase = new ExecuteContextClassificationUseCase(mockLLMAdapter);
+    const dummyState = { stage0: {} as any, stage1: {} as any };
+
+    const result = await useCase.execute(dummyState, undefined);
 
     // Verify the result indicates failure
     assert.strictEqual(result.success, false);

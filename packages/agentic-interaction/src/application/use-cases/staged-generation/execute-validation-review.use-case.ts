@@ -112,6 +112,22 @@ export class ExecuteValidationReviewUseCase {
             } else if (parsed.type === "warning") {
               warnings.push(parsed.message);
             } else if (parsed.type === "result") {
+              if (Array.isArray(parsed.errors)) {
+                for (const e of parsed.errors) {
+                  if (typeof e === "string") errors.push(e);
+                  else if (e && typeof e.message === "string")
+                    errors.push(
+                      e.rule ? `[${e.rule}] ${e.message}` : e.message,
+                    );
+                }
+              }
+              if (Array.isArray(parsed.warnings)) {
+                for (const w of parsed.warnings) {
+                  if (typeof w === "string") warnings.push(w);
+                  else if (w && typeof w.message === "string")
+                    warnings.push(w.message);
+                }
+              }
               passed = errors.length === 0;
             }
           }

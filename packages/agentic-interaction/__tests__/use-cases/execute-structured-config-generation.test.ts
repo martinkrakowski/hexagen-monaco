@@ -10,47 +10,59 @@ import {
 } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
 function createMockSendStructuredRequest(): SendStructuredRequestPort {
-  return {
-    sendRequest: async () => ({
-      success: true,
-      value: { content: "{}" },
+  const portMappingResponse = [
+    JSON.stringify({
+      contextName: "billing",
+      direction: "in",
+      name: "ProcessBillingPort",
+      portType: "command",
+      description: "Process billing",
     }),
+    JSON.stringify({
+      contextName: "billing",
+      direction: "out",
+      name: "BillingRepository",
+      portType: "repository",
+      description: "Persist billing",
+    }),
+  ].join("\n");
+
+  const adapterResponse = [
+    JSON.stringify({
+      contextName: "billing",
+      adapterName: "InMemoryBillingRepoAdapter",
+      adapterType: "Repository",
+      implements: "BillingRepository",
+    }),
+  ].join("\n");
+
+  const validationResponse = JSON.stringify({
+    type: "result",
+    passed: true,
+  });
+
+  let callCount = 0;
+  return {
+    sendRequest: async () => {
+      callCount++;
+      let content = portMappingResponse;
+      if (callCount > 1 && callCount <= 4) content = adapterResponse;
+      if (callCount > 4) content = validationResponse;
+      return {
+        success: true as const,
+        value: {
+          id: `test-${callCount}`,
+          modelId: "qwen-coder-3b" as any,
+          content,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      };
+    },
     streamStructuredRequest: async function* () {
       yield {
         success: true,
-        value:
-          JSON.stringify({
-            contextName: "billing",
-            direction: "in",
-            name: "ProcessBillingPort",
-            portType: "command",
-            description: "Process billing",
-          }) + "\n",
-      };
-      yield {
-        success: true,
-        value:
-          JSON.stringify({
-            contextName: "billing",
-            direction: "out",
-            name: "BillingRepository",
-            portType: "repository",
-            description: "Persist billing",
-          }) + "\n",
-      };
-      yield {
-        success: true,
-        value:
-          JSON.stringify({
-            contextName: "billing",
-            adapterName: "InMemoryBillingRepoAdapter",
-            adapterType: "Repository",
-            implements: "BillingRepository",
-          }) + "\n",
-      };
-      yield {
-        success: true,
-        value: JSON.stringify({ type: "result", passed: true }) + "\n",
+        value: portMappingResponse,
       };
     },
   } as unknown as SendStructuredRequestPort;

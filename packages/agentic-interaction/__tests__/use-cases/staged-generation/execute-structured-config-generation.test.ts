@@ -14,17 +14,55 @@ type StructuredConfig = {
 };
 
 function createMockLLMPort(shouldFailStage3 = false) {
+  let callCount = 0;
   return {
-    sendRequest: async () => ({
-      success: true as const,
-      value: {
-        id: "test",
-        modelId: "gpt-4o-mini" as any,
-        content: JSON.stringify({}),
-        finishReason: "stop" as const,
-        timestamp: Date.now(),
-      },
-    }),
+    sendRequest: async () => {
+      callCount++;
+      if (shouldFailStage3 && callCount >= 3) {
+        return {
+          success: false as const,
+          error: new Error("LLM failure at Stage 3"),
+        };
+      }
+      let content = "";
+      if (callCount <= 2) {
+        content = [
+          JSON.stringify({
+            contextName: "Payment",
+            direction: "in",
+            name: "ProcessPaymentPort",
+            portType: "command",
+            description: "Process a payment",
+          }),
+          JSON.stringify({
+            contextName: "Payment",
+            direction: "out",
+            name: "PaymentRepository",
+            portType: "repository",
+            description: "Persist payment",
+          }),
+        ].join("\n");
+      } else if (callCount <= 4) {
+        content = JSON.stringify({
+          contextName: "Payment",
+          adapterName: "InMemoryPaymentRepoAdapter",
+          adapterType: "Repository",
+          implements: "PaymentRepository",
+        });
+      } else {
+        content = JSON.stringify({ type: "result", passed: true });
+      }
+      return {
+        success: true as const,
+        value: {
+          id: `test-${callCount}`,
+          modelId: "gpt-4o-mini" as any,
+          content,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      };
+    },
     streamStructuredRequest: async function* () {
       if (shouldFailStage3) {
         yield { success: false, error: "Failed to map ports" };

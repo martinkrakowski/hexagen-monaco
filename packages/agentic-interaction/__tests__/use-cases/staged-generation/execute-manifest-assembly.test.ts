@@ -145,21 +145,20 @@ describe("Stage 5: Manifest Assembly", () => {
         explicitTechnologies: [],
         explicitPatterns: [],
         ambiguities: [],
-        // no projectName
       },
       stage2: { accepted: [], rejected: [], uncertain: [] },
       stage3: { contexts: [] },
       stage4: { contexts: [] },
+      contextMappings: [],
     };
 
     const result = useCase.execute(state);
     assert.ok(result.yaml);
     assert.ok(result.parsedObject);
     assert.ok(Array.isArray(result.assemblyWarnings));
-    // Should have a default project name (exact name may vary)
     assert.ok(
-      result.yaml.includes("project"),
-      "Expected some default project name in YAML",
+      result.yaml.includes("test") || result.yaml.includes("hexagen-workspace"),
+      "Expected default project name in YAML",
     );
   });
 
