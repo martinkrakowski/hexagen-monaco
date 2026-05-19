@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
+import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   type StructuredConfigGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 interface SpecRequestBody {
   config: string;
@@ -25,10 +27,27 @@ type NDJSONEvent =
       contextCount: number;
       portCount: number;
       adapterCount: number;
+      transactionId: string;
     }
   | { type: "error"; message: string };
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateCheck = checkRateLimit(request, 10, 60 * 1000);
+  if (!rateCheck.allowed) {
+    const retryAfter = Math.ceil(rateCheck.retryAfter! / 1000);
+    return new Response(
+      JSON.stringify({ type: "error", message: "Rate limit exceeded" }) + "\n",
+      { 
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": retryAfter.toString(),
+        },
+      }
+    );
+  }
+  
   let body: SpecRequestBody;
   try {
     body = await request.json();
@@ -78,8 +97,10 @@ export async function POST(request: NextRequest) {
           validateLocalLLM: false,
         });
 
+        const transactionManager = new InMemoryTransactionManager();
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
+          transactionManager,
         );
 
         const result = await useCase.execute(body.config, callbacks);
@@ -110,6 +131,7 @@ export async function POST(request: NextRequest) {
             contextCount: ctxCount,
             portCount,
             adapterCount,
+            transactionId: result.transactionId,
           });
         } else {
           const msg =

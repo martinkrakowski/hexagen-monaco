@@ -292,6 +292,7 @@ export const getModifyArchitectureUseCase = (
     new StructuredDiffReconciliationAdapter(),
     new VerdictComparatorAdapter(),
     new GovernanceAwareConflictResolverAdapter(),
+    undefined, // promoteStatePort (optional)
     undefined, // manifestPatchPort (deferred)
     new LinterReportFilterAdapter(), // lintFilterPort (restored)
   );

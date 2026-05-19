@@ -80,9 +80,9 @@ describe("ProjectDescription", () => {
     });
 
     it("should accept valid descriptions at minimum length", () => {
-      const minDescription = "A" + " system".repeat(2); // Exactly 10 chars
+      const minDescription = "A" + " system".repeat(2); // Exactly 15 chars
       const description = createProjectDescription(minDescription);
-      assert.strictEqual(description.text.length, 10);
+      assert.strictEqual(description.text.length, 15);
     });
 
     it("should accept valid descriptions at maximum length", () => {
@@ -142,7 +142,7 @@ describe("ProjectDescription", () => {
       const description = { text: "", language: "en", timestamp: new Date() };
       assert.throws(
         () => ProjectDescriptionValidator.validate(description),
-        /too short/i,
+        /empty or whitespace/i,
       );
     });
 

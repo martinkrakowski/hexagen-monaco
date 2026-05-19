@@ -1,6 +1,7 @@
 import type { ReconciliationPort } from "../ports/in/reconcile.port.js";
 import type { CompareVerdictsPort } from "../ports/in/compare-verdicts.port.js";
 import type { ResolveConflictPort } from "../ports/in/resolve-conflict.port.js";
+import type { PromoteStatePort } from "../ports/in/promote-state.port.js";
 import type { LintFilterPort } from "../ports/in/lint-filter.port.js";
 import type { LinterReportLike, LintViolationLike } from "@hexagen/core-domain";
 import type { ManifestPatchPort } from "../ports/out/manifest-patch.port.js";
@@ -14,6 +15,7 @@ export class ReconcileUseCase {
     private readonly reconciliationPort: ReconciliationPort,
     private readonly compareVerdictsPort: CompareVerdictsPort,
     private readonly resolveConflictPort: ResolveConflictPort,
+    private readonly promoteStatePort?: PromoteStatePort,
     private readonly manifestPatchPort?: ManifestPatchPort,
     private readonly lintFilterPort?: LintFilterPort,
   ) {}

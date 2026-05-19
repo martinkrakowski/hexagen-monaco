@@ -52,8 +52,7 @@ describe("CloudModelSettingsView - Vault Integration", () => {
   it("should have type definitions for CloudModelSettingsViewProps", async () => {
     const types = await import("../types");
     assert.strictEqual(typeof types, "object");
-    // Verify the types module exports the necessary interfaces
-    assert(Object.keys(types).length > 0);
+    assert.strictEqual(types.CLOUD_MODEL_SETTINGS_VIEW_PROPS !== undefined, true);
   });
 
   it("should compose all features correctly", async () => {

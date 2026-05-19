@@ -5,15 +5,40 @@
  * ensuring the type system catches cross-stage wiring errors.
  */
 
+/**
+ * INJECTION PROTECTION CONTRACT
+ *
+ * All compile functions in this file follow these rules:
+ *
+ * 1. User-originated text (from variables.userDescription or any string
+ *    that has passed through user input) is ALWAYS wrapped in XML tags
+ *    before injection into a prompt string:
+ *
+ *    `<user_input>\n${variables.userDescription}\n</user_input>`
+ *
+ * 2. The instruction line ("Output NDJSON:", "Return JSON:") ALWAYS
+ *    appears after the final closing XML tag. Instructions inside
+ *    delimited blocks are not followed by most models.
+ *
+ * 3. Stage outputs from previous stages are wrapped in named tags:
+ *    <original_intent>, <domain_analysis>, <accepted_contexts>,
+ *    <defined_ports>, <manifest_yaml>, <assembly_warnings>,
+ *    <promoted_from_uncertain>, <context_mappings>.
+ *
+ * 4. The ProjectDescriptionValidator.DANGEROUS_PATTERNS list is the
+ *    first gate. XML delimiters are the second gate. Together they
+ *    provide defence-in-depth against prompt injection.
+ *
+ * When adding a new compile function, all four rules are mandatory.
+ */
+
 import type {
-  PipelineState,
   NormalizedPrompt,
-  DomainAnalysis,
-  ClassificationResult,
-  PortMap,
-  AdapterBindings,
-  AssembledManifest,
+  PipelineState,
 } from "../value-objects/pipeline-state.js";
+import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema.js";
+import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
+export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors.js";
 
 export interface PromptVariables {
   userDescription: string;
@@ -22,11 +47,34 @@ export interface PromptVariables {
   additionalContext?: string;
 }
 
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[c] as string,
+  );
+}
+
 function buildTechnologyContext(variables: PromptVariables): string {
   const parts: string[] = [];
-  if (variables.platform) parts.push(`Target Platform: ${variables.platform}`);
-  if (variables.deployment) parts.push(`Deployment: ${variables.deployment}`);
-  if (variables.additionalContext) parts.push(`Additional Notes: ${variables.additionalContext}`);
+  if (variables.platform)
+    parts.push(
+      `<technology_context>Target Platform: ${escapeXml(variables.platform)}</technology_context>`,
+    );
+  if (variables.deployment)
+    parts.push(
+      `<technology_context>Deployment: ${escapeXml(variables.deployment)}</technology_context>`,
+    );
+  if (variables.additionalContext)
+    parts.push(
+      `<technology_context>Additional Notes: ${escapeXml(variables.additionalContext)}</technology_context>`,
+    );
   return parts.length > 0 ? parts.join("\n") : "None specified";
 }
 
@@ -49,127 +97,339 @@ RULES:
 - Emit zero or more "technology" objects.
 - Emit zero or more "pattern" objects.
 - Emit zero or more "ambiguity" objects for contradictory or vague requirements.
+- Emit zero or one "projectName" object if the user mentions a project or product name (e.g. {"type": "projectName", "value": "AcmePlatform"}).
+- Emit zero or one "isStructuredConfig" object set to true if the input appears to be a structured configuration (JSON, YAML, or key-value format) rather than natural language (e.g. {"type": "isStructuredConfig", "value": true}). If the input is natural language prose, omit this object entirely.
 - NO arrays. NO nested objects. NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
-export function compileStage0Prompt(state: Pick<PipelineState, never>, variables: PromptVariables): string {
-  return `Raw User Description:\n${variables.userDescription}\n\nOutput NDJSON:`;
+export function buildIntentHeader(normalized: NormalizedPrompt): string {
+  const parts: string[] = [];
+  if (normalized.projectName) {
+    parts.push(`Project: ${normalized.projectName}`);
+  }
+  parts.push(`Intent: ${normalized.intent}`);
+  if (normalized.explicitTechnologies?.length) {
+    parts.push(`Technologies: ${normalized.explicitTechnologies.join(", ")}`);
+  }
+  if (normalized.explicitPatterns?.length) {
+    parts.push(`Patterns: ${normalized.explicitPatterns.join(", ")}`);
+  }
+  if (normalized.ambiguities?.length) {
+    parts.push(`Ambiguities: ${normalized.ambiguities.join("; ")}`);
+  }
+  return parts.join("\n");
+}
+
+export function isStructuredConfigPipeline(
+  normalized: NormalizedPrompt,
+): boolean {
+  return normalized.isStructuredConfig === true;
+}
+
+export function compileStage0Prompt(variables: PromptVariables): string {
+  return `Raw User Description:\n<user_input>\n${escapeXml(variables.userDescription)}\n</user_input>\n\nOutput NDJSON:`;
 }
 
 // ==========================================
 // STAGE 1: DOMAIN EXTRACTION
 // ==========================================
-export const STAGE1_DOMAIN_SYSTEM_PROMPT = `You are a domain-driven design expert. Extract pure domain concepts from the normalized intent.
-Do NOT output infrastructure, databases, or frameworks. Focus strictly on business verbs and nouns.
+export const STAGE1_DOMAIN_SYSTEM_PROMPT = `You are a domain-driven design expert. Extract pure domain concepts from the normalized intent and identify DDD building blocks.
+Do NOT output infrastructure, databases, or frameworks. Focus strictly on business semantics.
+
+DDD CONCEPT DEFINITIONS:
+- **Aggregate Root**: The consistency boundary for a cluster of domain objects. Each aggregate root has a unique identity (e.g. "Order" with identityFields ["orderId"]). All changes within the aggregate must go through the root. Aggregates enforce invariants.
+- **Entity**: A domain object with identity that lives within an aggregate but is not a root (e.g. "OrderLine" inside "Order"). Entities are distinguished by their identity, not their attributes.
+- **Value Object**: An immutable domain object defined by its attributes, not identity (e.g. "Money", "Address"). Value objects have no identity of their own and enforce business rules or constraints (e.g. "Non-negative, two decimal places").
+- **Domain Event**: A significant state change that has occurred in the domain (e.g. "OrderPlaced"). Events are named in past tense. Each event is emitted by an aggregate root and has a trigger (the operation that caused it, e.g. "place() called").
+- **Use Case**: A user intention at the application level (e.g. "Place Order"). Each use case belongs to a subdomain, has an actor (who initiates it), and a command name (imperive form, e.g. "PlaceOrder").
 
 CRITICAL OUTPUT FORMAT - NDJSON (Newline-Delimited JSON) ONLY.
 Emit a series of objects, one per line:
 {"type": "verb", "value": "evaluate"}
 {"type": "noun", "value": "Policy"}
 {"type": "subdomain", "value": "Climate Policy Management"}
+{"type": "aggregateRoot", "name": "Order", "subdomain": "ordering", "identityFields": ["orderId"]}
+{"type": "entity", "name": "OrderLine", "parentAggregate": "Order"}
+{"type": "valueObject", "name": "Money", "rules": "Non-negative, two decimal places"}
+{"type": "domainEvent", "name": "OrderPlaced", "emitter": "Order", "trigger": "place() called"}
+{"type": "useCase", "name": "Place Order", "subdomain": "ordering", "actor": "Customer", "commandName": "PlaceOrder"}
 
 RULES:
-- Emit zero or more "verb", "noun", and "subdomain" objects.
-- Subdomains should group related verbs and nouns.
+- Emit zero or more "verb", "noun", and "subdomain" objects (backward compatibility).
+- Emit zero or more "aggregateRoot" objects. Each MUST have "name", "subdomain", and optionally "identityFields". Aggregates are consistency boundaries — every aggregate root must have a unique identity.
+- Emit zero or more "entity" objects. Each MUST have "name" and "parentAggregate" (the aggregate root it belongs to).
+- Emit zero or more "valueObject" objects. Each MUST have "name" and optionally "rules" (the invariant or constraint it enforces).
+- Emit zero or more "domainEvent" objects. Each MUST have "name" and "emitter" (the aggregate root that emits it). Optionally include "trigger" (the operation that causes the event).
+- Emit zero or more "useCase" objects. Each MUST have "name" and "subdomain". Optionally include "actor" and "commandName".
+- Subdomains should group related verbs, nouns, aggregates, and use cases.
 - NO technology names (e.g., PostgreSQL, MQTT).
 - NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
-export function compileStage1Prompt(state: Pick<PipelineState, "stage0">): string {
-  const intent = state.stage0?.intent || "";
-  const ambiguities = (state.stage0?.ambiguities || []).map((a) => `- ${a}`).join("\n");
-  const ambiguitySection = ambiguities ? `\n\nAmbiguities flagged by Stage 0:\n${ambiguities}` : "";
-  return `Normalized Intent:\n${intent}${ambiguitySection}\n\nExtract Domain Concepts (NDJSON):`;
+export function compileStage1Prompt(
+  state: Pick<PipelineState, "stage0">,
+): string {
+  const normalized = state.stage0;
+  const header = normalized ? buildIntentHeader(normalized) : "";
+  const ambiguities = (normalized?.ambiguities || [])
+    .map((a) => `- ${a}`)
+    .join("\n");
+  const ambiguitySection = ambiguities
+    ? `\n\nAmbiguities flagged by Stage 0:\n${ambiguities}`
+    : "";
+  return `<original_intent>\n${header}${ambiguitySection}\n</original_intent>\n\nExtract Domain Concepts and DDD Building Blocks (NDJSON):`;
 }
 
 // ==========================================
 // STAGE 2: CONTEXT CLASSIFICATION
 // ==========================================
-export const STAGE2_CLASSIFICATION_SYSTEM_PROMPT = `You are a software architect classifying bounded contexts.
-You will receive subdomains, explicit technologies, and ambiguities.
+export const STAGE2_CLASSIFICATION_SYSTEM_PROMPT = `You are a DDD architect classifying subdomains into bounded contexts.
+You will receive a rich domain analysis from Stage 1: subdomains, aggregate roots, entities, value objects, domain events, and use cases.
+Use these DDD building blocks to make informed classification decisions.
 
 CRITICAL RULES FOR BOUNDED CONTEXTS:
-1. Does it own a business subdomain with its own invariants and language? → Accept it.
+1. Does it own a business subdomain with its own invariants and ubiquitous language? → Accept it.
 2. Is it a cross-cutting concern (errors, IDs)? → Accept as 'shared-kernel'.
 3. Is it a technology used to fulfill a port? → REJECT IT.
 4. Is it a delivery mechanism (HTTP, MQTT)? → REJECT IT.
+5. If a subdomain could reasonably fit in MULTIPLE bounded contexts, mark it as "uncertain" and explain the ambiguity in reasoning. It is better to leave ambiguous domains as uncertain than to misclassify them.
+6. NEVER force-classify an ambiguous subdomain. Preserving uncertainty is safer than guessing.
 
 NEVER create a bounded context whose name contains: adapter, repository, cache, queue, database, postgres, redis, mongo, rabbit, kafka, mqtt, s3.
 Split contexts ONLY if they have distinct ubiquitous languages and communicate via defined ports. Use ambiguities provided as hints to flag uncertain contexts.
+Do NOT accept more than ${DEFAULT_MAX_BOUNDED_CONTEXTS} bounded contexts. If you find more candidates, promote the strongest and mark the rest as uncertain.
 
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
 Emit objects one per line:
-{"status": "accepted", "name": "climate-control", "contextType": "core", "reasoning": "Owns the climate policy invariants."}
+{"status": "accepted", "name": "climate-control", "contextType": "core", "reasoning": "Owns the climate policy invariants.", "responsibility": "Manage climate policy lifecycle and compliance rules.", "aggregateRoots": ["ClimatePolicy"], "useCaseNames": ["Create Policy", "Evaluate Policy"], "eventsPublished": ["PolicyCreated", "PolicyEvaluated"]}
 {"status": "rejected", "name": "postgres-adapter", "reasoning": "PostgreSQL is infrastructure, not a bounded context."}
-{"status": "uncertain", "name": "drift-analytics", "reasoning": "Ambiguity noted: unclear if this is a separate service or feature."}
+{"status": "uncertain", "name": "drift-analytics", "reasoning": "Could belong to climate-control (drift is a policy deviation) or be its own monitoring context. Ambiguity: unclear if this is a separate service or feature."}
 
 RULES:
 - "status" must be "accepted", "rejected", or "uncertain".
-- "contextType" is required for "accepted" status (must be: core, supporting, generic, shared-kernel).
+- "contextType" is required for "accepted" status (must be: core, supporting, generic, shared-kernel, driver).
 - "name" must be kebab-case.
+- For "accepted" entries, ALSO provide:
+  - "responsibility": one-sentence mission statement for this bounded context.
+  - "aggregateRoots": array of aggregate root names that belong to this context (from Stage 1 output).
+  - "useCaseNames": array of use case names that belong to this context.
+  - "eventsPublished": array of domain event names this context publishes.
+- "uncertain" entries MUST be preserved — never drop them.
 - NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
-export function compileStage2Prompt(state: Pick<PipelineState, "stage0" | "stage1">): string {
-  const subdomains = state.stage1?.subdomains || [];
-  const nouns = state.stage1?.nouns || [];
-  const verbs = state.stage1?.verbs || [];
-  const domainAnalysis = [...subdomains, ...nouns, ...verbs].join(", ");
+export function compileStage2Prompt(
+  state: Pick<PipelineState, "stage0" | "stage1">,
+): string {
+  const normalized = state.stage0;
+  const header = normalized ? buildIntentHeader(normalized) : "";
 
-  const explicitTech = state.stage0?.explicitTechnologies || [];
-  const ambiguities = state.stage0?.ambiguities || [];
-  const hints = [...explicitTech, ...ambiguities].join(", ");
+  const analysis = state.stage1;
+  const subdomains = analysis?.subdomains ?? [];
+  const aggregateRoots = analysis?.aggregateRoots ?? [];
+  const entities = analysis?.entities ?? [];
+  const valueObjects = analysis?.valueObjects ?? [];
+  const domainEvents = analysis?.domainEvents ?? [];
+  const useCases = analysis?.useCases ?? [];
 
-  return `Domain Subdomains & Analysis:\n${domainAnalysis}\n\nHints (Technologies & Ambiguities):\n${hints}\n\nClassify Contexts (NDJSON):`;
+  let domainSection = "";
+  if (subdomains.length > 0) {
+    domainSection += `\nSubdomains:\n${subdomains.map((s) => `- ${s}`).join("\n")}`;
+  }
+  if (aggregateRoots.length > 0) {
+    const grouped: Record<string, string[]> = {};
+    for (const ar of aggregateRoots) {
+      const key = ar.subdomain || "unassigned";
+      (grouped[key] ??= []).push(
+        ar.name +
+          (ar.identityFields?.length
+            ? ` (identity: ${ar.identityFields.join(", ")})`
+            : ""),
+      );
+    }
+    domainSection += `\n\nAggregate Roots (by subdomain):\n`;
+    for (const [sub, roots] of Object.entries(grouped)) {
+      domainSection += `  ${sub}: ${roots.join(", ")}\n`;
+    }
+  }
+  if (entities.length > 0) {
+    domainSection += `\nEntities:\n${entities.map((e) => `- ${e.name} (parent: ${e.parentAggregate})`).join("\n")}`;
+  }
+  if (valueObjects.length > 0) {
+    domainSection += `\n\nValue Objects:\n${valueObjects.map((v) => `- ${v.name}${v.rules ? ` — ${v.rules}` : ""}`).join("\n")}`;
+  }
+  if (domainEvents.length > 0) {
+    domainSection += `\n\nDomain Events:\n${domainEvents.map((d) => `- ${d.name} (emitter: ${d.emitter}${d.trigger ? `, trigger: ${d.trigger}` : ""})`).join("\n")}`;
+  }
+  if (useCases.length > 0) {
+    const grouped: Record<string, string[]> = {};
+    for (const uc of useCases) {
+      const key = uc.subdomain || "unassigned";
+      (grouped[key] ??= []).push(
+        uc.name + (uc.actor ? ` (actor: ${uc.actor})` : ""),
+      );
+    }
+    domainSection += `\n\nUse Cases (by subdomain):\n`;
+    for (const [sub, cases] of Object.entries(grouped)) {
+      domainSection += `  ${sub}: ${cases.join(", ")}\n`;
+    }
+  }
+
+  const explicitTech = normalized?.explicitTechnologies ?? [];
+  const ambiguities = normalized?.ambiguities ?? [];
+  let hintsSection = "";
+  if (explicitTech.length > 0 || ambiguities.length > 0) {
+    hintsSection = `\n\nHints (Technologies & Ambiguities):\n`;
+    if (explicitTech.length > 0)
+      hintsSection += `Technologies: ${explicitTech.join(", ")}\n`;
+    if (ambiguities.length > 0)
+      hintsSection += `Ambiguities:\n${ambiguities.map((a) => `- ${a}`).join("\n")}`;
+  }
+
+  return `<original_intent>\n${header}${hintsSection}\n</original_intent>\n<domain_analysis>\n${domainSection}\n</domain_analysis>\n\nClassify Contexts (NDJSON):`;
 }
 
 // ==========================================
 // STAGE 3: PORT MAPPING
 // ==========================================
-export const STAGE3_PORTS_SYSTEM_PROMPT = `You are an architect defining ports for accepted bounded contexts.
+export const STAGE3_PORTS_SYSTEM_PROMPT = `You are an architect defining ports and context mappings for accepted bounded contexts.
 You MUST ONLY define ports for the exact contexts provided. DO NOT invent new contexts. DO NOT list adapters.
 
+PORT DEFINITION RULES:
+1. For EACH accepted bounded context, identify all inbound and outbound ports.
+2. Every port MUST have a "forAggregate" field naming the aggregate root it serves (if applicable). If a port serves the context broadly (e.g. a shared-kernel query port), set forAggregate to null or omit it.
+3. Inbound port types: "command" (write operation trigger), "query" (read operation trigger), "event" (external signal receiver).
+4. Outbound port types: "repository" (data persistence), "publisher" (message/event emission), "external-client" (external HTTP/service call), "notifier" (alert/notification delivery).
+5. Ports should reflect domain intent, NOT infrastructure. Name ports after the domain concept (e.g. "OrderRepository", not "PostgresOrderRepo").
+
+CONTEXT MAPPING RULES:
+6. Identify upstream/downstream relationships between bounded contexts.
+7. An upstream context publishes events or provides data that a downstream context consumes.
+8. Use common DDD context mapping patterns:
+   - "Customer-Supplier": upstream adapts to downstream needs
+   - "Conformist": downstream conforms to upstream model
+   - "Anti-Corruption Layer": downstream translates upstream model
+   - "Open Host Service": upstream exposes a standard protocol
+9. Use common mechanisms: "Domain Events", "REST API", "GraphQL", "Shared Database", "Messaging".
+10. If two contexts share no data or events, do NOT create a mapping between them.
+
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
-Emit objects one per line:
-{"contextName": "climate-control", "direction": "in", "name": "SensorTelemetryPort", "portType": "event", "description": "Receives sensor readings."}
-{"contextName": "climate-control", "direction": "out", "name": "ClimateStateRepository", "portType": "repository", "description": "Saves state."}
+Emit objects one per line. Two NDJSON types:
+
+Port entries:
+{"type": "port", "contextName": "climate-control", "direction": "in", "name": "SensorTelemetryPort", "portType": "event", "description": "Receives sensor readings.", "forAggregate": "ClimatePolicy"}
+
+Context mapping entries:
+{"type": "contextMapping", "upstream": "climate-control", "downstream": "reporting", "pattern": "Customer-Supplier", "mechanism": "Domain Events", "notes": "Reporting consumes PolicyEvaluated events", "events": ["PolicyEvaluated"]}
 
 RULES:
 - "contextName" must strictly match one of the provided accepted contexts.
 - "direction" must be "in" or "out".
-- "portType" for "in" must be one of: "command" (write operation trigger), "query" (read operation trigger), "event" (external signal receiver).
-- "portType" for "out" must be one of: "repository" (data persistence), "publisher" (message/event emission), "external-client" (external HTTP/service call), "notifier" (alert/notification delivery).
+- "portType" for "in" must be one of: "command", "query", "event".
+- "portType" for "out" must be one of: "repository", "publisher", "external-client", "notifier".
+- "forAggregate" is optional — set it to the aggregate root name if the port is scoped to a specific aggregate; omit or null if context-wide.
+- "upstream" and "downstream" in contextMapping must match accepted context names.
+- "pattern" should be one of: "Customer-Supplier", "Conformist", "Anti-Corruption Layer", "Open Host Service".
+- "mechanism" should be one of: "Domain Events", "REST API", "GraphQL", "Shared Database", "Messaging".
+- "events" in contextMapping lists the domain event names flowing from upstream to downstream.
 - NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
-export function compileStage3Prompt(state: Pick<PipelineState, "stage2">): string {
-  const acceptedContexts = (state.stage2?.accepted || [])
-    .map((c) => `- ${c.name} (${c.type}): ${c.reasoning}`)
-    .join("\n");
+export function compileStage3Prompt(
+  state: Pick<PipelineState, "stage0" | "stage1" | "stage2">,
+): string {
+  const normalized = state.stage0;
+  const header = normalized ? buildIntentHeader(normalized) : "";
 
-  return `ACCEPTED CONTEXTS ONLY:\n${acceptedContexts}\n\nGenerate Ports (NDJSON):`;
+  const accepted = state.stage2?.accepted ?? [];
+  let contextSection = "";
+  if (accepted.length > 0) {
+    contextSection = "\nACCEPTED BOUNDED CONTEXTS:\n";
+    for (const ctx of accepted) {
+      contextSection += `\n- ${ctx.name} (${ctx.type})`;
+      if (ctx.responsibility)
+        contextSection += `\n  Responsibility: ${ctx.responsibility}`;
+      if (ctx.aggregateRoots?.length)
+        contextSection += `\n  Aggregate Roots: ${ctx.aggregateRoots.join(", ")}`;
+      if (ctx.useCaseNames?.length)
+        contextSection += `\n  Use Cases: ${ctx.useCaseNames.join(", ")}`;
+      if (ctx.eventsPublished?.length)
+        contextSection += `\n  Events Published: ${ctx.eventsPublished.join(", ")}`;
+      contextSection += `\n  Reasoning: ${ctx.reasoning}`;
+    }
+  }
+
+  const aggregateRoots = state.stage1?.aggregateRoots ?? [];
+  const domainEvents = state.stage1?.domainEvents ?? [];
+  let domainInfo = "";
+  if (aggregateRoots.length > 0) {
+    domainInfo += "\n\nAGGREGATE ROOTS (from Stage 1 domain analysis):\n";
+    for (const ar of aggregateRoots) {
+      domainInfo += `- ${ar.name} (subdomain: ${ar.subdomain}${ar.identityFields?.length ? `, identity: ${ar.identityFields.join(", ")}` : ""})\n`;
+    }
+  }
+  if (domainEvents.length > 0) {
+    domainInfo += "\nDOMAIN EVENTS (from Stage 1 domain analysis):\n";
+    for (const d of domainEvents) {
+      domainInfo += `- ${d.name} (emitter: ${d.emitter}${d.trigger ? `, trigger: ${d.trigger}` : ""})\n`;
+    }
+  }
+
+  const explicitTech = normalized?.explicitTechnologies ?? [];
+  let techSection = "";
+  if (explicitTech.length > 0) {
+    techSection = `\n\nEXPLICIT TECHNOLOGIES (influence port types and context mapping mechanisms):\n${explicitTech.join(", ")}`;
+  }
+
+  return `<original_intent>\n${header}${techSection}\n</original_intent>\n<accepted_contexts>\n${contextSection}\n</accepted_contexts>\n<domain_analysis>\n${domainInfo}\n</domain_analysis>\n\nGenerate Ports and Context Mappings (NDJSON):`;
 }
 
 // ==========================================
 // STAGE 4: ADAPTER ASSIGNMENT
 // ==========================================
-export const STAGE4_ADAPTERS_SYSTEM_PROMPT = `You are an infrastructure architect binding technologies to explicit outbound and inbound ports.
-You MUST ONLY map adapters to the exact ports provided. You may use the provided explicit technologies list.
+export const STAGE4_ADAPTERS_SYSTEM_PROMPT = `You are a hexagonal-architecture adapter architect. For EACH bounded context, assign exactly one adapter to every port defined in the previous stage. Each adapter specifies the concrete technology that fulfils the port contract.
+
+ADAPTER TYPE → PORT TYPE MAPPING (mandatory):
+- Inbound "command" port  → Controller adapter
+- Inbound "query" port    → Controller adapter
+- Inbound "event" port    → Listener adapter
+- Outbound "repository" port       → Repository adapter
+- Outbound "publisher" port        → Publisher adapter
+- Outbound "external-client" port  → HttpClient adapter
+- Outbound "notifier" port         → Notifier adapter
+
+VALID adapterType VALUES (use EXACTLY one of these):
+Repository | Listener | Publisher | HttpClient | Notifier | Controller
+
+TECHNOLOGY FIELD:
+Each adapter SHOULD include a "technology" field naming the concrete technology used (e.g. "PostgreSQL", "RabbitMQ", "Axios", "SendGrid", "Express.js"). Technology choices MUST come from the project's explicit technology stack (provided below). If no explicit technology matches, infer a sensible default.
 
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
 Emit objects one per line:
-{"contextName": "climate-control", "adapterName": "PostgresClimateRepoAdapter", "adapterType": "Repository", "implements": "ClimateStateRepository"}
-{"contextName": "climate-control", "adapterName": "MqttSensorListenerAdapter", "adapterType": "Listener", "implements": "SensorTelemetryPort"}
+{"adapter": {"contextName": "climate-control", "name": "PostgresClimateRepoAdapter", "adapterType": "Repository", "technology": "PostgreSQL", "implements": "ClimateStateRepository"}}
+{"adapter": {"contextName": "climate-control", "name": "MqttSensorListenerAdapter", "adapterType": "Listener", "technology": "MQTT", "implements": "SensorTelemetryPort"}}
+{"adapter": {"contextName": "climate-control", "name": "ExpressClimateControllerAdapter", "adapterType": "Controller", "technology": "Express.js", "implements": "CreateClimatePolicyPort"}}
 
 RULES:
-- "contextName" must match exactly.
-- "implements" MUST match a provided port name exactly.
+- "contextName" must match an accepted bounded context name exactly.
+- "implements" MUST match a provided port name exactly — one adapter per port.
+- "adapterType" MUST be one of: Repository, Listener, Publisher, HttpClient, Notifier, Controller.
+- "technology" SHOULD be present and MUST match a technology from the explicit technology list when possible.
 - Adapter names should be PascalCase ending in Adapter.
-- Use the provided technology list to inform adapter naming (e.g. if PostgreSQL is listed, name repository adapters "Postgres...Adapter").
+- Use context mapping relationships to inform cross-context communication patterns (e.g. if context A is upstream of B via Domain Events, the publisher adapter on A and listener adapter on B should use compatible messaging technology).
 - NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
-export function compileStage4Prompt(state: Pick<PipelineState, "stage0" | "stage3">, variables: PromptVariables): string {
+export function compileStage4Prompt(
+  state: Pick<
+    PipelineState,
+    "stage0" | "stage2" | "stage3" | "contextMappings"
+  >,
+  variables: PromptVariables,
+): string {
+  const normalized = state.stage0;
+  const header = normalized ? buildIntentHeader(normalized) : "";
+
   const portMap = state.stage3?.contexts || [];
   let portsMapStr = "";
   for (const ctx of portMap) {
@@ -177,59 +437,290 @@ export function compileStage4Prompt(state: Pick<PipelineState, "stage0" | "stage
     if (ctx.in.length > 0) {
       portsMapStr += ` Inbound:\n`;
       ctx.in.forEach((p) => {
-        portsMapStr += `  - ${p.name} (${p.type}): ${p.description}\n`;
+        portsMapStr += ` - ${p.name} (type: ${p.type}): ${p.description}${p.forAggregate ? ` [aggregate: ${p.forAggregate}]` : ""}\n`;
       });
     }
     if (ctx.out.length > 0) {
       portsMapStr += ` Outbound:\n`;
       ctx.out.forEach((p) => {
-        portsMapStr += `  - ${p.name} (${p.type}): ${p.description}\n`;
+        portsMapStr += ` - ${p.name} (type: ${p.type}): ${p.description}${p.forAggregate ? ` [aggregate: ${p.forAggregate}]` : ""}\n`;
       });
     }
   }
 
-  const explicitTech = state.stage0?.explicitTechnologies || [];
-  const techStr = explicitTech.length > 0 ? explicitTech.join(", ") : "None specified";
-  const infraContext = buildTechnologyContext(variables);
+  const accepted = state.stage2?.accepted ?? [];
+  let contextSection = "";
+  if (accepted.length > 0) {
+    contextSection = "\n\nACCEPTED BOUNDED CONTEXTS:\n";
+    for (const ctx of accepted) {
+      contextSection += `\n- ${ctx.name} (${ctx.type})`;
+      if (ctx.responsibility)
+        contextSection += `\n  Responsibility: ${ctx.responsibility}`;
+      if (ctx.aggregateRoots?.length)
+        contextSection += `\n  Aggregate Roots: ${ctx.aggregateRoots.join(", ")}`;
+      if (ctx.useCaseNames?.length)
+        contextSection += `\n  Use Cases: ${ctx.useCaseNames.join(", ")}`;
+      if (ctx.eventsPublished?.length)
+        contextSection += `\n  Events Published: ${ctx.eventsPublished.join(", ")}`;
+    }
+  }
 
-  return `DEFINED PORTS:\n${portsMapStr}\nAVAILABLE EXPLICIT TECHNOLOGIES:\n${techStr}\n\nINFRASTRUCTURE CONTEXT:\n${infraContext}\n\nAssign Adapters (NDJSON):`;
+  const contextMappings = state.contextMappings ?? [];
+  let mappingSection = "";
+  if (contextMappings.length > 0) {
+    mappingSection =
+      "\n\nCONTEXT MAPPINGS (upstream → downstream relationships):\n";
+    for (const cm of contextMappings) {
+      mappingSection += `- ${cm.upstream} → ${cm.downstream} (pattern: ${cm.pattern || "unspecified"}, mechanism: ${cm.mechanism || "unspecified"}`;
+      if (cm.events?.length)
+        mappingSection += `, events: ${cm.events.join(", ")}`;
+      if (cm.notes) mappingSection += `, notes: ${cm.notes}`;
+      mappingSection += ")\n";
+    }
+  }
+
+  const explicitTech = normalized?.explicitTechnologies ?? [];
+  let techSection = "";
+  if (explicitTech.length > 0) {
+    techSection = `\n\nEXPLICIT TECHNOLOGIES (use these to inform adapter technology choices):\n${explicitTech.join(", ")}`;
+  }
+
+  const infraContext = buildTechnologyContext(variables);
+  const infraSection =
+    infraContext !== "None specified"
+      ? `\n\n<technology_context>\n${infraContext}\n</technology_context>`
+      : "";
+
+  return `<original_intent>\n${header}${techSection}\n</original_intent>\n<defined_ports>\n${portsMapStr}\n</defined_ports>\n<accepted_contexts>\n${contextSection}\n</accepted_contexts>\n<context_mappings>\n${mappingSection}\n</context_mappings>\n${infraSection}\n\nAssign Adapters (NDJSON):`;
 }
 
 // ==========================================
 // STAGE 6: VALIDATION REVIEW
 // ==========================================
-export const STAGE6_VALIDATION_SYSTEM_PROMPT = `You are an architectural linter reviewing a generated Hexagonal Architecture manifest YAML.
-Critique the YAML against these rules:
-1. No context names contain technology nouns (postgres, redis, mqtt).
-2. All contexts have at least one entity or are shared-kernel.
-3. Every outbound port has an assigned adapter.
-4. shared-kernel has no framework dependencies.
+export const STAGE6_VALIDATION_SYSTEM_PROMPT = `You are an adversarial architectural linter for hexagonal DDD manifests.
+Your job is to FIND PROBLEMS, not to confirm correctness. Assume there are errors until you have verified otherwise.
 
-CRITICAL OUTPUT FORMAT - NDJSON ONLY.
-Emit objects one per line:
-{"type": "error", "message": "Context 'postgres-adapter' violates rule: no technology nouns."}
-{"type": "warning", "message": "Port 'TelemetryHistoryPort' has no assigned adapter."}
-{"type": "result", "passed": false}
+SEVERITY LEVELS:
+"error"   — structural violation that will cause runtime failure or fundamental DDD misuse. The manifest must be rejected.
+"warning" — design smell or missing best practice. The manifest can proceed but should be reviewed by a human.
+"info"    — notable observation that does not block generation. Surfaces facts the user should know.
 
-RULES:
-- Always end with exactly one "result" object indicating if there were any structural errors.
+VALIDATION RULES — check every rule explicitly. Do not skip any.
+
+STRUCTURAL RULES (emit "error" if violated):
+R01: No context name in the manifest contains a technology noun.
+      Banned technology words: postgres, redis, mongo, rabbit, kafka, mqtt, s3, stripe, supabase, firebase, sendgrid, mysql, elasticsearch, dynamo, sqs, sns.
+      Check: every context name in boundedContexts[*].name must not contain any banned word (case-insensitive).
+
+R02: Every non-shared-kernel context has at least one inbound port.
+      Check: for each context where type != "shared-kernel", ports.in must have length >= 1.
+
+R03: Every non-shared-kernel context has at least one outbound repository port.
+      Check: for each context where type != "shared-kernel", ports.out must contain at least one entry with type "repository".
+
+R04: Every outbound port has exactly one adapter assigned.
+      Check: for each port in ports.out across all contexts, exactly one adapter must list it in "implements".
+
+R05: Every inbound port has exactly one adapter assigned.
+      Check: for each port in ports.in across all contexts, exactly one adapter must list it in "implements".
+
+R06: No adapter's "implements" value references a port that belongs to a different context.
+      Check: for each adapter, find its port by name — that port must be in the same context.
+
+R07: Every dependsOn reference points to an existing context name.
+      Check: for each entry in dependsOn arrays, the referenced name must appear in boundedContexts[*].name.
+
+R08: The manifest has a workspace entry with non-empty name and non-empty description.
+      Check: workspace.name and workspace.description must both be non-empty strings.
+
+R09: shared-kernel contexts have no ports.
+      Check: for each context where type == "shared-kernel", ports.in and ports.out must both be empty.
+
+DESIGN RULES (emit "warning" if violated):
+R10: Every non-shared-kernel context with a domain event in its eventsPublished list has an outbound publisher port.
+      Check: if a context declares published events and has no port of type "publisher", emit a warning.
+
+R11: Every domain event consumed by a context (inbound event port) must be published by at least one other context.
+      Check: for each inbound port of type "event", the event name it receives must appear in another context's published events.
+
+R12: No two contexts share the same adapter name.
+      Check: adapter names must be globally unique across all contexts.
+
+R13: Contexts promoted from uncertain (marked with a promotedFromUncertain flag) are present in the manifest.
+      Emit: "warning" for each promoted-from-uncertain context, noting it requires human domain expert review.
+
+R14: Assembly warnings from Stage 5 are surfaced.
+      For each assembly warning provided, emit it at its original severity level.
+
+SEMANTIC FIDELITY (emit "info"):
+R15: The original project intent is reflected in at least one context name or responsibility description.
+      If key concepts from the intent appear in no context name and no responsibility field, emit an "info" noting the potential gap.
+
+CRITICAL OUTPUT FORMAT — NDJSON ONLY.
+{"type": "error", "rule": "R01", "message": "Context 'postgres-repo' violates R01: name contains technology noun 'postgres'."}
+{"type": "warning", "rule": "R10", "message": "Context 'notification-delivery' publishes 'NotificationSent' but has no publisher port."}
+{"type": "info", "rule": "R15", "message": "Intent mentions 'payment processing' but no context name or responsibility references payments."}
+{"type": "warning", "rule": "R13", "message": "Context 'drift-analytics' was promoted from uncertain status and requires domain expert review."}
+{"type": "result", "passed": true, "errorCount": 0, "warningCount": 2, "infoCount": 1}
+
+OUTPUT RULES:
+- Check every rule R01 through R15. Do not skip any rule even if you believe it is satisfied.
+- Always emit exactly one "result" object as the final line.
+- "passed" is true only if errorCount is 0.
+- "errorCount" counts objects of type "error".
+- "warningCount" counts objects of type "warning".
+- "infoCount" counts objects of type "info".
 - NO markdown. ONLY raw JSON objects separated by newlines.
 `;
 
-export function compileStage6Prompt(state: Pick<PipelineState, "stage5">): string {
-  const yaml = state.stage5?.yaml || "";
-  return `MANIFEST YAML TO REVIEW:\n\n${yaml}\n\nReview (NDJSON):`;
-}
+export function compileStage6Prompt(
+  state: Pick<
+    PipelineState,
+    "stage0" | "stage2" | "stage5" | "contextMappings"
+  >,
+): string {
+  const yaml = state.stage5?.yaml ?? "";
+  const assemblyWarnings = state.stage5?.assemblyWarnings ?? [];
+  const promotedContexts = (state.stage2?.uncertain ?? []).map((u) => u.name);
+  const contextMappings = state.contextMappings ?? [];
+  const normalized = state.stage0;
+  const header = normalized ? buildIntentHeader(normalized) : "";
 
+  const warningsSection =
+    assemblyWarnings.length > 0
+      ? [
+          `<assembly_warnings>`,
+          assemblyWarnings
+            .map(
+              (w) =>
+                `{"severity": "${w.severity}", "context": "${w.contextName}", "message": "${w.message}"}`,
+            )
+            .join("\n"),
+          `</assembly_warnings>`,
+        ].join("\n")
+      : "";
+
+  const promotedSection =
+    promotedContexts.length > 0
+      ? `<promoted_from_uncertain>\n${promotedContexts.join(", ")}\n</promoted_from_uncertain>`
+      : "";
+
+  const mappingSection =
+    contextMappings.length > 0
+      ? [
+          `<context_mappings>`,
+          contextMappings
+            .map(
+              (m) =>
+                `${m.upstream} → ${m.downstream} (${m.pattern ?? "unspecified"} via ${m.mechanism ?? "unspecified"})`,
+            )
+            .join("\n"),
+          `</context_mappings>`,
+        ].join("\n")
+      : "";
+
+  return [
+    `<original_intent>`,
+    header,
+    `</original_intent>`,
+    ``,
+    `<manifest_yaml>`,
+    yaml,
+    `</manifest_yaml>`,
+    ``,
+    warningsSection,
+    promotedSection,
+    mappingSection,
+    ``,
+    `Run all rules R01–R15. Output NDJSON:`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 // Retry prompts (Fallback if NDJSON is malformed)
-export const MAX_RETRY_ATTEMPTS = 3;
+export interface StageRetryContext {
+  /** Stage number 0–6 */
+  stage: number;
+  /** Attempt number (1-based) */
+  attempt: number;
+  /** Raw output from the failed attempt, truncated to 800 chars */
+  failedOutput: string;
+  /** Human-readable description of why the output was rejected */
+  errorDetail: string;
+  /** Original user prompt that produced the failed output */
+  originalPrompt: string;
+}
 
 export type RetryResult = { kind: "prompt"; content: string };
 
+/**
+ * Stage-specific retry hint strings injected into the correction prompt.
+ * Each describes the minimum correct output for that stage.
+ */
+const STAGE_RETRY_HINTS: Record<number, string> = {
+  0: `Emit: one "intent" object, one "projectName" object, zero or more "technology" / "pattern" / "ambiguity" objects. No other object types.`,
+  1: `Emit: "subdomain", "aggregateRoot", "entity", "valueObject", "domainEvent", "useCase", "verb", "noun" objects only. Each aggregateRoot must have "subdomain" and "identityFields". Each entity must have "parentAggregate". Each domainEvent must have past-tense "value".`,
+  2: `Emit: "accepted", "rejected", or "uncertain" objects only. Every "accepted" must have: name (kebab-case), contextType (core|supporting|generic|shared-kernel), responsibility, aggregateRoots (array), useCaseNames (array), eventsPublished (array), reasoning. Every "uncertain" must have "reasoning".`,
+  3: `Emit port and contextMapping objects only. Every port must have: contextName (matching an accepted context), direction (in|out), portType (command|query|event for in; repository|publisher|external-client|notifier for out), name (PascalCase), description, forAggregate. Every contextMapping must have: upstream, downstream, pattern, mechanism, events.`,
+  4: `Emit adapter objects only. Every adapter must have: contextName, name (PascalCase ending in Adapter), adapterType (Repository|Listener|Publisher|HttpClient|Notifier|Controller), implements (exact port name), technology.`,
+  5: `Stage 5 (Manifest Assembly) is a pure TypeScript function — it does not call the LLM. A failure here indicates a structural mismatch between upstream stages and the assembler. Expected input shape: { stage0: NormalizedPrompt, stage1: DomainAnalysis, stage2: ClassificationResult, stage3: PortMap, stage4: AdapterBindings }. Verify each upstream stage produced valid output before retrying.`,
+  6: `Emit validation objects only: "error", "warning", or "info" with "rule" and "message" fields. End with exactly one "result" object containing passed, errorCount, warningCount, infoCount.`,
+};
+
+/**
+ * Builds a targeted correction prompt for a failed stage output.
+ * Includes the specific error, the failed output, and the stage-specific
+ * format reminder. This replaces the generic generalNDJSON retry.
+ */
+export function buildStageRetryPrompt(ctx: StageRetryContext): RetryResult {
+  const hint =
+    STAGE_RETRY_HINTS[ctx.stage] ??
+    "Output only valid NDJSON — one JSON object per line.";
+  const truncatedOutput =
+    ctx.failedOutput.length > 800
+      ? ctx.failedOutput.slice(0, 800) + "\n... [truncated]"
+      : ctx.failedOutput;
+
+  const content = [
+    `CORRECTION REQUIRED — Attempt ${ctx.attempt} of ${MAX_RETRY_ATTEMPTS}`,
+    `Stage: ${ctx.stage}`,
+    ``,
+    `Your previous output was rejected for this reason:`,
+    `<rejection_reason>`,
+    ctx.errorDetail,
+    `</rejection_reason>`,
+    ``,
+    `Your previous output was:`,
+    `<failed_output>`,
+    truncatedOutput,
+    `</failed_output>`,
+    ``,
+    `The original input that produced this output was:`,
+    `<original_input>`,
+    ctx.originalPrompt.slice(0, 1000),
+    `</original_input>`,
+    ``,
+    `Stage ${ctx.stage} format reminder:`,
+    hint,
+    ``,
+    `Correct ONLY the invalid portions. Do not regenerate correct objects.`,
+    `Output corrected NDJSON:`,
+  ].join("\n");
+
+  return { kind: "prompt", content };
+}
+
+/** @deprecated Use buildStageRetryPrompt instead */
 export const RETRY_PROMPTS = {
-generalNDJSON: (attempt: number): RetryResult => ({
+  generalNDJSON: (attempt: number): RetryResult => ({
     kind: "prompt",
-    content: `Your previous output contained invalid JSON or markdown. You MUST output ONLY valid JSON objects, one per line. No backticks, no markdown blocks. Attempt ${attempt} of ${MAX_RETRY_ATTEMPTS}. Output:`,
+    content: buildStageRetryPrompt({
+      stage: -1,
+      attempt,
+      failedOutput: "(not provided)",
+      errorDetail: "Output contained invalid JSON or markdown.",
+      originalPrompt: "(not provided)",
+    }).content,
   }),
 };
 
@@ -238,7 +729,12 @@ generalNDJSON: (attempt: number): RetryResult => ({
 export const CONTEXT_LIST_SYSTEM_PROMPT = STAGE2_CLASSIFICATION_SYSTEM_PROMPT;
 export const compileContextListPrompt = (variables: PromptVariables): string =>
   compileStage2Prompt({
-    stage0: { intent: variables.userDescription, explicitTechnologies: [], explicitPatterns: [], ambiguities: [] },
+    stage0: {
+      intent: variables.userDescription,
+      explicitTechnologies: [],
+      explicitPatterns: [],
+      ambiguities: [],
+    },
     stage1: { subdomains: [], nouns: [], verbs: [] },
   });
 
@@ -250,7 +746,17 @@ export const compilePortsPrompt = (
 ): string =>
   compileStage3Prompt({
     stage2: {
-      accepted: [{ name: contextName, type: contextType as "core" | "supporting" | "generic" | "shared-kernel", reasoning: contextDescription }],
+      accepted: [
+        {
+          name: contextName,
+          type: contextType as
+            | "core"
+            | "supporting"
+            | "generic"
+            | "shared-kernel",
+          reasoning: contextDescription,
+        },
+      ],
       rejected: [],
       uncertain: [],
     },

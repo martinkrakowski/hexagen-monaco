@@ -32,12 +32,12 @@ import {
   STEP_LLM_INFERENCE,
   STEP_RECONCILE,
   STEP_COMMIT,
-  MAX_RETRY_ATTEMPTS,
   RETRY_DELAYS_MS,
   withRetry,
   LLMServiceError,
 } from "./modify-architecture-types.js";
 import type { ModifyArchitectureDeps } from "./modify-architecture-types.js";
+import { MAX_RETRY_ATTEMPTS } from "../../domain/errors/stage-errors.js";
 
 export class ModifyArchitectureUseCase {
   constructor(private readonly deps: ModifyArchitectureDeps) {}

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import {
   ExecuteStagedGenerationUseCase,
   type StagedGenerationCallbacks,
@@ -6,6 +7,7 @@ import {
 import type { PromptVariables } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 interface StageRequestBody {
   description: string;
@@ -18,6 +20,11 @@ interface StageRequestBody {
 type NDJSONEvent =
   | { type: "stage-start"; stage: number; label: string }
   | { type: "stage-complete"; stage: number; label: string; durationMs: number }
+  | {
+      type: "stage-telemetry";
+      stage: number;
+      telemetry: Record<string, unknown>;
+    }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
   | {
@@ -26,10 +33,27 @@ type NDJSONEvent =
       contextCount: number;
       portCount: number;
       adapterCount: number;
+      transactionId: string;
     }
   | { type: "error"; message: string };
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateCheck = checkRateLimit(request, 10, 60 * 1000);
+  if (!rateCheck.allowed) {
+    const retryAfter = Math.ceil(rateCheck.retryAfter! / 1000);
+    return new Response(
+      JSON.stringify({ type: "error", message: "Rate limit exceeded" }) + "\n",
+      { 
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": retryAfter.toString(),
+        },
+      }
+    );
+  }
+  
   let body: StageRequestBody;
   try {
     body = await request.json();
@@ -62,6 +86,12 @@ export async function POST(request: NextRequest) {
         onChunk: (stage, data) => send({ type: "chunk", stage, data }),
         onValidationError: (stage, errors) =>
           send({ type: "validation-error", stage, errors }),
+        onStageTelemetry: (telemetry) =>
+          send({
+            type: "stage-telemetry",
+            stage: telemetry.stage,
+            telemetry: telemetry as unknown as Record<string, unknown>,
+          }),
       };
 
       try {
@@ -71,7 +101,11 @@ export async function POST(request: NextRequest) {
           validateLocalLLM: false,
         });
 
-        const useCase = new ExecuteStagedGenerationUseCase(llmAdapter);
+        const transactionManager = new InMemoryTransactionManager();
+        const useCase = new ExecuteStagedGenerationUseCase(
+          llmAdapter,
+          transactionManager,
+        );
 
         const variables: PromptVariables = {
           userDescription: body.description,
@@ -106,6 +140,7 @@ export async function POST(request: NextRequest) {
             contextCount: ctxCount,
             portCount,
             adapterCount,
+            transactionId: result.transactionId,
           });
         } else {
           const msg =

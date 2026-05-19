@@ -1,14 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
-export default function GitHubImportStubPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/projects/new/import?highlight=github");
-  }, [router]);
-
-  return null;
+export default function ImportGitHubPage() {
+  redirect("/projects/new/import");
 }

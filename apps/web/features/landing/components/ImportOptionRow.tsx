@@ -1,6 +1,12 @@
 "use client";
 
-import { FileCode, Braces, GitBranch, ChevronRight } from "lucide-react";
+import {
+  FileCode,
+  Braces,
+  GitBranch,
+  Github,
+  ChevronRight,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { ImportSubOption } from "@/landing/domain/creation-path";
@@ -11,7 +17,12 @@ const iconMap = {
   FileCode,
   Braces,
   GitBranch,
+  Github,
 } as const;
+
+function isValidIconName(name: string): name is keyof typeof iconMap {
+  return name in iconMap;
+}
 
 interface ImportOptionRowProps {
   readonly option: ImportSubOption;
@@ -24,10 +35,11 @@ export function ImportOptionRow({
 }: ImportOptionRowProps) {
   const defaultRouter = useRouter();
   const router = injectedRouter ?? defaultRouter;
-  const IconComponent =
-    iconMap[option.iconName as keyof typeof iconMap] ?? FileCode;
+  const IconComponent = isValidIconName(option.iconName)
+    ? iconMap[option.iconName]
+    : FileCode;
 
-  if (!option.isAvailable) {
+  if (option.status !== "available") {
     return (
       <div
         role="presentation"

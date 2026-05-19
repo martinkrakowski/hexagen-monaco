@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 import {
   buildDomainAnalysisFromConfig,
@@ -9,63 +10,117 @@ import {
 } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.js";
 
 function createMockSendStructuredRequest(): SendStructuredRequestPort {
-  return {
-    sendRequest: async () => ({
-      success: true,
-      value: { content: "{}" },
+  const portMappingResponse = [
+    JSON.stringify({
+      contextName: "billing",
+      direction: "in",
+      name: "ProcessBillingPort",
+      portType: "command",
+      description: "Process billing",
     }),
+    JSON.stringify({
+      contextName: "billing",
+      direction: "out",
+      name: "BillingRepository",
+      portType: "repository",
+      description: "Persist billing",
+    }),
+  ].join("\n");
+
+  const adapterResponse = [
+    JSON.stringify({
+      contextName: "billing",
+      adapterName: "InMemoryBillingRepoAdapter",
+      adapterType: "Repository",
+      implements: "BillingRepository",
+    }),
+  ].join("\n");
+
+  const validationResponse = JSON.stringify({
+    type: "result",
+    passed: true,
+  });
+
+  let callCount = 0;
+  return {
+    sendRequest: async () => {
+      callCount++;
+      let content = portMappingResponse;
+      if (callCount > 1 && callCount <= 4) content = adapterResponse;
+      if (callCount > 4) content = validationResponse;
+      return {
+        success: true as const,
+        value: {
+          id: `test-${callCount}`,
+          modelId: "qwen-coder-3b" as any,
+          content,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      };
+    },
     streamStructuredRequest: async function* () {
       yield {
         success: true,
-        value: JSON.stringify({
-          contextName: "billing",
-          direction: "in",
-          name: "ProcessBillingPort",
-          portType: "command",
-          description: "Process billing",
-        }),
-      };
-      yield {
-        success: true,
-        value: JSON.stringify({
-          contextName: "billing",
-          direction: "out",
-          name: "BillingRepository",
-          portType: "repository",
-          description: "Persist billing",
-        }),
-      };
-      yield {
-        success: true,
-        value: JSON.stringify({
-          contextName: "billing",
-          adapterName: "InMemoryBillingRepoAdapter",
-          adapterType: "Repository",
-          implements: "BillingRepository",
-        }),
-      };
-      yield {
-        success: true,
-        value: JSON.stringify({ type: "result", passed: true }),
+        value: portMappingResponse,
       };
     },
   } as unknown as SendStructuredRequestPort;
 }
 
+function createMockTransactionManager(): TransactionManagerPort {
+  const transactions = new Map<
+    string,
+    { id: string; intentId: string; status: string }
+  >();
+  return {
+    begin: (intentId: string) => {
+      const tx = { id: `txn-${intentId}`, intentId, status: "pending" };
+      transactions.set(tx.id, tx);
+      return tx as any;
+    },
+    transition: (txId: string, status: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = status;
+      return tx as any;
+    },
+    get: (txId: string) => (transactions.get(txId) as any) ?? null,
+    list: () => Array.from(transactions.values()) as any,
+    commit: (txId: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = "committed";
+      return tx as any;
+    },
+    rollback: (txId: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = "rolled_back";
+      return tx as any;
+    },
+  } as unknown as TransactionManagerPort;
+}
+
 describe("ExecuteStructuredConfigGenerationUseCase", () => {
   it("rejects invalid JSON config", async () => {
     const mockPort = createMockSendStructuredRequest();
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+    const mockTx = createMockTransactionManager();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockPort,
+      mockTx,
+    );
     const result = await useCase.execute("not valid json");
     assert.strictEqual(result.success, false);
   });
 
   it("returns success for valid structured config JSON", async () => {
     const mockPort = createMockSendStructuredRequest();
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+    const mockTx = createMockTransactionManager();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockPort,
+      mockTx,
+    );
     const config = {
-      bounded_contexts: [{ id: "ctx1", name: "billing" }],
-      use_cases: [{ id: "uc1", name: "Process Billing", context_id: "ctx1" }],
+      bounded_contexts: [{ name: "billing" }],
+      use_cases: { billing: [{ name: "Process Billing" }] },
       context_mappings: [],
     };
     const result = await useCase.execute(JSON.stringify(config));
@@ -78,10 +133,14 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
   it("invokes onProgress callbacks during stages", async () => {
     const mockPort = createMockSendStructuredRequest();
-    const useCase = new ExecuteStructuredConfigGenerationUseCase(mockPort);
+    const mockTx = createMockTransactionManager();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockPort,
+      mockTx,
+    );
     const config = {
-      bounded_contexts: [{ id: "ctx1", name: "billing" }],
-      use_cases: [{ id: "uc1", name: "Process Billing", context_id: "ctx1" }],
+      bounded_contexts: [{ name: "billing" }],
+      use_cases: { billing: [{ name: "Process Billing" }] },
       context_mappings: [],
     };
     const stages: number[] = [];
@@ -98,11 +157,8 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 describe("buildDomainAnalysisFromConfig", () => {
   it("maps bounded_contexts to nouns/subdomains and use_cases to verbs", () => {
     const config = {
-      bounded_contexts: [
-        { id: "ctx1", name: "billing" },
-        { id: "ctx2", name: "inventory" },
-      ],
-      use_cases: [{ id: "uc1", name: "Process Billing", context_id: "ctx1" }],
+      bounded_contexts: [{ name: "billing" }, { name: "inventory" }],
+      use_cases: { billing: [{ name: "Process Billing" }] },
       context_mappings: [],
     };
     const analysis = buildDomainAnalysisFromConfig(config);
@@ -115,11 +171,14 @@ describe("buildDomainAnalysisFromConfig", () => {
 describe("buildClassificationFromConfig", () => {
   it("maps bounded_contexts to accepted core contexts", () => {
     const config = {
-      bounded_contexts: [{ id: "ctx1", name: "billing" }],
-      use_cases: [],
+      bounded_contexts: [{ name: "billing" }],
+      use_cases: {},
       context_mappings: [],
     };
-    const classification = buildClassificationFromConfig(config);
+    const classification = buildClassificationFromConfig(
+      config,
+      buildDomainAnalysisFromConfig(config),
+    );
     assert.strictEqual(classification.accepted.length, 1);
     assert.strictEqual(classification.accepted[0].name, "billing");
     assert.strictEqual(classification.accepted[0].type, "core");
@@ -128,10 +187,13 @@ describe("buildClassificationFromConfig", () => {
   it("returns empty accepted for empty bounded_contexts", () => {
     const config = {
       bounded_contexts: [],
-      use_cases: [],
+      use_cases: {},
       context_mappings: [],
     };
-    const classification = buildClassificationFromConfig(config);
+    const classification = buildClassificationFromConfig(
+      config,
+      buildDomainAnalysisFromConfig(config),
+    );
     assert.strictEqual(classification.accepted.length, 0);
   });
 });
@@ -139,8 +201,8 @@ describe("buildClassificationFromConfig", () => {
 describe("buildNormalizedPromptFromConfig", () => {
   it("builds intent from context names", () => {
     const config = {
-      bounded_contexts: [{ id: "ctx1", name: "billing" }],
-      use_cases: [],
+      bounded_contexts: [{ name: "billing" }],
+      use_cases: {},
       context_mappings: [],
     };
     const prompt = buildNormalizedPromptFromConfig(config);

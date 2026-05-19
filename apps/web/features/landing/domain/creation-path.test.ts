@@ -85,18 +85,18 @@ describe("creation-path domain", () => {
       }
     });
 
-    it("github sub-option is marked unavailable", () => {
+    it("github sub-option is marked as coming-soon", () => {
       const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
       assert.ok(github);
-      assert.strictEqual(github!.isAvailable, false);
+      assert.strictEqual(github!.status, "coming-soon");
     });
 
     it("manifest and spec sub-options are available", () => {
       for (const option of IMPORT_SUB_OPTIONS) {
         if (option.id === "github") continue;
         assert.strictEqual(
-          option.isAvailable,
-          true,
+          option.status,
+          "available",
           `${option.id} should be available`,
         );
       }

@@ -32,6 +32,7 @@ export type {
   ValidationResult,
   GeneratedManifest,
   GenerationMetadata,
+  StageTelemetry,
 } from "./domain/value-objects/index.js";
 export {
   ProjectDescriptionValidator,
@@ -43,8 +44,13 @@ export {
 } from "./domain/value-objects/index.js";
 export type {
   NormalizedPrompt,
+  AggregateRoot,
+  DomainEntity,
+  DomainValueObject,
+  DomainEvent,
   DomainAnalysis,
   ClassifiedContext,
+  AcceptedContext,
   RejectedContext,
   UncertainContext,
   ClassificationResult,
@@ -56,8 +62,10 @@ export type {
   AdapterBinding,
   ContextAdapters,
   AdapterBindings,
+  AssemblyWarning,
   AssembledManifest,
   ValidationReport,
+  ContextMappingEntry,
   PipelineState,
 } from "./domain/value-objects/index.js";
 export type {
@@ -89,6 +97,9 @@ export {
   GenerateManifestFromDescriptionUseCase,
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
+  ManifestWarningCategory,
+  type ManifestWarning,
+  type GenerationDiagnostics,
   FixManifestViolationUseCase,
   type FixManifestViolationRequest,
   type FixManifestViolationResponse,
@@ -100,6 +111,7 @@ export { ExecutePromptNormalizationUseCase } from "./application/use-cases/stage
 export { ExecuteDomainExtractionUseCase } from "./application/use-cases/staged-generation/execute-domain-extraction.use-case.js";
 export { ExecuteContextClassificationUseCase } from "./application/use-cases/staged-generation/execute-context-classification.use-case.js";
 export { ExecutePortMappingUseCase } from "./application/use-cases/staged-generation/execute-port-mapping.use-case.js";
+export type { PortMappingResult } from "./application/use-cases/staged-generation/execute-port-mapping.use-case.js";
 export { ExecuteAdapterAssignmentUseCase } from "./application/use-cases/staged-generation/execute-adapter-assignment.use-case.js";
 export { ExecuteManifestAssemblyUseCase } from "./application/use-cases/staged-generation/execute-manifest-assembly.use-case.js";
 export { ExecuteValidationReviewUseCase } from "./application/use-cases/staged-generation/execute-validation-review.use-case.js";
@@ -157,6 +169,8 @@ export {
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
+  buildIntentHeader,
+  isStructuredConfigPipeline,
   STAGE1_DOMAIN_SYSTEM_PROMPT,
   compileStage1Prompt,
   STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
@@ -168,7 +182,6 @@ export {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
   RETRY_PROMPTS,
-  MAX_RETRY_ATTEMPTS,
   CONTEXT_LIST_SYSTEM_PROMPT,
   compileContextListPrompt,
   PORTS_LIST_SYSTEM_PROMPT,

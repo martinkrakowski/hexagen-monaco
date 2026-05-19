@@ -1,5 +1,5 @@
-import { ImportSelectionPage } from "@/landing/ImportSelectionPage";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <ImportSelectionPage />;
+export default function ImportPage() {
+  redirect("/projects/new");
 }

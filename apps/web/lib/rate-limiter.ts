@@ -1,0 +1,71 @@
+import { NextRequest } from "next/server";
+
+const requestCounts = new Map<string, { count: number; resetTime: number }>();
+
+function cleanExpiredEntries() {
+  const now = Date.now();
+  for (const [key, record] of requestCounts.entries()) {
+    if (record.resetTime <= now) {
+      requestCounts.delete(key);
+    }
+  }
+}
+
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+if (typeof setInterval !== "undefined") {
+  const cleanupInterval = setInterval(cleanExpiredEntries, CLEANUP_INTERVAL_MS);
+  if (typeof cleanupInterval.unref === "function") {
+    cleanupInterval.unref();
+  }
+}
+
+function hashKey(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+export function checkRateLimit(
+  request: NextRequest,
+  maxRequests = 10,
+  windowMs = 60 * 1000, // 1 minute
+): { allowed: boolean; retryAfter?: number } {
+  let ip = (request as { cf?: { clientIp?: string } }).cf?.clientIp;
+  if (!ip) {
+    const forwardedFor = request.headers.get("x-forwarded-for");
+    ip = forwardedFor?.split(",")[0]?.trim() ?? undefined;
+  }
+  if (!ip) {
+    ip = request.headers.get("x-real-ip") ?? undefined;
+  }
+
+  let key = ip;
+  if (!key) {
+    const userAgent = request.headers.get("user-agent") ?? "";
+    const acceptLanguage = request.headers.get("accept-language") ?? "";
+    key = hashKey(userAgent + acceptLanguage);
+  }
+
+  const now = Date.now();
+
+  const record = requestCounts.get(key);
+
+  if (record) {
+    if (now > record.resetTime) {
+      requestCounts.delete(key);
+    } else {
+      if (record.count >= maxRequests) {
+        return { allowed: false, retryAfter: record.resetTime - now };
+      }
+      record.count++;
+      return { allowed: true };
+    }
+  }
+
+  requestCounts.set(key, { count: 1, resetTime: now + windowMs });
+  return { allowed: true };
+}

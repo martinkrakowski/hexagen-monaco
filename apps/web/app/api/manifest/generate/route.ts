@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "../../../../lib/rate-limiter";
 import { GenerateManifestFromDescriptionUseCase } from "@hexagen/agentic-interaction";
 import {
   createProjectDescription,
@@ -12,6 +13,7 @@ import {
 import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
 import type { WebLLMAdapter } from "@hexagen/local-llm";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { logger } from "../../../../lib/structured-logger";
 
 interface GenerateManifestRequestBody {
@@ -68,6 +70,20 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
+  // Rate limiting
+  const rateCheck = checkRateLimit(request, 10, 60 * 1000);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { success: false, error: "Rate limit exceeded" },
+      { 
+        status: 429,
+        headers: {
+          "Retry-After": Math.ceil(rateCheck.retryAfter! / 1000).toString(),
+        },
+      }
+    );
+  }
+  
   let body: GenerateManifestRequestBody;
   try {
     body = await request.json();
@@ -162,8 +178,14 @@ export async function POST(
       secretVault,
     });
 
+    // Create transaction manager
+    const transactionManager = new InMemoryTransactionManager();
+
     // Create and execute use case
-    const useCase = new GenerateManifestFromDescriptionUseCase(llmAdapter);
+    const useCase = new GenerateManifestFromDescriptionUseCase(
+      llmAdapter,
+      transactionManager,
+    );
     const result = await useCase.execute({
       description: projectDescription,
     });

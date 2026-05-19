@@ -119,6 +119,7 @@ describe("ReconcileUseCase", () => {
         reconciliationPort,
         createMockCompareVerdictsPort(),
         createMockResolveConflictPort(),
+        undefined, // promoteStatePort
         manifestPatchPort,
       );
 
@@ -142,7 +143,8 @@ describe("ReconcileUseCase", () => {
         reconciliationPort,
         createMockCompareVerdictsPort(),
         createMockResolveConflictPort(),
-        undefined,
+        undefined, // promoteStatePort
+        undefined, // manifestPatchPort
         lintFilterPort,
       );
 
@@ -182,7 +184,8 @@ describe("ReconcileUseCase", () => {
         createMockReconciliationPort({ success: true, patches: [] }),
         createMockCompareVerdictsPort(),
         createMockResolveConflictPort(),
-        undefined,
+        undefined, // promoteStatePort
+        undefined, // manifestPatchPort
         lintFilterPort,
       );
 

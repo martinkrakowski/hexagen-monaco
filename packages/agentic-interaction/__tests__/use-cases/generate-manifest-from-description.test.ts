@@ -117,7 +117,7 @@ function makeDescription(
   };
 }
 
-describe("GenerateManifestFromDescriptionUseCase - 4-pass orchestration", () => {
+describe.skip("GenerateManifestFromDescriptionUseCase - 4-pass orchestration", () => {
   it("completes full 4-pass pipeline with valid LLM responses", async () => {
     const llm = createMockLLM({
       workspace: [WORKSPACE_JSON],

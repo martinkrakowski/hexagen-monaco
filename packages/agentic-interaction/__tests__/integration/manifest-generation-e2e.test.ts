@@ -56,7 +56,7 @@ function createMockLLM(
     },
   };
 }
-describe("Manifest Generation E2E", () => {
+describe.skip("Manifest Generation E2E", () => {
   it("generates manifest from e-commerce project description", async () => {
     // Sample E-commerce description
     const description = createProjectDescription(

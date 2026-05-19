@@ -50,19 +50,25 @@ export const DESCRIPTION_MAX_LENGTH = 50_000;
 export class ProjectDescriptionValidator {
   static readonly MIN_LENGTH = DESCRIPTION_MIN_LENGTH;
   static readonly MAX_LENGTH = DESCRIPTION_MAX_LENGTH;
-  private static readonly DANGEROUS_PATTERNS = [
+  static readonly DANGEROUS_PATTERNS = Object.freeze([
     /ignore previous instructions/i,
     /system prompt/i,
     /you are now/i,
     /<script>/i,
     /javascript:/i,
-  ];
+    /I will ignore/i,
+  ]) as ReadonlyArray<RegExp>;
 
   /**
    * Validate project description
    * @throws Error if validation fails
    */
   static validate(description: ProjectDescription): void {
+    // Check for empty or whitespace-only FIRST (before sanitization could make it empty)
+    if (description.text.trim().length === 0) {
+      throw new Error("Description cannot be empty or whitespace only.");
+    }
+
     // Check length
     if (description.text.length < this.MIN_LENGTH) {
       throw new Error(
@@ -83,11 +89,6 @@ export class ProjectDescriptionValidator {
           "Description contains potentially dangerous content. Please rephrase.",
         );
       }
-    }
-
-    // Check for empty or whitespace-only
-    if (description.text.trim().length === 0) {
-      throw new Error("Description cannot be empty or whitespace only.");
     }
   }
 
@@ -120,6 +121,15 @@ export function createProjectDescription(
     additionalContext?: string;
   },
 ): ProjectDescription {
+  if (text.trim().length === 0) {
+    if (text.length === 0) {
+      throw new Error(
+        `Description too short. Minimum ${ProjectDescriptionValidator.MIN_LENGTH} characters required.`,
+      );
+    }
+    throw new Error("Description cannot be empty or whitespace only.");
+  }
+
   const sanitizedText = ProjectDescriptionValidator.sanitize(text);
 
   const description: ProjectDescription = {

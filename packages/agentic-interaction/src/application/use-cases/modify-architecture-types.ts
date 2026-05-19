@@ -11,6 +11,7 @@ import type {
   ProjectSpecLike,
 } from "@hexagen/reconciliation-engine";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import { MAX_RETRY_ATTEMPTS } from "../../domain/errors/stage-errors.js";
 
 const STEP_PARSE = "parse-nl-intent";
 const STEP_COMPILE_PROMPT = "compile-prompt";
@@ -19,7 +20,6 @@ const STEP_RECONCILE = "reconcile";
 const STEP_COMMIT = "commit-patches";
 
 const RETRYABLE_STATUS_CODES = new Set([429, 503]);
-const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 
 interface RetryOptions {
@@ -97,7 +97,6 @@ export {
   STEP_RECONCILE,
   STEP_COMMIT,
   RETRYABLE_STATUS_CODES,
-  MAX_RETRY_ATTEMPTS,
   RETRY_DELAYS_MS,
   withRetry,
   LLMServiceError,

@@ -1,5 +1,7 @@
-import { ImportProjectSpecPage } from "@/manifest-generation/ImportProjectSpecPage";
+"use client";
 
-export default function SpecImportPage() {
+import ImportProjectSpecPage from "../../../../../features/manifest-generation/ImportProjectSpecPage";
+
+export default function SpecPage() {
   return <ImportProjectSpecPage />;
 }

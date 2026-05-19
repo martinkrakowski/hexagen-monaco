@@ -1,21 +1,24 @@
-import path from "node:path";
 import { ok, err, type Result } from "@hexagen/shared";
 import type { Manifest } from "../../domain/model/manifest-schema/manifest-schema";
 import type { ProjectConfigurationReadPort } from "../ports/out/project-configuration-read.port";
-import { mergeSplitManifest } from "../../infrastructure/adapters/manifest-merge-loader.js";
+import type { FileSystemPort } from "../ports/out/file-system.port.js";
 
 export class ReadManifestUseCase implements ProjectConfigurationReadPort {
+  private fileSystem: FileSystemPort;
+
+  constructor(fileSystem: FileSystemPort) {
+    this.fileSystem = fileSystem;
+  }
+
   async execute(): Promise<Result<Manifest>> {
     return this.getManifest();
   }
 
   async getManifest(): Promise<Result<Manifest>> {
     try {
-      const manifestPath = path.join(
-        process.cwd(),
-        ".architecture/manifest.yaml",
-      );
-      const manifest = await mergeSplitManifest(process.cwd(), manifestPath);
+      const manifestPath = `${process.cwd()}/.architecture/manifest.yaml`;
+      const manifestStr = await this.fileSystem.mergeManifests(process.cwd(), manifestPath);
+      const manifest = JSON.parse(manifestStr) as Manifest;
       return ok(manifest);
     } catch (error) {
       if (

@@ -1,5 +1,37 @@
 import { balanceJSON } from "./json-balancer.js";
 
+function fixUnclosedStrings(json: string): string {
+  let inString = false;
+  let escaped = false;
+  const chars: string[] = [];
+
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (escaped) {
+      chars.push(ch);
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      chars.push(ch);
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      chars.push(ch);
+      continue;
+    }
+    chars.push(ch);
+  }
+
+  if (inString) {
+    chars.push('"');
+  }
+
+  return chars.join("");
+}
+
 export function repairJSON(raw: string): string | null {
   let s = raw.trim();
 
@@ -10,125 +42,37 @@ export function repairJSON(raw: string): string | null {
     c === "\n" || c === "\r" || c === "\t" ? c : "",
   );
 
-  s = fixUnterminatedStrings(s);
-  s = fixMultilineUnterminatedString(s);
+  // Fix unclosed strings first
+  s = fixUnclosedStrings(s);
 
-  let depth = 0;
-  let lastValidClose = -1;
-  let started = false;
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (ch === "\\" && inString) {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (ch === "{" || ch === "[") {
-      depth++;
-      started = true;
-    }
-    if (ch === "}" || ch === "]") {
-      depth--;
-      if (started && depth === 0) lastValidClose = i;
+  // First attempt: balance the entire cleaned string
+  let balanced = balanceJSON(s);
+  if (balanced) {
+    try {
+      JSON.parse(balanced);
+      return balanced;
+    } catch {
+      // Continue to next attempt
     }
   }
 
-  const startIdx = s.search(/[{[]/);
-  if (startIdx !== -1 && lastValidClose > 0 && lastValidClose >= startIdx) {
-    s = s.slice(startIdx, lastValidClose + 1);
-  } else if (startIdx !== -1) {
-    s = s.slice(startIdx);
-    s = balanceJSON(s);
-  } else if (lastValidClose > 0) {
-    s = s.slice(0, lastValidClose + 1);
-    s = balanceJSON(s);
-  }
-
-  try {
-    JSON.parse(s);
-    return s;
-  } catch {
-    return null;
-  }
-}
-
-function fixUnterminatedStrings(json: string): string {
-  const lines = json.split("\n");
-  const fixedLines: string[] = [];
-
-  for (const line of lines) {
-    const quotes = (line.match(/"/g) || []).length;
-    if (quotes % 2 !== 0) {
-      const firstOpenQuote = line.indexOf('"');
-      if (firstOpenQuote > 0) {
-        fixedLines.push(line.substring(0, firstOpenQuote));
+  // Second attempt: extract first JSON block, then balance
+  const block = extractFirstJSONBlock(s);
+  if (block) {
+    const fixedBlock = fixUnclosedStrings(block);
+    balanced = balanceJSON(fixedBlock);
+    if (balanced) {
+      try {
+        JSON.parse(balanced);
+        return balanced;
+      } catch {
+        // Continue
       }
-    } else {
-      fixedLines.push(line);
     }
   }
 
-  const result = fixedLines.join("\n");
-
-  if (result !== json) {
-    return balanceJSON(result);
-  }
-
-  return json;
-}
-
-function fixMultilineUnterminatedString(json: string): string {
-  let inString = false;
-  let escaped = false;
-  const chars: string[] = [];
-
-  for (let i = 0; i < json.length; i++) {
-    const ch = json[i];
-
-    if (escaped) {
-      chars.push(ch);
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\" && inString) {
-      escaped = true;
-      chars.push(ch);
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = !inString;
-      chars.push(ch);
-      continue;
-    }
-
-    if (inString) {
-      chars.push(ch);
-      continue;
-    }
-
-    chars.push(ch);
-  }
-
-  let result = chars.join("");
-
-  if (inString) {
-    result = balanceJSON(result);
-  }
-
-  return result;
+  // All attempts failed
+  return null;
 }
 
 export function extractFirstJSONBlock(s: string): string | null {
@@ -164,5 +108,5 @@ export function extractFirstJSONBlock(s: string): string | null {
     }
   }
 
-  return null;
+  return s.slice(start);
 }

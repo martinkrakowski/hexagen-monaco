@@ -13,11 +13,14 @@ export function extractJSON(raw: string): string {
   // NDJSON: multiple lines each independently starting with {
   // Exclude arrays (opening [ line) from the count
   const trimmed = raw.trim();
-  const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const lines = trimmed
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
   if (lines.length > 1) {
     const isLikelyNDJSON =
-      lines.every(l => !l.startsWith('[') && !l.startsWith(']')) &&
-      lines.filter(l => l.startsWith('{')).length > 1;
+      lines.every((l) => !l.startsWith("[") && !l.startsWith("]")) &&
+      lines.filter((l) => l.startsWith("{")).length > 1;
     if (isLikelyNDJSON) {
       // Likely NDJSON - return as-is for line-by-line parsing
       return trimmed;
@@ -54,10 +57,17 @@ export function extractArrayFromWrapper<T>(
 
 export function extractObjectFromWrapper<T extends Record<string, unknown>>(
   data: unknown,
-  _knownKeys: string[] = ["ports", "data", "result"], // eslint-disable-line @typescript-eslint/no-unused-vars
+  knownKeys: string[] = ["ports", "data", "result"],
 ): T | null {
-  if (typeof data === "object" && data !== null && !Array.isArray(data))
+  if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+    for (const key of knownKeys) {
+      const val = (data as Record<string, unknown>)[key];
+      if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+        return val as T;
+      }
+    }
     return data as T;
+  }
 
   if (Array.isArray(data) && data.length === 1 && typeof data[0] === "object")
     return data[0] as T;
