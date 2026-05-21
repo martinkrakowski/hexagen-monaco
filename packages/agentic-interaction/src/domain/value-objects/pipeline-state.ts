@@ -15,11 +15,13 @@ export interface AggregateRoot {
 
 export interface DomainEntity {
   name: string;
+  subdomain?: string;
   parentAggregate: string;
 }
 
 export interface DomainValueObject {
   name: string;
+  subdomain?: string;
   rules?: string;
 }
 

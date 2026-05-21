@@ -27,3 +27,6 @@ export type { SpinnerProps } from "./Spinner.js";
 
 export { Skeleton } from "./feedback/Skeleton.js";
 export type { SkeletonProps } from "./feedback/Skeleton.js";
+
+export { CopyButton } from "./CopyButton.js";
+export type { CopyButtonProps } from "./CopyButton.js";

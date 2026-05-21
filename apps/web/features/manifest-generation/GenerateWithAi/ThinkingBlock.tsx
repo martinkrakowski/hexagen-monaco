@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Loader2, Check } from "lucide-react";
+import { Loader2, Check, Terminal } from "lucide-react";
+import { CopyButton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
 
 const STAGE_ORDER: StagedPhase[] = [
@@ -45,6 +46,84 @@ interface ThinkingBlockProps {
    * for Stages 0-2 (which run as deterministic parsers, not LLM calls).
    */
   stageLabels?: Partial<Record<StagedPhase, string>>;
+  verboseLog?: string[];
+}
+
+function VerboseLogPanel({
+  entries,
+  className,
+}: {
+  entries: string[];
+  className?: string;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [entries]);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div
+      className={[
+        "w-full rounded-md border border-border/50 bg-muted/20 overflow-hidden flex flex-col",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/30 bg-muted/30 shrink-0">
+        <Terminal className="h-3 w-3 text-muted-foreground/60" />
+        <span className="text-xs text-muted-foreground/60 font-medium">
+          Generation log
+        </span>
+        <CopyButton
+          text={entries.join("\n")}
+          variant="ghost"
+          size="icon"
+          className="ml-auto h-6 w-6 text-muted-foreground/60 hover:text-muted-foreground"
+          aria-label="Copy log"
+        />
+      </div>
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto p-3 space-y-0.5 flex-1 min-h-0"
+      >
+        {entries.map((entry, i) => {
+          const isHeader = /^Stage \d/.test(entry);
+          const isSuccess = entry.includes("✓");
+          const isError = entry.includes("✗");
+          const isTimeout = entry.includes("⏱");
+          const isRetry = entry.includes("↻");
+          const isContext = entry.startsWith("→");
+          return (
+            <div
+              key={i}
+              className={[
+                "font-mono text-xs leading-relaxed whitespace-pre",
+                isHeader
+                  ? "text-foreground font-semibold mt-2 first:mt-0"
+                  : isSuccess
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : isError
+                      ? "text-destructive"
+                      : isTimeout || isRetry
+                        ? "text-amber-600 dark:text-amber-400"
+                        : isContext
+                          ? "text-foreground/80"
+                          : "text-muted-foreground",
+              ].join(" ")}
+            >
+              {entry}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function StepIndicator({
@@ -111,18 +190,22 @@ export function ThinkingBlock({
   stepDetail,
   stageProgress,
   stageLabels,
+  verboseLog,
 }: ThinkingBlockProps) {
   if (phase === "idle" || phase === "failed") return null;
 
   if (phase === "complete") {
     return (
-      <div className="flex flex-col items-center gap-2 py-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2 py-3 w-full h-full">
+        <div className="flex items-center gap-2 shrink-0">
           <Check className="h-4 w-4 text-accent" />
           <span className="text-base font-semibold text-foreground">
             Generation Complete
           </span>
         </div>
+        {verboseLog && verboseLog.length > 0 && (
+          <VerboseLogPanel entries={verboseLog} className="flex-1 min-h-0" />
+        )}
       </div>
     );
   }
@@ -131,8 +214,8 @@ export function ThinkingBlock({
   const label = (stageLabels?.[phase] ?? STAGE_LABELS[phase]) || phase;
 
   return (
-    <div className="flex flex-col items-center gap-4 py-3">
-      <div className="flex items-center gap-1.5">
+    <div className="flex flex-col gap-4 py-3 w-full h-full">
+      <div className="flex items-center gap-1.5 shrink-0 self-center">
         {STAGE_ORDER.map((stage, index) => {
           const stageNum = index;
           const progress = stageProgress?.[stageNum];
@@ -155,7 +238,7 @@ export function ThinkingBlock({
         })}
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-1.5">
+      <div className="flex flex-col items-center justify-center gap-1.5 shrink-0">
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 text-accent animate-spin" />
           <span className="text-base font-semibold text-foreground">
@@ -164,6 +247,10 @@ export function ThinkingBlock({
         </div>
         <DetailLine text={stepDetail} />
       </div>
+
+      {verboseLog && verboseLog.length > 0 && (
+        <VerboseLogPanel entries={verboseLog} className="flex-1 min-h-0" />
+      )}
     </div>
   );
 }

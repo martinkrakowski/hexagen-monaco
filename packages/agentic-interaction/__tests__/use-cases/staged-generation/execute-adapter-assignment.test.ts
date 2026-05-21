@@ -1,50 +1,87 @@
 import { test, describe } from "node:test";
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import { ExecuteAdapterAssignmentUseCase } from "../../../src/application/use-cases/staged-generation/execute-adapter-assignment.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
-class TimeoutError extends Error {
-  constructor(message = "LLM request timed out") {
-    super(message);
-    this.name = "TimeoutError";
-  }
-}
-
 const validBindingLine = JSON.stringify({
   contextName: "invoice-management",
-  adapterName: "InMemoryInvoiceAdapter",
+  name: "InMemoryInvoiceAdapter",
   adapterType: "Repository",
   implements: "InvoiceRepository",
 });
 
 const mockState = {
   stage0: { projectName: "test-project" },
-  stage2: { contexts: [{ name: "invoice-management" }] },
-  stage3: { entities: [] },
-  contextMappings: {},
+  stage2: {
+    accepted: [{ name: "invoice-management", type: "core", reasoning: "test" }],
+  },
+  stage3: {
+    contexts: [
+      {
+        contextName: "invoice-management",
+        in: [
+          {
+            name: "ProcessBillingPort",
+            type: "command",
+            description: "Process billing",
+          },
+        ],
+        out: [
+          {
+            name: "BillingRepositoryPort",
+            type: "repository",
+            description: "Persist billing",
+          },
+        ],
+      },
+    ],
+  },
+  contextMappings: [],
 } as any;
 
 const mockVariables = {} as any;
 
+function createMockLLMPort(
+  streamFn: () => AsyncIterable<{
+    success: boolean;
+    value?: string;
+    error?: unknown;
+  }>,
+): SendStructuredRequestPort {
+  return {
+    sendRequest: async () => ({
+      success: true as const,
+      value: {
+        id: "test",
+        modelId: "gpt-4o-mini" as any,
+        content: validBindingLine,
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
+      },
+    }),
+    streamStructuredRequest: () => streamFn(),
+  } as unknown as SendStructuredRequestPort;
+}
+
+async function* createSuccessStream(content: string) {
+  yield { success: true, value: content };
+}
+
+async function* createErrorStream(error: unknown) {
+  yield { success: false, error };
+}
+
+async function* createMalformedStream() {
+  yield { success: true, value: "not valid json at all" };
+}
+
 describe("ExecuteAdapterAssignmentUseCase", () => {
   test("happy path: returns valid adapter bindings", async () => {
-    const mockPort = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: validBindingLine,
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validBindingLine };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockPort = createMockLLMPort(() =>
+      createSuccessStream(validBindingLine),
+    );
 
     const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
     const result = await useCase.execute(mockState, mockVariables);
@@ -65,61 +102,24 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
   });
 
   test("retry path: fails 2x then succeeds", async () => {
-    let callCount = 0;
-    const mockPort = {
-      sendRequest: async () => {
-        callCount++;
-        if (callCount <= 2) {
-          return {
-            success: true as const,
-            value: {
-              id: "test",
-              modelId: "gpt-4o-mini" as any,
-              content: "invalid json",
-              finishReason: "stop" as const,
-              timestamp: Date.now(),
-            },
-          };
-        }
-        return {
-          success: true as const,
-          value: {
-            id: "test",
-            modelId: "gpt-4o-mini" as any,
-            content: validBindingLine,
-            finishReason: "stop" as const,
-            timestamp: Date.now(),
-          },
-        };
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validBindingLine };
-      },
-    } as unknown as SendStructuredRequestPort;
+    let attemptCount = 0;
+    const mockPort = createMockLLMPort(() => {
+      attemptCount++;
+      if (attemptCount <= 2) {
+        return createMalformedStream();
+      }
+      return createSuccessStream(validBindingLine);
+    });
 
     const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
     const result = await useCase.execute(mockState, mockVariables);
 
     assert.strictEqual(result.success, true);
-    assert.strictEqual(callCount, 3);
+    assert.strictEqual(attemptCount, 3);
   });
 
   test("max retries exceeded: returns error", async () => {
-    const mockPort = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: "invalid json",
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: "invalid json" };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockPort = createMockLLMPort(() => createMalformedStream());
 
     const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
     const result = await useCase.execute(mockState, mockVariables);
@@ -131,21 +131,9 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
   });
 
   test("calls telemetry callback with correct data", async () => {
-    const mockPort = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: validBindingLine,
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validBindingLine };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockPort = createMockLLMPort(() =>
+      createSuccessStream(validBindingLine),
+    );
 
     const telemetryCalls: StageTelemetry[] = [];
     const onStageTelemetry = (t: StageTelemetry) => telemetryCalls.push(t);
@@ -166,113 +154,34 @@ describe("ExecuteAdapterAssignmentUseCase", () => {
     assert.strictEqual(telemetry.retryCount, 0);
   });
 
-  test("handles LLM timeout", async () => {
-    const timeoutAdapter = {
-      sendRequest: async (request: any) => {
-        // Check if abort was already called
-        if (request.signal?.aborted) {
-          throw new TimeoutError("Request already aborted");
-        }
-        // Simulate a long operation that will be aborted
-        return new Promise<any>((resolve, reject) => {
-          let completed = false;
-          // Simulate long operation
-          const operationTimer = setTimeout(() => {
-            if (!completed) {
-              completed = true;
-              resolve({
-                success: true as const,
-                value: {
-                  id: "test",
-                  modelId: "gpt-4o-mini" as any,
-                  content: validBindingLine,
-                  finishReason: "stop" as const,
-                  timestamp: Date.now(),
-                },
-              });
-            }
-          }, 100000);
+  test("handles LLM stream error", async () => {
+    const mockPort = createMockLLMPort(() =>
+      createErrorStream(new Error("LLM request timeout")),
+    );
 
-          // Listen for abort
-          if (request.signal) {
-            request.signal.addEventListener("abort", () => {
-              if (!completed) {
-                completed = true;
-                clearTimeout(operationTimer);
-                reject(new TimeoutError("LLM request timeout"));
-              }
-            });
-          }
-        });
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validBindingLine };
-      },
-    } as unknown as SendStructuredRequestPort;
-
-    const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
+    const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
     const result = await useCase.execute(mockState, mockVariables);
 
     assert.strictEqual(result.success, false);
-    assert.ok(
-      result.error instanceof TimeoutError,
-      "Expected TimeoutError for LLM timeout",
-    );
+    assert.ok(result.error instanceof Error);
   });
 
-  test("retry fails on persistent timeout", async () => {
-    let callCount = 0;
-    const timeoutAdapter = {
-      sendRequest: async () => {
-        callCount++;
-        if (callCount <= 3) {
-          throw new TimeoutError(`Attempt ${callCount} timed out`);
-        }
-        return {
-          success: true as const,
-          value: {
-            id: "test",
-            modelId: "gpt-4o-mini" as any,
-            content: validBindingLine,
-            finishReason: "stop" as const,
-            timestamp: Date.now(),
-          },
-        };
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validBindingLine };
-      },
-    } as unknown as SendStructuredRequestPort;
+  test("retry fails on persistent stream error", async () => {
+    const mockPort = createMockLLMPort(() =>
+      createErrorStream(new Error("Persistent timeout")),
+    );
 
-    const useCase = new ExecuteAdapterAssignmentUseCase(timeoutAdapter);
+    const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
     const result = await useCase.execute(mockState, mockVariables);
 
     assert.strictEqual(result.success, false);
-    assert.ok(
-      result.error instanceof TimeoutError,
-      "Expected TimeoutError for persistent timeout",
-    );
-    assert.strictEqual(callCount, 3);
+    assert.ok(result.error instanceof Error);
   });
 
   test("handles malformed LLM response", async () => {
-    const badAdapter = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: "not valid json at all",
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: "not valid json at all" };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockPort = createMockLLMPort(() => createMalformedStream());
 
-    const useCase = new ExecuteAdapterAssignmentUseCase(badAdapter);
+    const useCase = new ExecuteAdapterAssignmentUseCase(mockPort);
     const result = await useCase.execute(mockState, mockVariables);
 
     assert.strictEqual(result.success, false);

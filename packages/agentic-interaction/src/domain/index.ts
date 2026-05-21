@@ -127,6 +127,7 @@ export {
   toKebabCase,
   ensurePortSuffix,
   normalizePortName,
+  normalizeContextName,
 } from "./manifest/index";
 export { validateDraft, checkClarificationTriggers } from "./manifest/index";
 export { draftToManifest } from "./manifest/index";

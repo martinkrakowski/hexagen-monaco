@@ -109,13 +109,27 @@ export const BoundedContextSchema = z.object({
 export const AppSchema = z
   .object({
     name: z.string(),
-    driver: z.enum(["next.js", "fastify", "express", "cli"]).optional(),
-    framework: z.enum(["next.js", "fastify", "express", "plain-ts"]).optional(),
+    framework: z.string().optional(),
     version: z.string().optional(),
+    driver: z.string().optional(),
     description: z.string().optional(),
+    role: z.string().optional(),
+    router: z.string().optional(),
+    deployment: z.string().optional(),
+    auth: z.string().optional(),
+    schedule: z.string().optional(),
+    ui: z
+      .object({
+        library: z.string().optional(),
+        styling: z.string().optional(),
+      })
+      .optional(),
+    responsibilities: z.array(z.string()).optional(),
     depends_on: z.array(z.string()).optional(),
   })
-  .strict();
+  // Silently strip unknown properties to tolerate forward-compatible imported manifests
+  // and allow graceful degradation when importing specs with extra fields
+  .strip();
 
 export const IndexManifestSchema = z
   .object({
@@ -207,6 +221,18 @@ export const ManifestSchema = z
       .optional(),
     bounded_contexts: z.array(BoundedContextSchema),
     apps: z.array(AppSchema).optional(),
+    context_mappings: z
+      .array(
+        z.object({
+          upstream: z.string(),
+          downstream: z.string(),
+          pattern: z.string().optional(),
+          mechanism: z.string().optional(),
+          notes: z.string().optional(),
+          events: z.array(z.string()).optional(),
+        }),
+      )
+      .optional(),
     workspaceDefaults: z.record(z.unknown()).optional(),
     legacy_config: z.string().optional(),
   })

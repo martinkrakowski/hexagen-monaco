@@ -1,5 +1,5 @@
 import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
@@ -9,61 +9,59 @@ import {
   buildNormalizedPromptFromConfig,
 } from "../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
+const portMappingResponse = [
+  JSON.stringify({
+    contextName: "billing",
+    direction: "in",
+    name: "ProcessBillingPort",
+    portType: "command",
+    description: "Process billing",
+  }),
+  JSON.stringify({
+    contextName: "billing",
+    direction: "out",
+    name: "BillingRepository",
+    portType: "repository",
+    description: "Persist billing",
+  }),
+].join("\n");
+
+const adapterResponse = [
+  JSON.stringify({
+    contextName: "billing",
+    adapterName: "InMemoryBillingRepoAdapter",
+    adapterType: "Repository",
+    implements: "BillingRepository",
+  }),
+].join("\n");
+
+const validationResponse = JSON.stringify({
+  type: "result",
+  passed: true,
+});
+
 function createMockSendStructuredRequest(): SendStructuredRequestPort {
-  const portMappingResponse = [
-    JSON.stringify({
-      contextName: "billing",
-      direction: "in",
-      name: "ProcessBillingPort",
-      portType: "command",
-      description: "Process billing",
-    }),
-    JSON.stringify({
-      contextName: "billing",
-      direction: "out",
-      name: "BillingRepository",
-      portType: "repository",
-      description: "Persist billing",
-    }),
-  ].join("\n");
-
-  const adapterResponse = [
-    JSON.stringify({
-      contextName: "billing",
-      adapterName: "InMemoryBillingRepoAdapter",
-      adapterType: "Repository",
-      implements: "BillingRepository",
-    }),
-  ].join("\n");
-
-  const validationResponse = JSON.stringify({
-    type: "result",
-    passed: true,
-  });
-
-  let callCount = 0;
+  let streamCallCount = 0;
   return {
-    sendRequest: async () => {
-      callCount++;
+    sendRequest: async () => ({
+      success: true as const,
+      value: {
+        id: "test",
+        modelId: "qwen-coder-3b" as any,
+        content: portMappingResponse,
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
+      },
+    }),
+    streamStructuredRequest: () => {
+      streamCallCount++;
       let content = portMappingResponse;
-      if (callCount > 1 && callCount <= 4) content = adapterResponse;
-      if (callCount > 4) content = validationResponse;
-      return {
-        success: true as const,
-        value: {
-          id: `test-${callCount}`,
-          modelId: "qwen-coder-3b" as any,
-          content,
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      };
-    },
-    streamStructuredRequest: async function* () {
-      yield {
-        success: true,
-        value: portMappingResponse,
-      };
+      if (streamCallCount > 1 && streamCallCount <= 4)
+        content = adapterResponse;
+      if (streamCallCount > 4) content = validationResponse;
+      return (async function* () {
+        yield { success: true, value: content };
+      })();
     },
   } as unknown as SendStructuredRequestPort;
 }

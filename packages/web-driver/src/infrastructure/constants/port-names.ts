@@ -120,6 +120,8 @@ export const PORT_NAMES = {
   PROJECT_GENERATOR: "ProjectGeneratorPort",
   /** Client manifest generation use case */
   CLIENT_MANIFEST_GENERATION: "ClientManifestGenerationPort",
+  /** Client spec generation use case (Map Ports & Adapters) */
+  CLIENT_SPEC_GENERATION: "ClientSpecGenerationPort",
   /** Server manifest generation use case (API-based) */
   SERVER_MANIFEST_GENERATION: "ServerManifestGenerationPort",
   /** File writer for generated files */

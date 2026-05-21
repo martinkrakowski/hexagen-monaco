@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, Suspense } from "react";
+import { useState, useCallback, Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
@@ -8,8 +8,16 @@ import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
-import { Skeleton } from "@hexagen/ui";
+import { Skeleton, Button, CopyButton } from "@hexagen/ui";
+import { ArrowLeft } from "lucide-react";
+import { ProjectsShell } from "@/landing/ProjectsShell";
 import type { StagedPhase } from "./staged-generation-types";
+import {
+  hasServerLLMAccessKey,
+  isLocalLLMReady,
+} from "../../app/lib/wire.client";
+import { usePendingManifest } from "./store/usePendingManifest";
+import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 
 type SpecPageState =
   | "UPLOAD"
@@ -77,6 +85,7 @@ const SPEC_STAGE_LABELS: Partial<Record<StagedPhase, string>> = {
 
 export default function ImportProjectSpecPage() {
   const router = useRouter();
+  const pendingManifest = usePendingManifest();
   const [pageState, setPageState] = useState<SpecPageState>("UPLOAD");
   const [previousState, setPreviousState] = useState<SpecPageState | null>(
     null,
@@ -93,7 +102,15 @@ export default function ImportProjectSpecPage() {
   // Hook for description fallback path
   const manifestGeneration = useStagedManifestGeneration();
 
+  useEffect(() => {
+    const saved = sessionStorage.getItem("import_spec_content");
+    if (saved && !specContent) {
+      handleFileLoaded(saved);
+    }
+  }, []);
+
   const handleFileLoaded = (content: string) => {
+    sessionStorage.setItem("import_spec_content", content);
     const mode: InputMode = detectInputMode(content);
 
     if (mode === "structured-config") {
@@ -112,41 +129,70 @@ export default function ImportProjectSpecPage() {
   };
 
   const handleMapPorts = useCallback(async () => {
+    // Pre-generation guard
+    const hasCloudKeys = hasServerLLMAccessKey();
+    const hasLocalLLM = isLocalLLMReady();
+
+    if (!hasCloudKeys && !hasLocalLLM) {
+      router.push(
+        "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
+      );
+      return;
+    }
+
     setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
+    manifestGeneration.reset();
 
-    const result = await specGeneration.generateFromSpec(specContent);
+    const result = await specGeneration.generateFromSpec(specContent, {
+      executionStrategy: "auto",
+    });
 
     if (result?.generatedManifest) {
       setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
-    } else if (result?.phase === "failed") {
-      setPageState("SPEC_REVIEW");
     }
-  }, [specContent, specGeneration, pageState]);
+    // If result.phase === "failed", we intentionally stay on the GENERATING page
+    // so the user can see the generationError message that is displayed there.
+    else if (result?.phase === "failed") {
+      const errorMsg = result.stepDetail || "";
+      if (errorMsg.includes("No cloud LLM API keys configured")) {
+        // Spec generation cannot run locally via WebLLM on the backend.
+        // Fallback to the description mode which uses the local-capable useStagedManifestGeneration.
+        setPageState("DESCRIPTION_FALLBACK");
+      }
+    }
+  }, [specContent, specGeneration, manifestGeneration, pageState, router]);
 
   const handleContinue = useCallback(async () => {
     setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
+    specGeneration.reset();
 
-    await manifestGeneration.generateManifest(specContent);
+    const result = await manifestGeneration.generateManifest(specContent);
 
-    const result = manifestGeneration;
-    if (result.generatedManifest) {
+    if (result?.generatedManifest) {
       setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
-    } else if (result.generationError) {
-      setPageState("DESCRIPTION_FALLBACK");
+    } else if (result?.generationError) {
+      if (result.generationError.includes("No cloud LLM API keys configured")) {
+        router.push(
+          "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
+        );
+      } else {
+        setPageState("DESCRIPTION_FALLBACK");
+      }
     }
-  }, [specContent, manifestGeneration, pageState]);
+  }, [specContent, manifestGeneration, specGeneration, pageState, router]);
 
   const handleBack = () => {
     if (pageState === "SPEC_REVIEW" || pageState === "DESCRIPTION_FALLBACK") {
       setPageState("UPLOAD");
       setSpecSummary(null);
       setSpecContent("");
+      sessionStorage.removeItem("import_spec_content");
     } else {
       router.push("/projects/new/import");
     }
@@ -159,7 +205,25 @@ export default function ImportProjectSpecPage() {
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
+    sessionStorage.removeItem("import_spec_content");
   };
+
+  const handleAcceptAndContinue = useCallback(() => {
+    if (!generatedManifest) return;
+    try {
+      const wizardData = parseManifestToWizardData(generatedManifest);
+      const projectName =
+        wizardData.governance?.workspaceName ||
+        `Imported Project ${new Date().toLocaleTimeString()}`;
+      pendingManifest.set(generatedManifest, wizardData, projectName);
+      router.push("/projects/new/ai/accept");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("Failed to parse manifest for wizard:", errorMsg);
+      setPageState("PREVIEW");
+      // Don't route away—show error but let user inspect the YAML
+    }
+  }, [generatedManifest, pendingManifest, router]);
 
   const generationError =
     specGeneration.generationError || manifestGeneration.generationError;
@@ -170,184 +234,226 @@ export default function ImportProjectSpecPage() {
   const stepDetail = specGeneration.stepDetail || manifestGeneration.stepDetail;
   const stageProgress =
     specGeneration.stageProgress || manifestGeneration.stageProgress;
+  const verboseLog = specGeneration.verboseLog;
 
-  return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
-      {pageState === "UPLOAD" && (
-        <div>
-          <h1 className="text-2xl font-bold mb-4">
-            Import Project Specification
-          </h1>
-          <p className="mb-4">
-            Upload a YAML or JSON spec file to generate a manifest.
-          </p>
-          <label
-            htmlFor="project-spec-file"
-            className="block mb-2 text-sm font-medium"
-          >
-            Upload Project Specification
-          </label>
-          <input
-            id="project-spec-file"
-            type="file"
-            accept=".yaml,.yml,.json,.txt"
-            aria-describedby="file-help"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = (ev) =>
-                handleFileLoaded(ev.target?.result as string);
-              reader.readAsText(file);
-            }}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent/90"
-          />
-          <p id="file-help" className="text-sm text-muted-foreground mt-2">
-            Upload a YAML or JSON spec file to generate a manifest.
-          </p>
-        </div>
-      )}
-
-      {pageState === "SPEC_REVIEW" && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Spec Review</h2>
-          {specSummary && (
-            <div className="mb-4 space-y-2">
-              <p>✓ {specSummary.contextCount} bounded contexts detected</p>
-              <p>✓ {specSummary.aggregateCount} aggregates</p>
-              <p>✓ {specSummary.valueObjectCount} value objects</p>
-              <p>✓ {specSummary.useCaseCount} use cases</p>
-              <p>✓ {specSummary.mappingCount} context mappings</p>
-              {specSummary.eventBusSubscriptionCount > 0 && (
-                <p>
-                  ✓ Event bus: {specSummary.eventBusSubscriptionCount}{" "}
-                  subscriptions
-                </p>
-              )}
-              <p className="text-sm text-muted-foreground mt-4">
-                AI will generate: hexagonal ports, adapter assignments, manifest
-                assembly, validation review
-              </p>
-              <p className="text-sm text-muted-foreground">
-                AI will skip: domain extraction (Stage 1), context
-                classification (Stage 2)
-              </p>
-            </div>
-          )}
+  const renderFooter = () => {
+    if (pageState === "SPEC_REVIEW") {
+      return (
+        <>
+          <Button variant="outline" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <Button type="button" onClick={handleMapPorts}>
+            Map Ports & Adapters
+          </Button>
+        </>
+      );
+    }
+    if (pageState === "DESCRIPTION_FALLBACK") {
+      return (
+        <>
+          <Button variant="outline" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
           <div className="flex gap-2">
-            <button
-              onClick={handleMapPorts}
-              className="px-4 py-2 bg-accent text-accent-foreground rounded hover:bg-accent/90"
-            >
-              Map Ports & Adapters
-            </button>
-            <button
-              onClick={handleBack}
-              className="px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded"
-            >
-              Back
-            </button>
-          </div>
-        </div>
-      )}
-
-      {pageState === "DESCRIPTION_FALLBACK" && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Description Detected</h2>
-          <p className="mb-4">
-            Warning: This doesn't look like a structured spec. You can continue
-            with AI generation using this as a description.
-          </p>
-          <div className="flex gap-2">
-            <button
+            <Button
+              variant="outline"
               onClick={() => router.push("/projects/new/ai")}
-              className="px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded"
             >
               Generate with AI instead
-            </button>
-            <button
-              onClick={handleContinue}
-              className="px-4 py-2 bg-accent text-accent-foreground rounded hover:bg-accent/90"
-            >
-              Continue anyway
-            </button>
-            <button
-              onClick={handleBack}
-              className="px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded"
-            >
-              Back
-            </button>
+            </Button>
+            <Button onClick={handleContinue}>Continue anyway</Button>
           </div>
-        </div>
-      )}
-
-      {pageState === "GENERATING" && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Generating Manifest</h2>
-          {generationError && (
-            <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded">
-              Error: {generationError}
-            </div>
-          )}
-          <Suspense
-            fallback={
-              <div className="space-y-4">
-                <Skeleton className="h-64 w-full" />
-                <Skeleton className="h-32 w-48" />
-                <Skeleton className="h-96 w-full" />
-              </div>
-            }
+        </>
+      );
+    }
+    if (pageState === "GENERATING") {
+      return (
+        <>
+          <span />
+          <Button
+            variant="outline"
+            onClick={() => {
+              specGeneration.reset();
+              manifestGeneration.reset();
+              setPageState(previousState ?? "SPEC_REVIEW");
+              setPreviousState(null);
+            }}
           >
-            <ThinkingBlock
-              phase={phase}
-              stepDetail={stepDetail}
-              stageProgress={stageProgress}
-              stageLabels={SPEC_STAGE_LABELS}
-            />
-          </Suspense>
-          {(specGeneration.isGenerating || manifestGeneration.isGenerating) && (
-            <button
-              onClick={() => {
-                specGeneration.reset();
-                manifestGeneration.reset();
-                setPageState(previousState ?? "SPEC_REVIEW");
-                setPreviousState(null);
-              }}
-              className="mt-4 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded"
-            >
-              Cancel
-            </button>
+            {specGeneration.isGenerating || manifestGeneration.isGenerating
+              ? "Cancel"
+              : "Go Back"}
+          </Button>
+        </>
+      );
+    }
+    if (pageState === "PREVIEW") {
+      return (
+        <>
+          <Button variant="outline" onClick={handleReset}>
+            Start Over
+          </Button>
+          <Button onClick={handleAcceptAndContinue}>Accept & Continue</Button>
+        </>
+      );
+    }
+    return (
+      <>
+        <Button variant="outline" onClick={handleBack}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+        <span />
+      </>
+    );
+  };
+
+  const isFullHeightState =
+    pageState === "GENERATING" || pageState === "PREVIEW";
+
+  return (
+    <ProjectsShell title="Import Project Specification" footer={renderFooter()}>
+      {isFullHeightState ? (
+        <div className="h-full flex flex-col dot-grid bg-ambient p-4">
+          {pageState === "GENERATING" && (
+            <>
+              <h2 className="text-xl font-semibold mb-3 shrink-0">
+                Generating Manifest
+              </h2>
+              {generationError && (
+                <div className="mb-3 p-4 bg-destructive/10 text-destructive rounded shrink-0">
+                  Error: {generationError}
+                </div>
+              )}
+              <div className="flex-1 min-h-0">
+                <Suspense
+                  fallback={
+                    <div className="space-y-4">
+                      <Skeleton className="h-64 w-full" />
+                      <Skeleton className="h-32 w-48" />
+                      <Skeleton className="h-96 w-full" />
+                    </div>
+                  }
+                >
+                  <ThinkingBlock
+                    phase={phase}
+                    stepDetail={stepDetail}
+                    stageProgress={stageProgress}
+                    stageLabels={SPEC_STAGE_LABELS}
+                    verboseLog={verboseLog}
+                  />
+                </Suspense>
+              </div>
+            </>
+          )}
+
+          {pageState === "PREVIEW" && (
+            <>
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <h2 className="text-xl font-semibold">Manifest Preview</h2>
+                {generatedManifest && (
+                  <CopyButton
+                    text={generatedManifest}
+                    aria-label="Copy manifest YAML"
+                  />
+                )}
+              </div>
+              {generatedManifest && (
+                <pre className="flex-1 min-h-0 p-4 bg-muted rounded overflow-auto text-sm font-mono">
+                  {generatedManifest}
+                </pre>
+              )}
+            </>
           )}
         </div>
-      )}
+      ) : (
+        <div className="h-full overflow-y-auto dot-grid bg-ambient">
+          <div className="max-w-2xl mx-auto py-8 px-4">
+            {pageState === "UPLOAD" && (
+              <div>
+                <h1 className="text-2xl font-bold mb-4">
+                  Import Project Specification
+                </h1>
+                <p className="mb-4">
+                  Upload a YAML or JSON spec file to generate a manifest.
+                </p>
+                <label
+                  htmlFor="project-spec-file"
+                  className="block mb-2 text-sm font-medium"
+                >
+                  Upload Project Specification
+                </label>
+                <input
+                  id="project-spec-file"
+                  type="file"
+                  accept=".yaml,.yml,.json,.txt"
+                  aria-describedby="file-help"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) =>
+                      handleFileLoaded(ev.target?.result as string);
+                    reader.readAsText(file);
+                  }}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent/90"
+                />
+                <p
+                  id="file-help"
+                  className="text-sm text-muted-foreground mt-2"
+                >
+                  Upload a YAML or JSON spec file to generate a manifest.
+                </p>
+              </div>
+            )}
 
-      {pageState === "PREVIEW" && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Manifest Preview</h2>
-          {generatedManifest && (
-            <pre className="p-4 bg-muted rounded overflow-auto max-h-96 text-sm">
-              {generatedManifest}
-            </pre>
-          )}
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={() => {
-                // Navigate to accept page or save
-                router.push("/projects/new");
-              }}
-              className="px-4 py-2 bg-accent text-accent-foreground rounded hover:bg-accent/90"
-            >
-              Accept & Continue
-            </button>
-            <button
-              onClick={handleReset}
-              className="px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded"
-            >
-              Start Over
-            </button>
+            {pageState === "SPEC_REVIEW" && (
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Spec Review</h2>
+                {specSummary && (
+                  <div className="mb-4 space-y-2">
+                    <p>
+                      ✓ {specSummary.contextCount} bounded contexts detected
+                    </p>
+                    <p>✓ {specSummary.aggregateCount} aggregates</p>
+                    <p>✓ {specSummary.valueObjectCount} value objects</p>
+                    <p>✓ {specSummary.useCaseCount} use cases</p>
+                    <p>✓ {specSummary.mappingCount} context mappings</p>
+                    {specSummary.eventBusSubscriptionCount > 0 && (
+                      <p>
+                        ✓ Event bus: {specSummary.eventBusSubscriptionCount}{" "}
+                        subscriptions
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground mt-4">
+                      AI will generate: hexagonal ports, adapter assignments,
+                      manifest assembly, validation review
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      AI will skip: domain extraction (Stage 1), context
+                      classification (Stage 2)
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pageState === "DESCRIPTION_FALLBACK" && (
+              <div>
+                <h2 className="text-xl font-semibold mb-4">
+                  Description Detected
+                </h2>
+                <p className="mb-4">
+                  Warning: This doesn't look like a structured spec. You can
+                  continue with AI generation using this as a description.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
-    </div>
+    </ProjectsShell>
   );
 }

@@ -7,6 +7,7 @@ import {
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
+import type { WebLLMAdapter } from "@hexagen/local-llm";
 
 interface SpecRequestBody {
   config: string;
@@ -38,16 +39,16 @@ export async function POST(request: NextRequest) {
     const retryAfter = Math.ceil(rateCheck.retryAfter! / 1000);
     return new Response(
       JSON.stringify({ type: "error", message: "Rate limit exceeded" }) + "\n",
-      { 
+      {
         status: 429,
         headers: {
           "Content-Type": "application/x-ndjson",
           "Retry-After": retryAfter.toString(),
         },
-      }
+      },
     );
   }
-  
+
   let body: SpecRequestBody;
   try {
     body = await request.json();
@@ -91,9 +92,25 @@ export async function POST(request: NextRequest) {
       };
 
       try {
+        let webLlmAdapter: WebLLMAdapter | null = null;
+        try {
+          const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
+          webLlmAdapter = new Adapter({
+            defaultModelId: undefined,
+          });
+        } catch (error) {
+          if (process.env.NODE_ENV !== "production") {
+            logger.warn("WebLLM adapter initialization failed:", { error });
+          }
+        }
+
+        const hasCloudKeys =
+          !!process.env.OPENAI_API_KEY || !!process.env.ANTHROPIC_API_KEY;
+        const preferLocal = body.preferLocal ?? !hasCloudKeys;
+
         const llmAdapter = createLLMProviderSelector({
-          preferLocal: body.preferLocal ?? false,
-          webLlmAdapter: null,
+          preferLocal,
+          webLlmAdapter,
           validateLocalLLM: false,
         });
 

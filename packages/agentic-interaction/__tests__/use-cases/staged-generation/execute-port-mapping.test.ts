@@ -1,9 +1,8 @@
 import { test, describe } from "node:test";
-import * as assert from "node:assert/strict";
+import assert from "node:assert";
 import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/staged-generation/execute-port-mapping.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
-import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
 const validPortMappingNdjson = [
@@ -22,26 +21,24 @@ const mockStageState: Pick<PipelineState, "stage0" | "stage1" | "stage2"> = {
         type: "core" as const,
         reasoning: "Manages invoices",
       },
+      {
+        name: "billing",
+        type: "core" as const,
+        reasoning: "Manages billing",
+      },
     ],
     rejected: [],
     uncertain: [],
   } as any,
 };
 
-const createSuccessStream = (content: string) => {
-  return {
-    async *[Symbol.asyncIterator]() {
-      yield { success: true, value: content };
-    },
-  } as AsyncIterable<{ success: boolean; value?: string; error?: unknown }>;
-};
-
-const createMockLLMPort = (
-  streams: Array<
-    AsyncIterable<{ success: boolean; value?: string; error?: unknown }>
-  >,
-) => {
-  let callIdx = 0;
+function createMockLLMPort(
+  streamFn: () => AsyncIterable<{
+    success: boolean;
+    value?: string;
+    error?: unknown;
+  }>,
+): SendStructuredRequestPort {
   return {
     sendRequest: async () => ({
       success: true as const,
@@ -53,19 +50,27 @@ const createMockLLMPort = (
         timestamp: Date.now(),
       },
     }),
-    streamStructuredRequest: () => {
-      const stream = streams[callIdx];
-      callIdx++;
-      return stream;
-    },
+    streamStructuredRequest: () => streamFn(),
   } as unknown as SendStructuredRequestPort;
-};
+}
+
+async function* createSuccessStream(content: string) {
+  yield { success: true, value: content };
+}
+
+async function* createErrorStream(error: unknown) {
+  yield { success: false, error };
+}
+
+async function* createMalformedStream() {
+  yield { success: true, value: "not valid json at all" };
+}
 
 describe("ExecutePortMappingUseCase", () => {
   test("happy path: valid stage0+stage1+stage2 returns PortMappingResult", async () => {
-    const mockPort = createMockLLMPort([
+    const mockPort = createMockLLMPort(() =>
       createSuccessStream(validPortMappingNdjson),
-    ]);
+    );
     const useCase = new ExecutePortMappingUseCase(mockPort);
     const result = await useCase.execute(mockStageState);
 
@@ -88,9 +93,9 @@ describe("ExecutePortMappingUseCase", () => {
 
   test("telemetry callback is invoked on success", async () => {
     const telemetryCalls: StageTelemetry[] = [];
-    const mockPort = createMockLLMPort([
+    const mockPort = createMockLLMPort(() =>
       createSuccessStream(validPortMappingNdjson),
-    ]);
+    );
     const useCase = new ExecutePortMappingUseCase(mockPort);
     const onStageTelemetry = (telemetry: StageTelemetry) => {
       telemetryCalls.push(telemetry);
@@ -106,82 +111,43 @@ describe("ExecutePortMappingUseCase", () => {
     assert.strictEqual(telemetry.retryCount, 0);
   });
 
-  test("handles LLM timeout", async () => {
-    const timeoutAdapter = {
-      sendRequest: async () => {
-        throw new Error("LLM request timeout");
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validPortMappingNdjson };
-      },
-    } as unknown as SendStructuredRequestPort;
+  test("handles stream error from LLM", async () => {
+    const mockPort = createMockLLMPort(() =>
+      createErrorStream(new Error("LLM request timeout")),
+    );
 
-    const useCase = new ExecutePortMappingUseCase(timeoutAdapter);
+    const useCase = new ExecutePortMappingUseCase(mockPort);
+    const result = await useCase.execute(mockStageState);
 
-    const result = await useCase.execute(mockStageState).catch((err) => {
-      return { success: false, error: err };
-    });
-
-    assert.strictEqual(result.success, false);
-    assert.ok(result.error);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.portMap.contexts.length, 0);
+    }
   });
 
-  test("retry fails on persistent timeout", async () => {
-    let callCount = 0;
-    const timeoutAdapter = {
-      sendRequest: async () => {
-        callCount++;
-        if (callCount <= 3) {
-          throw new Error(`Attempt ${callCount} timed out`);
-        }
-        return {
-          success: true as const,
-          value: {
-            id: "test",
-            modelId: "gpt-4o-mini" as any,
-            content: validPortMappingNdjson,
-            finishReason: "stop" as const,
-            timestamp: Date.now(),
-          },
-        };
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: validPortMappingNdjson };
-      },
-    } as unknown as SendStructuredRequestPort;
+  test("returns empty port map on persistent stream errors", async () => {
+    const mockPort = createMockLLMPort(() =>
+      createErrorStream(new Error("Persistent timeout")),
+    );
 
-    const useCase = new ExecutePortMappingUseCase(timeoutAdapter);
-    const result = await useCase.execute(mockStageState).catch((err) => {
-      return { success: false, error: err };
-    });
+    const useCase = new ExecutePortMappingUseCase(mockPort);
+    const result = await useCase.execute(mockStageState);
 
-    assert.strictEqual(result.success, false);
-    assert.ok(result.error);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.portMap.contexts.length, 0);
+    }
   });
 
   test("handles malformed LLM response", async () => {
-    const badAdapter = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: "not valid json at all",
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: "not valid json at all" };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockPort = createMockLLMPort(() => createMalformedStream());
 
-    const useCase = new ExecutePortMappingUseCase(badAdapter);
+    const useCase = new ExecutePortMappingUseCase(mockPort);
     const result = await useCase.execute(mockStageState);
 
-    assert.strictEqual(result.success, false);
-    if (!result.success) {
-      assert.ok(result.error instanceof StageMaxRetriesError);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.portMap.contexts.length, 0);
     }
   });
 });

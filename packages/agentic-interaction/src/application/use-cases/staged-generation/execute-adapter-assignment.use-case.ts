@@ -21,6 +21,60 @@ import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetr
 
 const STAGE_NUMBER = 4;
 
+/**
+ * Brace-depth scanner: correctly extracts JSON objects from LLM output
+ * regardless of whether they are newline-separated, concatenated, or wrapped
+ * in markdown fences. Handles `{` and `}` inside string values correctly.
+ */
+function extractJsonObjects(raw: string): Record<string, unknown>[] {
+  const stripped = raw
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  if (!stripped) return [];
+
+  const results: Record<string, unknown>[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < stripped.length; i++) {
+    const ch = stripped[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try {
+          results.push(
+            JSON.parse(stripped.slice(start, i + 1)) as Record<string, unknown>,
+          );
+        } catch {
+          // skip malformed object
+        }
+        start = -1;
+      }
+    }
+  }
+
+  return results;
+}
+
 export class ExecuteAdapterAssignmentUseCase {
   constructor(private readonly llmPort: SendStructuredRequestPort) {}
 
@@ -40,11 +94,15 @@ export class ExecuteAdapterAssignmentUseCase {
     let prompt = compileStage4Prompt(state, variables);
     let lastError = "";
     let retryCount = 0;
+    const contextCount = state.stage2?.accepted?.length ?? 0;
+    onChunk?.(
+      `Assigning concrete adapters across ${contextCount} bounded contexts…`,
+    );
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(() => abortController.abort(), 5000); // 5s timeout per attempt
+      const timeoutHandle = setTimeout(() => abortController.abort(), 1800000); // 30min timeout per attempt
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
@@ -53,13 +111,27 @@ export class ExecuteAdapterAssignmentUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        { stream: true, temperature: 0.1, maxTokens: 4096 },
       );
       request.signal = abortController.signal;
 
-      let responseResult;
+      let fullResponse = "";
+      let streamError: unknown = null;
+      let chunkCount = 0;
+
       try {
-        responseResult = await this.llmPort.sendRequest(request);
+        const stream = this.llmPort.streamStructuredRequest(request);
+        for await (const result of stream) {
+          if (!result.success) {
+            streamError = result.error;
+            break;
+          }
+          fullResponse += result.value;
+          chunkCount++;
+          if (chunkCount % 100 === 0) {
+            onChunk?.(`   Writing adapter bindings… (${chunkCount} tokens)`);
+          }
+        }
       } catch (thrownError) {
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
@@ -73,17 +145,6 @@ export class ExecuteAdapterAssignmentUseCase {
       } finally {
         clearTimeout(timeoutHandle);
       }
-      let fullResponse = "";
-      let streamError: unknown = null;
-
-      if (!responseResult.success) {
-        streamError = responseResult.error;
-      } else {
-        fullResponse = responseResult.value.content;
-        if (onChunk && fullResponse) {
-          onChunk(fullResponse);
-        }
-      }
 
       if (streamError) {
         if (attempt === MAX_RETRY_ATTEMPTS) {
@@ -93,7 +154,6 @@ export class ExecuteAdapterAssignmentUseCase {
         continue;
       }
 
-      // Parse NDJSON output
       const VALID_ADAPTER_TYPES = new Set<string>([
         "Repository",
         "Listener",
@@ -103,9 +163,7 @@ export class ExecuteAdapterAssignmentUseCase {
         "Controller",
       ]);
 
-      const lines = fullResponse
-        .split("\n")
-        .filter((line) => line.trim() !== "");
+      const objects = extractJsonObjects(fullResponse);
       const contextAdaptersMap = new Map<
         string,
         Array<{
@@ -116,59 +174,57 @@ export class ExecuteAdapterAssignmentUseCase {
           technology?: string;
         }>
       >();
-      let hasValidLine = false;
 
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          hasValidLine = true;
-          const entry = parsed.adapter ?? parsed;
-          const {
-            contextName,
-            adapterName,
-            adapterType,
-            technology,
-            implements: impl,
-          } = entry;
+      for (const parsed of objects) {
+        // Support both {"adapter": {...}} wrapper and flat {"contextName": ...}
+        const entry = (
+          parsed.adapter != null && typeof parsed.adapter === "object"
+            ? parsed.adapter
+            : parsed
+        ) as Record<string, unknown>;
 
-          if (!contextName || !adapterName || !adapterType || !impl) continue;
+        const contextName =
+          typeof entry.contextName === "string" ? entry.contextName : "";
+        // The system prompt uses "name" for the adapter name
+        const adapterName = typeof entry.name === "string" ? entry.name : "";
+        const adapterType =
+          typeof entry.adapterType === "string" ? entry.adapterType : "";
+        const technology =
+          typeof entry.technology === "string" ? entry.technology : undefined;
+        const impl =
+          typeof entry.implements === "string" ? entry.implements : "";
 
-          if (!contextAdaptersMap.has(contextName)) {
-            contextAdaptersMap.set(contextName, []);
-          }
+        if (!contextName || !adapterName || !adapterType || !impl) continue;
 
-          const binding: {
-            name: string;
-            type: string;
-            implements: string;
-            adapterType?: AdapterBinding["adapterType"];
-            technology?: string;
-          } = {
-            name: adapterName,
-            type: adapterType,
-            implements: impl,
-          };
-
-          if (
-            typeof adapterType === "string" &&
-            VALID_ADAPTER_TYPES.has(adapterType)
-          ) {
-            binding.adapterType = adapterType as AdapterBinding["adapterType"];
-          }
-
-          if (typeof technology === "string" && technology.length > 0) {
-            binding.technology = technology;
-          }
-
-          contextAdaptersMap.get(contextName)!.push(binding);
-        } catch {
-          // Ignore malformed lines
+        if (!contextAdaptersMap.has(contextName)) {
+          contextAdaptersMap.set(contextName, []);
         }
+
+        const binding: {
+          name: string;
+          type: string;
+          implements: string;
+          adapterType?: AdapterBinding["adapterType"];
+          technology?: string;
+        } = {
+          name: adapterName,
+          type: adapterType,
+          implements: impl,
+        };
+
+        if (VALID_ADAPTER_TYPES.has(adapterType)) {
+          binding.adapterType = adapterType as AdapterBinding["adapterType"];
+        }
+
+        if (technology && technology.length > 0) {
+          binding.technology = technology;
+        }
+
+        contextAdaptersMap.get(contextName)!.push(binding);
       }
 
-      const parseError = !hasValidLine
-        ? "No valid NDJSON lines found in output"
-        : "";
+      const parseError =
+        objects.length === 0 ? "No valid JSON objects found in output" : "";
 
       if (!parseError) {
         const durationMs = Date.now() - stageStart;
@@ -177,6 +233,13 @@ export class ExecuteAdapterAssignmentUseCase {
           contexts.push({ contextName, adapters });
         }
         const result: AdapterBindings = { contexts };
+        const totalAdapters = contexts.reduce(
+          (sum, c) => sum + c.adapters.length,
+          0,
+        );
+        onChunk?.(
+          `   ✓ ${totalAdapters} adapters assigned across ${contexts.length} contexts`,
+        );
         onStageTelemetry?.({
           stage: STAGE_NUMBER,
           label: "Adapter Assignment",

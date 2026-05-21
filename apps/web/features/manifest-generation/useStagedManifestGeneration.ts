@@ -23,7 +23,11 @@ export interface UseStagedManifestGenerationReturn {
       preferLocal?: boolean;
       signal?: AbortSignal;
     },
-  ) => Promise<void>;
+  ) => Promise<{
+    phase: StagedPhase;
+    generatedManifest?: string | null;
+    generationError?: string | null;
+  } | void>;
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
@@ -182,6 +186,11 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setPhase("complete");
           setStepDetail("Manifest generation complete");
           setIsGenerating(false);
+
+          return {
+            phase: "complete" as StagedPhase,
+            generatedManifest: yaml,
+          };
         } else {
           // Cloud: call server endpoint (staged generation with cloud keys)
           const result = await cloudStream.generate(
@@ -204,6 +213,13 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setStepDetail(result.stepDetail);
           setStageProgress(result.stageProgress);
           setValidationErrors(result.validationErrors);
+
+          return {
+            phase: result.phase as StagedPhase,
+            generatedManifest: result.generatedManifest,
+            generationError:
+              result.phase === "failed" ? result.stepDetail : null,
+          };
         }
       } catch (error) {
         if (controller.signal.aborted) {
@@ -217,6 +233,10 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
         logger.error(`[staged-gen] Failed: ${message}`);
         setGenerationError(message);
         setPhase("failed");
+        return {
+          phase: "failed" as StagedPhase,
+          generationError: message,
+        };
       } finally {
         if (!controller.signal.aborted) {
           setIsGenerating(false);

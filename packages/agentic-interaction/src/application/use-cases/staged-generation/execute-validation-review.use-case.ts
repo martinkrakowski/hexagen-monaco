@@ -36,11 +36,14 @@ export class ExecuteValidationReviewUseCase {
     let prompt = compileStage6Prompt(state);
     let lastError = "";
     let retryCount = 0;
+    onChunk?.(
+      `Reviewing assembled manifest for DDD violations and consistency issues…`,
+    );
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(() => abortController.abort(), 5000); // 5s timeout per attempt
+      const timeoutHandle = setTimeout(() => abortController.abort(), 1800000); // 30min timeout per attempt
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
@@ -53,9 +56,23 @@ export class ExecuteValidationReviewUseCase {
       );
       request.signal = abortController.signal;
 
-      let responseResult;
+      let fullResponse = "";
+      let streamError: unknown = null;
+      let chunkCount = 0;
+
       try {
-        responseResult = await this.llmPort.sendRequest(request);
+        const stream = this.llmPort.streamStructuredRequest(request);
+        for await (const result of stream) {
+          if (!result.success) {
+            streamError = result.error;
+            break;
+          }
+          fullResponse += result.value;
+          chunkCount++;
+          if (chunkCount % 50 === 0) {
+            onChunk?.(`   Scanning for issues… (${chunkCount} tokens)`);
+          }
+        }
       } catch (thrownError) {
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
@@ -69,17 +86,6 @@ export class ExecuteValidationReviewUseCase {
       } finally {
         clearTimeout(timeoutHandle);
       }
-      let fullResponse = "";
-      let streamError: unknown = null;
-
-      if (!responseResult.success) {
-        streamError = responseResult.error;
-      } else {
-        fullResponse = responseResult.value.content;
-        if (onChunk && fullResponse) {
-          onChunk(fullResponse);
-        }
-      }
 
       if (streamError) {
         if (attempt === MAX_RETRY_ATTEMPTS) {
@@ -89,8 +95,13 @@ export class ExecuteValidationReviewUseCase {
         continue;
       }
 
-      // Parse NDJSON output
-      const lines = fullResponse
+      // Parse NDJSON output — strip markdown code fences first
+      const cleanedResponse = fullResponse
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("```"))
+        .join("\n");
+
+      const lines = cleanedResponse
         .split("\n")
         .filter((line) => line.trim() !== "");
       const errors: string[] = [];
@@ -143,6 +154,15 @@ export class ExecuteValidationReviewUseCase {
       if (!parseError) {
         const durationMs = Date.now() - stageStart;
         const result: ValidationReport = { errors, warnings, passed };
+        if (passed) {
+          onChunk?.(
+            `   ✓ Validation passed — ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
+          );
+        } else {
+          onChunk?.(
+            `   ✗ ${errors.length} error${errors.length !== 1 ? "s" : ""} found, ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
+          );
+        }
         onStageTelemetry?.({
           stage: STAGE_NUMBER,
           label: "Validation Review",

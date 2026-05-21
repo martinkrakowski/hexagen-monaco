@@ -34,8 +34,13 @@ function normalizePortName(name: string): string {
   return ensurePortSuffix(toPascalCase(trimmed));
 }
 
-function normalizeContextName(name: string): string {
-  return toKebabCase(name);
+export function normalizeContextName(name: string): string {
+  return name
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
 }
 
 function safeTrim(value: unknown): string {
@@ -99,6 +104,7 @@ export function normalizeDraft(draft: ManifestDraft): ManifestDraft {
         notes: m.notes,
       })),
     }),
+    ...(draft.apps && { apps: draft.apps }),
   };
 }
 

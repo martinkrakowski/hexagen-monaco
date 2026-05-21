@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
@@ -19,7 +19,7 @@ interface ModelSelectionPageProps {
 
 export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const router = useRouter();
-  const { autoGenerate, clear } = useModelSelectionIntent();
+  const { clear } = useModelSelectionIntent();
   const [mounted, setMounted] = useState(false);
   const llmRef = useRef(llmContext);
   llmRef.current = llmContext;
@@ -28,17 +28,24 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
     setMounted(true);
   }, []);
 
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl");
+
   const isModelReady = llmContext.engineState.status === "ready";
 
   const handleBack = useCallback(() => {
     clear();
-    router.push("/projects/new/ai");
-  }, [clear, router]);
+    router.push(returnUrl || "/projects/new/ai");
+  }, [clear, router, returnUrl]);
 
   const handleGenerate = useCallback(() => {
     clear();
-    router.push("/projects/new/ai?generate=1");
-  }, [clear, router]);
+    if (returnUrl) {
+      router.push(returnUrl);
+    } else {
+      router.push("/projects/new/ai?generate=1");
+    }
+  }, [clear, router, returnUrl]);
 
   const handleSelectModel = useCallback(async (modelId: DomainModelId) => {
     const ctx = llmRef.current;
@@ -72,8 +79,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back
       </Button>
-      {isModelReady && autoGenerate && !isModelLoading && !isModelError ? (
-        <Button onClick={handleGenerate}>Generate Manifest</Button>
+      {isModelReady && !isModelLoading && !isModelError ? (
+        <Button onClick={handleGenerate}>
+          {returnUrl ? "Continue" : "Generate Manifest"}
+        </Button>
       ) : (
         <span />
       )}
@@ -151,7 +160,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 errorMessage={llmContext.engineState.errorMessage}
                 onCancel={() => {
                   clear();
-                  router.push("/projects/new/ai");
+                  router.push(returnUrl || "/projects/new/ai");
                 }}
                 onRetry={() => {
                   const modelId = llmContext.engineState.loadedModelId;

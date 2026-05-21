@@ -5,6 +5,8 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
+const validValidationNdjson = '{"type":"result","passed":true}\n';
+
 const createMockPipelineState = () => ({
   stage0: {
     intent: "Invoice system",
@@ -32,23 +34,45 @@ const createMockPipelineState = () => ({
   contextMappings: [],
 });
 
+function createMockLLMPort(
+  streamFn: () => AsyncIterable<{
+    success: boolean;
+    value?: string;
+    error?: unknown;
+  }>,
+): SendStructuredRequestPort {
+  return {
+    sendRequest: async () => ({
+      success: true as const,
+      value: {
+        id: "test",
+        modelId: "gpt-4o-mini" as any,
+        content: validValidationNdjson,
+        finishReason: "stop" as const,
+        timestamp: Date.now(),
+      },
+    }),
+    streamStructuredRequest: () => streamFn(),
+  } as unknown as SendStructuredRequestPort;
+}
+
+async function* createSuccessStream(content: string) {
+  yield { success: true, value: content };
+}
+
+async function* createErrorStream(error: unknown) {
+  yield { success: false, error };
+}
+
+async function* createMalformedStream() {
+  yield { success: true, value: "not valid json at all" };
+}
+
 describe("ExecuteValidationReviewUseCase", () => {
   test("happy path: returns successful validation report", async () => {
-    const mockLLM: SendStructuredRequestPort = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: '{"type":"result","passed":true}\n',
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"result","passed":true}\n' };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
@@ -64,49 +88,24 @@ describe("ExecuteValidationReviewUseCase", () => {
 
   test("retry path: fails 2x then succeeds", async () => {
     let attemptCount = 0;
-    const mockLLM: SendStructuredRequestPort = {
-      sendRequest: async () => {
-        attemptCount++;
-        if (attemptCount <= 2) {
-          return {
-            success: false as const,
-            error: new Error("LLM request failed"),
-          };
-        }
-        return {
-          success: true as const,
-          value: {
-            id: "test",
-            modelId: "gpt-4o-mini" as any,
-            content: '{"type":"result","passed":true}\n',
-            finishReason: "stop" as const,
-            timestamp: Date.now(),
-          },
-        };
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"result","passed":true}\n' };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockLLM = createMockLLMPort(() => {
+      attemptCount++;
+      if (attemptCount <= 2) {
+        return createMalformedStream();
+      }
+      return createSuccessStream(validValidationNdjson);
+    });
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
     const result = await useCase.execute(state);
 
     assert.strictEqual(result.success, true);
-    assert.strictEqual(attemptCount, 3); // 2 fails + 1 success
+    assert.strictEqual(attemptCount, 3);
   });
 
   test("max retries exceeded: returns error", async () => {
-    const mockLLM: SendStructuredRequestPort = {
-      sendRequest: async () => ({
-        success: false as const,
-        error: new Error("LLM request failed"),
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: false, error: new Error("LLM request failed") };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockLLM = createMockLLMPort(() => createMalformedStream());
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
@@ -124,21 +123,9 @@ describe("ExecuteValidationReviewUseCase", () => {
       telemetryCalls.push(telemetry);
     };
 
-    const mockLLM: SendStructuredRequestPort = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: '{"type":"result","passed":true}\n',
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"result","passed":true}\n' };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
@@ -153,26 +140,9 @@ describe("ExecuteValidationReviewUseCase", () => {
   });
 
   test("handles NDJSON with errors and warnings", async () => {
-    const mockLLM: SendStructuredRequestPort = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content:
-            '{"type":"error","message":"Invalid port"}\n{"type":"warning","message":"Deprecated adapter"}\n{"type":"result","passed":false}\n',
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield {
-          success: true,
-          value:
-            '{"type":"error","message":"Invalid port"}\n{"type":"warning","message":"Deprecated adapter"}\n{"type":"result","passed":false}\n',
-        };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const ndjson =
+      '{"type":"error","message":"Invalid port"}\n{"type":"warning","message":"Deprecated adapter"}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
@@ -186,79 +156,37 @@ describe("ExecuteValidationReviewUseCase", () => {
     }
   });
 
-  test("handles LLM timeout", async () => {
-    const timeoutAdapter = {
-      sendRequest: async () => {
-        throw new Error("LLM request timeout");
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"result","passed":true}\n' };
-      },
-    } as unknown as SendStructuredRequestPort;
+  test("handles LLM stream error", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createErrorStream(new Error("LLM request timeout")),
+    );
 
-    const useCase = new ExecuteValidationReviewUseCase(timeoutAdapter);
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
 
-    const result = await useCase.execute(state).catch((err) => {
-      return { success: false, error: err };
-    });
+    const result = await useCase.execute(state);
 
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
 
-  test("retry fails on persistent timeout", async () => {
-    let callCount = 0;
-    const timeoutAdapter = {
-      sendRequest: async () => {
-        callCount++;
-        if (callCount <= 3) {
-          throw new Error(`Attempt ${callCount} timed out`);
-        }
-        return {
-          success: true as const,
-          value: {
-            id: "test",
-            modelId: "gpt-4o-mini" as any,
-            content: '{"type":"result","passed":true}\n',
-            finishReason: "stop" as const,
-            timestamp: Date.now(),
-          },
-        };
-      },
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: '{"type":"result","passed":true}\n' };
-      },
-    } as unknown as SendStructuredRequestPort;
+  test("retry fails on persistent stream error", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createErrorStream(new Error("Persistent timeout")),
+    );
 
-    const useCase = new ExecuteValidationReviewUseCase(timeoutAdapter);
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
-    const result = await useCase.execute(state).catch((err) => {
-      return { success: false, error: err };
-    });
+    const result = await useCase.execute(state);
 
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
   });
 
   test("handles malformed LLM response", async () => {
-    const badAdapter = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content: "not valid json at all",
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield { success: true, value: "not valid json at all" };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const mockLLM = createMockLLMPort(() => createMalformedStream());
 
-    const useCase = new ExecuteValidationReviewUseCase(badAdapter);
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
     const result = await useCase.execute(state);
 
@@ -269,28 +197,11 @@ describe("ExecuteValidationReviewUseCase", () => {
   });
 
   test("returns validation failure with errors", async () => {
-    const invalidManifestAdapter = {
-      sendRequest: async () => ({
-        success: true as const,
-        value: {
-          id: "test",
-          modelId: "gpt-4o-mini" as any,
-          content:
-            '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n',
-          finishReason: "stop" as const,
-          timestamp: Date.now(),
-        },
-      }),
-      streamStructuredRequest: async function* () {
-        yield {
-          success: true,
-          value:
-            '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n',
-        };
-      },
-    } as unknown as SendStructuredRequestPort;
+    const ndjson =
+      '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
 
-    const useCase = new ExecuteValidationReviewUseCase(invalidManifestAdapter);
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = createMockPipelineState();
     const result = await useCase.execute(state);
 
@@ -298,7 +209,6 @@ describe("ExecuteValidationReviewUseCase", () => {
     if (result.success) {
       assert.strictEqual(result.value.passed, false);
       assert.ok(result.value.errors.length > 0);
-      // Check that errors contain the expected rule (stringify to avoid type issues)
       const errorsString = JSON.stringify(result.value.errors);
       assert.ok(errorsString.includes("R01"));
     }

@@ -40,7 +40,7 @@ export class ExecuteContextClassificationUseCase {
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(() => abortController.abort(), 5000); // 5s timeout per attempt
+      const timeoutHandle = setTimeout(() => abortController.abort(), 1800000); // 30min timeout per attempt
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
@@ -89,8 +89,13 @@ export class ExecuteContextClassificationUseCase {
         continue;
       }
 
-      // Parse NDJSON output
-      const lines = fullResponse
+      // Parse NDJSON output — strip markdown code fences first
+      const cleanedResponse = fullResponse
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("```"))
+        .join("\n");
+
+      const lines = cleanedResponse
         .split("\n")
         .filter((line) => line.trim() !== "");
       const accepted: ClassifiedContext[] = [];
