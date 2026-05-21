@@ -34,6 +34,14 @@ const server = setupServer(
       ),
     );
   }),
+  rest.post("/api/manifest/generate/spec/convert", async (req, res, ctx) => {
+    return res(
+      ctx.status(200),
+      ctx.body(
+        '{"type":"done","configJson":"{\\"bounded_contexts\\":[{\\"name\\":\\"test\\"}]}"}\n',
+      ),
+    );
+  }),
 );
 
 before(() => server.listen());
@@ -223,6 +231,30 @@ describe("ImportProjectSpecPage", () => {
     await waitFor(() => {
       assert.ok(screen.getByText(/error/i));
       assert.ok(screen.getByText(/missing config/i));
+    });
+  });
+
+  it("Upload semi-structured spec: transitions to CONVERTING_LOOSE_SPEC then SPEC_REVIEW", async () => {
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const looseContent =
+      "We have bounded contexts, some aggregates and value objects. This should trigger the semi-structured mode.";
+    const file = new File([looseContent], "loose.txt", { type: "text/plain" });
+
+    const fileInput = screen.getByLabelText(/file/i);
+    await user.upload(fileInput, file);
+
+    await waitFor(() => {
+      assert.ok(
+        screen.getByText(
+          /converting loose specification into structured architecture/i,
+        ),
+      );
+    });
+
+    await waitFor(() => {
+      assert.ok(screen.getByText(/spec review/i));
+      assert.ok(screen.getByText(/1 bounded contexts detected/i));
     });
   });
 });

@@ -7,6 +7,7 @@ import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
+import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
 import { Skeleton, Button, CopyButton } from "@hexagen/ui";
 import { ArrowLeft } from "lucide-react";
@@ -23,6 +24,7 @@ type SpecPageState =
   | "UPLOAD"
   | "SPEC_REVIEW"
   | "DESCRIPTION_FALLBACK"
+  | "CONVERTING_LOOSE_SPEC"
   | "GENERATING"
   | "PREVIEW";
 
@@ -102,6 +104,13 @@ export default function ImportProjectSpecPage() {
   // Hook for description fallback path
   const manifestGeneration = useStagedManifestGeneration();
 
+  // Hook for loose spec conversion
+  const {
+    convert,
+    error: conversionError,
+    reset: resetConversion,
+  } = useLooseSpecConversion();
+
   useEffect(() => {
     const saved = sessionStorage.getItem("import_spec_content");
     if (saved && !specContent) {
@@ -122,6 +131,25 @@ export default function ImportProjectSpecPage() {
       } catch {
         setSpecSummary(null);
       }
+    } else if (mode === "semi-structured") {
+      setSpecContent(content);
+      setPageState("CONVERTING_LOOSE_SPEC");
+      convert(content).then((result) => {
+        if (result.convertedConfig) {
+          try {
+            const parsed = JSON.parse(result.convertedConfig);
+            setSpecContent(result.convertedConfig);
+            sessionStorage.setItem(
+              "import_spec_content",
+              result.convertedConfig,
+            );
+            setSpecSummary(extractSpecSummary(parsed));
+            setPageState("SPEC_REVIEW");
+          } catch {
+            // Error handling JSON parse falls back to user seeing raw error or continuing.
+          }
+        }
+      });
     } else {
       setSpecContent(content);
       setPageState("DESCRIPTION_FALLBACK");
@@ -201,6 +229,7 @@ export default function ImportProjectSpecPage() {
   const handleReset = () => {
     specGeneration.reset();
     manifestGeneration.reset();
+    resetConversion();
     setGeneratedManifest(null);
     setPageState("UPLOAD");
     setSpecContent("");
@@ -266,6 +295,24 @@ export default function ImportProjectSpecPage() {
             </Button>
             <Button onClick={handleContinue}>Continue anyway</Button>
           </div>
+        </>
+      );
+    }
+    if (pageState === "CONVERTING_LOOSE_SPEC") {
+      return (
+        <>
+          <Button
+            variant="outline"
+            onClick={() => {
+              resetConversion();
+              setPageState("UPLOAD");
+              setSpecContent("");
+              sessionStorage.removeItem("import_spec_content");
+            }}
+          >
+            Cancel
+          </Button>
+          <span />
         </>
       );
     }
@@ -435,6 +482,24 @@ export default function ImportProjectSpecPage() {
                       AI will skip: domain extraction (Stage 1), context
                       classification (Stage 2)
                     </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pageState === "CONVERTING_LOOSE_SPEC" && (
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Converting...</h2>
+                <div className="p-4 bg-muted rounded flex items-center gap-3">
+                  <div className="animate-spin-border w-5 h-5 rounded-full border-2 border-primary border-t-transparent"></div>
+                  <p>
+                    Converting loose specification into structured
+                    architecture...
+                  </p>
+                </div>
+                {conversionError && (
+                  <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded">
+                    Error: {conversionError}
                   </div>
                 )}
               </div>
