@@ -12,6 +12,7 @@ import type {
   PipelineState,
   AssembledManifest,
   AssemblyWarning,
+  DomainAnalysis,
 } from "../../../domain/value-objects/pipeline-state";
 
 const STOP_WORDS = new Set([
@@ -47,13 +48,14 @@ export class ExecuteManifestAssemblyUseCase {
     state: Pick<
       PipelineState,
       "stage0" | "stage2" | "stage3" | "stage4" | "contextMappings"
-    >,
+    > & { stage1?: DomainAnalysis },
   ): AssembledManifest {
     const draftContexts: ManifestDraftContext[] = [];
 
     const acceptedContexts = state.stage2?.accepted || [];
     const portMap = state.stage3?.contexts || [];
     const adapterBindings = state.stage4?.contexts || [];
+    const domainAnalysis = state.stage1;
 
     for (const ctx of acceptedContexts) {
       const ctxPorts = portMap.find((p) => p.contextName === ctx.name);
@@ -95,6 +97,40 @@ export class ExecuteManifestAssemblyUseCase {
 
     const normalized = normalizeDraft(draft);
     const manifestObj = draftToManifest(normalized);
+
+    // Enrich layers.domain with aggregate roots, child entities, and value objects
+    // from the DomainAnalysis (stage1) if available (structured config path only).
+    if (domainAnalysis) {
+      for (const bc of manifestObj.bounded_contexts) {
+        const ctxName = bc.name;
+
+        const aggregateNames = (domainAnalysis.aggregateRoots ?? [])
+          .filter((ar) => ar.subdomain === ctxName)
+          .map((ar) => ar.name);
+
+        const entityNames = (domainAnalysis.entities ?? [])
+          .filter((e) => e.subdomain !== undefined && e.subdomain === ctxName)
+          .map((e) => e.name);
+
+        const voNames = (domainAnalysis.valueObjects ?? [])
+          .filter(
+            (vo) => vo.subdomain !== undefined && vo.subdomain === ctxName,
+          )
+          .map((vo) => vo.name);
+
+        const allEntities = [...aggregateNames, ...entityNames];
+
+        bc.layers = {
+          ...bc.layers,
+          domain: {
+            ...(bc.layers?.domain ?? {}),
+            ...(allEntities.length > 0 ? { entities: allEntities } : {}),
+            ...(voNames.length > 0 ? { value_objects: voNames } : {}),
+          },
+        };
+      }
+    }
+
     const manifestYaml = renderManifestYaml(manifestObj);
 
     const assemblyWarnings: AssemblyWarning[] = [];

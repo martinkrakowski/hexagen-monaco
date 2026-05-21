@@ -1,4 +1,4 @@
-import { ok, err } from "@hexagen/shared";
+import { ok } from "@hexagen/shared";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
@@ -14,10 +14,12 @@ import type {
   InboundPortType,
   OutboundPortType,
   ContextMappingEntry,
+  ClassifiedContext,
+  AggregateRoot,
+  DomainEvent,
 } from "../../../domain/value-objects/pipeline-state";
 import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
-import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
 
@@ -51,11 +53,139 @@ export interface PortMappingResult {
   contextMappings: ContextMappingEntry[];
 }
 
+type StageState = Required<Pick<PipelineState, "stage0" | "stage1" | "stage2">>;
+
+/**
+ * Normalize context names for matching.
+ * Converts both "IdentityAccess" and "identity-access" to a canonical form.
+ * This handles LLM output that may use various formats while we track by PascalCase.
+ */
+function normalizeContextName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .toLowerCase();
+}
+
+/**
+ * Find matching context name in accepted contexts, accounting for format variations.
+ */
+function findMatchingContextName(
+  inputName: string,
+  acceptedContextNames: Map<string, string>,
+): string | undefined {
+  const normalized = normalizeContextName(inputName);
+  for (const [key] of acceptedContextNames.entries()) {
+    if (normalizeContextName(key) === normalized) {
+      return key;
+    }
+  }
+  return undefined;
+}
+
+function filterStateForContext(
+  state: StageState,
+  contextName: string,
+): StageState {
+  const aggregateRoots: AggregateRoot[] = (
+    state.stage1.aggregateRoots ?? []
+  ).filter((ar) => ar.subdomain === contextName);
+  const domainEvents: DomainEvent[] = (state.stage1.domainEvents ?? []).filter(
+    (d) => d.emitter === contextName,
+  );
+  const useCases = (state.stage1.useCases ?? []).filter(
+    (uc) => uc.subdomain === contextName,
+  );
+
+  const accepted: ClassifiedContext[] = state.stage2.accepted.filter(
+    (c) => c.name === contextName,
+  );
+
+  return {
+    stage0: state.stage0,
+    stage1: {
+      ...state.stage1,
+      aggregateRoots,
+      domainEvents,
+      useCases,
+    },
+    stage2: {
+      ...state.stage2,
+      accepted,
+    },
+  };
+}
+
+function extractJsonObjects(raw: string): Record<string, unknown>[] {
+  const stripped = raw
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  if (!stripped) return [];
+
+  const results: Record<string, unknown>[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < stripped.length; i++) {
+    const ch = stripped[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try {
+          results.push(
+            normalizeKeys(
+              JSON.parse(stripped.slice(start, i + 1)) as Record<
+                string,
+                unknown
+              >,
+            ),
+          );
+        } catch {
+          // skip malformed object
+        }
+        start = -1;
+      }
+    }
+  }
+
+  return results;
+}
+
+function normalizeKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k.trim()] = typeof v === "string" ? v.trim() : v;
+  }
+  return out;
+}
+
 export class ExecutePortMappingUseCase {
   constructor(private readonly llmPort: SendStructuredRequestPort) {}
 
   async execute(
-    state: Pick<PipelineState, "stage0" | "stage1" | "stage2">,
+    state: StageState,
     onChunk?: (chunk: string) => void,
     onStageTelemetry?: (telemetry: StageTelemetry) => void,
   ): Promise<
@@ -63,14 +193,107 @@ export class ExecutePortMappingUseCase {
     | { success: false; error: unknown }
   > {
     const stageStart = Date.now();
-    let prompt = compileStage3Prompt(state);
+    const allPortsMap = new Map<
+      string,
+      { in: PortDefinition[]; out: PortDefinition[] }
+    >();
+    const allContextMappings: ContextMappingEntry[] = [];
+    let totalRetryCount = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    const contexts = state.stage2.accepted;
+    if (!contexts || contexts.length === 0) {
+      return ok({ portMap: { contexts: [] }, contextMappings: [] });
+    }
+
+    console.log(
+      `[Stage 3] Starting port mapping for ${contexts.length} contexts`,
+    );
+    onChunk?.(
+      `Analyzing ${contexts.length} bounded contexts for hexagonal ports…`,
+    );
+
+    // Build maps of valid context names (both PascalCase and normalized forms)
+    const acceptedContextNames = new Map(contexts.map((c) => [c.name, c.name]));
+
+    for (const [idx, context] of contexts.entries()) {
+      onChunk?.(
+        `→ ${context.name} (${idx + 1} of ${contexts.length}) — identifying inbound commands, queries, events and outbound repositories, publishers`,
+      );
+      const filtered = filterStateForContext(state, context.name);
+      const prompt = compileStage3Prompt(filtered);
+      totalInputTokens += estimateTokenCount(prompt);
+
+      const result = await this.runLLMWithRetry(prompt, onChunk);
+      totalRetryCount += result.retryCount;
+      totalOutputTokens += estimateTokenCount(result.fullResponse);
+      const retryNote =
+        result.retryCount > 0 ? `, retried ${result.retryCount}×` : "";
+      onChunk?.(
+        `   ✓ ${result.objects.length} port definitions identified${retryNote}`,
+      );
+
+      const { portsMap, mappings } = this.extractPortsAndMappings(
+        result.objects,
+        context.name,
+        acceptedContextNames,
+      );
+
+      for (const [ctxName, ports] of portsMap.entries()) {
+        allPortsMap.set(ctxName, ports);
+      }
+      allContextMappings.push(...mappings);
+    }
+
+    console.log(
+      `[Stage 3] Completed all contexts. Total retries: ${totalRetryCount}`,
+    );
+    const durationMs = Date.now() - stageStart;
+    const contextsArray: ContextPorts[] = [];
+    for (const [contextName, ports] of allPortsMap.entries()) {
+      contextsArray.push({ contextName, in: ports.in, out: ports.out });
+    }
+
+    onStageTelemetry?.({
+      stage: STAGE_NUMBER,
+      label: "Port Mapping",
+      durationMs,
+      usedLLM: true,
+      retryCount: totalRetryCount,
+      inputTokensEstimate: totalInputTokens,
+      outputTokensActual: totalOutputTokens,
+      servedFromCache: false,
+      summary: `Mapped ports for ${contextsArray.length} contexts, ${allContextMappings.length} context mappings`,
+    });
+
+    return ok({
+      portMap: { contexts: contextsArray },
+      contextMappings: allContextMappings,
+    });
+  }
+
+  private async runLLMWithRetry(
+    initialPrompt: string,
+    onChunk?: (chunk: string) => void,
+  ): Promise<{
+    objects: Record<string, unknown>[];
+    fullResponse: string;
+    retryCount: number;
+  }> {
+    let prompt = initialPrompt;
     let lastError = "";
-    let retryCount = 0;
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-      retryCount = attempt - 1;
+      const retryCount = attempt - 1;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(() => abortController.abort(), 5000); // 5s timeout per attempt
+      const timeoutHandle = setTimeout(() => {
+        console.log(`[Stage 3] Attempt ${attempt} timed out after 120s`);
+        onChunk?.(
+          `   ⏱ Attempt ${attempt} timed out — using partial output if available`,
+        );
+        abortController.abort();
+      }, 120000);
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
@@ -79,168 +302,203 @@ export class ExecutePortMappingUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        { stream: true, temperature: 0.3, maxTokens: 768 },
       );
       request.signal = abortController.signal;
 
-      let responseResult;
+      let fullResponse = "";
+      let streamError: unknown = null;
+      let chunkCount = 0;
+
       try {
-        responseResult = await this.llmPort.sendRequest(request);
+        const stream = this.llmPort.streamStructuredRequest(request);
+        for await (const result of stream) {
+          if (!result.success) {
+            streamError = result.error;
+            break;
+          }
+          fullResponse += result.value;
+          chunkCount++;
+          if (chunkCount % 100 === 0) {
+            console.log(
+              `[Stage 3] Attempt ${attempt}: ${chunkCount} chunks received`,
+            );
+            onChunk?.(`   Generating port definitions… (${chunkCount} tokens)`);
+          }
+        }
       } catch (thrownError) {
-        if (attempt === MAX_RETRY_ATTEMPTS) {
-          return err(
-            thrownError instanceof Error
-              ? thrownError
-              : new Error(String(thrownError)),
+        const partialObjects = extractJsonObjects(fullResponse);
+        if (partialObjects.length > 0) {
+          console.log(
+            `[Stage 3] Using ${partialObjects.length} partial objects after throw on attempt ${attempt} (${chunkCount} chunks)`,
           );
+          return { objects: partialObjects, fullResponse, retryCount };
+        }
+        if (attempt === MAX_RETRY_ATTEMPTS) {
+          return { objects: [], fullResponse, retryCount };
         }
         lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
+        onChunk?.(`\n--- Retry ${attempt + 1} (stream error) ---\n`);
         continue;
       } finally {
         clearTimeout(timeoutHandle);
       }
-      let fullResponse = "";
-      let streamError: unknown = null;
-
-      if (!responseResult.success) {
-        streamError = responseResult.error;
-      } else {
-        fullResponse = responseResult.value.content;
-        if (onChunk && fullResponse) {
-          onChunk(fullResponse);
-        }
-      }
 
       if (streamError) {
+        // On abort/timeout, accept any valid partial objects rather than retrying
+        const partialObjects = extractJsonObjects(fullResponse);
+        if (partialObjects.length > 0) {
+          console.log(
+            `[Stage 3] Using ${partialObjects.length} partial objects after timeout on attempt ${attempt} (${chunkCount} chunks)`,
+          );
+          return { objects: partialObjects, fullResponse, retryCount };
+        }
         if (attempt === MAX_RETRY_ATTEMPTS) {
-          return err(streamError);
+          return { objects: [], fullResponse, retryCount };
         }
         lastError = `Request error: ${streamError}`;
+        console.log(
+          `[Stage 3] Attempt ${attempt} stream error, retrying... (${chunkCount} chunks)`,
+        );
+        onChunk?.(
+          `   ↻ Retrying… (attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS})`,
+        );
         continue;
       }
 
-      // Parse NDJSON output
-      const lines = fullResponse
-        .split("\n")
-        .filter((line) => line.trim() !== "");
-      const contextPortsMap = new Map<
-        string,
-        { in: PortDefinition[]; out: PortDefinition[] }
-      >();
-      const contextMappings: ContextMappingEntry[] = [];
-      let hasValidLine = false;
+      console.log(
+        `[Stage 3] Attempt ${attempt} completed (${chunkCount} chunks)`,
+      );
 
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          hasValidLine = true;
-          const entryType = parsed.type || "port";
-
-          if (entryType === "contextMapping") {
-            if (
-              typeof parsed.upstream === "string" &&
-              typeof parsed.downstream === "string"
-            ) {
-              const mapping: ContextMappingEntry = {
-                upstream: parsed.upstream,
-                downstream: parsed.downstream,
-              };
-              if (typeof parsed.pattern === "string")
-                mapping.pattern = parsed.pattern;
-              if (typeof parsed.mechanism === "string")
-                mapping.mechanism = parsed.mechanism;
-              if (typeof parsed.notes === "string")
-                mapping.notes = parsed.notes;
-              if (
-                Array.isArray(parsed.events) &&
-                parsed.events.every((v: unknown) => typeof v === "string")
-              ) {
-                mapping.events = parsed.events;
-              }
-              contextMappings.push(mapping);
-            }
-            continue;
-          }
-
-          const { contextName, direction, name, portType, description } =
-            parsed;
-
-          if (!contextName || !direction || !name || !portType) continue;
-
-          if (!contextPortsMap.has(contextName)) {
-            contextPortsMap.set(contextName, { in: [], out: [] });
-          }
-
-          const ports = contextPortsMap.get(contextName)!;
-          const coercedType = coercePortType(direction, portType);
-          if (!coercedType) continue;
-
-          const portDef: PortDefinition = {
-            name,
-            type: coercedType as InboundPortType | OutboundPortType,
-            description: description || "",
-          };
-          if (typeof parsed.forAggregate === "string") {
-            portDef.forAggregate = parsed.forAggregate;
-          }
-
-          if (direction === "in") {
-            portDef.type = coercedType as InboundPortType;
-            ports.in.push(portDef);
-          } else if (direction === "out") {
-            portDef.type = coercedType as OutboundPortType;
-            ports.out.push(portDef);
-          }
-        } catch {
-          // Ignore malformed lines
-        }
+      const objects = extractJsonObjects(fullResponse);
+      if (objects.length > 0) {
+        return { objects, fullResponse, retryCount };
       }
 
-      const parseError = !hasValidLine
-        ? "No valid NDJSON lines found in output"
-        : "";
-
-      if (!parseError) {
-        const durationMs = Date.now() - stageStart;
-        const contexts: ContextPorts[] = [];
-        for (const [contextName, ports] of contextPortsMap.entries()) {
-          contexts.push({ contextName, in: ports.in, out: ports.out });
-        }
-        const result: PortMappingResult = {
-          portMap: { contexts },
-          contextMappings,
-        };
-        onStageTelemetry?.({
-          stage: STAGE_NUMBER,
-          label: "Port Mapping",
-          durationMs,
-          usedLLM: true,
-          retryCount,
-          inputTokensEstimate: estimateTokenCount(prompt),
-          outputTokensActual: estimateTokenCount(fullResponse),
-          servedFromCache: false,
-          summary: `Mapped ports for ${contexts.length} contexts, ${contextMappings.length} context mappings`,
-        });
-        return ok(result);
-      }
-
-      lastError = parseError;
+      lastError = "No valid JSON objects found in output";
       if (attempt === MAX_RETRY_ATTEMPTS) {
-        return err(
-          new StageMaxRetriesError(STAGE_NUMBER, lastError, fullResponse),
-        );
+        return { objects: [], fullResponse, retryCount };
       }
+      onChunk?.(`\n--- Retry ${attempt + 1} (parse failed) ---\n`);
 
-      // Build retry prompt
       prompt = buildStageRetryPrompt({
         stage: STAGE_NUMBER,
         attempt: attempt + 1,
         failedOutput: fullResponse,
-        errorDetail: parseError,
-        originalPrompt: prompt,
+        errorDetail: lastError,
+        originalPrompt: initialPrompt,
       }).content;
     }
 
-    return err(new StageMaxRetriesError(STAGE_NUMBER, lastError, ""));
+    return {
+      objects: [],
+      fullResponse: "",
+      retryCount: MAX_RETRY_ATTEMPTS - 1,
+    };
+  }
+
+  private extractPortsAndMappings(
+    objects: Record<string, unknown>[],
+    fallbackContextName: string,
+    acceptedContextNames: Map<string, string>,
+  ): {
+    portsMap: Map<string, { in: PortDefinition[]; out: PortDefinition[] }>;
+    mappings: ContextMappingEntry[];
+  } {
+    const portsMap = new Map<
+      string,
+      { in: PortDefinition[]; out: PortDefinition[] }
+    >();
+    const mappings: ContextMappingEntry[] = [];
+
+    for (const normalized of objects) {
+      const entryType = String(normalized.type ?? "port");
+
+      if (entryType === "contextMapping" || entryType === "context-mapping") {
+        const upstream = String(normalized.upstream ?? "");
+        const downstream = String(normalized.downstream ?? "");
+
+        // Resolve context names accounting for format variations (PascalCase, kebab-case, etc.)
+        const resolvedUpstream = findMatchingContextName(
+          upstream,
+          acceptedContextNames,
+        );
+        const resolvedDownstream = findMatchingContextName(
+          downstream,
+          acceptedContextNames,
+        );
+
+        // Validate that both upstream and downstream refer to accepted contexts
+        if (!resolvedUpstream || !resolvedDownstream) {
+          // Skip mapping if either context doesn't exist — this prevents hallucinated mappings
+          continue;
+        }
+
+        if (resolvedUpstream && resolvedDownstream) {
+          const mapping: ContextMappingEntry = {
+            upstream: resolvedUpstream,
+            downstream: resolvedDownstream,
+          };
+          if (typeof normalized.pattern === "string")
+            mapping.pattern = normalized.pattern;
+          if (typeof normalized.mechanism === "string")
+            mapping.mechanism = normalized.mechanism;
+          if (typeof normalized.notes === "string")
+            mapping.notes = normalized.notes;
+          if (
+            Array.isArray(normalized.events) &&
+            normalized.events.every((v: unknown) => typeof v === "string")
+          ) {
+            mapping.events = normalized.events as string[];
+          }
+          mappings.push(mapping);
+        }
+        continue;
+      }
+
+      const inputContextName = String(
+        normalized.contextName ??
+          normalized["context Name"] ??
+          fallbackContextName,
+      );
+
+      // Resolve the context name to the canonical form
+      const contextName =
+        findMatchingContextName(inputContextName, acceptedContextNames) ||
+        inputContextName;
+
+      const direction = String(normalized.direction ?? "");
+      const name = String(normalized.name ?? "");
+      const portType = String(normalized.portType ?? "");
+      const description = String(normalized.description ?? "");
+
+      if (!direction || !name || !portType) continue;
+      if (direction !== "in" && direction !== "out") continue;
+
+      const coercedType = coercePortType(direction, portType);
+      if (!coercedType) continue;
+
+      if (!portsMap.has(contextName)) {
+        portsMap.set(contextName, { in: [], out: [] });
+      }
+
+      const portDef: PortDefinition = {
+        name,
+        type: coercedType as InboundPortType | OutboundPortType,
+        description,
+      };
+      if (typeof normalized.forAggregate === "string") {
+        portDef.forAggregate = normalized.forAggregate;
+      }
+
+      const ports = portsMap.get(contextName)!;
+      if (direction === "in") {
+        ports.in.push(portDef);
+      } else {
+        ports.out.push(portDef);
+      }
+    }
+
+    return { portsMap, mappings };
   }
 }

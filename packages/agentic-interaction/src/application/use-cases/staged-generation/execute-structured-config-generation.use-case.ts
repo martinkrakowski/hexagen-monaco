@@ -10,7 +10,11 @@ import type {
   DomainEvent,
   DomainValueObject,
   AcceptedContext,
-  PipelineState,
+  InboundPortType,
+  OutboundPortType,
+  PortMap,
+  AdapterBindings,
+  AdapterBinding,
 } from "../../../domain/value-objects/pipeline-state";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
@@ -106,6 +110,7 @@ interface StructuredConfigContext {
   name: string;
   short?: string;
   responsibility?: string;
+  description?: string;
   app?: string;
   aggregates?: StructuredConfigAggregate[];
   value_objects?: StructuredConfigValueObject[];
@@ -128,6 +133,19 @@ interface StructuredConfigContext {
     }>
   >;
   type?: string;
+  /** Pre-defined hexagonal layers — present when importing a manifest-format spec. */
+  layers?: {
+    domain?: Record<string, unknown>;
+    application?: {
+      ports?: {
+        in?: string[];
+        out?: string[];
+      };
+    };
+    infrastructure?: {
+      adapters?: string[];
+    };
+  };
 }
 
 export interface StructuredConfig {
@@ -283,6 +301,7 @@ export function buildDomainAnalysisFromConfig(
         // root: false → child entity
         entities.push({
           name: agg.name,
+          subdomain,
           parentAggregate: agg.parent ?? subdomain,
         });
       }
@@ -299,6 +318,7 @@ export function buildDomainAnalysisFromConfig(
       if (vo.rules) rules.push(...vo.rules);
       valueObjects.push({
         name: vo.name,
+        subdomain,
         rules: rules.join("; ") || undefined,
       });
     }
@@ -433,8 +453,9 @@ export function buildClassificationFromConfig(
     return {
       name: contextName,
       type: inferContextType(ctx),
-      responsibility: ctx.responsibility ?? ctx.name,
-      reasoning: ctx.responsibility ?? `Context: ${ctx.name}`,
+      responsibility: ctx.responsibility ?? ctx.description ?? ctx.name,
+      reasoning:
+        ctx.responsibility ?? ctx.description ?? `Context: ${ctx.name}`,
       aggregateRoots: ctxAggregateRoots,
       useCaseNames: ctxUseCaseNames,
       eventsPublished: ctxEventsPublished,
@@ -458,6 +479,128 @@ export function buildContextMappingsFromConfig(
     notes: cm.notes,
     events: cm.events,
   }));
+}
+
+// ── Pre-defined port/adapter helpers (manifest-format import path) ──────────
+
+function ctxHasPreDefinedPorts(ctx: StructuredConfigContext): boolean {
+  const ports = ctx.layers?.application?.ports;
+  return !!(
+    (ports?.in && ports.in.length > 0) ||
+    (ports?.out && ports.out.length > 0)
+  );
+}
+
+function ctxHasPreDefinedAdapters(ctx: StructuredConfigContext): boolean {
+  return !!ctx.layers?.infrastructure?.adapters?.length;
+}
+
+function inferInboundPortType(name: string): InboundPortType {
+  const l = name.toLowerCase();
+  if (l.includes("event") || l.endsWith("eventport")) return "event";
+  if (
+    l.includes("query") ||
+    l.startsWith("get") ||
+    l.startsWith("find") ||
+    l.startsWith("list")
+  )
+    return "query";
+  return "command";
+}
+
+function inferOutboundPortType(name: string): OutboundPortType {
+  const l = name.toLowerCase();
+  if (l.includes("reposit") || l.includes("repo")) return "repository";
+  if (l.includes("publish") || l.includes("publisher")) return "publisher";
+  if (l.includes("notif")) return "notifier";
+  return "external-client";
+}
+
+function inferAdapterType(name: string): AdapterBinding["adapterType"] {
+  const l = name.toLowerCase();
+  if (l.includes("repo") || l.includes("reposit")) return "Repository";
+  if (l.includes("controller")) return "Controller";
+  if (l.includes("listener")) return "Listener";
+  if (l.includes("publisher")) return "Publisher";
+  if (l.includes("client")) return "HttpClient";
+  if (l.includes("notif")) return "Notifier";
+  return undefined;
+}
+
+function inferAdapterImplements(
+  adapterName: string,
+  portNames: string[],
+): string {
+  // Strip common technology prefixes and type suffixes to isolate the core name
+  const core = adapterName
+    .replace(
+      /^(Postgres|Mysql|Redis|Rabbit(MQ)?|Mqtt|Express|Axios|Supabase|Stripe|Vercel|FlyIO|Email)/i,
+      "",
+    )
+    .replace(
+      /(Repo|Repository|Controller|Listener|Publisher|Client|Notifier|Integration)?Adapter$/i,
+      "",
+    )
+    .toLowerCase();
+
+  if (core) {
+    const match = portNames.find((p) => {
+      const portCore = p.replace(/Port$/i, "").toLowerCase();
+      return portCore.includes(core) || core.includes(portCore);
+    });
+    if (match) return match;
+  }
+  return portNames[0] ?? "";
+}
+
+function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
+  return {
+    contexts: config.bounded_contexts
+      .filter(ctxHasPreDefinedPorts)
+      .map((ctx) => ({
+        contextName: ctx.name,
+        in: (ctx.layers?.application?.ports?.in ?? []).map((name) => ({
+          name,
+          type: inferInboundPortType(name),
+          description: name.replace(/Port$/, ""),
+        })),
+        out: (ctx.layers?.application?.ports?.out ?? []).map((name) => ({
+          name,
+          type: inferOutboundPortType(name),
+          description: name.replace(/Port$/, ""),
+        })),
+      })),
+  };
+}
+
+function buildPreDefinedAdapterBindings(
+  config: StructuredConfig,
+  portMap: PortMap,
+): AdapterBindings {
+  return {
+    contexts: config.bounded_contexts
+      .filter(ctxHasPreDefinedAdapters)
+      .map((ctx) => {
+        const ctxPorts = portMap.contexts.find(
+          (p) => p.contextName === ctx.name,
+        );
+        const portNames = [
+          ...(ctxPorts?.in ?? []).map((p) => p.name),
+          ...(ctxPorts?.out ?? []).map((p) => p.name),
+        ];
+        return {
+          contextName: ctx.name,
+          adapters: (ctx.layers?.infrastructure?.adapters ?? []).map(
+            (name) => ({
+              name,
+              type: inferAdapterType(name) ?? "adapter",
+              implements: inferAdapterImplements(name, portNames),
+              adapterType: inferAdapterType(name),
+            }),
+          ),
+        };
+      }),
+  };
 }
 
 export class ExecuteStructuredConfigGenerationUseCase {
@@ -525,68 +668,133 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const contextMappings = buildContextMappingsFromConfig(config);
     callbacks?.onProgress?.(2, Date.now() - s2Start);
 
-    // Build pipeline state for Stage 3 onward
-    const pipelineState: Pick<
-      PipelineState,
-      "stage0" | "stage1" | "stage2" | "contextMappings"
-    > = {
-      stage0: normalizedPrompt,
-      stage1: domainAnalysis,
-      stage2: classification,
-      contextMappings,
-    };
-
-    // Stage 3: Port Mapping (LLM)
+    // Stage 3: Port Mapping — skip LLM for contexts that already declare ports
     const s3Start = Date.now();
     callbacks?.onProgress?.(3, 0);
-    const s3 = await this.stage3.execute(
-      pipelineState,
-      callbacks?.onChunk,
-      callbacks?.onStageTelemetry,
-    );
-    const s3Duration = Date.now() - s3Start;
-    if (!s3.success) {
-      callbacks?.onError?.(3, String(s3.error), s3Duration);
-      return { success: false, error: s3.error };
-    }
-    callbacks?.onProgress?.(3, s3Duration);
 
-    // Stage 4: Adapter Assignment
+    const preDefinedPortNames = new Set(
+      config.bounded_contexts.filter(ctxHasPreDefinedPorts).map((c) => c.name),
+    );
+    const contextsNeedingPorts = classification.accepted.filter(
+      (ctx) => !preDefinedPortNames.has(ctx.name),
+    );
+
+    let mergedPortMap: PortMap;
+    let mergedContextMappings: ContextMappingEntry[];
+
+    if (contextsNeedingPorts.length > 0) {
+      callbacks?.onChunk?.("Stage 3 · Port Mapping");
+      const partialClassification: ClassificationResult = {
+        accepted: contextsNeedingPorts,
+        rejected: [],
+        uncertain: [],
+      };
+      const s3 = await this.stage3.execute(
+        {
+          stage0: normalizedPrompt,
+          stage1: domainAnalysis,
+          stage2: partialClassification,
+        },
+        callbacks?.onChunk,
+        callbacks?.onStageTelemetry,
+      );
+      const s3Duration = Date.now() - s3Start;
+      if (!s3.success) {
+        callbacks?.onError?.(3, String(s3.error), s3Duration);
+        return { success: false, error: s3.error };
+      }
+      mergedPortMap = {
+        contexts: [
+          ...buildPreDefinedPortMap(config).contexts,
+          ...s3.value.portMap.contexts,
+        ],
+      };
+      mergedContextMappings = s3.value.contextMappings;
+    } else {
+      if (preDefinedPortNames.size > 0) {
+        callbacks?.onChunk?.(
+          "Stage 3 · Port Mapping (pre-defined — skipping AI)",
+        );
+      }
+      mergedPortMap = buildPreDefinedPortMap(config);
+      mergedContextMappings = contextMappings;
+    }
+    callbacks?.onProgress?.(3, Date.now() - s3Start);
+
+    // Stage 4: Adapter Assignment — skip LLM for contexts that already declare adapters
     const s4Start = Date.now();
     callbacks?.onProgress?.(4, 0);
-    const variables: PromptVariables = {
-      userDescription: rawConfig, // Pass original config — Stage 4 prompt will XML-wrap it
-      deployment: (config.apps ?? [])
-        .map((a) => a.deployment)
-        .filter(Boolean)
-        .join(", "),
-    };
-    const s4 = await this.stage4.execute(
-      {
-        stage0: normalizedPrompt,
-        stage3: s3.value.portMap,
-        contextMappings: s3.value.contextMappings,
-      },
-      variables,
-      callbacks?.onChunk,
-      callbacks?.onStageTelemetry,
+
+    const preDefinedAdapterNames = new Set(
+      config.bounded_contexts
+        .filter(ctxHasPreDefinedAdapters)
+        .map((c) => c.name),
     );
-    const s4Duration = Date.now() - s4Start;
-    if (!s4.success) {
-      callbacks?.onError?.(4, String(s4.error), s4Duration);
-      return { success: false, error: s4.error };
+    const contextsNeedingAdapters = classification.accepted.filter(
+      (ctx) => !preDefinedAdapterNames.has(ctx.name),
+    );
+
+    let mergedAdapterBindings: AdapterBindings;
+
+    if (contextsNeedingAdapters.length > 0) {
+      callbacks?.onChunk?.("Stage 4 · Adapter Assignment");
+      const partialClassification: ClassificationResult = {
+        accepted: contextsNeedingAdapters,
+        rejected: [],
+        uncertain: [],
+      };
+      const variables: PromptVariables = {
+        userDescription: rawConfig,
+        deployment: (config.apps ?? [])
+          .map((a) => a.deployment)
+          .filter(Boolean)
+          .join(", "),
+      };
+      const s4 = await this.stage4.execute(
+        {
+          stage0: normalizedPrompt,
+          stage2: partialClassification,
+          stage3: mergedPortMap,
+          contextMappings: mergedContextMappings,
+        },
+        variables,
+        callbacks?.onChunk,
+        callbacks?.onStageTelemetry,
+      );
+      const s4Duration = Date.now() - s4Start;
+      if (!s4.success) {
+        callbacks?.onError?.(4, String(s4.error), s4Duration);
+        return { success: false, error: s4.error };
+      }
+      mergedAdapterBindings = {
+        contexts: [
+          ...buildPreDefinedAdapterBindings(config, mergedPortMap).contexts,
+          ...s4.value.contexts,
+        ],
+      };
+    } else {
+      if (preDefinedAdapterNames.size > 0) {
+        callbacks?.onChunk?.(
+          "Stage 4 · Adapter Assignment (pre-defined — skipping AI)",
+        );
+      }
+      mergedAdapterBindings = buildPreDefinedAdapterBindings(
+        config,
+        mergedPortMap,
+      );
     }
-    callbacks?.onProgress?.(4, s4Duration);
+    callbacks?.onProgress?.(4, Date.now() - s4Start);
 
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
     const assembledManifest = this.stage5.execute({
       stage0: normalizedPrompt,
+      stage1: domainAnalysis,
       stage2: classification,
-      stage3: s3.value.portMap,
-      stage4: s4.value,
-      contextMappings: s3.value.contextMappings ?? contextMappings,
+      stage3: mergedPortMap,
+      stage4: mergedAdapterBindings,
+      contextMappings: mergedContextMappings,
     });
     const s5Duration = Date.now() - s5Start;
     callbacks?.onProgress?.(5, s5Duration);
@@ -594,12 +802,13 @@ export class ExecuteStructuredConfigGenerationUseCase {
     // Stage 6: Validation Review
     const s6Start = Date.now();
     callbacks?.onProgress?.(6, 0);
+    callbacks?.onChunk?.("Stage 6 · Validation Review");
     const s6 = await this.stage6.execute(
       {
         stage0: normalizedPrompt,
         stage2: classification,
         stage5: assembledManifest,
-        contextMappings: s3.value.contextMappings ?? contextMappings,
+        contextMappings: mergedContextMappings,
       },
       callbacks?.onChunk,
       callbacks?.onStageTelemetry,
