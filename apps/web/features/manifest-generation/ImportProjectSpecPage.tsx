@@ -94,6 +94,8 @@ export default function ImportProjectSpecPage() {
   );
   const [specSummary, setSpecSummary] = useState<SpecSummary | null>(null);
   const [specContent, setSpecContent] = useState<string>("");
+  const [cameFromConversion, setCameFromConversion] = useState(false);
+  const [isJsonDisclosed, setIsJsonDisclosed] = useState(false);
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
@@ -118,11 +120,39 @@ export default function ImportProjectSpecPage() {
     }
   }, []);
 
+  const runConversion = useCallback(
+    async (rawContent: string) => {
+      setCameFromConversion(true);
+      setPageState("CONVERTING_LOOSE_SPEC");
+      resetConversion();
+      const result = await convert(rawContent);
+      if (!result.convertedConfig) {
+        // Stay in CONVERTING_LOOSE_SPEC; the error UI offers Retry / Continue.
+        return;
+      }
+      try {
+        const parsed = JSON.parse(result.convertedConfig);
+        setSpecContent(result.convertedConfig);
+        sessionStorage.setItem("import_spec_content", result.convertedConfig);
+        setSpecSummary(extractSpecSummary(parsed));
+        setPageState("SPEC_REVIEW");
+      } catch (e) {
+        // Hook returned configJson but it's not parseable JSON — surface as a
+        // conversion failure so the user gets Retry / Continue options.
+        console.error("Converted config failed JSON.parse", e);
+        resetConversion();
+        setPageState("DESCRIPTION_FALLBACK");
+      }
+    },
+    [convert, resetConversion],
+  );
+
   const handleFileLoaded = (content: string) => {
     sessionStorage.setItem("import_spec_content", content);
     const mode: InputMode = detectInputMode(content);
 
     if (mode === "structured-config") {
+      setCameFromConversion(false);
       setSpecContent(content);
       setPageState("SPEC_REVIEW");
       try {
@@ -133,24 +163,9 @@ export default function ImportProjectSpecPage() {
       }
     } else if (mode === "semi-structured") {
       setSpecContent(content);
-      setPageState("CONVERTING_LOOSE_SPEC");
-      convert(content).then((result) => {
-        if (result.convertedConfig) {
-          try {
-            const parsed = JSON.parse(result.convertedConfig);
-            setSpecContent(result.convertedConfig);
-            sessionStorage.setItem(
-              "import_spec_content",
-              result.convertedConfig,
-            );
-            setSpecSummary(extractSpecSummary(parsed));
-            setPageState("SPEC_REVIEW");
-          } catch {
-            // Error handling JSON parse falls back to user seeing raw error or continuing.
-          }
-        }
-      });
+      void runConversion(content);
     } else {
+      setCameFromConversion(false);
       setSpecContent(content);
       setPageState("DESCRIPTION_FALLBACK");
     }
@@ -234,6 +249,8 @@ export default function ImportProjectSpecPage() {
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
+    setCameFromConversion(false);
+    setIsJsonDisclosed(false);
     sessionStorage.removeItem("import_spec_content");
   };
 
@@ -299,6 +316,33 @@ export default function ImportProjectSpecPage() {
       );
     }
     if (pageState === "CONVERTING_LOOSE_SPEC") {
+      // When conversion has failed, offer recovery paths. While in flight,
+      // only Cancel is available.
+      if (conversionError) {
+        return (
+          <>
+            <Button variant="outline" onClick={handleReset}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPageState("DESCRIPTION_FALLBACK");
+                  resetConversion();
+                  setCameFromConversion(false);
+                }}
+              >
+                Continue as description
+              </Button>
+              <Button onClick={() => void runConversion(specContent)}>
+                Retry conversion
+              </Button>
+            </div>
+          </>
+        );
+      }
       return (
         <>
           <Button
@@ -307,6 +351,7 @@ export default function ImportProjectSpecPage() {
               resetConversion();
               setPageState("UPLOAD");
               setSpecContent("");
+              setCameFromConversion(false);
               sessionStorage.removeItem("import_spec_content");
             }}
           >
@@ -435,7 +480,7 @@ export default function ImportProjectSpecPage() {
                 <input
                   id="project-spec-file"
                   type="file"
-                  accept=".yaml,.yml,.json,.txt"
+                  accept=".yaml,.yml,.json,.txt,.md"
                   aria-describedby="file-help"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -459,6 +504,13 @@ export default function ImportProjectSpecPage() {
             {pageState === "SPEC_REVIEW" && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Spec Review</h2>
+                {cameFromConversion && (
+                  <div className="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+                    This summary was generated from your loose specification.
+                    Review the converted JSON below before generating ports and
+                    adapters.
+                  </div>
+                )}
                 {specSummary && (
                   <div className="mb-4 space-y-2">
                     <p>
@@ -483,6 +535,22 @@ export default function ImportProjectSpecPage() {
                       classification (Stage 2)
                     </p>
                   </div>
+                )}
+                {cameFromConversion && specContent && (
+                  <details
+                    className="mt-4 border rounded"
+                    open={isJsonDisclosed}
+                    onToggle={(e) =>
+                      setIsJsonDisclosed((e.target as HTMLDetailsElement).open)
+                    }
+                  >
+                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium select-none">
+                      {isJsonDisclosed ? "Hide" : "View"} converted JSON
+                    </summary>
+                    <pre className="max-h-96 overflow-auto p-3 bg-muted text-xs font-mono whitespace-pre-wrap break-words">
+                      {specContent}
+                    </pre>
+                  </details>
                 )}
               </div>
             )}

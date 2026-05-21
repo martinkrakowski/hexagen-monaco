@@ -20,13 +20,18 @@ export function detectInputMode(content: string): InputMode {
   }
 
   const hints = [
-    /bounded\s*contexts/i,
-    /aggregates?/i,
-    /value\s*objects?/i,
-    /use\s*cases?/i,
-    /domain\s*events?/i,
-    /context\s*mappings?/i,
-    /entities/i,
+    // Prose / heading-style hints
+    /\bbounded[_\s-]?contexts?/i,
+    /\baggregates?/i,
+    /\bvalue[_\s-]?objects?/i,
+    /\buse[_\s-]?cases?/i,
+    /\bdomain[_\s-]?events?/i,
+    /\bcontext[_\s-]?mappings?/i,
+    /\bentities\b/i,
+    // YAML-structural hints — catch partial / loosely-typed YAML
+    /^---\s*$/m, // multi-document separator
+    /^\s*-\s+name:/m, // list of named entries
+    /^\s*apps?:/m, // top-level apps section
   ];
 
   let hintCount = 0;

@@ -159,36 +159,67 @@ describe("ExecuteLooseSpecConversionUseCase", () => {
     assert.strictEqual(callCount, 0);
   });
 
-  test("Abort signal fires mid-call -> returns abort error", async () => {
+  test("External abort signal fires mid-call -> returns abort error", async () => {
     const mockLLMAdapter = {
       sendRequest: async (request: any) => {
-        return new Promise((resolve, reject) => {
+        return new Promise((_resolve, reject) => {
           if (request.signal) {
             request.signal.addEventListener("abort", () => {
-              const err = new Error("AbortError");
-              err.name = "AbortError";
-              reject(err);
+              const e = new Error("AbortError");
+              e.name = "AbortError";
+              reject(e);
             });
-            // Immediately abort the controller for testing
-            setTimeout(() => {
-              const event = new Event("abort");
-              request.signal.dispatchEvent(event);
-              const err = new Error("AbortError");
-              err.name = "AbortError";
-              reject(err);
-            }, 10);
           }
         });
       },
     } as unknown as SendStructuredRequestPort;
 
     const useCase = new ExecuteLooseSpecConversionUseCase(mockLLMAdapter);
-    const result = await useCase.execute("Build a core domain");
+    const controller = new AbortController();
+    // Abort shortly after the call starts.
+    setTimeout(() => controller.abort(), 10);
+
+    const result = await useCase.execute("Build a core domain", {
+      signal: controller.signal,
+    });
 
     assert.strictEqual(result.success, false);
     if (!result.success) {
       assert.ok(result.error instanceof Error);
       assert.strictEqual(result.error.name, "AbortError");
+    }
+  });
+
+  test("Already-aborted signal -> fails before LLM is called", async () => {
+    let callCount = 0;
+    const mockLLMAdapter = {
+      sendRequest: async () => {
+        callCount++;
+        return {
+          success: true as const,
+          value: {
+            id: "test",
+            modelId: "gpt-4o-mini" as any,
+            content: validJsonResponse,
+            finishReason: "stop" as const,
+            timestamp: Date.now(),
+          },
+        };
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const useCase = new ExecuteLooseSpecConversionUseCase(mockLLMAdapter);
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await useCase.execute("Build a core domain", {
+      signal: controller.signal,
+    });
+
+    assert.strictEqual(result.success, false);
+    assert.strictEqual(callCount, 0);
+    if (!result.success) {
+      assert.strictEqual((result.error as Error).name, "AbortError");
     }
   });
 });

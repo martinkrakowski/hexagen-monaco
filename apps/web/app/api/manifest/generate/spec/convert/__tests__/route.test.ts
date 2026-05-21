@@ -45,10 +45,8 @@ test("POST /api/manifest/generate/spec/convert happy path with mock", async (t) 
   t.mock.method(
     ExecuteLooseSpecConversionUseCase.prototype,
     "execute",
-    async (spec, onChunk) => {
-      if (onChunk) {
-        onChunk("mock chunk");
-      }
+    async (_spec, callbacks) => {
+      callbacks?.onChunk?.("mock chunk");
       return ok({
         configJson: "{}",
         config: { mock: true },

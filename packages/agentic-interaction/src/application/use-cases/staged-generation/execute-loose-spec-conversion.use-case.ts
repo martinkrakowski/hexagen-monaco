@@ -1,9 +1,10 @@
+/* eslint-disable no-console */
 import { ok, err } from "@hexagen/shared";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
 import {
-  STAGE_LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT,
+  LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT,
   compileLooseSpecConversionPrompt,
   buildLooseSpecRetryPrompt,
 } from "../../../domain/prompts/convert-loose-spec.prompt";
@@ -13,35 +14,82 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import { jsonrepair } from "jsonrepair";
 
-const STAGE_NUMBER = 0; // Using 0 or a generic stage number since it's a standalone pipeline phase
+export const MAX_LOOSE_SPEC_INPUT_CHARS = 200_000;
+
+// Use a sentinel that does not collide with staged generation stages 0-6.
+// Telemetry filtering by stage number must be able to distinguish conversion
+// failures from prompt-normalization (Stage 0) failures.
+const LOOSE_SPEC_CONVERSION_STAGE = -1;
+
+const ATTEMPT_TIMEOUT_MS = 1_800_000; // 30 minutes per attempt
+
+const LOG_PREFIX = "[loose-spec-convert]";
+
+export interface LooseSpecConversionCallbacks {
+  onChunk?: (chunk: string) => void;
+  onProgress?: (message: string) => void;
+  signal?: AbortSignal;
+}
 
 export class ExecuteLooseSpecConversionUseCase {
   constructor(private readonly llmPort: SendStructuredRequestPort) {}
 
   async execute(
     looseSpec: string,
-    onChunk?: (chunk: string) => void,
+    callbacks?: LooseSpecConversionCallbacks,
   ): Promise<
     | { success: true; value: { configJson: string; config: StructuredConfig } }
     | { success: false; error: unknown }
   > {
-    if (looseSpec.length > 200_000) {
-      return err(new Error("Input too large (exceeds 200,000 characters)."));
+    if (looseSpec.length > MAX_LOOSE_SPEC_INPUT_CHARS) {
+      return err(
+        new Error(
+          `Input too large (exceeds ${MAX_LOOSE_SPEC_INPUT_CHARS.toLocaleString()} characters).`,
+        ),
+      );
+    }
+
+    // Honour an already-aborted external signal before any work.
+    if (callbacks?.signal?.aborted) {
+      const abortErr = new Error("AbortError");
+      abortErr.name = "AbortError";
+      return err(abortErr);
     }
 
     let prompt = compileLooseSpecConversionPrompt(looseSpec);
     let lastError = "";
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      console.log(
+        `${LOG_PREFIX} phase=conversion, attempt=${attempt}, maxTokens=8000`,
+      );
+      callbacks?.onProgress?.(`Converting (attempt ${attempt})...`);
+
+      // Compose external + internal abort. The internal controller fires on
+      // 30-min timeout; the external signal lets callers cancel mid-flight.
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(() => abortController.abort(), 1800000); // 30min timeout per attempt
+      const timeoutHandle = setTimeout(
+        () => abortController.abort(),
+        ATTEMPT_TIMEOUT_MS,
+      );
+      const externalSignal = callbacks?.signal;
+      const onExternalAbort = () => abortController.abort();
+      if (externalSignal) {
+        if (externalSignal.aborted) {
+          abortController.abort();
+        } else {
+          externalSignal.addEventListener("abort", onExternalAbort, {
+            once: true,
+          });
+        }
+      }
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
         [
           {
             role: "system",
-            content: STAGE_LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT,
+            content: LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT,
           },
           { role: "user", content: prompt },
         ],
@@ -54,6 +102,17 @@ export class ExecuteLooseSpecConversionUseCase {
       try {
         responseResult = await this.llmPort.sendRequest(request);
       } catch (thrownError) {
+        const isAbort =
+          thrownError instanceof Error && thrownError.name === "AbortError";
+        if (isAbort) {
+          console.log(
+            `${LOG_PREFIX} phase=conversion, attempt=${attempt}, aborted=true`,
+          );
+          return err(thrownError);
+        }
+        console.log(
+          `${LOG_PREFIX} phase=conversion, attempt=${attempt}, llmFailed=true`,
+        );
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
             thrownError instanceof Error
@@ -61,13 +120,19 @@ export class ExecuteLooseSpecConversionUseCase {
               : new Error(String(thrownError)),
           );
         }
-        if (thrownError instanceof Error && thrownError.name === "AbortError") {
-          return err(thrownError);
-        }
         lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
         continue;
       } finally {
         clearTimeout(timeoutHandle);
+        if (externalSignal) {
+          externalSignal.removeEventListener("abort", onExternalAbort);
+        }
+      }
+
+      if (callbacks?.signal?.aborted) {
+        const abortErr = new Error("AbortError");
+        abortErr.name = "AbortError";
+        return err(abortErr);
       }
 
       let fullResponse = "";
@@ -77,25 +142,33 @@ export class ExecuteLooseSpecConversionUseCase {
         streamError = responseResult.error;
       } else {
         fullResponse = responseResult.value.content;
-        if (onChunk && fullResponse) {
-          onChunk(fullResponse);
+        if (callbacks?.onChunk && fullResponse) {
+          callbacks.onChunk(fullResponse);
         }
       }
 
       if (streamError) {
         const errorMsg = `Request error: ${streamError}`;
+        console.log(
+          `${LOG_PREFIX} phase=conversion, attempt=${attempt}, streamError=true`,
+        );
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
-            new StageMaxRetriesError(STAGE_NUMBER, errorMsg, fullResponse),
+            new StageMaxRetriesError(
+              LOOSE_SPEC_CONVERSION_STAGE,
+              errorMsg,
+              fullResponse,
+            ),
           );
         }
         lastError = errorMsg;
         continue;
       }
 
+      // Strip fenced code blocks if present (handles ```json...``` and ```...```).
       const cleanedResponse = fullResponse
-        .replace(/^```json/m, "")
-        .replace(/```$/m, "")
+        .replace(/^[ \t]*```(?:json)?\s*/gim, "")
+        .replace(/```\s*$/gm, "")
         .trim();
 
       let parsedConfig: StructuredConfig | null = null;
@@ -109,16 +182,26 @@ export class ExecuteLooseSpecConversionUseCase {
       }
 
       if (parsedConfig) {
+        console.log(
+          `${LOG_PREFIX} phase=conversion, attempt=${attempt}, success=true`,
+        );
         return ok({
           configJson: JSON.stringify(parsedConfig, null, 2),
           config: parsedConfig,
         });
       }
 
+      console.log(
+        `${LOG_PREFIX} phase=conversion, attempt=${attempt}, parseFailed=true, error=${parseErrorStr.slice(0, 200)}`,
+      );
       lastError = parseErrorStr;
       if (attempt === MAX_RETRY_ATTEMPTS) {
         return err(
-          new StageMaxRetriesError(STAGE_NUMBER, lastError, fullResponse),
+          new StageMaxRetriesError(
+            LOOSE_SPEC_CONVERSION_STAGE,
+            lastError,
+            fullResponse,
+          ),
         );
       }
 
@@ -130,6 +213,8 @@ export class ExecuteLooseSpecConversionUseCase {
       });
     }
 
-    return err(new StageMaxRetriesError(STAGE_NUMBER, lastError, ""));
+    return err(
+      new StageMaxRetriesError(LOOSE_SPEC_CONVERSION_STAGE, lastError, ""),
+    );
   }
 }

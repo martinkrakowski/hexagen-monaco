@@ -171,8 +171,8 @@ export function useLooseSpecConversion(
           // Yield to event loop
           await new Promise((r) => setTimeout(r, 0));
 
-          const result = await useCase.execute(looseSpec, () => {
-            // We can optionally use onChunk if needed, but not required for simple state
+          const result = await useCase.execute(looseSpec, {
+            signal: controller.signal,
           });
 
           if (abortRef.current || controller.signal.aborted) {

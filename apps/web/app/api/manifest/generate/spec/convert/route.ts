@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../../lib/rate-limiter";
-import { ExecuteLooseSpecConversionUseCase } from "@hexagen/agentic-interaction";
+import {
+  ExecuteLooseSpecConversionUseCase,
+  MAX_LOOSE_SPEC_INPUT_CHARS,
+} from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../../lib/wire.server";
 import { logger } from "../../../../../../lib/structured-logger";
 import type { WebLLMAdapter } from "@hexagen/local-llm";
@@ -12,7 +15,6 @@ interface ConvertRequestBody {
 
 type NDJSONEvent =
   | { type: "chunk"; data: string }
-  | { type: "validation-error"; errors: string[] }
   | { type: "done"; configJson: string; config: unknown }
   | { type: "error"; message: string };
 
@@ -50,11 +52,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (body.looseSpec.length > 200_000) {
+  if (body.looseSpec.length > MAX_LOOSE_SPEC_INPUT_CHARS) {
     return new Response(
       JSON.stringify({
         type: "error",
-        message: "Input too large (exceeds 200,000 characters).",
+        message: `Input too large (exceeds ${MAX_LOOSE_SPEC_INPUT_CHARS.toLocaleString()} characters).`,
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
@@ -92,8 +94,11 @@ export async function POST(request: NextRequest) {
 
         const useCase = new ExecuteLooseSpecConversionUseCase(llmAdapter);
 
-        const result = await useCase.execute(body.looseSpec, (chunk) => {
-          send({ type: "chunk", data: chunk });
+        const result = await useCase.execute(body.looseSpec, {
+          signal: request.signal,
+          onChunk: (chunk) => {
+            send({ type: "chunk", data: chunk });
+          },
         });
 
         if (result.success) {
