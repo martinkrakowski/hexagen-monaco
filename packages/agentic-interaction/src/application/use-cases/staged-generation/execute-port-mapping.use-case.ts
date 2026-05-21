@@ -6,6 +6,7 @@ import {
   STAGE3_PORTS_SYSTEM_PROMPT,
   compileStage3Prompt,
   normalizeContextName,
+  validatePortQuality,
 } from "../../../domain/index";
 import type {
   PortMap,
@@ -230,6 +231,24 @@ export class ExecutePortMappingUseCase {
       );
 
       for (const [ctxName, ports] of portsMap.entries()) {
+        const allPortDefs = [...ports.in, ...ports.out];
+        const aggregateRoots = (state.stage1.aggregateRoots ?? [])
+          .filter(
+            (ar) =>
+              normalizeContextName(ar.subdomain) ===
+              normalizeContextName(ctxName),
+          )
+          .map((ar) => ar.name);
+        const issues = validatePortQuality(
+          allPortDefs,
+          ctxName,
+          aggregateRoots,
+        );
+        if (issues.length > 0) {
+          console.warn(
+            `[Stage 3] Port quality issues for ${ctxName}: ${issues.map((i) => `${i.portName}[${i.rule}]`).join(", ")}`,
+          );
+        }
         allPortsMap.set(ctxName, ports);
       }
       allContextMappings.push(...mappings);
@@ -291,7 +310,7 @@ export class ExecutePortMappingUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.3, maxTokens: 768 },
+        { stream: true, temperature: 0.3, maxTokens: 2048 },
       );
       request.signal = abortController.signal;
 
@@ -493,6 +512,9 @@ export class ExecutePortMappingUseCase {
       };
       if (typeof normalized.forAggregate === "string") {
         portDef.forAggregate = normalized.forAggregate;
+      }
+      if (typeof normalized.justification === "string") {
+        portDef.justification = normalized.justification;
       }
 
       const ports = portsMap.get(contextName)!;

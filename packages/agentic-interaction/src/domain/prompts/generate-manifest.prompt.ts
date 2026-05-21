@@ -331,11 +331,23 @@ If you find yourself naming a port after a deployment platform or a
 cron-job duty, STOP and re-derive from the context's aggregates,
 events_published, and value_objects instead.
 
+PORT JUSTIFICATION
+==================
+Every port MUST include a "justification" field — a 1-2 sentence
+explanation of WHY this port exists, tied to a specific domain need,
+aggregate dependency, or external-system contract.
+
+BAD: "justification": "Repository for Order"
+GOOD: "justification": "Order aggregate requires persistent storage for order state across checkout and fulfillment workflows"
+
+BAD: "justification": "Sends emails"
+GOOD: "justification": "Notifies customers of order confirmation and shipping updates via the NotificationDispatcher port contract"
+
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
 Emit objects one per line. Two NDJSON types:
 
 Port entries:
-{"type": "port", "contextName": "climate-control", "direction": "in", "name": "SensorTelemetryPort", "portType": "event", "description": "Receives sensor readings.", "forAggregate": "ClimatePolicy"}
+{"type": "port", "contextName": "climate-control", "direction": "in", "name": "SensorTelemetryPort", "portType": "event", "description": "Receives sensor readings.", "forAggregate": "ClimatePolicy", "justification": "ClimatePolicy aggregate requires real-time sensor data to evaluate policy compliance rules against environmental conditions"}
 
 Context mapping entries:
 {"type": "contextMapping", "upstream": "climate-control", "downstream": "reporting", "pattern": "Customer-Supplier", "mechanism": "Domain Events", "notes": "Reporting consumes PolicyEvaluated events", "events": ["PolicyEvaluated"]}

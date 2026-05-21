@@ -147,3 +147,6 @@ export {
   coercePortName,
   extractYamlFromResponse,
 } from "./manifest/index";
+
+export type { PortQualityIssue } from "./services/index";
+export { validatePortQuality } from "./services/index";
