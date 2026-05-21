@@ -11,6 +11,8 @@ import {
   buildContextMappingsFromConfig,
   deriveOutboundPortsFromConfig,
   ExecuteStructuredConfigGenerationUseCase,
+  inferContextType,
+  StructuredConfigContext,
 } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
 
 const fixturesDir = path.join(
@@ -442,5 +444,64 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     assert.strictEqual(result1.success, true);
     const result2 = await useCase.execute(validYaml);
     assert.strictEqual(result2.success, true);
+  });
+});
+
+describe("inferContextType — heuristic edge cases (Phase 1 Heuristic)", () => {
+  const ctx = (name: string, responsibility: string) =>
+    ({
+      name,
+      responsibility,
+      aggregates: [],
+    }) as unknown as StructuredConfigContext;
+
+  it("'shared files' must NOT be shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(
+        ctx(
+          "DocumentVault",
+          "Contracts, shared files, scoped Supabase Storage",
+        ),
+      ),
+      "supporting",
+    );
+  });
+
+  // PRESERVED — phrase-level matches must continue to work
+  it("'Shared Kernel for X' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(
+        ctx("BillingTerms", "Shared Kernel for billing terminology"),
+      ),
+      "shared-kernel",
+    );
+  });
+
+  it("'Cross-cutting concerns' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(ctx("CrossCutting", "Cross-cutting concerns")),
+      "shared-kernel",
+    );
+  });
+
+  it("bare 'common utilities' must NOT be shared-kernel", () => {
+    assert.notStrictEqual(
+      inferContextType(ctx("Utilities", "Common utilities module")),
+      "shared-kernel",
+    );
+  });
+
+  it("literal 'shared-kernel' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(ctx("CoreShared", "shared-kernel context")),
+      "shared-kernel",
+    );
+  });
+
+  it("literal 'shared_kernel' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(ctx("CoreShared2", "shared_kernel context")),
+      "shared-kernel",
+    );
   });
 });

@@ -109,7 +109,7 @@ interface StructuredConfigApp {
   schedule?: string;
 }
 
-interface StructuredConfigContext {
+export interface StructuredConfigContext {
   name: string;
   short?: string;
   responsibility?: string;
@@ -442,7 +442,7 @@ export function buildDomainAnalysisFromConfig(
  * Infer context type from the config.
  * Uses explicit type field if present, then name/responsibility heuristics.
  */
-function inferContextType(
+export function inferContextType(
   ctx: StructuredConfigContext,
 ): AcceptedContext["type"] {
   // If the config explicitly declares a type, honour it
@@ -481,7 +481,12 @@ function inferContextType(
     "billing-gateway",
     "email",
   ];
-  const sharedKernelKeywords = ["shared", "common", "kernel", "cross-cutting"];
+  const sharedKernelKeywords = [
+    "shared kernel",
+    "shared-kernel",
+    "shared_kernel",
+    "cross-cutting",
+  ];
 
   if (
     sharedKernelKeywords.some((kw) => name.includes(kw) || resp.includes(kw))

@@ -313,6 +313,24 @@ CONTEXT MAPPING RULES:
 9. Use common mechanisms: "Domain Events", "REST API", "GraphQL", "Shared Database", "Messaging".
 10. If two contexts share no data or events, do NOT create a mapping between them.
 
+APP-LEVEL METADATA IS NOT A PORT
+=================================
+The \`apps[]\` array describes RUNTIME HOSTING, not domain dependencies:
+
+- \`apps[].responsibilities\` — what the app process runs (cron jobs,
+  integrations, infra duties). These become Stage 4 adapters that wire
+  INTO existing context ports. They are NEVER outbound ports themselves.
+- \`apps[].deployment\` — the hosting platform (Vercel, Fly.io, AWS).
+  A bounded context never "calls Vercel"; deployment is irrelevant to
+  the hexagonal model. NEVER emit {Platform}ClientPort.
+- \`apps[].schedule\` — a cron expression. Schedules drive worker
+  adapters, not context ports.
+
+Rule of thumb: if the name comes from \`apps[].*\`, it is NOT a port.
+If you find yourself naming a port after a deployment platform or a
+cron-job duty, STOP and re-derive from the context's aggregates,
+events_published, and value_objects instead.
+
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
 Emit objects one per line. Two NDJSON types:
 
