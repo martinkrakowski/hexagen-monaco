@@ -628,14 +628,15 @@ function buildPreDefinedAdapterBindings(
         ];
         return {
           contextName: ctx.name,
-          adapters: (ctx.layers?.infrastructure?.adapters ?? []).map(
-            (name) => ({
+          adapters: (ctx.layers?.infrastructure?.adapters ?? []).map((name) => {
+            const adapterType = inferAdapterType(name);
+            return {
               name,
-              type: inferAdapterType(name) ?? "adapter",
+              type: adapterType ?? "adapter",
               implements: inferAdapterImplements(name, portNames),
-              adapterType: inferAdapterType(name),
-            }),
-          ),
+              adapterType,
+            };
+          }),
         };
       }),
   };

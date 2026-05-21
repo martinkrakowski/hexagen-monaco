@@ -143,6 +143,7 @@ export default function ImportProjectSpecPage() {
     setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
+    manifestGeneration.reset();
 
     const result = await specGeneration.generateFromSpec(specContent, {
       executionStrategy: "auto",
@@ -162,12 +163,13 @@ export default function ImportProjectSpecPage() {
         setPageState("DESCRIPTION_FALLBACK");
       }
     }
-  }, [specContent, specGeneration, pageState, router]);
+  }, [specContent, specGeneration, manifestGeneration, pageState, router]);
 
   const handleContinue = useCallback(async () => {
     setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
+    specGeneration.reset();
 
     const result = await manifestGeneration.generateManifest(specContent);
 
@@ -183,7 +185,7 @@ export default function ImportProjectSpecPage() {
         setPageState("DESCRIPTION_FALLBACK");
       }
     }
-  }, [specContent, manifestGeneration, pageState, router]);
+  }, [specContent, manifestGeneration, specGeneration, pageState, router]);
 
   const handleBack = () => {
     if (pageState === "SPEC_REVIEW" || pageState === "DESCRIPTION_FALLBACK") {

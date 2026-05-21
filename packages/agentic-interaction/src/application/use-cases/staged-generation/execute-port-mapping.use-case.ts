@@ -324,6 +324,12 @@ export class ExecutePortMappingUseCase {
           return { objects: partialObjects, fullResponse, retryCount };
         }
         if (attempt === MAX_RETRY_ATTEMPTS) {
+          console.warn(
+            `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`,
+          );
+          onChunk?.(
+            `   ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+          );
           return { objects: [], fullResponse, retryCount };
         }
         lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
@@ -343,6 +349,12 @@ export class ExecutePortMappingUseCase {
           return { objects: partialObjects, fullResponse, retryCount };
         }
         if (attempt === MAX_RETRY_ATTEMPTS) {
+          console.warn(
+            `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${lastError}`,
+          );
+          onChunk?.(
+            `   ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+          );
           return { objects: [], fullResponse, retryCount };
         }
         lastError = `Request error: ${streamError}`;
@@ -366,6 +378,12 @@ export class ExecutePortMappingUseCase {
 
       lastError = "No valid JSON objects found in output";
       if (attempt === MAX_RETRY_ATTEMPTS) {
+        console.warn(
+          `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${lastError}`,
+        );
+        onChunk?.(
+          `   ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+        );
         return { objects: [], fullResponse, retryCount };
       }
       onChunk?.(`\n--- Retry ${attempt + 1} (parse failed) ---\n`);
@@ -378,7 +396,6 @@ export class ExecutePortMappingUseCase {
         originalPrompt: initialPrompt,
       }).content;
     }
-
     return {
       objects: [],
       fullResponse: "",
@@ -423,25 +440,23 @@ export class ExecutePortMappingUseCase {
           continue;
         }
 
-        if (resolvedUpstream && resolvedDownstream) {
-          const mapping: ContextMappingEntry = {
-            upstream: resolvedUpstream,
-            downstream: resolvedDownstream,
-          };
-          if (typeof normalized.pattern === "string")
-            mapping.pattern = normalized.pattern;
-          if (typeof normalized.mechanism === "string")
-            mapping.mechanism = normalized.mechanism;
-          if (typeof normalized.notes === "string")
-            mapping.notes = normalized.notes;
-          if (
-            Array.isArray(normalized.events) &&
-            normalized.events.every((v: unknown) => typeof v === "string")
-          ) {
-            mapping.events = normalized.events as string[];
-          }
-          mappings.push(mapping);
+        const mapping: ContextMappingEntry = {
+          upstream: resolvedUpstream,
+          downstream: resolvedDownstream,
+        };
+        if (typeof normalized.pattern === "string")
+          mapping.pattern = normalized.pattern;
+        if (typeof normalized.mechanism === "string")
+          mapping.mechanism = normalized.mechanism;
+        if (typeof normalized.notes === "string")
+          mapping.notes = normalized.notes;
+        if (
+          Array.isArray(normalized.events) &&
+          normalized.events.every((v: unknown) => typeof v === "string")
+        ) {
+          mapping.events = normalized.events as string[];
         }
+        mappings.push(mapping);
         continue;
       }
 

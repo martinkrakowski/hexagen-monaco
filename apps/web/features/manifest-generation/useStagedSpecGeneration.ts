@@ -178,7 +178,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
         controller.signal,
       );
 
-      if (abortRef.current) {
+      if (abortRef.current || controller.signal.aborted) {
         return {
           phase: "failed" as StagedPhase,
           generationError: "Aborted",
@@ -245,9 +245,12 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           // sees a blank or stale UI until stage 3's LLM call yields the event loop.
           await new Promise((r) => setTimeout(r, 0));
 
+          const isCancelled = () =>
+            abortRef.current || controller.signal.aborted;
+
           const result = await useCase.execute(config, {
             onProgress: (stage: number, durationMs: number) => {
-              if (abortRef.current) return;
+              if (isCancelled()) return;
               console.log(
                 `[Stage ${stage}] onProgress called: durationMs=${durationMs}`,
               );
@@ -274,7 +277,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
               });
             },
             onError: (stage: number, error: string, durationMs?: number) => {
-              if (abortRef.current) return;
+              if (isCancelled()) return;
               console.error(`[Stage ${stage}] ERROR: ${error}`);
               setGenerationError(error);
               setPhase("failed");
@@ -294,11 +297,11 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
               }
             },
             onChunk: (message: string) => {
-              if (abortRef.current) return;
+              if (isCancelled()) return;
               setVerboseLog((prev) => [...prev, message]);
             },
             onStageTelemetry: (telemetry: StageTelemetry) => {
-              if (abortRef.current) return;
+              if (isCancelled()) return;
               console.log(
                 `[Stage ${telemetry.stage}] Telemetry: ${telemetry.label} (${telemetry.durationMs}ms, retries=${telemetry.retryCount})`,
               );
@@ -322,7 +325,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             result.success ? "SUCCESS" : "FAILED",
           );
 
-          if (abortRef.current) {
+          if (abortRef.current || controller.signal.aborted) {
             return {
               phase: "failed" as StagedPhase,
               generationError: "Aborted",
@@ -382,7 +385,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
           throw result.error;
         } catch (localError: unknown) {
-          if (abortRef.current) {
+          if (abortRef.current || controller.signal.aborted) {
             return {
               phase: "failed" as StagedPhase,
               generationError: "Aborted",
@@ -404,7 +407,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
       return await executeCloudGeneration();
     } catch (error) {
-      if (abortRef.current) {
+      if (abortRef.current || controller.signal.aborted) {
         return {
           phase: "failed" as StagedPhase,
           generationError: "Aborted",
