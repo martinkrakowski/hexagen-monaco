@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import Script from "next/script";
-import { Share2, Copy, Check } from "lucide-react";
+import { Share2 } from "lucide-react";
+import { CopyButton } from "@hexagen/ui";
 
 interface MermaidDiagramViewProps {
   mermaidCode: string;
@@ -18,7 +19,6 @@ declare global {
 export function MermaidDiagramView({ mermaidCode }: MermaidDiagramViewProps) {
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const diagramRef = useRef<HTMLDivElement>(null);
 
@@ -43,12 +43,6 @@ export function MermaidDiagramView({ mermaidCode }: MermaidDiagramViewProps) {
     renderDiagram();
   }, [mermaidCode, scriptLoaded]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(mermaidCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
     <div className="absolute inset-0 flex flex-col bg-background">
       <Script
@@ -62,17 +56,11 @@ export function MermaidDiagramView({ mermaidCode }: MermaidDiagramViewProps) {
         <span className="text-xs font-semibold text-foreground">
           Mermaid Class Diagram
         </span>
-        <button
-          onClick={handleCopy}
-          className="ml-auto flex items-center px-2 py-1 rounded text-xs font-medium text-muted-foreground bg-card border border-border hover:text-foreground hover:border-muted transition-colors font-mono"
-        >
-          {copied ? (
-            <Check className="w-3 h-3 mr-1 text-success" />
-          ) : (
-            <Copy className="w-3 h-3 mr-1" />
-          )}
-          {copied ? "Copied!" : "Copy"}
-        </button>
+        <CopyButton
+          text={mermaidCode}
+          className="ml-auto"
+          aria-label="Copy Mermaid source"
+        />
       </div>
 
       <div className="flex-1 overflow-auto p-4 flex items-center justify-center">

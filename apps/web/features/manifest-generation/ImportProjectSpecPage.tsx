@@ -354,8 +354,6 @@ export default function ImportProjectSpecPage() {
                 {generatedManifest && (
                   <CopyButton
                     text={generatedManifest}
-                    label="Copy"
-                    variant="outline"
                     aria-label="Copy manifest YAML"
                   />
                 )}
