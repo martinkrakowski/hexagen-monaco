@@ -14,6 +14,7 @@ import type {
   OutboundPortType,
   PortMap,
   ContextPorts,
+  PortDefinition,
   AdapterBindings,
   AdapterBinding,
 } from "../../../domain/value-objects/pipeline-state";
@@ -624,6 +625,76 @@ function inferOutboundPortType(name: string): OutboundPortType {
   return "external-client";
 }
 
+/**
+ * Deterministically derive outbound ports for a context from its source
+ * config. Used when Stage 3 (LLM port mapping) fails for a context and the
+ * fallback path takes over — without this, the context would be emitted
+ * with no outbound ports at all (the empty array gets stripped by the YAML
+ * serializer, leaving the architecture incomplete).
+ *
+ * Derivation rules:
+ *   - Each aggregate root            → `{Root}RepositoryPort`
+ *   - events_published (non-empty)   → `{FirstRootOrCtx}EventPublisherPort`
+ *   - Channel-style enum value object (name contains "Channel", underlying
+ *     is enum) → one `{Channel}NotifierPort` per enum value
+ */
+export function deriveOutboundPortsFromConfig(
+  config: StructuredConfig,
+  contextName: string,
+): PortDefinition[] {
+  const ctx = config.bounded_contexts.find((c) => c.name === contextName);
+  if (!ctx) return [];
+
+  const ports: PortDefinition[] = [];
+
+  // 1. Repository ports — one per aggregate root.
+  const roots = (ctx.aggregates ?? []).filter((a) => a.root !== false);
+  for (const root of roots) {
+    ports.push({
+      name: `${root.name}RepositoryPort`,
+      type: "repository",
+      description: `Persistence for ${root.name} aggregate`,
+      forAggregate: root.name,
+    });
+  }
+
+  // 2. Publisher port — only if the context actually publishes events.
+  const publishedEvents = ctx.events_published ?? [];
+  if (publishedEvents.length > 0) {
+    const prefix = roots[0]?.name ?? contextName;
+    ports.push({
+      name: `${prefix}EventPublisherPort`,
+      type: "publisher",
+      description: `Publishes domain events: ${publishedEvents.join(", ")}`,
+    });
+  }
+
+  // 3. Channel notifier ports — for "delivery"-style contexts that declare
+  // a DeliveryChannel-like enum value object.
+  for (const vo of ctx.value_objects ?? []) {
+    const isChannelLike =
+      /channel/i.test(vo.name) &&
+      vo.underlying === "enum" &&
+      Array.isArray(vo.values) &&
+      vo.values.length > 0;
+    if (!isChannelLike) continue;
+    for (const channel of vo.values!) {
+      const pascal = channel
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join("");
+      ports.push({
+        name: `${pascal}NotifierPort`,
+        type: "notifier",
+        description: `${pascal} channel delivery`,
+      });
+    }
+  }
+
+  return ports;
+}
+
 function inferAdapterType(name: string): AdapterBinding["adapterType"] {
   const l = name.toLowerCase();
   if (l.includes("repo") || l.includes("reposit")) return "Repository";
@@ -836,8 +907,9 @@ export class ExecuteStructuredConfigGenerationUseCase {
       for (const ctx of contextsNeedingPorts) {
         if (portedContextNames.has(ctx.name)) continue;
         const useCases = lookupUseCases(config, ctx.name);
+        const fallbackOut = deriveOutboundPortsFromConfig(config, ctx.name);
         callbacks?.onChunk?.(
-          `   ⚠ ${ctx.name}: LLM returned no ports — ${useCases.length > 0 ? "falling back to use_cases" : "leaving empty"}`,
+          `   ⚠ ${ctx.name}: LLM returned no ports — ${useCases.length > 0 ? `falling back to use_cases (${useCases.length} in, ${fallbackOut.length} out)` : "leaving empty"}`,
         );
         if (useCases.length > 0) {
           fallbackContexts.push({
@@ -847,7 +919,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
               type: inferInboundPortType(uc.name),
               description: uc.command ?? uc.name,
             })),
-            out: [],
+            out: fallbackOut,
           });
         }
       }
