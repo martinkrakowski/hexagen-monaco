@@ -4,6 +4,7 @@ import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/st
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
+import { STAGE3_PORTS_SYSTEM_PROMPT } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
 
 const validPortMappingNdjson = [
   '{"contextName":"invoice-management","direction":"in","name":"createInvoice","portType":"command","description":"Creates invoice"}',
@@ -149,5 +150,76 @@ describe("ExecutePortMappingUseCase", () => {
     if (result.success) {
       assert.strictEqual(result.value.portMap.contexts.length, 0);
     }
+  });
+
+  test("parser captures justification field from NDJSON", async () => {
+    const ndjsonWithJustification = [
+      '{"contextName":"invoice-management","direction":"in","name":"CreateInvoicePort","portType":"command","description":"Creates a new invoice for a customer order","justification":"Invoice aggregate requires a command entry point to initiate invoice lifecycle from order placement events"}',
+    ].join("\n");
+    const mockPort = createMockLLMPort(() =>
+      createSuccessStream(ndjsonWithJustification),
+    );
+    const useCase = new ExecutePortMappingUseCase(mockPort);
+    const result = await useCase.execute(mockStageState);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const ctx = result.value.portMap.contexts.find(
+        (c) => c.contextName === "invoice-management",
+      );
+      assert.ok(ctx, "Expected invoice-management context");
+      const port = ctx.in.find((p) => p.name === "CreateInvoicePort");
+      assert.ok(port, "Expected CreateInvoicePort");
+      assert.strictEqual(
+        port.justification,
+        "Invoice aggregate requires a command entry point to initiate invoice lifecycle from order placement events",
+      );
+    }
+  });
+
+  test("parser handles NDJSON without justification (optional field)", async () => {
+    const ndjsonWithoutJustification = [
+      '{"contextName":"invoice-management","direction":"in","name":"CreateInvoicePort","portType":"command","description":"Creates a new invoice for a customer order"}',
+    ].join("\n");
+    const mockPort = createMockLLMPort(() =>
+      createSuccessStream(ndjsonWithoutJustification),
+    );
+    const useCase = new ExecutePortMappingUseCase(mockPort);
+    const result = await useCase.execute(mockStageState);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const ctx = result.value.portMap.contexts.find(
+        (c) => c.contextName === "invoice-management",
+      );
+      assert.ok(ctx, "Expected invoice-management context");
+      const port = ctx.in.find((p) => p.name === "CreateInvoicePort");
+      assert.ok(port, "Expected CreateInvoicePort");
+      assert.strictEqual(port.justification, undefined);
+    }
+  });
+});
+
+describe("Stage 3 Prompt Shape", () => {
+  test("STAGE3_PORTS_SYSTEM_PROMPT contains PORT JUSTIFICATION block", () => {
+    assert.ok(
+      STAGE3_PORTS_SYSTEM_PROMPT.includes("PORT JUSTIFICATION"),
+      "Stage 3 prompt must include PORT JUSTIFICATION instruction block",
+    );
+  });
+
+  test("STAGE3_PORTS_SYSTEM_PROMPT includes justification field in NDJSON example", () => {
+    assert.ok(
+      STAGE3_PORTS_SYSTEM_PROMPT.includes('"justification"'),
+      'Stage 3 prompt NDJSON example must include "justification" field',
+    );
+  });
+
+  test("STAGE3_PORTS_SYSTEM_PROMPT describes good vs bad justification examples", () => {
+    assert.ok(
+      STAGE3_PORTS_SYSTEM_PROMPT.includes("BAD:") &&
+        STAGE3_PORTS_SYSTEM_PROMPT.includes("GOOD:"),
+      "Stage 3 prompt must include BAD/GOOD justification examples",
+    );
   });
 });

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import {
   ExecuteStructuredConfigGenerationUseCase,
+  ClassifyContextTypeUseCase,
   type StructuredConfigGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
@@ -115,9 +116,11 @@ export async function POST(request: NextRequest) {
         });
 
         const transactionManager = new InMemoryTransactionManager();
+        const classifyUseCase = new ClassifyContextTypeUseCase(llmAdapter);
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
           transactionManager,
+          classifyUseCase,
         );
 
         const result = await useCase.execute(body.config, callbacks);

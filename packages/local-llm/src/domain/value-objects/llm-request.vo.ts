@@ -16,6 +16,7 @@ export interface LLMRequest {
   stream?: boolean;
   metadata?: Record<string, unknown>;
   signal?: AbortSignal;
+  preferredCloudModel?: string;
 }
 
 export function createLLMRequest(
@@ -31,6 +32,7 @@ export function createLLMRequest(
     topP?: number;
     stream?: boolean;
     metadata?: Record<string, unknown>;
+    preferredCloudModel?: string;
   } = {},
 ): LLMRequest {
   return {

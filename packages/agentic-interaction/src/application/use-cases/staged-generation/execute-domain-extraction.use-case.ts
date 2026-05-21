@@ -19,11 +19,16 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
+import type { EscalationConfig } from "./retry-with-escalation";
 
 const STAGE_NUMBER = 1;
 
 export class ExecuteDomainExtractionUseCase {
-  constructor(private readonly llmPort: SendStructuredRequestPort) {}
+  constructor(
+    private readonly llmPort: SendStructuredRequestPort,
+    private readonly escalationConfig: EscalationConfig = DEFAULT_ESCALATION_CONFIG,
+  ) {}
 
   async execute(
     state: Pick<PipelineState, "stage0">,

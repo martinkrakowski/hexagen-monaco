@@ -5,26 +5,66 @@ import { z } from "zod";
 import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
+  validatePortQuality,
+  normalizeContextName,
 } from "../../../domain/index";
 import type {
   ValidationReport,
   PipelineState,
+  PortDefinition,
 } from "../../../domain/value-objects/pipeline-state";
+import type { PortQualityIssue } from "../../../domain/services/port-quality-validator";
 import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
+import type { EscalationConfig } from "./retry-with-escalation";
 
 const STAGE_NUMBER = 6;
 
+function collectPortQualityIssues(
+  state: Pick<PipelineState, "stage0" | "stage1" | "stage3">,
+): PortQualityIssue[] {
+  const portMap = state.stage3;
+  if (!portMap || portMap.contexts.length === 0) return [];
+
+  const runtimeConcerns = state.stage0?.runtimeConcerns;
+  const aggregateRoots = state.stage1?.aggregateRoots ?? [];
+
+  const issues: PortQualityIssue[] = [];
+  for (const ctx of portMap.contexts) {
+    const ctxAggregates = aggregateRoots
+      .filter(
+        (ar) =>
+          normalizeContextName(ar.subdomain) ===
+          normalizeContextName(ctx.contextName),
+      )
+      .map((ar) => ar.name);
+    const allPorts: PortDefinition[] = [...ctx.in, ...ctx.out];
+    issues.push(
+      ...validatePortQuality(
+        allPorts,
+        ctx.contextName,
+        ctxAggregates,
+        runtimeConcerns,
+      ),
+    );
+  }
+  return issues;
+}
+
 export class ExecuteValidationReviewUseCase {
-  constructor(private readonly llmPort: SendStructuredRequestPort) {}
+  constructor(
+    private readonly llmPort: SendStructuredRequestPort,
+    private readonly escalationConfig: EscalationConfig = DEFAULT_ESCALATION_CONFIG,
+  ) {}
 
   async execute(
     state: Pick<
       PipelineState,
-      "stage0" | "stage2" | "stage5" | "contextMappings"
+      "stage0" | "stage1" | "stage2" | "stage3" | "stage5" | "contextMappings"
     >,
     onChunk?: (chunk: string) => void,
     onStageTelemetry?: (telemetry: StageTelemetry) => void,
@@ -152,6 +192,17 @@ export class ExecuteValidationReviewUseCase {
         : "";
 
       if (!parseError) {
+        const programmaticIssues = collectPortQualityIssues(state);
+        for (const issue of programmaticIssues) {
+          const tagged = `[${issue.rule}] ${issue.contextName}/${issue.portName}: ${issue.message}`;
+          if (issue.severity === "error") {
+            errors.push(tagged);
+          } else {
+            warnings.push(tagged);
+          }
+        }
+        passed = errors.length === 0;
+
         const durationMs = Date.now() - stageStart;
         const result: ValidationReport = { errors, warnings, passed };
         if (passed) {

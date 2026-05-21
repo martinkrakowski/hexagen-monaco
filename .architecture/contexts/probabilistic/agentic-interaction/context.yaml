@@ -10,14 +10,16 @@ layers:
       - ProviderFallbackChain
   application:
     use_cases:
-      - ModifyArchitectureUseCase
-      - GenerateSuggestionUseCase
-      - SecureChatDispatchUseCase
-      - ExecuteLooseSpecConversionUseCase
+    - ModifyArchitectureUseCase
+    - GenerateSuggestionUseCase
+    - SecureChatDispatchUseCase
+    - ExecuteLooseSpecConversionUseCase
+    - ClassifyContextTypeUseCase
     ports:
       in:
-        - ArchitectureModificationPort
-        - ConvertLooseSpecPort
+      - ArchitectureModificationPort
+      - ConvertLooseSpecPort
+      - ClassifyContextTypePort
       out:
         - LLMProviderPort
         - SuggestionEnginePort

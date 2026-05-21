@@ -90,6 +90,10 @@ export {
   compileAdapterUserPrompt,
 } from "./prompts/index";
 export type { AdapterPromptVariables } from "./prompts/index";
+export {
+  CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT,
+  compileClassifyContextTypePrompt,
+} from "./prompts/index";
 
 // Manifest draft pipeline exports
 export {
@@ -147,3 +151,6 @@ export {
   coercePortName,
   extractYamlFromResponse,
 } from "./manifest/index";
+
+export type { PortQualityIssue } from "./services/index";
+export { validatePortQuality } from "./services/index";

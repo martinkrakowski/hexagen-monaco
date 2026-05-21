@@ -57,6 +57,7 @@ export interface ClassifiedContext {
   useCaseNames?: string[];
   eventsPublished?: string[];
   promotedFromUncertain?: boolean;
+  needsTypeReview?: boolean;
 }
 
 export type AcceptedContext = ClassifiedContext;
@@ -89,6 +90,7 @@ export interface PortDefinition {
   type: InboundPortType | OutboundPortType;
   description: string;
   forAggregate?: string;
+  justification?: string;
 }
 
 export interface ContextPorts {

@@ -23,6 +23,7 @@ export {
   buildDomainAnalysisFromConfig,
   buildClassificationFromConfig,
   buildNormalizedPromptFromConfig,
+  inferContextTypeWithConfidence,
 } from "./staged-generation/execute-structured-config-generation.use-case";
 export {
   ManifestWarningCategory,
@@ -49,3 +50,5 @@ export {
   MAX_LOOSE_SPEC_INPUT_CHARS,
   type LooseSpecConversionCallbacks,
 } from "./staged-generation/execute-loose-spec-conversion.use-case";
+export { ClassifyContextTypeUseCase } from "./staged-generation/classify-context-type.use-case";
+export type { ClassifyContextTypePort } from "./staged-generation/classify-context-type.use-case";

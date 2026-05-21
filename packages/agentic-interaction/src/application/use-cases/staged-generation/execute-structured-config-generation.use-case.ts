@@ -26,6 +26,8 @@ import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import type { ClassifyContextTypeUseCase } from "./classify-context-type.use-case";
+import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
 import * as yaml from "js-yaml";
 
 export interface StructuredConfigGenerationCallbacks {
@@ -442,64 +444,75 @@ export function buildDomainAnalysisFromConfig(
  * Infer context type from the config.
  * Uses explicit type field if present, then name/responsibility heuristics.
  */
+const SUPPORTING_KEYWORDS = [
+  "notification",
+  "delivery",
+  "document",
+  "vault",
+  "storage",
+  "audit",
+  "logging",
+  "reporting",
+  "analytics",
+  "monitoring",
+];
+
+// Listed as "generic" DDD categories but mapped to `supporting` because
+// identity/auth/payment built in-house is a supporting capability, not
+// truly generic (off-the-shelf) for this codebase.
+const GENERIC_TO_SUPPORTING_KEYWORDS = [
+  "identity",
+  "auth",
+  "authentication",
+  "authorization",
+  "iam",
+  "payment",
+  "billing-gateway",
+  "email",
+];
+
+const SHARED_KERNEL_KEYWORDS = [
+  "shared kernel",
+  "shared-kernel",
+  "shared_kernel",
+  "cross-cutting",
+];
+
+export function inferContextTypeWithConfidence(ctx: StructuredConfigContext): {
+  type: AcceptedContext["type"];
+  confidence: number;
+} {
+  if ("type" in ctx && ctx.type) {
+    const declared = String(ctx.type).toLowerCase();
+    if (declared === "core") return { type: "core", confidence: 1.0 };
+    if (declared === "supporting")
+      return { type: "supporting", confidence: 1.0 };
+    if (declared === "generic") return { type: "generic", confidence: 1.0 };
+    if (declared === "shared-kernel" || declared === "shared_kernel")
+      return { type: "shared-kernel", confidence: 1.0 };
+  }
+
+  const resp = (ctx.responsibility ?? ctx.name).toLowerCase();
+  const name = ctx.name.toLowerCase();
+  const matches = (kws: string[]) =>
+    kws.some((kw) => name.includes(kw) || resp.includes(kw));
+
+  if (matches(SHARED_KERNEL_KEYWORDS)) {
+    return { type: "shared-kernel", confidence: 0.9 };
+  }
+  if (matches(GENERIC_TO_SUPPORTING_KEYWORDS)) {
+    return { type: "supporting", confidence: 0.7 };
+  }
+  if (matches(SUPPORTING_KEYWORDS)) {
+    return { type: "supporting", confidence: 0.8 };
+  }
+  return { type: "core", confidence: 0.4 };
+}
+
 export function inferContextType(
   ctx: StructuredConfigContext,
 ): AcceptedContext["type"] {
-  // If the config explicitly declares a type, honour it
-  if ("type" in ctx && ctx.type) {
-    const declared = String(ctx.type).toLowerCase();
-    if (declared === "core") return "core";
-    if (declared === "supporting") return "supporting";
-    if (declared === "generic") return "generic";
-    if (declared === "shared-kernel" || declared === "shared_kernel")
-      return "shared-kernel";
-  }
-
-  // Responsibility keyword heuristics
-  const resp = (ctx.responsibility ?? ctx.name).toLowerCase();
-  const name = ctx.name.toLowerCase();
-
-  const supportingKeywords = [
-    "notification",
-    "delivery",
-    "document",
-    "vault",
-    "storage",
-    "audit",
-    "logging",
-    "reporting",
-    "analytics",
-    "monitoring",
-  ];
-  const genericKeywords = [
-    "identity",
-    "auth",
-    "authentication",
-    "authorization",
-    "iam",
-    "payment",
-    "billing-gateway",
-    "email",
-  ];
-  const sharedKernelKeywords = [
-    "shared kernel",
-    "shared-kernel",
-    "shared_kernel",
-    "cross-cutting",
-  ];
-
-  if (
-    sharedKernelKeywords.some((kw) => name.includes(kw) || resp.includes(kw))
-  ) {
-    return "shared-kernel";
-  }
-  if (genericKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
-    return "supporting"; // identity/auth built in-house is supporting, not generic
-  }
-  if (supportingKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
-    return "supporting";
-  }
-  return "core";
+  return inferContextTypeWithConfidence(ctx).type;
 }
 
 export function buildClassificationFromConfig(
@@ -529,9 +542,11 @@ export function buildClassificationFromConfig(
       ? `App responsibilities: ${ctxApp.responsibilities.join(", ")}`
       : undefined;
 
+    const { type, confidence } = inferContextTypeWithConfidence(ctx);
+
     return {
       name: contextName,
-      type: inferContextType(ctx),
+      type,
       responsibility: ctx.responsibility ?? ctx.description ?? ctx.name,
       reasoning:
         ctx.responsibility ?? ctx.description ?? `Context: ${ctx.name}`,
@@ -539,7 +554,8 @@ export function buildClassificationFromConfig(
       useCaseNames: ctxUseCaseNames,
       eventsPublished: ctxEventsPublished,
       promotedFromUncertain: false,
-      // Attach adapter hints as a non-standard field for Stage 3/4 prompt enrichment
+      needsTypeReview: confidence < 0.6,
+      // Non-standard underscore-prefixed field carried through for Stage 3/4 prompt enrichment
       ...(adapterHints ? { _adapterHints: adapterHints } : {}),
     } as AcceptedContext;
   });
@@ -794,16 +810,22 @@ export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage5: ExecuteManifestAssemblyUseCase;
   private readonly stage6: ExecuteValidationReviewUseCase;
   private readonly transactionManager: TransactionManagerPort;
+  private readonly classifyUseCase?: ClassifyContextTypeUseCase;
 
   constructor(
     llmPort: SendStructuredRequestPort,
     transactionManager: TransactionManagerPort,
+    classifyUseCase?: ClassifyContextTypeUseCase,
   ) {
-    this.stage3 = new ExecutePortMappingUseCase(llmPort);
+    this.stage3 = new ExecutePortMappingUseCase(
+      llmPort,
+      STAGE3_ESCALATION_CONFIG,
+    );
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
     this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
     this.transactionManager = transactionManager;
+    this.classifyUseCase = classifyUseCase;
   }
 
   async execute(
@@ -851,6 +873,35 @@ export class ExecuteStructuredConfigGenerationUseCase {
       domainAnalysis,
     );
     const contextMappings = buildContextMappingsFromConfig(config);
+
+    // LLM-enhanced classification: review low-confidence contexts
+    if (this.classifyUseCase) {
+      for (const ctx of classification.accepted) {
+        if (!ctx.needsTypeReview) continue;
+        try {
+          const sourceCtx = config.bounded_contexts.find(
+            (c) => c.name === ctx.name,
+          );
+          const classifyResult = await this.classifyUseCase.execute(
+            {
+              name: ctx.name,
+              responsibility: ctx.responsibility,
+              aggregates: sourceCtx?.aggregates?.map((a) => a.name),
+              value_objects: sourceCtx?.value_objects?.map((v) => v.name),
+            },
+            config.project,
+          );
+          if (classifyResult.success) {
+            ctx.type = classifyResult.type;
+            ctx.reasoning = classifyResult.reasoning;
+          }
+        } catch {
+          // Silently keep heuristic type on classifier failure
+        }
+        ctx.needsTypeReview = false;
+      }
+    }
+
     callbacks?.onProgress?.(2, Date.now() - s2Start);
 
     // Stage 3: Port Mapping — skip LLM for contexts that already declare ports
@@ -1074,7 +1125,9 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const s6 = await this.stage6.execute(
       {
         stage0: normalizedPrompt,
+        stage1: domainAnalysis,
         stage2: classification,
+        stage3: mergedPortMap,
         stage5: assembledManifest,
         contextMappings: mergedContextMappings,
       },

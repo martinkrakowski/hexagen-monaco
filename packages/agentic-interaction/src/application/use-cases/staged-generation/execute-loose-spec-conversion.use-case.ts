@@ -13,6 +13,8 @@ import { parseStructuredConfig } from "./execute-structured-config-generation.us
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import { jsonrepair } from "jsonrepair";
+import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
+import type { EscalationConfig } from "./retry-with-escalation";
 
 export const MAX_LOOSE_SPEC_INPUT_CHARS = 200_000;
 
@@ -32,7 +34,10 @@ export interface LooseSpecConversionCallbacks {
 }
 
 export class ExecuteLooseSpecConversionUseCase {
-  constructor(private readonly llmPort: SendStructuredRequestPort) {}
+  constructor(
+    private readonly llmPort: SendStructuredRequestPort,
+    private readonly escalationConfig: EscalationConfig = DEFAULT_ESCALATION_CONFIG,
+  ) {}
 
   async execute(
     looseSpec: string,

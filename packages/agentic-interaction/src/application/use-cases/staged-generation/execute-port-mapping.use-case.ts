@@ -6,6 +6,7 @@ import {
   STAGE3_PORTS_SYSTEM_PROMPT,
   compileStage3Prompt,
   normalizeContextName,
+  validatePortQuality,
 } from "../../../domain/index";
 import type {
   PortMap,
@@ -23,6 +24,11 @@ import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  retryWithEscalation,
+  STAGE3_ESCALATION_CONFIG,
+} from "./retry-with-escalation";
+import type { EscalationConfig } from "./retry-with-escalation";
 
 const STAGE_NUMBER = 3;
 
@@ -171,7 +177,10 @@ function normalizeKeys(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 export class ExecutePortMappingUseCase {
-  constructor(private readonly llmPort: SendStructuredRequestPort) {}
+  constructor(
+    private readonly llmPort: SendStructuredRequestPort,
+    private readonly escalationConfig: EscalationConfig = STAGE3_ESCALATION_CONFIG,
+  ) {}
 
   async execute(
     state: StageState,
@@ -230,6 +239,25 @@ export class ExecutePortMappingUseCase {
       );
 
       for (const [ctxName, ports] of portsMap.entries()) {
+        const allPortDefs = [...ports.in, ...ports.out];
+        const aggregateRoots = (state.stage1.aggregateRoots ?? [])
+          .filter(
+            (ar) =>
+              normalizeContextName(ar.subdomain) ===
+              normalizeContextName(ctxName),
+          )
+          .map((ar) => ar.name);
+        const issues = validatePortQuality(
+          allPortDefs,
+          ctxName,
+          aggregateRoots,
+          state.stage0?.runtimeConcerns,
+        );
+        if (issues.length > 0) {
+          console.warn(
+            `[Stage 3] Port quality issues for ${ctxName}: ${issues.map((i) => `${i.portName}[${i.rule}]`).join(", ")}`,
+          );
+        }
         allPortsMap.set(ctxName, ports);
       }
       allContextMappings.push(...mappings);
@@ -270,16 +298,38 @@ export class ExecutePortMappingUseCase {
     fullResponse: string;
     retryCount: number;
   }> {
+    const { result, retryCount } = await retryWithEscalation(
+      async (preferredCloudModel?: string) => {
+        return this.runSingleAttempt(
+          initialPrompt,
+          onChunk,
+          preferredCloudModel,
+        );
+      },
+      this.escalationConfig,
+      (attemptResult) => attemptResult.objects.length === 0,
+    );
+
+    return { ...result, retryCount };
+  }
+
+  private async runSingleAttempt(
+    initialPrompt: string,
+    onChunk?: (chunk: string) => void,
+    preferredCloudModel?: string,
+  ): Promise<{
+    objects: Record<string, unknown>[];
+    fullResponse: string;
+  }> {
     let prompt = initialPrompt;
     let lastError = "";
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-      const retryCount = attempt - 1;
       const abortController = new AbortController();
       const timeoutHandle = setTimeout(() => {
         console.log(`[Stage 3] Attempt ${attempt} timed out after 120s`);
         onChunk?.(
-          `   ⏱ Attempt ${attempt} timed out — using partial output if available`,
+          ` ⏱ Attempt ${attempt} timed out — using partial output if available`,
         );
         abortController.abort();
       }, 120000);
@@ -291,7 +341,12 @@ export class ExecutePortMappingUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.3, maxTokens: 768 },
+        {
+          stream: true,
+          temperature: 0.3,
+          maxTokens: 2048,
+          preferredCloudModel,
+        },
       );
       request.signal = abortController.signal;
 
@@ -312,7 +367,7 @@ export class ExecutePortMappingUseCase {
             console.log(
               `[Stage 3] Attempt ${attempt}: ${chunkCount} chunks received`,
             );
-            onChunk?.(`   Generating port definitions… (${chunkCount} tokens)`);
+            onChunk?.(` Generating port definitions… (${chunkCount} tokens)`);
           }
         }
       } catch (thrownError) {
@@ -321,16 +376,16 @@ export class ExecutePortMappingUseCase {
           console.log(
             `[Stage 3] Using ${partialObjects.length} partial objects after throw on attempt ${attempt} (${chunkCount} chunks)`,
           );
-          return { objects: partialObjects, fullResponse, retryCount };
+          return { objects: partialObjects, fullResponse };
         }
         if (attempt === MAX_RETRY_ATTEMPTS) {
           console.warn(
             `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`,
           );
           onChunk?.(
-            `   ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+            ` ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
           );
-          return { objects: [], fullResponse, retryCount };
+          return { objects: [], fullResponse };
         }
         lastError = `Request error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`;
         onChunk?.(`\n--- Retry ${attempt + 1} (stream error) ---\n`);
@@ -340,29 +395,28 @@ export class ExecutePortMappingUseCase {
       }
 
       if (streamError) {
-        // On abort/timeout, accept any valid partial objects rather than retrying
         const partialObjects = extractJsonObjects(fullResponse);
         if (partialObjects.length > 0) {
           console.log(
             `[Stage 3] Using ${partialObjects.length} partial objects after timeout on attempt ${attempt} (${chunkCount} chunks)`,
           );
-          return { objects: partialObjects, fullResponse, retryCount };
+          return { objects: partialObjects, fullResponse };
         }
         if (attempt === MAX_RETRY_ATTEMPTS) {
           console.warn(
             `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${lastError}`,
           );
           onChunk?.(
-            `   ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+            ` ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
           );
-          return { objects: [], fullResponse, retryCount };
+          return { objects: [], fullResponse };
         }
         lastError = `Request error: ${streamError}`;
         console.log(
           `[Stage 3] Attempt ${attempt} stream error, retrying... (${chunkCount} chunks)`,
         );
         onChunk?.(
-          `   ↻ Retrying… (attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS})`,
+          ` ↻ Retrying… (attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS})`,
         );
         continue;
       }
@@ -373,7 +427,7 @@ export class ExecutePortMappingUseCase {
 
       const objects = extractJsonObjects(fullResponse);
       if (objects.length > 0) {
-        return { objects, fullResponse, retryCount };
+        return { objects, fullResponse };
       }
 
       lastError = "No valid JSON objects found in output";
@@ -382,9 +436,9 @@ export class ExecutePortMappingUseCase {
           `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${lastError}`,
         );
         onChunk?.(
-          `   ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+          ` ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
         );
-        return { objects: [], fullResponse, retryCount };
+        return { objects: [], fullResponse };
       }
       onChunk?.(`\n--- Retry ${attempt + 1} (parse failed) ---\n`);
 
@@ -399,7 +453,6 @@ export class ExecutePortMappingUseCase {
     return {
       objects: [],
       fullResponse: "",
-      retryCount: MAX_RETRY_ATTEMPTS - 1,
     };
   }
 
@@ -493,6 +546,9 @@ export class ExecutePortMappingUseCase {
       };
       if (typeof normalized.forAggregate === "string") {
         portDef.forAggregate = normalized.forAggregate;
+      }
+      if (typeof normalized.justification === "string") {
+        portDef.justification = normalized.justification;
       }
 
       const ports = portsMap.get(contextName)!;

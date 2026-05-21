@@ -126,6 +126,7 @@ export {
   buildDomainAnalysisFromConfig,
   buildClassificationFromConfig,
   buildNormalizedPromptFromConfig,
+  inferContextTypeWithConfidence,
 } from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 export {
   serializeProjectContext,
@@ -257,3 +258,15 @@ export {
   MAX_LOOSE_SPEC_INPUT_CHARS,
   type LooseSpecConversionCallbacks,
 } from "./application/use-cases/staged-generation/execute-loose-spec-conversion.use-case";
+export { ClassifyContextTypeUseCase } from "./application/use-cases/staged-generation/classify-context-type.use-case";
+export type { ClassifyContextTypePort } from "./application/use-cases/staged-generation/classify-context-type.use-case";
+export {
+  retryWithEscalation,
+  DEFAULT_ESCALATION_CONFIG,
+  STAGE3_ESCALATION_CONFIG,
+} from "./application/use-cases/staged-generation/retry-with-escalation";
+export type { EscalationConfig } from "./application/use-cases/staged-generation/retry-with-escalation";
+export {
+  CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT,
+  compileClassifyContextTypePrompt,
+} from "./domain/index";

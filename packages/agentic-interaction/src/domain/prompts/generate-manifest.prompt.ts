@@ -331,11 +331,23 @@ If you find yourself naming a port after a deployment platform or a
 cron-job duty, STOP and re-derive from the context's aggregates,
 events_published, and value_objects instead.
 
+PORT JUSTIFICATION
+==================
+Every port SHOULD include a "justification" field — a 1-2 sentence
+explanation of WHY this port exists, tied to a specific domain need,
+aggregate dependency, or external-system contract.
+
+BAD: "justification": "Repository for Order"
+GOOD: "justification": "Order aggregate requires persistent storage for order state across checkout and fulfillment workflows"
+
+BAD: "justification": "Sends emails"
+GOOD: "justification": "Notifies customers of order confirmation and shipping updates via the NotificationDispatcher port contract"
+
 CRITICAL OUTPUT FORMAT - NDJSON ONLY.
 Emit objects one per line. Two NDJSON types:
 
 Port entries:
-{"type": "port", "contextName": "climate-control", "direction": "in", "name": "SensorTelemetryPort", "portType": "event", "description": "Receives sensor readings.", "forAggregate": "ClimatePolicy"}
+{"type": "port", "contextName": "climate-control", "direction": "in", "name": "SensorTelemetryPort", "portType": "event", "description": "Receives sensor readings.", "forAggregate": "ClimatePolicy", "justification": "ClimatePolicy aggregate requires real-time sensor data to evaluate policy compliance rules against environmental conditions"}
 
 Context mapping entries:
 {"type": "contextMapping", "upstream": "climate-control", "downstream": "reporting", "pattern": "Customer-Supplier", "mechanism": "Domain Events", "notes": "Reporting consumes PolicyEvaluated events", "events": ["PolicyEvaluated"]}
@@ -577,15 +589,25 @@ SEMANTIC FIDELITY (emit "info"):
 R15: The original project intent is reflected in at least one context name or responsibility description.
       If key concepts from the intent appear in no context name and no responsibility field, emit an "info" noting the potential gap.
 
+PORT QUALITY RULES:
+R16 [warning]: Port description and justification (if present) must be non-trivial.
+      Check: each port's "description" must be longer than 10 characters and must not be a substring of the port name. If the port has a "justification" field, the same rule applies.
+R17 [error]: Port forAggregate (when present) must reference a real aggregate root from the manifest's domain analysis.
+      Check: for each port with a forAggregate field, that name must appear in the corresponding context's aggregates list. Fabricated aggregate names indicate a hallucinated port.
+R18 [error]: Port names must not leak app-level metadata. Two checks:
+      (a) name must not match \`/(Client|Adapter|Host|Platform)(Port)?$/i\` when paired with known platform tokens (Vercel, FlyIO, AWS, GCP, Azure, Heroku, Render, Railway, DigitalOcean, Netlify, Cloudflare);
+      (b) name must not contain any token present in <runtime_concerns> (worker responsibilities + deployment platforms). This catches names like \`EmailRetryPort\` and \`OverdueInvoiceDetectionPort\` that escape the regex but still leak \`apps[].responsibilities\`.
+
 CRITICAL OUTPUT FORMAT — NDJSON ONLY.
 {"type": "error", "rule": "R01", "message": "Context 'postgres-repo' violates R01: name contains technology noun 'postgres'."}
 {"type": "warning", "rule": "R10", "message": "Context 'notification-delivery' publishes 'NotificationSent' but has no publisher port."}
 {"type": "info", "rule": "R15", "message": "Intent mentions 'payment processing' but no context name or responsibility references payments."}
 {"type": "warning", "rule": "R13", "message": "Context 'drift-analytics' was promoted from uncertain status and requires domain expert review."}
+{"type": "error", "rule": "R18", "message": "Port 'VercelClientPort' in context 'document-vault' leaks deployment platform 'Vercel'."}
 {"type": "result", "passed": true, "errorCount": 0, "warningCount": 2, "infoCount": 1}
 
 OUTPUT RULES:
-- Check every rule R01 through R15. Do not skip any rule even if you believe it is satisfied.
+- Check every rule R01 through R18. Do not skip any rule even if you believe it is satisfied.
 - Always emit exactly one "result" object as the final line.
 - "passed" is true only if errorCount is 0.
 - "errorCount" counts objects of type "error".
@@ -640,6 +662,12 @@ export function compileStage6Prompt(
         ].join("\n")
       : "";
 
+  const runtimeConcerns = normalized?.runtimeConcerns ?? [];
+  const runtimeConcernsSection =
+    runtimeConcerns.length > 0
+      ? `<runtime_concerns>\n${runtimeConcerns.join(", ")}\n</runtime_concerns>`
+      : "";
+
   return [
     `<original_intent>`,
     header,
@@ -652,8 +680,9 @@ export function compileStage6Prompt(
     warningsSection,
     promotedSection,
     mappingSection,
+    runtimeConcernsSection,
     ``,
-    `Run all rules R01–R15. Output NDJSON:`,
+    `Run all rules R01–R18. Output NDJSON:`,
   ]
     .filter(Boolean)
     .join("\n");

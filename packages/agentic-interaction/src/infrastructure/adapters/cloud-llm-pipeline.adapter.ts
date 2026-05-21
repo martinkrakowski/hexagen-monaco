@@ -81,8 +81,9 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
         : undefined
       : undefined;
 
+    const model = request.preferredCloudModel ?? provider.model;
     const body: Record<string, unknown> = {
-      model: provider.model,
+      model,
       messages,
       temperature: request.temperature ?? provider.temperature ?? 0.4,
       max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
@@ -136,7 +137,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       const content = data.choices?.[0]?.message?.content ?? "";
       const finishReason = data.choices?.[0]?.finish_reason ?? "stop";
 
-      const modelId = provider.model as unknown as DomainModelId;
+      const modelId = model as unknown as DomainModelId;
       const response = createLLMResponse(
         modelId,
         content,
@@ -151,7 +152,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
             : undefined,
           metadata: {
             provider: provider.providerId,
-            model: provider.model,
+            model,
           },
         },
       );
