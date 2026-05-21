@@ -36,11 +36,8 @@ export function ManifestAcceptPage() {
   const isNavigatingAway = useRef(false);
 
   useEffect(() => {
-    if (
-      pendingManifest.yaml === null &&
-      !isSaving &&
-      !isNavigatingAway.current
-    ) {
+    if (isNavigatingAway.current) return;
+    if (pendingManifest.yaml === null && !isSaving) {
       setRedirecting(true);
       router.replace("/projects/new/ai");
     }

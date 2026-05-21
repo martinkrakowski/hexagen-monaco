@@ -8,6 +8,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/infrastructure/adapters/server.d.ts",
+      "default": "./dist/infrastructure/adapters/server.js"
+    },
+    "./infrastructure/adapters/server": {
+      "types": "./dist/infrastructure/adapters/server.d.ts",
+      "default": "./dist/infrastructure/adapters/server.js"
     }
   },
   "scripts": {

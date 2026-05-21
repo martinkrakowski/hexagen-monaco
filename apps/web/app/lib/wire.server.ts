@@ -17,11 +17,11 @@ import {
   createDefaultFallbackChain,
   EnvironmentSecretVaultAdapter,
 } from "@hexagen/agentic-interaction";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import {
-  InMemoryTransactionManager,
   SyncDelegatingManifestMutationAdapter,
   CliLintValidationAdapter,
-} from "@hexagen/transaction-system";
+} from "@hexagen/transaction-system/server";
 import {
   ReconcileUseCase,
   StructuredDiffReconciliationAdapter,

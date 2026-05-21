@@ -82,6 +82,8 @@ import {
   ClientManifestGenerationUseCase,
   ServerManifestGenerationUseCase,
 } from "@hexagen/manifest-generation";
+import { ExecuteStructuredConfigGenerationUseCase } from "@hexagen/agentic-interaction";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 import {
   createWebLogger,
@@ -324,13 +326,17 @@ export const wireDependencies = () => {
     serverManifestGenerationUseCase,
   );
 
-  // TODO: Wire REM context when app-level intent tracking available (Phase 3)
-  // REM (RuleExecutionManifest) will be integrated when UI layer event streams are available
-  // const rem = buildRuntimeExecutionManifest(manifest);
-  // const lineage = getCurrentIntentLineage();
-  // const transactionManager = new InMemoryTransactionManagerAdapter();
-  // const executeTransactionUseCase = new ExecuteTransactionUseCase(transactionManager);
-  // registry.set("ExecuteTransactionUseCase", executeTransactionUseCase);
+  // Transaction Manager → Singleton in-memory state
+  const transactionManager = new InMemoryTransactionManager();
+  registry.set(PORT_NAMES.TRANSACTION_MANAGER, transactionManager);
+
+  // Client Spec Generation → Local LLM adapter with in-memory transaction manager
+  const clientSpecGenerationUseCase =
+    new ExecuteStructuredConfigGenerationUseCase(
+      localLLMAdapter,
+      transactionManager,
+    );
+  registry.set(PORT_NAMES.CLIENT_SPEC_GENERATION, clientSpecGenerationUseCase);
 
   return {
     get: <T>(portName: string): T => {
@@ -440,6 +446,17 @@ export const getServerManifestGenerationUseCase = () =>
     PORT_NAMES.SERVER_MANIFEST_GENERATION,
   );
 
+export function getClientSpecGenerationUseCase(): ExecuteStructuredConfigGenerationUseCase {
+  if (typeof window === "undefined") {
+    throw new Error(
+      "getClientSpecGenerationUseCase called in non-browser context",
+    );
+  }
+  return dependencies.get<ExecuteStructuredConfigGenerationUseCase>(
+    PORT_NAMES.CLIENT_SPEC_GENERATION,
+  );
+}
+
 export const getStorageQuotaMonitor = () =>
   dependencies.get<StorageQuotaMonitor>(PORT_NAMES.STORAGE_QUOTA_MONITOR);
 
@@ -450,6 +467,13 @@ export const getPersistenceDomainRegistry = () =>
   dependencies.get<PersistenceDomainRegistryPort>(
     PORT_NAMES.PERSISTENCE_DOMAIN_REGISTRY,
   );
+
+export function isLocalLLMReady(): boolean {
+  const lifecycle = dependencies.get<ModelLifecyclePort>(
+    PORT_NAMES.MODEL_LIFECYCLE,
+  );
+  return lifecycle.getLoadedModel() !== null;
+}
 
 /**
  * Check if server LLM provider has valid cloud API key configured.

@@ -18,7 +18,13 @@ export async function* createStreamingGenerator(
   worker: Worker,
   request: StreamingRequest,
   timeoutMs: number = 120000,
+  signal?: AbortSignal,
 ): AsyncGenerator<Result<string>> {
+  if (signal?.aborted) {
+    yield err(new Error("Request aborted before generation started"));
+    return;
+  }
+
   type QueueItem =
     | { kind: "chunk"; value: string }
     | { kind: "done" }
@@ -36,7 +42,25 @@ export async function* createStreamingGenerator(
     }
   };
 
+  let timeoutId = setTimeout(() => {
+    enqueue({
+      kind: "error",
+      error: new Error("Streaming request timed out"),
+    });
+  }, timeoutMs);
+
+  const resetTimeout = () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      enqueue({
+        kind: "error",
+        error: new Error("Streaming request timed out"),
+      });
+    }, timeoutMs);
+  };
+
   const messageHandler = (e: MessageEvent<WorkerMessage>) => {
+    resetTimeout();
     const msg = e.data;
     if (msg.type === "chunk") {
       enqueue({ kind: "chunk", value: msg.data as string });
@@ -50,14 +74,15 @@ export async function* createStreamingGenerator(
     }
   };
 
-  const timeoutId = setTimeout(() => {
+  const onAbort = () => {
     enqueue({
       kind: "error",
-      error: new Error("Streaming request timed out"),
+      error: new Error("Streaming request aborted"),
     });
-  }, timeoutMs);
+  };
 
   try {
+    signal?.addEventListener("abort", onAbort, { once: true });
     worker.addEventListener("message", messageHandler);
     worker.postMessage({
       type: "generate",
@@ -75,6 +100,10 @@ export async function* createStreamingGenerator(
     });
 
     while (true) {
+      if (signal?.aborted) {
+        yield err(new Error("Streaming request aborted"));
+        return;
+      }
       while (queue.length > 0) {
         const item = queue.shift()!;
         if (item.kind === "chunk") {
@@ -92,6 +121,7 @@ export async function* createStreamingGenerator(
     }
   } finally {
     clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", onAbort);
     worker.removeEventListener("message", messageHandler);
   }
 }

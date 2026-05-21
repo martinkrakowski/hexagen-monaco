@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "./providers/AuthProvider";
@@ -36,9 +35,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
-        <Script
+        <script
           id="theme-guard"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               try {

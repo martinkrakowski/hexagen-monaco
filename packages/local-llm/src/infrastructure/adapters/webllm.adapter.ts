@@ -13,10 +13,7 @@ import type {
   LLMCompletionRequest,
   LLMCompletionResponse,
 } from "../../domain/ports/index";
-import type { StructuredOutputSchema } from "@hexagen/prompt-compiler";
 import { MODEL_METADATA_MAP } from "../../domain/value-objects/model-metadata.vo";
-import { z } from "zod";
-import { validateStructuredOutput } from "@hexagen/prompt-compiler";
 import {
   MLC_IDS,
   DEFAULT_DOMAIN_MODEL_ID,
@@ -36,6 +33,7 @@ export class WebLLMAdapter
   private worker: Worker | null = null;
   private config: WebLLMAdapterConfig;
   private _disposed = false;
+  private _streamingLock: Promise<void> = Promise.resolve();
 
   constructor(config: WebLLMAdapterConfig = {}) {
     this.config = {
@@ -121,6 +119,10 @@ export class WebLLMAdapter
       );
     }
 
+    if (request.signal?.aborted) {
+      return err(new Error("Request aborted before sending"));
+    }
+
     return new Promise((resolve) => {
       if (!this.worker) {
         resolve(err(new Error("Worker not available")));
@@ -128,68 +130,56 @@ export class WebLLMAdapter
       }
 
       const timeoutId = setTimeout(() => {
+        cleanup();
         resolve(err(new Error("Request timed out")));
-      }, 120000);
+      }, 300000);
+
+      const onAbort = () => {
+        cleanup();
+        resolve(err(new Error("Request aborted")));
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        this.worker?.removeEventListener("message", messageHandler);
+        request.signal?.removeEventListener("abort", onAbort);
+      };
+
+      let accumulated = "";
 
       const messageHandler = (e: MessageEvent) => {
         const msg = e.data as WorkerMessage;
-        if (msg.type === "result") {
-          clearTimeout(timeoutId);
-          this.worker?.removeEventListener("message", messageHandler);
-          const rawResponse = msg.data as string;
-
-          let parsedData: unknown;
-          try {
-            parsedData = JSON.parse(rawResponse);
-          } catch (parseError) {
-            resolve(
-              err(
-                new Error(
-                  `Failed to parse LLM response as JSON: ${String(parseError)}`,
-                ),
-              ),
-            );
-            return;
-          }
-
-          const structuredOutputSchema: StructuredOutputSchema = {
-            id: `temp-schema-${Date.now()}`,
-            schema: request.schema as z.ZodTypeAny,
-            version: 1,
-            updatedAt: new Date().toISOString(),
+        if (msg.type === "chunk") {
+          accumulated += msg.data as string;
+        } else if (msg.type === "done") {
+          cleanup();
+          const response: LLMResponse = {
+            id: `webllm-${Date.now()}`,
+            modelId: this.loadedModelId!,
+            content: accumulated,
+            finishReason: "stop",
+            usage: undefined,
+            timestamp: Date.now(),
           };
-
-          const validationResult = validateStructuredOutput(
-            structuredOutputSchema,
-            parsedData,
-          );
-
-          if (validationResult.success) {
-            const response: LLMResponse = {
-              id: `webllm-${Date.now()}`,
-              modelId: this.loadedModelId!,
-              content: rawResponse,
-              finishReason: "stop",
-              usage: undefined,
-              timestamp: Date.now(),
-            };
-            resolve(ok(response));
-          } else {
-            resolve(
-              err(
-                new Error(
-                  `LLM response failed schema validation: ${validationResult.error.message}`,
-                ),
-              ),
-            );
-          }
+          resolve(ok(response));
+        } else if (msg.type === "result") {
+          cleanup();
+          const response: LLMResponse = {
+            id: `webllm-${Date.now()}`,
+            modelId: this.loadedModelId!,
+            content: msg.data as string,
+            finishReason: "stop",
+            usage: undefined,
+            timestamp: Date.now(),
+          };
+          resolve(ok(response));
         } else if (msg.type === "error") {
-          clearTimeout(timeoutId);
-          this.worker?.removeEventListener("message", messageHandler);
+          cleanup();
           resolve(err(new Error(`Generation failed: ${msg.data}`)));
         }
       };
 
+      request.signal?.addEventListener("abort", onAbort, { once: true });
       this.worker.addEventListener("message", messageHandler);
       this.worker.postMessage({
         type: "generate",
@@ -198,7 +188,7 @@ export class WebLLMAdapter
           temperature: request.temperature ?? 0.6,
           maxTokens: request.maxTokens ?? 768,
           topP: request.topP,
-          stream: request.stream ?? false,
+          stream: true,
         },
       });
     });
@@ -219,6 +209,11 @@ export class WebLLMAdapter
       return;
     }
 
+    if (request.signal?.aborted) {
+      yield err(new Error("Request aborted before streaming"));
+      return;
+    }
+
     yield* this.streamComplete({
       modelId: request.modelId,
       messages: request.messages,
@@ -226,6 +221,7 @@ export class WebLLMAdapter
       maxTokens: request.maxTokens,
       topP: request.topP,
       stream: true,
+      signal: request.signal,
     });
   }
 
@@ -301,13 +297,32 @@ export class WebLLMAdapter
     presencePenalty?: number;
     repetitionPenalty?: number;
     stream?: boolean;
+    signal?: AbortSignal;
   }): AsyncGenerator<Result<string>> {
     if (!this.worker || !this.loadedModelId) {
       yield err(new Error("Engine not initialized. Call initialize() first."));
       return;
     }
 
-    yield* createStreamingGenerator(this.worker, request);
+    // Serialize access: wait for any previous streaming call to finish
+    // before registering a new message listener on the shared worker.
+    let releaseLock: () => void;
+    const prevLock = this._streamingLock;
+    this._streamingLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    await prevLock;
+
+    try {
+      yield* createStreamingGenerator(
+        this.worker,
+        request,
+        120000,
+        request.signal,
+      );
+    } finally {
+      releaseLock!();
+    }
   }
 
   getLoadedModel(): ModelMetadata | null {
