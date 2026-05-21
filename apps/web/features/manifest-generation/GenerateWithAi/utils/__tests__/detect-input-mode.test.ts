@@ -49,3 +49,23 @@ test('detectInputMode("# Bounded Contexts\\n- aggregates: Foo") returns "semi-st
     "semi-structured",
   );
 });
+
+test('detectInputMode: multi-document YAML with `---` separators routes to "structured-config"', () => {
+  const multiDocYaml = `version: "1.0"
+project: krakowski-portal
+---
+apps:
+  - name: portal-web
+    framework: nextjs
+---
+bounded_contexts:
+  - name: IdentityAccess
+    type: core
+    responsibility: "Auth"
+---
+use_cases:
+  IdentityAccess:
+    - name: RegisterUser
+`;
+  assert.strictEqual(detectInputMode(multiDocYaml), "structured-config");
+});

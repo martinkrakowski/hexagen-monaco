@@ -170,10 +170,49 @@ export interface StructuredConfig {
 }
 
 /**
+ * Merge a list of YAML documents into a single object.
+ * Returns null if any document is not a plain object or if two documents
+ * declare the same top-level key with conflicting values. This is the
+ * "no surprises" merge — visual `---` separators between disjoint sections
+ * (a common authoring style) work; ambiguous overrides do not.
+ */
+function tryMergeMultiDocYaml(
+  rawConfig: string,
+): Record<string, unknown> | null {
+  let docs: unknown[];
+  try {
+    docs = yaml.loadAll(rawConfig);
+  } catch {
+    return null;
+  }
+  const objectDocs = docs.filter(
+    (d): d is Record<string, unknown> =>
+      d !== null && typeof d === "object" && !Array.isArray(d),
+  );
+  if (objectDocs.length === 0) return null;
+
+  const merged: Record<string, unknown> = {};
+  for (const doc of objectDocs) {
+    for (const [key, value] of Object.entries(doc)) {
+      if (
+        key in merged &&
+        JSON.stringify(merged[key]) !== JSON.stringify(value)
+      ) {
+        // Conflict — caller must resolve. Don't silently override.
+        return null;
+      }
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+/**
  * Parse a raw config string as YAML or JSON.
  * Attempts JSON first (fastest path for .json files).
- * Falls back to YAML for all other input.
- * Throws a descriptive error if neither parse succeeds.
+ * Falls back to single-document YAML, then to multi-document YAML
+ * (visual `---` separators between disjoint top-level sections).
+ * Throws a descriptive error if no parse succeeds.
  */
 export function parseStructuredConfig(rawConfig: string): StructuredConfig {
   const trimmed = rawConfig.trimStart();
@@ -190,19 +229,50 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
     }
   }
 
-  // YAML path (covers .yaml, .yml, and malformed JSON)
+  // Single-document YAML path (covers .yaml, .yml, and malformed JSON)
+  let singleDocError: unknown = null;
   try {
     const parsed = yaml.load(rawConfig) as StructuredConfig;
     validateStructuredConfigShape(parsed);
     return parsed;
   } catch (e) {
-    if (e instanceof StructuredConfigShapeError) throw e;
-    throw new Error(
-      `Failed to parse structured config as YAML or JSON. ` +
-        `Ensure the file is valid YAML or JSON with a "bounded_contexts" array. ` +
-        `Parser error: ${String(e)}`,
-    );
+    if (e instanceof StructuredConfigShapeError) {
+      // Single-doc parse succeeded but shape was wrong — could still be
+      // multi-doc YAML where the first doc lacks bounded_contexts. Try merge.
+      singleDocError = e;
+    } else if (
+      e instanceof Error &&
+      e.message.includes("expected a single document")
+    ) {
+      // js-yaml refuses multi-doc input via load(); fall through to loadAll.
+      singleDocError = e;
+    } else {
+      throw new Error(
+        `Failed to parse structured config as YAML or JSON. ` +
+          `Ensure the file is valid YAML or JSON with a "bounded_contexts" array. ` +
+          `Parser error: ${String(e)}`,
+      );
+    }
   }
+
+  // Multi-document YAML path. Handles authoring styles that use `---` as
+  // a visual separator between top-level sections (apps, bounded_contexts,
+  // use_cases, etc.).
+  const merged = tryMergeMultiDocYaml(rawConfig);
+  if (merged) {
+    validateStructuredConfigShape(merged);
+    return merged as StructuredConfig;
+  }
+
+  // Multi-doc fallback didn't apply — surface the single-doc error.
+  if (singleDocError instanceof StructuredConfigShapeError) {
+    throw singleDocError;
+  }
+  throw new Error(
+    `Failed to parse structured config as YAML or JSON. ` +
+      `Ensure the file is valid YAML or JSON with a "bounded_contexts" array. ` +
+      `Parser error: ${String(singleDocError)}`,
+  );
 }
 
 export class StructuredConfigShapeError extends Error {

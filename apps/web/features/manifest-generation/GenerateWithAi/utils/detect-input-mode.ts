@@ -6,7 +6,10 @@ export function detectInputMode(content: string): InputMode {
   if (!content.trim()) return "description";
 
   try {
-    const parsed = maybeParseJson(content) ?? parseLeanYaml(content);
+    const parsed =
+      maybeParseJson(content) ??
+      parseLeanYaml(content) ??
+      parseMultiDocYaml(content);
     if (parsed && typeof parsed === "object") {
       const obj = parsed as Record<string, unknown>;
       const hasContexts =
@@ -58,8 +61,43 @@ function maybeParseJson(content: string): unknown | null {
 function parseLeanYaml(content: string): Record<string, unknown> | null {
   try {
     const parsed = yaml.load(content) as Record<string, unknown> | null;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse multi-document YAML (visual `---` separators) and merge the
+ * resulting documents. Returns null if any doc is not an object or if two
+ * docs declare the same top-level key with conflicting values.
+ */
+function parseMultiDocYaml(content: string): Record<string, unknown> | null {
+  let docs: unknown[];
+  try {
+    docs = yaml.loadAll(content);
+  } catch {
+    return null;
+  }
+  const objectDocs = docs.filter(
+    (d): d is Record<string, unknown> =>
+      d !== null && typeof d === "object" && !Array.isArray(d),
+  );
+  if (objectDocs.length === 0) return null;
+
+  const merged: Record<string, unknown> = {};
+  for (const doc of objectDocs) {
+    for (const [key, value] of Object.entries(doc)) {
+      if (
+        key in merged &&
+        JSON.stringify(merged[key]) !== JSON.stringify(value)
+      ) {
+        return null;
+      }
+      merged[key] = value;
+    }
+  }
+  return merged;
 }

@@ -67,6 +67,65 @@ test("parseStructuredConfig: YAML without YAML prefix (JSON string) parsed as YA
   assert.strictEqual(config.bounded_contexts.length, 1);
 });
 
+test("parseStructuredConfig: multi-document YAML with disjoint top-level keys merges", () => {
+  const multiDoc = `project: krakowski-portal
+---
+apps:
+  - name: web
+    framework: nextjs
+---
+bounded_contexts:
+  - name: IdentityAccess
+    type: core
+`;
+  const config = parseStructuredConfig(multiDoc);
+  assert.strictEqual(config.project, "krakowski-portal");
+  assert.strictEqual(config.apps?.length, 1);
+  assert.strictEqual(config.apps?.[0].name, "web");
+  assert.strictEqual(config.bounded_contexts.length, 1);
+  assert.strictEqual(config.bounded_contexts[0].name, "IdentityAccess");
+});
+
+test("parseStructuredConfig: multi-document YAML where first doc has bounded_contexts", () => {
+  const multiDoc = `bounded_contexts:
+  - name: First
+    type: core
+---
+apps:
+  - name: web
+`;
+  const config = parseStructuredConfig(multiDoc);
+  assert.strictEqual(config.bounded_contexts.length, 1);
+  assert.strictEqual(config.apps?.length, 1);
+});
+
+test("parseStructuredConfig: multi-document YAML with conflicting top-level keys throws", () => {
+  const conflicting = `project: foo
+bounded_contexts:
+  - name: A
+    type: core
+---
+project: bar
+`;
+  // Refusing to silently override is safer than picking a winner.
+  assert.throws(
+    () => parseStructuredConfig(conflicting),
+    /Failed to parse|StructuredConfigShapeError/,
+  );
+});
+
+test("parseStructuredConfig: multi-document YAML where no doc has bounded_contexts throws", () => {
+  const noContexts = `project: foo
+---
+apps:
+  - name: web
+`;
+  assert.throws(
+    () => parseStructuredConfig(noContexts),
+    StructuredConfigShapeError,
+  );
+});
+
 test("parseStructuredConfig: large input (50,000 chars) returns result within 1000ms", () => {
   const baseYaml =
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";

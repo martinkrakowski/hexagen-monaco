@@ -156,8 +156,16 @@ export default function ImportProjectSpecPage() {
       setSpecContent(content);
       setPageState("SPEC_REVIEW");
       try {
-        const parsed = yaml.load(content) as Record<string, unknown>;
-        setSpecSummary(extractSpecSummary(parsed));
+        // Support both single-document and multi-document YAML (`---`
+        // separators between disjoint top-level sections).
+        const docs = yaml.loadAll(content) as Array<Record<string, unknown>>;
+        const merged: Record<string, unknown> = {};
+        for (const doc of docs) {
+          if (doc && typeof doc === "object" && !Array.isArray(doc)) {
+            Object.assign(merged, doc);
+          }
+        }
+        setSpecSummary(extractSpecSummary(merged));
       } catch {
         setSpecSummary(null);
       }
