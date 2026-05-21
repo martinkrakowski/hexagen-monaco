@@ -21,30 +21,28 @@ export async function retryWithEscalation<T>(
   config: EscalationConfig,
   shouldRetry: (result: T) => boolean,
 ): Promise<{ result: T; escalated: boolean; retryCount: number }> {
+  let lastResult!: T;
   let retryCount = 0;
-  let escalated = false;
 
   for (let attempt = 1; attempt <= config.maxDefaultRetries; attempt++) {
     retryCount = attempt - 1;
-    const result = await fn(undefined);
-    if (!shouldRetry(result)) {
-      return { result, escalated: false, retryCount };
+    lastResult = await fn(undefined);
+    if (!shouldRetry(lastResult)) {
+      return { result: lastResult, escalated: false, retryCount };
     }
   }
 
-  if (config.escalationModel) {
-    escalated = true;
-    for (let attempt = 1; attempt <= config.maxEscalatedRetries; attempt++) {
-      retryCount = config.maxDefaultRetries + attempt - 1;
-      const result = await fn(config.escalationModel);
-      if (!shouldRetry(result)) {
-        return { result, escalated: true, retryCount };
-      }
+  if (!config.escalationModel) {
+    return { result: lastResult, escalated: false, retryCount };
+  }
+
+  for (let attempt = 1; attempt <= config.maxEscalatedRetries; attempt++) {
+    retryCount = config.maxDefaultRetries + attempt - 1;
+    lastResult = await fn(config.escalationModel);
+    if (!shouldRetry(lastResult)) {
+      return { result: lastResult, escalated: true, retryCount };
     }
   }
 
-  const finalResult = await fn(escalated ? config.escalationModel : undefined);
-  retryCount =
-    config.maxDefaultRetries + (escalated ? config.maxEscalatedRetries : 0);
-  return { result: finalResult, escalated, retryCount };
+  return { result: lastResult, escalated: true, retryCount };
 }

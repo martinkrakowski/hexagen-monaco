@@ -53,7 +53,7 @@ function checkTrivialDescription(
       portName: port.name,
       contextName,
       severity: "warning",
-      rule: "R12",
+      rule: "R16",
       message: `Port description is trivial: "${port.description}"`,
     };
   }
@@ -70,7 +70,7 @@ function checkInvalidForAggregate(
       portName: port.name,
       contextName,
       severity: "error",
-      rule: "R13",
+      rule: "R17",
       message: `Port forAggregate "${port.forAggregate}" is not a known aggregate root`,
     };
   }
@@ -92,7 +92,7 @@ function checkDegenerateJustification(
       portName: port.name,
       contextName,
       severity: "warning",
-      rule: "R12",
+      rule: "R16",
       message: `Port justification is degenerate: "${port.justification}"`,
     };
   }
@@ -114,7 +114,7 @@ function checkInfrastructureName(
       portName: port.name,
       contextName,
       severity: "error",
-      rule: "R14",
+      rule: "R18",
       message: `Port name "${port.name}" leaks infrastructure/platform metadata (regex match)`,
     };
   }
@@ -140,7 +140,7 @@ function checkRuntimeConcernLeak(
         portName: port.name,
         contextName,
         severity: "error",
-        rule: "R14",
+        rule: "R18",
         message: `Port name "${port.name}" leaks runtime concern "${concern}"`,
       };
     }

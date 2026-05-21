@@ -23,7 +23,7 @@ export class ClassifyContextTypeUseCase {
       aggregates?: string[];
       value_objects?: string[];
     },
-    _projectContext?: string,
+    projectContext?: string,
     signal?: AbortSignal,
   ): Promise<
     | {
@@ -34,7 +34,10 @@ export class ClassifyContextTypeUseCase {
     | { success: false; error: unknown }
   > {
     try {
-      const userPrompt = compileClassifyContextTypePrompt(context);
+      const userPrompt = compileClassifyContextTypePrompt(
+        context,
+        projectContext,
+      );
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
         [

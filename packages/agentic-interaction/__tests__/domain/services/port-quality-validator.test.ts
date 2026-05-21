@@ -24,7 +24,7 @@ describe("validatePortQuality", () => {
     assert.strictEqual(issues.length, 0);
   });
 
-  test("trivial description → warning R12", () => {
+  test("trivial description → warning R16", () => {
     const port: PortDefinition = {
       name: "OrderRepositoryPort",
       type: "repository",
@@ -32,10 +32,10 @@ describe("validatePortQuality", () => {
       forAggregate: "Order",
     };
     const issues = validatePortQuality([port], "OrderContext", aggregateRoots);
-    assert.ok(issues.some((i) => i.rule === "R12" && i.severity === "warning"));
+    assert.ok(issues.some((i) => i.rule === "R16" && i.severity === "warning"));
   });
 
-  test("description that is a substring of the port name → warning R12", () => {
+  test("description that is a substring of the port name → warning R16", () => {
     const port: PortDefinition = {
       name: "OrderRepositoryPort",
       type: "repository",
@@ -43,10 +43,10 @@ describe("validatePortQuality", () => {
       forAggregate: "Order",
     };
     const issues = validatePortQuality([port], "OrderContext", aggregateRoots);
-    assert.ok(issues.some((i) => i.rule === "R12" && i.severity === "warning"));
+    assert.ok(issues.some((i) => i.rule === "R16" && i.severity === "warning"));
   });
 
-  test("invalid forAggregate → error R13", () => {
+  test("invalid forAggregate → error R17", () => {
     const port: PortDefinition = {
       name: "FooRepositoryPort",
       type: "repository",
@@ -55,7 +55,7 @@ describe("validatePortQuality", () => {
       forAggregate: "NonExistent",
     };
     const issues = validatePortQuality([port], "OrderContext", aggregateRoots);
-    assert.ok(issues.some((i) => i.rule === "R13" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R17" && i.severity === "error"));
   });
 
   test("degenerate justification → warning", () => {
@@ -70,24 +70,24 @@ describe("validatePortQuality", () => {
     assert.ok(
       issues.some(
         (i) =>
-          i.rule === "R12" &&
+          i.rule === "R16" &&
           i.severity === "warning" &&
           i.message.includes("justification"),
       ),
     );
   });
 
-  test("infrastructure name with platform token → error R14 (regex)", () => {
+  test("infrastructure name with platform token → error R18 (regex)", () => {
     const port: PortDefinition = {
       name: "VercelClientPort",
       type: "external-client",
       description: "Provides client integration for Vercel deployment platform",
     };
     const issues = validatePortQuality([port], "OrderContext", aggregateRoots);
-    assert.ok(issues.some((i) => i.rule === "R14" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 
-  test("infrastructure name with FlyIO → error R14 (regex)", () => {
+  test("infrastructure name with FlyIO → error R18 (regex)", () => {
     const port: PortDefinition = {
       name: "FlyIOClientAdapter",
       type: "external-client",
@@ -95,10 +95,10 @@ describe("validatePortQuality", () => {
         "Client adapter for FlyIO deployment platform infrastructure",
     };
     const issues = validatePortQuality([port], "OrderContext", aggregateRoots);
-    assert.ok(issues.some((i) => i.rule === "R14" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 
-  test("runtime concern leak: EmailRetryPort with email-retry concern → error R14", () => {
+  test("runtime concern leak: EmailRetryPort with email-retry concern → error R18", () => {
     const port: PortDefinition = {
       name: "EmailRetryPort",
       type: "notifier",
@@ -110,10 +110,10 @@ describe("validatePortQuality", () => {
       aggregateRoots,
       ["email-retry"],
     );
-    assert.ok(issues.some((i) => i.rule === "R14" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 
-  test("runtime concern leak: OverdueInvoiceDetectionPort with overdue-invoice concern → error R14", () => {
+  test("runtime concern leak: OverdueInvoiceDetectionPort with overdue-invoice concern → error R18", () => {
     const port: PortDefinition = {
       name: "OverdueInvoiceDetectionPort",
       type: "command",
@@ -126,10 +126,10 @@ describe("validatePortQuality", () => {
       aggregateRoots,
       ["overdue-invoice-detection"],
     );
-    assert.ok(issues.some((i) => i.rule === "R14" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 
-  test("runtime concern leak: FlyIO in deployment concerns → error R14", () => {
+  test("runtime concern leak: FlyIO in deployment concerns → error R18", () => {
     const port: PortDefinition = {
       name: "FlyIOClientPort",
       type: "external-client",
@@ -139,7 +139,7 @@ describe("validatePortQuality", () => {
     const issues = validatePortQuality([port], "OrderContext", aggregateRoots, [
       "fly.io",
     ]);
-    assert.ok(issues.some((i) => i.rule === "R14" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 
   test("no justification → no issue (justification is optional)", () => {
@@ -165,15 +165,15 @@ describe("validatePortQuality", () => {
       "NotificationContext",
       aggregateRoots,
     );
-    const r14 = issues.filter((i) => i.rule === "R14");
+    const r14 = issues.filter((i) => i.rule === "R18");
     assert.strictEqual(
       r14.length,
       0,
-      "R14 should not fire without runtimeConcerns when regex backstop doesn't match",
+      "R18 should not fire without runtimeConcerns when regex backstop doesn't match",
     );
   });
 
-  test("port with non-matching runtime concern → no R14 leak", () => {
+  test("port with non-matching runtime concern → no R18 leak", () => {
     const port: PortDefinition = {
       name: "OrderRepositoryPort",
       type: "repository",
@@ -185,7 +185,7 @@ describe("validatePortQuality", () => {
       "email-retry",
       "cron-scheduler",
     ]);
-    assert.ok(!issues.some((i) => i.rule === "R14"));
+    assert.ok(!issues.some((i) => i.rule === "R18"));
   });
 
   test("multiple ports can produce multiple distinct issues", () => {
@@ -221,7 +221,7 @@ describe("validatePortQuality", () => {
     assert.strictEqual(issues.length, 0);
   });
 
-  test("StripeReconciliationPort with stripe-reconciliation concern → error R14", () => {
+  test("StripeReconciliationPort with stripe-reconciliation concern → error R18", () => {
     const port: PortDefinition = {
       name: "StripeReconciliationPort",
       type: "command",
@@ -233,6 +233,6 @@ describe("validatePortQuality", () => {
       aggregateRoots,
       ["stripe-reconciliation"],
     );
-    assert.ok(issues.some((i) => i.rule === "R14" && i.severity === "error"));
+    assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 });

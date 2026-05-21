@@ -4,6 +4,10 @@ import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cas
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
+import {
+  STAGE6_VALIDATION_SYSTEM_PROMPT,
+  compileStage6Prompt,
+} from "../../../src/domain/prompts/generate-manifest.prompt.ts";
 
 const validValidationNdjson = '{"type":"result","passed":true}\n';
 
@@ -212,5 +216,189 @@ describe("ExecuteValidationReviewUseCase", () => {
       const errorsString = JSON.stringify(result.value.errors);
       assert.ok(errorsString.includes("R01"));
     }
+  });
+
+  test("programmatic R18: VercelClientPort in stage3 surfaces as error", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage1: {
+        verbs: [],
+        nouns: [],
+        subdomains: ["invoice-management"],
+        aggregateRoots: [{ name: "Invoice", subdomain: "invoice-management" }],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [],
+            out: [
+              {
+                name: "VercelClientPort",
+                type: "external-client" as const,
+                description:
+                  "Client integration for Vercel deployment platform infrastructure",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, false);
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(
+        errorsString.includes("R18"),
+        `Expected R18 error, got: ${errorsString}`,
+      );
+      assert.ok(errorsString.includes("VercelClientPort"));
+    }
+  });
+
+  test("programmatic R18 (runtime-concern): EmailRetryPort triggers when runtime concern present", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage0: {
+        ...createMockPipelineState().stage0,
+        runtimeConcerns: ["email-retry"],
+      },
+      stage1: {
+        verbs: [],
+        nouns: [],
+        subdomains: ["notification-delivery"],
+        aggregateRoots: [],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "notification-delivery",
+            in: [],
+            out: [
+              {
+                name: "EmailRetryPort",
+                type: "notifier" as const,
+                description:
+                  "Handles email retry logic for notification dispatch",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, false);
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(errorsString.includes("R18"));
+      assert.ok(errorsString.includes("email-retry"));
+    }
+  });
+
+  test("programmatic R17: forAggregate not in aggregate roots surfaces as error", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage1: {
+        verbs: [],
+        nouns: [],
+        subdomains: ["invoice-management"],
+        aggregateRoots: [{ name: "Invoice", subdomain: "invoice-management" }],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [],
+            out: [
+              {
+                name: "BogusRepositoryPort",
+                type: "repository" as const,
+                description:
+                  "Provides persistence for the fabricated aggregate",
+                forAggregate: "NotReal",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, false);
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(errorsString.includes("R17"));
+      assert.ok(errorsString.includes("NotReal"));
+    }
+  });
+});
+
+describe("STAGE6_VALIDATION_SYSTEM_PROMPT", () => {
+  test("declares R16 (port description quality)", () => {
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R16/);
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /non-trivial/);
+  });
+
+  test("declares R17 (forAggregate must exist)", () => {
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R17/);
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /forAggregate/);
+  });
+
+  test("declares R18 (port-name leak) with regex + runtime-concern checks", () => {
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R18/);
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /Vercel/);
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /runtime_concerns/);
+  });
+
+  test("instructs LLM to run rules R01 through R18", () => {
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R01 through R18/);
+  });
+});
+
+describe("compileStage6Prompt", () => {
+  test("includes <runtime_concerns> section when state.stage0.runtimeConcerns is non-empty", () => {
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+        runtimeConcerns: ["email-retry", "fly.io"],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    assert.match(prompt, /<runtime_concerns>/);
+    assert.match(prompt, /email-retry/);
+    assert.match(prompt, /fly\.io/);
+  });
+
+  test("omits <runtime_concerns> section when runtimeConcerns is empty/absent", () => {
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    assert.doesNotMatch(prompt, /<runtime_concerns>/);
   });
 });

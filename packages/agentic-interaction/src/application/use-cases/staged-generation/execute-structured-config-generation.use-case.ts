@@ -444,65 +444,39 @@ export function buildDomainAnalysisFromConfig(
  * Infer context type from the config.
  * Uses explicit type field if present, then name/responsibility heuristics.
  */
-export function inferContextType(
-  ctx: StructuredConfigContext,
-): AcceptedContext["type"] {
-  // If the config explicitly declares a type, honour it
-  if ("type" in ctx && ctx.type) {
-    const declared = String(ctx.type).toLowerCase();
-    if (declared === "core") return "core";
-    if (declared === "supporting") return "supporting";
-    if (declared === "generic") return "generic";
-    if (declared === "shared-kernel" || declared === "shared_kernel")
-      return "shared-kernel";
-  }
+const SUPPORTING_KEYWORDS = [
+  "notification",
+  "delivery",
+  "document",
+  "vault",
+  "storage",
+  "audit",
+  "logging",
+  "reporting",
+  "analytics",
+  "monitoring",
+];
 
-  // Responsibility keyword heuristics
-  const resp = (ctx.responsibility ?? ctx.name).toLowerCase();
-  const name = ctx.name.toLowerCase();
+// Listed as "generic" DDD categories but mapped to `supporting` because
+// identity/auth/payment built in-house is a supporting capability, not
+// truly generic (off-the-shelf) for this codebase.
+const GENERIC_TO_SUPPORTING_KEYWORDS = [
+  "identity",
+  "auth",
+  "authentication",
+  "authorization",
+  "iam",
+  "payment",
+  "billing-gateway",
+  "email",
+];
 
-  const supportingKeywords = [
-    "notification",
-    "delivery",
-    "document",
-    "vault",
-    "storage",
-    "audit",
-    "logging",
-    "reporting",
-    "analytics",
-    "monitoring",
-  ];
-  const genericKeywords = [
-    "identity",
-    "auth",
-    "authentication",
-    "authorization",
-    "iam",
-    "payment",
-    "billing-gateway",
-    "email",
-  ];
-  const sharedKernelKeywords = [
-    "shared kernel",
-    "shared-kernel",
-    "shared_kernel",
-    "cross-cutting",
-  ];
-
-  if (
-    sharedKernelKeywords.some((kw) => name.includes(kw) || resp.includes(kw))
-  ) {
-    return "shared-kernel";
-  }
-  if (genericKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
-    return "supporting"; // identity/auth built in-house is supporting, not generic
-  }
-  if (supportingKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
-    return "supporting";
-  }
-  return "core";
-}
+const SHARED_KERNEL_KEYWORDS = [
+  "shared kernel",
+  "shared-kernel",
+  "shared_kernel",
+  "cross-cutting",
+];
 
 export function inferContextTypeWithConfidence(ctx: StructuredConfigContext): {
   type: AcceptedContext["type"];
@@ -510,58 +484,35 @@ export function inferContextTypeWithConfidence(ctx: StructuredConfigContext): {
 } {
   if ("type" in ctx && ctx.type) {
     const declared = String(ctx.type).toLowerCase();
-    if (
-      declared === "core" ||
-      declared === "supporting" ||
-      declared === "generic" ||
-      declared === "shared-kernel" ||
-      declared === "shared_kernel"
-    ) {
-      return { type: inferContextType(ctx), confidence: 1.0 };
-    }
+    if (declared === "core") return { type: "core", confidence: 1.0 };
+    if (declared === "supporting")
+      return { type: "supporting", confidence: 1.0 };
+    if (declared === "generic") return { type: "generic", confidence: 1.0 };
+    if (declared === "shared-kernel" || declared === "shared_kernel")
+      return { type: "shared-kernel", confidence: 1.0 };
   }
+
   const resp = (ctx.responsibility ?? ctx.name).toLowerCase();
   const name = ctx.name.toLowerCase();
-  const supportingKeywords = [
-    "notification",
-    "delivery",
-    "document",
-    "vault",
-    "storage",
-    "audit",
-    "logging",
-    "reporting",
-    "analytics",
-    "monitoring",
-  ];
-  const genericKeywords = [
-    "identity",
-    "auth",
-    "authentication",
-    "authorization",
-    "iam",
-    "payment",
-    "billing-gateway",
-    "email",
-  ];
-  const sharedKernelKeywords = [
-    "shared kernel",
-    "shared-kernel",
-    "shared_kernel",
-    "cross-cutting",
-  ];
-  if (
-    sharedKernelKeywords.some((kw) => name.includes(kw) || resp.includes(kw))
-  ) {
+  const matches = (kws: string[]) =>
+    kws.some((kw) => name.includes(kw) || resp.includes(kw));
+
+  if (matches(SHARED_KERNEL_KEYWORDS)) {
     return { type: "shared-kernel", confidence: 0.9 };
   }
-  if (genericKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
+  if (matches(GENERIC_TO_SUPPORTING_KEYWORDS)) {
     return { type: "supporting", confidence: 0.7 };
   }
-  if (supportingKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
+  if (matches(SUPPORTING_KEYWORDS)) {
     return { type: "supporting", confidence: 0.8 };
   }
   return { type: "core", confidence: 0.4 };
+}
+
+export function inferContextType(
+  ctx: StructuredConfigContext,
+): AcceptedContext["type"] {
+  return inferContextTypeWithConfidence(ctx).type;
 }
 
 export function buildClassificationFromConfig(
@@ -604,6 +555,7 @@ export function buildClassificationFromConfig(
       eventsPublished: ctxEventsPublished,
       promotedFromUncertain: false,
       needsTypeReview: confidence < 0.6,
+      // Non-standard underscore-prefixed field carried through for Stage 3/4 prompt enrichment
       ...(adapterHints ? { _adapterHints: adapterHints } : {}),
     } as AcceptedContext;
   });
@@ -1173,7 +1125,9 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const s6 = await this.stage6.execute(
       {
         stage0: normalizedPrompt,
+        stage1: domainAnalysis,
         stage2: classification,
+        stage3: mergedPortMap,
         stage5: assembledManifest,
         contextMappings: mergedContextMappings,
       },

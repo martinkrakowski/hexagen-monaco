@@ -9,13 +9,19 @@ Definitions:
 Output JSON only: {"type": "core|supporting|generic|shared-kernel", "reasoning": "brief explanation"}
 `;
 
-export function compileClassifyContextTypePrompt(context: {
-  name: string;
-  responsibility?: string;
-  aggregates?: string[];
-  value_objects?: string[];
-}): string {
+export function compileClassifyContextTypePrompt(
+  context: {
+    name: string;
+    responsibility?: string;
+    aggregates?: string[];
+    value_objects?: string[];
+  },
+  projectContext?: string,
+): string {
   const parts: string[] = [];
+  if (projectContext) {
+    parts.push(`<project>${projectContext}</project>`);
+  }
   parts.push(`<context_name>${context.name}</context_name>`);
   if (context.responsibility) {
     parts.push(`<responsibility>${context.responsibility}</responsibility>`);

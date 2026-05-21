@@ -96,7 +96,7 @@ async function* streamProvider(
     : undefined;
 
   const body: Record<string, unknown> = {
-    model: provider.model,
+    model: request.preferredCloudModel ?? provider.model,
     messages,
     temperature: request.temperature ?? provider.temperature ?? 0.4,
     max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
