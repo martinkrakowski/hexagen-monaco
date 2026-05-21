@@ -13,9 +13,11 @@ layers:
       - ModifyArchitectureUseCase
       - GenerateSuggestionUseCase
       - SecureChatDispatchUseCase
+      - ExecuteLooseSpecConversionUseCase
     ports:
       in:
         - ArchitectureModificationPort
+        - ConvertLooseSpecPort
       out:
         - LLMProviderPort
         - SuggestionEnginePort

@@ -252,3 +252,8 @@ export {
   coerceRawPorts,
   extractYamlFromResponse,
 } from "./domain/index";
+export {
+  ExecuteLooseSpecConversionUseCase,
+  MAX_LOOSE_SPEC_INPUT_CHARS,
+  type LooseSpecConversionCallbacks,
+} from "./application/use-cases/staged-generation/execute-loose-spec-conversion.use-case";

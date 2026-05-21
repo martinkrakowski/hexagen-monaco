@@ -7,6 +7,7 @@ import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
+import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
 import { Skeleton, Button, CopyButton } from "@hexagen/ui";
 import { ArrowLeft } from "lucide-react";
@@ -23,6 +24,7 @@ type SpecPageState =
   | "UPLOAD"
   | "SPEC_REVIEW"
   | "DESCRIPTION_FALLBACK"
+  | "CONVERTING_LOOSE_SPEC"
   | "GENERATING"
   | "PREVIEW";
 
@@ -92,6 +94,8 @@ export default function ImportProjectSpecPage() {
   );
   const [specSummary, setSpecSummary] = useState<SpecSummary | null>(null);
   const [specContent, setSpecContent] = useState<string>("");
+  const [cameFromConversion, setCameFromConversion] = useState(false);
+  const [isJsonDisclosed, setIsJsonDisclosed] = useState(false);
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
@@ -102,6 +106,13 @@ export default function ImportProjectSpecPage() {
   // Hook for description fallback path
   const manifestGeneration = useStagedManifestGeneration();
 
+  // Hook for loose spec conversion
+  const {
+    convert,
+    error: conversionError,
+    reset: resetConversion,
+  } = useLooseSpecConversion();
+
   useEffect(() => {
     const saved = sessionStorage.getItem("import_spec_content");
     if (saved && !specContent) {
@@ -109,20 +120,60 @@ export default function ImportProjectSpecPage() {
     }
   }, []);
 
+  const runConversion = useCallback(
+    async (rawContent: string) => {
+      setCameFromConversion(true);
+      setPageState("CONVERTING_LOOSE_SPEC");
+      resetConversion();
+      const result = await convert(rawContent);
+      if (!result.convertedConfig) {
+        // Stay in CONVERTING_LOOSE_SPEC; the error UI offers Retry / Continue.
+        return;
+      }
+      try {
+        const parsed = JSON.parse(result.convertedConfig);
+        setSpecContent(result.convertedConfig);
+        sessionStorage.setItem("import_spec_content", result.convertedConfig);
+        setSpecSummary(extractSpecSummary(parsed));
+        setPageState("SPEC_REVIEW");
+      } catch (e) {
+        // Hook returned configJson but it's not parseable JSON — surface as a
+        // conversion failure so the user gets Retry / Continue options.
+        console.error("Converted config failed JSON.parse", e);
+        resetConversion();
+        setPageState("DESCRIPTION_FALLBACK");
+      }
+    },
+    [convert, resetConversion],
+  );
+
   const handleFileLoaded = (content: string) => {
     sessionStorage.setItem("import_spec_content", content);
     const mode: InputMode = detectInputMode(content);
 
     if (mode === "structured-config") {
+      setCameFromConversion(false);
       setSpecContent(content);
       setPageState("SPEC_REVIEW");
       try {
-        const parsed = yaml.load(content) as Record<string, unknown>;
-        setSpecSummary(extractSpecSummary(parsed));
+        // Support both single-document and multi-document YAML (`---`
+        // separators between disjoint top-level sections).
+        const docs = yaml.loadAll(content) as Array<Record<string, unknown>>;
+        const merged: Record<string, unknown> = {};
+        for (const doc of docs) {
+          if (doc && typeof doc === "object" && !Array.isArray(doc)) {
+            Object.assign(merged, doc);
+          }
+        }
+        setSpecSummary(extractSpecSummary(merged));
       } catch {
         setSpecSummary(null);
       }
+    } else if (mode === "semi-structured") {
+      setSpecContent(content);
+      void runConversion(content);
     } else {
+      setCameFromConversion(false);
       setSpecContent(content);
       setPageState("DESCRIPTION_FALLBACK");
     }
@@ -201,10 +252,13 @@ export default function ImportProjectSpecPage() {
   const handleReset = () => {
     specGeneration.reset();
     manifestGeneration.reset();
+    resetConversion();
     setGeneratedManifest(null);
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
+    setCameFromConversion(false);
+    setIsJsonDisclosed(false);
     sessionStorage.removeItem("import_spec_content");
   };
 
@@ -266,6 +320,52 @@ export default function ImportProjectSpecPage() {
             </Button>
             <Button onClick={handleContinue}>Continue anyway</Button>
           </div>
+        </>
+      );
+    }
+    if (pageState === "CONVERTING_LOOSE_SPEC") {
+      // When conversion has failed, offer recovery paths. While in flight,
+      // only Cancel is available.
+      if (conversionError) {
+        return (
+          <>
+            <Button variant="outline" onClick={handleReset}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPageState("DESCRIPTION_FALLBACK");
+                  resetConversion();
+                  setCameFromConversion(false);
+                }}
+              >
+                Continue as description
+              </Button>
+              <Button onClick={() => void runConversion(specContent)}>
+                Retry conversion
+              </Button>
+            </div>
+          </>
+        );
+      }
+      return (
+        <>
+          <Button
+            variant="outline"
+            onClick={() => {
+              resetConversion();
+              setPageState("UPLOAD");
+              setSpecContent("");
+              setCameFromConversion(false);
+              sessionStorage.removeItem("import_spec_content");
+            }}
+          >
+            Cancel
+          </Button>
+          <span />
         </>
       );
     }
@@ -388,7 +488,7 @@ export default function ImportProjectSpecPage() {
                 <input
                   id="project-spec-file"
                   type="file"
-                  accept=".yaml,.yml,.json,.txt"
+                  accept=".yaml,.yml,.json,.txt,.md"
                   aria-describedby="file-help"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -412,6 +512,13 @@ export default function ImportProjectSpecPage() {
             {pageState === "SPEC_REVIEW" && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Spec Review</h2>
+                {cameFromConversion && (
+                  <div className="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+                    This summary was generated from your loose specification.
+                    Review the converted JSON below before generating ports and
+                    adapters.
+                  </div>
+                )}
                 {specSummary && (
                   <div className="mb-4 space-y-2">
                     <p>
@@ -435,6 +542,40 @@ export default function ImportProjectSpecPage() {
                       AI will skip: domain extraction (Stage 1), context
                       classification (Stage 2)
                     </p>
+                  </div>
+                )}
+                {cameFromConversion && specContent && (
+                  <details
+                    className="mt-4 border rounded"
+                    open={isJsonDisclosed}
+                    onToggle={(e) =>
+                      setIsJsonDisclosed((e.target as HTMLDetailsElement).open)
+                    }
+                  >
+                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium select-none">
+                      {isJsonDisclosed ? "Hide" : "View"} converted JSON
+                    </summary>
+                    <pre className="max-h-96 overflow-auto p-3 bg-muted text-xs font-mono whitespace-pre-wrap break-words">
+                      {specContent}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            )}
+
+            {pageState === "CONVERTING_LOOSE_SPEC" && (
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Converting...</h2>
+                <div className="p-4 bg-muted rounded flex items-center gap-3">
+                  <div className="animate-spin-border w-5 h-5 rounded-full border-2 border-primary border-t-transparent"></div>
+                  <p>
+                    Converting loose specification into structured
+                    architecture...
+                  </p>
+                </div>
+                {conversionError && (
+                  <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded">
+                    Error: {conversionError}
                   </div>
                 )}
               </div>

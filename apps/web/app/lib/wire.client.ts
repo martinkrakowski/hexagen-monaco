@@ -82,7 +82,10 @@ import {
   ClientManifestGenerationUseCase,
   ServerManifestGenerationUseCase,
 } from "@hexagen/manifest-generation";
-import { ExecuteStructuredConfigGenerationUseCase } from "@hexagen/agentic-interaction";
+import {
+  ExecuteStructuredConfigGenerationUseCase,
+  ExecuteLooseSpecConversionUseCase,
+} from "@hexagen/agentic-interaction";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 import {
@@ -338,6 +341,14 @@ export const wireDependencies = () => {
     );
   registry.set(PORT_NAMES.CLIENT_SPEC_GENERATION, clientSpecGenerationUseCase);
 
+  // Client Loose Spec Conversion
+  const clientLooseSpecConversionUseCase =
+    new ExecuteLooseSpecConversionUseCase(localLLMAdapter);
+  registry.set(
+    PORT_NAMES.CLIENT_LOOSE_SPEC_CONVERSION,
+    clientLooseSpecConversionUseCase,
+  );
+
   return {
     get: <T>(portName: string): T => {
       const instance = registry.get(portName);
@@ -454,6 +465,17 @@ export function getClientSpecGenerationUseCase(): ExecuteStructuredConfigGenerat
   }
   return dependencies.get<ExecuteStructuredConfigGenerationUseCase>(
     PORT_NAMES.CLIENT_SPEC_GENERATION,
+  );
+}
+
+export function getClientLooseSpecConversionUseCase(): ExecuteLooseSpecConversionUseCase {
+  if (typeof window === "undefined") {
+    throw new Error(
+      "getClientLooseSpecConversionUseCase called in non-browser context",
+    );
+  }
+  return dependencies.get<ExecuteLooseSpecConversionUseCase>(
+    PORT_NAMES.CLIENT_LOOSE_SPEC_CONVERSION,
   );
 }
 
