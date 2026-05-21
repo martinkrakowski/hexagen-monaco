@@ -86,7 +86,7 @@ test("POST /api/manifest/generate/spec/convert happy path with mock", async (t) 
 
   const events = resultStr
     .trim()
-    .split("\\n")
+    .split("\n")
     .map((line) => JSON.parse(line));
   assert.ok(events.length >= 2);
 
