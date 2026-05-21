@@ -35,9 +35,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: ConvertRequestBody;
+  let rawBody: unknown;
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return new Response(
       JSON.stringify({ type: "error", message: "Invalid JSON" }),
@@ -45,7 +45,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!body.looseSpec || typeof body.looseSpec !== "string") {
+  // Guard: body must be a plain object. JSON.parse accepts null, arrays, and
+  // primitives, all of which would throw on property access below.
+  if (
+    rawBody === null ||
+    typeof rawBody !== "object" ||
+    Array.isArray(rawBody)
+  ) {
+    return new Response(
+      JSON.stringify({ type: "error", message: "Body must be a JSON object" }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const body = rawBody as Partial<ConvertRequestBody>;
+
+  if (typeof body.looseSpec !== "string" || body.looseSpec.length === 0) {
     return new Response(
       JSON.stringify({ type: "error", message: "Missing looseSpec" }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -61,6 +76,10 @@ export async function POST(request: NextRequest) {
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
+
+  // Extract validated values so narrowing survives across the stream closure.
+  const looseSpec = body.looseSpec;
+  const preferLocalInput = body.preferLocal;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -84,7 +103,7 @@ export async function POST(request: NextRequest) {
 
         const hasCloudKeys =
           !!process.env.OPENAI_API_KEY || !!process.env.ANTHROPIC_API_KEY;
-        const preferLocal = body.preferLocal ?? !hasCloudKeys;
+        const preferLocal = preferLocalInput ?? !hasCloudKeys;
 
         const llmAdapter = createLLMProviderSelector({
           preferLocal,
@@ -94,7 +113,7 @@ export async function POST(request: NextRequest) {
 
         const useCase = new ExecuteLooseSpecConversionUseCase(llmAdapter);
 
-        const result = await useCase.execute(body.looseSpec, {
+        const result = await useCase.execute(looseSpec, {
           signal: request.signal,
           onChunk: (chunk) => {
             send({ type: "chunk", data: chunk });

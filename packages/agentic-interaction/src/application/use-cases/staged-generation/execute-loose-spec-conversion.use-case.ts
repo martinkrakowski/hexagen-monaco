@@ -56,7 +56,8 @@ export class ExecuteLooseSpecConversionUseCase {
       return err(abortErr);
     }
 
-    let prompt = compileLooseSpecConversionPrompt(looseSpec);
+    const initialPrompt = compileLooseSpecConversionPrompt(looseSpec);
+    let prompt = initialPrompt;
     let lastError = "";
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
@@ -209,7 +210,7 @@ export class ExecuteLooseSpecConversionUseCase {
         attempt: attempt + 1,
         failedOutput: fullResponse,
         errorDetail: parseErrorStr,
-        originalPrompt: prompt,
+        originalPrompt: initialPrompt,
       });
     }
 

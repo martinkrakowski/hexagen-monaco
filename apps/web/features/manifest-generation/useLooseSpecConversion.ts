@@ -89,32 +89,50 @@ export function useLooseSpecConversion(
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (!abortRef.current && !signal?.aborted) {
-        if (abortRef.current || signal?.aborted) {
-          reader.cancel();
-          return { convertedConfig: null, error: "Aborted" };
+      const handleLine = (
+        line: string,
+      ): { convertedConfig: string | null; error: string | null } | null => {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+        try {
+          const event = JSON.parse(trimmed);
+          if (event.type === "done") {
+            return { convertedConfig: event.configJson, error: null };
+          }
+          if (event.type === "error") {
+            return { convertedConfig: null, error: event.message };
+          }
+        } catch {
+          // ignore JSON parse errors for incomplete frames
         }
+        return null;
+      };
 
+      while (!abortRef.current && !signal?.aborted) {
         const { done, value } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const event = JSON.parse(line);
-            if (event.type === "done") {
-              return { convertedConfig: event.configJson, error: null };
-            } else if (event.type === "error") {
-              return { convertedConfig: null, error: event.message };
-            }
-          } catch {
-            // ignore JSON parse errors for incomplete lines
-          }
+          const settled = handleLine(line);
+          if (settled) return settled;
         }
+      }
+
+      // Flush the decoder and parse any trailing frame the server may have
+      // emitted without a terminating newline.
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const settled = handleLine(buffer);
+        if (settled) return settled;
+      }
+
+      if (abortRef.current || signal?.aborted) {
+        reader.cancel().catch(() => {});
+        return { convertedConfig: null, error: "Aborted" };
       }
       return { convertedConfig: null, error: "Stream ended unexpectedly" };
     } catch (e) {
@@ -143,9 +161,13 @@ export function useLooseSpecConversion(
 
     const controller = new AbortController();
     if (options?.signal) {
-      options.signal.addEventListener("abort", () => controller.abort(), {
-        once: true,
-      });
+      if (options.signal.aborted) {
+        controller.abort();
+      } else {
+        options.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
     }
 
     const strategy = options?.executionStrategy ?? "auto";
@@ -242,9 +264,9 @@ export function useLooseSpecConversion(
       return { convertedConfig: null, error: msg };
     } finally {
       convertingLockRef.current = false;
-      if (!abortRef.current && !controller.signal.aborted) {
-        setIsConverting(false);
-      }
+      // Always clear loading — leaving it true on an aborted run leaves the UI
+      // spinning forever even though no work is in flight.
+      setIsConverting(false);
     }
   };
 
