@@ -11,6 +11,7 @@ const fixturesDir = path.resolve(
   "packages/agentic-interaction/__tests__/use-cases/staged-generation/fixtures",
 );
 const yamlPath = path.join(fixturesDir, "krakowski-portal.yaml");
+const looseMdPath = path.join(fixturesDir, "krakowski-portal-loose.md");
 
 test('detectInputMode("") returns "description"', () => {
   assert.strictEqual(detectInputMode(""), "description");
@@ -31,4 +32,20 @@ test('detectInputMode("bounded_contexts: []") returns "description" (empty array
 
 test('detectInputMode("{{ invalid }}") returns "description" (no throw)', () => {
   assert.strictEqual(detectInputMode("{{ invalid }}"), "description");
+});
+
+test('detectInputMode(looseMd) returns "semi-structured"', () => {
+  const looseMd = fs.readFileSync(looseMdPath, "utf-8");
+  assert.strictEqual(detectInputMode(looseMd), "semi-structured");
+});
+
+test('detectInputMode("This app has aggregates") returns "description" (1 hint)', () => {
+  assert.strictEqual(detectInputMode("This app has aggregates"), "description");
+});
+
+test('detectInputMode("# Bounded Contexts\\n- aggregates: Foo") returns "semi-structured" (2 hints)', () => {
+  assert.strictEqual(
+    detectInputMode("# Bounded Contexts\n- aggregates: Foo"),
+    "semi-structured",
+  );
 });

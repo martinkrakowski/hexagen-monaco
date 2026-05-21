@@ -44,3 +44,4 @@ export {
   type HolisticManifestRepairRequest,
   type HolisticManifestRepairResponse,
 } from "./holistic-manifest-repair.use-case";
+export { ExecuteLooseSpecConversionUseCase } from "./staged-generation/execute-loose-spec-conversion.use-case";

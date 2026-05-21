@@ -1,23 +1,43 @@
 import yaml from "js-yaml";
 
-export type InputMode = "description" | "structured-config";
+export type InputMode = "description" | "structured-config" | "semi-structured";
 
 export function detectInputMode(content: string): InputMode {
   if (!content.trim()) return "description";
 
   try {
     const parsed = maybeParseJson(content) ?? parseLeanYaml(content);
-    if (!parsed || typeof parsed !== "object") return "description";
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      const hasContexts =
+        Array.isArray(obj.bounded_contexts) &&
+        (obj.bounded_contexts as unknown[]).length > 0;
 
-    const obj = parsed as Record<string, unknown>;
-    const hasContexts =
-      Array.isArray(obj.bounded_contexts) &&
-      (obj.bounded_contexts as unknown[]).length > 0;
-
-    return hasContexts ? "structured-config" : "description";
+      if (hasContexts) return "structured-config";
+    }
   } catch {
-    return "description";
+    // Fallthrough
   }
+
+  const hints = [
+    /bounded\s*contexts/i,
+    /aggregates?/i,
+    /value\s*objects?/i,
+    /use\s*cases?/i,
+    /domain\s*events?/i,
+    /context\s*mappings?/i,
+    /entities/i,
+  ];
+
+  let hintCount = 0;
+  for (const hint of hints) {
+    if (hint.test(content)) {
+      hintCount++;
+      if (hintCount >= 2) return "semi-structured";
+    }
+  }
+
+  return "description";
 }
 
 function maybeParseJson(content: string): unknown | null {

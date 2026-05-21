@@ -4,3 +4,4 @@ export * from "./few-shot-examples";
 export * from "./generate-adapters.prompt";
 export * from "./generate-manifest.prompt";
 export * from "./generate-topology.prompt";
+export * from "./convert-loose-spec.prompt";

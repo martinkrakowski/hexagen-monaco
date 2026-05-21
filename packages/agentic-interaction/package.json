@@ -32,6 +32,7 @@
     "@hexagen/shared": "workspace:*",
     "@hexagen/transaction-system": "workspace:*",
     "js-yaml": "^4.1.1",
+    "jsonrepair": "^3.14.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
