@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, Suspense, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
@@ -8,17 +8,26 @@ import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
-import { ThinkingBlock } from "./GenerateWithAi/ThinkingBlock";
-import { Skeleton, Button, CopyButton } from "@hexagen/ui";
+import { Button } from "@hexagen/ui";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShell } from "@/landing/ProjectsShell";
-import type { StagedPhase } from "./staged-generation-types";
 import {
   hasServerLLMAccessKey,
   isLocalLLMReady,
 } from "../../app/lib/wire.client";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
+
+import { SpecUploadStep } from "./import-project-spec/SpecUploadStep";
+import { SpecReviewStep } from "./import-project-spec/SpecReviewStep";
+import { SpecConvertingStep } from "./import-project-spec/SpecConvertingStep";
+import { SpecDescriptionFallbackStep } from "./import-project-spec/SpecDescriptionFallbackStep";
+import { ManifestGeneratingStep } from "./import-project-spec/ManifestGeneratingStep";
+import { ManifestPreviewStep } from "./import-project-spec/ManifestPreviewStep";
+import {
+  extractSpecSummary,
+  type SpecSummary,
+} from "./import-project-spec/utils";
 
 type SpecPageState =
   | "UPLOAD"
@@ -27,63 +36,6 @@ type SpecPageState =
   | "CONVERTING_LOOSE_SPEC"
   | "GENERATING"
   | "PREVIEW";
-
-interface SpecSummary {
-  contextCount: number;
-  aggregateCount: number;
-  valueObjectCount: number;
-  useCaseCount: number;
-  mappingCount: number;
-  eventBusSubscriptionCount: number;
-}
-
-function extractSpecSummary(parsed: Record<string, unknown>): SpecSummary {
-  const contexts = (parsed.bounded_contexts ?? []) as Array<
-    Record<string, unknown>
-  >;
-  const useCasesMap = (parsed.use_cases ?? {}) as Record<
-    string,
-    Array<Record<string, unknown>>
-  >;
-
-  return {
-    contextCount: contexts.length,
-    aggregateCount: contexts.reduce(
-      (sum, ctx) =>
-        sum +
-        ((ctx.aggregates as Array<Record<string, unknown>>) ?? []).filter(
-          (a) => {
-            const agg = a as { root?: boolean };
-            return agg.root !== false;
-          },
-        ).length,
-      0,
-    ),
-    valueObjectCount: contexts.reduce(
-      (sum, ctx) => sum + ((ctx.value_objects as Array<unknown>) ?? []).length,
-      0,
-    ),
-    useCaseCount: Object.values(useCasesMap).reduce(
-      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-      0,
-    ),
-    mappingCount: ((parsed.context_mappings as Array<unknown>) ?? []).length,
-    eventBusSubscriptionCount: (
-      (((parsed.event_bus as Record<string, unknown>) ?? {})
-        .subscriptions as Array<unknown>) ?? []
-    ).length,
-  };
-}
-
-const SPEC_STAGE_LABELS: Partial<Record<StagedPhase, string>> = {
-  "stage-0": "Parsing Configuration",
-  "stage-1": "Building Domain Model",
-  "stage-2": "Classifying Contexts",
-  "stage-3": "Mapping Ports",
-  "stage-4": "Assigning Adapters",
-  "stage-5": "Assembling Manifest",
-  "stage-6": "Validating",
-};
 
 export default function ImportProjectSpecPage() {
   const router = useRouter();
@@ -418,179 +370,42 @@ export default function ImportProjectSpecPage() {
       {isFullHeightState ? (
         <div className="h-full flex flex-col dot-grid bg-ambient p-4">
           {pageState === "GENERATING" && (
-            <>
-              <h2 className="text-xl font-semibold mb-3 shrink-0">
-                Generating Manifest
-              </h2>
-              {generationError && (
-                <div className="mb-3 p-4 bg-destructive/10 text-destructive rounded shrink-0">
-                  Error: {generationError}
-                </div>
-              )}
-              <div className="flex-1 min-h-0">
-                <Suspense
-                  fallback={
-                    <div className="space-y-4">
-                      <Skeleton className="h-64 w-full" />
-                      <Skeleton className="h-32 w-48" />
-                      <Skeleton className="h-96 w-full" />
-                    </div>
-                  }
-                >
-                  <ThinkingBlock
-                    phase={phase}
-                    stepDetail={stepDetail}
-                    stageProgress={stageProgress}
-                    stageLabels={SPEC_STAGE_LABELS}
-                    verboseLog={verboseLog}
-                  />
-                </Suspense>
-              </div>
-            </>
+            <ManifestGeneratingStep
+              generationError={generationError}
+              phase={phase}
+              stepDetail={stepDetail}
+              stageProgress={stageProgress}
+              verboseLog={verboseLog}
+            />
           )}
 
           {pageState === "PREVIEW" && (
-            <>
-              <div className="flex items-center justify-between mb-3 shrink-0">
-                <h2 className="text-xl font-semibold">Manifest Preview</h2>
-                {generatedManifest && (
-                  <CopyButton
-                    text={generatedManifest}
-                    aria-label="Copy manifest YAML"
-                  />
-                )}
-              </div>
-              {generatedManifest && (
-                <pre className="flex-1 min-h-0 p-4 bg-muted rounded overflow-auto text-sm font-mono">
-                  {generatedManifest}
-                </pre>
-              )}
-            </>
+            <ManifestPreviewStep generatedManifest={generatedManifest} />
           )}
         </div>
       ) : (
         <div className="h-full overflow-y-auto dot-grid bg-ambient">
           <div className="max-w-2xl mx-auto py-8 px-4">
             {pageState === "UPLOAD" && (
-              <div>
-                <h1 className="text-2xl font-bold mb-4">
-                  Import Project Specification
-                </h1>
-                <p className="mb-4">
-                  Upload a YAML or JSON spec file to generate a manifest.
-                </p>
-                <label
-                  htmlFor="project-spec-file"
-                  className="block mb-2 text-sm font-medium"
-                >
-                  Upload Project Specification
-                </label>
-                <input
-                  id="project-spec-file"
-                  type="file"
-                  accept=".yaml,.yml,.json,.txt,.md"
-                  aria-describedby="file-help"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) =>
-                      handleFileLoaded(ev.target?.result as string);
-                    reader.readAsText(file);
-                  }}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent/90"
-                />
-                <p
-                  id="file-help"
-                  className="text-sm text-muted-foreground mt-2"
-                >
-                  Upload a YAML or JSON spec file to generate a manifest.
-                </p>
-              </div>
+              <SpecUploadStep onFileLoaded={handleFileLoaded} />
             )}
 
             {pageState === "SPEC_REVIEW" && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Spec Review</h2>
-                {cameFromConversion && (
-                  <div className="mb-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
-                    This summary was generated from your loose specification.
-                    Review the converted JSON below before generating ports and
-                    adapters.
-                  </div>
-                )}
-                {specSummary && (
-                  <div className="mb-4 space-y-2">
-                    <p>
-                      ✓ {specSummary.contextCount} bounded contexts detected
-                    </p>
-                    <p>✓ {specSummary.aggregateCount} aggregates</p>
-                    <p>✓ {specSummary.valueObjectCount} value objects</p>
-                    <p>✓ {specSummary.useCaseCount} use cases</p>
-                    <p>✓ {specSummary.mappingCount} context mappings</p>
-                    {specSummary.eventBusSubscriptionCount > 0 && (
-                      <p>
-                        ✓ Event bus: {specSummary.eventBusSubscriptionCount}{" "}
-                        subscriptions
-                      </p>
-                    )}
-                    <p className="text-sm text-muted-foreground mt-4">
-                      AI will generate: hexagonal ports, adapter assignments,
-                      manifest assembly, validation review
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      AI will skip: domain extraction (Stage 1), context
-                      classification (Stage 2)
-                    </p>
-                  </div>
-                )}
-                {cameFromConversion && specContent && (
-                  <details
-                    className="mt-4 border rounded"
-                    open={isJsonDisclosed}
-                    onToggle={(e) =>
-                      setIsJsonDisclosed((e.target as HTMLDetailsElement).open)
-                    }
-                  >
-                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium select-none">
-                      {isJsonDisclosed ? "Hide" : "View"} converted JSON
-                    </summary>
-                    <pre className="max-h-96 overflow-auto p-3 bg-muted text-xs font-mono whitespace-pre-wrap break-words">
-                      {specContent}
-                    </pre>
-                  </details>
-                )}
-              </div>
+              <SpecReviewStep
+                specSummary={specSummary}
+                specContent={specContent}
+                cameFromConversion={cameFromConversion}
+                isJsonDisclosed={isJsonDisclosed}
+                onToggleJsonDisclosed={setIsJsonDisclosed}
+              />
             )}
 
             {pageState === "CONVERTING_LOOSE_SPEC" && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Converting...</h2>
-                <div className="p-4 bg-muted rounded flex items-center gap-3">
-                  <div className="animate-spin-border w-5 h-5 rounded-full border-2 border-primary border-t-transparent"></div>
-                  <p>
-                    Converting loose specification into structured
-                    architecture...
-                  </p>
-                </div>
-                {conversionError && (
-                  <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded">
-                    Error: {conversionError}
-                  </div>
-                )}
-              </div>
+              <SpecConvertingStep conversionError={conversionError} />
             )}
 
             {pageState === "DESCRIPTION_FALLBACK" && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">
-                  Description Detected
-                </h2>
-                <p className="mb-4">
-                  Warning: This doesn't look like a structured spec. You can
-                  continue with AI generation using this as a description.
-                </p>
-              </div>
+              <SpecDescriptionFallbackStep />
             )}
           </div>
         </div>

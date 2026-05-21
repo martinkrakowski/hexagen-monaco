@@ -9,7 +9,10 @@ import {
   buildDomainAnalysisFromConfig,
   buildClassificationFromConfig,
   buildContextMappingsFromConfig,
+  deriveOutboundPortsFromConfig,
   ExecuteStructuredConfigGenerationUseCase,
+  inferContextType,
+  StructuredConfigContext,
 } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
 
 const fixturesDir = path.join(
@@ -124,6 +127,100 @@ apps:
     () => parseStructuredConfig(noContexts),
     StructuredConfigShapeError,
   );
+});
+
+describe("deriveOutboundPortsFromConfig", () => {
+  const baseConfig = parseStructuredConfig(`
+bounded_contexts:
+  - name: IdentityAccess
+    type: core
+    aggregates:
+      - name: User
+        root: true
+    events_published:
+      - UserRegistered
+      - UserRoleChanged
+  - name: NotificationDelivery
+    type: supporting
+    aggregates:
+      - name: Notification
+        root: true
+    value_objects:
+      - name: DeliveryChannel
+        underlying: enum
+        values: [email, in_app]
+  - name: ProjectDelivery
+    type: core
+    aggregates:
+      - name: Project
+        root: true
+      - name: Milestone
+        root: false
+        parent: Project
+  - name: Empty
+    type: generic
+`);
+
+  it("derives one repository port per aggregate root", () => {
+    const ports = deriveOutboundPortsFromConfig(baseConfig, "ProjectDelivery");
+    const repoPorts = ports.filter((p) => p.type === "repository");
+    // Project (root) gets a repo; Milestone (root:false) does not.
+    assert.strictEqual(repoPorts.length, 1);
+    assert.strictEqual(repoPorts[0].name, "ProjectRepositoryPort");
+    assert.strictEqual(repoPorts[0].forAggregate, "Project");
+  });
+
+  it("adds a publisher port when events_published is non-empty", () => {
+    const ports = deriveOutboundPortsFromConfig(baseConfig, "IdentityAccess");
+    const pub = ports.find((p) => p.type === "publisher");
+    assert.ok(pub, "expected a publisher port");
+    assert.strictEqual(pub.name, "UserEventPublisherPort");
+    assert.match(pub.description, /UserRegistered/);
+  });
+
+  it("omits the publisher port when events_published is empty", () => {
+    const ports = deriveOutboundPortsFromConfig(
+      baseConfig,
+      "NotificationDelivery",
+    );
+    assert.strictEqual(ports.filter((p) => p.type === "publisher").length, 0);
+  });
+
+  it("derives one notifier port per channel enum value (DeliveryChannel)", () => {
+    const ports = deriveOutboundPortsFromConfig(
+      baseConfig,
+      "NotificationDelivery",
+    );
+    const notifiers = ports.filter((p) => p.type === "notifier");
+    assert.deepStrictEqual(notifiers.map((p) => p.name).sort(), [
+      "EmailNotifierPort",
+      "InAppNotifierPort",
+    ]);
+  });
+
+  it("returns the full expected port set for notification-delivery", () => {
+    const ports = deriveOutboundPortsFromConfig(
+      baseConfig,
+      "NotificationDelivery",
+    );
+    // 1 repository (Notification) + 0 publishers + 2 notifiers (email, in_app)
+    assert.strictEqual(ports.length, 3);
+    assert.deepStrictEqual(ports.map((p) => p.name).sort(), [
+      "EmailNotifierPort",
+      "InAppNotifierPort",
+      "NotificationRepositoryPort",
+    ]);
+  });
+
+  it("returns [] for contexts with no aggregates, no events, no channels", () => {
+    const ports = deriveOutboundPortsFromConfig(baseConfig, "Empty");
+    assert.deepStrictEqual(ports, []);
+  });
+
+  it("returns [] for an unknown context name", () => {
+    const ports = deriveOutboundPortsFromConfig(baseConfig, "DoesNotExist");
+    assert.deepStrictEqual(ports, []);
+  });
 });
 
 test("parseStructuredConfig: large input (50,000 chars) returns result within 1000ms", () => {
@@ -347,5 +444,64 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     assert.strictEqual(result1.success, true);
     const result2 = await useCase.execute(validYaml);
     assert.strictEqual(result2.success, true);
+  });
+});
+
+describe("inferContextType — heuristic edge cases (Phase 1 Heuristic)", () => {
+  const ctx = (name: string, responsibility: string) =>
+    ({
+      name,
+      responsibility,
+      aggregates: [],
+    }) as unknown as StructuredConfigContext;
+
+  it("'shared files' must NOT be shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(
+        ctx(
+          "DocumentVault",
+          "Contracts, shared files, scoped Supabase Storage",
+        ),
+      ),
+      "supporting",
+    );
+  });
+
+  // PRESERVED — phrase-level matches must continue to work
+  it("'Shared Kernel for X' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(
+        ctx("BillingTerms", "Shared Kernel for billing terminology"),
+      ),
+      "shared-kernel",
+    );
+  });
+
+  it("'Cross-cutting concerns' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(ctx("CrossCutting", "Cross-cutting concerns")),
+      "shared-kernel",
+    );
+  });
+
+  it("bare 'common utilities' falls through to 'core' (default)", () => {
+    assert.strictEqual(
+      inferContextType(ctx("Utilities", "Common utilities module")),
+      "core",
+    );
+  });
+
+  it("literal 'shared-kernel' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(ctx("CoreShared", "shared-kernel context")),
+      "shared-kernel",
+    );
+  });
+
+  it("literal 'shared_kernel' classifies as shared-kernel", () => {
+    assert.strictEqual(
+      inferContextType(ctx("CoreShared2", "shared_kernel context")),
+      "shared-kernel",
+    );
   });
 });
