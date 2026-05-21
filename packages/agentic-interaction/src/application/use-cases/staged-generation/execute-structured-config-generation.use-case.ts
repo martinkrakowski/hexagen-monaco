@@ -320,13 +320,12 @@ export function buildNormalizedPromptFromConfig(
     .filter((app) => Boolean(app.auth))
     .map((app) => app.auth as string);
 
-  const allTech = [
-    ...new Set([
-      ...techHints,
-      ...deploymentTargets,
-      ...frameworks,
-      ...authSystems,
-    ]),
+  const platformTech = [...new Set([...frameworks, ...authSystems])].filter(
+    Boolean,
+  );
+
+  const runtimeConcerns = [
+    ...new Set([...techHints, ...deploymentTargets]),
   ].filter(Boolean);
 
   // Build intent from context responsibilities
@@ -340,7 +339,8 @@ export function buildNormalizedPromptFromConfig(
   return {
     intent,
     projectName: config.project,
-    explicitTechnologies: allTech,
+    explicitTechnologies: platformTech,
+    runtimeConcerns,
     explicitPatterns: [],
     ambiguities: [],
     isStructuredConfig: true,

@@ -5,6 +5,7 @@ export interface NormalizedPrompt {
   ambiguities: string[];
   projectName?: string;
   isStructuredConfig?: boolean;
+  runtimeConcerns?: string[];
 }
 
 export interface AggregateRoot {

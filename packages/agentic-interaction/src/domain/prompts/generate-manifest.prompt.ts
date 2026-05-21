@@ -497,7 +497,10 @@ export function compileStage4Prompt(
     }
   }
 
-  const explicitTech = normalized?.explicitTechnologies ?? [];
+  const explicitTech = [
+    ...(normalized?.explicitTechnologies ?? []),
+    ...(normalized?.runtimeConcerns ?? []),
+  ];
   let techSection = "";
   if (explicitTech.length > 0) {
     techSection = `\n\nEXPLICIT TECHNOLOGIES (use these to inform adapter technology choices):\n${explicitTech.join(", ")}`;

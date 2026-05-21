@@ -19,7 +19,8 @@ test("compileStage3Prompt compiles correctly and includes explicit technologies"
     stage0: {
       intent: "Core portal functionality",
       projectName: "krakowski-portal",
-      explicitTechnologies: ["PostgreSQL", "email-retry", "vercel"],
+      explicitTechnologies: ["PostgreSQL", "React"],
+      runtimeConcerns: ["email-retry", "vercel"],
       explicitPatterns: [],
       ambiguities: [],
       isStructuredConfig: true,
@@ -64,5 +65,56 @@ test("compileStage3Prompt compiles correctly and includes explicit technologies"
     /Customer \(subdomain: customer-onboarding, identity: customerId\)/,
   );
   assert.match(compiled, /EXPLICIT TECHNOLOGIES/);
-  assert.match(compiled, /PostgreSQL, email-retry, vercel/);
+  assert.match(compiled, /PostgreSQL, React/);
+});
+
+test("Stage 3 prompt MUST NOT contain worker responsibilities (Phase 1 gate)", () => {
+  const state: PipelineState = {
+    stage0: {
+      intent: "Core portal functionality",
+      projectName: "krakowski-portal",
+      explicitTechnologies: ["PostgreSQL"],
+      runtimeConcerns: ["email-retry", "vercel", "fly.io"],
+      explicitPatterns: [],
+      ambiguities: [],
+      isStructuredConfig: true,
+    },
+    stage1: {
+      verbs: [],
+      nouns: [],
+      subdomains: ["customer-onboarding"],
+      aggregateRoots: [
+        {
+          name: "Customer",
+          subdomain: "customer-onboarding",
+          identityFields: ["customerId"],
+        },
+      ],
+      domainEvents: [],
+      useCases: [],
+    },
+    stage2: {
+      accepted: [
+        {
+          name: "customer-onboarding",
+          type: "core",
+          reasoning: "Manages customer registration",
+          responsibility: "Handle onboarding and registration.",
+          aggregateRoots: ["Customer"],
+        },
+      ],
+      rejected: [],
+      uncertain: [],
+    },
+  };
+
+  const compiled = compileStage3Prompt(state);
+
+  // Assert via assert.doesNotMatch that worker responsibilities/platforms are not present
+  assert.doesNotMatch(compiled, /email-retry/);
+  assert.doesNotMatch(compiled, /vercel/);
+  assert.doesNotMatch(compiled, /fly\.io/);
+
+  // Assert via assert.match that PostgreSQL is present
+  assert.match(compiled, /PostgreSQL/);
 });
