@@ -1,5 +1,5 @@
 import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import { ClassifyContextTypeUseCase } from "../../src/application/use-cases/staged-generation/classify-context-type.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { LLMResponse } from "@hexagen/local-llm/client";
@@ -44,10 +44,10 @@ describe("ClassifyContextTypeUseCase", () => {
       name: "NotificationService",
       responsibility: "Sends notifications",
     });
-    assert.equal(result.success, true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.equal(result.type, "supporting");
-      assert.equal(result.reasoning, "Augments core");
+      assert.strictEqual(result.type, "supporting");
+      assert.strictEqual(result.reasoning, "Augments core");
     }
   });
 
@@ -60,9 +60,9 @@ describe("ClassifyContextTypeUseCase", () => {
       name: "OrderManagement",
       responsibility: "Manages orders",
     });
-    assert.equal(result.success, true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.equal(result.type, "core");
+      assert.strictEqual(result.type, "core");
     }
   });
 
@@ -75,9 +75,9 @@ describe("ClassifyContextTypeUseCase", () => {
       name: "IdentityAccess",
       responsibility: "Authentication and authorization",
     });
-    assert.equal(result.success, true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.equal(result.type, "generic");
+      assert.strictEqual(result.type, "generic");
     }
   });
 
@@ -90,9 +90,9 @@ describe("ClassifyContextTypeUseCase", () => {
       name: "SharedKernel",
       responsibility: "Cross-cutting events",
     });
-    assert.equal(result.success, true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.equal(result.type, "shared-kernel");
+      assert.strictEqual(result.type, "shared-kernel");
     }
   });
 
@@ -102,7 +102,7 @@ describe("ClassifyContextTypeUseCase", () => {
     const result = await useCase.execute({
       name: "SomeContext",
     });
-    assert.equal(result.success, false);
+    assert.strictEqual(result.success, false);
   });
 
   it("returns success: false for wrong schema", async () => {
@@ -113,7 +113,7 @@ describe("ClassifyContextTypeUseCase", () => {
     const result = await useCase.execute({
       name: "SomeContext",
     });
-    assert.equal(result.success, false);
+    assert.strictEqual(result.success, false);
   });
 
   it("returns success: false when LLM call fails", async () => {
@@ -122,7 +122,7 @@ describe("ClassifyContextTypeUseCase", () => {
     const result = await useCase.execute({
       name: "SomeContext",
     });
-    assert.equal(result.success, false);
+    assert.strictEqual(result.success, false);
   });
 
   it("strips markdown fences from LLM response", async () => {
@@ -135,9 +135,9 @@ describe("ClassifyContextTypeUseCase", () => {
     const result = await useCase.execute({
       name: "AuditLogging",
     });
-    assert.equal(result.success, true);
+    assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.equal(result.type, "supporting");
+      assert.strictEqual(result.type, "supporting");
     }
   });
 });
@@ -164,7 +164,7 @@ describe("compileClassifyContextTypePrompt", () => {
     const { compileClassifyContextTypePrompt } =
       await import("../../src/domain/prompts/classify-context-type.prompt");
     const prompt = compileClassifyContextTypePrompt({ name: "Billing" });
-    assert.equal(prompt.includes("responsibility"), false);
+    assert.strictEqual(prompt.includes("responsibility"), false);
   });
 });
 

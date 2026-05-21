@@ -333,7 +333,7 @@ events_published, and value_objects instead.
 
 PORT JUSTIFICATION
 ==================
-Every port MUST include a "justification" field — a 1-2 sentence
+Every port SHOULD include a "justification" field — a 1-2 sentence
 explanation of WHY this port exists, tied to a specific domain need,
 aggregate dependency, or external-system contract.
 

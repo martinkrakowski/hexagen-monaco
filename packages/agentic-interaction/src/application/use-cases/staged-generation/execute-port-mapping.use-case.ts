@@ -251,6 +251,7 @@ export class ExecutePortMappingUseCase {
           allPortDefs,
           ctxName,
           aggregateRoots,
+          state.stage0?.runtimeConcerns,
         );
         if (issues.length > 0) {
           console.warn(

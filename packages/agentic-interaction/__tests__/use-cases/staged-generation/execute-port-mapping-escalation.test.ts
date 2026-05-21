@@ -111,6 +111,10 @@ describe("Stage 3 Escalation", () => {
     await useCase.execute(mockStageState);
 
     assert.ok(
+      requestedModels.length > 0,
+      "Expected at least one streaming request",
+    );
+    assert.ok(
       requestedModels.every((m) => m === undefined),
       `Expected no escalationModel, got: ${JSON.stringify(requestedModels)}`,
     );
