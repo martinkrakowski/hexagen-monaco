@@ -127,6 +127,8 @@ export const AppSchema = z
     responsibilities: z.array(z.string()).optional(),
     depends_on: z.array(z.string()).optional(),
   })
+  // Silently strip unknown properties to tolerate forward-compatible imported manifests
+  // and allow graceful degradation when importing specs with extra fields
   .strip();
 
 export const IndexManifestSchema = z

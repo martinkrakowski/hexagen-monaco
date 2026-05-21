@@ -420,21 +420,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           adapterCount: 0,
         };
       }
-      if (controller.signal.aborted) {
-        setPhase("idle");
-        setIsGenerating(false);
-        return {
-          phase: "failed" as StagedPhase,
-          generationError: "Aborted",
-          generatedManifest: null,
-          stepDetail: "Aborted",
-          stageProgress: {},
-          validationErrors: [],
-          contextCount: 0,
-          portCount: 0,
-          adapterCount: 0,
-        };
-      }
       const message = error instanceof Error ? error.message : "Unknown error";
       setGenerationError(message);
       setPhase("failed");
