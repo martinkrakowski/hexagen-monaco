@@ -1,0 +1,109 @@
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import { extractSpecSummary } from "../utils";
+
+describe("extractSpecSummary", () => {
+  test("happy path with valid spec data and structures", () => {
+    const validSpec = {
+      bounded_contexts: [
+        {
+          name: "Inventory",
+          aggregates: [
+            { name: "Product", root: true },
+            { name: "StockItem", root: false },
+          ],
+          value_objects: [{ name: "Sku" }, { name: "Weight" }],
+        },
+        {
+          name: "Shipping",
+          aggregates: [{ name: "Shipment" }],
+          value_objects: [],
+        },
+      ],
+      use_cases: {
+        Inventory: [{ name: "CreateProduct" }, { name: "UpdateStock" }],
+        Shipping: [{ name: "ShipOrder" }],
+      },
+      context_mappings: [{ downstream: "Shipping", upstream: "Inventory" }],
+      event_bus: {
+        subscriptions: [{ event: "ProductCreated", handler: "SyncProduct" }],
+      },
+    };
+
+    const summary = extractSpecSummary(validSpec);
+    assert.deepEqual(summary, {
+      contextCount: 2,
+      aggregateCount: 2, // StockItem has root: false (filtered out), Shipment defaults to root: true/undefined, Product has root: true
+      valueObjectCount: 2,
+      useCaseCount: 3,
+      mappingCount: 1,
+      eventBusSubscriptionCount: 1,
+    });
+  });
+
+  test("missing fields (empty object passed)", () => {
+    const emptySpec = {};
+    const summary = extractSpecSummary(emptySpec);
+    assert.deepEqual(summary, {
+      contextCount: 0,
+      aggregateCount: 0,
+      valueObjectCount: 0,
+      useCaseCount: 0,
+      mappingCount: 0,
+      eventBusSubscriptionCount: 0,
+    });
+  });
+
+  test("malformed/invalid shapes", () => {
+    const malformedSpec = {
+      bounded_contexts: "not-an-array",
+      use_cases: 12345,
+      context_mappings: {},
+      event_bus: "not-an-object",
+    };
+
+    const summary = extractSpecSummary(malformedSpec);
+    assert.deepEqual(summary, {
+      contextCount: 0,
+      aggregateCount: 0,
+      valueObjectCount: 0,
+      useCaseCount: 0,
+      mappingCount: 0,
+      eventBusSubscriptionCount: 0,
+    });
+  });
+
+  test("malformed inner shapes", () => {
+    const malformedInner = {
+      bounded_contexts: [
+        {
+          name: "Context1",
+          aggregates: "not-an-array",
+          value_objects: 123,
+        },
+        {
+          name: "Context2",
+          aggregates: [{ name: "Agg1", root: true }],
+          value_objects: ["VO1"],
+        },
+      ],
+      use_cases: {
+        Context1: "not-an-array",
+        Context2: [{ name: "UseCase1" }],
+      },
+      event_bus: {
+        subscriptions: "not-an-array",
+      },
+    };
+
+    const summary = extractSpecSummary(malformedInner);
+    assert.deepEqual(summary, {
+      contextCount: 2,
+      aggregateCount: 1,
+      valueObjectCount: 1,
+      useCaseCount: 1,
+      mappingCount: 0,
+      eventBusSubscriptionCount: 0,
+    });
+  });
+});

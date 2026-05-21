@@ -913,20 +913,31 @@ export class ExecuteStructuredConfigGenerationUseCase {
         if (portedContextNames.has(ctx.name)) continue;
         const useCases = lookupUseCases(config, ctx.name);
         const fallbackOut = deriveOutboundPortsFromConfig(config, ctx.name);
-        callbacks?.onChunk?.(
-          `   ⚠ ${ctx.name}: LLM returned no ports — ${useCases.length > 0 ? `falling back to use_cases (${useCases.length} in, ${fallbackOut.length} out)` : "leaving empty"}`,
-        );
-        if (useCases.length > 0) {
-          fallbackContexts.push({
-            contextName: ctx.name,
-            in: useCases.map((uc) => ({
-              name: `${uc.name}Port`,
-              type: inferInboundPortType(uc.name),
-              description: uc.command ?? uc.name,
-            })),
-            out: fallbackOut,
-          });
+
+        let fallbackMsg = "";
+        if (useCases.length > 0 && fallbackOut.length > 0) {
+          fallbackMsg = `falling back to use_cases (${useCases.length} in) and derived outbound ports (${fallbackOut.length} out)`;
+        } else if (useCases.length > 0) {
+          fallbackMsg = `falling back to use_cases (${useCases.length} in)`;
+        } else if (fallbackOut.length > 0) {
+          fallbackMsg = `falling back to derived outbound ports (${fallbackOut.length} out)`;
+        } else {
+          fallbackMsg = "leaving empty";
         }
+
+        callbacks?.onChunk?.(
+          `   ⚠ ${ctx.name}: LLM returned no ports — ${fallbackMsg}`,
+        );
+
+        fallbackContexts.push({
+          contextName: ctx.name,
+          in: useCases.map((uc) => ({
+            name: `${uc.name}Port`,
+            type: inferInboundPortType(uc.name),
+            description: uc.command ?? uc.name,
+          })),
+          out: fallbackOut,
+        });
       }
 
       mergedPortMap = {
