@@ -13,9 +13,11 @@ import type {
   InboundPortType,
   OutboundPortType,
   PortMap,
+  ContextPorts,
   AdapterBindings,
   AdapterBinding,
 } from "../../../domain/value-objects/pipeline-state";
+import { normalizeContextName } from "../../../domain/index";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
@@ -432,13 +434,14 @@ export function buildClassificationFromConfig(
     const contextName = ctx.name;
 
     // Aggregate roots belonging to this context
+    const normalCtxName = normalizeContextName(contextName);
     const ctxAggregateRoots = (domainAnalysis.aggregateRoots ?? [])
-      .filter((ar) => ar.subdomain === contextName)
+      .filter((ar) => normalizeContextName(ar.subdomain) === normalCtxName)
       .map((ar) => ar.name);
 
     // Use case names belonging to this context
     const ctxUseCaseNames = (domainAnalysis.useCases ?? [])
-      .filter((uc) => uc.subdomain === contextName)
+      .filter((uc) => normalizeContextName(uc.subdomain) === normalCtxName)
       .map((uc) => uc.name);
 
     // Events published by this context
@@ -493,6 +496,41 @@ function ctxHasPreDefinedPorts(ctx: StructuredConfigContext): boolean {
 
 function ctxHasPreDefinedAdapters(ctx: StructuredConfigContext): boolean {
   return !!ctx.layers?.infrastructure?.adapters?.length;
+}
+
+function lookupUseCases(
+  config: StructuredConfig,
+  contextName: string,
+): StructuredConfigUseCase[] {
+  if (!config.use_cases) return [];
+  if (config.use_cases[contextName]) return config.use_cases[contextName];
+
+  // Resolve all name aliases for this context (name + short field)
+  const normalTarget = normalizeContextName(contextName);
+  const ctxEntry = config.bounded_contexts.find(
+    (c) =>
+      normalizeContextName(c.name) === normalTarget ||
+      (c.short ? normalizeContextName(c.short) === normalTarget : false),
+  );
+
+  const nameCandidates = new Set<string>([contextName]);
+  if (ctxEntry) {
+    nameCandidates.add(ctxEntry.name);
+    if (ctxEntry.short) nameCandidates.add(ctxEntry.short);
+  }
+  const normalCandidates = new Set(
+    [...nameCandidates].map(normalizeContextName),
+  );
+
+  for (const [key, value] of Object.entries(config.use_cases)) {
+    if (
+      nameCandidates.has(key) ||
+      normalCandidates.has(normalizeContextName(key))
+    ) {
+      return value;
+    }
+  }
+  return [];
 }
 
 function inferInboundPortType(name: string): InboundPortType {
@@ -682,6 +720,21 @@ export class ExecuteStructuredConfigGenerationUseCase {
     let mergedPortMap: PortMap;
     let mergedContextMappings: ContextMappingEntry[];
 
+    // Issue 3: Pre-compute filtered source mappings (removes external-system entries).
+    // Include both ctx.name and ctx.short so a mapping that references either form is kept.
+    const knownContextNormalNames = new Set(
+      config.bounded_contexts.flatMap((ctx) => {
+        const names = [normalizeContextName(ctx.name)];
+        if (ctx.short) names.push(normalizeContextName(ctx.short));
+        return names;
+      }),
+    );
+    const sourceMappings = contextMappings.filter(
+      (m) =>
+        knownContextNormalNames.has(normalizeContextName(m.upstream)) &&
+        knownContextNormalNames.has(normalizeContextName(m.downstream)),
+    );
+
     if (contextsNeedingPorts.length > 0) {
       callbacks?.onChunk?.("Stage 3 · Port Mapping");
       const partialClassification: ClassificationResult = {
@@ -703,13 +756,50 @@ export class ExecuteStructuredConfigGenerationUseCase {
         callbacks?.onError?.(3, String(s3.error), s3Duration);
         return { success: false, error: s3.error };
       }
+
+      // Issue 2: Validate every requested context produced LLM output; fall back to use_cases
+      const portedContextNames = new Set(
+        s3.value.portMap.contexts.map((c) => c.contextName),
+      );
+      const fallbackContexts: ContextPorts[] = [];
+      for (const ctx of contextsNeedingPorts) {
+        if (portedContextNames.has(ctx.name)) continue;
+        const useCases = lookupUseCases(config, ctx.name);
+        callbacks?.onChunk?.(
+          `   ⚠ ${ctx.name}: LLM returned no ports — ${useCases.length > 0 ? "falling back to use_cases" : "leaving empty"}`,
+        );
+        if (useCases.length > 0) {
+          fallbackContexts.push({
+            contextName: ctx.name,
+            in: useCases.map((uc) => ({
+              name: `${uc.name}Port`,
+              type: inferInboundPortType(uc.name),
+              description: uc.command ?? uc.name,
+            })),
+            out: [],
+          });
+        }
+      }
+
       mergedPortMap = {
         contexts: [
           ...buildPreDefinedPortMap(config).contexts,
           ...s3.value.portMap.contexts,
+          ...fallbackContexts,
         ],
       };
-      mergedContextMappings = s3.value.contextMappings;
+
+      // Issue 3: Merge source config mappings with LLM mappings (source takes priority)
+      const llmMappings = s3.value.contextMappings ?? [];
+      const seenKeys = new Set(
+        sourceMappings.map((m) => `${m.upstream}:${m.downstream}`),
+      );
+      mergedContextMappings = [
+        ...sourceMappings,
+        ...llmMappings.filter(
+          (m) => !seenKeys.has(`${m.upstream}:${m.downstream}`),
+        ),
+      ];
     } else {
       if (preDefinedPortNames.size > 0) {
         callbacks?.onChunk?.(
@@ -717,8 +807,26 @@ export class ExecuteStructuredConfigGenerationUseCase {
         );
       }
       mergedPortMap = buildPreDefinedPortMap(config);
-      mergedContextMappings = contextMappings;
+      mergedContextMappings = sourceMappings;
     }
+
+    // Issue 5: Override inbound ports with deterministic use_cases derivation
+    // Only for contexts that went through the LLM (not pre-defined ports)
+    const contextsNeedingPortsNames = new Set(
+      contextsNeedingPorts.map((c) => c.name),
+    );
+    for (const ctxPorts of mergedPortMap.contexts) {
+      if (!contextsNeedingPortsNames.has(ctxPorts.contextName)) continue;
+      const useCases = lookupUseCases(config, ctxPorts.contextName);
+      if (useCases.length > 0) {
+        ctxPorts.in = useCases.map((uc) => ({
+          name: `${uc.name}Port`,
+          type: inferInboundPortType(uc.name),
+          description: uc.command ?? uc.name,
+        }));
+      }
+    }
+
     callbacks?.onProgress?.(3, Date.now() - s3Start);
 
     // Stage 4: Adapter Assignment — skip LLM for contexts that already declare adapters
@@ -795,6 +903,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
       stage3: mergedPortMap,
       stage4: mergedAdapterBindings,
       contextMappings: mergedContextMappings,
+      apps: config.apps ?? [],
     });
     const s5Duration = Date.now() - s5Start;
     callbacks?.onProgress?.(5, s5Duration);

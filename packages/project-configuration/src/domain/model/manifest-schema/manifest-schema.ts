@@ -109,13 +109,25 @@ export const BoundedContextSchema = z.object({
 export const AppSchema = z
   .object({
     name: z.string(),
-    driver: z.enum(["next.js", "fastify", "express", "cli"]).optional(),
-    framework: z.enum(["next.js", "fastify", "express", "plain-ts"]).optional(),
+    framework: z.string().optional(),
     version: z.string().optional(),
+    driver: z.string().optional(),
     description: z.string().optional(),
+    role: z.string().optional(),
+    router: z.string().optional(),
+    deployment: z.string().optional(),
+    auth: z.string().optional(),
+    schedule: z.string().optional(),
+    ui: z
+      .object({
+        library: z.string().optional(),
+        styling: z.string().optional(),
+      })
+      .optional(),
+    responsibilities: z.array(z.string()).optional(),
     depends_on: z.array(z.string()).optional(),
   })
-  .strict();
+  .strip();
 
 export const IndexManifestSchema = z
   .object({

@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   STAGE3_PORTS_SYSTEM_PROMPT,
   compileStage3Prompt,
+  normalizeContextName,
 } from "../../../domain/index";
 import type {
   PortMap,
@@ -56,19 +57,6 @@ export interface PortMappingResult {
 type StageState = Required<Pick<PipelineState, "stage0" | "stage1" | "stage2">>;
 
 /**
- * Normalize context names for matching.
- * Converts both "IdentityAccess" and "identity-access" to a canonical form.
- * This handles LLM output that may use various formats while we track by PascalCase.
- */
-function normalizeContextName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .toLowerCase();
-}
-
-/**
  * Find matching context name in accepted contexts, accounting for format variations.
  */
 function findMatchingContextName(
@@ -88,14 +76,15 @@ function filterStateForContext(
   state: StageState,
   contextName: string,
 ): StageState {
+  const normalCtx = normalizeContextName(contextName);
   const aggregateRoots: AggregateRoot[] = (
     state.stage1.aggregateRoots ?? []
-  ).filter((ar) => ar.subdomain === contextName);
+  ).filter((ar) => normalizeContextName(ar.subdomain) === normalCtx);
   const domainEvents: DomainEvent[] = (state.stage1.domainEvents ?? []).filter(
-    (d) => d.emitter === contextName,
+    (d) => normalizeContextName(d.emitter) === normalCtx,
   );
   const useCases = (state.stage1.useCases ?? []).filter(
-    (uc) => uc.subdomain === contextName,
+    (uc) => normalizeContextName(uc.subdomain) === normalCtx,
   );
 
   const accepted: ClassifiedContext[] = state.stage2.accepted.filter(

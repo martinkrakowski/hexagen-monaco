@@ -76,6 +76,7 @@ export function createManifestDraftSchema(
     }),
     boundedContexts: z.array(ManifestDraftContextSchema).min(1).max(max),
     contextMappings: z.array(ManifestDraftContextMappingSchema).optional(),
+    apps: z.array(z.record(z.unknown())).optional(),
   });
 }
 

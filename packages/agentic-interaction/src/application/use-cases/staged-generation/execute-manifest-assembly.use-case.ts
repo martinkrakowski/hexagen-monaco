@@ -3,6 +3,7 @@ import {
   draftToManifest,
   renderManifestYaml,
   toKebabCase,
+  normalizeContextName,
 } from "../../../domain/index";
 import type {
   ManifestDraft,
@@ -48,7 +49,10 @@ export class ExecuteManifestAssemblyUseCase {
     state: Pick<
       PipelineState,
       "stage0" | "stage2" | "stage3" | "stage4" | "contextMappings"
-    > & { stage1?: DomainAnalysis },
+    > & {
+      stage1?: DomainAnalysis;
+      apps?: unknown[];
+    },
   ): AssembledManifest {
     const draftContexts: ManifestDraftContext[] = [];
 
@@ -98,6 +102,10 @@ export class ExecuteManifestAssemblyUseCase {
     const normalized = normalizeDraft(draft);
     const manifestObj = draftToManifest(normalized);
 
+    if (state.apps && state.apps.length > 0) {
+      manifestObj.apps = state.apps;
+    }
+
     // Enrich layers.domain with aggregate roots, child entities, and value objects
     // from the DomainAnalysis (stage1) if available (structured config path only).
     if (domainAnalysis) {
@@ -105,16 +113,28 @@ export class ExecuteManifestAssemblyUseCase {
         const ctxName = bc.name;
 
         const aggregateNames = (domainAnalysis.aggregateRoots ?? [])
-          .filter((ar) => ar.subdomain === ctxName)
+          .filter(
+            (ar) =>
+              normalizeContextName(ar.subdomain ?? "") ===
+              normalizeContextName(ctxName),
+          )
           .map((ar) => ar.name);
 
         const entityNames = (domainAnalysis.entities ?? [])
-          .filter((e) => e.subdomain !== undefined && e.subdomain === ctxName)
+          .filter(
+            (e) =>
+              e.subdomain !== undefined &&
+              normalizeContextName(e.subdomain) ===
+                normalizeContextName(ctxName),
+          )
           .map((e) => e.name);
 
         const voNames = (domainAnalysis.valueObjects ?? [])
           .filter(
-            (vo) => vo.subdomain !== undefined && vo.subdomain === ctxName,
+            (vo) =>
+              vo.subdomain !== undefined &&
+              normalizeContextName(vo.subdomain) ===
+                normalizeContextName(ctxName),
           )
           .map((vo) => vo.name);
 

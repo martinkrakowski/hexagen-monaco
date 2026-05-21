@@ -76,7 +76,7 @@ export function draftToManifest(draft: ManifestDraft): ManifestOutput {
     scope: extractScope(draft.workspace.name),
     architecture: "modular-monolith",
     bounded_contexts: draft.boundedContexts.map(transformContext),
-    apps: [],
+    apps: draft.apps ?? [],
     ...(draft.contextMappings?.length && {
       context_mappings: draft.contextMappings.map((m) => ({
         upstream: m.upstream,

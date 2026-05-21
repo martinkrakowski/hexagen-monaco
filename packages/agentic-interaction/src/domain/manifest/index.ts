@@ -37,6 +37,7 @@ export {
   toKebabCase,
   ensurePortSuffix,
   normalizePortName,
+  normalizeContextName,
 } from "./normalize-draft";
 
 export { validateDraft, checkClarificationTriggers } from "./validate-draft";
