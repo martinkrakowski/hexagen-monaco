@@ -484,10 +484,10 @@ describe("inferContextType — heuristic edge cases (Phase 1 Heuristic)", () => 
     );
   });
 
-  it("bare 'common utilities' must NOT be shared-kernel", () => {
-    assert.notStrictEqual(
+  it("bare 'common utilities' falls through to 'core' (default)", () => {
+    assert.strictEqual(
       inferContextType(ctx("Utilities", "Common utilities module")),
-      "shared-kernel",
+      "core",
     );
   });
 

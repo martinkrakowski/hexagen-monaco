@@ -1,3 +1,5 @@
+// UI flow smoke test against a mocked NDJSON stream.
+// Does NOT validate the prompt / heuristic fixes — see Phase 4 of docs/planning/stage3-port-leakage-remediation.md for real-LLM verification.
 import { test, expect } from "@playwright/test";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -5,7 +7,7 @@ import yaml from "js-yaml";
 
 import { fileURLToPath } from "node:url";
 
-test.describe("Loose-Spec Import E2E Flow", () => {
+test.describe("Loose-Spec Import E2E Flow @smoke", () => {
   test("successfully processes krakowski-portal-with-worker.yaml structured config", async ({
     page,
   }) => {
@@ -239,8 +241,10 @@ context_mappings: []
     }
 
     // 10. Save a screenshot to the artifacts directory
-    const screenshotDir =
-      "/Users/martin/.gemini/antigravity/brain/4a318ce6-bd31-42b8-8dfe-4885c97e06e9";
+    const screenshotDir = path.join(
+      __dirname,
+      "../../test-results/screenshots",
+    );
     if (!fs.existsSync(screenshotDir)) {
       fs.mkdirSync(screenshotDir, { recursive: true });
     }

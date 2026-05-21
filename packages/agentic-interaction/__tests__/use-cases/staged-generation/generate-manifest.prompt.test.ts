@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   STAGE3_PORTS_SYSTEM_PROMPT,
   compileStage3Prompt,
+  compileStage4Prompt,
 } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state.ts";
 
@@ -117,4 +118,49 @@ test("Stage 3 prompt MUST NOT contain worker responsibilities (Phase 1 gate)", (
 
   // Assert via assert.match that PostgreSQL is present
   assert.match(compiled, /PostgreSQL/);
+});
+
+test("compileStage4Prompt compiles correctly and includes merged explicit technologies and runtime concerns", () => {
+  const state: PipelineState = {
+    stage0: {
+      intent: "Core portal functionality",
+      projectName: "krakowski-portal",
+      explicitTechnologies: ["PostgreSQL", "React"],
+      runtimeConcerns: ["email-retry", "vercel"],
+      explicitPatterns: [],
+      ambiguities: [],
+      isStructuredConfig: true,
+    },
+    stage2: {
+      accepted: [
+        {
+          name: "customer-onboarding",
+          type: "core",
+          reasoning: "Manages customer registration",
+          responsibility: "Handle onboarding and registration.",
+        },
+      ],
+      rejected: [],
+      uncertain: [],
+    },
+    stage3: {
+      contexts: [
+        {
+          contextName: "customer-onboarding",
+          in: [],
+          out: [],
+        },
+      ],
+    },
+  };
+
+  const compiled = compileStage4Prompt(state, {
+    userDescription: "Test system",
+  });
+
+  assert.match(compiled, /EXPLICIT TECHNOLOGIES/);
+  assert.match(compiled, /PostgreSQL/);
+  assert.match(compiled, /React/);
+  assert.match(compiled, /email-retry/);
+  assert.match(compiled, /vercel/);
 });
