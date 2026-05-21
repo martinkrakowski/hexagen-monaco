@@ -26,6 +26,8 @@ import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import type { ClassifyContextTypeUseCase } from "./classify-context-type.use-case";
+import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
 import * as yaml from "js-yaml";
 
 export interface StructuredConfigGenerationCallbacks {
@@ -502,6 +504,66 @@ export function inferContextType(
   return "core";
 }
 
+export function inferContextTypeWithConfidence(ctx: StructuredConfigContext): {
+  type: AcceptedContext["type"];
+  confidence: number;
+} {
+  if ("type" in ctx && ctx.type) {
+    const declared = String(ctx.type).toLowerCase();
+    if (
+      declared === "core" ||
+      declared === "supporting" ||
+      declared === "generic" ||
+      declared === "shared-kernel" ||
+      declared === "shared_kernel"
+    ) {
+      return { type: inferContextType(ctx), confidence: 1.0 };
+    }
+  }
+  const resp = (ctx.responsibility ?? ctx.name).toLowerCase();
+  const name = ctx.name.toLowerCase();
+  const supportingKeywords = [
+    "notification",
+    "delivery",
+    "document",
+    "vault",
+    "storage",
+    "audit",
+    "logging",
+    "reporting",
+    "analytics",
+    "monitoring",
+  ];
+  const genericKeywords = [
+    "identity",
+    "auth",
+    "authentication",
+    "authorization",
+    "iam",
+    "payment",
+    "billing-gateway",
+    "email",
+  ];
+  const sharedKernelKeywords = [
+    "shared kernel",
+    "shared-kernel",
+    "shared_kernel",
+    "cross-cutting",
+  ];
+  if (
+    sharedKernelKeywords.some((kw) => name.includes(kw) || resp.includes(kw))
+  ) {
+    return { type: "shared-kernel", confidence: 0.9 };
+  }
+  if (genericKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
+    return { type: "supporting", confidence: 0.7 };
+  }
+  if (supportingKeywords.some((kw) => name.includes(kw) || resp.includes(kw))) {
+    return { type: "supporting", confidence: 0.8 };
+  }
+  return { type: "core", confidence: 0.4 };
+}
+
 export function buildClassificationFromConfig(
   config: StructuredConfig,
   domainAnalysis: DomainAnalysis,
@@ -529,9 +591,11 @@ export function buildClassificationFromConfig(
       ? `App responsibilities: ${ctxApp.responsibilities.join(", ")}`
       : undefined;
 
+    const { type, confidence } = inferContextTypeWithConfidence(ctx);
+
     return {
       name: contextName,
-      type: inferContextType(ctx),
+      type,
       responsibility: ctx.responsibility ?? ctx.description ?? ctx.name,
       reasoning:
         ctx.responsibility ?? ctx.description ?? `Context: ${ctx.name}`,
@@ -539,7 +603,7 @@ export function buildClassificationFromConfig(
       useCaseNames: ctxUseCaseNames,
       eventsPublished: ctxEventsPublished,
       promotedFromUncertain: false,
-      // Attach adapter hints as a non-standard field for Stage 3/4 prompt enrichment
+      needsTypeReview: confidence < 0.6,
       ...(adapterHints ? { _adapterHints: adapterHints } : {}),
     } as AcceptedContext;
   });
@@ -794,16 +858,22 @@ export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage5: ExecuteManifestAssemblyUseCase;
   private readonly stage6: ExecuteValidationReviewUseCase;
   private readonly transactionManager: TransactionManagerPort;
+  private readonly classifyUseCase?: ClassifyContextTypeUseCase;
 
   constructor(
     llmPort: SendStructuredRequestPort,
     transactionManager: TransactionManagerPort,
+    classifyUseCase?: ClassifyContextTypeUseCase,
   ) {
-    this.stage3 = new ExecutePortMappingUseCase(llmPort);
+    this.stage3 = new ExecutePortMappingUseCase(
+      llmPort,
+      STAGE3_ESCALATION_CONFIG,
+    );
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
     this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
     this.transactionManager = transactionManager;
+    this.classifyUseCase = classifyUseCase;
   }
 
   async execute(
@@ -851,6 +921,35 @@ export class ExecuteStructuredConfigGenerationUseCase {
       domainAnalysis,
     );
     const contextMappings = buildContextMappingsFromConfig(config);
+
+    // LLM-enhanced classification: review low-confidence contexts
+    if (this.classifyUseCase) {
+      for (const ctx of classification.accepted) {
+        if (!ctx.needsTypeReview) continue;
+        try {
+          const sourceCtx = config.bounded_contexts.find(
+            (c) => c.name === ctx.name,
+          );
+          const classifyResult = await this.classifyUseCase.execute(
+            {
+              name: ctx.name,
+              responsibility: ctx.responsibility,
+              aggregates: sourceCtx?.aggregates?.map((a) => a.name),
+              value_objects: sourceCtx?.value_objects?.map((v) => v.name),
+            },
+            config.project,
+          );
+          if (classifyResult.success) {
+            ctx.type = classifyResult.type;
+            ctx.reasoning = classifyResult.reasoning;
+          }
+        } catch {
+          // Silently keep heuristic type on classifier failure
+        }
+        ctx.needsTypeReview = false;
+      }
+    }
+
     callbacks?.onProgress?.(2, Date.now() - s2Start);
 
     // Stage 3: Port Mapping — skip LLM for contexts that already declare ports
