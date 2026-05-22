@@ -4,6 +4,7 @@ import { ModelSettingsView } from "@hexagen/model-settings";
 import { PanelFooter } from "../governance";
 import type { ModeWrapperProps } from "./types";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire";
 
 type LocalModeSettingsViewProps = Pick<
   ModeWrapperProps,
@@ -64,6 +65,8 @@ export function LocalModeSettingsView({
         onSwitchToCloud={onSwitchToCloud}
         requiresModelWarning={showRequiresModel}
         onResetConfig={onResetConfig}
+        hasServerApiKey={hasServerLLMAccessKey()}
+        serverModelName={process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini"}
       />
       <PanelFooter showHint={false} />
     </div>

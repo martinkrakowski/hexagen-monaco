@@ -2,6 +2,7 @@ import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 import type { ModelSelectionFlowState } from "./types";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire";
 
 interface ModelSelectionViewProps {
   flowState: ModelSelectionFlowState;
@@ -47,9 +48,11 @@ export function ModelSelectionView({
         }
         onSwitchToCloud={undefined}
         requiresModelWarning={false}
+        hasServerApiKey={hasServerLLMAccessKey()}
+        serverModelName={process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini"}
       />
 
-      {flowState.isModelReady && (
+      {(flowState.isModelReady || hasServerLLMAccessKey()) && (
         <div className="text-center">
           <Button onClick={onModelReady}>Generate Manifest</Button>
         </div>

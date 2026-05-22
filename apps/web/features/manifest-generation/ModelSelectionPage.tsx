@@ -12,6 +12,7 @@ import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import type { DomainModelId } from "../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
+import { hasServerLLMAccessKey } from "../../app/lib/wire";
 
 interface ModelSelectionPageProps {
   llmContext: LocalLLMContext;
@@ -31,7 +32,9 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get("returnUrl");
 
-  const isModelReady = llmContext.engineState.status === "ready";
+  const hasServerApiKey = hasServerLLMAccessKey();
+  const isModelReady =
+    hasServerApiKey || llmContext.engineState.status === "ready";
 
   const handleBack = useCallback(() => {
     clear();
@@ -124,6 +127,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                   isLoading={isLoading}
                   onSwitchToCloud={undefined}
                   requiresModelWarning={false}
+                  hasServerApiKey={hasServerApiKey}
+                  serverModelName={
+                    process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini"
+                  }
                 />
               ),
               [
@@ -133,6 +140,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 handleDeleteModel,
                 handleHasModelInCache,
                 isLoading,
+                hasServerApiKey,
               ],
             )}
           </div>

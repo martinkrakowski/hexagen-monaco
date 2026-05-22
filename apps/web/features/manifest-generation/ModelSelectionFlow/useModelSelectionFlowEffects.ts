@@ -152,7 +152,7 @@ export function useModelSelectionFlowEffects({
   useEffect(() => {
     setFlowState((prev) => ({
       ...prev,
-      isModelReady: engineState.status === "ready",
+      isModelReady: hasServerLLMAccessKey() || engineState.status === "ready",
     }));
   }, [engineState.status, setFlowState]);
 

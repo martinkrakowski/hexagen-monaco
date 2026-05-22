@@ -8,6 +8,7 @@ import {
 } from "@hexagen/local-llm";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { useHardwareDetection } from "./useHardwareDetection";
+import { Cloud, CheckCircle2 } from "lucide-react";
 
 import {
   ModelSettingsHeader,
@@ -30,6 +31,10 @@ interface ModelSettingsViewProps {
   requiresModelWarning?: boolean;
   onResetConfig?: () => void;
   hideHeader?: boolean;
+  /** True if server-side LLM is detected and available */
+  hasServerApiKey?: boolean;
+  /** The active server LLM model (e.g., "gpt-4o-mini") */
+  serverModelName?: string;
 }
 
 interface CacheStatusEntry {
@@ -103,6 +108,8 @@ export function ModelSettingsView({
   requiresModelWarning,
   onResetConfig,
   hideHeader,
+  hasServerApiKey = false,
+  serverModelName,
 }: ModelSettingsViewProps) {
   const [state, dispatch] = useReducer(modelSettingsReducer, {
     cacheStatus: new Map<DomainModelId, CacheStatusEntry>(),
@@ -276,6 +283,49 @@ export function ModelSettingsView({
       {requiresModelWarning && <WarningBanner />}
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5 mx-auto max-w-2xl w-full">
+        {hasServerApiKey && (
+          <div className="mb-6 p-5 rounded-lg border border-primary/30 bg-card relative overflow-hidden animate-fade-in-up">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer-slow" />
+            <div className="relative z-10 flex items-start gap-4">
+              <div className="p-2 rounded-md bg-primary/15 text-primary">
+                <Cloud className="h-6 w-6" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground flex items-center gap-1.5 text-base">
+                    Environment LLM Active
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">
+                      Active
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  A server-side cloud LLM key is configured in the environment
+                  variables. The application will use this for high-performance
+                  manifest generation.
+                </p>
+                <div className="pt-3 grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block font-medium">
+                      Model Name
+                    </span>
+                    <span className="font-mono text-foreground font-semibold">
+                      {serverModelName || "gpt-4o-mini"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block font-medium">
+                      Status
+                    </span>
+                    <span className="text-success font-medium flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Ready
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {LOCAL_MODELS.some((m) => m.tier === "desktop-high") && (
           <ModelTierSection
             title="Desktop"
