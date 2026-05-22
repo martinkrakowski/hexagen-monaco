@@ -276,5 +276,12 @@ All steps must pass before merging to `main`.
 
 ## License
 
-MIT.
+HexaGen Monaco is licensed under the [Business Source License (BSL) 1.1](./LICENSE). 
+
+**What this means:**
+- You can read the source code, run it locally, and use it freely for internal development, testing, and academic research.
+- You **cannot** use this software in a commercial production deployment or offer it as a managed service without a commercial license.
+
+For commercial licensing inquiries, enterprise support, and access to the automated brownfield ingestion engine, please contact Krakowski Cloud Solutions, LLC.
+
 Maintained by Martin Krakowski
