@@ -1,8 +1,8 @@
-<p align="center"><img src="https://hexagen-monaco.cloud/images/hexagen-monaco-logo.svg" width="350" alt="HexaGen Monaco Logo"></p>
+<p align="center"><img src="https://hexagen-monaco.cloud/images/hexagen-monaco-logo.svg" width="350" alt="Hexagen-Monaco Logo"></p>
 
 <div align="center">
 
-# Hexagen-Monaco <br> Architecture Governance Engine
+# Hexagen-Monaco <br> Governance Engine for Human and Agentic Systems
 
 [![Architectural Integrity Check](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml/badge.svg)](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -13,45 +13,48 @@
 
 </div>
 
-## The Problem
-
-Architectural decay is invisible until it becomes expensive. By the time a team notices that business logic has leaked into components, or that two bounded contexts have merged informally through a shared utility, the refactor cost is enormous. React / Next.js monorepos degrade predictably through deep cross-feature coupling and boundary erosion — and the damage is done before anyone raises an alert.
-
-## The Solution
-
-HexaGen Monaco treats architecture as a first-class artifact. A single `manifest.yaml` encodes your system's topology — bounded contexts, ports, adapters, and layer rules — as executable data. Every commit runs `yarn lint:arch`. Every generated project ships with its own governance engine. Architectural decisions stop being documents that drift from reality and start being rules the build enforces.
-
-## Why HexaGen Monaco Exists
-
-HexaGen Monaco makes architecture **explicit, versionable, and enforceable** at the build level. It shifts coordination complexity from engineers to deterministic tooling — so teams can move fast within well-defined boundaries instead of slow across undefined ones.
-
-## Generated Project User Flow
-
-HexaGen Monaco doesn't just govern itself — it generates projects that govern themselves. Every scaffolded monorepo includes the full HexaGen CLI with `yarn sync`, `yarn lint:arch`, and `--dry-run` support baked in. The tool that builds your governance engine becomes the governance engine.
+## Quick Start
 
 ```bash
-# 1. Download the generated project ZIP from the web UI
-# 2. Extract and enter the directory
-cd hexagen-project
-
-# 3. Enable corepack and install dependencies
+git clone git@github.com:martinkrakowski/hexagen-monaco.git
+cd hexagen-monaco
 corepack enable && yarn install
-
-# 4. Start development or build
-yarn dev          # Start all packages in dev mode
-yarn build        # Build all packages
-
-# 5. Use the HexaGen CLI for architecture management
-yarn sync                    # Generate artifacts
-yarn sync:dry                # Preview changes
-yarn sync:force              # Overwrite non-generated files
-yarn lint:arch               # Validate manifest against rules
-yarn format                  # Format all TypeScript and Markdown files
+yarn build
+npx hexagen --help
 ```
 
-## Web UI
+The full CLI reference is in [CLI Reference](#cli-reference).
 
-The web application provides a visual architecture canvas for navigating bounded contexts, ports, adapters, and dependency flows. Built with Next.js and React Flow, it renders the manifest as an interactive graph where each node maps to a named element in `manifest.yaml`.
+## The Problem
+
+Architectural decay is rarely visible until the cost of correcting it becomes systemic. In enterprise systems — and now in codebases increasingly authored by autonomous agents — bounded contexts merge silently through shared utilities, business logic leaks into adapters, and dependency edges form across layers that were never meant to touch. The damage is done before anyone files an alert.
+
+Linting rules and review etiquette are not enough. When the actors mutating the system include both humans and LLM-driven agents, the architecture itself must be the contract that everyone — human or otherwise — is forced to honor.
+
+## The Solution — Governance as Compiled Code
+
+Hexagen-Monaco treats architecture as a first-class, executable artifact. A single manifest.yaml encodes the system topology — planes, bounded contexts, ports, adapters, and layer rules — as deterministic data. The same manifest drives the visual canvas, the linter, and the tool surface AI agents are restricted to. Architectural decisions stop being documents that drift from reality and become rules the build enforces against every contributor, human or agentic.
+
+## The Governance Loop
+
+Every mutation in the system, whether issued by a human in the visual control plane, an operator in the terminal control plane, or an LLM through the MCP server, flows through the same closed loop:
+
+```
+Manifest  ──►  Linter (hexagen-lint)  ──►  HITL Surface (Web / TUI)
+   ▲                                              │
+   │                                              ▼
+Transaction  ◄──────────  Agent / Operator (via MCP server)
+```
+
+The manifest is the source of truth. The linter compiles invariants into a verdict. Humans review violations in either control plane. Agents propose remediations through the MCP server's tool surface. Every proposed change is captured as a transaction and only merges into the manifest after explicit approval — making the audit trail symmetric between human and agentic contributors.
+
+## Human Control Planes (HITL)
+
+Two operator surfaces participate in the governance loop: a visual control plane in the browser and a terminal control plane on the engineer's workstation. Both consume the same manifest state the linter compiles against and the MCP server reads from — the operator's view is the system's view. Operators inspect the same architectural state the system enforces.
+
+### Visual Control Plane (Web)
+
+The Next.js application is the visual control plane. It surfaces the manifest's bounded contexts, ports, adapters, and dependency edges as a governance surface where human operators inspect invariants, review agent-proposed mutations, and accept or reject transactions before they reach `main`. The canvas is a window onto governance state, not a separate model of it.
 
 <p align="center">
   <img src="https://hexagen-monaco.cloud/images/ui-canvas-01.png" alt="Architecture canvas — bounded context graph with hexagonal nodes and dependency edges" width="720" />
@@ -65,172 +68,141 @@ The web application provides a visual architecture canvas for navigating bounded
   <img src="https://hexagen-monaco.cloud/images/ui-canvas-03.png" alt="Architecture canvas — dependency flow visualization across module boundaries" width="720" />
 </p>
 
-## Terminal UI (TUI)
+### Terminal Control Plane (TUI)
 
-HexaGen includes a full-featured terminal dashboard (`apps/tui`) built with [Ink](https://github.com/vadimdemedes/ink) for navigating and governing architecture directly from the command line.
-
-The TUI presents a three-pane layout: a navigation tree for module and port browsing, a rule engine panel that shows active invariants and layer constraints, and a violation inspector that surfaces boundary breaches with contextual refactoring suggestions. Filesystem watching keeps all three panes live — the dashboard updates when the manifest or dependency graph changes, without requiring a manual refresh.
+The terminal control plane (`apps/tui`) built with [Ink](https://github.com/vadimdemedes/ink) is the local operator surface for engineers reviewing governance state without leaving the terminal. Three panes expose live state: bounded-context navigation, the active invariant set, and a boundary-violation inspector. Filesystem watching on the manifest keeps the operator's view synchronized with what the linter and MCP server observe — there is no stale local cache to diverge.
 
 <p align="center">
   <img src="https://hexagen-monaco.cloud/images/tui-violation-inspector.png" alt="TUI violation inspector — three-pane layout showing navigation tree, rule engine, and boundary violation details" width="720" />
 </p>
 
-AI-assisted refactoring is integrated through a local MCP server. When the linter detects a boundary violation, pressing `r` routes the context to the agent, which proposes a fix grounded in the manifest. The TUI is keyboard-driven throughout: `j/k` to navigate, `Tab` to switch panes, `r` to refactor with AI, `u` to refresh, `q` to quit.
+When the linter detects a boundary violation, pressing `r` routes the violation context through a local MCP client to an agent, which proposes a remediation grounded in the manifest. The proposal is captured for review; no mutation reaches the manifest without operator sign-off. Key bindings: `j/k` to navigate, `Tab` to switch panes, `r` to request an agent remediation, `u` to refresh, `q` to quit.
 
 ```bash
-# Start the TUI
-yarn workspace @hexagen/tui dev
-
-# Or after building
-yarn workspace @hexagen/tui start
+yarn workspace @hexagen/tui dev       # development
+yarn workspace @hexagen/tui start     # built
 ```
 
-## AI as Infrastructure
+## Agentic Governance Layer
 
-The LLM is not a first-class actor in this system — it is infrastructure, modeled behind a port. Every AI interaction flows through `LLMProviderPort` (defined in the `agentic-interaction` bounded context), making the inference layer swappable, testable, and incapable of leaking into domain logic.
+AI in Hexagen-Monaco is not a first-class domain actor. It is governed infrastructure modeled behind explicit ports, with quality controls and an escalation strategy that treat LLM output the same way the build treats any other untrusted input.
 
-This design has a concrete consequence: you can substitute OpenAI, Anthropic, a local WebLLM instance (via the `local-llm` plane), or a future provider without touching any domain code. Governance rules and prompt compilation live in `prompt-compiler` and `governance` — they consume the port interface, not a specific provider. The LLM is a detail of infrastructure, not a constraint on architecture.
+**LLM ports (three, all in the `probabilistic` plane).** Every inference call is routed through one of:
 
-For TUI integration, the `mcp-server` bounded context exposes architectural tools (audit, scaffold, diff, governance reads) over stdio transport, allowing AI agents — Claude Code, Copilot, or any MCP-compatible client — to interact with the manifest and enforcement layer programmatically.
+- `LLMProviderPort` — generic request/response abstraction in `agentic-interaction`.
+- `CloudLLMProviderPort` — OpenAI-compatible cloud inference with `preferredCloudModel`, BYOK key handling, and cancellation signals.
+- `LocalLLMProviderPort` — browser-side WebGPU inference via WebLLM (MLC AI) in the `local-llm` plane, with IndexedDB model caching for offline operation.
 
-## High-Level Architecture
+No domain code references a provider by name. Switching providers, swapping in a local WebGPU model, or routing through a future inference backend is an adapter concern — not an architectural one.
 
-HexaGen Monaco is a modular monolith composed of strictly isolated modules defined in `.architecture/manifest.yaml`.
+**Outbound port quality controls.** The agentic-interaction context applies deterministic validation to every LLM-proposed port before it is allowed into the manifest pipeline. Implemented in `packages/agentic-interaction/src/domain/services/port-quality-validator.ts`:
 
-**Enforcement Mechanisms:**
+| Rule    | Check                                                                                                                         |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **R16** | Port description is trivial or the justification is a degenerate restatement of the port name.                                |
+| **R17** | The port's `forAggregate` reference does not match any known aggregate root.                                                  |
+| **R18** | Port name leaks infrastructure or platform metadata (Vercel, FlyIO, AWS, GCP, `*Client`, `*Adapter`, `*Host`, `*Platform` …). |
 
-- **TypeScript Project References:** Physical file-system isolation.
-- **ESLint Boundaries:** Rules preventing unauthorized cross-package imports.
-- **Turbo Pipeline:** Enforcing build-graph isolation.
+**Retry with model escalation.** Stage-3 structured config generation uses `STAGE3_ESCALATION_CONFIG` (3 default retries, then 3 escalated retries with `escalationModel: "gpt-4o"`). The generic `DEFAULT_ESCALATION_CONFIG` provides the same 3 + 3 pattern for use cases that need to fall back to a stronger model on persistent failure. Both live in `packages/agentic-interaction/src/application/use-cases/staged-generation/retry-with-escalation.ts`.
 
-## Architect Mode Modules
+**Confidence-gated type review.** `ClassifyContextTypeUseCase` emits a confidence score on every inferred context type; results below the threshold are flagged `needsTypeReview` and surfaced to the human reviewer, never auto-applied.
 
-| Module                        | Core Responsibility                                                      |
-| :---------------------------- | :----------------------------------------------------------------------- |
-| **Project Configuration**     | Governance Core; manifest parsing and system topology.                   |
-| **Code Generation**           | Manifest Compiler; generates hexagonal boilerplate and syncs workspaces. |
-| **Architectural Enforcement** | Risk Mitigation; dependency linting and boundary validation.             |
-| **Wizard Orchestration**      | Deterministic UI Engine; follows `Intent > Use Case > Projection`.       |
-| **Monaco Orchestration**      | Semantic Editing; AST-based patching gated by confidence scoring.        |
-| **Agentic Interaction**       | AI as Infrastructure; architectural assistant modeled behind ports.      |
-| **Visualization**             | Interactive Graph; visualizes module-to-port-to-adapter mappings.        |
-| **Persistence**               | Lifecycle Engine; tracks architectural evolution and version diffs.      |
+**MCP server (stdio).** The `mcp-server` context exposes the entire governance surface to MCP-compatible clients — Claude Code, Copilot, the TUI's own client — over stdio transport:
 
-The three most architecturally significant decisions in this system:
+- **7 read resources:** manifest, dependency graph, linter report, decisions, invariants, linter config, workspace context.
+- **19 tools:** audit boundaries, diff manifest, scaffold module, create / remove port / context / adapter, add dependency, generate topology / adapters / manifest pipeline, accept / reject / get / list transaction, log agent remediation, initialize feature worktree, submit architectural spec.
 
-**Wizard Orchestration** routes every user interaction through an `Intent > Use Case > Projection` pipeline — enforcing a strict separation between what the user wants, what the system does, and what the UI renders. The intent layer is the only entry point; projections are pure.
+All mutations are transaction-gated. The MCP server is constrained by the same manifest invariants as every other mutation surface; it can only propose changes that the linter and the human reviewer approve.
 
-**Monaco Orchestration** uses AST-based semantic patching (via ts-morph) with confidence scoring. Not all edits are treated equally — the system gates mutations based on structural certainty, enabling safe auto-refactor within the editor.
+## Architecture Topology
 
-**Agentic Interaction** treats AI as infrastructure behind a port, not as a first-class domain actor. This means the LLM is swappable and testable, and governance rules can never accidentally couple to a specific provider's behavior.
+Hexagen-Monaco is a modular monolith. Thirty bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
 
----
+| Plane              | Context                | Responsibility                                                   |
+| ------------------ | ---------------------- | ---------------------------------------------------------------- |
+| **Core**           | project-configuration  | Governance core; manifest parsing and topology validation        |
+| **Core**           | wizard-orchestration   | Deterministic UI engine; `Intent → Use Case → Projection`        |
+| **Core**           | monaco-orchestration   | Semantic patching via `ts-morph`, confidence-gated mutations     |
+| **Core**           | project-generation     | Hexagonal boilerplate generation from manifest specs             |
+| **Core**           | governance             | Decisions, invariants, and architectural policy state            |
+| **Core**           | ai-pipeline            | Staged generation pipeline orchestration                         |
+| **Core**           | intent-compiler        | Compiles user intent into structured use-case input              |
+| **Core**           | layout-engine          | Deterministic layout for visualization projections               |
+| **Core**           | ui-projection-compiler | Compiles projection specs into renderable UI trees               |
+| **Core**           | prompt-compiler        | Compiles prompts; ACL between domain and LLM ports               |
+| **Core**           | manifest-generation    | Manifest synthesis from architectural specs                      |
+| **Core**           | llm-driver             | Domain-side driver for LLM-backed use cases                      |
+| **Core**           | report-governance      | Governance reporting and remediation audit trail                 |
+| **Core**           | byok                   | Bring-your-own-key secret handling for cloud LLMs                |
+| **Probabilistic**  | agentic-interaction    | Outbound LLM ports, R16-R18 quality controls, retry + escalation |
+| **Probabilistic**  | mcp-server             | Stdio MCP server; 7 governance reads, 19 transaction-gated tools |
+| **Probabilistic**  | local-llm              | WebGPU/WebLLM inference, IndexedDB model + chat persistence      |
+| **Probabilistic**  | reconciliation-engine  | Reconciles agent proposals against current manifest state        |
+| **Projection**     | web-driver             | Next.js application shell; HITL canvas host                      |
+| **Projection**     | ui                     | Shared React components for projection planes                    |
+| **Projection**     | visualization          | Architecture graph rendering (React Flow)                        |
+| **Projection**     | model-settings         | Model configuration and provider selection UI                    |
+| **Infrastructure** | sync                   | Manifest-to-workspace synchronization engine                     |
+| **Infrastructure** | persistence            | Storage adapters (Drizzle, IndexedDB)                            |
+| **Infrastructure** | messaging              | Cross-context event delivery                                     |
+| **Infrastructure** | external-integration   | Outbound adapters to external APIs                               |
+| **Infrastructure** | deployment             | Build and release artifacts                                      |
+| **Infrastructure** | runtime                | Process and worker lifecycle                                     |
+| **Shared-Kernel**  | core-domain            | Cross-plane domain primitives                                    |
+| **Shared-Kernel**  | shared                 | Type-only utilities permitted in any plane                       |
+
+Three runtime surfaces expose the governance planes: `apps/web` (Next.js visual control plane), `apps/tui` (Ink terminal control plane), `apps/api-gateway` (HTTP surface for the canvas).
+
+## Enforcement Stack
+
+Four independent enforcement layers prevent unauthorized mutations from reaching `main`:
+
+- **TypeScript project references** isolate package compilation graphs at the file-system level.
+- **ESLint boundaries** reject unauthorized cross-package imports during local development.
+- **Turborepo pipeline** enforces build-graph isolation and caches per-package outputs.
+- **`hexagen-lint`** validates the manifest against `.architecture/invariants/linter-config.yaml` — per-context subpath conventions, per-package import allow-lists, and a global whitelist.
+
+`hexagen-lint` discovers the project root in this order: `--root <path>` argument, then `HEXAGEN_ROOT` env var, then a walk-up for `.architecture/manifest.yaml`, then a walk-up for a `package.json` containing a `workspaces` field.
 
 ## Architecture Evolution Tracking
 
-The system treats architecture as something that evolves over time. Instead of generating a static structure once and leaving it to drift, it tracks how the architecture changes as the system grows:
+The manifest is versioned and diffable. Three tracking surfaces support change review:
 
-- Module splits show how bounded contexts evolve as the codebase expands.
-- Port changes are tracked so interface contracts do not silently drift over time.
-- Structural changes are captured as auditable diffs, making it easier to understand how the system topology evolves.
+- **Module splits** show how bounded contexts decompose as the system grows.
+- **Port contract diffs** surface drift in interface signatures before downstream adapters break.
+- **Manifest diffs** (`hexagen arch diff`) compare the working tree against `git HEAD` or any specified revision — the same diff feeds the MCP `DiffManifestToolUseCase` for agentic review.
 
----
-
-## CLI Commands
+## CLI Reference
 
 ```bash
-# Run the sync engine
-npx hexagen sync                    # Generate artifacts
-npx hexagen sync --dry-run          # Preview changes
-npx hexagen sync --force            # Overwrite non-generated files
-npx hexagen sync --strict           # Fail on linter warnings
+# Sync — compile the manifest into workspace artifacts
+npx hexagen sync                       # generate artifacts
+npx hexagen sync --dry-run             # preview changes
+npx hexagen sync --force               # overwrite non-generated files
+npx hexagen sync --strict              # fail on linter warnings
 
-# Manage architecture manifest
-npx hexagen arch list               # List bounded contexts
-npx hexagen arch validate           # Validate manifest against rules
-npx hexagen arch port               # Scaffold a new port interactively
-npx hexagen arch context            # Add a new bounded context interactively
-npx hexagen arch remove port        # Remove a port from a context
-npx hexagen arch remove port --force    # Remove without confirmation
-npx hexagen arch remove context     # Remove a bounded context
-npx hexagen arch remove context --force  # Remove without confirmation
-npx hexagen arch diff               # Show manifest changes (current vs git HEAD)
-npx hexagen arch diff --file <path>  # Compare against specific file
-npx hexagen arch edit               # Edit manifest in editor (default: nano)
-npx hexagen arch edit --editor vim  # Use vim instead of nano
-npx hexagen arch edit --validate-only  # Validate without editing
-```
+# Manifest management
+npx hexagen arch list                  # list bounded contexts
+npx hexagen arch validate              # validate manifest against invariants
+npx hexagen arch port                  # scaffold a port (interactive)
+npx hexagen arch context               # add a bounded context (interactive)
+npx hexagen arch remove port [--force]
+npx hexagen arch remove context [--force]
+npx hexagen arch diff                  # working tree vs git HEAD
+npx hexagen arch diff --file <path>    # compare against a file
+npx hexagen arch edit                  # open manifest in $EDITOR (default: nano)
+npx hexagen arch edit --editor vim
+npx hexagen arch edit --validate-only
 
-## Architecture Linter
-
-The `hexagen-lint` command validates your project's architectural integrity against the manifest, closing the enforcement pipeline between code and governance. It discovers the project root using the following priority:
-
-1. `--root <path>` CLI argument (explicit override)
-2. `HEXAGEN_ROOT` environment variable
-3. Walk-up from `cwd()` to find `.architecture/manifest.yaml`
-4. Walk-up to find `package.json` with `workspaces` field
-
-```bash
-# Direct usage
+# Linter (architectural integrity)
 hexagen-lint --root /path/to/project
-
-# Via environment variable
 HEXAGEN_ROOT=/path/to/project hexagen-lint
+yarn lint:arch                         # workspace convenience target
 
-# CI/CD usage
-yarn lint:arch
+# Apps
+yarn workspace @hexagen/web dev
+yarn workspace @hexagen/tui dev
 ```
-
-## Testing Strategy
-
-Tests are run in **CI only** (GitHub Actions), not during local pre-commits. This approach provides:
-
-- ✅ **Fast local commits:** Pre-commit runs lint + typecheck only (~2–5s)
-- ✅ **Comprehensive CI coverage:** Full test suite runs in consistent CI environment
-- ✅ **Industry standard:** Matches practices from React, Vue, Next.js (tests in CI)
-- ✅ **No workarounds needed:** No `--no-verify` required for fast commits
-
-### Running Tests Locally
-
-Before pushing, run the full test suite locally:
-
-```bash
-# Run entire test suite
-yarn test
-
-# Run tests for a specific package
-yarn workspace @hexagen/web-driver test
-
-# Run tests in watch mode
-yarn test --watch
-
-# Run tests with coverage report
-yarn test --coverage
-```
-
-### Continuous Integration
-
-The `.github/workflows/sync-integrity.yml` workflow runs on all PRs and pushes to `main`/`develop`:
-
-1. **Build:** `yarn turbo run build` (33 packages)
-2. **Typecheck:** `yarn turbo run typecheck` (55 packages)
-3. **Lint:** `yarn turbo run lint` (architecture + ESLint)
-4. **Linter Integrity:** `yarn workspace @hexagen/sync run cli sync --dry-run`
-5. **Test Suite:** `yarn turbo run test` (all 268+ tests)
-
-All steps must pass before merging to `main`.
-
-## Tech Stack
-
-- **Monorepo Engine:** Yarn 4 + Turborepo
-- **Language:** TypeScript (Composite Projects)
-- **Frontend Core:** React / Next.js
-- **TUI:** Ink (React for CLIs)
-- **Manifest:** YAML
-- **Analysis:** Babel/AST for semantic patching
-- **Testing:** Vitest (unit/integration), Node.js test runner
-
----
 
 ## Example Manifest
 
@@ -240,42 +212,65 @@ All steps must pass before merging to `main`.
 system: hexagen-monaco
 architecture: modular-monolith
 
-modules:
-  - name: project-configuration
-    description: Primary feature module for project generation & manifest handling
-    entities:
-      - ProjectSpec
-      - BoundedContext
-      - Entity
-      - ValueObject
-      - Port
-      - UseCase
-      - Adapter
-    value_objects:
-      - FileTreeNode
-    use_cases:
-      - GenerateProject
-      - ValidateSpec
+planes:
+  core: [project-configuration, wizard-orchestration, monaco-orchestration, ...]
+  probabilistic:
+    [agentic-interaction, mcp-server, local-llm, reconciliation-engine]
+  projection: [web-driver, ui, visualization, model-settings]
+  infrastructure: [sync, persistence, messaging, deployment, runtime, ...]
+  shared-kernel: [core-domain, shared]
+
+bounded_contexts:
+  - name: agentic-interaction
+    type: supporting
+    plane: probabilistic
+    status: active
     ports:
-      - ProjectGeneratorPort
-    infrastructure:
-      - persistence: drizzle
-      - llm_providers:
-          - Claude
-      - external_apis:
-          - claude
-          - git-provider-port
+      - LLMProviderPort
+      - CloudLLMProviderPort
+      - SuggestionEnginePort
+      - SecretVaultPort
+    quality_controls:
+      - R16 # trivial description / degenerate justification
+      - R17 # invalid forAggregate reference
+      - R18 # infrastructure / platform name leak
+    escalation:
+      default: { retries: 3, escalated: 3 }
+      stage3: { retries: 3, escalated: 3, escalationModel: gpt-4o }
 ```
 
-## Quick Start (HexaGen Monaco)
+## Testing & CI
+
+Tests run in CI only. Local pre-commits run lint and typecheck (~2–5s); the full suite runs against a clean GitHub Actions environment. The test runner is Node's built-in `node:test`.
 
 ```bash
-git clone git@github.com:martinkrakowski/hexagen-monaco.git
-cd hexagen-monaco
-yarn install
-yarn build
-npx hexagen --help
+yarn test                              # full suite
+yarn workspace @hexagen/web-driver test
+yarn test --watch
+yarn test --coverage
 ```
+
+The [`.github/workflows/sync-integrity.yml`](.github/workflows/sync-integrity.yml) workflow runs on every PR and on pushes to `main` / `develop`:
+
+1. **Build** — `yarn turbo run build`
+2. **Typecheck** — `yarn turbo run typecheck`
+3. **Lint** — `yarn turbo run lint` (architecture + ESLint)
+4. **Linter integrity** — `yarn workspace @hexagen/sync run cli sync --dry-run`
+5. **Test suite** — `yarn turbo run test`
+
+All steps must pass before merging to `main`.
+
+## Tech Stack
+
+- **Monorepo:** Yarn 4 + Turborepo
+- **Language:** TypeScript (composite project references)
+- **Canvas:** Next.js + React Flow
+- **Terminal UI:** Ink
+- **Semantic patching:** `ts-morph`
+- **Local inference:** WebLLM (MLC AI) on WebGPU
+- **MCP transport:** stdio
+- **Manifest:** YAML
+- **Testing:** `node:test`
 
 ---
 
