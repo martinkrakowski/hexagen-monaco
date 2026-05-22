@@ -9,6 +9,7 @@ import { ExternalIntegrationProvider } from "./contexts/ExternalIntegrationConte
 import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
 import { SecretVaultProvider } from "@/lib/vault-context";
 import { NormalizeErrors } from "./NormalizeErrors";
+import { FreeTierProvider } from "@/lib/free-tier/FreeTierContext";
 
 /*
  * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
@@ -72,7 +73,7 @@ export default function RootLayout({
                 <AuthProvider>
                   <ExternalIntegrationProvider>
                     <ActiveWorkspaceProvider>
-                      {children}
+                      <FreeTierProvider>{children}</FreeTierProvider>
                     </ActiveWorkspaceProvider>
                   </ExternalIntegrationProvider>
                 </AuthProvider>

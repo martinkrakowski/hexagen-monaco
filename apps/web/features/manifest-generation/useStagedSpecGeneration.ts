@@ -110,6 +110,27 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     stageLabels: STAGE_LABELS,
   });
 
+  // While the cloud stream is active, mirror its phase / stepDetail /
+  // stageProgress / verboseLog into this hook's state so the UI updates
+  // live instead of waiting for stream.generate() to resolve. The stream
+  // sends chunk events with stage = -1 (status text not tied to a stage);
+  // we treat those as the verbose log.
+  useEffect(() => {
+    if (!stream.isGenerating) return;
+    setPhase(stream.phase);
+    if (stream.stepDetail) setStepDetail(stream.stepDetail);
+    const { [-1]: chunkStage, ...numberedStages } = stream.stageProgress;
+    setStageProgress(numberedStages);
+    if (chunkStage?.chunks?.length) {
+      setVerboseLog(chunkStage.chunks);
+    }
+  }, [
+    stream.isGenerating,
+    stream.phase,
+    stream.stepDetail,
+    stream.stageProgress,
+  ]);
+
   const [prState, setPrState] = useState<{
     isProposing: boolean;
     prMetadata: PullRequestMetadata | null;
@@ -413,13 +434,23 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
         };
       }
       const message = error instanceof Error ? error.message : "Unknown error";
-      setGenerationError(message);
+
+      // Provide helpful guidance for rate limit errors
+      let displayMessage = message;
+      if (
+        message.toLowerCase().includes("rate") &&
+        message.toLowerCase().includes("limit")
+      ) {
+        displayMessage = `${message}. Your LLM endpoint is rate-limited. Processing may take longer than usual. Consider upgrading to a higher-tier endpoint or reducing the complexity of your project specification.`;
+      }
+
+      setGenerationError(displayMessage);
       setPhase("failed");
       return {
         phase: "failed" as StagedPhase,
-        generationError: message,
+        generationError: displayMessage,
         generatedManifest: null,
-        stepDetail: message,
+        stepDetail: displayMessage,
         stageProgress: {},
         validationErrors: [],
         contextCount: 0,

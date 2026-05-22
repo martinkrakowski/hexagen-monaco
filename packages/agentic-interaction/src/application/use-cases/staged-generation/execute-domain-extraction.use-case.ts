@@ -39,6 +39,10 @@ export class ExecuteDomainExtractionUseCase {
     | { success: false; error: unknown }
   > {
     const stageStart = Date.now();
+
+    // Log stage progress to generation log
+    onChunk?.("Analyzing domain architecture...");
+
     let prompt = compileStage1Prompt(state);
     let lastError = "";
     let retryCount = 0;

@@ -243,7 +243,7 @@ export class ExecuteAdapterAssignmentUseCase {
           0,
         );
         onChunk?.(
-          `   ✓ ${totalAdapters} adapters assigned across ${contexts.length} contexts`,
+          `${totalAdapters} adapters assigned across ${contexts.length} contexts`,
         );
         onStageTelemetry?.({
           stage: STAGE_NUMBER,

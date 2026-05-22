@@ -506,3 +506,12 @@ export function isLocalLLMReady(): boolean {
 export const hasServerLLMAccessKey = (): boolean => {
   return process.env.NEXT_PUBLIC_LLM_AVAILABLE === "true";
 };
+
+/**
+ * Check if using a free tier model with rate limiting.
+ * Synchronously checks environment variables at app init time.
+ * @returns true if the build-time NEXT_PUBLIC_FREE_TIER_MODEL flag is "true"
+ */
+export const isFreeTierModel = (): boolean => {
+  return process.env.NEXT_PUBLIC_FREE_TIER_MODEL === "true";
+};

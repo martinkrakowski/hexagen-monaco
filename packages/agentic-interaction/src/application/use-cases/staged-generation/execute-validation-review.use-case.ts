@@ -207,11 +207,11 @@ export class ExecuteValidationReviewUseCase {
         const result: ValidationReport = { errors, warnings, passed };
         if (passed) {
           onChunk?.(
-            `   ✓ Validation passed — ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
+            `Validation passed — ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
           );
         } else {
           onChunk?.(
-            `   ✗ ${errors.length} error${errors.length !== 1 ? "s" : ""} found, ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
+            `${errors.length} error${errors.length !== 1 ? "s" : ""} found, ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
           );
         }
         onStageTelemetry?.({

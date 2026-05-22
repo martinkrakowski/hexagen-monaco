@@ -40,9 +40,10 @@ export async function* streamStructuredRequest(
   let lastError: Error | null = null;
 
   for (const provider of providers) {
+    let hadSuccess = false;
+    let providerErrored = false;
     try {
       for await (const result of streamProvider(fetchFn, provider, request)) {
-        yield result;
         if (!result.success) {
           const err: Error =
             result.error instanceof Error
@@ -50,11 +51,23 @@ export async function* streamStructuredRequest(
               : new Error(String(result.error ?? "Unknown error"));
           lastError = err;
           const status = getErrorStatus(err);
-          if (!isRetryable(status ?? 0)) {
+          // If we already streamed content from this provider, surface the
+          // partial result and stop — switching providers mid-stream would
+          // duplicate output.
+          if (hadSuccess) {
             return;
           }
+          if (!isRetryable(status ?? 0)) {
+            yield result;
+            return;
+          }
+          providerErrored = true;
           break;
         }
+        yield result;
+        hadSuccess = true;
+      }
+      if (!providerErrored) {
         return;
       }
     } catch (error) {
@@ -66,6 +79,7 @@ export async function* streamStructuredRequest(
         return;
       }
       lastError = error instanceof Error ? error : new Error(String(error));
+      if (hadSuccess) return;
       continue;
     }
   }
@@ -93,6 +107,15 @@ async function* streamProvider(
     stream: true,
   };
 
+  if (request.guidedJsonSchema) {
+    body.extra_body = {
+      guided_json: request.guidedJsonSchema,
+    };
+  }
+
+  const MAX_RATE_LIMIT_RETRIES = 5;
+  let rateLimitRetries = 0;
+
   try {
     const abortController = new AbortController();
     const timeout = setTimeout(
@@ -100,33 +123,61 @@ async function* streamProvider(
       provider.timeoutMs ?? 60000,
     );
 
-    const httpResponse = await fetchFn(`${provider.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${provider.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: abortController.signal,
-    });
+    let httpResponse: Response;
+
+    // Retry loop for rate limiting (429 responses)
+    while (rateLimitRetries <= MAX_RATE_LIMIT_RETRIES) {
+      httpResponse = await fetchFn(`${provider.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${provider.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: abortController.signal,
+      });
+
+      // Handle rate limiting with exponential backoff
+      if (httpResponse.status === 429) {
+        rateLimitRetries++;
+        if (rateLimitRetries > MAX_RATE_LIMIT_RETRIES) {
+          clearTimeout(timeout);
+          const errorText = await httpResponse.text();
+          const error = new Error(
+            `LLM API rate limited (429) after ${MAX_RATE_LIMIT_RETRIES} retries: ${errorText}`,
+          );
+          yield { success: false, error };
+          return;
+        }
+
+        const backoffMs = Math.min(
+          1000 * Math.pow(2, rateLimitRetries - 1),
+          30000,
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        continue;
+      }
+
+      break;
+    }
 
     clearTimeout(timeout);
 
-    if (!httpResponse.ok) {
-      const errorText = await httpResponse.text();
+    if (!httpResponse!.ok) {
+      const errorText = await httpResponse!.text();
       const error = new Error(
-        `LLM API error: ${httpResponse.status} ${errorText}`,
+        `LLM API error: ${httpResponse!.status} ${errorText}`,
       );
       yield { success: false, error };
       return;
     }
 
-    if (!httpResponse.body) {
+    if (!httpResponse!.body) {
       yield { success: false, error: new Error("No response body") };
       return;
     }
 
-    const reader = httpResponse.body.getReader();
+    const reader = httpResponse!.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
 

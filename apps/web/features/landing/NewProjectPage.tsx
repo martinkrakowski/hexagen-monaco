@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FolderOpen } from "lucide-react";
 import { Button } from "@hexagen/ui";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useCreationPaths } from "@/landing/application/useCreationPaths";
 import { usePathNavigation } from "@/landing/application/usePathNavigation";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
@@ -16,7 +16,7 @@ export function NewProjectPage() {
   const { navigate } = usePathNavigation();
 
   return (
-    <ProjectsShell
+    <ProjectsShellWithFreeTier
       title="New Project"
       footer={
         <div className="flex items-center gap-3 ml-auto">
@@ -50,6 +50,6 @@ export function NewProjectPage() {
           </div>
         </div>
       </div>
-    </ProjectsShell>
+    </ProjectsShellWithFreeTier>
   );
 }

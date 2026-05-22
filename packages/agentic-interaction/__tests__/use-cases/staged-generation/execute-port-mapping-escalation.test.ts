@@ -120,8 +120,11 @@ describe("Stage 3 Escalation", () => {
     );
   });
 
-  test("default constructor uses STAGE3_ESCALATION_CONFIG with gpt-4o", () => {
-    assert.strictEqual(STAGE3_ESCALATION_CONFIG.escalationModel, "gpt-4o");
+  test("default STAGE3_ESCALATION_CONFIG has no hardcoded escalationModel", () => {
+    // Intentionally undefined so non-OpenAI providers don't 404 on retry.
+    // The wiring layer injects an escalation model via env (LLM_ESCALATION_MODEL)
+    // when it knows the configured provider supports it.
+    assert.strictEqual(STAGE3_ESCALATION_CONFIG.escalationModel, undefined);
     assert.strictEqual(STAGE3_ESCALATION_CONFIG.maxDefaultRetries, 3);
     assert.strictEqual(STAGE3_ESCALATION_CONFIG.maxEscalatedRetries, 3);
   });

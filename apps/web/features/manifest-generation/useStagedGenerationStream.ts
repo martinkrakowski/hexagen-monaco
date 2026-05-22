@@ -107,7 +107,7 @@ export function useStagedGenerationStream(
       try {
         const MAX_RECONNECT_ATTEMPTS = 3;
         const BASE_DELAY_MS = 1000;
-        const READ_TIMEOUT_MS = 60000;
+        const READ_TIMEOUT_MS = 300000; // 5 minutes to accommodate rate-limited endpoints (e.g., NVIDIA free tier at 40tps)
 
         let lastDataTime = Date.now();
         let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -116,16 +116,14 @@ export function useStagedGenerationStream(
           attempt: number,
         ): Promise<ReadableStreamDefaultReader | null> => {
           if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-            // eslint-disable-next-line no-console
-            console.error(
+            logger.error(
               `[SSE] Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`,
             );
             return null;
           }
 
           const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-          // eslint-disable-next-line no-console
-          console.log(
+          logger.info(
             `[SSE] Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})`,
           );
 
@@ -163,15 +161,15 @@ export function useStagedGenerationStream(
 
         timeoutCheckInterval = setInterval(() => {
           if (Date.now() - lastDataTime > READ_TIMEOUT_MS) {
-            // eslint-disable-next-line no-console
-            console.warn("[SSE] Timeout: no data received for 60s");
+            logger.warn(
+              `[SSE] Timeout: no data received for ${READ_TIMEOUT_MS / 1000}s`,
+            );
             reader.cancel();
           }
         }, 5000);
 
         try {
-          // eslint-disable-next-line no-constant-condition
-          while (true) {
+          for (;;) {
             try {
               const { done, value } = await reader.read();
               if (done) break;
@@ -265,8 +263,7 @@ export function useStagedGenerationStream(
                 }
               }
             } catch {
-              // eslint-disable-next-line no-console
-              console.warn("[SSE] Connection lost, attempting reconnect...");
+              logger.warn("[SSE] Connection lost, attempting reconnect...");
               const newReader = await attemptReconnect(0);
               if (!newReader) {
                 throw new Error("SSE connection lost and reconnection failed");

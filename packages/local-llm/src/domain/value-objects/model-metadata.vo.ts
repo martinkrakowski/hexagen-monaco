@@ -2,6 +2,7 @@ import { DomainModelId } from "./model-id.vo.js";
 
 export interface ModelMetadata {
   modelId: DomainModelId;
+  name: string;
   vendor: string;
   parameterSize: string;
   quantizeLevel: string;
@@ -26,6 +27,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   // Desktop High-End
   [DomainModelId.QWEN_CODER_3B]: {
     modelId: DomainModelId.QWEN_CODER_3B,
+    name: "Qwen Coder 3B",
     vendor: "Alibaba",
     parameterSize: "3B",
     quantizeLevel: "q4f16_1",
@@ -35,6 +37,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   },
   [DomainModelId.LLAMA_3_2_3B]: {
     modelId: DomainModelId.LLAMA_3_2_3B,
+    name: "Llama 3.2 3B",
     vendor: "Meta",
     parameterSize: "3B",
     quantizeLevel: "q4f16_1",
@@ -44,6 +47,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   },
   [DomainModelId.PHI_3_5_MINI]: {
     modelId: DomainModelId.PHI_3_5_MINI,
+    name: "Phi 3.5 Mini",
     vendor: "Microsoft",
     parameterSize: "3.8B",
     quantizeLevel: "q4f16_1",
@@ -54,6 +58,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   // Desktop Compact
   [DomainModelId.GEMMA_2_2B]: {
     modelId: DomainModelId.GEMMA_2_2B,
+    name: "Gemma 2 2B",
     vendor: "Google",
     parameterSize: "2B",
     quantizeLevel: "q4f16_1",
@@ -63,6 +68,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   },
   [DomainModelId.QWEN_CODER_1_5B]: {
     modelId: DomainModelId.QWEN_CODER_1_5B,
+    name: "Qwen Coder 1.5B",
     vendor: "Alibaba",
     parameterSize: "1.5B",
     quantizeLevel: "q4f16_1",
@@ -73,6 +79,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   // Ultra-Light
   [DomainModelId.LLAMA_3_2_1B]: {
     modelId: DomainModelId.LLAMA_3_2_1B,
+    name: "Llama 3.2 1B",
     vendor: "Meta",
     parameterSize: "1B",
     quantizeLevel: "q4f16_1",
@@ -82,6 +89,7 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   },
   [DomainModelId.QWEN_CODER_0_5B]: {
     modelId: DomainModelId.QWEN_CODER_0_5B,
+    name: "Qwen Coder 0.5B",
     vendor: "Alibaba",
     parameterSize: "0.5B",
     quantizeLevel: "q4f16_1",

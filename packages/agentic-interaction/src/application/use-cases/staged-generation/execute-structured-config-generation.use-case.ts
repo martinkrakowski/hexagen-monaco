@@ -816,11 +816,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
     llmPort: SendStructuredRequestPort,
     transactionManager: TransactionManagerPort,
     classifyUseCase?: ClassifyContextTypeUseCase,
+    escalationModel?: string,
   ) {
-    this.stage3 = new ExecutePortMappingUseCase(
-      llmPort,
-      STAGE3_ESCALATION_CONFIG,
-    );
+    const stage3Config = escalationModel
+      ? { ...STAGE3_ESCALATION_CONFIG, escalationModel }
+      : STAGE3_ESCALATION_CONFIG;
+    this.stage3 = new ExecutePortMappingUseCase(llmPort, stage3Config);
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
     this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
@@ -977,7 +978,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
         }
 
         callbacks?.onChunk?.(
-          `   ⚠ ${ctx.name}: LLM returned no ports — ${fallbackMsg}`,
+          `${ctx.name}: LLM returned no ports — ${fallbackMsg}`,
         );
 
         fallbackContexts.push({

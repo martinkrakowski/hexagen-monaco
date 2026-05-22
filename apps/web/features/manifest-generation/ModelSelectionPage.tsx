@@ -8,6 +8,7 @@ import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShell } from "@/landing/ProjectsShell";
 import { useModelSelectionIntent } from "./store/useModelSelectionIntent";
+import { usePreferredLLM } from "@/lib/free-tier/store/usePreferredLLM";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import type { DomainModelId } from "../../lib/llm-interfaces";
@@ -22,6 +23,7 @@ interface ModelSelectionPageProps {
 export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const router = useRouter();
   const { clear } = useModelSelectionIntent();
+  const { setPreferredLocalModel } = usePreferredLLM();
   const [mounted, setMounted] = useState(false);
   const llmRef = useRef(llmContext);
   llmRef.current = llmContext;
@@ -52,13 +54,23 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   }, [clear, router, returnUrl]);
 
   const handleGenerate = useCallback(() => {
+    // Save the currently loaded model as the preferred one
+    if (llmContext.engineState.loadedModelId) {
+      setPreferredLocalModel(llmContext.engineState.loadedModelId);
+    }
     clear();
     if (returnUrl) {
       router.push(returnUrl);
     } else {
       router.push("/projects/new/ai?generate=1");
     }
-  }, [clear, router, returnUrl]);
+  }, [
+    clear,
+    router,
+    returnUrl,
+    llmContext.engineState.loadedModelId,
+    setPreferredLocalModel,
+  ]);
 
   const handleSelectModel = useCallback(async (modelId: DomainModelId) => {
     const ctx = llmRef.current;

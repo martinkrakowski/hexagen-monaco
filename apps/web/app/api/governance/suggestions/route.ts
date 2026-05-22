@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+import { logger } from "../../../../lib/structured-logger";
 
 interface AISuggestion {
   id: string;
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ suggestions });
   } catch (err) {
-    console.error("Governance suggestions error:", err);
+    logger.error("Governance suggestions error:", { error: err });
     return NextResponse.json(
       { error: "Internal Server Error", suggestions: [] },
       { status: 500 },
