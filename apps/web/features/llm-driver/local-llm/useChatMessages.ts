@@ -274,13 +274,9 @@ export function useChatMessages({
           const decoder = new TextDecoder();
           let buffer = "";
 
-          let reading = true;
-          while (reading) {
+          outer: for (;;) {
             const { done, value } = await reader.read();
-            if (done || abortControllerRef.current?.signal.aborted) {
-              reading = false;
-              break;
-            }
+            if (done || abortControllerRef.current?.signal.aborted) break;
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
