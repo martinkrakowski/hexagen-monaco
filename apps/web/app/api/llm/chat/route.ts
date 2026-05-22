@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
   try {
     const port = new HandleServerChatUseCase(
       createLLMProvider(),
-      process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini",
+      process.env.LLM_MODEL || "gpt-4o-mini",
     );
     const stream = await port.handleRequest(
       { messages: body.messages as ChatMessage[] },

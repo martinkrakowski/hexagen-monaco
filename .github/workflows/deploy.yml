@@ -19,7 +19,10 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -f apps/web/Dockerfile -t hexagen-monaco-web:prod .
+          docker build \
+            --build-arg NEXT_PUBLIC_LLM_AVAILABLE=${{ secrets.LLM_API_KEY != '' }} \
+            --build-arg NEXT_PUBLIC_LLM_MODEL=${{ secrets.LLM_MODEL }} \
+            -f apps/web/Dockerfile -t hexagen-monaco-web:prod .
 
       - name: Save Image to tar.gz
         run: |
@@ -41,13 +44,17 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET
-          script: |
-            cd /opt/hexagen-monaco
-            echo "AUTH_SECRET=$AUTH_SECRET" > .env
-            docker compose down
-            docker rmi hexagen-monaco-web:prod || true
-            docker load < hexagen-web.tar.gz
-            docker compose up -d
-            rm hexagen-web.tar.gz
-            docker system prune -a -f --volumes
+          envs: AUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+          script: "cd /opt/hexagen-monaco\n\
+            cat <<EOF > .env\n\
+            AUTH_SECRET=\"$AUTH_SECRET\"\n\
+            LLM_API_KEY=\"$LLM_API_KEY\"\n\
+            LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
+            LLM_MODEL=\"$LLM_MODEL\"\n\
+            EOF\n\
+            docker compose down\n\
+            docker rmi hexagen-monaco-web:prod || true\n\
+            docker load < hexagen-web.tar.gz\n\
+            docker compose up -d\n\
+            rm hexagen-web.tar.gz\n\
+            docker system prune -a -f --volumes"

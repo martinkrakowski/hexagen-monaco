@@ -24,7 +24,7 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: !isCI,
     env: {
-      NEXT_PUBLIC_LLM_API_KEY: "mock-key",
+      LLM_API_KEY: "mock-key",
     },
   },
 });

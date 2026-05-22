@@ -96,10 +96,9 @@ async function runSuggestions(
   manifestYaml: string,
   openFileContent?: string,
 ): Promise<AISuggestion[]> {
-  const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
-  const baseUrl =
-    process.env.NEXT_PUBLIC_LLM_BASE_URL || "https://api.openai.com/v1";
-  const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+  const apiKey = process.env.LLM_API_KEY || "";
+  const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
+  const model = process.env.LLM_MODEL || "gpt-4o-mini";
 
   if (!apiKey) {
     return [];

@@ -501,11 +501,8 @@ export function isLocalLLMReady(): boolean {
  * Check if server LLM provider has valid cloud API key configured.
  * Synchronously checks environment variables at app init time.
  * Used for immediate (Tier 1) button gating before async BYOK probe (Tier 2).
- * @returns true if NEXT_PUBLIC_LLM_API_KEY is set and non-empty
+ * @returns true if the build-time NEXT_PUBLIC_LLM_AVAILABLE flag is "true"
  */
 export const hasServerLLMAccessKey = (): boolean => {
-  const provider = getLLMProvider() as {
-    hasAccessKey?: () => boolean;
-  };
-  return typeof provider.hasAccessKey === "function" && provider.hasAccessKey();
+  return process.env.NEXT_PUBLIC_LLM_AVAILABLE === "true";
 };

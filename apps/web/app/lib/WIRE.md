@@ -37,7 +37,7 @@ export const createWebLogger = (): LoggerPort => ({
 export const createEventBus = (): EventBusPort => new InMemoryEventBusAdapter();
 
 export const createLLMProvider = (): LLMProviderPort => {
-  const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
+  const apiKey = process.env.LLM_API_KEY || "";
   return new ServerLLMAdapter(apiKey, baseUrl, model);
 };
 ```
@@ -318,3 +318,39 @@ console.log(`Wire getter took ${elapsed}ms`); // Should be <1ms for lazy-loaded 
 - Constants: `packages/web-driver/src/infrastructure/constants/port-names.ts`
 - Client entry: `apps/web/app/lib/wire.client.ts`
 - Server entry: `apps/web/app/lib/wire.server.ts`
+
+---
+
+## Environment Contract & LLM Provider Priority Matrix
+
+To ensure security while preserving flexible runtime fallbacks, the system employs a three-tiered environment contract for LLM provider resolution. This architecture separates the server-side API key (`LLM_API_KEY`) from client-side execution to prevent key leaks into browser bundles, in compliance with **ADR-0022** and **ADR-0031**.
+
+### The Priority Matrix Hierarchy
+
+When executing LLM queries or checking UI capabilities, the system resolves LLM capability in the following strict order:
+
+1. **Tier 1: Host Environment (Primary / Preferred)**
+   - **Context**: Server-side.
+   - **Resolution**: Reads `LLM_API_KEY` (and optional `LLM_BASE_URL` / `LLM_MODEL`) from the host's server-side environment (`.env` or hosting provider configuration).
+   - **Client Visibility**: The client bundle does NOT see the raw key. Instead, the deployment build process computes a non-sensitive build-time boolean flag `NEXT_PUBLIC_LLM_AVAILABLE` (`true` if `LLM_API_KEY` is configured in CI, `false` otherwise), which enables the primary cloud-based AI actions in the UI.
+
+2. **Tier 2: Client Bring-Your-Own-Key (BYOK) Fallback**
+   - **Context**: Client-side (in-browser).
+   - **Resolution**: If Tier 1 is not configured, the user may explicitly provide their own cloud API key via the client settings UI (BYOK).
+   - **Client Visibility**: This key resides entirely in the user's browser runtime memory/local storage (never sent to the host server, only to the proxy/LLM endpoint directly).
+
+3. **Tier 3: Local-First In-Browser Inference (WebLLM via WebGPU)**
+   - **Context**: Client-side (in-browser).
+   - **Resolution**: If neither Tier 1 (Host) nor Tier 2 (BYOK) is available/provided, the system falls back to in-browser execution using WebLLM powered by WebGPU for completely local offline execution.
+
+### Build-Time Boolean Flags
+
+| Variable Name               | Purpose                                                                                    | Value Scope                                   |
+| :-------------------------- | :----------------------------------------------------------------------------------------- | :-------------------------------------------- |
+| `NEXT_PUBLIC_LLM_AVAILABLE` | Indicates to the client components whether a server-side/host LLM connection is available. | `"true"` or `"false"` (Inlined at build time) |
+| `NEXT_PUBLIC_LLM_MODEL`     | The default LLM model identifier for client-side chat configurations.                      | e.g. `"gpt-4o-mini"` (Inlined at build time)  |
+
+### Relevant Architectural Decisions
+
+- **ADR-0022: Server-Context LLM ACL**
+  - Defines the boundary for server-side key resolution and prevents leaks of private API keys into static assets.
