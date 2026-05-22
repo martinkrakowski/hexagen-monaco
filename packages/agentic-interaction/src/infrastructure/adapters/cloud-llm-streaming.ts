@@ -85,16 +85,6 @@ async function* streamProvider(
     content: m.content,
   }));
 
-  const schemaJson = request.schema
-    ? (request.schema as { _def: unknown })._def
-      ? JSON.stringify(
-          (
-            request.schema as unknown as { toJsonSchema: () => unknown }
-          ).toJsonSchema?.() ?? {},
-        )
-      : undefined
-    : undefined;
-
   const body: Record<string, unknown> = {
     model: request.preferredCloudModel ?? provider.model,
     messages,
@@ -102,12 +92,6 @@ async function* streamProvider(
     max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
     stream: true,
   };
-  if (schemaJson) {
-    body.response_format = {
-      type: "json_schema",
-      json_schema: { name: "structured_output", schema: schemaJson },
-    };
-  }
 
   try {
     const abortController = new AbortController();

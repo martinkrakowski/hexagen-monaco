@@ -122,6 +122,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
   const reset = () => {
     stream.reset();
+    generatingLockRef.current = false;
     setIsGenerating(false);
     setGenerationError(null);
     setGeneratedManifest(null);
@@ -200,6 +201,9 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       setStepDetail(result.stepDetail);
       setStageProgress(result.stageProgress);
       setValidationErrors(result.validationErrors);
+      if (result.phase === "failed") {
+        setGenerationError(result.stepDetail || "Generation failed");
+      }
 
       return result;
     };
@@ -251,9 +255,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           const result = await useCase.execute(config, {
             onProgress: (stage: number, durationMs: number) => {
               if (isCancelled()) return;
-              console.log(
-                `[Stage ${stage}] onProgress called: durationMs=${durationMs}`,
-              );
               setPhase(`stage-${stage}` as StagedPhase);
               setStepDetail(STAGE_LABELS[stage] ?? `Stage ${stage}`);
               setStageProgress((prev) => {
@@ -278,7 +279,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             },
             onError: (stage: number, error: string, durationMs?: number) => {
               if (isCancelled()) return;
-              console.error(`[Stage ${stage}] ERROR: ${error}`);
               setGenerationError(error);
               setPhase("failed");
               setStepDetail(`Error in ${STAGE_LABELS[stage]}: ${error}`);
@@ -302,9 +302,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             },
             onStageTelemetry: (telemetry: StageTelemetry) => {
               if (isCancelled()) return;
-              console.log(
-                `[Stage ${telemetry.stage}] Telemetry: ${telemetry.label} (${telemetry.durationMs}ms, retries=${telemetry.retryCount})`,
-              );
               setStageProgress((prev) => ({
                 ...prev,
                 [telemetry.stage]: {
@@ -319,11 +316,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
               }));
             },
           });
-
-          console.log(
-            "[Generation] useCase.execute() returned:",
-            result.success ? "SUCCESS" : "FAILED",
-          );
 
           if (abortRef.current || controller.signal.aborted) {
             return {

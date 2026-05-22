@@ -88,10 +88,9 @@ export default function ImportProjectSpecPage() {
         sessionStorage.setItem("import_spec_content", result.convertedConfig);
         setSpecSummary(extractSpecSummary(parsed));
         setPageState("SPEC_REVIEW");
-      } catch (e) {
+      } catch {
         // Hook returned configJson but it's not parseable JSON — surface as a
         // conversion failure so the user gets Retry / Continue options.
-        console.error("Converted config failed JSON.parse", e);
         resetConversion();
         setPageState("DESCRIPTION_FALLBACK");
       }
@@ -155,16 +154,16 @@ export default function ImportProjectSpecPage() {
     if (result?.generatedManifest) {
       setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
-    }
-    // If result.phase === "failed", we intentionally stay on the GENERATING page
-    // so the user can see the generationError message that is displayed there.
-    else if (result?.phase === "failed") {
+    } else if (result?.phase === "failed") {
       const errorMsg = result.stepDetail || "";
       if (errorMsg.includes("No cloud LLM API keys configured")) {
         // Spec generation cannot run locally via WebLLM on the backend.
         // Fallback to the description mode which uses the local-capable useStagedManifestGeneration.
         setPageState("DESCRIPTION_FALLBACK");
       }
+      // Other failures: specGeneration.generationError is set by executeCloudGeneration,
+      // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
+      // when isGenerating=false, so the user can recover.
     }
   }, [specContent, specGeneration, manifestGeneration, pageState, router]);
 
@@ -224,8 +223,12 @@ export default function ImportProjectSpecPage() {
       pendingManifest.set(generatedManifest, wizardData, projectName);
       router.push("/projects/new/ai/accept");
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error("Failed to parse manifest for wizard:", errorMsg);
+      if (process.env.NODE_ENV !== "production") {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        // eslint-disable no-console
+        console.error("Failed to parse manifest for wizard:", errorMsg);
+        // eslint-enable no-console
+      }
       setPageState("PREVIEW");
       // Don't route away—show error but let user inspect the YAML
     }

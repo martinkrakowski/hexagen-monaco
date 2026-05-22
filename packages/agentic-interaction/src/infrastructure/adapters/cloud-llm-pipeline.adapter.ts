@@ -71,16 +71,6 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       content: m.content,
     }));
 
-    const schemaJson = request.schema
-      ? (request.schema as { _def: unknown })._def
-        ? JSON.stringify(
-            (
-              request.schema as unknown as { toJsonSchema: () => unknown }
-            ).toJsonSchema?.() ?? {},
-          )
-        : undefined
-      : undefined;
-
     const model = request.preferredCloudModel ?? provider.model;
     const body: Record<string, unknown> = {
       model,
@@ -88,12 +78,6 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       temperature: request.temperature ?? provider.temperature ?? 0.4,
       max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
     };
-    if (schemaJson) {
-      body.response_format = {
-        type: "json_schema",
-        json_schema: { name: "structured_output", schema: schemaJson },
-      };
-    }
 
     const abortController = new AbortController();
     const timeout = setTimeout(

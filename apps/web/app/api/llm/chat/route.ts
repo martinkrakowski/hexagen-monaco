@@ -50,21 +50,7 @@ const VALID_BYOK_PROVIDERS: ReadonlySet<string> = new Set([
 ]);
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-
-  if (!session || !session.user?.sub) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const userId = session.user.sub;
-
-  if (isRateLimited(userId)) {
-    return NextResponse.json(
-      { error: "Too many requests. Please try again in a minute." },
-      { status: 429 },
-    );
-  }
-
+  // Parse body early so we can distinguish BYOK vs ENV LLM requests before auth decisions.
   let body: ByokChatBody;
   try {
     body = await request.json();
@@ -72,6 +58,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Invalid JSON in request body" },
       { status: 400 },
+    );
+  }
+
+  const isByokRequest =
+    typeof body.byokCiphertext === "string" &&
+    typeof body.byokProvider === "string";
+
+  const session = await getServerSession(authOptions);
+
+  // BYOK always requires authentication.
+  // ENV LLM (server-key path) allows unauthenticated access when LLM_API_KEY is
+  // configured — the operator has implicitly opted in by setting the key.
+  if (!session?.user?.sub && (isByokRequest || !process.env.LLM_API_KEY)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId =
+    session?.user?.sub ??
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    request.headers.get("x-real-ip") ??
+    "anon";
+
+  if (isRateLimited(userId)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again in a minute." },
+      { status: 429 },
     );
   }
 
@@ -85,10 +97,6 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-
-  const isByokRequest =
-    typeof body.byokCiphertext === "string" &&
-    typeof body.byokProvider === "string";
 
   if (isByokRequest) {
     if (!VALID_BYOK_PROVIDERS.has(body.byokProvider!)) {

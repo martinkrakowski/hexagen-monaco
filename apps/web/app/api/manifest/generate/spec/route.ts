@@ -8,7 +8,6 @@ import {
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
-import type { WebLLMAdapter } from "@hexagen/local-llm";
 
 interface SpecRequestBody {
   config: string;
@@ -93,25 +92,9 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        let webLlmAdapter: WebLLMAdapter | null = null;
-        try {
-          const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
-          webLlmAdapter = new Adapter({
-            defaultModelId: undefined,
-          });
-        } catch (error) {
-          if (process.env.NODE_ENV !== "production") {
-            logger.warn("WebLLM adapter initialization failed:", { error });
-          }
-        }
-
-        const hasCloudKeys =
-          !!process.env.OPENAI_API_KEY || !!process.env.ANTHROPIC_API_KEY;
-        const preferLocal = body.preferLocal ?? !hasCloudKeys;
-
         const llmAdapter = createLLMProviderSelector({
-          preferLocal,
-          webLlmAdapter,
+          preferLocal: false,
+          webLlmAdapter: null,
           validateLocalLLM: false,
         });
 
