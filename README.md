@@ -273,15 +273,15 @@ All steps must pass before merging to `main`.
 - **Testing:** `node:test`
 
 ---
-
 ## License
 
-HexaGen Monaco is licensed under the [Business Source License (BSL) 1.1](./LICENSE). 
+HexaGen Monaco is a source-available, proprietary product owned by Krakowski Cloud Solutions, LLC. It is licensed under the [Source-Available Evaluation License](./LICENSE).
 
 **What this means:**
-- You can read the source code, run it locally, and use it freely for internal development, testing, and academic research.
-- You **cannot** use this software in a commercial production deployment or offer it as a managed service without a commercial license.
+- You can read the source code, run it locally, and use it freely for internal evaluation and non-commercial academic research.
+- You **cannot** use this software in a commercial production deployment, or offer it as a managed service.
+- This software does **not** transition to an open-source license. 
 
-For commercial licensing inquiries, enterprise support, and access to the automated brownfield ingestion engine, please contact Krakowski Cloud Solutions, LLC.
+For commercial licensing, enterprise support, and access to the automated brownfield ingestion engine, please contact Krakowski Cloud Solutions, LLC.
 
 Maintained by Martin Krakowski
