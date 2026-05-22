@@ -1,0 +1,33 @@
+KRAKOWSKI CLOUD SOLUTIONS LLC - SOURCE-AVAILABLE EVALUATION LICENSE
+
+Copyright (c) 2026 Krakowski Cloud Solutions, LLC
+All rights reserved.
+
+1. GRANT OF LICENSE
+Krakowski Cloud Solutions, LLC ("Licensor") grants you a non-exclusive, non-transferable, worldwide, royalty-free limited license to download, view, modify, 
+and compile the source code of this software ("Software") strictly for the following purposes:
+
+  a. Personal or internal evaluation.
+  b. Non-commercial academic research.
+  c. Local testing and development that is not connected to a commercial production environment.
+
+2. RESTRICTIONS
+Without prior written commercial authorization from the Licensor, you may NOT:
+  a. Deploy, execute, or utilize the Software in any commercial production environment.
+  b. Use the Software to provide a commercial service, SaaS, or managed service to third parties.
+  c. Distribute, sublicense, or sell the Software or derivative works based on the Software.
+  d. Remove or alter any copyright, trademark, or other proprietary notices from the Software.
+
+3. COMMERCIAL LICENSING
+For use in a production environment, commercial deployments, or access to enterprise features, a separate commercial license must be purchased from Krakowski Cloud Solutions, LLC.
+
+4. OWNERSHIP
+This is a license agreement and not an agreement for sale. The Licensor reserves all rights not expressly granted to you in this License. 
+The Software and all intellectual property rights therein are owned exclusively by Krakowski Cloud Solutions, LLC.
+
+5. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
