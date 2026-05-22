@@ -1,10 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { PanelFooter } from "../governance";
 import type { ModeWrapperProps } from "./types";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { hasServerLLMAccessKey } from "../../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 type LocalModeSettingsViewProps = Pick<
   ModeWrapperProps,
@@ -34,9 +36,23 @@ export function LocalModeSettingsView({
   onSwitchToCloud,
   onResetConfig,
 }: LocalModeSettingsViewProps) {
+  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+
+  useEffect(() => {
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   if (
     panelView !== "model-settings" ||
-    (llmEngineState.status !== "ready" && !showRequiresModel)
+    (llmEngineState.status !== "ready" &&
+      !showRequiresModel &&
+      !hasServerLLMAccessKey())
   ) {
     return null;
   }
@@ -63,10 +79,10 @@ export function LocalModeSettingsView({
           llmEngineState.status === "loading_vram"
         }
         onSwitchToCloud={onSwitchToCloud}
-        requiresModelWarning={showRequiresModel}
+        requiresModelWarning={showRequiresModel && !hasServerLLMAccessKey()}
         onResetConfig={onResetConfig}
         hasServerApiKey={hasServerLLMAccessKey()}
-        serverModelName={process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini"}
+        serverModelName={serverModelName}
       />
       <PanelFooter showHint={false} />
     </div>

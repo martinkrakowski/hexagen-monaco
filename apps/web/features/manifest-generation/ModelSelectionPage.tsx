@@ -13,6 +13,7 @@ import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import type { DomainModelId } from "../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { hasServerLLMAccessKey } from "../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 interface ModelSelectionPageProps {
   llmContext: LocalLLMContext;
@@ -25,8 +26,17 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const llmRef = useRef(llmContext);
   llmRef.current = llmContext;
 
+  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+
   useEffect(() => {
     setMounted(true);
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const searchParams = useSearchParams();
@@ -128,9 +138,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                   onSwitchToCloud={undefined}
                   requiresModelWarning={false}
                   hasServerApiKey={hasServerApiKey}
-                  serverModelName={
-                    process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini"
-                  }
+                  serverModelName={serverModelName}
                 />
               ),
               [
@@ -141,6 +149,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 handleHasModelInCache,
                 isLoading,
                 hasServerApiKey,
+                serverModelName,
               ],
             )}
           </div>

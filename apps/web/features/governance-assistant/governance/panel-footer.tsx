@@ -5,6 +5,7 @@ import { ModelFooterIndicator } from "../ModelFooterIndicator";
 
 interface PanelFooterProps {
   modelId?: DomainModelId | null;
+  modelLabel?: string;
   onOpenSettings?: () => void;
   isLoading?: boolean;
   showHint?: boolean;
@@ -12,6 +13,7 @@ interface PanelFooterProps {
 
 export function PanelFooter({
   modelId,
+  modelLabel,
   onOpenSettings,
   isLoading,
   showHint = true,
@@ -30,9 +32,10 @@ export function PanelFooter({
             </>
           )}
         </div>
-        {modelId !== undefined && onOpenSettings && (
+        {(modelId || modelLabel) && onOpenSettings && (
           <ModelFooterIndicator
             modelId={modelId}
+            modelLabel={modelLabel}
             onOpenSettings={onOpenSettings}
             isLoading={isLoading ?? false}
           />

@@ -10,4 +10,5 @@ export type CapabilityProbeResult = {
 export type CapabilitiesResponse = {
   capabilities: CapabilityProbeResult[];
   canGenerate: boolean;
+  activeModelName?: string;
 };

@@ -1,8 +1,12 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 import type { ModelSelectionFlowState } from "./types";
 import { hasServerLLMAccessKey } from "../../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 interface ModelSelectionViewProps {
   flowState: ModelSelectionFlowState;
@@ -19,6 +23,18 @@ export function ModelSelectionView({
   onBack,
   onModelReady,
 }: ModelSelectionViewProps) {
+  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+
+  useEffect(() => {
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   if (flowState.state !== "model_selection") {
     return null;
   }
@@ -49,7 +65,7 @@ export function ModelSelectionView({
         onSwitchToCloud={undefined}
         requiresModelWarning={false}
         hasServerApiKey={hasServerLLMAccessKey()}
-        serverModelName={process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini"}
+        serverModelName={serverModelName}
       />
 
       {(flowState.isModelReady || hasServerLLMAccessKey()) && (

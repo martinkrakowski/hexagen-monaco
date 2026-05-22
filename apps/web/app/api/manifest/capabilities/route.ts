@@ -64,6 +64,7 @@ export async function GET() {
     return NextResponse.json({
       capabilities,
       canGenerate: capabilities.some((c) => c.status !== "no_keys_configured"),
+      activeModelName: process.env.LLM_MODEL || "gpt-4o-mini",
     });
   }
 
@@ -109,5 +110,6 @@ export async function GET() {
   return NextResponse.json({
     capabilities,
     canGenerate: capabilities.some((c) => c.status !== "no_keys_configured"),
+    activeModelName: process.env.LLM_MODEL || "gpt-4o-mini",
   });
 }
