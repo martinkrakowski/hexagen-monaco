@@ -2,7 +2,7 @@
 
 import { useEffect, type RefObject } from "react";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
-import { getSecretVault } from "../../../app/lib/wire";
+import { getSecretVault, hasServerLLMAccessKey } from "../../../app/lib/wire";
 import { useWebGPUDetection } from "./useWebGPUDetection";
 import {
   createApiKeyManager,
@@ -157,6 +157,12 @@ export function useModelSelectionFlowEffects({
   }, [engineState.status, setFlowState]);
 
   useEffect(() => {
+    // If the server LLM key is configured, it takes precedence over local config.
+    // We skip the auto-loading/auto-initialization of local WebLLM models.
+    if (hasServerLLMAccessKey()) {
+      return;
+    }
+
     if (!hasCheckedCache.current) {
       hasCheckedCache.current = true;
 

@@ -13,6 +13,7 @@ import {
   InMemoryIntentBusAdapter,
 } from "@hexagen/messaging";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+import { logger } from "../../lib/structured-logger";
 
 // Create console-based logger for web app
 export const createWebLogger = (): LoggerPort => ({
@@ -42,16 +43,21 @@ export const createLLMProvider = (): LLMProviderPort => {
   const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
   const model = process.env.LLM_MODEL || "gpt-4o-mini";
 
-  if (!apiKey) {
-    /**
-     * Warn only in development environments to avoid exposing configuration
-     * concerns in production logs. Production logging should capture actual
-     * failures (requests failing due to missing auth), not configuration issues.
-     */
+  // Check if LLM is available via environment on either server (apiKey) or client (NEXT_PUBLIC_LLM_AVAILABLE)
+  const isAvailable =
+    typeof window === "undefined"
+      ? !!apiKey
+      : process.env.NEXT_PUBLIC_LLM_AVAILABLE === "true";
+
+  if (!isAvailable) {
     if (process.env.NODE_ENV === "development") {
-      console.warn(
+      logger.warn(
         "[LLMProviderPort] No API key configured - LLM features will be disabled",
       );
+    }
+  } else {
+    if (process.env.NODE_ENV === "development") {
+      logger.info("[LLMProviderPort] Environment LLM API key detected.");
     }
   }
 
