@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 
 export type ModelCardStatus =
@@ -31,6 +32,8 @@ interface ModelCardProps {
   loadedModel: ModelMetadata | null;
   isRecommended?: boolean;
   compatibilityIssue?: { reason: string; severity: "warning" | "error" } | null;
+  isDownloading?: boolean;
+  downloadProgress?: number;
 }
 
 export function ModelCard({
@@ -52,9 +55,47 @@ export function ModelCard({
   loadedModel,
   isRecommended = false,
   compatibilityIssue = null,
+  isDownloading = false,
+  downloadProgress = 0,
 }: ModelCardProps) {
   const isPendingSwitch = cardStatus.status === "pending-switch";
   const isConfirmDelete = cardStatus.status === "confirm-delete";
+
+  const [downloadStartTime, setDownloadStartTime] = useState<number | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (isDownloading) {
+      if (downloadStartTime === null && downloadProgress > 0) {
+        setDownloadStartTime(Date.now());
+      }
+    } else {
+      setDownloadStartTime(null);
+    }
+  }, [isDownloading, downloadProgress, downloadStartTime]);
+
+  const getEstimatedTimeRemaining = () => {
+    if (!isDownloading || downloadProgress <= 0.02 || !downloadStartTime) {
+      return "Estimating time remaining...";
+    }
+    const elapsed = Date.now() - downloadStartTime;
+    if (elapsed < 1000) {
+      return "Estimating time remaining...";
+    }
+    const totalEstimatedTime = elapsed / downloadProgress;
+    const remainingMs = totalEstimatedTime - elapsed;
+    if (remainingMs <= 0) {
+      return "Finishing download...";
+    }
+    const remainingSec = Math.round(remainingMs / 1000);
+    if (remainingSec < 60) {
+      return `${remainingSec}s remaining`;
+    }
+    const minutes = Math.floor(remainingSec / 60);
+    const seconds = remainingSec % 60;
+    return `${minutes}m ${seconds}s remaining`;
+  };
 
   const borderClass = isConfirmDelete
     ? "border-destructive/40 bg-destructive/5"
@@ -64,7 +105,8 @@ export function ModelCard({
         ? "border-primary/40 bg-primary/5"
         : "border-border bg-muted/20 hover:bg-muted/30";
 
-  const buttonDisabled = isLoading || isSwitching || isDeleting;
+  const buttonDisabled =
+    isLoading || isSwitching || isDeleting || isDownloading;
 
   if (isConfirmDelete) {
     return (
@@ -128,11 +170,13 @@ export function ModelCard({
     );
   }
 
+  const percent = Math.round(downloadProgress * 100);
+
   return (
     <div className={`rounded-xl border p-4 transition-all ${borderClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-medium text-foreground truncate">
               {descriptor.displayName}
             </h3>
@@ -182,32 +226,53 @@ export function ModelCard({
               ⚠️ {compatibilityIssue.reason}
             </div>
           )}
+
+          {isDownloading && (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-primary font-medium">Downloading...</span>
+                <span className="text-muted-foreground font-mono">
+                  {percent}% · {getEstimatedTimeRemaining()}
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-200 ease-out"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {cacheStatus && (cacheStatus.isCached || isCurrent) && (
+          {cacheStatus?.isCached && !isCurrent && (
             <button
               onClick={onDelete}
-              disabled={isLoading || isDeleting}
+              disabled={isLoading || isDeleting || isDownloading}
               className="px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
               title="Delete cached model"
             >
               Delete
             </button>
           )}
-          <button
-            onClick={onSelectModel}
-            disabled={isLoading || isSwitching || isCurrent}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-          >
-            {isSwitching && isPendingSwitch
-              ? "Switching…"
-              : isCurrent
-                ? "Active"
+          {isCurrent ? (
+            <span className="px-3 py-1.5 rounded-md text-sm font-medium bg-success/10 text-success border border-success/20 select-none">
+              Active
+            </span>
+          ) : (
+            <button
+              onClick={onSelectModel}
+              disabled={buttonDisabled}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              {isDownloading
+                ? "Downloading…"
                 : cacheStatus?.isCached
-                  ? "Switch"
+                  ? "Activate"
                   : "Download"}
-          </button>
+            </button>
+          )}
         </div>
       </div>
     </div>

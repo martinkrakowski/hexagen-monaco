@@ -34,6 +34,8 @@ interface ModelTierSectionProps {
   loadedModel: ModelMetadata | null;
   isRecommended?: boolean;
   compatibilityIssue?: { reason: string; severity: "warning" | "error" } | null;
+  downloadingModelId?: DomainModelId | null;
+  downloadProgress?: number;
 }
 
 export function ModelTierSection({
@@ -58,6 +60,8 @@ export function ModelTierSection({
   error,
   loadedModel,
   compatibilityIssue,
+  downloadingModelId = null,
+  downloadProgress = 0,
 }: ModelTierSectionProps) {
   if (descriptors.length === 0) return null;
 
@@ -99,6 +103,12 @@ export function ModelTierSection({
               selectedModelId === descriptor.modelId
                 ? (compatibilityIssue ?? null)
                 : null
+            }
+            isDownloading={downloadingModelId === descriptor.modelId}
+            downloadProgress={
+              downloadingModelId === descriptor.modelId
+                ? downloadProgress
+                : undefined
             }
           />
         ))}

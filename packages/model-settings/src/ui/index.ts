@@ -4,3 +4,8 @@ export { StorageFooter } from "./model-settings/storage-footer";
 export { WarningBanner } from "./model-settings/warning-banner";
 export { ModelTierSection } from "./model-settings/model-tier-section";
 export { CloudModelsSection } from "./model-settings/cloud-models-section";
+export {
+  TandemModeBadge,
+  type TandemBadgeState,
+  type TandemModeBadgeProps,
+} from "./model-settings/tandem-mode-badge";
