@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+import { logger } from "../../../../lib/structured-logger";
 
 interface AISuggestion {
   id: string;
@@ -29,10 +30,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
-    const baseUrl =
-      process.env.NEXT_PUBLIC_LLM_BASE_URL || "https://api.openai.com/v1";
-    const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+    const apiKey = process.env.LLM_API_KEY || "";
+    const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
+    const model = process.env.LLM_MODEL || "gpt-4o-mini";
 
     if (!apiKey) {
       return NextResponse.json({
@@ -69,7 +69,10 @@ export async function POST(request: Request) {
     if (!result.success) {
       return NextResponse.json({
         suggestions: [],
-        error: result.error instanceof Error ? result.error.message : "Failed to generate suggestions",
+        error:
+          result.error instanceof Error
+            ? result.error.message
+            : "Failed to generate suggestions",
       });
     }
 
@@ -82,7 +85,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ suggestions });
   } catch (err) {
-    console.error("Governance suggestions error:", err);
+    logger.error("Governance suggestions error:", { error: err });
     return NextResponse.json(
       { error: "Internal Server Error", suggestions: [] },
       { status: 500 },
@@ -92,7 +95,10 @@ export async function POST(request: Request) {
 
 export async function GET() {
   return NextResponse.json(
-    { error: "Use POST with manifestYaml and optional openFileContent", suggestions: [] },
+    {
+      error: "Use POST with manifestYaml and optional openFileContent",
+      suggestions: [],
+    },
     { status: 405, headers: { Allow: "POST" } },
   );
 }

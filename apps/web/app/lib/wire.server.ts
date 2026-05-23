@@ -191,6 +191,16 @@ export const createLLMProviderSelector = (
           temperature: 0.3,
           maxTokens: 4000,
         },
+        // Generic LLM_API_KEY provider — supports any OpenAI-compatible endpoint
+        // configured via LLM_BASE_URL / LLM_MODEL (same vars as the chat route).
+        {
+          providerId: "openai" as const,
+          baseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
+          model: process.env.LLM_MODEL || "gpt-4o-mini",
+          apiKeyEnvVar: "LLM_API_KEY",
+          temperature: 0.3,
+          maxTokens: 4000,
+        },
       ],
     },
     secretVault,

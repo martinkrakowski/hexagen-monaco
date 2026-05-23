@@ -6,7 +6,6 @@ import {
 } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../../lib/wire.server";
 import { logger } from "../../../../../../lib/structured-logger";
-import type { WebLLMAdapter } from "@hexagen/local-llm";
 
 interface ConvertRequestBody {
   looseSpec: string;
@@ -79,7 +78,6 @@ export async function POST(request: NextRequest) {
 
   // Extract validated values so narrowing survives across the stream closure.
   const looseSpec = body.looseSpec;
-  const preferLocalInput = body.preferLocal;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -89,25 +87,9 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        let webLlmAdapter: WebLLMAdapter | null = null;
-        try {
-          const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
-          webLlmAdapter = new Adapter({
-            defaultModelId: undefined,
-          });
-        } catch (error) {
-          if (process.env.NODE_ENV !== "production") {
-            logger.warn("WebLLM adapter initialization failed:", { error });
-          }
-        }
-
-        const hasCloudKeys =
-          !!process.env.OPENAI_API_KEY || !!process.env.ANTHROPIC_API_KEY;
-        const preferLocal = preferLocalInput ?? !hasCloudKeys;
-
         const llmAdapter = createLLMProviderSelector({
-          preferLocal,
-          webLlmAdapter,
+          preferLocal: false,
+          webLlmAdapter: null,
           validateLocalLLM: false,
         });
 

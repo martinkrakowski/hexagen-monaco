@@ -4,17 +4,19 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
+import { logger } from "../../lib/structured-logger";
 import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
-import { Button } from "@hexagen/ui";
+import { Button, Badge } from "@hexagen/ui";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShell } from "@/landing/ProjectsShell";
 import {
   hasServerLLMAccessKey,
   isLocalLLMReady,
 } from "../../app/lib/wire.client";
+import { useFreeTier } from "@/lib/free-tier/FreeTierContext";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 
@@ -51,6 +53,13 @@ export default function ImportProjectSpecPage() {
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
+  const {
+    showFreeTierBadge,
+    usingWebLLM,
+    currentModelName,
+    freeTierModal,
+    openModal,
+  } = useFreeTier();
 
   // Hook for spec path (structured config)
   const specGeneration = useStagedSpecGeneration();
@@ -88,10 +97,9 @@ export default function ImportProjectSpecPage() {
         sessionStorage.setItem("import_spec_content", result.convertedConfig);
         setSpecSummary(extractSpecSummary(parsed));
         setPageState("SPEC_REVIEW");
-      } catch (e) {
+      } catch {
         // Hook returned configJson but it's not parseable JSON — surface as a
         // conversion failure so the user gets Retry / Continue options.
-        console.error("Converted config failed JSON.parse", e);
         resetConversion();
         setPageState("DESCRIPTION_FALLBACK");
       }
@@ -155,16 +163,16 @@ export default function ImportProjectSpecPage() {
     if (result?.generatedManifest) {
       setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
-    }
-    // If result.phase === "failed", we intentionally stay on the GENERATING page
-    // so the user can see the generationError message that is displayed there.
-    else if (result?.phase === "failed") {
+    } else if (result?.phase === "failed") {
       const errorMsg = result.stepDetail || "";
       if (errorMsg.includes("No cloud LLM API keys configured")) {
         // Spec generation cannot run locally via WebLLM on the backend.
         // Fallback to the description mode which uses the local-capable useStagedManifestGeneration.
         setPageState("DESCRIPTION_FALLBACK");
       }
+      // Other failures: specGeneration.generationError is set by executeCloudGeneration,
+      // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
+      // when isGenerating=false, so the user can recover.
     }
   }, [specContent, specGeneration, manifestGeneration, pageState, router]);
 
@@ -224,8 +232,12 @@ export default function ImportProjectSpecPage() {
       pendingManifest.set(generatedManifest, wizardData, projectName);
       router.push("/projects/new/ai/accept");
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error("Failed to parse manifest for wizard:", errorMsg);
+      if (process.env.NODE_ENV !== "production") {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logger.error("Failed to parse manifest for wizard:", {
+          error: errorMsg,
+        });
+      }
       setPageState("PREVIEW");
       // Don't route away—show error but let user inspect the YAML
     }
@@ -366,50 +378,71 @@ export default function ImportProjectSpecPage() {
     pageState === "GENERATING" || pageState === "PREVIEW";
 
   return (
-    <ProjectsShell title="Import Project Specification" footer={renderFooter()}>
-      {isFullHeightState ? (
-        <div className="h-full flex flex-col dot-grid bg-ambient p-4">
-          {pageState === "GENERATING" && (
-            <ManifestGeneratingStep
-              generationError={generationError}
-              phase={phase}
-              stepDetail={stepDetail}
-              stageProgress={stageProgress}
-              verboseLog={verboseLog}
-            />
-          )}
-
-          {pageState === "PREVIEW" && (
-            <ManifestPreviewStep generatedManifest={generatedManifest} />
-          )}
-        </div>
-      ) : (
-        <div className="h-full overflow-y-auto dot-grid bg-ambient">
-          <div className="max-w-2xl mx-auto py-8 px-4">
-            {pageState === "UPLOAD" && (
-              <SpecUploadStep onFileLoaded={handleFileLoaded} />
+    <>
+      <ProjectsShell
+        headerContent={
+          <div className="flex items-center justify-between w-full">
+            <span className="font-semibold text-sm truncate">
+              Import Project Specification
+            </span>
+            {(showFreeTierBadge || usingWebLLM) && (
+              <button onClick={openModal} className="ml-auto">
+                <Badge variant="secondary">
+                  {usingWebLLM
+                    ? `WebLLM: ${currentModelName ?? ""}`
+                    : `Free Tier Model${currentModelName ? `: ${currentModelName}` : ""}`}
+                </Badge>
+              </button>
             )}
-
-            {pageState === "SPEC_REVIEW" && (
-              <SpecReviewStep
-                specSummary={specSummary}
-                specContent={specContent}
-                cameFromConversion={cameFromConversion}
-                isJsonDisclosed={isJsonDisclosed}
-                onToggleJsonDisclosed={setIsJsonDisclosed}
+          </div>
+        }
+        footer={renderFooter()}
+      >
+        {isFullHeightState ? (
+          <div className="h-full flex flex-col dot-grid bg-ambient p-4">
+            {pageState === "GENERATING" && (
+              <ManifestGeneratingStep
+                generationError={generationError}
+                phase={phase}
+                stepDetail={stepDetail}
+                stageProgress={stageProgress}
+                verboseLog={verboseLog}
               />
             )}
 
-            {pageState === "CONVERTING_LOOSE_SPEC" && (
-              <SpecConvertingStep conversionError={conversionError} />
-            )}
-
-            {pageState === "DESCRIPTION_FALLBACK" && (
-              <SpecDescriptionFallbackStep />
+            {pageState === "PREVIEW" && (
+              <ManifestPreviewStep generatedManifest={generatedManifest} />
             )}
           </div>
-        </div>
-      )}
-    </ProjectsShell>
+        ) : (
+          <div className="h-full overflow-y-auto dot-grid bg-ambient">
+            <div className="max-w-2xl mx-auto py-8 px-4">
+              {pageState === "UPLOAD" && (
+                <SpecUploadStep onFileLoaded={handleFileLoaded} />
+              )}
+
+              {pageState === "SPEC_REVIEW" && (
+                <SpecReviewStep
+                  specSummary={specSummary}
+                  specContent={specContent}
+                  cameFromConversion={cameFromConversion}
+                  isJsonDisclosed={isJsonDisclosed}
+                  onToggleJsonDisclosed={setIsJsonDisclosed}
+                />
+              )}
+
+              {pageState === "CONVERTING_LOOSE_SPEC" && (
+                <SpecConvertingStep conversionError={conversionError} />
+              )}
+
+              {pageState === "DESCRIPTION_FALLBACK" && (
+                <SpecDescriptionFallbackStep />
+              )}
+            </div>
+          </div>
+        )}
+      </ProjectsShell>
+      {freeTierModal}
+    </>
   );
 }

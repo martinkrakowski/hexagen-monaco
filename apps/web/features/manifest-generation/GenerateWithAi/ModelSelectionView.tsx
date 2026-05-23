@@ -1,7 +1,12 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 import type { ModelSelectionFlowState } from "./types";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 interface ModelSelectionViewProps {
   flowState: ModelSelectionFlowState;
@@ -18,6 +23,22 @@ export function ModelSelectionView({
   onBack,
   onModelReady,
 }: ModelSelectionViewProps) {
+  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+
+  useEffect(() => {
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch capabilities / serverModelName:", err);
+        }
+      });
+  }, []);
+
   if (flowState.state !== "model_selection") {
     return null;
   }
@@ -47,9 +68,11 @@ export function ModelSelectionView({
         }
         onSwitchToCloud={undefined}
         requiresModelWarning={false}
+        hasServerApiKey={hasServerLLMAccessKey()}
+        serverModelName={serverModelName}
       />
 
-      {flowState.isModelReady && (
+      {(flowState.isModelReady || hasServerLLMAccessKey()) && (
         <div className="text-center">
           <Button onClick={onModelReady}>Generate Manifest</Button>
         </div>

@@ -8,7 +8,6 @@ import {
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
-import type { WebLLMAdapter } from "@hexagen/local-llm";
 
 interface SpecRequestBody {
   config: string;
@@ -19,8 +18,13 @@ interface SpecRequestBody {
 }
 
 type NDJSONEvent =
-  | { type: "stage-start"; stage: number; label: string }
-  | { type: "stage-complete"; stage: number; label: string; durationMs: number }
+  | { type: "stage-start"; stage: number; label?: string }
+  | {
+      type: "stage-complete";
+      stage: number;
+      label?: string;
+      durationMs: number;
+    }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
   | {
@@ -76,13 +80,14 @@ export async function POST(request: NextRequest) {
 
       const callbacks: StructuredConfigGenerationCallbacks = {
         onProgress: (stage, _durationMs) => {
+          // Omit label so the client uses its own STAGE_LABELS mapping
+          // (e.g., "Port Mapping" instead of the generic "Stage 3").
           if (_durationMs === 0) {
-            send({ type: "stage-start", stage, label: `Stage ${stage}` });
+            send({ type: "stage-start", stage });
           } else {
             send({
               type: "stage-complete",
               stage,
-              label: `Stage ${stage}`,
               durationMs: _durationMs,
             });
           }
@@ -93,34 +98,23 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        let webLlmAdapter: WebLLMAdapter | null = null;
-        try {
-          const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
-          webLlmAdapter = new Adapter({
-            defaultModelId: undefined,
-          });
-        } catch (error) {
-          if (process.env.NODE_ENV !== "production") {
-            logger.warn("WebLLM adapter initialization failed:", { error });
-          }
-        }
-
-        const hasCloudKeys =
-          !!process.env.OPENAI_API_KEY || !!process.env.ANTHROPIC_API_KEY;
-        const preferLocal = body.preferLocal ?? !hasCloudKeys;
-
         const llmAdapter = createLLMProviderSelector({
-          preferLocal,
-          webLlmAdapter,
+          preferLocal: false,
+          webLlmAdapter: null,
           validateLocalLLM: false,
         });
 
         const transactionManager = new InMemoryTransactionManager();
         const classifyUseCase = new ClassifyContextTypeUseCase(llmAdapter);
+        // LLM_ESCALATION_MODEL is opt-in: only set this when you know the
+        // configured provider (LLM_BASE_URL) hosts the named model. Setting
+        // "gpt-4o" against a non-OpenAI endpoint produces 404s on retry.
+        const escalationModel = process.env.LLM_ESCALATION_MODEL || undefined;
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
           transactionManager,
           classifyUseCase,
+          escalationModel,
         );
 
         const result = await useCase.execute(body.config, callbacks);
@@ -180,6 +174,9 @@ export async function POST(request: NextRequest) {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
+      // Rate limit info for clients to understand endpoint constraints
+      "X-RateLimit-Limit": process.env.LLM_RATE_LIMIT || "unlimited",
+      "X-RateLimit-Window": "60s",
     },
   });
 }

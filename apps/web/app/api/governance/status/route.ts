@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import * as yaml from "js-yaml";
+import { logger } from "../../../../lib/structured-logger";
 
 interface PortAdapterStatus {
   context: string;
@@ -44,17 +45,14 @@ export async function POST(request: Request) {
       const ctxName = ctx.name as string;
       const layers = ctx.layers as Record<string, unknown> | undefined;
 
-      const portsConfig = (layers?.application as Record<string, unknown>)?.ports as
-        | Record<string, unknown>
-        | undefined;
+      const portsConfig = (layers?.application as Record<string, unknown>)
+        ?.ports as Record<string, unknown> | undefined;
       const inPorts = portsConfig?.in as string[] | undefined;
       const outPorts = portsConfig?.out as string[] | undefined;
 
       const ports = (inPorts?.length || 0) + (outPorts?.length || 0);
 
-      const domainLayer = layers?.domain as
-        | Record<string, unknown>
-        | undefined;
+      const domainLayer = layers?.domain as Record<string, unknown> | undefined;
       const adapters = domainLayer?.adapters as
         | Record<string, unknown>
         | undefined;
@@ -70,7 +68,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status });
   } catch (err) {
-    console.error("Governance status error:", err);
+    logger.error("Governance status error:", { error: err });
     return NextResponse.json(
       { error: "Internal Server Error", status: [] },
       { status: 500 },

@@ -14,7 +14,7 @@ import {
 } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
 
-import { getChatPersistence } from "@/lib/wire";
+import { getChatPersistence, hasServerLLMAccessKey } from "@/lib/wire";
 import {
   buildGroundedSystemPrompt,
   chunkEditorBuffer,
@@ -88,7 +88,7 @@ export function useChatMessages({
     if (!isHistoryLoaded || isStreaming || messages.length === 0) return;
     const port = getChatPersistence();
     port.saveChatHistory(messages).catch(() => {
-      console.warn("Failed to save chat history");
+      // Silently handle chat history save failures to avoid blocking user interaction
     });
   }, [isHistoryLoaded, isStreaming, messages]);
 
@@ -162,8 +162,8 @@ export function useChatMessages({
               `System prompt + message (${totalTokens} tokens) exceeds safe limit`,
             );
           }
-        } catch (promptError) {
-          console.warn("Failed to build grounded prompt:", promptError);
+        } catch {
+          // Fallback to generic prompt if grounded prompt fails
           systemPrompt =
             "You are HexaGen Monaco AI. Assist with the architecture project.";
         }
@@ -231,28 +231,98 @@ export function useChatMessages({
       const assistantMessageId = appendUserAndPlaceholder(content);
       abortControllerRef.current = new AbortController();
 
-      try {
-        const requestMessages: LLMRequest["messages"] = history
-          ? [
-              { role: "system", content: systemPrompt },
-              ...history,
-              { role: "user", content },
-            ]
-          : [
-              { role: "system", content: systemPrompt },
-              { role: "user", content },
-            ];
+      const requestMessages: LLMRequest["messages"] = history
+        ? [
+            { role: "system", content: systemPrompt },
+            ...history,
+            { role: "user", content },
+          ]
+        : [
+            { role: "system", content: systemPrompt },
+            { role: "user", content },
+          ];
 
-        await streamAssistantResponse({
-          adapter,
-          modelId:
-            adapter.getLoadedModel()?.modelId ??
-            ("qwen-coder-3b" as DomainModelId),
-          messages: requestMessages,
-          assistantMessageId,
-          abortController: abortControllerRef.current,
-          setMessages,
-        });
+      try {
+        // When no local model is loaded but the server ENV LLM is available,
+        // route through the server proxy to avoid "Engine not initialized" errors.
+        if (!adapter.getLoadedModel() && hasServerLLMAccessKey()) {
+          const response = await fetch("/api/llm/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: requestMessages,
+              model: process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini",
+              temperature: DEFAULT_TUNING_CONFIG.temperature,
+              maxTokens: DEFAULT_TUNING_CONFIG.maxTokens,
+            }),
+            signal: abortControllerRef.current.signal,
+          });
+
+          if (!response.ok) {
+            let errMsg = `Server LLM error: ${response.status}`;
+            try {
+              const errBody = (await response.json()) as { error?: string };
+              if (errBody.error) errMsg = errBody.error;
+            } catch {
+              // fallback to status-based message
+            }
+            throw new Error(errMsg);
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) throw new Error("No response body from server LLM");
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          outer: for (;;) {
+            const { done, value } = await reader.read();
+            if (done || abortControllerRef.current?.signal.aborted) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith("data: ")) continue;
+              const data = trimmed.slice(6);
+              try {
+                const parsed = JSON.parse(data) as {
+                  type: string;
+                  content?: string;
+                  message?: string;
+                };
+                if (parsed.type === "chunk" && parsed.content) {
+                  const chunk = parsed.content;
+                  setMessages((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (!last || last.id !== assistantMessageId) return prev;
+                    return [
+                      ...prev.slice(0, -1),
+                      { ...last, content: last.content + chunk },
+                    ];
+                  });
+                } else if (parsed.type === "error") {
+                  throw new Error(parsed.message ?? "Server LLM error");
+                } else if (parsed.type === "done") {
+                  break outer;
+                }
+              } catch (e) {
+                if (e instanceof SyntaxError) continue;
+                throw e;
+              }
+            }
+          }
+        } else {
+          await streamAssistantResponse({
+            adapter,
+            modelId:
+              adapter.getLoadedModel()?.modelId ??
+              ("qwen-coder-3b" as DomainModelId),
+            messages: requestMessages,
+            assistantMessageId,
+            abortController: abortControllerRef.current,
+            setMessages,
+          });
+        }
       } catch (error: unknown) {
         writeErrorIntoPlaceholder(assistantMessageId, error);
       } finally {

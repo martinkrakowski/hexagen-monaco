@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { PanelFooter } from "../governance";
 import type { ModeWrapperProps } from "./types";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 type LocalModeSettingsViewProps = Pick<
   ModeWrapperProps,
@@ -33,9 +36,27 @@ export function LocalModeSettingsView({
   onSwitchToCloud,
   onResetConfig,
 }: LocalModeSettingsViewProps) {
+  const [serverModelName, setServerModelName] = useState<string>("");
+
+  useEffect(() => {
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch capabilities / serverModelName:", err);
+        }
+      });
+  }, []);
+
   if (
     panelView !== "model-settings" ||
-    (llmEngineState.status !== "ready" && !showRequiresModel)
+    (llmEngineState.status !== "ready" &&
+      !showRequiresModel &&
+      !hasServerLLMAccessKey())
   ) {
     return null;
   }
@@ -62,8 +83,10 @@ export function LocalModeSettingsView({
           llmEngineState.status === "loading_vram"
         }
         onSwitchToCloud={onSwitchToCloud}
-        requiresModelWarning={showRequiresModel}
+        requiresModelWarning={showRequiresModel && !hasServerLLMAccessKey()}
         onResetConfig={onResetConfig}
+        hasServerApiKey={hasServerLLMAccessKey()}
+        serverModelName={serverModelName}
       />
       <PanelFooter showHint={false} />
     </div>

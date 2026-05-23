@@ -18,6 +18,8 @@ import type {
   DomainModelId,
 } from "@hexagen/local-llm";
 import { StepPills, PanelFooter } from "../governance";
+import { hasServerLLMAccessKey } from "../../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 import { StatusSection } from "./StatusSection";
 import { ViolationsSection } from "./ViolationsSection";
@@ -72,6 +74,18 @@ export function GovernanceAssistantPanel({
   } = useLocalLLMConfig();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
+  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+
+  useEffect(() => {
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
@@ -99,7 +113,7 @@ export function GovernanceAssistantPanel({
   }, []);
 
   const handleBackFromSettings = useCallback(() => {
-    if (status === "requires_model") return;
+    if (status === "requires_model" && !hasServerLLMAccessKey()) return;
     autoNavigatedToSettings.current = false;
     setPanelView("main");
   }, [status]);
@@ -193,7 +207,11 @@ export function GovernanceAssistantPanel({
   );
 
   useEffect(() => {
-    if (status === "requires_model" && panelView !== "model-settings") {
+    if (
+      status === "requires_model" &&
+      !hasServerLLMAccessKey() &&
+      panelView !== "model-settings"
+    ) {
       setPanelView("model-settings");
       autoNavigatedToSettings.current = true;
     }
@@ -212,13 +230,19 @@ export function GovernanceAssistantPanel({
 
   // Show/hide state calculations
   const showUnavailable =
-    status === "no_webgpu" || status === "unsupported_browser";
-  const showWakingUp = status === "loading_vram" && autoLoading;
+    (status === "no_webgpu" || status === "unsupported_browser") &&
+    !hasServerLLMAccessKey();
+  const showWakingUp =
+    status === "loading_vram" && autoLoading && !hasServerLLMAccessKey();
   const showProgress =
-    status === "downloading" || (status === "loading_vram" && !autoLoading);
-  const showError = status === "error";
-  const showRequiresModel = status === "requires_model";
-  const showBootSpinner = status === "unavailable" || status === "opt_in";
+    (status === "downloading" || (status === "loading_vram" && !autoLoading)) &&
+    !hasServerLLMAccessKey();
+  const showError = status === "error" && !hasServerLLMAccessKey();
+  const showRequiresModel =
+    status === "requires_model" && !hasServerLLMAccessKey();
+  const showBootSpinner =
+    (status === "unavailable" || status === "opt_in") &&
+    !hasServerLLMAccessKey();
 
   // Handle mode wrapper states
   if (
@@ -325,6 +349,7 @@ export function GovernanceAssistantPanel({
 
       <PanelFooter
         modelId={llmEngineState.loadedModelId}
+        modelLabel={hasServerLLMAccessKey() ? serverModelName : undefined}
         onOpenSettings={handleOpenSettings}
         isLoading={
           llmEngineState.status === "downloading" ||

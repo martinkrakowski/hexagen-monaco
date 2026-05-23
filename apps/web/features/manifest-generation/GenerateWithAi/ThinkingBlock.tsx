@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Loader2, Check, Terminal } from "lucide-react";
+import { Loader2, Check, Terminal, AlertCircle, Clock } from "lucide-react";
 import { CopyButton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
 
@@ -49,6 +49,108 @@ interface ThinkingBlockProps {
   verboseLog?: string[];
 }
 
+interface LogEntryParsed {
+  text: string;
+  icon?: "success" | "error" | "warning" | "throttle" | "retry" | "context";
+  color: string;
+}
+
+function parseLogEntry(entry: string): LogEntryParsed {
+  let text = entry;
+  let icon: LogEntryParsed["icon"];
+  let color = "text-muted-foreground";
+
+  const isHeader = /^Stage \d/.test(entry);
+  if (isHeader) {
+    return { text, color: "text-foreground font-semibold mt-2 first:mt-0" };
+  }
+
+  const lowerEntry = entry.toLowerCase();
+
+  // Strip legacy emojis and detect icon type based on content keywords
+  if (
+    entry.includes("✓") ||
+    lowerEntry.includes("identified") ||
+    lowerEntry.includes("extracted") ||
+    lowerEntry.includes("validation passed") ||
+    lowerEntry.includes("assigned across")
+  ) {
+    text = entry.replace(/✓/g, "").trim();
+    icon = "success";
+    color = "text-emerald-600 dark:text-emerald-400";
+  } else if (
+    entry.includes("✗") ||
+    (lowerEntry.includes("all") && lowerEntry.includes("attempts exhausted")) ||
+    lowerEntry.includes("no port definitions") ||
+    (lowerEntry.includes("error") && lowerEntry.includes("found"))
+  ) {
+    text = entry.replace(/✗/g, "").trim();
+    icon = "error";
+    color = "text-destructive";
+  } else if (
+    entry.includes("⚠") ||
+    lowerEntry.includes("tps-limited") ||
+    lowerEntry.includes("rate limited") ||
+    lowerEntry.includes("rate limit encountered")
+  ) {
+    text = entry.replace(/⚠/g, "").trim();
+    icon = "warning";
+    color = "text-destructive";
+  } else if (
+    entry.includes("⏳") ||
+    lowerEntry.includes("endpoint throttled") ||
+    lowerEntry.includes("waiting")
+  ) {
+    text = entry.replace(/⏳/g, "").trim();
+    icon = "throttle";
+    color = "text-amber-600 dark:text-amber-400";
+  } else if (
+    entry.includes("↻") ||
+    lowerEntry.includes("retrying") ||
+    lowerEntry.includes("retry")
+  ) {
+    text = entry.replace(/↻/g, "").trim();
+    icon = "retry";
+    color = "text-amber-600 dark:text-amber-400";
+  } else if (entry.includes("⏱") || lowerEntry.includes("timed out")) {
+    text = entry.replace(/⏱/g, "").trim();
+    icon = "retry";
+    color = "text-amber-600 dark:text-amber-400";
+  } else if (entry.startsWith("→")) {
+    text = entry.substring(1).trim();
+    icon = "context";
+    color = "text-foreground/80";
+  }
+
+  return { text, icon, color };
+}
+
+function LogEntryIcon({ type }: { type: LogEntryParsed["icon"] }) {
+  if (!type) return null;
+  switch (type) {
+    case "success":
+      return (
+        <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+      );
+    case "error":
+      return <AlertCircle className="h-3 w-3 text-destructive shrink-0" />;
+    case "warning":
+      return <AlertCircle className="h-3 w-3 text-destructive shrink-0" />;
+    case "throttle":
+      return (
+        <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+      );
+    case "retry":
+      return (
+        <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+      );
+    case "context":
+      return null;
+    default:
+      return null;
+  }
+}
+
 function VerboseLogPanel({
   entries,
   className,
@@ -93,31 +195,31 @@ function VerboseLogPanel({
         className="overflow-y-auto p-3 space-y-0.5 flex-1 min-h-0"
       >
         {entries.map((entry, i) => {
+          const parsed = parseLogEntry(entry);
           const isHeader = /^Stage \d/.test(entry);
-          const isSuccess = entry.includes("✓");
-          const isError = entry.includes("✗");
-          const isTimeout = entry.includes("⏱");
-          const isRetry = entry.includes("↻");
-          const isContext = entry.startsWith("→");
           return (
             <div
               key={i}
               className={[
-                "font-mono text-xs leading-relaxed whitespace-pre",
-                isHeader
-                  ? "text-foreground font-semibold mt-2 first:mt-0"
-                  : isSuccess
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : isError
-                      ? "text-destructive"
-                      : isTimeout || isRetry
-                        ? "text-amber-600 dark:text-amber-400"
-                        : isContext
-                          ? "text-foreground/80"
-                          : "text-muted-foreground",
-              ].join(" ")}
+                "font-mono text-xs leading-relaxed",
+                isHeader ? "mt-2 first:mt-0" : "",
+                parsed.color,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
-              {entry}
+              {parsed.icon ? (
+                <div className="flex items-start gap-1.5">
+                  <LogEntryIcon type={parsed.icon} />
+                  <span className="whitespace-pre">{parsed.text}</span>
+                </div>
+              ) : (
+                <span
+                  className={`whitespace-pre ${isHeader ? "font-semibold" : ""}`}
+                >
+                  {parsed.text}
+                </span>
+              )}
             </div>
           );
         })}

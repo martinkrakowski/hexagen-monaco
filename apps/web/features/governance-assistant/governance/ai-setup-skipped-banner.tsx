@@ -8,9 +8,10 @@ interface Props {
 
 export function AiSetupSkippedBanner({ onDismiss }: Props) {
   return (
-    <div className="mx-4 mb-3 px-3 py-2 rounded-md bg-warning/10 border border-warning/20 flex items-start gap-2">
-      <p className="text-xs text-warning-foreground flex-1">
-        AI was not configured during setup. Configure a model here to enable governance features.
+    <div className="mx-4 mb-3 px-3 py-2 rounded-md bg-warning/10 border border-warning/20 dark:bg-warning/20 dark:border-warning/30 flex items-start gap-2">
+      <p className="text-xs text-warning-foreground dark:text-warning flex-1">
+        AI was not configured during setup. Configure a model here to enable
+        governance features.
       </p>
       <button
         type="button"

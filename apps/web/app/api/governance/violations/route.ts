@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import * as yaml from "js-yaml";
+import { logger } from "../../../../lib/structured-logger";
 
 interface Violation {
   id: string;
@@ -49,15 +50,15 @@ export async function POST(request: Request) {
     for (const ctx of boundedContexts) {
       const ctxName = ctx.name as string;
       const layers = ctx.layers as Record<string, unknown> | undefined;
-      const domainLayer = layers?.domain as
-        | Record<string, unknown>
-        | undefined;
+      const domainLayer = layers?.domain as Record<string, unknown> | undefined;
       const adapters = domainLayer?.adapters as
         | Record<string, unknown>
         | undefined;
 
       const adapterCount = adapters ? Object.keys(adapters).length : 0;
-      const appLayer = layers?.application as Record<string, unknown> | undefined;
+      const appLayer = layers?.application as
+        | Record<string, unknown>
+        | undefined;
       const portConfig = appLayer?.ports as Record<string, unknown> | undefined;
       const ports = portConfig
         ? Object.keys(portConfig?.in || {}).length +
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
       isCompliant: violations.filter((v) => v.type === "error").length === 0,
     });
   } catch (err) {
-    console.error("Governance violations error:", err);
+    logger.error("Governance violations error:", { error: err });
     return NextResponse.json(
       {
         error: "Internal Server Error",

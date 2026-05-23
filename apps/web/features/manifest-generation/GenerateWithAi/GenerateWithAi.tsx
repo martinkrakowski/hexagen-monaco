@@ -174,14 +174,20 @@ export function GenerateWithAi({
 
   const handleGenerate = () => {
     if (!canGenerate) return;
-    const prefs = getModelPreferences();
-    if (
-      llmContext.engineState.status === "ready" ||
-      (prefs.rememberChoice && prefs.lastModelId)
-    ) {
+
+    // Server/Cloud LLM via env key or BYOK takes precedence over local WebLLM configuration
+    if (hasCloudKeys) {
       actions.transitionTo("generating");
     } else {
-      navigateToModelSelection(true);
+      const prefs = getModelPreferences();
+      if (
+        llmContext.engineState.status === "ready" ||
+        (prefs.rememberChoice && prefs.lastModelId)
+      ) {
+        actions.transitionTo("generating");
+      } else {
+        navigateToModelSelection(true);
+      }
     }
   };
 
@@ -191,13 +197,19 @@ export function GenerateWithAi({
     if (!hasReturnedFromModelSelection) return;
     if (flowState.state !== "idle") return;
     if (!formHandlers.isValid) return;
-    const prefs = getModelPreferences();
-    if (
-      llmContext.engineState.status === "ready" ||
-      (prefs.rememberChoice && prefs.lastModelId)
-    ) {
+
+    if (hasCloudKeys) {
       actions.transitionTo("generating");
       router.replace("/projects/new/ai");
+    } else {
+      const prefs = getModelPreferences();
+      if (
+        llmContext.engineState.status === "ready" ||
+        (prefs.rememberChoice && prefs.lastModelId)
+      ) {
+        actions.transitionTo("generating");
+        router.replace("/projects/new/ai");
+      }
     }
   }, [
     hasReturnedFromModelSelection,
@@ -206,6 +218,7 @@ export function GenerateWithAi({
     llmContext.engineState.status,
     actions,
     router,
+    hasCloudKeys,
   ]);
 
   const handleRetryOrRegenerate = useCallback(() => {

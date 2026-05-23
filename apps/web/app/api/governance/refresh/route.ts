@@ -7,6 +7,7 @@ import os from "os";
 import * as yaml from "js-yaml";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+import { logger } from "../../../../lib/structured-logger";
 
 const execAsync = promisify(exec);
 
@@ -96,10 +97,9 @@ async function runSuggestions(
   manifestYaml: string,
   openFileContent?: string,
 ): Promise<AISuggestion[]> {
-  const apiKey = process.env.NEXT_PUBLIC_LLM_API_KEY || "";
-  const baseUrl =
-    process.env.NEXT_PUBLIC_LLM_BASE_URL || "https://api.openai.com/v1";
-  const model = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+  const apiKey = process.env.LLM_API_KEY || "";
+  const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
+  const model = process.env.LLM_MODEL || "gpt-4o-mini";
 
   if (!apiKey) {
     return [];
@@ -248,10 +248,12 @@ export async function POST(request: Request) {
       portAdapterStatus,
     });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Governance refresh failed";
+    logger.error("[governance/refresh] Failed:", { error: message });
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "Governance refresh failed",
+        error: message,
       },
       { status: 500 },
     );

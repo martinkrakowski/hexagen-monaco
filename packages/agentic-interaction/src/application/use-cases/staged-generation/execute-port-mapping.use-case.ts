@@ -6,7 +6,6 @@ import {
   STAGE3_PORTS_SYSTEM_PROMPT,
   compileStage3Prompt,
   normalizeContextName,
-  validatePortQuality,
 } from "../../../domain/index";
 import type {
   PortMap,
@@ -39,6 +38,75 @@ const VALID_OUTBOUND_TYPES = new Set<string>([
   "external-client",
   "notifier",
 ]);
+
+/**
+ * JSON schema for NVIDIA NIM `guided_json` grammar enforcement.
+ *
+ * NOT applied by default — empirical testing showed that NIM's xgrammar
+ * parser causes premature stream termination with complex `oneOf` array
+ * schemas on certain models (e.g. z-ai/glm-5.1 on integrate.api.nvidia.com
+ * produced 2–3 character outputs before stopping). Opt in via the
+ * LLM_USE_GUIDED_JSON env var only when you have verified that your
+ * configured provider+model handles guided grammars correctly.
+ */
+const PORT_MAPPING_JSON_SCHEMA = {
+  type: "array",
+  items: {
+    oneOf: [
+      {
+        type: "object",
+        properties: {
+          type: { type: "string", enum: ["port"] },
+          contextName: { type: "string" },
+          direction: { type: "string", enum: ["in", "out"] },
+          name: { type: "string" },
+          portType: {
+            type: "string",
+            enum: [
+              "command",
+              "query",
+              "event",
+              "repository",
+              "publisher",
+              "external-client",
+              "notifier",
+            ],
+          },
+          description: { type: "string" },
+          forAggregate: { type: ["string", "null"] },
+          justification: { type: "string" },
+        },
+        required: [
+          "type",
+          "contextName",
+          "direction",
+          "name",
+          "portType",
+          "description",
+        ],
+      },
+      {
+        type: "object",
+        properties: {
+          type: { type: "string", enum: ["contextMapping"] },
+          upstream: { type: "string" },
+          downstream: { type: "string" },
+          pattern: { type: "string" },
+          mechanism: { type: "string" },
+          notes: { type: "string" },
+          events: { type: "array", items: { type: "string" } },
+        },
+        required: ["type", "upstream", "downstream"],
+      },
+    ],
+  },
+};
+
+function isGuidedJsonEnabled(): boolean {
+  const val = process.env.LLM_USE_GUIDED_JSON;
+  if (!val) return false;
+  return val === "1" || val.toLowerCase() === "true";
+}
 
 function coercePortType(
   direction: string,
@@ -205,9 +273,6 @@ export class ExecutePortMappingUseCase {
       return ok({ portMap: { contexts: [] }, contextMappings: [] });
     }
 
-    console.log(
-      `[Stage 3] Starting port mapping for ${contexts.length} contexts`,
-    );
     onChunk?.(
       `Analyzing ${contexts.length} bounded contexts for hexagonal ports…`,
     );
@@ -223,13 +288,36 @@ export class ExecutePortMappingUseCase {
       const prompt = compileStage3Prompt(filtered);
       totalInputTokens += estimateTokenCount(prompt);
 
-      const result = await this.runLLMWithRetry(prompt, onChunk);
+      const wrappedOnChunk = (chunk: string) => {
+        // Detect and format rate limit messages for user visibility
+        const lowerChunk = chunk.toLowerCase();
+        if (lowerChunk.includes("429")) {
+          onChunk?.(
+            `TPS-limited model endpoint detected. System backing off and retrying...`,
+          );
+          return;
+        }
+        if (lowerChunk.includes("backing off")) {
+          const match = chunk.match(/backing off (\d+)ms/i);
+          if (match) {
+            const delayMs = parseInt(match[1], 10);
+            const delaySecs = (delayMs / 1000).toFixed(1);
+            onChunk?.(
+              `Endpoint throttled. Waiting ${delaySecs}s before retry...`,
+            );
+            return;
+          }
+        }
+        onChunk?.(chunk);
+      };
+
+      const result = await this.runLLMWithRetry(prompt, wrappedOnChunk);
       totalRetryCount += result.retryCount;
       totalOutputTokens += estimateTokenCount(result.fullResponse);
       const retryNote =
         result.retryCount > 0 ? `, retried ${result.retryCount}×` : "";
       onChunk?.(
-        `   ✓ ${result.objects.length} port definitions identified${retryNote}`,
+        `${result.objects.length} port definitions identified${retryNote}`,
       );
 
       const { portsMap, mappings } = this.extractPortsAndMappings(
@@ -239,33 +327,11 @@ export class ExecutePortMappingUseCase {
       );
 
       for (const [ctxName, ports] of portsMap.entries()) {
-        const allPortDefs = [...ports.in, ...ports.out];
-        const aggregateRoots = (state.stage1.aggregateRoots ?? [])
-          .filter(
-            (ar) =>
-              normalizeContextName(ar.subdomain) ===
-              normalizeContextName(ctxName),
-          )
-          .map((ar) => ar.name);
-        const issues = validatePortQuality(
-          allPortDefs,
-          ctxName,
-          aggregateRoots,
-          state.stage0?.runtimeConcerns,
-        );
-        if (issues.length > 0) {
-          console.warn(
-            `[Stage 3] Port quality issues for ${ctxName}: ${issues.map((i) => `${i.portName}[${i.rule}]`).join(", ")}`,
-          );
-        }
         allPortsMap.set(ctxName, ports);
       }
       allContextMappings.push(...mappings);
     }
 
-    console.log(
-      `[Stage 3] Completed all contexts. Total retries: ${totalRetryCount}`,
-    );
     const durationMs = Date.now() - stageStart;
     const contextsArray: ContextPorts[] = [];
     for (const [contextName, ports] of allPortsMap.entries()) {
@@ -327,9 +393,8 @@ export class ExecutePortMappingUseCase {
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       const abortController = new AbortController();
       const timeoutHandle = setTimeout(() => {
-        console.log(`[Stage 3] Attempt ${attempt} timed out after 120s`);
         onChunk?.(
-          ` ⏱ Attempt ${attempt} timed out — using partial output if available`,
+          `Attempt ${attempt} timed out — using partial output if available`,
         );
         abortController.abort();
       }, 120000);
@@ -344,8 +409,11 @@ export class ExecutePortMappingUseCase {
         {
           stream: true,
           temperature: 0.3,
-          maxTokens: 2048,
+          maxTokens: 4096,
           preferredCloudModel,
+          ...(isGuidedJsonEnabled()
+            ? { guidedJsonSchema: PORT_MAPPING_JSON_SCHEMA }
+            : {}),
         },
       );
       request.signal = abortController.signal;
@@ -364,26 +432,17 @@ export class ExecutePortMappingUseCase {
           fullResponse += result.value;
           chunkCount++;
           if (chunkCount % 100 === 0) {
-            console.log(
-              `[Stage 3] Attempt ${attempt}: ${chunkCount} chunks received`,
-            );
             onChunk?.(` Generating port definitions… (${chunkCount} tokens)`);
           }
         }
       } catch (thrownError) {
         const partialObjects = extractJsonObjects(fullResponse);
         if (partialObjects.length > 0) {
-          console.log(
-            `[Stage 3] Using ${partialObjects.length} partial objects after throw on attempt ${attempt} (${chunkCount} chunks)`,
-          );
           return { objects: partialObjects, fullResponse };
         }
         if (attempt === MAX_RETRY_ATTEMPTS) {
-          console.warn(
-            `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${thrownError instanceof Error ? thrownError.message : String(thrownError)}`,
-          );
           onChunk?.(
-            ` ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+            `All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
           );
           return { objects: [], fullResponse };
         }
@@ -395,35 +454,33 @@ export class ExecutePortMappingUseCase {
       }
 
       if (streamError) {
+        const errorStr = String(streamError);
+        const isRateLimited = errorStr.includes("429");
+
         const partialObjects = extractJsonObjects(fullResponse);
         if (partialObjects.length > 0) {
-          console.log(
-            `[Stage 3] Using ${partialObjects.length} partial objects after timeout on attempt ${attempt} (${chunkCount} chunks)`,
-          );
           return { objects: partialObjects, fullResponse };
         }
         if (attempt === MAX_RETRY_ATTEMPTS) {
-          console.warn(
-            `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${lastError}`,
-          );
-          onChunk?.(
-            ` ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
-          );
+          const exhaustedMsg = isRateLimited
+            ? `Model endpoint rate limited. All ${MAX_RETRY_ATTEMPTS} attempts exhausted. Consider upgrading to a higher-tier endpoint.`
+            : `All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`;
+          onChunk?.(exhaustedMsg);
           return { objects: [], fullResponse };
         }
-        lastError = `Request error: ${streamError}`;
-        console.log(
-          `[Stage 3] Attempt ${attempt} stream error, retrying... (${chunkCount} chunks)`,
-        );
-        onChunk?.(
-          ` ↻ Retrying… (attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS})`,
-        );
+        lastError = `Request error: ${errorStr}`;
+
+        if (isRateLimited) {
+          onChunk?.(
+            `Endpoint rate limit encountered. Retrying with backoff...`,
+          );
+        } else {
+          onChunk?.(
+            `Retrying… (attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS})`,
+          );
+        }
         continue;
       }
-
-      console.log(
-        `[Stage 3] Attempt ${attempt} completed (${chunkCount} chunks)`,
-      );
 
       const objects = extractJsonObjects(fullResponse);
       if (objects.length > 0) {
@@ -432,11 +489,8 @@ export class ExecutePortMappingUseCase {
 
       lastError = "No valid JSON objects found in output";
       if (attempt === MAX_RETRY_ATTEMPTS) {
-        console.warn(
-          `[Stage 3] All ${MAX_RETRY_ATTEMPTS} attempts exhausted without valid JSON. Last error: ${lastError}`,
-        );
         onChunk?.(
-          ` ✗ All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
+          `All ${MAX_RETRY_ATTEMPTS} attempts exhausted — no port definitions extracted`,
         );
         return { objects: [], fullResponse };
       }

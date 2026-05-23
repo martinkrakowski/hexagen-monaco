@@ -10,10 +10,18 @@ export const DEFAULT_ESCALATION_CONFIG: EscalationConfig = {
   escalationModel: undefined,
 };
 
+/**
+ * Default escalation config for Stage 3 (Port Mapping).
+ *
+ * `escalationModel` is intentionally undefined here — the wiring layer should
+ * inject a model name only when it knows the configured provider supports it.
+ * Hardcoding "gpt-4o" here breaks any non-OpenAI provider (NVIDIA, vLLM,
+ * Ollama, Anthropic, etc.) with 404s during escalation.
+ */
 export const STAGE3_ESCALATION_CONFIG: EscalationConfig = {
   maxDefaultRetries: 3,
   maxEscalatedRetries: 3,
-  escalationModel: "gpt-4o",
+  escalationModel: undefined,
 };
 
 export async function retryWithEscalation<T>(

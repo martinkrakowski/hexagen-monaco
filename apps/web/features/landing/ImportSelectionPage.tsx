@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@hexagen/ui";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
 import { ImportOptionRow } from "@/landing/components/ImportOptionRow";
 import {
@@ -22,7 +22,7 @@ export function ImportSelectionPage({
   const router = injectedRouter ?? defaultRouter;
 
   return (
-    <ProjectsShell
+    <ProjectsShellWithFreeTier
       title="Import Project"
       footer={
         <Button variant="outline" onClick={() => router.push("/projects/new")}>
@@ -61,6 +61,6 @@ export function ImportSelectionPage({
           </div>
         </div>
       </div>
-    </ProjectsShell>
+    </ProjectsShellWithFreeTier>
   );
 }

@@ -8,10 +8,13 @@ import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShell } from "@/landing/ProjectsShell";
 import { useModelSelectionIntent } from "./store/useModelSelectionIntent";
+import { usePreferredLLM } from "@/lib/free-tier/store/usePreferredLLM";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import type { DomainModelId } from "../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
+import { hasServerLLMAccessKey } from "../../app/lib/wire";
+import { getCapabilities } from "@/lib/manifest-generation";
 
 interface ModelSelectionPageProps {
   llmContext: LocalLLMContext;
@@ -20,18 +23,34 @@ interface ModelSelectionPageProps {
 export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const router = useRouter();
   const { clear } = useModelSelectionIntent();
+  const { setPreferredLocalModel } = usePreferredLLM();
   const [mounted, setMounted] = useState(false);
   const llmRef = useRef(llmContext);
   llmRef.current = llmContext;
 
+  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+
   useEffect(() => {
     setMounted(true);
+    getCapabilities()
+      .then((res) => {
+        if (res.activeModelName) {
+          setServerModelName(res.activeModelName);
+        }
+      })
+      .catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch capabilities / serverModelName:", err);
+        }
+      });
   }, []);
 
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get("returnUrl");
 
-  const isModelReady = llmContext.engineState.status === "ready";
+  const hasServerApiKey = hasServerLLMAccessKey();
+  const isModelReady =
+    hasServerApiKey || llmContext.engineState.status === "ready";
 
   const handleBack = useCallback(() => {
     clear();
@@ -39,13 +58,23 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   }, [clear, router, returnUrl]);
 
   const handleGenerate = useCallback(() => {
+    // Save the currently loaded model as the preferred one
+    if (llmContext.engineState.loadedModelId) {
+      setPreferredLocalModel(llmContext.engineState.loadedModelId);
+    }
     clear();
     if (returnUrl) {
       router.push(returnUrl);
     } else {
       router.push("/projects/new/ai?generate=1");
     }
-  }, [clear, router, returnUrl]);
+  }, [
+    clear,
+    router,
+    returnUrl,
+    llmContext.engineState.loadedModelId,
+    setPreferredLocalModel,
+  ]);
 
   const handleSelectModel = useCallback(async (modelId: DomainModelId) => {
     const ctx = llmRef.current;
@@ -124,6 +153,8 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                   isLoading={isLoading}
                   onSwitchToCloud={undefined}
                   requiresModelWarning={false}
+                  hasServerApiKey={hasServerApiKey}
+                  serverModelName={serverModelName}
                 />
               ),
               [
@@ -133,6 +164,8 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 handleDeleteModel,
                 handleHasModelInCache,
                 isLoading,
+                hasServerApiKey,
+                serverModelName,
               ],
             )}
           </div>

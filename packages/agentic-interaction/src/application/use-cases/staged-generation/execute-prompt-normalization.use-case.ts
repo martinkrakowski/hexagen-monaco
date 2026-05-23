@@ -34,6 +34,10 @@ export class ExecutePromptNormalizationUseCase {
     | { success: false; error: unknown }
   > {
     const stageStart = Date.now();
+
+    // Log generation start to generation log
+    onChunk?.("Parsing and normalizing specification...");
+
     let prompt = compileStage0Prompt(variables || { userDescription });
     let lastError = "";
     let retryCount = 0;
