@@ -2055,6 +2055,17 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/tandem-execution@workspace:packages/tandem-execution":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/tandem-execution@workspace:packages/tandem-execution"
+  dependencies:
+    "@hexagen/messaging": "workspace:*"
+    "@hexagen/shared": "workspace:*"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.5.4"
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/transaction-system@workspace:*, @hexagen/transaction-system@workspace:packages/transaction-system":
   version: 0.0.0-use.local
   resolution: "@hexagen/transaction-system@workspace:packages/transaction-system"

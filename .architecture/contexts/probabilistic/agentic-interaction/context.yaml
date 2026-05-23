@@ -41,4 +41,5 @@ depends_on:
   - prompt-compiler
   - reconciliation-engine
   - transaction-system
+  - tandem-execution
 plane: probabilistic

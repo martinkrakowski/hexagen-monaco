@@ -1,0 +1,33 @@
+name: tandem-execution
+type: core
+description: Tandem LLM Execution Architecture context orchestrating multi-tiered local and cloud inference pipelines (Phase 0)
+layers:
+  domain:
+    value_objects:
+      - TandemConfig
+      - ConnectionHealthState
+      - LocalModelState
+      - TandemTokenMetadata
+      - TandemMessage
+      - RefinementEngine
+      - RefinementEngineOption
+  application:
+    ports:
+      in:
+        - TandemOrchestratorPort
+        - PreFlightValidatorPort
+        - PayloadConstructorPort
+        - RefinementEngineSelectorPort
+      out:
+        - CloudProviderHealthPort
+  infrastructure:
+    adapters:
+      - LocalStorageTandemConfigAdapter
+      - RefinementEngineSelectorAdapter
+depends_on:
+  - local-llm
+  - agentic-interaction
+  - shared
+  - core-domain
+  - messaging
+plane: probabilistic
