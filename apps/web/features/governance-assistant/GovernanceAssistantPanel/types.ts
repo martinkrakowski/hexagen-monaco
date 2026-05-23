@@ -10,6 +10,7 @@ import type {
 } from "@hexagen/local-llm";
 import type { CloudChatMessage } from "../hooks/useCloudLlm";
 import type { ConnectionState } from "../hooks/useCloudConnection";
+import type { TandemChatMessage, TandemStatus } from "../hooks/useTandemLlm";
 
 export interface GovernanceAssistantPanelProps {
   wizardData: unknown;
@@ -21,7 +22,7 @@ export interface GovernanceAssistantPanelProps {
 }
 
 export type PanelView = "main" | "model-settings";
-export type LLMMode = "local" | "cloud";
+export type LLMMode = "local" | "cloud" | "tandem";
 export type ActiveItem =
   | { type: "violation"; item: Violation }
   | { type: "suggestion"; item: AISuggestion }
@@ -67,6 +68,34 @@ export interface ModeWrapperProps {
   mode: LLMMode;
   panelView: PanelView;
   onModeChange: (mode: LLMMode) => void;
+  tandemMessages?: TandemChatMessage[];
+  tandemStatus?: TandemStatus;
+  onSendTandemMessage?: (params: {
+    content: string;
+    conversationId: string;
+    localModelState:
+      | "NOT_DOWNLOADED"
+      | "DOWNLOADING"
+      | "DOWNLOADED"
+      | "LOADING"
+      | "ACTIVE"
+      | "ERROR";
+    cloudHealthState: "VALID" | "DEGRADED" | "UNAVAILABLE" | "UNVALIDATED";
+    byokCiphertext?: string;
+    byokProvider?: string;
+    cloudContextLimit?: number;
+  }) => Promise<void>;
+  onAbortTandem?: () => void;
+  onStageAwareAbortTandem?: (stage: "stage1" | "stage3" | "full") => void;
+  onClearTandem?: () => void;
+  tandemCurrentStage?: "idle" | "stage1" | "transitioning" | "stage3";
+  tandemCanRetry?: boolean;
+  onRetryCloudRefinement?: () => Promise<void>;
+  tandemLastBypassReason?: string | null;
+  tandemLastResponseWasPartial?: boolean;
+  tandemLastErrorType?: string | null;
+  tandemHasOomEvent?: boolean;
+  onClearBypassReason?: () => void;
   cloudConnectionState: ConnectionState;
   cloudConnectionError: { message: string; retryable: boolean } | null;
   onCloudConnect: (provider: string, model: string) => Promise<void>;
@@ -99,4 +128,7 @@ export interface ModeWrapperProps {
   hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
   onInitModel: () => void;
   onResetConfig?: () => void;
+  onConfigSaved?: () => void;
+  onTandemDisabled?: () => void;
+  tandemDerivedStatus?: "active" | "degraded" | "unavailable" | "off";
 }

@@ -8,6 +8,11 @@ import {
   getClientProviders,
 } from "@hexagen/local-llm";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
+import {
+  LocalStorageTandemConfigAdapter,
+  DEFAULT_TANDEM_CONFIG,
+} from "@hexagen/tandem-execution";
+import type { TandemConfig } from "@hexagen/tandem-execution";
 import { useHardwareDetection } from "./useHardwareDetection";
 import { Cloud, CheckCircle2 } from "lucide-react";
 import { TandemModeBadge } from "./model-settings/tandem-mode-badge";
@@ -40,6 +45,10 @@ interface ModelSettingsViewProps {
   downloadingModelId?: DomainModelId | null;
   downloadProgress?: number;
   tandemStatus?: "active" | "degraded" | "unavailable" | "off";
+  /** Called after a successful tandem config write — use to record the sentinel. */
+  onConfigSaved?: () => void;
+  /** Called when tandem config is reset — use to switch mode back to local/cloud. */
+  onTandemDisabled?: () => void;
 }
 
 interface CacheStatusEntry {
@@ -100,32 +109,6 @@ function modelSettingsReducer(
   }
 }
 
-interface TandemConfig {
-  enabled: boolean;
-  localModelId: string;
-  refinementEngine: string;
-  displayPreference: "overwrite" | "append";
-  stageOneTimeoutSeconds: number;
-  memoryHeadroomMB: number;
-  promptTemplateVersion: string;
-  firstTimeExperienceDismissed: boolean;
-  autoRetryEnabled: boolean;
-  lastValidatedAt: string;
-}
-
-const DEFAULT_TANDEM_CONFIG: TandemConfig = {
-  enabled: false,
-  localModelId: "",
-  refinementEngine: "ENV",
-  displayPreference: "overwrite",
-  stageOneTimeoutSeconds: 60,
-  memoryHeadroomMB: 512,
-  promptTemplateVersion: "v1",
-  firstTimeExperienceDismissed: false,
-  autoRetryEnabled: true,
-  lastValidatedAt: "",
-};
-
 export function ModelSettingsView({
   currentModelId,
   loadedModel,
@@ -144,6 +127,8 @@ export function ModelSettingsView({
   downloadingModelId,
   downloadProgress,
   tandemStatus,
+  onConfigSaved,
+  onTandemDisabled,
 }: ModelSettingsViewProps) {
   const [state, dispatch] = useReducer(modelSettingsReducer, {
     cacheStatus: new Map<DomainModelId, CacheStatusEntry>(),
@@ -165,9 +150,17 @@ export function ModelSettingsView({
     selectedModelId,
   } = state;
 
-  const [tandemConfig, setTandemConfig] = useState<TandemConfig>(
-    DEFAULT_TANDEM_CONFIG,
+  const configAdapter = useMemo(
+    () => new LocalStorageTandemConfigAdapter(),
+    [],
   );
+
+  const [tandemConfig, setTandemConfig] = useState<TandemConfig>(() => {
+    // Create a separate instance for the lazy initializer to avoid closure over
+    // configAdapter (which is from useMemo evaluated after useState in the same render).
+    const result = new LocalStorageTandemConfigAdapter().read();
+    return result.success ? result.value : DEFAULT_TANDEM_CONFIG;
+  });
   const [showTandemResetConfirm, setShowTandemResetConfirm] = useState(false);
   const [simulatedDownload, setSimulatedDownload] = useState<{
     modelId: DomainModelId;
@@ -176,82 +169,24 @@ export function ModelSettingsView({
     startTime: number;
   } | null>(null);
 
-  useEffect(() => {
-    try {
-      const item = localStorage.getItem("hexagen:tandem:config");
-      if (item) {
-        const parsed = JSON.parse(item);
-        setTandemConfig({
-          enabled:
-            typeof parsed.enabled === "boolean"
-              ? parsed.enabled
-              : DEFAULT_TANDEM_CONFIG.enabled,
-          localModelId:
-            typeof parsed.localModelId === "string"
-              ? parsed.localModelId
-              : DEFAULT_TANDEM_CONFIG.localModelId,
-          refinementEngine:
-            typeof parsed.refinementEngine === "string"
-              ? parsed.refinementEngine
-              : DEFAULT_TANDEM_CONFIG.refinementEngine,
-          displayPreference:
-            parsed.displayPreference === "overwrite" ||
-            parsed.displayPreference === "append"
-              ? parsed.displayPreference
-              : DEFAULT_TANDEM_CONFIG.displayPreference,
-          stageOneTimeoutSeconds:
-            typeof parsed.stageOneTimeoutSeconds === "number"
-              ? parsed.stageOneTimeoutSeconds
-              : DEFAULT_TANDEM_CONFIG.stageOneTimeoutSeconds,
-          memoryHeadroomMB:
-            typeof parsed.memoryHeadroomMB === "number"
-              ? parsed.memoryHeadroomMB
-              : DEFAULT_TANDEM_CONFIG.memoryHeadroomMB,
-          promptTemplateVersion:
-            typeof parsed.promptTemplateVersion === "string"
-              ? parsed.promptTemplateVersion
-              : DEFAULT_TANDEM_CONFIG.promptTemplateVersion,
-          firstTimeExperienceDismissed:
-            typeof parsed.firstTimeExperienceDismissed === "boolean"
-              ? parsed.firstTimeExperienceDismissed
-              : DEFAULT_TANDEM_CONFIG.firstTimeExperienceDismissed,
-          autoRetryEnabled:
-            typeof parsed.autoRetryEnabled === "boolean"
-              ? parsed.autoRetryEnabled
-              : DEFAULT_TANDEM_CONFIG.autoRetryEnabled,
-          lastValidatedAt:
-            typeof parsed.lastValidatedAt === "string"
-              ? parsed.lastValidatedAt
-              : DEFAULT_TANDEM_CONFIG.lastValidatedAt,
-        });
-      }
-    } catch (e) {
-      console.error("Failed to load tandem config", e);
-    }
-  }, []);
-
   const updateTandemConfig = (updates: Partial<TandemConfig>) => {
     setTandemConfig((prev) => {
       const next = { ...prev, ...updates };
-      try {
-        localStorage.setItem("hexagen:tandem:config", JSON.stringify(next));
-      } catch (e) {
-        console.error("Failed to save tandem config", e);
+      const writeResult = configAdapter.write(next);
+      if (!writeResult.success) {
+        console.error("Failed to save tandem config", writeResult.error);
+        return prev; // revert on write failure
       }
+      onConfigSaved?.();
       return next;
     });
   };
 
-  const resetTandemConfig = () => {
+  const handleTandemResetConfirmed = () => {
+    configAdapter.reset();
     setTandemConfig(DEFAULT_TANDEM_CONFIG);
-    try {
-      localStorage.setItem(
-        "hexagen:tandem:config",
-        JSON.stringify(DEFAULT_TANDEM_CONFIG),
-      );
-    } catch (e) {
-      console.error("Failed to reset tandem config", e);
-    }
+    setShowTandemResetConfirm(false);
+    onTandemDisabled?.();
   };
 
   const cloudProviders = useMemo(() => {
@@ -843,10 +778,7 @@ export function ModelSettingsView({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  resetTandemConfig();
-                  setShowTandemResetConfirm(false);
-                }}
+                onClick={handleTandemResetConfirmed}
                 className="text-xs px-3 py-1.5 rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
               >
                 Reset

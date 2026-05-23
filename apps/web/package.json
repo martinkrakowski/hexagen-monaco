@@ -32,6 +32,7 @@
     "@hexagen/reconciliation-engine": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
+    "@hexagen/tandem-execution": "workspace:*",
     "@hexagen/transaction-system": "workspace:*",
     "@hexagen/ui": "workspace:*",
     "@hexagen/ui-projection-compiler": "workspace:*",
