@@ -9,6 +9,8 @@ export type TandemStage =
 
 interface TandemStageBadgeProps {
   stage: TandemStage;
+  localModelName?: string;
+  cloudModelName?: string;
 }
 
 const STAGE_CONFIG: Record<
@@ -41,8 +43,19 @@ const STAGE_CONFIG: Record<
   },
 };
 
-export function TandemStageBadge({ stage }: TandemStageBadgeProps) {
+export function TandemStageBadge({
+  stage,
+  localModelName,
+  cloudModelName,
+}: TandemStageBadgeProps) {
   const config = STAGE_CONFIG[stage];
+
+  const label =
+    stage === "stage1" && localModelName
+      ? `Local Draft · ${localModelName}`
+      : stage === "stage3" && cloudModelName
+        ? `Cloud Refinement · ${cloudModelName}`
+        : config.label;
 
   return (
     <span aria-live="polite" aria-atomic="true">
@@ -55,7 +68,7 @@ export function TandemStageBadge({ stage }: TandemStageBadgeProps) {
             aria-hidden="true"
           />
         )}
-        {config.label}
+        {label}
       </span>
     </span>
   );

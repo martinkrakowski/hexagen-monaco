@@ -61,6 +61,8 @@ export function ModeWrapper({
   tandemLastErrorType,
   tandemHasOomEvent,
   onClearBypassReason,
+  tandemLocalModelName,
+  tandemCloudModelName,
 }: ModeWrapperProps) {
   const { showRecoveryBanner, dismissRecoveryBanner } = useTandemLostConfig();
 
@@ -100,6 +102,8 @@ export function ModeWrapper({
           clearBypassReason={onClearBypassReason ?? (() => undefined)}
           onModeChange={onModeChange}
           onOpenSettings={onOpenSettings}
+          localModelName={tandemLocalModelName}
+          cloudModelName={tandemCloudModelName}
         />
       </div>
     );

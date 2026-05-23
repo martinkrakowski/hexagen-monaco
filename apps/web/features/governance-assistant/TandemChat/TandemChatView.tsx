@@ -8,6 +8,8 @@ interface TandemChatViewProps extends UseTandemLlmReturn {
   displayMode?: "overwrite" | "append";
   onModeChange: (mode: "local" | "cloud" | "tandem") => void;
   onOpenSettings: () => void;
+  localModelName?: string;
+  cloudModelName?: string;
 }
 
 export function TandemChatView({
@@ -28,6 +30,8 @@ export function TandemChatView({
   clearBypassReason,
   onModeChange,
   onOpenSettings,
+  localModelName,
+  cloudModelName,
 }: TandemChatViewProps) {
   return (
     <div className="flex flex-col h-full">
@@ -78,6 +82,8 @@ export function TandemChatView({
           lastErrorType={lastErrorType}
           hasOomEvent={hasOomEvent}
           clearBypassReason={clearBypassReason}
+          localModelName={localModelName}
+          cloudModelName={cloudModelName}
         />
       </div>
       <PanelFooter showHint={false} />

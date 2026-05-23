@@ -245,11 +245,16 @@ export function GovernanceAssistantPanel({
     | "off" => {
     const configResult = configAdapter.read();
     if (!configResult.success || !configResult.value.enabled) return "off";
-    if (mappedLocalState === "ACTIVE" && mappedCloudState === "VALID")
+    // Stage 3 always routes through /api/llm/chat — independent of cloudConnection.
+    // When a server-side API key is present the cloud leg is always reachable.
+    const effectiveCloudState: ConnectionHealthState = hasServerLLMAccessKey()
+      ? "VALID"
+      : mappedCloudState;
+    if (mappedLocalState === "ACTIVE" && effectiveCloudState === "VALID")
       return "active";
-    if (mappedCloudState === "UNAVAILABLE" || mappedLocalState === "ERROR")
+    if (effectiveCloudState === "UNAVAILABLE" || mappedLocalState === "ERROR")
       return "unavailable";
-    if (mappedCloudState === "DEGRADED") return "degraded";
+    if (effectiveCloudState === "DEGRADED") return "degraded";
     return "off";
   }, [configAdapter, mappedLocalState, mappedCloudState]);
 
@@ -515,6 +520,8 @@ export function GovernanceAssistantPanel({
           tandemLastErrorType={tandemLlm.lastErrorType}
           tandemHasOomEvent={tandemLlm.hasOomEvent}
           onClearBypassReason={tandemLlm.clearBypassReason}
+          tandemLocalModelName={loadedModel?.name}
+          tandemCloudModelName={modelName}
         />
         <TandemInterceptionModal
           isOpen={tandemModalOpen}

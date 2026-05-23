@@ -29,6 +29,8 @@ interface TandemChatInterfaceProps {
   lastErrorType: string | null;
   hasOomEvent: boolean;
   clearBypassReason: () => void;
+  localModelName?: string;
+  cloudModelName?: string;
 }
 
 export function TandemChatInterface({
@@ -47,6 +49,8 @@ export function TandemChatInterface({
   lastErrorType,
   hasOomEvent,
   clearBypassReason,
+  localModelName,
+  cloudModelName,
 }: TandemChatInterfaceProps) {
   const [input, setInput] = useState("");
   const [isRetrying, setIsRetrying] = useState(false);
@@ -117,7 +121,11 @@ export function TandemChatInterface({
         <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Tandem</span>
-            <span className="text-xs text-muted-foreground">Local + Cloud</span>
+            <span className="text-xs text-muted-foreground">
+              {localModelName && cloudModelName
+                ? `${localModelName} → ${cloudModelName}`
+                : "Local + Cloud"}
+            </span>
           </div>
           <button
             type="button"
@@ -203,7 +211,11 @@ export function TandemChatInterface({
           <div className="flex-1 flex flex-col gap-1">
             {pipelineStage && (
               <div className="flex items-center gap-1.5">
-                <TandemStageBadge stage={pipelineStage} />
+                <TandemStageBadge
+                  stage={pipelineStage}
+                  localModelName={localModelName}
+                  cloudModelName={cloudModelName}
+                />
               </div>
             )}
             <input

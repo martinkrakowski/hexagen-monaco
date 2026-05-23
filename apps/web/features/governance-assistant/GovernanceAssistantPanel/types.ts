@@ -96,6 +96,8 @@ export interface ModeWrapperProps {
   tandemLastErrorType?: string | null;
   tandemHasOomEvent?: boolean;
   onClearBypassReason?: () => void;
+  tandemLocalModelName?: string;
+  tandemCloudModelName?: string;
   cloudConnectionState: ConnectionState;
   cloudConnectionError: { message: string; retryable: boolean } | null;
   onCloudConnect: (provider: string, model: string) => Promise<void>;
