@@ -20,6 +20,13 @@ layers:
         - RefinementEngineSelectorPort
       out:
         - CloudProviderHealthPort
+    use_cases:
+      - TandemTriggerDetectionUseCase
+      - PreFlightValidatorUseCase
+      - Stage1LocalSpeculationUseCase
+      - Stage2PayloadConstructorUseCase
+      - Stage3CloudDispatchUseCase
+      - TandemOrchestratorUseCase
   infrastructure:
     adapters:
       - LocalStorageTandemConfigAdapter

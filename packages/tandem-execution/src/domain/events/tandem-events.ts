@@ -22,6 +22,7 @@ export const TANDEM_EVENT_TYPES = {
   CLOUD_HANDOFF_COMPLETED: "TANDEM_STAGE_3_CLOUD_HANDOFF_COMPLETED",
   CLOUD_HANDOFF_FAILED: "TANDEM_STAGE_3_CLOUD_HANDOFF_FAILED",
   FINAL_OUTPUT_COMPLETED: "TANDEM_STAGE_4_FINAL_OUTPUT_COMPLETED",
+  BYOK_CIPHERTEXT_ROTATED: "TANDEM_BYOK_CIPHERTEXT_ROTATED",
 } as const;
 
 export type TandemEventPayloads = {
@@ -70,6 +71,7 @@ export type TandemEventPayloads = {
     conversationId: string;
     content: string;
     tokenMetadata?: TandemTokenMetadata;
+    partial?: boolean;
   };
   [TANDEM_EVENT_TYPES.CLOUD_HANDOFF_FAILED]: {
     conversationId: string;
@@ -81,6 +83,10 @@ export type TandemEventPayloads = {
     finalContent: string;
     stage1Draft?: string;
     tokenMetadata?: TandemTokenMetadata;
+  };
+  [TANDEM_EVENT_TYPES.BYOK_CIPHERTEXT_ROTATED]: {
+    conversationId: string;
+    newCiphertext: string;
   };
 };
 

@@ -9,3 +9,7 @@ export {
   type TandemBadgeState,
   type TandemModeBadgeProps,
 } from "./model-settings/tandem-mode-badge";
+export {
+  TandemInterceptionModal,
+  type TandemInterceptionModalProps,
+} from "./model-settings/tandem-interception-modal";
