@@ -310,7 +310,7 @@ export function ModelSettingsView({
                       Model Name
                     </span>
                     <span className="font-mono text-foreground font-semibold">
-                      {serverModelName || "gpt-4o-mini"}
+                      {serverModelName ?? "Configured by environment"}
                     </span>
                   </div>
                   <div>

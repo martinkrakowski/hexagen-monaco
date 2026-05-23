@@ -13,10 +13,11 @@ export function useCurrentModelName(): string | null {
   const isFreeTier = isFreeTierModel();
 
   useEffect(() => {
+    let active = true;
     const updateModelName = async () => {
       // If a local model is preferred and loaded, show its name
       if (preferredLocalModel && llmConfig.loadedModel?.name) {
-        setModelName(llmConfig.loadedModel.name);
+        if (active) setModelName(llmConfig.loadedModel.name);
         return;
       }
 
@@ -26,19 +27,19 @@ export function useCurrentModelName(): string | null {
           .split("/")
           .pop()
           ?.replace(/-/g, " ");
-        if (modelDisplayName) {
+        if (modelDisplayName && active) {
           setModelName(modelDisplayName);
           return;
         }
       }
 
       // Clear stale name immediately before the async fetch
-      setModelName(null);
+      if (active) setModelName(null);
 
       // Otherwise, get the cloud model name
       try {
         const capabilities = await getCapabilities();
-        if (capabilities.activeModelName) {
+        if (active && capabilities.activeModelName) {
           setModelName(capabilities.activeModelName);
           return;
         }
@@ -47,12 +48,15 @@ export function useCurrentModelName(): string | null {
       }
 
       // Default to free tier if using cloud
-      if (isFreeTier) {
+      if (isFreeTier && active) {
         setModelName("Free Tier Model");
       }
     };
 
     updateModelName();
+    return () => {
+      active = false;
+    };
   }, [llmConfig.loadedModel, preferredLocalModel, isFreeTier]);
 
   return modelName;

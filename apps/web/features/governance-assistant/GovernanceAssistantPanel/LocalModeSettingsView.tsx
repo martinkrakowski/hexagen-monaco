@@ -36,7 +36,7 @@ export function LocalModeSettingsView({
   onSwitchToCloud,
   onResetConfig,
 }: LocalModeSettingsViewProps) {
-  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+  const [serverModelName, setServerModelName] = useState<string>("");
 
   useEffect(() => {
     getCapabilities()
@@ -45,7 +45,11 @@ export function LocalModeSettingsView({
           setServerModelName(res.activeModelName);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch capabilities / serverModelName:", err);
+        }
+      });
   }, []);
 
   if (

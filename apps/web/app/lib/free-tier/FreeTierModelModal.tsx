@@ -41,16 +41,10 @@ export function FreeTierModelModal({
   }, [open, preferredLocalModel]);
 
   const handlePreferWebLLM = async () => {
-    if (preferredLocalModel && webLLMReady) {
-      if (llmContext.switchModel) {
+    if (preferredLocalModel) {
+      if (llmContext.switchModel && webLLMReady) {
         await llmContext.switchModel(preferredLocalModel);
       }
-      onOpenChange(false);
-    } else if (preferredLocalModel && !webLLMReady) {
-      const returnUrl = pathname;
-      router.push(
-        `/projects/new/ai/models?returnUrl=${encodeURIComponent(returnUrl)}`,
-      );
       onOpenChange(false);
     } else {
       const returnUrl = pathname;

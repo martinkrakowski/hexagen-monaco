@@ -38,7 +38,11 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
           setServerModelName(res.activeModelName);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch capabilities / serverModelName:", err);
+        }
+      });
   }, []);
 
   const searchParams = useSearchParams();

@@ -32,7 +32,11 @@ export function ModelSelectionView({
           setServerModelName(res.activeModelName);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to fetch capabilities / serverModelName:", err);
+        }
+      });
   }, []);
 
   if (flowState.state !== "model_selection") {

@@ -16,10 +16,12 @@ RUN echo 'nodeLinker: node-modules' > .yarnrc.yml && yarn install
 # Declare ARG variables for build-time injection
 ARG NEXT_PUBLIC_LLM_AVAILABLE
 ARG NEXT_PUBLIC_LLM_MODEL
+ARG NEXT_PUBLIC_FREE_TIER_MODEL
 
 # Re-export them as ENV variables so Next.js can inline them during turbo build
 ENV NEXT_PUBLIC_LLM_AVAILABLE=$NEXT_PUBLIC_LLM_AVAILABLE
 ENV NEXT_PUBLIC_LLM_MODEL=$NEXT_PUBLIC_LLM_MODEL
+ENV NEXT_PUBLIC_FREE_TIER_MODEL=$NEXT_PUBLIC_FREE_TIER_MODEL
 
 # Hard cap Node.js memory to 4GB to leave 3GB for Docker/Ubuntu OS
 ENV NODE_OPTIONS="--max-old-space-size=4096"

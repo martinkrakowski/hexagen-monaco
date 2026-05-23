@@ -7,6 +7,7 @@ import os from "os";
 import * as yaml from "js-yaml";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
+import { logger } from "../../../../lib/structured-logger";
 
 const execAsync = promisify(exec);
 
@@ -247,10 +248,12 @@ export async function POST(request: Request) {
       portAdapterStatus,
     });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Governance refresh failed";
+    logger.error("[governance/refresh] Failed:", { error: message });
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "Governance refresh failed",
+        error: message,
       },
       { status: 500 },
     );

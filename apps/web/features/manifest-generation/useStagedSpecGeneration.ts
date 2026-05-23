@@ -445,6 +445,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       }
 
       setGenerationError(displayMessage);
+      setStepDetail(displayMessage);
       setPhase("failed");
       return {
         phase: "failed" as StagedPhase,

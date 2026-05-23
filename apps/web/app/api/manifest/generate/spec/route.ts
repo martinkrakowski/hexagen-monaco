@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       "Access-Control-Allow-Origin": "*",
       // Rate limit info for clients to understand endpoint constraints
       "X-RateLimit-Limit": process.env.LLM_RATE_LIMIT || "unlimited",
-      "X-RateLimit-Window": "1s",
+      "X-RateLimit-Window": "60s",
     },
   });
 }
