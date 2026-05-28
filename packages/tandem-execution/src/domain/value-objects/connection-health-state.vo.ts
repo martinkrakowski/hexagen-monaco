@@ -19,7 +19,7 @@ export class ConnectionHealthStateMachine {
    * Validates if a state is a canonical ConnectionHealthState.
    */
   static isValidState(state: string): state is ConnectionHealthState {
-    return state in CONNECTION_HEALTH_STATES;
+    return Object.hasOwn(CONNECTION_HEALTH_STATES, state);
   }
 
   /**

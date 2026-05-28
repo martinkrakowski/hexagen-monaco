@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
-import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import type { EventBusPort, DomainEvent } from "@hexagen/messaging";
 import { Stage3CloudDispatchUseCase } from "../../src/application/use-cases/stage3-cloud-dispatch.use-case.js";
 import { TANDEM_EVENT_TYPES } from "../../src/domain/index.js";
@@ -35,8 +35,14 @@ type FetchMock = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+const originalFetch = globalThis.fetch;
+
 function installFetchMock(mock: FetchMock): void {
   (globalThis as Record<string, unknown>).fetch = mock;
+}
+
+function restoreFetch(): void {
+  (globalThis as Record<string, unknown>).fetch = originalFetch;
 }
 
 function buildSSEResponse(
@@ -83,6 +89,8 @@ describe("Stage3CloudDispatchUseCase — successful SSE stream", () => {
     eventBus = new EventBusFake();
     useCase = new Stage3CloudDispatchUseCase(eventBus);
   });
+
+  afterEach(restoreFetch);
 
   it("returns full content with partial: false on successful stream", async () => {
     installFetchMock(async () => buildSSEResponse(["Hello", " world", "!"]));
@@ -141,6 +149,8 @@ describe("Stage3CloudDispatchUseCase — 429 rate limited", () => {
     useCase = new Stage3CloudDispatchUseCase(eventBus);
   });
 
+  afterEach(restoreFetch);
+
   it("returns errorType: rate_limited when autoRetryEnabled is false", async () => {
     installFetchMock(async () => buildErrorResponse(429));
 
@@ -197,6 +207,8 @@ describe("Stage3CloudDispatchUseCase — network failure", () => {
     useCase = new Stage3CloudDispatchUseCase(eventBus);
   });
 
+  afterEach(restoreFetch);
+
   it("returns errorType: network_failure on fetch throw", async () => {
     installFetchMock(async () => {
       throw new Error("Network error");
@@ -241,6 +253,8 @@ describe("Stage3CloudDispatchUseCase — AbortError / cancellation", () => {
     useCase = new Stage3CloudDispatchUseCase(eventBus);
   });
 
+  afterEach(restoreFetch);
+
   it("returns errorType: cancelled when fetch throws AbortError", async () => {
     installFetchMock(async () => {
       const error = new Error("The operation was aborted");
@@ -268,6 +282,8 @@ describe("Stage3CloudDispatchUseCase — BYOK ciphertext rotation", () => {
     eventBus = new EventBusFake();
     useCase = new Stage3CloudDispatchUseCase(eventBus);
   });
+
+  afterEach(restoreFetch);
 
   it("emits BYOK_CIPHERTEXT_ROTATED event when X-Byok-Rotated-Ciphertext header is present", async () => {
     const newCiphertext = "new-encrypted-ciphertext-value";

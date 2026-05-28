@@ -71,14 +71,22 @@ function serializeHistory(
 // Payload assembly
 // ---------------------------------------------------------------------------
 
+const PLACEHOLDER_MAP: Record<string, 0 | 1 | 2> = {
+  "{user_prompt}": 0,
+  "{truncated_prior_turns}": 1,
+  "{stage_1_output_between_markers}": 2,
+};
+
 function assemblePayload(
   userPrompt: string,
   historyText: string,
   draftContent: string,
 ): string {
-  return STAGE_2_TEMPLATE.replace("{user_prompt}", userPrompt)
-    .replace("{truncated_prior_turns}", historyText)
-    .replace("{stage_1_output_between_markers}", draftContent);
+  const values = [userPrompt, historyText, draftContent] as const;
+  return STAGE_2_TEMPLATE.replace(
+    /\{user_prompt\}|\{truncated_prior_turns\}|\{stage_1_output_between_markers\}/g,
+    (match) => values[PLACEHOLDER_MAP[match] ?? 0],
+  );
 }
 
 // ---------------------------------------------------------------------------

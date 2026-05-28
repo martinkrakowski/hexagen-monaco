@@ -159,7 +159,7 @@ export function TandemChatInterface({
           <TandemInlineBanner
             variant="error"
             message="Cloud rate limit reached — showing local draft."
-            onRetry={onRetry}
+            onRetry={handleRetry}
             retryLabel="Retry"
           />
         )}

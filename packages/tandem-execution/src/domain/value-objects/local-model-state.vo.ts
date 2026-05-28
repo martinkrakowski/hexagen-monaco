@@ -38,7 +38,7 @@ export class LocalModelStateMachine {
    * Validates if a state is a canonical LocalModelState.
    */
   static isValidState(state: string): state is LocalModelState {
-    return state in LOCAL_MODEL_STATES;
+    return Object.hasOwn(LOCAL_MODEL_STATES, state);
   }
 
   /**

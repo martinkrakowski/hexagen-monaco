@@ -169,7 +169,8 @@ export class TandemOrchestratorUseCase implements TandemOrchestratorPort {
 
       if (
         stage3Result.errorType &&
-        stage3Result.errorType !== "partial_stream"
+        stage3Result.errorType !== "partial_stream" &&
+        stage3Result.errorType !== "cancelled"
       ) {
         return err(new Error(`Stage 3 failed: ${stage3Result.errorType}`));
       }

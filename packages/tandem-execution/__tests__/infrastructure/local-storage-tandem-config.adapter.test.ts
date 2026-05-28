@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import { describe, it, before, beforeEach, after } from "node:test";
 import { LocalStorageTandemConfigAdapter } from "../../src/infrastructure/adapters/local-storage-tandem-config.adapter.js";
 import { DEFAULT_TANDEM_CONFIG } from "../../src/domain/index.js";

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Stage2PayloadConstructorUseCase } from "../../src/application/use-cases/stage2-payload-constructor.use-case.js";
 

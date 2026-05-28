@@ -46,8 +46,18 @@ export interface Stage3Result {
 
 const RETRY_DELAYS_MS = [5_000, 15_000, 45_000];
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(id);
+      reject(new DOMException("Aborted", "AbortError"));
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -80,9 +90,9 @@ async function* parseSSEStream(
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("data: ")) {
-          const data = trimmed.slice("data: ".length);
+        const stripped = line.replace(/\r$/, "");
+        if (stripped.startsWith("data: ")) {
+          const data = stripped.slice("data: ".length);
           if (data === "[DONE]") return;
           if (data.length > 0) {
             yield data;
@@ -196,7 +206,11 @@ export class Stage3CloudDispatchUseCase {
         const waitMs =
           RETRY_DELAYS_MS[attempt] ??
           RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
-        await delay(waitMs);
+        try {
+          await delay(waitMs, params.signal);
+        } catch {
+          return { content: "", partial: true, errorType: "cancelled" };
+        }
         return this._executeWithRetry(params, attempt + 1);
       }
 

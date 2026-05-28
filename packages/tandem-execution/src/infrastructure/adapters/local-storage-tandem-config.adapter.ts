@@ -52,11 +52,15 @@ export class LocalStorageTandemConfigAdapter implements TandemConfigPersistenceP
             ? parsed.displayPreference
             : DEFAULT_TANDEM_CONFIG.displayPreference,
         stageOneTimeoutSeconds:
-          typeof parsed.stageOneTimeoutSeconds === "number"
+          typeof parsed.stageOneTimeoutSeconds === "number" &&
+          Number.isFinite(parsed.stageOneTimeoutSeconds) &&
+          parsed.stageOneTimeoutSeconds > 0
             ? parsed.stageOneTimeoutSeconds
             : DEFAULT_TANDEM_CONFIG.stageOneTimeoutSeconds,
         memoryHeadroomMB:
-          typeof parsed.memoryHeadroomMB === "number"
+          typeof parsed.memoryHeadroomMB === "number" &&
+          Number.isFinite(parsed.memoryHeadroomMB) &&
+          parsed.memoryHeadroomMB >= 0
             ? parsed.memoryHeadroomMB
             : DEFAULT_TANDEM_CONFIG.memoryHeadroomMB,
         promptTemplateVersion:

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import { describe, it } from "node:test";
 import { RefinementEngineSelectorAdapter } from "../../src/infrastructure/adapters/refinement-engine-selector.adapter.js";
 import type { CloudProviderHealthPort } from "../../src/application/ports/cloud-provider-health.port.js";

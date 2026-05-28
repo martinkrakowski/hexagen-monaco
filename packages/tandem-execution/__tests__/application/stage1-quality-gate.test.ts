@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import assert from "node:assert";
 import { describe, it } from "node:test";
 import { runQualityGate } from "../../src/application/use-cases/stage1-local-speculation.use-case.js";
 
