@@ -135,8 +135,20 @@ export function useTandemLlm(): UseTandemLlmReturn {
     const unsubscribers: Array<() => void> = [];
 
     const sub = <T>(eventType: string, handler: (payload: T) => void) => {
-      const unsub = eventBus.subscribe<T>(eventType, (event: DomainEvent<T>) =>
-        handler(event.payload),
+      const unsub = eventBus.subscribe<T>(
+        eventType,
+        (event: DomainEvent<T>) => {
+          const convId = lastSendParamsRef.current?.conversationId;
+          const payloadConvId = (event.payload as Record<string, unknown>)
+            ?.conversationId;
+          if (
+            convId &&
+            typeof payloadConvId === "string" &&
+            payloadConvId !== convId
+          )
+            return;
+          handler(event.payload);
+        },
       );
       unsubscribers.push(unsub);
     };
