@@ -105,6 +105,7 @@ export function GovernanceAssistantPanel({
   });
 
   const prevCloudStateRef = useRef<ConnectionHealthState>("UNVALIDATED");
+  const prevLocalStatusRef = useRef<string | null>(null);
 
   const tandemLlm = useTandemLlm();
 
@@ -180,14 +181,26 @@ export function GovernanceAssistantPanel({
 
   // ── Forward trigger: watch local model state transitions ──────────────────
   useEffect(() => {
-    const mapped = mapToLocalModelState(llmEngineState.status);
-    if (mapped === "DOWNLOADED" && !tandemModalOpen) {
-      const cloudMapped = mapToCloudHealthState(cloudConnection.state);
-      if (triggerDetection.checkForwardTrigger(mapped, cloudMapped)) {
-        setTandemModalOpen(true);
-      }
+    const prev = prevLocalStatusRef.current;
+    const curr = llmEngineState.status;
+    prevLocalStatusRef.current = curr;
+    if (tandemModalOpen) return;
+
+    // "downloading" → "ready" is the only observable download-completion edge.
+    const justDownloaded = prev === "downloading" && curr === "ready";
+    if (!justDownloaded) return;
+
+    const cloudMapped = mapToCloudHealthState(cloudConnection.state);
+    if (triggerDetection.checkForwardTrigger("DOWNLOADED", cloudMapped)) {
+      setTandemModalOpen(true);
     }
-  }, [llmEngineState.status]); // intentional: only re-run on status change
+  }, [
+    llmEngineState.status,
+    cloudConnection.state,
+    tandemModalOpen,
+    triggerDetection,
+    mapToCloudHealthState,
+  ]);
 
   // ── Reverse trigger: watch cloud connection state transitions ─────────────
   useEffect(() => {
