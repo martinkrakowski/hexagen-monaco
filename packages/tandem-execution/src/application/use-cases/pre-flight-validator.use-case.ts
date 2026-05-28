@@ -90,6 +90,7 @@ export class PreFlightValidatorUseCase implements PreFlightValidatorPort {
       return ok({
         success: true,
         bypassLocal: false,
+        bypassCloud: true,
       }) as Result<PreFlightValidationResult, Error>;
     }
 
@@ -135,6 +136,9 @@ export class PreFlightValidatorUseCase implements PreFlightValidatorPort {
     }
     if (result.bypassLocal) {
       return "BYPASS_LOCAL";
+    }
+    if (result.bypassCloud) {
+      return "BYPASS_CLOUD";
     }
     return "PROCEED_TANDEM";
   }

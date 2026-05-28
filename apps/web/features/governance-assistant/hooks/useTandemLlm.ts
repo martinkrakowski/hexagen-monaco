@@ -8,6 +8,7 @@ import {
   Stage2PayloadConstructorUseCase,
   Stage3CloudDispatchUseCase,
   LocalStorageTandemConfigAdapter,
+  DEFAULT_TANDEM_CONFIG,
   TANDEM_EVENT_TYPES,
 } from "@hexagen/tandem-execution";
 import type {
@@ -95,10 +96,9 @@ export function useTandemLlm(): UseTandemLlmReturn {
     const sendStructuredRequest = getSendStructuredRequest();
     const configAdapter = new LocalStorageTandemConfigAdapter();
     const configResult = configAdapter.read();
-    const config = configResult.success ? configResult.value : undefined;
-    if (!config) {
-      return null;
-    }
+    const config = configResult.success
+      ? configResult.value
+      : DEFAULT_TANDEM_CONFIG;
     const preFlightValidator = new PreFlightValidatorUseCase();
     const stage1 = new Stage1LocalSpeculationUseCase(
       sendStructuredRequest,
@@ -269,10 +269,6 @@ export function useTandemLlm(): UseTandemLlmReturn {
       cloudContextLimit?: number;
     }) => {
       if (isStreamingRef.current) return;
-      if (!orchestratorParts) {
-        setStatus("error");
-        return;
-      }
 
       const { orchestrator } = orchestratorParts;
 
@@ -512,7 +508,6 @@ export function useTandemLlm(): UseTandemLlmReturn {
    */
   const retryCloudRefinement = useCallback(async () => {
     if (isStreamingRef.current) return;
-    if (!orchestratorParts) return;
 
     const { stage2, stage3, config } = orchestratorParts;
     const savedParams = lastSendParamsRef.current;

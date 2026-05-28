@@ -269,17 +269,10 @@ export function GovernanceAssistantPanel({
 
   // ── Tandem sendMessage wrapper ────────────────────────────────────────────
   const handleSendTandemMessage = useCallback(
-    async (params: {
-      content: string;
-      conversationId: string;
-      localModelState: LocalModelState;
-      cloudHealthState: ConnectionHealthState;
-      byokCiphertext?: string;
-      byokProvider?: string;
-      cloudContextLimit?: number;
-    }) => {
+    async (content: string) => {
       await tandemLlm.sendMessage({
-        ...params,
+        content,
+        conversationId: "governance-tandem",
         localModelState: mappedLocalState,
         cloudHealthState: mappedCloudState,
       });

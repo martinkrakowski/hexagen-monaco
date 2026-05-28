@@ -70,21 +70,7 @@ export interface ModeWrapperProps {
   onModeChange: (mode: LLMMode) => void;
   tandemMessages?: TandemChatMessage[];
   tandemStatus?: TandemStatus;
-  onSendTandemMessage?: (params: {
-    content: string;
-    conversationId: string;
-    localModelState:
-      | "NOT_DOWNLOADED"
-      | "DOWNLOADING"
-      | "DOWNLOADED"
-      | "LOADING"
-      | "ACTIVE"
-      | "ERROR";
-    cloudHealthState: "VALID" | "DEGRADED" | "UNAVAILABLE" | "UNVALIDATED";
-    byokCiphertext?: string;
-    byokProvider?: string;
-    cloudContextLimit?: number;
-  }) => Promise<void>;
+  onSendTandemMessage?: (content: string) => Promise<void>;
   onAbortTandem?: () => void;
   onStageAwareAbortTandem?: (stage: "stage1" | "stage3" | "full") => void;
   onClearTandem?: () => void;

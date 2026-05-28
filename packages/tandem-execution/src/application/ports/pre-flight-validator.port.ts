@@ -14,6 +14,7 @@ export interface PreFlightValidatorOptions {
 export interface PreFlightValidationResult {
   success: boolean;
   bypassLocal: boolean;
+  bypassCloud?: boolean;
   bypassReason?: "memory_insufficient" | "context_overflow" | "none";
   error?: string;
 }

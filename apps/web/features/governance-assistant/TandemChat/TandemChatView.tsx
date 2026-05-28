@@ -4,7 +4,8 @@ import { TandemChatInterface } from "./TandemChatInterface";
 import { PanelFooter } from "../governance";
 import type { UseTandemLlmReturn } from "../hooks/useTandemLlm";
 
-interface TandemChatViewProps extends UseTandemLlmReturn {
+interface TandemChatViewProps extends Omit<UseTandemLlmReturn, "sendMessage"> {
+  sendMessage: (content: string) => Promise<void>;
   displayMode?: "overwrite" | "append";
   onModeChange: (mode: "local" | "cloud" | "tandem") => void;
   onOpenSettings: () => void;
@@ -63,14 +64,7 @@ export function TandemChatView({
           status={status}
           currentStage={currentStage}
           displayMode={displayMode}
-          onSendMessage={(content) => {
-            void sendMessage({
-              content,
-              conversationId: "governance-tandem",
-              localModelState: "ACTIVE",
-              cloudHealthState: "VALID",
-            });
-          }}
+          onSendMessage={(content) => void sendMessage(content)}
           onAbort={abort}
           onStageAwareAbort={stageAwareAbort}
           onClear={clear}

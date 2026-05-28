@@ -148,13 +148,9 @@ export class TandemOrchestratorUseCase implements TandemOrchestratorPort {
       return err(new Error("Both engines unavailable"));
     }
 
-    // Determine outcome
+    // Determine outcome — both flags are set by PreFlightValidatorUseCase
     const isBypassLocal = validation.bypassLocal;
-    // BYPASS_CLOUD: local active, cloud unavailable/unvalidated
-    const isBypassCloud =
-      !isBypassLocal &&
-      (cloudHealthState === "UNAVAILABLE" ||
-        cloudHealthState === "UNVALIDATED");
+    const isBypassCloud = validation.bypassCloud ?? false;
 
     // -----------------------------------------------------------------------
     // BYPASS_LOCAL path — skip Stage 1 & 2, go directly to Stage 3
