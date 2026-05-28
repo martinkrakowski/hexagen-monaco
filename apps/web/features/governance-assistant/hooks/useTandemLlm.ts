@@ -91,14 +91,10 @@ export function useTandemLlm(): UseTandemLlmReturn {
     localModelState: TandemOrchestratorParams["localModelState"];
   } | null>(null);
 
-  const orchestratorParts = useMemo(() => {
+  // Stable infrastructure — stateless use-cases that don't depend on config.
+  const infrastructure = useMemo(() => {
     const eventBus = getEventBus();
     const sendStructuredRequest = getSendStructuredRequest();
-    const configAdapter = new LocalStorageTandemConfigAdapter();
-    const configResult = configAdapter.read();
-    const config = configResult.success
-      ? configResult.value
-      : DEFAULT_TANDEM_CONFIG;
     const preFlightValidator = new PreFlightValidatorUseCase();
     const stage1 = new Stage1LocalSpeculationUseCase(
       sendStructuredRequest,
@@ -106,16 +102,32 @@ export function useTandemLlm(): UseTandemLlmReturn {
     );
     const stage2 = new Stage2PayloadConstructorUseCase();
     const stage3 = new Stage3CloudDispatchUseCase(eventBus);
+    return { eventBus, preFlightValidator, stage1, stage2, stage3 };
+  }, []);
+
+  // Builds an orchestrator with freshly-read config so settings changes take
+  // effect on the next send rather than requiring a remount.
+  const buildOrchestrator = useCallback(() => {
+    const configAdapter = new LocalStorageTandemConfigAdapter();
+    const configResult = configAdapter.read();
+    const config = configResult.success
+      ? configResult.value
+      : DEFAULT_TANDEM_CONFIG;
     const orchestrator = new TandemOrchestratorUseCase(
-      preFlightValidator,
-      stage1,
-      stage2,
-      stage3,
-      eventBus,
+      infrastructure.preFlightValidator,
+      infrastructure.stage1,
+      infrastructure.stage2,
+      infrastructure.stage3,
+      infrastructure.eventBus,
       config,
     );
-    return { orchestrator, stage2, stage3, config };
-  }, []);
+    return {
+      orchestrator,
+      stage2: infrastructure.stage2,
+      stage3: infrastructure.stage3,
+      config,
+    };
+  }, [infrastructure]);
 
   useEffect(() => {
     const eventBus = getEventBus();
@@ -270,7 +282,7 @@ export function useTandemLlm(): UseTandemLlmReturn {
     }) => {
       if (isStreamingRef.current) return;
 
-      const { orchestrator } = orchestratorParts;
+      const { orchestrator } = buildOrchestrator();
 
       // Reset per-run notification state
       setLastBypassReason(null);
@@ -406,7 +418,7 @@ export function useTandemLlm(): UseTandemLlmReturn {
         abortControllerRef.current = null;
       }
     },
-    [orchestratorParts],
+    [buildOrchestrator],
   );
 
   const abort = useCallback(() => {
@@ -509,7 +521,7 @@ export function useTandemLlm(): UseTandemLlmReturn {
   const retryCloudRefinement = useCallback(async () => {
     if (isStreamingRef.current) return;
 
-    const { stage2, stage3, config } = orchestratorParts;
+    const { stage2, stage3, config } = buildOrchestrator();
     const savedParams = lastSendParamsRef.current;
     if (!savedParams) return;
 
@@ -681,7 +693,7 @@ export function useTandemLlm(): UseTandemLlmReturn {
       isStreamingRef.current = false;
       abortControllerRef.current = null;
     }
-  }, [orchestratorParts]);
+  }, [buildOrchestrator]);
 
   /**
    * canRetry is true when the last assistant message has a stage1Draft and

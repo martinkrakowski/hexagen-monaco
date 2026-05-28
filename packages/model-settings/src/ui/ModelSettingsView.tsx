@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useEffect, useMemo, useState } from "react";
+import { useReducer, useEffect, useMemo, useState, useRef } from "react";
 import {
   LOCAL_MODELS,
   getModelDescriptor,
@@ -162,6 +162,10 @@ export function ModelSettingsView({
     return result.success ? result.value : DEFAULT_TANDEM_CONFIG;
   });
   const [showTandemResetConfirm, setShowTandemResetConfirm] = useState(false);
+  const tandemResetCancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (showTandemResetConfirm) tandemResetCancelRef.current?.focus();
+  }, [showTandemResetConfirm]);
   const [simulatedDownload, setSimulatedDownload] = useState<{
     modelId: DomainModelId;
     progress: number;
@@ -354,13 +358,23 @@ export function ModelSettingsView({
       }
       setSimulatedDownload(null);
       setIsSwitching(false);
+    }
 
+    try {
       const isNowCached = await hasModelInCache(modelId);
       dispatch({
         type: "UPDATE_CACHE_ENTRY",
         payload: {
           modelId,
           entry: { modelId, isCached: isNowCached, isChecking: false },
+        },
+      });
+    } catch {
+      dispatch({
+        type: "UPDATE_CACHE_ENTRY",
+        payload: {
+          modelId,
+          entry: { modelId, isCached: false, isChecking: false },
         },
       });
     }
@@ -759,17 +773,35 @@ export function ModelSettingsView({
       />
 
       {showTandemResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/50">
-          <div className="bg-popover text-popover-foreground border border-border rounded-lg p-5 max-w-sm mx-4 shadow-lg animate-fade-in-up">
-            <h3 className="text-sm font-semibold text-popover-foreground mb-2">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/50"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setShowTandemResetConfirm(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tandem-reset-title"
+            aria-describedby="tandem-reset-desc"
+            className="bg-popover text-popover-foreground border border-border rounded-lg p-5 max-w-sm mx-4 shadow-lg animate-fade-in-up"
+          >
+            <h3
+              id="tandem-reset-title"
+              className="text-sm font-semibold text-popover-foreground mb-2"
+            >
               Reset Tandem Configuration
             </h3>
-            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+            <p
+              id="tandem-reset-desc"
+              className="text-xs text-muted-foreground mb-4 leading-relaxed"
+            >
               Are you sure you want to reset your Tandem Mode configuration to
               default values?
             </p>
             <div className="flex justify-end gap-2">
               <button
+                ref={tandemResetCancelRef}
                 type="button"
                 onClick={() => setShowTandemResetConfirm(false)}
                 className="text-xs px-3 py-1.5 rounded-md border border-border text-foreground hover:bg-muted/60 transition-colors"

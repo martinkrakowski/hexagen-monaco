@@ -16,7 +16,4 @@ export {
   type Stage3Params,
   type Stage3Result,
 } from "./stage3-cloud-dispatch.use-case.js";
-export {
-  TandemOrchestratorUseCase,
-  type TandemOrchestratorParams,
-} from "./tandem-orchestrator.use-case.js";
+export { TandemOrchestratorUseCase } from "./tandem-orchestrator.use-case.js";

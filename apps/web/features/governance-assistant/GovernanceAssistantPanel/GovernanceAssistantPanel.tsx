@@ -216,7 +216,16 @@ export function GovernanceAssistantPanel({
       const config = configResult.success
         ? configResult.value
         : DEFAULT_TANDEM_CONFIG;
-      triggerDetection.commitActivation(path, config, configAdapter);
+      const result = triggerDetection.commitActivation(
+        path,
+        config,
+        configAdapter,
+      );
+
+      if (!result.success) {
+        // Keep modal open; mode unchanged — caller may retry or dismiss
+        return;
+      }
 
       if (path === "tandem") {
         setMode("tandem");

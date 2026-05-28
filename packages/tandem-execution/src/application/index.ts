@@ -11,5 +11,4 @@ export {
   Stage2PayloadConstructorUseCase,
   Stage3CloudDispatchUseCase,
   TandemOrchestratorUseCase,
-  type TandemOrchestratorParams,
 } from "./use-cases/index.js";

@@ -1,11 +1,28 @@
 import type { Result } from "@hexagen/shared";
-import type { TandemTokenMetadata } from "../../domain/index.js";
+import type {
+  TandemTokenMetadata,
+  LocalModelState,
+  ConnectionHealthState,
+} from "../../domain/index.js";
 
 export interface OrchestratorParams {
   prompt: string;
   conversationId: string;
   history: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   deviceMemoryGb?: number;
+}
+
+export interface TandemOrchestratorParams extends OrchestratorParams {
+  /** ADR-0016 streaming guard ref. Managed by the orchestrator if not provided. */
+  isStreamingRef?: { current: boolean };
+  localModelState: LocalModelState;
+  cloudHealthState: ConnectionHealthState;
+  cloudContextLimit?: number;
+  memoryThresholdGb?: number;
+  byokCiphertext?: string;
+  byokProvider?: string;
+  onToken?: (chunk: string) => void;
+  signal?: AbortSignal;
 }
 
 export interface OrchestratorResult {
@@ -17,6 +34,6 @@ export interface OrchestratorResult {
 
 export interface TandemOrchestratorPort {
   executePipeline(
-    params: OrchestratorParams,
+    params: TandemOrchestratorParams,
   ): Promise<Result<OrchestratorResult, Error>>;
 }

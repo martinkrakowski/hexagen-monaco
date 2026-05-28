@@ -2,8 +2,8 @@ import type { Result } from "@hexagen/shared";
 import { ok, err } from "@hexagen/shared";
 import type { EventBusPort } from "@hexagen/messaging";
 import type {
-  OrchestratorParams,
   OrchestratorResult,
+  TandemOrchestratorParams,
   TandemOrchestratorPort,
 } from "../ports/tandem-orchestrator.port.js";
 import type { PreFlightValidatorPort } from "../ports/pre-flight-validator.port.js";
@@ -12,35 +12,6 @@ import { TANDEM_EVENT_TYPES, createTandemEvent } from "../../domain/index.js";
 import type { Stage1LocalSpeculationUseCase } from "./stage1-local-speculation.use-case.js";
 import type { Stage2PayloadConstructorUseCase } from "./stage2-payload-constructor.use-case.js";
 import type { Stage3CloudDispatchUseCase } from "./stage3-cloud-dispatch.use-case.js";
-
-// ---------------------------------------------------------------------------
-// Extended OrchestratorParams with isStreamingRef
-// ---------------------------------------------------------------------------
-
-export interface TandemOrchestratorParams extends OrchestratorParams {
-  /**
-   * ADR-0016 streaming guard ref.
-   * If provided, the orchestrator sets `isStreamingRef.current = true` at the
-   * start of `executePipeline` and releases it in the `finally` block across
-   * ALL exit paths (success, error, cancellation, terminal failure).
-   * If not provided, the orchestrator manages an internal ref.
-   */
-  isStreamingRef?: { current: boolean };
-  localModelState:
-    | "NOT_DOWNLOADED"
-    | "DOWNLOADING"
-    | "DOWNLOADED"
-    | "LOADING"
-    | "ACTIVE"
-    | "ERROR";
-  cloudHealthState: "VALID" | "DEGRADED" | "UNAVAILABLE" | "UNVALIDATED";
-  cloudContextLimit?: number;
-  memoryThresholdGb?: number;
-  byokCiphertext?: string;
-  byokProvider?: string;
-  onToken?: (chunk: string) => void;
-  signal?: AbortSignal;
-}
 
 // ---------------------------------------------------------------------------
 // TandemOrchestratorUseCase
@@ -74,21 +45,16 @@ export class TandemOrchestratorUseCase implements TandemOrchestratorPort {
   ) {}
 
   async executePipeline(
-    params: OrchestratorParams,
+    params: TandemOrchestratorParams,
   ): Promise<Result<OrchestratorResult, Error>> {
-    // Cast to extended params — callers using the full orchestrator should
-    // pass TandemOrchestratorParams; the base port signature is preserved for
-    // interface compliance.
-    const extParams = params as TandemOrchestratorParams;
-
     // ADR-0016: Acquire isStreamingRef
-    const isStreamingRef: { current: boolean } = extParams.isStreamingRef ?? {
+    const isStreamingRef: { current: boolean } = params.isStreamingRef ?? {
       current: false,
     };
     isStreamingRef.current = true;
 
     try {
-      return await this._runPipeline(extParams, isStreamingRef);
+      return await this._runPipeline(params, isStreamingRef);
     } finally {
       // Release in ALL exit paths
       isStreamingRef.current = false;
