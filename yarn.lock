@@ -1885,6 +1885,7 @@ __metadata:
   resolution: "@hexagen/model-settings@workspace:packages/model-settings"
   dependencies:
     "@hexagen/local-llm": "workspace:*"
+    "@hexagen/tandem-execution": "workspace:*"
     "@hexagen/ui": "workspace:*"
     "@types/react": "npm:^19.0.0"
     lucide-react: "npm:^1.11.0"
@@ -2055,7 +2056,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/tandem-execution@workspace:packages/tandem-execution":
+"@hexagen/tandem-execution@workspace:*, @hexagen/tandem-execution@workspace:packages/tandem-execution":
   version: 0.0.0-use.local
   resolution: "@hexagen/tandem-execution@workspace:packages/tandem-execution"
   dependencies:
@@ -15874,6 +15875,7 @@ __metadata:
     "@hexagen/reconciliation-engine": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
+    "@hexagen/tandem-execution": "workspace:*"
     "@hexagen/transaction-system": "workspace:*"
     "@hexagen/ui": "workspace:*"
     "@hexagen/ui-projection-compiler": "workspace:*"
