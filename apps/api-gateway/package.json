@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/api-gateway",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "fastify start -w -l info -P app.js -p 3001",

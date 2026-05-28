@@ -12,10 +12,7 @@ import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button, Badge } from "@hexagen/ui";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShell } from "@/landing/ProjectsShell";
-import {
-  hasServerLLMAccessKey,
-  isLocalLLMReady,
-} from "../../app/lib/wire.client";
+import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { useFreeTier } from "@/lib/free-tier/FreeTierContext";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
@@ -26,6 +23,7 @@ import { SpecConvertingStep } from "./import-project-spec/SpecConvertingStep";
 import { SpecDescriptionFallbackStep } from "./import-project-spec/SpecDescriptionFallbackStep";
 import { ManifestGeneratingStep } from "./import-project-spec/ManifestGeneratingStep";
 import { ManifestPreviewStep } from "./import-project-spec/ManifestPreviewStep";
+import { ModelSetupPrompt } from "./GenerateWithAi/ModelSetupPrompt";
 import {
   extractSpecSummary,
   type SpecSummary,
@@ -60,6 +58,8 @@ export default function ImportProjectSpecPage() {
     freeTierModal,
     openModal,
   } = useFreeTier();
+
+  const { needsSetup, isProbing } = useLLMReadiness();
 
   // Hook for spec path (structured config)
   const specGeneration = useStagedSpecGeneration();
@@ -140,16 +140,7 @@ export default function ImportProjectSpecPage() {
   };
 
   const handleMapPorts = useCallback(async () => {
-    // Pre-generation guard
-    const hasCloudKeys = hasServerLLMAccessKey();
-    const hasLocalLLM = isLocalLLMReady();
-
-    if (!hasCloudKeys && !hasLocalLLM) {
-      router.push(
-        "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
-      );
-      return;
-    }
+    if (needsSetup) return;
 
     setPreviousState(pageState);
     setPageState("GENERATING");
@@ -174,9 +165,11 @@ export default function ImportProjectSpecPage() {
       // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
       // when isGenerating=false, so the user can recover.
     }
-  }, [specContent, specGeneration, manifestGeneration, pageState, router]);
+  }, [needsSetup, specContent, specGeneration, manifestGeneration, pageState]);
 
   const handleContinue = useCallback(async () => {
+    if (needsSetup) return;
+
     setPreviousState(pageState);
     setPageState("GENERATING");
     setGeneratedManifest(null);
@@ -188,15 +181,9 @@ export default function ImportProjectSpecPage() {
       setGeneratedManifest(result.generatedManifest);
       setPageState("PREVIEW");
     } else if (result?.generationError) {
-      if (result.generationError.includes("No cloud LLM API keys configured")) {
-        router.push(
-          "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
-        );
-      } else {
-        setPageState("DESCRIPTION_FALLBACK");
-      }
+      setPageState("DESCRIPTION_FALLBACK");
     }
-  }, [specContent, manifestGeneration, specGeneration, pageState, router]);
+  }, [needsSetup, specContent, manifestGeneration, specGeneration, pageState]);
 
   const handleBack = () => {
     if (pageState === "SPEC_REVIEW" || pageState === "DESCRIPTION_FALLBACK") {
@@ -417,6 +404,21 @@ export default function ImportProjectSpecPage() {
         ) : (
           <div className="h-full overflow-y-auto dot-grid bg-ambient">
             <div className="max-w-2xl mx-auto py-8 px-4">
+              {(pageState === "SPEC_REVIEW" ||
+                pageState === "DESCRIPTION_FALLBACK") &&
+                needsSetup &&
+                !isProbing && (
+                  <div className="mb-6">
+                    <ModelSetupPrompt
+                      onSetupModel={() =>
+                        router.push(
+                          "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
+                        )
+                      }
+                    />
+                  </div>
+                )}
+
               {pageState === "UPLOAD" && (
                 <SpecUploadStep onFileLoaded={handleFileLoaded} />
               )}

@@ -1,10 +1,13 @@
 name: model-settings
 type: supporting
-description: Projection layer for local LLM model configuration — renders model selection, hardware capability, download state, and provider switching as UI components. Depends on local-llm domain types; consumes no app-level state.
+description: Projection layer for local LLM model configuration — renders model selection, hardware capability, download state, provider switching, and tandem interception as UI components. Depends on local-llm domain types; consumes no app-level state.
 layers:
   domain: {}
   application: {}
   infrastructure: {}
+  ui:
+    components:
+      - TandemInterceptionModal
 depends_on:
   - local-llm
   - ui

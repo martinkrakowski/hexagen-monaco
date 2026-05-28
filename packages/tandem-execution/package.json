@@ -1,0 +1,32 @@
+{
+  "name": "@hexagen/tandem-execution",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "source": "./src/index.ts",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\"",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@hexagen/local-llm": "workspace:*",
+    "@hexagen/messaging": "workspace:*",
+    "@hexagen/shared": "workspace:*"
+  }
+}

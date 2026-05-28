@@ -14,25 +14,21 @@ import { DESCRIPTION_MIN_LENGTH } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { Button, Skeleton } from "@hexagen/ui";
-import { useWebGPUDetection } from "../ModelSelectionFlow/useWebGPUDetection";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import { ActionBar } from "./ActionBar";
 import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
 import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
 import { HeaderSection } from "./HeaderSection";
+import { ModelSetupPrompt } from "./ModelSetupPrompt";
 import { StateView } from "./StateView";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
 import type { GenerateWithAiProps, ViewTab } from "./types";
-import {
-  getCapabilities,
-  onCapabilityCacheInvalidated,
-} from "@/lib/manifest-generation";
-import { hasServerLLMAccessKey } from "../../../app/lib/wire.client";
-import type { CapabilitiesResponse } from "../types/capabilities";
+import { useLLMReadiness } from "../hooks/useLLMReadiness";
 import { useModelSelectionIntent } from "../store/useModelSelectionIntent";
+import { useSuppressLLMLoadingModal } from "@/contexts/LLMLoadingModalContext";
 
 export function GenerateWithAi({
   onUseManifest,
@@ -43,6 +39,7 @@ export function GenerateWithAi({
   const router = useRouter();
   const searchParams = useSearchParams();
   const modelSelectionIntent = useModelSelectionIntent();
+  useSuppressLLMLoadingModal();
   const [formState, formHandlers] = useGenerateWithAiForm();
   const [mounted, setMounted] = useState(false);
   const [previewActiveTab, setPreviewActiveTab] =
@@ -53,53 +50,9 @@ export function GenerateWithAi({
     setMounted(true);
   }, []);
 
-  /**
-   * Tier 1 (Synchronous): Check if server has env-var API key configured.
-   * This fires immediately at component init without roundtrip.
-   */
-  const hasServerApiKey = hasServerLLMAccessKey();
-
-  /**
-   * Tier 2 (Asynchronous): Probe server for full capability picture.
-   * Always runs to discover BYOK configuration.
-   * Resolves BYOK tier for each provider and produces canGenerate aggregate.
-   */
-  const [capabilities, setCapabilities] = useState<CapabilitiesResponse | null>(
-    null,
+  const { hasAnyCloud, isProbing, needsSetup, preferLocal } = useLLMReadiness(
+    llmContext.engineState,
   );
-
-  /**
-   * Tier 3 (Synchronous): Check if browser supports WebLLM (local generation).
-   * Polls WebGPU capability and hardware constraints.
-   */
-  const gpuDetection = useWebGPUDetection();
-  const hasLocalLLM =
-    gpuDetection.isWebGPUSupported && gpuDetection.isHardwareAdequate;
-
-  // Probe capabilities on mount and when cache is invalidated.
-  // Always probe for BYOK tier (don't skip based on Tier 1).
-  // Tier 1 is a fast-pass (button enabled immediately), not a prerequisite.
-  useEffect(() => {
-    const probeCapabilities = async () => {
-      try {
-        const result = await getCapabilities();
-        setCapabilities(result);
-      } catch {
-        // Fail open if probe fails AND Tier 1 passes (env key exists).
-        // Fail closed if probe fails AND Tier 1 fails (no env key, no BYOK either).
-        setCapabilities({ capabilities: [], canGenerate: hasServerApiKey });
-      }
-    };
-
-    probeCapabilities();
-
-    // Listen for cache invalidation (e.g., when user adds BYOK key)
-    const unsubscribe = onCapabilityCacheInvalidated(() => {
-      probeCapabilities();
-    });
-
-    return unsubscribe;
-  }, [hasServerApiKey]);
 
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
@@ -113,22 +66,18 @@ export function GenerateWithAi({
     generateRef.current = stagedGen.generateManifest;
   }, [stagedGen.generateManifest]);
 
-  // Compute provider availability early (before useEffect that uses it)
-  const hasCloudKeys = hasServerApiKey || (capabilities?.canGenerate ?? false);
-
   useEffect(() => {
     if (flowState.state !== "generating") return;
     generateRef.current(formState.description, {
       deployment: formState.deployment,
       signal: undefined,
-      preferLocal: !hasCloudKeys && hasLocalLLM,
+      preferLocal,
     });
   }, [
     flowState.state,
     formState.description,
     formState.deployment,
-    hasCloudKeys,
-    hasLocalLLM,
+    preferLocal,
   ]);
 
   useEffect(() => {
@@ -151,18 +100,18 @@ export function GenerateWithAi({
   const capability = assessModelCapability(loadedModelId, false);
   const manifestCapable = capability.isCapable;
 
-  const hasAnyProvider = hasCloudKeys || hasLocalLLM;
+  const hasAnyProvider = !needsSetup || isProbing;
   const canGenerate =
-    formHandlers.isValid && flowState.state === "idle" && hasAnyProvider;
+    formHandlers.isValid &&
+    flowState.state === "idle" &&
+    hasAnyProvider &&
+    !isProbing;
 
-  // Tooltip messaging based on which providers are unavailable
-  const disabledTooltip = !hasAnyProvider
-    ? "No API keys configured. Add a BYOK key in Settings, set environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, COHERE_API_KEY), or enable local generation with WebLLM (requires WebGPU support)."
-    : formHandlers.isTooShort
-      ? `Description must be at least ${DESCRIPTION_MIN_LENGTH} characters.`
-      : formHandlers.isTooLong
-        ? "Description exceeds character limit"
-        : undefined;
+  const disabledTooltip = formHandlers.isTooShort
+    ? `Description must be at least ${DESCRIPTION_MIN_LENGTH} characters.`
+    : formHandlers.isTooLong
+      ? "Description exceeds character limit"
+      : undefined;
 
   const navigateToModelSelection = useCallback(
     (autoGenerate = false) => {
@@ -175,8 +124,7 @@ export function GenerateWithAi({
   const handleGenerate = () => {
     if (!canGenerate) return;
 
-    // Server/Cloud LLM via env key or BYOK takes precedence over local WebLLM configuration
-    if (hasCloudKeys) {
+    if (hasAnyCloud) {
       actions.transitionTo("generating");
     } else {
       const prefs = getModelPreferences();
@@ -198,7 +146,7 @@ export function GenerateWithAi({
     if (flowState.state !== "idle") return;
     if (!formHandlers.isValid) return;
 
-    if (hasCloudKeys) {
+    if (hasAnyCloud) {
       actions.transitionTo("generating");
       router.replace("/projects/new/ai");
     } else {
@@ -218,7 +166,7 @@ export function GenerateWithAi({
     llmContext.engineState.status,
     actions,
     router,
-    hasCloudKeys,
+    hasAnyCloud,
   ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
@@ -313,6 +261,12 @@ export function GenerateWithAi({
         onFileLoaded={formHandlers.loadFromFile}
         onClearFile={formHandlers.clearFile}
       />
+
+      {needsSetup && !isProbing && (
+        <ModelSetupPrompt
+          onSetupModel={() => navigateToModelSelection(false)}
+        />
+      )}
 
       {hasError && (
         <div className="p-4 bg-destructive/10 border border-destructive rounded-md space-y-3">

@@ -15,6 +15,7 @@ import type { DomainModelId } from "../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { hasServerLLMAccessKey } from "../../app/lib/wire";
 import { getCapabilities } from "@/lib/manifest-generation";
+import { useSuppressLLMLoadingModal } from "@/contexts/LLMLoadingModalContext";
 
 interface ModelSelectionPageProps {
   llmContext: LocalLLMContext;
@@ -24,6 +25,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const router = useRouter();
   const { clear } = useModelSelectionIntent();
   const { setPreferredLocalModel } = usePreferredLLM();
+  useSuppressLLMLoadingModal();
   const [mounted, setMounted] = useState(false);
   const llmRef = useRef(llmContext);
   llmRef.current = llmContext;

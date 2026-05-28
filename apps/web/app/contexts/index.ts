@@ -17,3 +17,9 @@ export {
   type ExportState,
   type ProjectExportContextValue,
 } from "./ExportContext";
+
+export {
+  LLMLoadingModalProvider,
+  useSuppressLLMLoadingModal,
+  useLLMLoadingModalSuppressed,
+} from "./LLMLoadingModalContext";

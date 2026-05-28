@@ -1885,6 +1885,7 @@ __metadata:
   resolution: "@hexagen/model-settings@workspace:packages/model-settings"
   dependencies:
     "@hexagen/local-llm": "workspace:*"
+    "@hexagen/tandem-execution": "workspace:*"
     "@hexagen/ui": "workspace:*"
     "@types/react": "npm:^19.0.0"
     lucide-react: "npm:^1.11.0"
@@ -2052,6 +2053,18 @@ __metadata:
     typescript: "npm:^5.9.3"
   bin:
     hexagen: ./dist/cli.js
+  languageName: unknown
+  linkType: soft
+
+"@hexagen/tandem-execution@workspace:*, @hexagen/tandem-execution@workspace:packages/tandem-execution":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/tandem-execution@workspace:packages/tandem-execution"
+  dependencies:
+    "@hexagen/local-llm": "workspace:*"
+    "@hexagen/messaging": "workspace:*"
+    "@hexagen/shared": "workspace:*"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.5.4"
   languageName: unknown
   linkType: soft
 
@@ -15863,6 +15876,7 @@ __metadata:
     "@hexagen/reconciliation-engine": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
+    "@hexagen/tandem-execution": "workspace:*"
     "@hexagen/transaction-system": "workspace:*"
     "@hexagen/ui": "workspace:*"
     "@hexagen/ui-projection-compiler": "workspace:*"
