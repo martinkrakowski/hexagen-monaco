@@ -2060,6 +2060,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/tandem-execution@workspace:packages/tandem-execution"
   dependencies:
+    "@hexagen/local-llm": "workspace:*"
     "@hexagen/messaging": "workspace:*"
     "@hexagen/shared": "workspace:*"
     tsx: "npm:^4.19.2"

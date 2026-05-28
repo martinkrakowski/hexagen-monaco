@@ -25,6 +25,7 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
+    "@hexagen/local-llm": "workspace:*",
     "@hexagen/messaging": "workspace:*",
     "@hexagen/shared": "workspace:*"
   }
