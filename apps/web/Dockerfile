@@ -31,8 +31,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN yarn turbo build --filter=web... --concurrency=1
 
 # Post-build safety: fail if a raw OpenAI/Anthropic-shaped key is embedded in client bundle
+# --include='*.js' limits the scan to JavaScript chunks; CSS files can contain substrings
+# that match the key pattern (e.g. react-flow's "mask-stroke-color-default" → "sk-stroke-...")
+# without ever being an actual secret.
 RUN cd apps/web && \
-    if grep -rE 'sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}' .next/static; then \
+    if grep -rE 'sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}' .next/static --include='*.js'; then \
       echo "FATAL: API key value leak detected in client bundle" && exit 1; \
     fi
 
