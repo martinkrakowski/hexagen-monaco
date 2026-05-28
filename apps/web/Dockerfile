@@ -30,13 +30,17 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Build only the web app and its dependencies, one at a time (memory optimization)
 RUN yarn turbo build --filter=web... --concurrency=1
 
-# Post-build safety: fail if a raw OpenAI/Anthropic-shaped key is embedded in client bundle
-# --include='*.js' limits the scan to JavaScript chunks; CSS files can contain substrings
-# that match the key pattern (e.g. react-flow's "mask-stroke-color-default" → "sk-stroke-...")
-# without ever being an actual secret.
+# Post-build safety: fail if a raw OpenAI/Anthropic-shaped key is embedded in JS chunks.
+# Uses find+grep instead of grep --include because BusyBox grep (Alpine) does not support
+# --include. Scanning only *.js avoids false positives from CSS (e.g. react-flow's
+# "mask-stroke-color-default" contains the substring "sk-stroke-color-default").
 RUN cd apps/web && \
-    if grep -rE 'sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}' .next/static --include='*.js'; then \
-      echo "FATAL: API key value leak detected in client bundle" && exit 1; \
+    LEAKS=$(find .next/static -name '*.js' \
+        -exec grep -lE 'sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}' {} + \
+        2>/dev/null); \
+    if [ -n "$LEAKS" ]; then \
+      echo "FATAL: API key value leak detected in client bundle" && \
+      echo "$LEAKS" && exit 1; \
     fi
 
 # ---------- 2️⃣  Runtime stage ----------
