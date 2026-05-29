@@ -1,7 +1,7 @@
 {
   "id": "auth-mock",
   "name": "Auth Mock",
-  "description": "AUTH_MODE=mock|real toggle, UserContext value object, session cookie, and real-provider stub",
+  "description": "AUTH_MODE=mock|real toggle, UserContext value object, session cookie, mock adapter, and real-provider stub",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
@@ -25,6 +25,18 @@
       "default": "demo@example.com"
     },
     {
+      "id": "mock_user_roles",
+      "type": "text",
+      "prompt": "Mock user roles (comma-separated)?",
+      "default": "user"
+    },
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes to protect (comma-separated)?",
+      "default": "/api,/dashboard"
+    },
+    {
       "id": "real_provider_slot",
       "type": "select",
       "prompt": "Which real provider will replace mock later?",
@@ -41,9 +53,15 @@
   ],
   "envVars": [
     "AUTH_MODE",
+    "AUTH_COOKIE_NAME",
+    "AUTH_SESSION_MAX_AGE",
     "AUTH_SESSION_SECRET",
+    "AUTH_PROTECTED_PATHS",
+    "MOCK_USER_ID",
     "MOCK_USER_NAME",
-    "MOCK_USER_EMAIL"
+    "MOCK_USER_EMAIL",
+    "MOCK_USER_ROLES",
+    "MOCK_USER_AVATAR_URL"
   ],
   "outputs": [
     "src/domain/value-objects/user-context.ts",
@@ -51,16 +69,23 @@
     "src/application/services/auth.service.ts",
     "src/application/use-cases/get-current-user.use-case.ts",
     "src/infrastructure/auth/mock/mock-auth.adapter.ts",
+    "src/infrastructure/auth/mock/mock-session.ts",
     "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
     "src/infrastructure/auth/session/session-manager.ts",
+    "src/infrastructure/auth/index.ts",
     "server/middleware/auth.middleware.ts",
-    "app/api/auth/logout/route.ts"
+    "app/api/auth/logout/route.ts",
+    "app/api/auth/me/route.ts",
+    ".env.auth.example"
   ],
   "checklist": [
-    "Merge .env.auth.example into .env.local",
+    "Copy .env.auth.example values into your .env.local",
     "Set AUTH_MODE=mock for local development",
-    "Verify __auth_session cookie is set on first browser request",
-    "Call GET /api/auth/me to confirm UserContext is returned"
+    "Add MOCK_USER_NAME, MOCK_USER_EMAIL, MOCK_USER_ROLES to taste",
+    "Wire auth middleware into your root middleware.ts (see server/middleware/auth.middleware.ts)",
+    "Call GET /api/auth/me to confirm UserContext is returned",
+    "Verify DELETE /api/auth/logout clears the session cookie",
+    "When ready for real auth: implement real-auth.adapter.stub.ts and set AUTH_MODE=real"
   ],
   "branch": "feature/generator-template-auth-mock"
 }
