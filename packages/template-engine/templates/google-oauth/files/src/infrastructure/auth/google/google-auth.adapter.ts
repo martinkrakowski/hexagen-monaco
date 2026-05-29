@@ -8,10 +8,13 @@ import { GOOGLE_CONFIG } from "./config";
 // mapper, so this no longer implements a generic auth port.
 export class GoogleAuthAdapter {
   async createSessionFromGoogleUser(user: GoogleUser): Promise<string> {
-    if (GOOGLE_CONFIG.hd && user.hd !== GOOGLE_CONFIG.hd) {
+    // Domain names are case-insensitive (RFC 4343), so compare lower-cased.
+    const allowed = GOOGLE_CONFIG.hd?.trim().toLowerCase();
+    const actual = user.hd?.trim().toLowerCase();
+    if (allowed && actual !== allowed) {
       throw new Error(
         `Account domain '${user.hd ?? "personal"}' is not allowed. ` +
-          `Only @${GOOGLE_CONFIG.hd} accounts may sign in.`,
+          `Only @${allowed} accounts may sign in.`,
       );
     }
     return encryptSession(user);

@@ -38,7 +38,7 @@ What changed from v1:
 
 ## Files Generated (selected)
 
-```
+```text
 src/infrastructure/supabase/
   client.ts                  # createBrowserClient
   server.ts                  # createSupabaseServerClient (cookies-aware)

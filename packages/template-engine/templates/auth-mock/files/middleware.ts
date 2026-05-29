@@ -15,6 +15,9 @@ export default function middleware(request: NextRequest) {
   headers.delete("x-user-context");
 
   if (process.env.AUTH_MODE === "mock") {
+    if (process.env.NODE_ENV !== "development") {
+      throw new Error("AUTH_MODE=mock is only supported in development");
+    }
     headers.set("x-user-context", JSON.stringify(MOCK_USER));
   }
   return NextResponse.next({ request: { headers } });

@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "../../../../src/lib/auth/get-current-user";
+import { getValidatedSession } from "../../../../src/lib/auth/get-current-user";
+import { buildSessionCookieHeader } from "../../../../src/infrastructure/auth/session/session-manager";
 
 export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) {
+  const session = await getValidatedSession();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.json({ user });
+  const response = NextResponse.json({ user: session.user });
+  if (session.refreshedToken) {
+    response.headers.append(
+      "Set-Cookie",
+      buildSessionCookieHeader(session.refreshedToken),
+    );
+  }
+  return response;
 }

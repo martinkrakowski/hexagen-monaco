@@ -6,7 +6,12 @@ import { MOCK_USER } from "../../infrastructure/auth/mock-user";
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 
 export async function getCurrentUser(): Promise<UserContext | null> {
-  if (process.env.AUTH_MODE === "mock") return MOCK_USER;
+  if (process.env.AUTH_MODE === "mock") {
+    if (process.env.NODE_ENV !== "development") {
+      throw new Error("AUTH_MODE=mock is only supported in development");
+    }
+    return MOCK_USER;
+  }
 
   try {
     const reqHeaders = await headers();

@@ -28,7 +28,7 @@ Each real provider:
 - `conflicts` with **every other real provider** (each one ships its own root `middleware.ts`; only one can win).
 - Ships these files (paths relative to project root):
 
-  ```
+  ```text
   middleware.ts                          # Root middleware. AUTH_MODE=mock short-circuit, then provider validation.
   src/lib/auth/get-current-user.ts       # Server helper. Honours AUTH_MODE=mock.
   src/lib/auth/require-auth.ts           # redirect-on-fail wrapper around get-current-user.
@@ -40,9 +40,10 @@ Each real provider:
   .env.<provider>.example
   ```
 
-- Asks two install-time questions in addition to provider-specific ones:
+- Asks one shared install-time question in addition to provider-specific ones:
   - `protected_paths` (default `/dashboard,/api/protected`) — comma-separated path prefixes the middleware enforces.
-  - `session_cookie_name` (default `__auth_session`) — must match auth-mock's value.
+
+  The session cookie name lives only in auth-mock (single source of truth). Provider helpers hardcode `"__auth_session"` as the fallback and pick up runtime overrides from `AUTH_COOKIE_NAME`.
 
 ### Middleware shape
 
@@ -93,12 +94,11 @@ Validation logic moved to `middleware.ts` and `src/lib/auth/get-current-user.ts`
     "nextauth",
     "clerk",
     "better-auth",
-    "<the other 4 real providers>"
+    "<the other 5 real providers>"
   ],
   "questions": [
     /* provider-specific... */
-    { "id": "protected_paths", "default": "/dashboard,/api/protected" },
-    { "id": "session_cookie_name", "default": "__auth_session" }
+    { "id": "protected_paths", "default": "/dashboard,/api/protected" }
   ],
   "outputs": [
     /* provider-specific files... */

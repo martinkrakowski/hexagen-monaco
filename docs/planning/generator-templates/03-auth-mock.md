@@ -66,7 +66,7 @@ Real providers ship their own root `middleware.ts` that **overwrites this file**
 
 ## Environment Variables
 
-```
+```env
 AUTH_MODE=mock                  # mock | real (unset = real)
 AUTH_COOKIE_NAME=__auth_session # consumed by session-manager helpers
 AUTH_SESSION_MAX_AGE=604800     # cookie Max-Age in seconds (7d default)

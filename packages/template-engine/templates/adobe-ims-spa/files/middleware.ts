@@ -14,12 +14,19 @@ import { MOCK_USER } from "./src/infrastructure/auth/mock-user";
 // validated values.
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
-  .map((p) => p.trim().replace(/\/+$/, ""))
+  .map((p) => {
+    const trimmed = p.trim();
+    // Preserve "/" as the literal root path; only strip trailing slashes for non-root.
+    return trimmed === "/" ? "/" : trimmed.replace(/\/+$/, "");
+  })
   .filter(Boolean);
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PATHS.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
+    (prefix) =>
+      prefix === "/" ||
+      pathname === prefix ||
+      pathname.startsWith(prefix + "/"),
   );
 }
 
@@ -30,6 +37,9 @@ export default async function middleware(request: NextRequest) {
   headers.delete("x-user-context");
 
   if (process.env.AUTH_MODE === "mock") {
+    if (process.env.NODE_ENV !== "development") {
+      throw new Error("AUTH_MODE=mock is only supported in development");
+    }
     headers.set("x-user-context", JSON.stringify(MOCK_USER));
     return NextResponse.next({ request: { headers } });
   }
