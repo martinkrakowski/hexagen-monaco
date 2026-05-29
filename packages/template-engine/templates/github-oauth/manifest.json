@@ -1,0 +1,61 @@
+{
+  "id": "github-oauth",
+  "name": "GitHub OAuth",
+  "description": "GitHub OAuth App integration: code exchange, primary-email fetch, org-membership gate, AES-256-GCM stateless session",
+  "version": "1.0.0",
+  "requires": ["auth-mock", "env-setup"],
+  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "questions": [
+    {
+      "id": "redirect_uri",
+      "type": "text",
+      "prompt": "OAuth callback URI?",
+      "default": "http://localhost:3000/api/auth/callback/github"
+    },
+    {
+      "id": "scopes",
+      "type": "text",
+      "prompt": "OAuth scopes (comma-separated)?",
+      "default": "read:user,user:email"
+    },
+    {
+      "id": "allowed_orgs",
+      "type": "text",
+      "prompt": "Restrict to GitHub org members? (comma-separated org names, leave blank for any)",
+      "default": ""
+    }
+  ],
+  "envVars": [
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "GITHUB_REDIRECT_URI",
+    "GITHUB_OAUTH_SCOPES",
+    "GITHUB_ALLOWED_ORGS",
+    "AUTH_SESSION_SECRET"
+  ],
+  "outputs": [
+    "src/domain/value-objects/github-user.ts",
+    "src/infrastructure/auth/github/config.ts",
+    "src/infrastructure/auth/github/github-client.ts",
+    "src/infrastructure/auth/github/user-profile-mapper.ts",
+    "src/infrastructure/auth/github/session-store.ts",
+    "src/infrastructure/auth/github/github-auth.adapter.ts",
+    "app/api/auth/login/github/route.ts",
+    "app/api/auth/callback/github/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    ".env.github-oauth.example"
+  ],
+  "checklist": [
+    "Create an OAuth App at https://github.com/settings/developers",
+    "Set 'Authorization callback URL' to http://localhost:3000/api/auth/callback/github",
+    "Merge .env.github-oauth.example into .env.local",
+    "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from the OAuth App settings",
+    "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
+    "Set AUTH_MODE=real in .env.local — the template has already wired GitHubAuthAdapter as RealAuthAdapter",
+    "If using GITHUB_ALLOWED_ORGS, ensure the token has read:org scope",
+    "Test flow: GET /api/auth/login/github → GitHub → GET /api/auth/callback/github → /dashboard",
+    "Verify GET /api/auth/me returns UserContext",
+    "Verify DELETE /api/auth/logout clears the session cookie"
+  ],
+  "branch": "feature/generator-template-github-oauth"
+}
