@@ -57,8 +57,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     tokens = await exchangeCode(code);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Token exchange failed";
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, request.url));
+    console.error("Google token exchange failed", err);
+    return NextResponse.redirect(new URL("/login?error=token_exchange_failed", request.url));
   }
 
   let sessionToken;
@@ -67,8 +67,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const googleUser = mapGoogleUserInfo(userInfo);
     sessionToken = await adapter.createSessionFromGoogleUser(googleUser);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Profile fetch failed";
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, request.url));
+    console.error("Google profile fetch / session creation failed", err);
+    return NextResponse.redirect(new URL("/login?error=auth_failed", request.url));
   }
 
   const response = NextResponse.redirect(new URL("/dashboard", request.url));

@@ -4,7 +4,10 @@ const SECRET = process.env.AUTH_SESSION_SECRET ?? "";
 
 interface SessionPayload {
   user: GoogleUser;
+  expiresAt: number;
 }
+
+const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
 
 async function secretKey(): Promise<CryptoKey> {
   const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SECRET));
@@ -32,7 +35,9 @@ export async function encryptSession(user: GoogleUser): Promise<string> {
   const key = await secretKey();
   const iv = new Uint8Array(new ArrayBuffer(12));
   crypto.getRandomValues(iv);
-  const plaintext = new TextEncoder().encode(JSON.stringify({ user } satisfies SessionPayload));
+  const plaintext = new TextEncoder().encode(
+    JSON.stringify({ user, expiresAt: Date.now() + SESSION_TTL_MS } satisfies SessionPayload),
+  );
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
   return `${base64urlEncode(iv.buffer as ArrayBuffer)}.${base64urlEncode(ciphertext)}`;
 }
@@ -47,6 +52,9 @@ export async function decryptSession(token: string): Promise<GoogleUser | null> 
     const ct = base64urlDecode(ctB64);
     const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
     const payload = JSON.parse(new TextDecoder().decode(plaintext)) as SessionPayload;
+    if (typeof payload.expiresAt !== "number" || payload.expiresAt <= Date.now()) {
+      return null;
+    }
     return payload.user;
   } catch {
     return null;

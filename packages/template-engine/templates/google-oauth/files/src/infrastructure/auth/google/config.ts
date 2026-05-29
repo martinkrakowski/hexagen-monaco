@@ -14,7 +14,10 @@ export const GOOGLE_CONFIG = {
   clientId,
   clientSecret,
   redirectUri: process.env.GOOGLE_REDIRECT_URI ?? "{redirect_uri}",
-  scopes: (process.env.GOOGLE_OAUTH_SCOPES ?? "{scopes}").split(",").map((s) => s.trim()),
+  scopes: (process.env.GOOGLE_OAUTH_SCOPES ?? "{scopes}")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   /** Optional: restrict login to this Google Workspace domain (e.g. "company.com") */
   hd: hdRaw || undefined,
 } as const;
