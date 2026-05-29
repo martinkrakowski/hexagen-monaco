@@ -15,6 +15,8 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "sync:dry": "hexagen sync --dry-run",
     "sync:force": "hexagen sync --force",
     "lint:arch": "hexagen arch validate",
+    "templates:add": "hexagen add",
+    "templates:validate": "hexagen validate-templates",
     "format": "prettier --write \\"**/*.{ts,tsx,md}\\""
   },
   "devDependencies": {
