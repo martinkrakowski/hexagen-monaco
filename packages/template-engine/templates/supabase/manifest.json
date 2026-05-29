@@ -1,15 +1,27 @@
 {
   "id": "supabase",
   "name": "Supabase",
-  "description": "SSR-safe client setup, storage helpers, auth helpers (getUser not getSession), RLS examples, type generation",
+  "description": "SSR-safe browser/server/admin clients, Result-based storage helpers, server-validated auth helpers (getUser not getSession), RLS examples, type generation, optional Drizzle ORM and realtime",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
   "questions": [
     {
+      "id": "project_url",
+      "type": "text",
+      "prompt": "Supabase project URL?",
+      "required": true
+    },
+    {
+      "id": "anon_key",
+      "type": "text",
+      "prompt": "Supabase anon key? (public — safe in the browser)",
+      "required": true
+    },
+    {
       "id": "features",
       "type": "multiselect",
-      "prompt": "Which Supabase features?",
+      "prompt": "Which Supabase features? (storage and auth helpers are emitted when selected)",
       "options": ["database", "storage", "auth", "realtime", "edge-functions"],
       "default": ["database", "storage"]
     },
@@ -22,14 +34,26 @@
     {
       "id": "orm",
       "type": "boolean",
-      "prompt": "Use Drizzle ORM over Supabase?",
+      "prompt": "Add a Drizzle ORM layer over the Supabase Postgres connection?",
       "default": false
     },
     {
       "id": "type_gen",
       "type": "boolean",
-      "prompt": "Set up automatic TypeScript type generation?",
+      "prompt": "Include the type-generation script (supabase gen types)?",
       "default": true
+    },
+    {
+      "id": "rls_examples",
+      "type": "boolean",
+      "prompt": "Generate example RLS policies?",
+      "default": true
+    },
+    {
+      "id": "realtime_example",
+      "type": "boolean",
+      "prompt": "Generate a realtime subscription example?",
+      "default": false
     }
   ],
   "envVars": [
@@ -41,21 +65,82 @@
     "src/infrastructure/supabase/client.ts",
     "src/infrastructure/supabase/server.ts",
     "src/infrastructure/supabase/admin.ts",
-    "src/infrastructure/supabase/storage/upload.ts",
-    "src/infrastructure/supabase/storage/signed-url.ts",
-    "src/infrastructure/supabase/storage/delete.ts",
-    "src/infrastructure/supabase/auth/get-user.ts",
-    "src/infrastructure/supabase/auth/require-auth.ts",
+    "src/infrastructure/supabase/result.ts",
     "src/infrastructure/supabase/types/database.types.ts",
-    "supabase/migrations/.gitkeep",
-    "scripts/gen-types.sh"
+    ".env.supabase.example",
+    "supabase/seed.sql",
+    {
+      "path": "src/infrastructure/supabase/storage/upload.ts",
+      "when": { "answer": "features", "includes": "storage" }
+    },
+    {
+      "path": "src/infrastructure/supabase/storage/download.ts",
+      "when": { "answer": "features", "includes": "storage" }
+    },
+    {
+      "path": "src/infrastructure/supabase/storage/signed-url.ts",
+      "when": { "answer": "features", "includes": "storage" }
+    },
+    {
+      "path": "src/infrastructure/supabase/storage/delete.ts",
+      "when": { "answer": "features", "includes": "storage" }
+    },
+    {
+      "path": "src/infrastructure/supabase/storage/index.ts",
+      "when": { "answer": "features", "includes": "storage" }
+    },
+    {
+      "path": "src/infrastructure/supabase/auth/get-user.ts",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "path": "src/infrastructure/supabase/auth/require-auth.ts",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "path": "src/infrastructure/supabase/auth/index.ts",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "path": "scripts/gen-types.sh",
+      "when": { "answer": "type_gen", "equals": true }
+    },
+    {
+      "path": "supabase/migrations/0001_example_rls.sql",
+      "when": { "answer": "rls_examples", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/supabase/realtime/subscribe.ts",
+      "when": { "answer": "realtime_example", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/supabase/drizzle/client.ts",
+      "when": { "answer": "orm", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/supabase/drizzle/schema.ts",
+      "when": { "answer": "orm", "equals": true }
+    },
+    {
+      "path": "scripts/migrate.ts",
+      "when": { "answer": "orm", "equals": true }
+    },
+    {
+      "path": "drizzle.config.ts",
+      "when": { "answer": "orm", "equals": true }
+    }
   ],
   "checklist": [
+    "Install dependencies: npm install @supabase/supabase-js @supabase/ssr",
     "Merge .env.supabase.example into .env.local",
-    "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY from your project settings",
-    "Set SUPABASE_SERVICE_ROLE_KEY — server-only, never prefix with NEXT_PUBLIC_",
-    "Run: yarn gen:types  (after supabase init + any schema changes)",
-    "Enable RLS on all tables before going to production"
+    "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY from Project Settings → API",
+    "Set SUPABASE_SERVICE_ROLE_KEY — server-only, never prefix with NEXT_PUBLIC_ (it bypasses RLS)",
+    "Create storage buckets in the dashboard or via: supabase storage create <name>",
+    "If type generation is enabled: install the supabase CLI, add \"gen:types\": \"bash scripts/gen-types.sh\" to package.json scripts, then run yarn gen:types after supabase start + schema changes",
+    "Enable RLS on every table before going to production (see supabase/migrations/0001_example_rls.sql)",
+    "If Drizzle is enabled: npm install drizzle-orm postgres tsx (and -D drizzle-kit), add \"migrate\": \"tsx scripts/migrate.ts\" to package.json scripts, set SUPABASE_DB_URL, then yarn migrate",
+    "auth helpers use getUser() (server-validated) — never trust getSession() locally for authorization",
+    "To wire Supabase auth into auth-mock's RealAuthAdapter, map getCurrentUser() to a UserContext"
   ],
   "branch": "feature/generator-template-supabase"
 }
