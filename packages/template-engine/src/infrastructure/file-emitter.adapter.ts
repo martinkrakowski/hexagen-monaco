@@ -93,17 +93,31 @@ export class FileSystemFileEmitter implements FileEmitterPort {
 
       if (existingContent !== null) {
         const existingHash = sha256(existingContent);
-        const previousRecord = config.templates[manifest.id];
-        const previousEntry = previousRecord?.generatedFiles.find(
-          (f) => f.path === outputRelPath,
-        );
 
-        const wasGeneratedByUs = !!previousEntry;
-        const isUnmodified =
-          wasGeneratedByUs && previousEntry.contentHash === existingHash;
+        // The file is safe to overwrite if its current content matches a hash
+        // any installed template recorded at this path — covering both
+        // idempotent re-emits by the same template and intentional cross-template
+        // overrides (e.g. an auth provider replacing auth-mock's stub). If no
+        // recorded hash matches, the user has modified the file — emit a conflict
+        // copy instead.
+        // The config is loaded from disk without schema validation, so a
+        // malformed record (missing/non-array generatedFiles, or templates not
+        // an object) must not crash the scan — treat anything unexpected as
+        // "no matching record" rather than throwing.
+        const wasGeneratedByHexagen =
+          typeof config.templates === "object" &&
+          config.templates !== null &&
+          Object.values(config.templates).some(
+            (record) =>
+              Array.isArray(record?.generatedFiles) &&
+              record.generatedFiles.some(
+                (f) =>
+                  f.path === outputRelPath && f.contentHash === existingHash,
+              ),
+          );
         const isAlreadyIdentical = existingHash === templateHash;
 
-        if (!isAlreadyIdentical && !isUnmodified) {
+        if (!isAlreadyIdentical && !wasGeneratedByHexagen) {
           // User has modified this file — emit conflict copy instead
           const conflictDest = conflictFilePath(destFile);
           await atomicWrite(conflictDest, templateContent, sourceMode);
