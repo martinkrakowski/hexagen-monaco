@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [
+    "auth-mock",
     "google-oauth",
     "github-oauth",
     "microsoft-entra",
