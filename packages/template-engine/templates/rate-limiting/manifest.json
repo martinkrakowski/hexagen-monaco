@@ -43,6 +43,7 @@
     "IMAGE_RPM",
     "GENERAL_RPM",
     "RATE_LIMIT_WARN_AT",
+    "RATE_LIMIT_SESSION_TTL",
     "RATE_LIMIT_DEBUG"
   ],
   "outputs": [
@@ -51,7 +52,8 @@
     "server/utils/get-client-ip.ts",
     "server/utils/session-id.ts",
     "server/errors/rate-limit-exceeded.error.ts",
-    "types/rate-limit.d.ts"
+    "types/rate-limit.d.ts",
+    ".env.rate-limit.example"
   ],
   "checklist": [
     "Merge .env.rate-limit.example into your .env.local",
