@@ -24,7 +24,7 @@ All Core Implementation planning artifacts now live under the `core-implementati
 
 - **Governance** — [Architectural governance debt](../governance/debt.md) and migration work that may cut across phases.
 - **Architecture** — The contracts and decisions these plans must respect.
-- `.architecture/plans/` — Historical or machine-oriented snapshots (now point to this location).
+- `.architecture/` — Machine contracts and historical planning pointers (see `docs/planning/legacy/`)
 
 ## Maintenance
 

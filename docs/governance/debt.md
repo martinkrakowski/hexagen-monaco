@@ -1,7 +1,7 @@
 # Architectural Governance Debt
 
 **Status:** Living document  
-**Machine index:** [.architecture/debt/open-items.md](../../.architecture/debt/open-items.md)  
+**Machine index:** [docs/governance/legacy/open-items.md](legacy/open-items.md)  
 **Last reviewed:** 2026-05 (reorganization)
 
 This is the primary human-readable register of **architectural governance and boundary enforcement debt**.

@@ -10,8 +10,8 @@ This `docs/` folder is the home for **narrative, planning, and remediation** con
 |--------------------------------|-------------------------------------------------------|-----------------------------------------|
 | [Decisions](decisions/)        | Curated index and synthesis of key ADRs               | [.architecture/decisions/](../.architecture/decisions/) |
 | [Architecture](architecture/)  | Human-oriented overviews (three-plane system)         | [.architecture/README.md](../.architecture/README.md) |
-| [Planning](planning/)          | Core Implementation workstream (per-phase plans)      | [.architecture/plans/](../.architecture/plans/) |
-| [Governance](governance/)      | Architectural boundary and governance debt            | [.architecture/debt/](../.architecture/debt/) |
+| [Planning](planning/)          | Core Implementation workstream (per-phase plans)      | [.architecture/](../.architecture/) (contracts) |
+| [Governance](governance/)      | Architectural boundary and governance debt            | [.architecture/](../.architecture/) (contracts) |
 
 ## Core Principle
 
