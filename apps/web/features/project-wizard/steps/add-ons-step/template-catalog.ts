@@ -3,6 +3,13 @@ export interface TemplateDetails {
   includes: string[];
 }
 
+export interface CatalogNote {
+  /** Short label shown as a badge on the tile */
+  badge: string;
+  /** Full explanation shown in the information modal */
+  detail: string;
+}
+
 export interface CatalogEntry {
   id: string;
   name: string;
@@ -11,7 +18,14 @@ export interface CatalogEntry {
   conflicts: string[];
   category: "foundation" | "infrastructure" | "ai" | "auth" | "tooling";
   details: TemplateDetails;
+  note?: CatalogNote;
 }
+
+const STANDALONE_NOTE: CatalogNote = {
+  badge: "Standalone",
+  detail:
+    "Standalone framework — replaces the auth layer entirely. Conflicts with all Group A providers and the other Group B frameworks.",
+};
 
 export const TEMPLATE_CATALOG: CatalogEntry[] = [
   {
@@ -329,6 +343,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
         "Middleware file with configurable route matcher",
       ],
     },
+    note: STANDALONE_NOTE,
   },
   {
     id: "clerk",
@@ -356,6 +371,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
         "Organisation and role guard wrapper components",
       ],
     },
+    note: STANDALONE_NOTE,
   },
   {
     id: "better-auth",
@@ -383,6 +399,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
         "Typed authClient for browser/server use",
       ],
     },
+    note: STANDALONE_NOTE,
   },
   {
     id: "adobe-ims-spa",
