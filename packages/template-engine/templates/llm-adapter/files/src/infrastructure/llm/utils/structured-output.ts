@@ -37,22 +37,20 @@ export async function callStructured<T>(
   if (!callResult.ok) return callResult;
 
   const raw = callResult.value.content;
-  let parsed: unknown;
+
+  let repairReason: string;
 
   try {
-    parsed = JSON.parse(extractJson(raw));
+    const parsed = JSON.parse(extractJson(raw));
+    const validated = schema.safeParse(parsed);
+    if (validated.success) return { ok: true, value: validated.data };
+    repairReason = `Validation errors:\n${JSON.stringify(validated.error.issues, null, 2)}`;
   } catch (e) {
-    return {
-      ok: false,
-      error: new LLMParsingError("Response is not valid JSON", raw, e),
-    };
+    repairReason = `JSON.parse failed: ${e instanceof Error ? e.message : String(e)}`;
   }
 
-  const validated = schema.safeParse(parsed);
-  if (validated.success) return { ok: true, value: validated.data };
-
-  // One repair attempt
-  const repairPrompt = `Original JSON:\n${raw}\n\nValidation errors:\n${JSON.stringify(validated.error.issues, null, 2)}\n\nReturn the corrected JSON only.`;
+  // One repair attempt — covers both invalid JSON and schema validation failures
+  const repairPrompt = `Original response:\n${raw}\n\n${repairReason}\n\nReturn the corrected JSON only.`;
   const repairResult = await client.call(repairPrompt, {
     ...options,
     systemPrompt: REPAIR_SYSTEM_PROMPT,
@@ -61,22 +59,20 @@ export async function callStructured<T>(
   if (!repairResult.ok) return repairResult;
 
   try {
-    parsed = JSON.parse(extractJson(repairResult.value.content));
+    const repaired = JSON.parse(extractJson(repairResult.value.content));
+    const revalidated = schema.safeParse(repaired);
+    if (revalidated.success) return { ok: true, value: revalidated.data };
+    return {
+      ok: false,
+      error: new LLMParsingError(
+        `Schema validation failed after repair: ${revalidated.error.message}`,
+        raw,
+      ),
+    };
   } catch (e) {
     return {
       ok: false,
       error: new LLMParsingError("Repair response is not valid JSON", repairResult.value.content, e),
     };
   }
-
-  const revalidated = schema.safeParse(parsed);
-  if (revalidated.success) return { ok: true, value: revalidated.data };
-
-  return {
-    ok: false,
-    error: new LLMParsingError(
-      `Schema validation failed after repair: ${revalidated.error.message}`,
-      raw,
-    ),
-  };
 }
