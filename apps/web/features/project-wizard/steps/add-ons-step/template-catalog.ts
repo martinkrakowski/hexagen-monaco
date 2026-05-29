@@ -323,6 +323,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "Auth.js v5 with Google, GitHub and Credentials providers, JWT session strategy, middleware route protection",
     requires: ["env-setup"],
     conflicts: [
+      "auth-mock",
       "google-oauth",
       "github-oauth",
       "microsoft-entra",
@@ -352,6 +353,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "Clerk SDK, middleware, useUser/useAuth hooks, JWT template for API routes, org-aware role guards",
     requires: ["env-setup"],
     conflicts: [
+      "auth-mock",
       "google-oauth",
       "github-oauth",
       "microsoft-entra",
@@ -380,6 +382,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "Better Auth server setup, social providers, magic-link plugin, schema migration, typed session client",
     requires: ["env-setup"],
     conflicts: [
+      "auth-mock",
       "google-oauth",
       "github-oauth",
       "microsoft-entra",
@@ -460,6 +463,30 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     },
   },
 ];
+
+const CATALOG_BY_ID = new Map(TEMPLATE_CATALOG.map((e) => [e.id, e]));
+
+/**
+ * Returns the already-selected entries that conflict with `candidateId`.
+ * The check is symmetric: a conflict declared on either side counts, since
+ * catalog `conflicts` lists are not always reciprocal.
+ */
+export function findConflicts(
+  candidateId: string,
+  selectedIds: string[],
+): CatalogEntry[] {
+  const candidate = CATALOG_BY_ID.get(candidateId);
+  if (!candidate) return [];
+  return selectedIds
+    .filter((id) => id !== candidateId)
+    .map((id) => CATALOG_BY_ID.get(id))
+    .filter((e): e is CatalogEntry => e !== undefined)
+    .filter(
+      (e) =>
+        candidate.conflicts.includes(e.id) ||
+        e.conflicts.includes(candidate.id),
+    );
+}
 
 export const CATEGORY_LABELS: Record<CatalogEntry["category"], string> = {
   foundation: "Foundation",

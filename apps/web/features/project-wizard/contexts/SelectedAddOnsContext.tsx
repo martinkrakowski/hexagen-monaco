@@ -6,6 +6,8 @@ interface SelectedAddOnsContextValue {
   selectedIds: string[];
   toggle: (id: string) => void;
   isSelected: (id: string) => boolean;
+  /** Atomically deselect `removeIds` and select `addId` (used to resolve conflicts). */
+  replaceConflicting: (addId: string, removeIds: string[]) => void;
 }
 
 const SelectedAddOnsContext = createContext<SelectedAddOnsContextValue | null>(
@@ -30,8 +32,21 @@ export function SelectedAddOnsProvider({
     [selectedIds],
   );
 
+  const replaceConflicting = useCallback(
+    (addId: string, removeIds: string[]) => {
+      const remove = new Set(removeIds);
+      setSelectedIds((prev) => [
+        ...prev.filter((x) => !remove.has(x) && x !== addId),
+        addId,
+      ]);
+    },
+    [],
+  );
+
   return (
-    <SelectedAddOnsContext.Provider value={{ selectedIds, toggle, isSelected }}>
+    <SelectedAddOnsContext.Provider
+      value={{ selectedIds, toggle, isSelected, replaceConflicting }}
+    >
       {children}
     </SelectedAddOnsContext.Provider>
   );
