@@ -198,6 +198,29 @@ describe("FileSystemFileEmitter", () => {
     await assert.rejects(fs.access(path.join(projectRoot, "output.txt")));
   });
 
+  it("preserves the executable bit from the template source file", async () => {
+    const src = path.join(templatesDir, "__test__", "files", "output.txt");
+    await fs.chmod(src, 0o755);
+    try {
+      const projectRoot = await freshProject();
+      const emitter = new FileSystemFileEmitter(templatesDir);
+      await emitter.emit(
+        testManifest(),
+        { name: "World" },
+        projectRoot,
+        emptyConfig(),
+      );
+      const st = await fs.stat(path.join(projectRoot, "output.txt"));
+      assert.equal(
+        (st.mode & 0o111) !== 0,
+        true,
+        "emitted file should be executable",
+      );
+    } finally {
+      await fs.chmod(src, 0o644);
+    }
+  });
+
   it("emits a gated output when its condition is met", async () => {
     const projectRoot = await freshProject();
     const emitter = new FileSystemFileEmitter(templatesDir);

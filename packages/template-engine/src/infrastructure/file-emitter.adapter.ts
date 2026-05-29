@@ -58,8 +58,12 @@ export class FileSystemFileEmitter implements FileEmitterPort {
       const sourceFile = path.join(templateFilesDir, outputRelPath);
 
       let templateContent: string;
+      // Permission bits of the template source, preserved on emit so executable
+      // scripts (e.g. *.sh with a shebang) stay runnable. Defaults to 0o644.
+      let sourceMode = 0o644;
       try {
         const raw = await fs.readFile(sourceFile, "utf-8");
+        sourceMode = (await fs.stat(sourceFile)).mode & 0o777;
         const { output, warnings: interpWarnings } = interpolate(raw, answers);
         templateContent = output;
         for (const key of interpWarnings) {
@@ -102,7 +106,7 @@ export class FileSystemFileEmitter implements FileEmitterPort {
         if (!isAlreadyIdentical && !isUnmodified) {
           // User has modified this file — emit conflict copy instead
           const conflictDest = conflictFilePath(destFile);
-          await atomicWrite(conflictDest, templateContent);
+          await atomicWrite(conflictDest, templateContent, sourceMode);
           const rel = path.relative(projectRoot, conflictDest);
           warnings.push(
             `⚠️  Conflict: ${outputRelPath} has local changes.\n` +
@@ -113,7 +117,7 @@ export class FileSystemFileEmitter implements FileEmitterPort {
         }
       }
 
-      await atomicWrite(destFile, templateContent);
+      await atomicWrite(destFile, templateContent, sourceMode);
       generatedFiles.push({ path: outputRelPath, contentHash: templateHash });
     }
 
@@ -121,10 +125,16 @@ export class FileSystemFileEmitter implements FileEmitterPort {
   }
 }
 
-async function atomicWrite(filePath: string, content: string): Promise<void> {
+async function atomicWrite(
+  filePath: string,
+  content: string,
+  mode?: number,
+): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp.${Date.now()}`;
   await fs.writeFile(tmp, content, "utf-8");
+  // Apply the mode before the rename so the final file is atomically correct.
+  if (mode !== undefined) await fs.chmod(tmp, mode & 0o777);
   await fs.rename(tmp, filePath);
 }
 
