@@ -198,6 +198,30 @@ describe("FileSystemFileEmitter", () => {
     await assert.rejects(fs.access(path.join(projectRoot, "output.txt")));
   });
 
+  it("preserves the executable bit from the template source file", async () => {
+    const src = path.join(templatesDir, "__test__", "files", "output.txt");
+    const originalMode = (await fs.stat(src)).mode & 0o777;
+    await fs.chmod(src, 0o755);
+    try {
+      const projectRoot = await freshProject();
+      const emitter = new FileSystemFileEmitter(templatesDir);
+      await emitter.emit(
+        testManifest(),
+        { name: "World" },
+        projectRoot,
+        emptyConfig(),
+      );
+      const st = await fs.stat(path.join(projectRoot, "output.txt"));
+      assert.equal(
+        (st.mode & 0o111) !== 0,
+        true,
+        "emitted file should be executable",
+      );
+    } finally {
+      await fs.chmod(src, originalMode);
+    }
+  });
+
   it("emits a gated output when its condition is met", async () => {
     const projectRoot = await freshProject();
     const emitter = new FileSystemFileEmitter(templatesDir);
@@ -217,5 +241,31 @@ describe("FileSystemFileEmitter", () => {
       "utf-8",
     );
     assert.equal(content, "Hello World!");
+  });
+
+  it("removes the temp file when the write fails", async () => {
+    const projectRoot = await freshProject();
+    // Destination is an existing directory, so the final rename fails.
+    await fs.mkdir(path.join(projectRoot, "blocked"), { recursive: true });
+    await fs.writeFile(
+      path.join(templatesDir, "__test__", "files", "blocked"),
+      "x",
+      "utf-8",
+    );
+    const emitter = new FileSystemFileEmitter(templatesDir);
+
+    await assert.rejects(
+      emitter.emit(
+        testManifest(["blocked"]),
+        { name: "X" },
+        projectRoot,
+        emptyConfig(),
+      ),
+    );
+
+    const leftovers = (await fs.readdir(projectRoot)).filter((f) =>
+      f.includes(".tmp."),
+    );
+    assert.deepEqual(leftovers, [], "no temp file should remain after failure");
   });
 });
