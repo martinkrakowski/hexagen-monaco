@@ -1,0 +1,65 @@
+{
+  "id": "clerk",
+  "name": "Clerk",
+  "description": "Standalone Clerk integration: clerkMiddleware route protection, server-side auth helpers, org/app-level RoleGuard component, protected route group, and a JWT-template API example",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [
+    "google-oauth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link",
+    "adobe-ims-spa",
+    "nextauth",
+    "better-auth"
+  ],
+  "questions": [
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes to protect?",
+      "default": "/dashboard,/api/protected"
+    },
+    {
+      "id": "org_features",
+      "type": "boolean",
+      "prompt": "Enable organisation/role features?",
+      "default": false
+    },
+    {
+      "id": "jwt_template",
+      "type": "text",
+      "prompt": "JWT template name for API auth?",
+      "default": "default"
+    }
+  ],
+  "envVars": [
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+    "CLERK_SECRET_KEY",
+    "NEXT_PUBLIC_CLERK_SIGN_IN_URL",
+    "NEXT_PUBLIC_CLERK_SIGN_UP_URL",
+    "NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL",
+    "NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL"
+  ],
+  "outputs": [
+    "middleware.ts",
+    "src/lib/auth.ts",
+    "src/lib/role-guard.tsx",
+    "app/(protected)/layout.tsx",
+    "app/api/protected-example/route.ts",
+    ".env.clerk.example"
+  ],
+  "checklist": [
+    "Install dependencies: npm install @clerk/nextjs",
+    "Wrap your root layout with <ClerkProvider> (see https://clerk.com/docs/quickstarts/nextjs)",
+    "Merge .env.clerk.example into .env.local",
+    "Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY from the Clerk dashboard",
+    "Add <SignIn /> and <SignUp /> pages at the configured sign-in/sign-up URLs (Clerk hosts the UI)",
+    "If using org/role features: enable Organizations in the Clerk dashboard; RoleGuard org=true gates on orgRole",
+    "For app-level roles: set sessionClaims.metadata.role via a custom session token claim",
+    "Create the '{jwt_template}' JWT template in the dashboard if the API example mints downstream tokens",
+    "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
+    "Test flow: visit a protected path while signed out → redirected to /sign-in; GET /api/protected-example returns 401 without a session"
+  ],
+  "branch": "feature/generator-template-clerk"
+}
