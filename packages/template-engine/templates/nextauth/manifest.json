@@ -1,0 +1,72 @@
+{
+  "id": "nextauth",
+  "name": "Auth.js (NextAuth v5)",
+  "description": "Standalone Auth.js v5 setup: Google/GitHub/Credentials providers, Edge-safe config split, JWT session strategy, typed session.user, and matcher-based route protection middleware",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [
+    "google-oauth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link",
+    "adobe-ims-spa",
+    "clerk",
+    "better-auth"
+  ],
+  "questions": [
+    {
+      "id": "providers",
+      "type": "multiselect",
+      "prompt": "Which providers?",
+      "options": ["google", "github", "credentials", "email"],
+      "default": ["google", "github"]
+    },
+    {
+      "id": "session_strategy",
+      "type": "select",
+      "prompt": "Session strategy?",
+      "options": ["jwt", "database"],
+      "default": "jwt"
+    },
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes to protect?",
+      "default": "/dashboard,/api/protected"
+    },
+    {
+      "id": "trust_host",
+      "type": "boolean",
+      "prompt": "Trust HOST header (needed for proxies)?",
+      "default": false
+    }
+  ],
+  "envVars": [
+    "AUTH_SECRET",
+    "AUTH_URL",
+    "AUTH_GOOGLE_ID",
+    "AUTH_GOOGLE_SECRET",
+    "AUTH_GITHUB_ID",
+    "AUTH_GITHUB_SECRET"
+  ],
+  "outputs": [
+    "src/auth.ts",
+    "src/auth.config.ts",
+    "src/types/next-auth.d.ts",
+    "middleware.ts",
+    "app/api/auth/[...nextauth]/route.ts",
+    ".env.nextauth.example"
+  ],
+  "checklist": [
+    "Install dependencies: npm install next-auth@beta bcryptjs (add @auth/prisma-adapter if session_strategy=database)",
+    "Merge .env.nextauth.example into .env.local",
+    "Generate AUTH_SECRET: openssl rand -base64 32",
+    "Set AUTH_GOOGLE_ID/SECRET and AUTH_GITHUB_ID/SECRET from each provider console",
+    "Set AUTH_URL to your deployment URL (required in production)",
+    "Remove any providers you don't use from src/auth.config.ts and src/auth.ts",
+    "For Credentials login, implement lookupUser() in src/auth.ts against your user store",
+    "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
+    "Test flow: GET /api/auth/signin → provider → redirect back; protected paths require a session"
+  ],
+  "branch": "feature/generator-template-nextauth"
+}
