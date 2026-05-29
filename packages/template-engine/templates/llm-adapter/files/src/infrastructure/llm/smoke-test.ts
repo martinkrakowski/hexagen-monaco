@@ -9,7 +9,7 @@ async function main() {
     maxTokens: 10,
   });
 
-  if (!result.ok) {
+  if (!result.success) {
     console.error("Smoke test FAILED:", result.error.message);
     process.exit(1);
   }

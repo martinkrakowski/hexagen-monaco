@@ -3,7 +3,7 @@
   "name": "LLM Adapter",
   "description": "Typed port interface, provider adapters (xAI, OpenAI, Anthropic, Ollama, Azure OpenAI), model constants, reasoning routing, retry logic, structured output",
   "version": "1.0.0",
-  "requires": ["env-setup"],
+  "requires": ["env-setup", "error-handling"],
   "conflicts": [],
   "questions": [
     {
@@ -82,7 +82,6 @@
     "LLM_MAX_RETRIES"
   ],
   "outputs": [
-    "src/shared/result.ts",
     "src/domain/ports/out/llm-client.port.ts",
     "src/infrastructure/llm/constants/models.ts",
     "src/infrastructure/llm/constants/capabilities.ts",

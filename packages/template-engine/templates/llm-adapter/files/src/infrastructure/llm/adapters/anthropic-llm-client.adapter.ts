@@ -72,7 +72,7 @@ export class AnthropicLLMClientAdapter implements LLMClientPort {
 
       if (!response.ok) {
         const retryAfter = response.headers.get("Retry-After");
-        return { ok: false, error: classifyHttpError(response.status, retryAfter) };
+        return { success: false, error: classifyHttpError(response.status, retryAfter) };
       }
 
       const data = await response.json();
@@ -90,7 +90,7 @@ export class AnthropicLLMClientAdapter implements LLMClientPort {
         : "";
 
       return {
-        ok: true,
+        success: true,
         value: {
           content,
           model: data.model ?? model,
@@ -103,9 +103,9 @@ export class AnthropicLLMClientAdapter implements LLMClientPort {
       };
     } catch (e) {
       if (e instanceof Error && e.name === "LLMTimeoutError") {
-        return { ok: false, error: e as LLMError };
+        return { success: false, error: e as LLMError };
       }
-      return { ok: false, error: new LLMServiceError("Anthropic request failed", e) };
+      return { success: false, error: new LLMServiceError("Anthropic request failed", e) };
     }
   }
 }

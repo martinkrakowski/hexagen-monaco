@@ -25,7 +25,7 @@ export async function withRetry<T>(
   while (true) {
     const result = await fn();
 
-    if (result.ok) return result;
+    if (result.success) return result;
 
     const error = result.error;
     const isLast = attempt >= maxRetries;

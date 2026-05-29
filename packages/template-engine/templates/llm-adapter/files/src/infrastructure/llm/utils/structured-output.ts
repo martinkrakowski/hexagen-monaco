@@ -34,7 +34,7 @@ export async function callStructured<T>(
     .join("\n\n");
 
   const callResult = await client.call(prompt, { ...options, systemPrompt });
-  if (!callResult.ok) return callResult;
+  if (!callResult.success) return callResult;
 
   const raw = callResult.value.content;
 
@@ -43,7 +43,7 @@ export async function callStructured<T>(
   try {
     const parsed = JSON.parse(extractJson(raw));
     const validated = schema.safeParse(parsed);
-    if (validated.success) return { ok: true, value: validated.data };
+    if (validated.success) return { success: true, value: validated.data };
     repairReason = `Validation errors:\n${JSON.stringify(validated.error.issues, null, 2)}`;
   } catch (e) {
     repairReason = `JSON.parse failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -56,14 +56,14 @@ export async function callStructured<T>(
     systemPrompt: REPAIR_SYSTEM_PROMPT,
   });
 
-  if (!repairResult.ok) return repairResult;
+  if (!repairResult.success) return repairResult;
 
   try {
     const repaired = JSON.parse(extractJson(repairResult.value.content));
     const revalidated = schema.safeParse(repaired);
-    if (revalidated.success) return { ok: true, value: revalidated.data };
+    if (revalidated.success) return { success: true, value: revalidated.data };
     return {
-      ok: false,
+      success: false,
       error: new LLMParsingError(
         `Schema validation failed after repair: ${revalidated.error.message}`,
         raw,
@@ -71,7 +71,7 @@ export async function callStructured<T>(
     };
   } catch (e) {
     return {
-      ok: false,
+      success: false,
       error: new LLMParsingError("Repair response is not valid JSON", repairResult.value.content, e),
     };
   }

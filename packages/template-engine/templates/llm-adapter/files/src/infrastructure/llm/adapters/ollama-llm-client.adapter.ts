@@ -70,7 +70,7 @@ export class OllamaLLMClientAdapter implements LLMClientPort {
 
       if (!response.ok) {
         return {
-          ok: false,
+          success: false,
           error: new LLMServiceError(`Ollama error (HTTP ${response.status})`),
         };
       }
@@ -81,7 +81,7 @@ export class OllamaLLMClientAdapter implements LLMClientPort {
       const promptEvalCount = data.prompt_eval_count ?? 0;
 
       return {
-        ok: true,
+        success: true,
         value: {
           content,
           model: data.model ?? model,
@@ -94,9 +94,9 @@ export class OllamaLLMClientAdapter implements LLMClientPort {
       };
     } catch (e) {
       if (e instanceof Error && e.name === "LLMTimeoutError") {
-        return { ok: false, error: e as LLMError };
+        return { success: false, error: e as LLMError };
       }
-      return { ok: false, error: new LLMServiceError("Ollama request failed", e) };
+      return { success: false, error: new LLMServiceError("Ollama request failed", e) };
     }
   }
 }
