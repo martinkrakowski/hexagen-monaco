@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { IMSClient } from "../../../../src/infrastructure/auth/adobe-ims/ims-client";
 import { AdobeIMSAuthAdapter } from "../../../../src/infrastructure/auth/adobe-ims/adobe-ims-auth.adapter";
-import { mapIMSProfileToUserContext } from "../../../../src/infrastructure/auth/adobe-ims/user-profile-mapper";
-import {
-  buildTokenCookieHeader,
-  buildClearTokenCookieHeader,
-} from "../../../../src/infrastructure/auth/adobe-ims/token-store";
-import {
-  buildSessionCookieHeader,
-  buildClearSessionCookieHeader,
-} from "../../../../src/infrastructure/auth/session/session-manager";
+import { buildTokenCookieHeader } from "../../../../src/infrastructure/auth/adobe-ims/token-store";
+import { buildSessionCookieHeader } from "../../../../src/infrastructure/auth/session/session-manager";
 
 const PKCE_COOKIE = "__ims_pkce";
 const STATE_COOKIE = "__ims_state";
@@ -74,9 +67,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const message = err instanceof Error ? err.message : "Token exchange failed";
     return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, request.url));
   }
-
-  const profile = await imsClient.fetchProfile(tokens.accessToken);
-  const _user = mapIMSProfileToUserContext(profile);
 
   const sessionToken = await adapter.createSessionFromTokens(tokens);
 

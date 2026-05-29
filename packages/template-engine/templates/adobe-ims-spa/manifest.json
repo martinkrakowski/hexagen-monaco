@@ -59,13 +59,14 @@
     "app/api/auth/callback/route.ts",
     "app/api/auth/logout/route.ts",
     "app/api/auth/me/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
     ".env.adobe-ims.example"
   ],
   "checklist": [
     "Merge .env.adobe-ims.example into .env.local",
     "Set ADOBE_IMS_CLIENT_ID from the Adobe Developer Console (Single Page App credential type)",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local to activate the IMS adapter",
+    "Set AUTH_MODE=real in .env.local — the template has already wired AdobeIMSAuthAdapter as RealAuthAdapter",
     "Wire adobe-ims-refresh.middleware before auth.middleware in your root middleware.ts",
     "Test flow: GET /api/auth/login → IMS authorize → GET /api/auth/callback → /dashboard",
     "Verify GET /api/auth/me returns UserContext",
