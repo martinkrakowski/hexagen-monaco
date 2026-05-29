@@ -1,10 +1,10 @@
 {
   "id": "adobe-ims-spa",
   "name": "Adobe IMS SPA (PKCE)",
-  "description": "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, token store, auto-refresh",
+  "description": "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, AES-256-GCM token store, silent auto-refresh middleware",
   "version": "1.0.0",
   "requires": ["auth-mock", "env-setup"],
-  "conflicts": [],
+  "conflicts": ["nextauth", "clerk", "better-auth"],
   "questions": [
     {
       "id": "client_id",
@@ -19,6 +19,12 @@
       "default": "http://localhost:3000/api/auth/callback"
     },
     {
+      "id": "scopes",
+      "type": "text",
+      "prompt": "IMS OAuth scopes (comma-separated)?",
+      "default": "openid,AdobeID,read_organizations"
+    },
+    {
       "id": "environment",
       "type": "select",
       "prompt": "IMS environment?",
@@ -26,48 +32,45 @@
       "default": "prod"
     },
     {
-      "id": "token_storage",
-      "type": "select",
-      "prompt": "Where to store tokens?",
-      "options": ["httponly-cookie", "server-session", "supabase"],
-      "default": "httponly-cookie"
-    },
-    {
       "id": "auto_refresh",
       "type": "boolean",
       "prompt": "Auto-refresh access tokens before expiry?",
       "default": true
-    },
-    {
-      "id": "scopes",
-      "type": "text",
-      "prompt": "IMS OAuth scopes (comma-separated)?",
-      "default": "openid,AdobeID,read_organizations"
     }
   ],
   "envVars": [
     "ADOBE_IMS_CLIENT_ID",
     "ADOBE_IMS_REDIRECT_URI",
     "ADOBE_IMS_SCOPES",
-    "ADOBE_IMS_ENVIRONMENT"
+    "ADOBE_IMS_ENVIRONMENT",
+    "ADOBE_IMS_AUTO_REFRESH",
+    "AUTH_SESSION_SECRET"
   ],
   "outputs": [
+    "src/domain/ports/out/ims-auth.port.ts",
     "src/infrastructure/auth/adobe-ims/config.ts",
     "src/infrastructure/auth/adobe-ims/pkce.ts",
     "src/infrastructure/auth/adobe-ims/ims-client.ts",
     "src/infrastructure/auth/adobe-ims/token-store.ts",
     "src/infrastructure/auth/adobe-ims/user-profile-mapper.ts",
+    "src/infrastructure/auth/adobe-ims/adobe-ims-auth.adapter.ts",
+    "server/middleware/adobe-ims-refresh.middleware.ts",
     "app/api/auth/login/route.ts",
     "app/api/auth/callback/route.ts",
     "app/api/auth/logout/route.ts",
-    "app/api/auth/me/route.ts"
+    "app/api/auth/me/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    ".env.adobe-ims.example"
   ],
   "checklist": [
     "Merge .env.adobe-ims.example into .env.local",
-    "Set ADOBE_IMS_CLIENT_ID from the Adobe Developer Console",
-    "Confirm credential type is 'Single Page App' (not Web App — deprecated)",
+    "Set ADOBE_IMS_CLIENT_ID from the Adobe Developer Console (Single Page App credential type)",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Test: GET /api/auth/login → IMS → callback → /dashboard"
+    "Set AUTH_MODE=real in .env.local — the template has already wired AdobeIMSAuthAdapter as RealAuthAdapter",
+    "Wire adobe-ims-refresh.middleware before auth.middleware in your root middleware.ts",
+    "Test flow: GET /api/auth/login → IMS authorize → GET /api/auth/callback → /dashboard",
+    "Verify GET /api/auth/me returns UserContext",
+    "Verify POST /api/auth/logout clears both session and token cookies"
   ],
   "branch": "feature/generator-template-adobe-ims-spa"
 }
