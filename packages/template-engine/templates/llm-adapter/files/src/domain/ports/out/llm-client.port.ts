@@ -1,5 +1,5 @@
 import type { ZodSchema } from "zod";
-import type { Result } from "../../../../../../../shared/result";
+import type { Result } from "../../../shared/result";
 import type { LLMError } from "../../../infrastructure/llm/errors/llm-errors";
 
 export interface LLMCallOptions {

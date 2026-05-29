@@ -1,4 +1,5 @@
 import { isRetryable, type LLMError } from "../errors/llm-errors";
+import { parseIntSafe } from "./parse-env";
 import type { Result } from "../../../../shared/result";
 
 const DEFAULT_BASE_MS = 500;
@@ -17,7 +18,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function withRetry<T>(
   fn: () => Promise<Result<T, LLMError>>,
-  maxRetries = parseInt(process.env.LLM_MAX_RETRIES ?? "2", 10),
+  maxRetries = parseIntSafe(process.env.LLM_MAX_RETRIES, 2, 0),
 ): Promise<Result<T, LLMError>> {
   let attempt = 0;
 

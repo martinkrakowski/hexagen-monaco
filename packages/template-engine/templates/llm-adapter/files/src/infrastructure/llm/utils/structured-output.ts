@@ -58,15 +58,7 @@ export async function callStructured<T>(
     systemPrompt: REPAIR_SYSTEM_PROMPT,
   });
 
-  if (!repairResult.ok) {
-    return {
-      ok: false,
-      error: new LLMParsingError(
-        `Schema validation failed: ${validated.error.message}`,
-        raw,
-      ),
-    };
-  }
+  if (!repairResult.ok) return repairResult;
 
   try {
     parsed = JSON.parse(extractJson(repairResult.value.content));

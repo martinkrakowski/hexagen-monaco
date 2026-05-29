@@ -13,13 +13,14 @@ import { parseIntSafe } from "../utils/parse-env";
 import { MODELS } from "../constants/models";
 import type { Result } from "../../../../shared/result";
 
-const BASE_URL = process.env.XAI_BASE_URL ?? "https://api.x.ai/v1";
+const ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT ?? "";
+const API_VERSION = "2024-02-01";
 const DEFAULT_TIMEOUT = parseIntSafe(process.env.LLM_DEFAULT_TIMEOUT_MS, 30000, 1);
 
-export class XaiLLMClientAdapter implements LLMClientPort {
+export class AzureOpenAILLMClientAdapter implements LLMClientPort {
   private readonly apiKey: string;
 
-  constructor(apiKey = process.env.XAI_API_KEY ?? "") {
+  constructor(apiKey = process.env.AZURE_OPENAI_API_KEY ?? "") {
     this.apiKey = apiKey;
   }
 
@@ -42,8 +43,9 @@ export class XaiLLMClientAdapter implements LLMClientPort {
     prompt: string,
     options: LLMCallOptions,
   ): Promise<Result<LLMResponse, LLMError>> {
-    const model = options.model ?? MODELS.xai.fast;
+    const deployment = options.model ?? MODELS["azure-openai"].fast;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT;
+    const url = `${ENDPOINT}/openai/deployments/${deployment}/chat/completions?api-version=${API_VERSION}`;
 
     const messages = [
       ...(options.systemPrompt
@@ -53,7 +55,6 @@ export class XaiLLMClientAdapter implements LLMClientPort {
     ];
 
     const body = JSON.stringify({
-      model,
       messages,
       max_tokens: options.maxTokens ?? 4096,
       temperature: options.temperature ?? 0.7,
@@ -62,11 +63,11 @@ export class XaiLLMClientAdapter implements LLMClientPort {
     try {
       const response = await withTimeout(
         (signal) =>
-          fetch(`${BASE_URL}/chat/completions`, {
+          fetch(url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${this.apiKey}`,
+              "api-key": this.apiKey,
             },
             body,
             signal,
@@ -86,7 +87,7 @@ export class XaiLLMClientAdapter implements LLMClientPort {
         ok: true,
         value: {
           content: choice?.message?.content ?? "",
-          model: data.model ?? model,
+          model: deployment,
           usage: {
             promptTokens: data.usage?.prompt_tokens ?? 0,
             completionTokens: data.usage?.completion_tokens ?? 0,
@@ -98,7 +99,7 @@ export class XaiLLMClientAdapter implements LLMClientPort {
       if (e instanceof Error && e.name === "LLMTimeoutError") {
         return { ok: false, error: e as LLMError };
       }
-      return { ok: false, error: new LLMServiceError("xAI request failed", e) };
+      return { ok: false, error: new LLMServiceError("Azure OpenAI request failed", e) };
     }
   }
 }

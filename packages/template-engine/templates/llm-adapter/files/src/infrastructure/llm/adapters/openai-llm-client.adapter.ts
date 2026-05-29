@@ -9,11 +9,12 @@ import type { LLMError } from "../errors/llm-errors";
 import { withRetry } from "../utils/retry";
 import { withTimeout } from "../utils/timeout";
 import { callStructured } from "../utils/structured-output";
+import { parseIntSafe } from "../utils/parse-env";
 import { MODELS } from "../constants/models";
 import type { Result } from "../../../../shared/result";
 
 const BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-const DEFAULT_TIMEOUT = parseInt(process.env.LLM_DEFAULT_TIMEOUT_MS ?? "30000", 10);
+const DEFAULT_TIMEOUT = parseIntSafe(process.env.LLM_DEFAULT_TIMEOUT_MS, 30000, 1);
 
 export class OpenAILLMClientAdapter implements LLMClientPort {
   private readonly apiKey: string;
@@ -60,14 +61,16 @@ export class OpenAILLMClientAdapter implements LLMClientPort {
 
     try {
       const response = await withTimeout(
-        fetch(`${BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body,
-        }),
+        (signal) =>
+          fetch(`${BASE_URL}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${this.apiKey}`,
+            },
+            body,
+            signal,
+          }),
         timeoutMs,
       );
 

@@ -1,11 +1,22 @@
 import { LLMTimeoutError } from "../errors/llm-errors";
 
-export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new LLMTimeoutError(ms)), ms);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+export async function withTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw new LLMTimeoutError(ms);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }

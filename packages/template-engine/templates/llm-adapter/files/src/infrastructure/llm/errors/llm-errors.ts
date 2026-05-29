@@ -64,7 +64,12 @@ export class LLMParsingError extends LLMError {
 
 export function classifyHttpError(status: number, retryAfterHeader?: string | null): LLMError {
   const retryAfterMs = retryAfterHeader
-    ? parseInt(retryAfterHeader, 10) * 1000
+    ? (() => {
+        const seconds = Number.parseInt(retryAfterHeader, 10);
+        if (Number.isFinite(seconds)) return seconds * 1000;
+        const dateMs = Date.parse(retryAfterHeader);
+        return Number.isNaN(dateMs) ? undefined : Math.max(0, dateMs - Date.now());
+      })()
     : undefined;
 
   if (status === 401 || status === 403) return new LLMAuthError();

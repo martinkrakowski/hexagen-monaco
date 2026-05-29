@@ -10,6 +10,7 @@ import { XaiLLMClientAdapter } from "../adapters/xai-llm-client.adapter";
 import { OpenAILLMClientAdapter } from "../adapters/openai-llm-client.adapter";
 import { AnthropicLLMClientAdapter } from "../adapters/anthropic-llm-client.adapter";
 import { OllamaLLMClientAdapter } from "../adapters/ollama-llm-client.adapter";
+import { AzureOpenAILLMClientAdapter } from "../adapters/azure-openai-llm-client.adapter";
 import type { Result } from "../../../../shared/result";
 
 export type CallType = "orchestration" | "wizard" | "fast" | "vision";
@@ -32,6 +33,7 @@ export class LLMRouter implements LLMClientPort {
       ["openai", new OpenAILLMClientAdapter()],
       ["anthropic", new AnthropicLLMClientAdapter()],
       ["ollama", new OllamaLLMClientAdapter()],
+      ["azure-openai", new AzureOpenAILLMClientAdapter()],
     ]);
   }
 

@@ -9,11 +9,12 @@ import type { LLMError } from "../errors/llm-errors";
 import { withRetry } from "../utils/retry";
 import { withTimeout } from "../utils/timeout";
 import { callStructured } from "../utils/structured-output";
+import { parseIntSafe } from "../utils/parse-env";
 import { MODELS } from "../constants/models";
 import type { Result } from "../../../../shared/result";
 
 const BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
-const DEFAULT_TIMEOUT = parseInt(process.env.LLM_DEFAULT_TIMEOUT_MS ?? "30000", 10);
+const DEFAULT_TIMEOUT = parseIntSafe(process.env.LLM_DEFAULT_TIMEOUT_MS, 30000, 1);
 
 export class OllamaLLMClientAdapter implements LLMClientPort {
   async call(
@@ -57,11 +58,13 @@ export class OllamaLLMClientAdapter implements LLMClientPort {
 
     try {
       const response = await withTimeout(
-        fetch(`${BASE_URL}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        }),
+        (signal) =>
+          fetch(`${BASE_URL}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            signal,
+          }),
         timeoutMs,
       );
 

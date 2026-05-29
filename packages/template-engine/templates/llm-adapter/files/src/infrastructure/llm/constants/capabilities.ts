@@ -10,6 +10,8 @@ export const REASONING_CAPABLE_MODELS = new Set([
   // Anthropic
   "claude-opus-4-7",
   "claude-sonnet-4-6",
+  // Ollama
+  "llama3.3",
 ]);
 
 export const VISION_CAPABLE_MODELS = new Set([
