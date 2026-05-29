@@ -50,9 +50,11 @@ export function AddOnCard({
         )}
 
         <div className="flex items-center gap-2 mb-1 pr-4">
-          <span className="font-semibold text-sm">{entry.name}</span>
+          <span className="font-semibold text-sm min-w-0 break-words">
+            {entry.name}
+          </span>
           {entry.note && (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <span className="inline-flex items-center gap-1 shrink-0 text-xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
               <Info size={10} />
               {entry.note.badge}
             </span>
