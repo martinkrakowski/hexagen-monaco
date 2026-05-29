@@ -7,12 +7,6 @@
   "conflicts": ["nextauth", "clerk", "better-auth"],
   "questions": [
     {
-      "id": "client_id",
-      "type": "text",
-      "prompt": "Adobe IMS Client ID (from Developer Console)?",
-      "required": true
-    },
-    {
       "id": "redirect_uri",
       "type": "text",
       "prompt": "OAuth callback URI?",
@@ -70,7 +64,7 @@
     "Wire adobe-ims-refresh.middleware before auth.middleware in your root middleware.ts",
     "Test flow: GET /api/auth/login → IMS authorize → GET /api/auth/callback → /dashboard",
     "Verify GET /api/auth/me returns UserContext",
-    "Verify POST /api/auth/logout clears both session and token cookies"
+    "Verify DELETE /api/auth/logout clears both session and token cookies"
   ],
   "branch": "feature/generator-template-adobe-ims-spa"
 }

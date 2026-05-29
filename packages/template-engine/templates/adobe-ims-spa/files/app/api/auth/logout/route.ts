@@ -9,7 +9,7 @@ import {
 const IS_SECURE = process.env.NODE_ENV === "production";
 const adapter = new AdobeIMSAuthAdapter();
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const token = readSessionToken(request);
 
   if (token) {

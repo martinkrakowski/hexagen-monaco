@@ -5,9 +5,9 @@ const IMS_HOSTS = {
   stage: "https://ims-na1-stg1.adobelogin.com",
 } as const;
 
-const clientId = process.env.ADOBE_IMS_CLIENT_ID ?? "{client_id}";
+const clientId = process.env.ADOBE_IMS_CLIENT_ID;
 
-if (!clientId || clientId === "{client_id}") {
+if (!clientId) {
   throw new Error(
     "ADOBE_IMS_CLIENT_ID is required. " +
       "Set it in .env.local from the Adobe Developer Console.",
