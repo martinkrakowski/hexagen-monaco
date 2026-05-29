@@ -43,8 +43,11 @@ export function resolveDependencies(
   requested: string[],
   registry: Map<string, TemplateManifest>,
 ): string[] {
-  // Build the full set needed (requested + all transitive requirements)
+  // Build the full set needed (requested + all transitive requirements).
+  // parent tracks who directly required each dep so error messages are accurate
+  // even for transitive missing templates.
   const needed = new Set<string>();
+  const parent = new Map<string, string>();
   const stack: string[] = [...requested];
 
   while (stack.length > 0) {
@@ -54,14 +57,14 @@ export function resolveDependencies(
 
     const manifest = registry.get(id);
     if (!manifest) {
-      const requiredBy = requested.includes(id)
-        ? id
-        : findRequirer(id, requested, registry);
-      throw new MissingTemplateError(id, requiredBy);
+      throw new MissingTemplateError(id, parent.get(id) ?? id);
     }
 
     for (const dep of manifest.requires) {
-      if (!needed.has(dep)) stack.push(dep);
+      if (!needed.has(dep)) {
+        parent.set(dep, id);
+        stack.push(dep);
+      }
     }
   }
 
@@ -101,16 +104,4 @@ export function resolveDependencies(
   }
 
   return sorted;
-}
-
-function findRequirer(
-  missingId: string,
-  candidates: string[],
-  registry: Map<string, TemplateManifest>,
-): string {
-  for (const id of candidates) {
-    const manifest = registry.get(id);
-    if (manifest?.requires.includes(missingId)) return id;
-  }
-  return missingId;
 }

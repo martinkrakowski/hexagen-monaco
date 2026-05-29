@@ -52,9 +52,14 @@ export class FileSystemFileEmitter implements FileEmitterPort {
             `⚠️  Unresolved template variable '{${key}}' in ${outputRelPath}`,
           );
         }
-      } catch {
-        // Template has no file content yet (planned but not implemented) — skip silently
-        continue;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          // Template source file not yet implemented — planned output, skip silently
+          continue;
+        }
+        throw new Error(
+          `Failed to read template source ${sourceFile}: ${(err as Error).message}`,
+        );
       }
 
       const templateHash = sha256(templateContent);

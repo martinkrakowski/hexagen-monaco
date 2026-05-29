@@ -72,11 +72,12 @@ export class ValidateTemplatesUseCase {
         }
       }
 
+      // Scan all declared outputs — not just record.generatedFiles — because
+      // the emitter does not add an entry to generatedFiles when a conflict occurs.
       const conflictFiles: string[] = [];
-      const record = config.templates[id];
-      for (const generated of record.generatedFiles) {
+      for (const outputPath of manifest.outputs) {
         const absConflict = conflictFilePath(
-          path.join(projectRoot, generated.path),
+          path.join(projectRoot, outputPath),
         );
         try {
           await fs.access(absConflict);
