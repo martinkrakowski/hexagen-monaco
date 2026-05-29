@@ -55,3 +55,18 @@ export type TemplateQuestion =
 export type QuestionAnswer = string | string[] | boolean;
 
 export type AnswerMap = Record<string, QuestionAnswer>;
+
+export interface OutputCondition {
+  /** Question id whose answer this output is gated on. */
+  answer: string;
+  /** Exact match for a boolean or select answer. */
+  equals?: string | boolean;
+  /** Require this value to be present in a multiselect answer. */
+  includes?: string;
+}
+
+/**
+ * A manifest output entry: a plain relative path (always emitted) or a path
+ * gated on an answer via a `when` condition.
+ */
+export type ManifestOutput = string | { path: string; when: OutputCondition };

@@ -42,4 +42,78 @@ describe("validateManifest", () => {
     assert.deepEqual(m.outputs, []);
     assert.deepEqual(m.checklist, []);
   });
+
+  const base = {
+    id: "x",
+    name: "X",
+    description: "X",
+    version: "1",
+    questions: [
+      { id: "orm", type: "boolean", prompt: "ORM?" },
+      { id: "features", type: "multiselect", prompt: "Features?", options: [] },
+    ],
+  };
+
+  it("accepts a gated output whose when.answer matches a question", () => {
+    const m = validateManifest({
+      ...base,
+      outputs: [
+        "always.ts",
+        { path: "drizzle.ts", when: { answer: "orm", equals: true } },
+        { path: "rt.ts", when: { answer: "features", includes: "realtime" } },
+      ],
+    });
+    assert.equal(m.outputs.length, 3);
+  });
+
+  it("throws when a gated output references an unknown answer", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          outputs: [{ path: "a.ts", when: { answer: "nope", equals: true } }],
+        }),
+      /unknown answer 'nope'/,
+    );
+  });
+
+  it("throws when a gated output sets both equals and includes", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          outputs: [
+            {
+              path: "a.ts",
+              when: { answer: "orm", equals: true, includes: "x" },
+            },
+          ],
+        }),
+      /at most one of 'equals' or 'includes'/,
+    );
+  });
+
+  it("throws when equals is not a string or boolean", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          outputs: [{ path: "a.ts", when: { answer: "orm", equals: 5 } }],
+        }),
+      /'equals' must be a string or boolean/,
+    );
+  });
+
+  it("throws when includes is not a non-empty string", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          outputs: [
+            { path: "a.ts", when: { answer: "features", includes: "" } },
+          ],
+        }),
+      /'includes' must be a non-empty string/,
+    );
+  });
 });
