@@ -80,7 +80,7 @@ export function AddOnCard({
           className="absolute bottom-2.5 right-2.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
           aria-label={`About ${entry.name}`}
         >
-          <Info size={13} />
+          <Info size={16} />
         </button>
       </div>
 
