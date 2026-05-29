@@ -1,0 +1,60 @@
+{
+  "id": "llm-adapter",
+  "name": "LLM Adapter",
+  "description": "Typed port interface, provider adapters (xAI/OpenAI/Anthropic/Ollama), model constants, reasoning routing, retry logic, structured output",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "providers",
+      "type": "multiselect",
+      "prompt": "Which LLM providers?",
+      "options": ["xai"],
+      "default": ["xai"]
+    },
+    {
+      "id": "reasoning_routing",
+      "type": "boolean",
+      "prompt": "Route orchestration calls to a reasoning model?",
+      "default": true
+    },
+    {
+      "id": "structured_output",
+      "type": "boolean",
+      "prompt": "Need structured JSON output with Zod schema validation?",
+      "default": true
+    },
+    {
+      "id": "streaming",
+      "type": "boolean",
+      "prompt": "Enable streaming responses?",
+      "default": false
+    }
+  ],
+  "envVars": [
+    "XAI_API_KEY",
+    "LLM_REASONING_MODEL",
+    "LLM_FAST_MODEL",
+    "LLM_DEFAULT_TIMEOUT_MS"
+  ],
+  "outputs": [
+    "src/domain/ports/out/llm-client.port.ts",
+    "src/infrastructure/llm/constants/models.ts",
+    "src/infrastructure/llm/constants/capabilities.ts",
+    "src/infrastructure/llm/adapters/xai-llm-client.adapter.ts",
+    "src/infrastructure/llm/router/llm-router.ts",
+    "src/infrastructure/llm/utils/retry.ts",
+    "src/infrastructure/llm/utils/timeout.ts",
+    "src/infrastructure/llm/utils/structured-output.ts",
+    "src/infrastructure/llm/errors/llm-errors.ts",
+    "src/infrastructure/llm/index.ts"
+  ],
+  "checklist": [
+    "Add XAI_API_KEY (and other provider keys) to .env.local",
+    "Verify LLM_REASONING_MODEL matches a model on your current tier",
+    "Check xAI console for RPM and TPM limits — set TEXT_RPM accordingly",
+    "See SETUP.md → LLM Adapter for model name reference and tier limits"
+  ],
+  "branch": "feature/generator-template-llm-adapter"
+}

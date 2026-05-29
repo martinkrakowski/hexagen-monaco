@@ -1,0 +1,63 @@
+{
+  "id": "rate-limiting",
+  "name": "Rate Limiting",
+  "description": "Differentiated middleware (text/image/general), session+IP hybrid identification, configurable limits, debug logging",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "framework",
+      "type": "select",
+      "prompt": "Which server framework?",
+      "options": ["nitro", "nextjs-api", "express", "fastify"],
+      "default": "nitro"
+    },
+    {
+      "id": "session_cookie_name",
+      "type": "text",
+      "prompt": "Session cookie name?",
+      "default": "__session"
+    },
+    {
+      "id": "differentiated",
+      "type": "boolean",
+      "prompt": "Differentiate limits by request type (text/image/general)?",
+      "default": true
+    },
+    {
+      "id": "debug_logging",
+      "type": "boolean",
+      "prompt": "Enable proximity-to-limit debug logging?",
+      "default": true
+    },
+    {
+      "id": "redis_backed",
+      "type": "boolean",
+      "prompt": "Use Redis for distributed rate limiting (multi-instance)?",
+      "default": false
+    }
+  ],
+  "envVars": [
+    "TEXT_RPM",
+    "IMAGE_RPM",
+    "GENERAL_RPM",
+    "RATE_LIMIT_WARN_AT",
+    "RATE_LIMIT_DEBUG"
+  ],
+  "outputs": [
+    "server/middleware/rate-limit.ts",
+    "server/utils/rate-limiter.ts",
+    "server/utils/get-client-ip.ts",
+    "server/utils/session-id.ts",
+    "server/errors/rate-limit-exceeded.error.ts",
+    "types/rate-limit.d.ts"
+  ],
+  "checklist": [
+    "Merge .env.rate-limit.example into your .env.local",
+    "Set TEXT_RPM=40 and IMAGE_RPM=12 for xAI free tier",
+    "Open DevTools → Application → Cookies — confirm __session is set on first request",
+    "Set RATE_LIMIT_DEBUG=true during local testing to see limit proximity logs"
+  ],
+  "branch": "feature/generator-template-rate-limiting"
+}

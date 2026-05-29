@@ -23,4 +23,5 @@ depends_on:
   - project-configuration
   - visualization
   - governance
+  - template-engine
 plane: infrastructure

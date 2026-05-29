@@ -1,0 +1,38 @@
+{
+  "id": "env-setup",
+  "name": "Env Setup",
+  "description": "Categorised .env.example, Zod runtime validation, check-env script, and SETUP.md first-day guide",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "framework",
+      "type": "select",
+      "prompt": "Server framework?",
+      "options": ["next.js", "express", "fastify", "nitro"],
+      "default": "next.js"
+    },
+    {
+      "id": "strict_validation",
+      "type": "boolean",
+      "prompt": "Fail hard at startup if required env vars are missing?",
+      "default": true
+    }
+  ],
+  "envVars": ["NODE_ENV", "NEXT_PUBLIC_APP_URL"],
+  "outputs": [
+    ".env.example",
+    "src/config/env.ts",
+    "src/config/env.server.ts",
+    "src/config/env.client.ts",
+    "scripts/check-env.ts",
+    "SETUP.md"
+  ],
+  "checklist": [
+    "cp .env.example .env.local",
+    "Fill in required values (lines with empty = values)",
+    "yarn check:env  ← validates your .env.local before first run"
+  ],
+  "branch": "feature/generator-template-env-setup"
+}

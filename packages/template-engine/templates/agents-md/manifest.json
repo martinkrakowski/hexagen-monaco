@@ -1,0 +1,42 @@
+{
+  "id": "agents-md",
+  "name": "AGENTS.md",
+  "description": "Rich AGENTS.md with mode system, tech stack reference, commands-after-edits table, and companion .agents/ spec directory",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "project_description",
+      "type": "text",
+      "prompt": "One-sentence project description?",
+      "required": true
+    },
+    {
+      "id": "architecture_style",
+      "type": "select",
+      "prompt": "Architecture style?",
+      "options": ["hexagonal", "layered", "feature-based", "monolith"],
+      "default": "hexagonal"
+    },
+    {
+      "id": "session_logging",
+      "type": "boolean",
+      "prompt": "Include session logging structure?",
+      "default": true
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    "AGENTS.md",
+    ".agents/architecture.md",
+    ".agents/testing.md",
+    ".agents/git.md",
+    ".agents/tech-stack.md"
+  ],
+  "checklist": [
+    "Review .agents/tech-stack.md — add any tools not auto-detected",
+    "Run: cat AGENTS.md to verify Claude Code will read the correct instructions"
+  ],
+  "branch": "feature/generator-template-agents-md"
+}

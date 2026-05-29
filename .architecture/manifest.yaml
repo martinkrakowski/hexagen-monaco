@@ -29,6 +29,7 @@ planes:
     - deployment
     - sync
     - runtime
+    - template-engine
   shared-kernel:
     - shared
     - core-domain
@@ -206,6 +207,11 @@ bounded_contexts:
     plane: core
     status: active
     file: contexts/core/llm-driver/context.yaml
+  - name: template-engine
+    type: supporting
+    plane: infrastructure
+    status: active
+    file: contexts/infrastructure/template-engine/context.yaml
 apps:
   - name: web
     file: apps/web.app.yaml

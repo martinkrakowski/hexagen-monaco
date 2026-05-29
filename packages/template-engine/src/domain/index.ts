@@ -1,0 +1,27 @@
+export type {
+  QuestionType,
+  TemplateQuestion,
+  SelectQuestion,
+  MultiSelectQuestion,
+  TextQuestion,
+  BooleanQuestion,
+  AutoQuestion,
+  QuestionAnswer,
+  AnswerMap,
+} from "./question.js";
+
+export type { TemplateManifest } from "./template-manifest.js";
+export { validateManifest } from "./template-manifest.js";
+
+export type {
+  TemplateInstallRecord,
+  GeneratedFileRecord,
+  TemplateConfig,
+} from "./template-config.js";
+export {
+  TEMPLATE_CONFIG_FILE,
+  emptyConfig,
+  isInstalled,
+} from "./template-config.js";
+
+export { conflictFilePath } from "./conflict-path.js";

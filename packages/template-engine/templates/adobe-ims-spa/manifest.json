@@ -1,0 +1,73 @@
+{
+  "id": "adobe-ims-spa",
+  "name": "Adobe IMS SPA (PKCE)",
+  "description": "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, token store, auto-refresh",
+  "version": "1.0.0",
+  "requires": ["auth-mock", "env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "client_id",
+      "type": "text",
+      "prompt": "Adobe IMS Client ID (from Developer Console)?",
+      "required": true
+    },
+    {
+      "id": "redirect_uri",
+      "type": "text",
+      "prompt": "OAuth callback URI?",
+      "default": "http://localhost:3000/api/auth/callback"
+    },
+    {
+      "id": "environment",
+      "type": "select",
+      "prompt": "IMS environment?",
+      "options": ["prod", "stage"],
+      "default": "prod"
+    },
+    {
+      "id": "token_storage",
+      "type": "select",
+      "prompt": "Where to store tokens?",
+      "options": ["httponly-cookie", "server-session", "supabase"],
+      "default": "httponly-cookie"
+    },
+    {
+      "id": "auto_refresh",
+      "type": "boolean",
+      "prompt": "Auto-refresh access tokens before expiry?",
+      "default": true
+    },
+    {
+      "id": "scopes",
+      "type": "text",
+      "prompt": "IMS OAuth scopes (comma-separated)?",
+      "default": "openid,AdobeID,read_organizations"
+    }
+  ],
+  "envVars": [
+    "ADOBE_IMS_CLIENT_ID",
+    "ADOBE_IMS_REDIRECT_URI",
+    "ADOBE_IMS_SCOPES",
+    "ADOBE_IMS_ENVIRONMENT"
+  ],
+  "outputs": [
+    "src/infrastructure/auth/adobe-ims/config.ts",
+    "src/infrastructure/auth/adobe-ims/pkce.ts",
+    "src/infrastructure/auth/adobe-ims/ims-client.ts",
+    "src/infrastructure/auth/adobe-ims/token-store.ts",
+    "src/infrastructure/auth/adobe-ims/user-profile-mapper.ts",
+    "app/api/auth/login/route.ts",
+    "app/api/auth/callback/route.ts",
+    "app/api/auth/logout/route.ts",
+    "app/api/auth/me/route.ts"
+  ],
+  "checklist": [
+    "Merge .env.adobe-ims.example into .env.local",
+    "Set ADOBE_IMS_CLIENT_ID from the Adobe Developer Console",
+    "Confirm credential type is 'Single Page App' (not Web App — deprecated)",
+    "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
+    "Test: GET /api/auth/login → IMS → callback → /dashboard"
+  ],
+  "branch": "feature/generator-template-adobe-ims-spa"
+}

@@ -1,0 +1,52 @@
+{
+  "id": "error-handling",
+  "name": "Error Handling",
+  "description": "3-layer error hierarchy, Result<T,E> type, RFC 7807 HTTP mapping, React error boundary",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "http_mapping",
+      "type": "select",
+      "prompt": "HTTP error mapping strategy?",
+      "options": ["status-codes", "rfc7807-problem-json", "custom"],
+      "default": "rfc7807-problem-json"
+    },
+    {
+      "id": "react_boundary",
+      "type": "boolean",
+      "prompt": "Generate React ErrorBoundary component?",
+      "default": true
+    },
+    {
+      "id": "sentry",
+      "type": "boolean",
+      "prompt": "Integrate Sentry for error tracking?",
+      "default": false
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    "src/shared/result.ts",
+    "src/shared/errors/error-codes.ts",
+    "src/domain/errors/domain.error.ts",
+    "src/domain/errors/not-found.error.ts",
+    "src/domain/errors/validation.error.ts",
+    "src/domain/errors/authorization.error.ts",
+    "src/application/errors/application.error.ts",
+    "src/infrastructure/errors/infrastructure.error.ts",
+    "src/infrastructure/errors/external-service.error.ts",
+    "src/infrastructure/errors/llm-errors.ts",
+    "server/middleware/error-handler.ts",
+    "app/components/ErrorBoundary.tsx",
+    "app/components/ErrorFallback.tsx"
+  ],
+  "checklist": [
+    "Import Result from 'src/shared/result.ts' in new use cases",
+    "Wrap infrastructure calls in try/catch and return err(new ExternalServiceError(...))",
+    "Register handleError in your server middleware chain",
+    "Wrap top-level React trees with <ErrorBoundary> in app/layout.tsx"
+  ],
+  "branch": "feature/generator-template-error-handling"
+}

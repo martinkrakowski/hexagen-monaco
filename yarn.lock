@@ -2042,6 +2042,7 @@ __metadata:
     "@hexagen/governance": "workspace:*"
     "@hexagen/project-configuration": "workspace:*"
     "@hexagen/shared": "workspace:*"
+    "@hexagen/template-engine": "workspace:*"
     "@hexagen/visualization": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^22.19.0"
@@ -2065,6 +2066,17 @@ __metadata:
     "@hexagen/shared": "workspace:*"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.5.4"
+  languageName: unknown
+  linkType: soft
+
+"@hexagen/template-engine@workspace:*, @hexagen/template-engine@workspace:packages/template-engine":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/template-engine@workspace:packages/template-engine"
+  dependencies:
+    "@hexagen/shared": "workspace:*"
+    "@types/node": "npm:^22.19.0"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.4.5"
   languageName: unknown
   linkType: soft
 

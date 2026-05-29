@@ -40,6 +40,7 @@
     { "path": "./packages/runtime" },
     { "path": "./packages/shared" },
     { "path": "./packages/sync" },
+    { "path": "./packages/template-engine" },
     { "path": "./packages/transaction-system" },
     { "path": "./packages/ui" },
     { "path": "./packages/ui-projection-compiler" },
