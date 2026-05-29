@@ -243,6 +243,50 @@ describe("FileSystemFileEmitter", () => {
     assert.equal(content, "Hello World!");
   });
 
+  it("overwrites a file previously emitted by a different template (no conflict)", async () => {
+    const projectRoot = await freshProject();
+    const emitter = new FileSystemFileEmitter(templatesDir);
+    const config = emptyConfig();
+
+    // First emit records the file under template id "__test__".
+    const first = await emitter.emit(
+      testManifest(),
+      { name: "A" },
+      projectRoot,
+      config,
+    );
+    // Move that record under a *different* template id, as the engine would
+    // after a prior install (e.g. auth-mock writing the stub first).
+    config.templates["other-template"] = {
+      installedAt: new Date().toISOString(),
+      version: "1.0.0",
+      answers: {},
+      generatedFiles: first.generatedFiles,
+    };
+
+    // A subsequent emit (still id "__test__") with different content must
+    // overwrite cleanly — recognizing the existing content was written by
+    // another template, not the user.
+    const second = await emitter.emit(
+      testManifest(),
+      { name: "B" },
+      projectRoot,
+      config,
+    );
+
+    assert.equal(
+      second.warnings.length,
+      0,
+      "cross-template override should not produce a conflict warning",
+    );
+    assert.equal(second.generatedFiles.length, 1);
+    const content = await fs.readFile(
+      path.join(projectRoot, "output.txt"),
+      "utf-8",
+    );
+    assert.equal(content, "Hello B!");
+  });
+
   it("removes the temp file when the write fails", async () => {
     const projectRoot = await freshProject();
     // Destination is an existing directory, so the final rename fails.
