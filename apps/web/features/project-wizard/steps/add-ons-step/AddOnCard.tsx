@@ -54,7 +54,7 @@ export function AddOnCard({
             {entry.name}
           </span>
           {entry.note && (
-            <span className="inline-flex items-center gap-1 shrink-0 text-xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <span className="inline-flex items-center gap-1 shrink-0 self-start text-xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
               <Info size={10} />
               {entry.note.badge}
             </span>
