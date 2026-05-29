@@ -9,7 +9,11 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const token = readSessionToken(request);
 
   if (token) {
-    await authService.revokeSession(token);
+    try {
+      await authService.revokeSession(token);
+    } catch {
+      // best-effort — always clear the cookie even if revocation fails
+    }
   }
 
   const response = NextResponse.json({ ok: true });
