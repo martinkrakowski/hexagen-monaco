@@ -10,12 +10,26 @@ export interface CatalogNote {
   detail: string;
 }
 
+/**
+ * A conflict declaration. Plain string = unconditional conflict. Object form
+ * mirrors the engine's gated conflicts: only active when the declaring
+ * template's `when` condition is satisfied at install time. The wizard skips
+ * gated entries during selection because user answers don't exist yet; the
+ * engine catches them at install time via resolveDependencies.
+ */
+export type CatalogConflict =
+  | string
+  | {
+      id: string;
+      when: { answer: string; equals?: string | boolean; includes?: string };
+    };
+
 export interface CatalogEntry {
   id: string;
   name: string;
   description: string;
   requires: string[];
-  conflicts: string[];
+  conflicts: CatalogConflict[];
   category: "foundation" | "infrastructure" | "ai" | "auth" | "tooling";
   details: TemplateDetails;
   note?: CatalogNote;
@@ -253,7 +267,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "microsoft-entra",
       "magic-link",
       "adobe-ims-spa",
-      "supabase",
     ],
     category: "auth",
     details: {
@@ -282,7 +295,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "microsoft-entra",
       "magic-link",
       "adobe-ims-spa",
-      "supabase",
     ],
     category: "auth",
     details: {
@@ -312,7 +324,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "github-oauth",
       "magic-link",
       "adobe-ims-spa",
-      "supabase",
     ],
     category: "auth",
     details: {
@@ -342,7 +353,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "github-oauth",
       "microsoft-entra",
       "adobe-ims-spa",
-      "supabase",
     ],
     category: "auth",
     details: {
@@ -460,7 +470,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "github-oauth",
       "microsoft-entra",
       "magic-link",
-      "supabase",
     ],
     category: "auth",
     details: {
@@ -482,15 +491,19 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     description:
       "SSR-safe clients, storage helpers, RLS examples, type generation, optional Drizzle ORM. When 'auth' is selected, ships @supabase/ssr middleware + getCurrentUser/requireAuth as a full auth provider",
     requires: ["env-setup", "auth-mock"],
+    // Supabase only ships an auth middleware when features ⊇ {auth}. The
+    // catalog's findConflicts skips gated entries because user answers don't
+    // exist yet at selection time — the engine's resolveDependencies catches
+    // them at install time when answers are known.
     conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
+      { id: "nextauth", when: { answer: "features", includes: "auth" } },
+      { id: "clerk", when: { answer: "features", includes: "auth" } },
+      { id: "better-auth", when: { answer: "features", includes: "auth" } },
+      { id: "google-oauth", when: { answer: "features", includes: "auth" } },
+      { id: "github-oauth", when: { answer: "features", includes: "auth" } },
+      { id: "microsoft-entra", when: { answer: "features", includes: "auth" } },
+      { id: "magic-link", when: { answer: "features", includes: "auth" } },
+      { id: "adobe-ims-spa", when: { answer: "features", includes: "auth" } },
     ],
     category: "infrastructure",
     details: {
@@ -533,21 +546,32 @@ const CATALOG_BY_ID = new Map(TEMPLATE_CATALOG.map((e) => [e.id, e]));
  * Returns the already-selected entries that conflict with `candidateId`.
  * The check is symmetric: a conflict declared on either side counts, since
  * catalog `conflicts` lists are not always reciprocal.
+ *
+ * Gated (object-form) conflicts are skipped here because user answers for
+ * each template aren't available at selection time. The engine evaluates
+ * those at install time via resolveDependencies; surfacing them in the
+ * wizard would either require asking gating questions up-front (bad UX) or
+ * produce false positives by assuming every gate fires.
  */
+function unconditionalConflicts(entry: CatalogEntry): string[] {
+  return entry.conflicts.filter((c): c is string => typeof c === "string");
+}
+
 export function findConflicts(
   candidateId: string,
   selectedIds: string[],
 ): CatalogEntry[] {
   const candidate = CATALOG_BY_ID.get(candidateId);
   if (!candidate) return [];
+  const candidateConflicts = unconditionalConflicts(candidate);
   return selectedIds
     .filter((id) => id !== candidateId)
     .map((id) => CATALOG_BY_ID.get(id))
     .filter((e): e is CatalogEntry => e !== undefined)
     .filter(
       (e) =>
-        candidate.conflicts.includes(e.id) ||
-        e.conflicts.includes(candidate.id),
+        candidateConflicts.includes(e.id) ||
+        unconditionalConflicts(e).includes(candidate.id),
     );
 }
 

@@ -109,6 +109,29 @@ Manifests don't support conditional `requires`. Auth-mock is lightweight (5 file
 
 ---
 
-## Conflicts
+## Conflicts (gated)
 
-Supabase conflicts with every Group A provider (`google-oauth`, `github-oauth`, `microsoft-entra`, `magic-link`, `adobe-ims-spa`) and every Group B framework (`nextauth`, `clerk`, `better-auth`). The wizard's `findConflicts` is symmetric, so this is enforced from either direction.
+Supabase's conflicts with the eight other auth-providing templates are **gated on `features ⊇ {auth}`** — they only fire when this install actually emits the auth middleware. Storage-only or database-only Supabase coexists fine with any auth provider.
+
+```json
+"conflicts": [
+  { "id": "nextauth",        "when": { "answer": "features", "includes": "auth" } },
+  { "id": "clerk",           "when": { "answer": "features", "includes": "auth" } },
+  { "id": "better-auth",     "when": { "answer": "features", "includes": "auth" } },
+  { "id": "google-oauth",    "when": { "answer": "features", "includes": "auth" } },
+  { "id": "github-oauth",    "when": { "answer": "features", "includes": "auth" } },
+  { "id": "microsoft-entra", "when": { "answer": "features", "includes": "auth" } },
+  { "id": "magic-link",      "when": { "answer": "features", "includes": "auth" } },
+  { "id": "adobe-ims-spa",   "when": { "answer": "features", "includes": "auth" } }
+]
+```
+
+The Group A providers no longer list `supabase` in their conflict arrays — the asymmetric conflict is declared only on the Supabase side because only Supabase knows whether its install is bringing auth.
+
+### Engine semantics
+
+`resolveDependencies` evaluates gated conflicts using the same `{ answer, equals?, includes? }` shape as gated outputs (PR #101). Plain-string conflicts always fire; object-form conflicts fire only when the declaring template's answers satisfy the gate.
+
+### Wizard semantics
+
+The wizard's `findConflicts` skips gated entries because user answers don't exist at add-on selection time. Surfacing them there would either require asking gating questions up-front (bad UX) or produce false positives by assuming every gate fires. The engine catches them at install time when answers are known and throws `ConflictError` with a clear message.

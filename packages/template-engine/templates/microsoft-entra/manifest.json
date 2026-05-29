@@ -11,8 +11,7 @@
     "google-oauth",
     "github-oauth",
     "magic-link",
-    "adobe-ims-spa",
-    "supabase"
+    "adobe-ims-spa"
   ],
   "questions": [
     {
@@ -81,9 +80,9 @@
     "If using group role mapping: add GroupMember.Read.All (delegated) and grant admin consent",
     "Merge .env.microsoft-entra.example into .env.local",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real (or unset AUTH_MODE) — this template's middleware.ts overwrites auth-mock's dev middleware and runs real Entra auth on protected paths",
-    "Keep AUTH_MODE=mock for local dev — both the middleware and getCurrentUser() short-circuit to MOCK_USER",
-    "Test flow: GET /api/auth/login/entra → Microsoft → GET /api/auth/callback/entra → /dashboard",
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real Entra auth on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Test flow: GET /api/auth/login/entra \u2192 Microsoft \u2192 GET /api/auth/callback/entra \u2192 /dashboard",
     "Verify GET /api/auth/me returns UserContext with correct roles",
     "Verify DELETE /api/auth/logout/entra clears the session cookie",
     "Confirm middleware redirects unauthenticated requests to /api/auth/login/entra for paths under {protected_paths}",

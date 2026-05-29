@@ -11,8 +11,7 @@
     "google-oauth",
     "microsoft-entra",
     "magic-link",
-    "adobe-ims-spa",
-    "supabase"
+    "adobe-ims-spa"
   ],
   "questions": [
     {
@@ -70,10 +69,10 @@
     "Merge .env.github-oauth.example into .env.local",
     "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from the OAuth App settings",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real (or unset AUTH_MODE) — this template's middleware.ts overwrites auth-mock's dev middleware and runs real GitHub auth on protected paths",
-    "Keep AUTH_MODE=mock for local dev — both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real GitHub auth on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
     "If using GITHUB_ALLOWED_ORGS, ensure the token has read:org scope",
-    "Test flow: GET /api/auth/login/github → GitHub → GET /api/auth/callback/github → /dashboard",
+    "Test flow: GET /api/auth/login/github \u2192 GitHub \u2192 GET /api/auth/callback/github \u2192 /dashboard",
     "Verify GET /api/auth/me returns UserContext after login",
     "Verify POST /api/auth/logout/github clears the session cookie",
     "Confirm middleware redirects unauthenticated requests to /api/auth/login/github for paths under {protected_paths}",

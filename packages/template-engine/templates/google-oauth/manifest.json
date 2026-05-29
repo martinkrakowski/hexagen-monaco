@@ -11,8 +11,7 @@
     "github-oauth",
     "microsoft-entra",
     "magic-link",
-    "adobe-ims-spa",
-    "supabase"
+    "adobe-ims-spa"
   ],
   "questions": [
     {
@@ -70,9 +69,9 @@
     "Merge .env.google-oauth.example into .env.local",
     "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the Google Cloud Console",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real (or unset AUTH_MODE) — this template's middleware.ts overwrites auth-mock's dev middleware and runs real Google auth on protected paths",
-    "Keep AUTH_MODE=mock for local dev — both the middleware and getCurrentUser() short-circuit to MOCK_USER",
-    "Test flow: GET /api/auth/login/google → Google → GET /api/auth/callback/google → /dashboard",
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real Google auth on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Test flow: GET /api/auth/login/google \u2192 Google \u2192 GET /api/auth/callback/google \u2192 /dashboard",
     "Verify GET /api/auth/me returns UserContext after login",
     "Verify POST /api/auth/logout/google clears the session cookie",
     "Confirm middleware redirects unauthenticated requests to /api/auth/login/google for paths under {protected_paths}",

@@ -11,8 +11,7 @@
     "google-oauth",
     "github-oauth",
     "microsoft-entra",
-    "adobe-ims-spa",
-    "supabase"
+    "adobe-ims-spa"
   ],
   "questions": [
     {
@@ -86,9 +85,9 @@
     "If using Resend: sign up at https://resend.com and set RESEND_API_KEY",
     "If using Nodemailer: run npm install nodemailer and configure SMTP_* env vars",
     "Set MAGIC_LINK_FROM to a verified sender address for your transport",
-    "Set AUTH_MODE=real (or unset AUTH_MODE) — this template's middleware.ts overwrites auth-mock's dev middleware and runs real magic-link auth on protected paths",
-    "Keep AUTH_MODE=mock for local dev — both the middleware and getCurrentUser() short-circuit to MOCK_USER",
-    "Test flow: POST /api/auth/magic-link/request { email } → check inbox → GET /api/auth/magic-link/verify?token=... → /dashboard",
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real magic-link auth on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Test flow: POST /api/auth/magic-link/request { email } \u2192 check inbox \u2192 GET /api/auth/magic-link/verify?token=... \u2192 /dashboard",
     "Verify second use of same link returns 'already used' redirect",
     "Verify GET /api/auth/me returns UserContext after login",
     "Verify DELETE /api/auth/logout clears the session cookie",

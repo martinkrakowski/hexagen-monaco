@@ -5,14 +5,32 @@
   "version": "2.0.0",
   "requires": ["env-setup", "auth-mock"],
   "conflicts": [
-    "nextauth",
-    "clerk",
-    "better-auth",
-    "google-oauth",
-    "github-oauth",
-    "microsoft-entra",
-    "magic-link",
-    "adobe-ims-spa"
+    { "id": "nextauth", "when": { "answer": "features", "includes": "auth" } },
+    { "id": "clerk", "when": { "answer": "features", "includes": "auth" } },
+    {
+      "id": "better-auth",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "id": "google-oauth",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "id": "github-oauth",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "id": "microsoft-entra",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "id": "magic-link",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "id": "adobe-ims-spa",
+      "when": { "answer": "features", "includes": "auth" }
+    }
   ],
   "questions": [
     {

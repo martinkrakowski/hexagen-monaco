@@ -10,9 +10,16 @@ export type {
   AnswerMap,
   OutputCondition,
   ManifestOutput,
+  ManifestConflict,
 } from "./question.js";
 
-export { outputPath, isOutputEnabled } from "./output-gating.js";
+export {
+  outputPath,
+  isOutputEnabled,
+  matchesCondition,
+  conflictTarget,
+  isConflictActive,
+} from "./output-gating.js";
 
 export type { TemplateManifest } from "./template-manifest.js";
 export { validateManifest } from "./template-manifest.js";

@@ -1,4 +1,5 @@
-import type { TemplateManifest } from "../domain/index.js";
+import type { AnswerMap, TemplateManifest } from "../domain/index.js";
+import { conflictTarget, isConflictActive } from "../domain/index.js";
 
 export class CyclicDependencyError extends Error {
   constructor(public readonly cycle: string[]) {
@@ -36,12 +37,18 @@ export class ConflictError extends Error {
  * ordered list of template IDs that must be applied (including auto-resolved
  * dependencies), in topological order (dependencies first).
  *
+ * `answers` is an optional map keyed by template id whose values are that
+ * template's answer map. It enables conditional conflicts: a `{ id, when }`
+ * conflict entry only fires when its `when` condition is satisfied by the
+ * declaring template's answers. Plain string conflicts always fire.
+ *
  * Throws CyclicDependencyError, MissingTemplateError, or ConflictError if the
  * graph is invalid.
  */
 export function resolveDependencies(
   requested: string[],
   registry: Map<string, TemplateManifest>,
+  answers?: Map<string, AnswerMap>,
 ): string[] {
   // Build the full set needed (requested + all transitive requirements).
   // parent tracks who directly required each dep so error messages are accurate
@@ -68,10 +75,14 @@ export function resolveDependencies(
     }
   }
 
-  // Check conflicts
+  // Check conflicts. Gated conflicts (`{ id, when }`) are evaluated against
+  // the declaring template's answers; missing answers → gate inactive.
   for (const id of needed) {
     const manifest = registry.get(id)!;
-    for (const conflictId of manifest.conflicts) {
+    const tplAnswers = answers?.get(id);
+    for (const conflict of manifest.conflicts) {
+      if (!isConflictActive(conflict, tplAnswers)) continue;
+      const conflictId = conflictTarget(conflict);
       if (needed.has(conflictId)) {
         throw new ConflictError(id, conflictId);
       }
