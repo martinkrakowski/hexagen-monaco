@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [
+    "auth-mock",
     "google-oauth",
     "github-oauth",
     "microsoft-entra",
@@ -52,7 +53,7 @@
   "outputs": [
     "src/auth.ts",
     "src/auth.config.ts",
-    "src/types/next-auth.d.ts",
+    "types/next-auth.d.ts",
     "middleware.ts",
     "app/api/auth/[...nextauth]/route.ts",
     ".env.nextauth.example"

@@ -3,9 +3,10 @@ import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 
 // Path prefixes that require an authenticated session (from the `protected_paths` answer).
+// Trailing slashes are stripped so "/dashboard/" still protects "/dashboard".
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
-  .map((p) => p.trim())
+  .map((p) => p.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 // Edge-safe configuration shared between the middleware and the full auth instance.
