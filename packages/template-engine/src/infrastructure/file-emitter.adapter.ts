@@ -133,8 +133,14 @@ async function atomicWrite(
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp.${Date.now()}`;
   await fs.writeFile(tmp, content, "utf-8");
-  // Apply the mode before the rename so the final file is atomically correct.
-  if (mode !== undefined) await fs.chmod(tmp, mode & 0o777);
+  // Restore only the source's executable bits (masked by umask), keeping the
+  // read/write bits as writeFile created them. This preserves script
+  // executability without widening permissions beyond what the umask allows.
+  if (mode !== undefined && (mode & 0o111) !== 0) {
+    const created = (await fs.stat(tmp)).mode & 0o777;
+    const execBits = mode & 0o111 & ~process.umask();
+    await fs.chmod(tmp, created | execBits);
+  }
   await fs.rename(tmp, filePath);
 }
 
