@@ -6,12 +6,16 @@ import {
   MissingTemplateError,
   ConflictError,
 } from "../../src/application/resolve-dependencies.js";
-import type { TemplateManifest } from "../../src/domain/index.js";
+import type {
+  AnswerMap,
+  ManifestConflict,
+  TemplateManifest,
+} from "../../src/domain/index.js";
 
 function manifest(
   id: string,
   requires: string[] = [],
-  conflicts: string[] = [],
+  conflicts: ManifestConflict[] = [],
 ): TemplateManifest {
   return {
     id,
@@ -112,6 +116,90 @@ describe("resolveDependencies", () => {
     const registry = makeRegistry(manifest("a", [], ["b"]), manifest("b"));
     assert.throws(
       () => resolveDependencies(["a", "b"], registry),
+      ConflictError,
+    );
+  });
+
+  it("fires a gated conflict when the declaring template's answer satisfies the gate", () => {
+    // a's conflict with b is gated on a.features ⊇ {auth}
+    const registry = makeRegistry(
+      manifest(
+        "a",
+        [],
+        [{ id: "b", when: { answer: "features", includes: "auth" } }],
+      ),
+      manifest("b"),
+    );
+    const answers = new Map<string, AnswerMap>([
+      ["a", { features: ["auth", "storage"] }],
+    ]);
+    assert.throws(
+      () => resolveDependencies(["a", "b"], registry, answers),
+      ConflictError,
+    );
+  });
+
+  it("skips a gated conflict when the declaring template's answer does not satisfy the gate", () => {
+    // Same setup, but features doesn't include "auth" → no conflict
+    const registry = makeRegistry(
+      manifest(
+        "a",
+        [],
+        [{ id: "b", when: { answer: "features", includes: "auth" } }],
+      ),
+      manifest("b"),
+    );
+    const answers = new Map<string, AnswerMap>([
+      ["a", { features: ["storage"] }],
+    ]);
+    const result = resolveDependencies(["a", "b"], registry, answers);
+    assert.deepEqual(result.sort(), ["a", "b"]);
+  });
+
+  it("treats a gated conflict as inactive when no answers are supplied", () => {
+    // Conservative default: without evidence, gates don't fire.
+    const registry = makeRegistry(
+      manifest(
+        "a",
+        [],
+        [{ id: "b", when: { answer: "features", includes: "auth" } }],
+      ),
+      manifest("b"),
+    );
+    const result = resolveDependencies(["a", "b"], registry);
+    assert.deepEqual(result.sort(), ["a", "b"]);
+  });
+
+  it("fires an unconditional conflict even when the registry has gated entries", () => {
+    // Plain-string and gated entries can coexist; the plain one still fires.
+    const registry = makeRegistry(
+      manifest("a", [], ["b", { id: "c", when: { answer: "x", equals: "y" } }]),
+      manifest("b"),
+      manifest("c"),
+    );
+    assert.throws(
+      () => resolveDependencies(["a", "b"], registry),
+      ConflictError,
+    );
+  });
+
+  it("evaluates an equals-gated conflict against a boolean answer", () => {
+    const registry = makeRegistry(
+      manifest(
+        "a",
+        [],
+        [{ id: "b", when: { answer: "ship_auth", equals: true } }],
+      ),
+      manifest("b"),
+    );
+    const noShip = new Map<string, AnswerMap>([["a", { ship_auth: false }]]);
+    assert.deepEqual(resolveDependencies(["a", "b"], registry, noShip).sort(), [
+      "a",
+      "b",
+    ]);
+    const ship = new Map<string, AnswerMap>([["a", { ship_auth: true }]]);
+    assert.throws(
+      () => resolveDependencies(["a", "b"], registry, ship),
       ConflictError,
     );
   });

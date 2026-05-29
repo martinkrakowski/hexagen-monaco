@@ -70,3 +70,11 @@ export interface OutputCondition {
  * gated on an answer via a `when` condition.
  */
 export type ManifestOutput = string | { path: string; when: OutputCondition };
+
+/**
+ * A manifest conflict entry: a plain template id (always conflicts) or a
+ * template id whose conflict is gated on an answer via the same `when` shape
+ * as gated outputs. Lets a multi-feature template like Supabase declare
+ * "I only conflict with auth providers when my `features` includes `auth`".
+ */
+export type ManifestConflict = string | { id: string; when: OutputCondition };

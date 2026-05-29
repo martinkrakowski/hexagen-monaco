@@ -1,15 +1,15 @@
 {
   "id": "auth-mock",
   "name": "Auth Mock",
-  "description": "AUTH_MODE=mock|real toggle, UserContext value object, session cookie, mock adapter, and real-provider stub",
-  "version": "1.0.0",
+  "description": "UserContext value object, MOCK_USER for development, generic session-cookie helpers, and a dev-only root middleware that injects MOCK_USER when AUTH_MODE=mock. Real auth providers (google-oauth, supabase, etc.) overwrite the middleware with their own.",
+  "version": "2.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
   "questions": [
     {
       "id": "session_cookie_name",
       "type": "text",
-      "prompt": "Session cookie name?",
+      "prompt": "Session cookie name? (used by the session-manager cookie helpers)",
       "default": "__auth_session"
     },
     {
@@ -29,34 +29,12 @@
       "type": "text",
       "prompt": "Mock user roles (comma-separated)?",
       "default": "user"
-    },
-    {
-      "id": "protected_paths",
-      "type": "text",
-      "prompt": "Path prefixes to protect (comma-separated)?",
-      "default": "/api,/dashboard"
-    },
-    {
-      "id": "real_provider_slot",
-      "type": "select",
-      "prompt": "Which real provider will replace mock later?",
-      "options": [
-        "adobe-ims",
-        "nextauth",
-        "clerk",
-        "supabase-auth",
-        "custom",
-        "none"
-      ],
-      "default": "none"
     }
   ],
   "envVars": [
     "AUTH_MODE",
     "AUTH_COOKIE_NAME",
     "AUTH_SESSION_MAX_AGE",
-    "AUTH_SESSION_SECRET",
-    "AUTH_PROTECTED_PATHS",
     "MOCK_USER_ID",
     "MOCK_USER_NAME",
     "MOCK_USER_EMAIL",
@@ -65,27 +43,18 @@
   ],
   "outputs": [
     "src/domain/value-objects/user-context.ts",
-    "src/domain/ports/out/auth-provider.port.ts",
-    "src/application/services/auth.service.ts",
-    "src/application/use-cases/get-current-user.use-case.ts",
-    "src/infrastructure/auth/mock/mock-auth.adapter.ts",
-    "src/infrastructure/auth/mock/mock-session.ts",
-    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    "src/infrastructure/auth/mock-user.ts",
     "src/infrastructure/auth/session/session-manager.ts",
-    "src/infrastructure/auth/index.ts",
-    "server/middleware/auth.middleware.ts",
-    "app/api/auth/logout/route.ts",
-    "app/api/auth/me/route.ts",
+    "middleware.ts",
     ".env.auth.example"
   ],
   "checklist": [
     "Copy .env.auth.example values into your .env.local",
-    "Set AUTH_MODE=mock for local development",
-    "Add MOCK_USER_NAME, MOCK_USER_EMAIL, MOCK_USER_ROLES to taste",
-    "Wire auth middleware into your root middleware.ts (see server/middleware/auth.middleware.ts)",
-    "Call GET /api/auth/me to confirm UserContext is returned",
-    "Verify DELETE /api/auth/logout clears the session cookie",
-    "When ready for real auth: implement real-auth.adapter.stub.ts and set AUTH_MODE=real"
+    "Set AUTH_MODE=mock for local development — the dev middleware will inject MOCK_USER as x-user-context on every request",
+    "Override MOCK_USER fields at runtime via MOCK_USER_NAME / MOCK_USER_EMAIL / MOCK_USER_ROLES / MOCK_USER_AVATAR_URL",
+    "Domain code depends on UserContext (src/domain/value-objects/user-context.ts) — not on a vendor user shape",
+    "Add a real auth provider template (google-oauth, github-oauth, microsoft-entra, magic-link, adobe-ims-spa, supabase) — its middleware will overwrite the dev middleware and handle real-mode auth end-to-end, while still honouring AUTH_MODE=mock as a dev short-circuit",
+    "Group B frameworks (nextauth, clerk, better-auth) own their own auth model and don't use this template's middleware"
   ],
-  "branch": "feature/generator-template-auth-mock"
+  "branch": "feature/auth-stack-restructure"
 }

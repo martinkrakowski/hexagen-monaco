@@ -1,10 +1,18 @@
 {
   "id": "microsoft-entra",
   "name": "Microsoft Entra ID (Azure AD)",
-  "description": "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM stateless session",
-  "version": "1.0.0",
+  "description": "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM stateless session cookie, and a root middleware that protects configured paths while still honouring AUTH_MODE=mock as a dev short-circuit.",
+  "version": "2.0.0",
   "requires": ["auth-mock", "env-setup"],
-  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "conflicts": [
+    "nextauth",
+    "clerk",
+    "better-auth",
+    "google-oauth",
+    "github-oauth",
+    "magic-link",
+    "adobe-ims-spa"
+  ],
   "questions": [
     {
       "id": "redirect_uri",
@@ -29,6 +37,12 @@
       "type": "text",
       "prompt": "Group role map JSON? (e.g. {\"<oid>\":\"admin\"})",
       "default": "{}"
+    },
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes the middleware should require auth for (comma-separated)?",
+      "default": "/dashboard,/api/protected"
     }
   ],
   "envVars": [
@@ -50,10 +64,13 @@
     "src/infrastructure/auth/entra/user-profile-mapper.ts",
     "src/infrastructure/auth/entra/session-store.ts",
     "src/infrastructure/auth/entra/entra-auth.adapter.ts",
+    "src/lib/auth/get-current-user.ts",
+    "src/lib/auth/require-auth.ts",
     "app/api/auth/login/entra/route.ts",
     "app/api/auth/callback/entra/route.ts",
     "app/api/auth/logout/entra/route.ts",
-    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    "app/api/auth/me/route.ts",
+    "middleware.ts",
     ".env.microsoft-entra.example"
   ],
   "checklist": [
@@ -63,10 +80,13 @@
     "If using group role mapping: add GroupMember.Read.All (delegated) and grant admin consent",
     "Merge .env.microsoft-entra.example into .env.local",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local — the template has already wired EntraAuthAdapter as RealAuthAdapter",
-    "Test flow: GET /api/auth/login/entra → Microsoft → GET /api/auth/callback/entra → /dashboard",
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real Entra auth on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Test flow: GET /api/auth/login/entra \u2192 Microsoft \u2192 GET /api/auth/callback/entra \u2192 /dashboard",
     "Verify GET /api/auth/me returns UserContext with correct roles",
-    "Verify DELETE /api/auth/logout/entra clears the session cookie"
+    "Verify DELETE /api/auth/logout/entra clears the session cookie",
+    "Confirm middleware redirects unauthenticated requests to /api/auth/login/entra for paths under {protected_paths}",
+    "Use getCurrentUser() / requireAuth() in Server Components and Server Actions"
   ],
-  "branch": "feature/generator-template-microsoft-entra"
+  "branch": "feature/auth-stack-restructure"
 }

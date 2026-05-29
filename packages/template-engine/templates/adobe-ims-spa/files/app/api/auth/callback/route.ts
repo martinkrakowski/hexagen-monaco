@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { IMSClient } from "../../../../src/infrastructure/auth/adobe-ims/ims-client";
 import { AdobeIMSAuthAdapter } from "../../../../src/infrastructure/auth/adobe-ims/adobe-ims-auth.adapter";
-import { buildTokenCookieHeader } from "../../../../src/infrastructure/auth/adobe-ims/token-store";
 import { buildSessionCookieHeader } from "../../../../src/infrastructure/auth/session/session-manager";
 
 const PKCE_COOKIE = "__ims_pkce";
@@ -76,8 +75,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   response.headers.append("Set-Cookie", clearShortCookie(PKCE_COOKIE));
   response.headers.append("Set-Cookie", clearShortCookie(STATE_COOKIE));
 
-  // Set encrypted token cookie + session cookie
-  response.headers.append("Set-Cookie", buildTokenCookieHeader(sessionToken, IS_SECURE));
+  // Set the encrypted IMSTokens blob as the session cookie. Middleware reads
+  // it on every protected request and refreshes the access token when it
+  // enters the configured pre-expiry window.
   response.headers.append("Set-Cookie", buildSessionCookieHeader(sessionToken));
 
   return response;

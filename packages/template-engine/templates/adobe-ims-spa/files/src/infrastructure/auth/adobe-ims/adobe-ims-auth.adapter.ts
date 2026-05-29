@@ -1,4 +1,3 @@
-import type { AuthProviderPort } from "../../../domain/ports/out/auth-provider.port";
 import type { UserContext } from "../../../domain/value-objects/user-context";
 import type { IMSTokens } from "../../../domain/ports/out/ims-auth.port";
 import { IMSClient } from "./ims-client";
@@ -6,22 +5,47 @@ import { IMS_CONFIG } from "./config";
 import { encryptTokens, decryptTokens } from "./token-store";
 import { mapIMSProfileToUserContext } from "./user-profile-mapper";
 
-// Session token format: encrypted IMSTokens blob (base64url.base64url)
-// The authService session token IS the encrypted token bundle.
+// Session-related helpers for Adobe IMS. The session cookie's value is the
+// encrypted IMSTokens blob — validation requires a round-trip to IMS to fetch
+// the current profile and (optionally) refresh the access token.
 
 const imsClient = new IMSClient();
 
-export class AdobeIMSAuthAdapter implements AuthProviderPort {
-  async validate(sessionToken: string): Promise<UserContext | null> {
+// validate() returns the resolved user and, when a refresh fired, the new
+// encrypted IMSTokens blob the caller should persist back to the cookie.
+// Returns null on any validation/refresh failure.
+//
+// Concurrent-refresh note: two simultaneous in-window requests will both
+// refresh. The first Set-Cookie response wins; the second is harmless under
+// Adobe IMS's refresh-token rotation policy (the previous refresh token
+// remains valid through one rotation cycle). Strict single-flight refresh
+// would require a shared server-side store, which intentionally isn't part of
+// a stateless cookie template.
+export interface ValidatedSession {
+  readonly user: UserContext;
+  readonly refreshedToken?: string;
+}
+
+export class AdobeIMSAuthAdapter {
+  async validate(sessionToken: string): Promise<ValidatedSession | null> {
     const tokens = await decryptTokens(sessionToken);
     if (!tokens) return null;
 
-    if (IMS_CONFIG.autoRefresh && tokens.expiresAt - Date.now() < IMS_CONFIG.refreshWindowSeconds * 1000) {
+    if (
+      IMS_CONFIG.autoRefresh &&
+      tokens.expiresAt - Date.now() < IMS_CONFIG.refreshWindowSeconds * 1000
+    ) {
       if (!tokens.refreshToken) return null;
       try {
         const refreshed = await imsClient.refreshToken(tokens.refreshToken);
         const profile = await imsClient.fetchProfile(refreshed.accessToken);
-        return mapIMSProfileToUserContext(profile);
+        // Encrypt the full refreshed bundle so the new refresh_token (Adobe
+        // rotates it on every exchange) is persisted, not just the access token.
+        const refreshedToken = await encryptTokens(refreshed);
+        return {
+          user: mapIMSProfileToUserContext(profile),
+          refreshedToken,
+        };
       } catch {
         return null;
       }
@@ -29,21 +53,10 @@ export class AdobeIMSAuthAdapter implements AuthProviderPort {
 
     try {
       const profile = await imsClient.fetchProfile(tokens.accessToken);
-      return mapIMSProfileToUserContext(profile);
+      return { user: mapIMSProfileToUserContext(profile) };
     } catch {
       return null;
     }
-  }
-
-  async createSession(user: UserContext): Promise<string> {
-    // Called after a successful code exchange; the encrypted token blob
-    // is stored separately in the token cookie. This session token is a
-    // lightweight reference — for IMS we store the full encrypted blob.
-    // Callers that have the tokens should use createSessionFromTokens instead.
-    throw new Error(
-      "AdobeIMSAuthAdapter.createSession() requires tokens. " +
-        "Use createSessionFromTokens() in the callback route.",
-    );
   }
 
   async createSessionFromTokens(tokens: IMSTokens): Promise<string> {

@@ -1,20 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
-import { AdobeIMSAuthAdapter } from "../../../../src/infrastructure/auth/adobe-ims/adobe-ims-auth.adapter";
-import { readSessionToken } from "../../../../src/infrastructure/auth/session/session-manager";
+import { NextResponse } from "next/server";
+import { getValidatedSession } from "../../../../src/lib/auth/get-current-user";
+import { buildSessionCookieHeader } from "../../../../src/infrastructure/auth/session/session-manager";
 
-const adapter = new AdobeIMSAuthAdapter();
-
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const token = readSessionToken(request);
-
-  if (!token) {
-    return NextResponse.json({ error: "No active session" }, { status: 401 });
+export async function GET() {
+  const session = await getValidatedSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const user = await adapter.validate(token);
-  if (!user) {
-    return NextResponse.json({ error: "Invalid or expired session" }, { status: 401 });
+  const response = NextResponse.json({ user: session.user });
+  if (session.refreshedToken) {
+    response.headers.append(
+      "Set-Cookie",
+      buildSessionCookieHeader(session.refreshedToken),
+    );
   }
-
-  return NextResponse.json(user);
+  return response;
 }

@@ -1,10 +1,18 @@
 {
   "id": "google-oauth",
   "name": "Google OAuth 2.0",
-  "description": "Server-side Google OAuth 2.0: authorization code flow, userinfo fetch, AES-256-GCM session, optional hosted-domain restriction",
-  "version": "1.0.0",
+  "description": "Server-side Google OAuth 2.0: authorization code flow, userinfo fetch, AES-256-GCM session cookie, optional hosted-domain restriction, and a root middleware that protects configured paths while still honouring AUTH_MODE=mock as a dev short-circuit.",
+  "version": "2.0.0",
   "requires": ["auth-mock", "env-setup"],
-  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "conflicts": [
+    "nextauth",
+    "clerk",
+    "better-auth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link",
+    "adobe-ims-spa"
+  ],
   "questions": [
     {
       "id": "redirect_uri",
@@ -23,6 +31,12 @@
       "type": "text",
       "prompt": "Restrict to Google Workspace domain? (leave blank for any Google account)",
       "default": ""
+    },
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes the middleware should require auth for (comma-separated)?",
+      "default": "/dashboard,/api/protected"
     }
   ],
   "envVars": [
@@ -40,9 +54,13 @@
     "src/infrastructure/auth/google/user-profile-mapper.ts",
     "src/infrastructure/auth/google/session-store.ts",
     "src/infrastructure/auth/google/google-auth.adapter.ts",
+    "src/lib/auth/get-current-user.ts",
+    "src/lib/auth/require-auth.ts",
     "app/api/auth/login/google/route.ts",
     "app/api/auth/callback/google/route.ts",
-    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    "app/api/auth/logout/google/route.ts",
+    "app/api/auth/me/route.ts",
+    "middleware.ts",
     ".env.google-oauth.example"
   ],
   "checklist": [
@@ -51,10 +69,13 @@
     "Merge .env.google-oauth.example into .env.local",
     "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the Google Cloud Console",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local — the template has already wired GoogleAuthAdapter as RealAuthAdapter",
-    "Test flow: GET /api/auth/login/google → Google → GET /api/auth/callback/google → /dashboard",
-    "Verify GET /api/auth/me returns UserContext",
-    "Verify DELETE /api/auth/logout clears the session cookie"
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real Google auth on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Test flow: GET /api/auth/login/google \u2192 Google \u2192 GET /api/auth/callback/google \u2192 /dashboard",
+    "Verify GET /api/auth/me returns UserContext after login",
+    "Verify POST /api/auth/logout/google clears the session cookie",
+    "Confirm middleware redirects unauthenticated requests to /api/auth/login/google for paths under {protected_paths}",
+    "Use getCurrentUser() / requireAuth() in Server Components and Server Actions"
   ],
-  "branch": "feature/generator-template-google-oauth"
+  "branch": "feature/auth-stack-restructure"
 }

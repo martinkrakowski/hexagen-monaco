@@ -1,10 +1,18 @@
 {
   "id": "adobe-ims-spa",
   "name": "Adobe IMS SPA (PKCE)",
-  "description": "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, AES-256-GCM token store, silent auto-refresh middleware",
-  "version": "1.0.0",
+  "description": "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, AES-256-GCM token store, silent auto-refresh, and a root middleware that protects configured paths and validates IMS sessions while still honouring AUTH_MODE=mock as a dev short-circuit.",
+  "version": "2.0.0",
   "requires": ["auth-mock", "env-setup"],
-  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "conflicts": [
+    "nextauth",
+    "clerk",
+    "better-auth",
+    "google-oauth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link"
+  ],
   "questions": [
     {
       "id": "redirect_uri",
@@ -30,6 +38,12 @@
       "type": "boolean",
       "prompt": "Auto-refresh access tokens before expiry?",
       "default": true
+    },
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes the middleware should require auth for (comma-separated)?",
+      "default": "/dashboard,/api/protected"
     }
   ],
   "envVars": [
@@ -48,23 +62,26 @@
     "src/infrastructure/auth/adobe-ims/token-store.ts",
     "src/infrastructure/auth/adobe-ims/user-profile-mapper.ts",
     "src/infrastructure/auth/adobe-ims/adobe-ims-auth.adapter.ts",
-    "server/middleware/adobe-ims-refresh.middleware.ts",
+    "src/lib/auth/get-current-user.ts",
+    "src/lib/auth/require-auth.ts",
     "app/api/auth/login/route.ts",
     "app/api/auth/callback/route.ts",
     "app/api/auth/logout/route.ts",
     "app/api/auth/me/route.ts",
-    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    "middleware.ts",
     ".env.adobe-ims.example"
   ],
   "checklist": [
     "Merge .env.adobe-ims.example into .env.local",
     "Set ADOBE_IMS_CLIENT_ID from the Adobe Developer Console (Single Page App credential type)",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local — the template has already wired AdobeIMSAuthAdapter as RealAuthAdapter",
-    "Wire adobe-ims-refresh.middleware before auth.middleware in your root middleware.ts",
-    "Test flow: GET /api/auth/login → IMS authorize → GET /api/auth/callback → /dashboard",
-    "Verify GET /api/auth/me returns UserContext",
-    "Verify DELETE /api/auth/logout clears both session and token cookies"
+    "Set AUTH_MODE=real (or unset AUTH_MODE) \u2014 this template's middleware.ts overwrites auth-mock's dev middleware and runs real IMS auth + auto-refresh on protected paths",
+    "Keep AUTH_MODE=mock for local dev \u2014 both the middleware and getCurrentUser() short-circuit to MOCK_USER",
+    "Test flow: GET /api/auth/login \u2192 IMS authorize \u2192 GET /api/auth/callback \u2192 /dashboard",
+    "Verify GET /api/auth/me returns UserContext after login",
+    "Verify DELETE /api/auth/logout clears the session cookie",
+    "Confirm middleware redirects unauthenticated requests to /api/auth/login for paths under {protected_paths}",
+    "Use getCurrentUser() / requireAuth() in Server Components and Server Actions"
   ],
-  "branch": "feature/generator-template-adobe-ims-spa"
+  "branch": "feature/auth-stack-restructure"
 }
