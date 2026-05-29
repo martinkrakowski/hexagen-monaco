@@ -45,24 +45,11 @@ export function AddOnCard({
             : "border-border hover:border-primary/50 hover:bg-muted/30"
         }`}
       >
-        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
-          {isSelected && (
-            <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setInfoOpen(true);
-            }}
-            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-            aria-label={`About ${entry.name}`}
-          >
-            <Info size={13} />
-          </button>
-        </div>
+        {isSelected && (
+          <div className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-primary" />
+        )}
 
-        <div className="font-semibold text-sm mb-1 pr-10">{entry.name}</div>
+        <div className="font-semibold text-sm mb-1 pr-4">{entry.name}</div>
         <p className="text-xs text-muted-foreground flex-1">
           {entry.description}
         </p>
@@ -83,6 +70,20 @@ export function AddOnCard({
             ))}
           </div>
         )}
+
+        <div className="flex justify-end mt-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setInfoOpen(true);
+            }}
+            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+            aria-label={`About ${entry.name}`}
+          >
+            <Info size={13} />
+          </button>
+        </div>
       </div>
 
       <Dialog open={infoOpen} onClose={() => setInfoOpen(false)}>
