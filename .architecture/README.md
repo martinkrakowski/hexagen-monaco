@@ -520,3 +520,13 @@ See [ADR-0005: Shared Kernel Type Migration](decisions/0005-shared-kernel-type-m
 - [README.md](../README.md) — Project overview
 - [packages/sync/](../packages/sync/) — Sync engine implementation
 - [tools/arch-linter/](../tools/arch-linter/) — Architectural linter implementation
+
+### Human-Readable Documentation
+
+For narrative architectural planning, remediation plans, and synthesized overviews (separate from the machine contracts in this directory):
+
+- [docs/](../docs/README.md) — Documentation hub
+- [docs/decisions/](../docs/decisions/) — ADR index and key decisions synthesis
+- [docs/planning/](../docs/planning/) — Core Implementation workstream (per-phase plans)
+- [docs/governance/](../docs/governance/) — Architectural governance debt
+- [docs/architecture/](../docs/architecture/) — Human-oriented architecture overviews

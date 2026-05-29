@@ -25,6 +25,18 @@ npx hexagen --help
 
 The full CLI reference is in [CLI Reference](#cli-reference).
 
+## Documentation
+
+For **architectural planning** and **remediation plans**, see the dedicated documentation:
+
+- [Documentation Hub](docs/README.md)
+- [Decisions](docs/decisions/)
+- [Planning & Core Implementation](docs/planning/)
+- [Governance & Architectural Debt](docs/governance/)
+- [Human Architecture Overviews](docs/architecture/)
+
+The `.architecture/` directory remains the single source of truth for machine-enforced contracts and primary ADRs.
+
 ## The Problem
 
 Architectural decay is rarely visible until the cost of correcting it becomes systemic. In enterprise systems — and now in codebases increasingly authored by autonomous agents — bounded contexts merge silently through shared utilities, business logic leaks into adapters, and dependency edges form across layers that were never meant to touch. The damage is done before anyone files an alert.
