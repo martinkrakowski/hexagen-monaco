@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { UserContext } from "../../domain/value-objects/user-context";
 import { decryptSession } from "../../infrastructure/auth/github/session-store";
 import { mapGitHubUserToUserContext } from "../../infrastructure/auth/github/user-profile-mapper";
@@ -8,6 +8,15 @@ const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 
 export async function getCurrentUser(): Promise<UserContext | null> {
   if (process.env.AUTH_MODE === "mock") return MOCK_USER;
+
+  try {
+    const reqHeaders = await headers();
+    const cached = reqHeaders.get("x-user-context");
+    if (cached) return JSON.parse(cached) as UserContext;
+  } catch {
+    // headers() unavailable outside a request context — fall through.
+  }
+
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;

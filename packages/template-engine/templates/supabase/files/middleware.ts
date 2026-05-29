@@ -6,6 +6,11 @@ import { MOCK_USER } from "./src/infrastructure/auth/mock-user";
 // Root middleware: honours AUTH_MODE=mock as a dev short-circuit, then runs
 // Supabase's standard SSR session-refresh pattern. The refresh MUST happen
 // between createServerClient and getUser — do not add work in between.
+//
+// x-user-context is stripped from incoming headers on every code path so it
+// can only carry middleware-validated values — getCurrentUser() trusts it
+// when present. Request headers are mutated in place so the change propagates
+// to downstream Server Components via NextResponse.next({ request }).
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
   .map((p) => p.trim().replace(/\/+$/, ""))
@@ -39,13 +44,14 @@ function mapSupabaseUserToUserContext(user: SupabaseUserShape): UserContext {
 }
 
 export default async function middleware(request: NextRequest) {
+  request.headers.delete("x-user-context");
+
   if (process.env.AUTH_MODE === "mock") {
-    const headers = new Headers(request.headers);
-    headers.set("x-user-context", JSON.stringify(MOCK_USER));
-    return NextResponse.next({ request: { headers } });
+    request.headers.set("x-user-context", JSON.stringify(MOCK_USER));
+    return NextResponse.next({ request });
   }
 
-  let response = NextResponse.next({ request: { headers: request.headers } });
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -59,7 +65,7 @@ export default async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
-          response = NextResponse.next({ request: { headers: request.headers } });
+          response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );
@@ -78,7 +84,7 @@ export default async function middleware(request: NextRequest) {
   }
 
   if (user) {
-    response.headers.set(
+    request.headers.set(
       "x-user-context",
       JSON.stringify(mapSupabaseUserToUserContext(user)),
     );

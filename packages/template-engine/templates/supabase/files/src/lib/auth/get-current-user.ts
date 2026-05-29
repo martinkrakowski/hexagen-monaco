@@ -1,12 +1,24 @@
+import { headers } from "next/headers";
 import type { UserContext } from "../../domain/value-objects/user-context";
 import { createSupabaseServerClient } from "../../infrastructure/supabase/server";
 import { MOCK_USER } from "../../infrastructure/auth/mock-user";
 
-// Server-only helper. Honours AUTH_MODE=mock, then calls supabase.auth.getUser()
-// (server-validated JWT — never trust getSession() here) and maps the Supabase
-// user to UserContext.
+// Server-only helper. Honours AUTH_MODE=mock, then short-circuits via the
+// x-user-context header that middleware emits after validating the Supabase
+// session (middleware strips any client-supplied value first). Falls back to
+// a fresh supabase.auth.getUser() (server-validated JWT — never trust
+// getSession() locally) when the header is missing.
 export async function getCurrentUser(): Promise<UserContext | null> {
   if (process.env.AUTH_MODE === "mock") return MOCK_USER;
+
+  try {
+    const reqHeaders = await headers();
+    const cached = reqHeaders.get("x-user-context");
+    if (cached) return JSON.parse(cached) as UserContext;
+  } catch {
+    // headers() unavailable outside a request context — fall through.
+  }
+
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.auth.getUser();

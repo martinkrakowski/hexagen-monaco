@@ -4,6 +4,8 @@ import { decryptSession } from "./src/infrastructure/auth/github/session-store";
 import { mapGitHubUserToUserContext } from "./src/infrastructure/auth/github/user-profile-mapper";
 import { MOCK_USER } from "./src/infrastructure/auth/mock-user";
 
+// Root middleware. x-user-context is stripped from incoming headers on every
+// code path so it can only carry middleware-validated values.
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
   .map((p) => p.trim().replace(/\/+$/, ""))
@@ -16,14 +18,18 @@ function isProtected(pathname: string): boolean {
 }
 
 export default async function middleware(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.delete("x-user-context");
+
   if (process.env.AUTH_MODE === "mock") {
-    const headers = new Headers(request.headers);
     headers.set("x-user-context", JSON.stringify(MOCK_USER));
     return NextResponse.next({ request: { headers } });
   }
 
   const { pathname } = request.nextUrl;
-  if (!isProtected(pathname)) return NextResponse.next();
+  if (!isProtected(pathname)) {
+    return NextResponse.next({ request: { headers } });
+  }
 
   const token = readSessionToken(request);
   if (!token) {
@@ -34,7 +40,6 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/api/auth/login/github", request.url));
   }
 
-  const headers = new Headers(request.headers);
   headers.set("x-user-context", JSON.stringify(mapGitHubUserToUserContext(user)));
   return NextResponse.next({ request: { headers } });
 }

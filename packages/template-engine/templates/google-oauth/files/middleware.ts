@@ -4,9 +4,11 @@ import { decryptSession } from "./src/infrastructure/auth/google/session-store";
 import { mapGoogleUserToUserContext } from "./src/infrastructure/auth/google/user-profile-mapper";
 import { MOCK_USER } from "./src/infrastructure/auth/mock-user";
 
-// Root middleware. Honours AUTH_MODE=mock as a dev short-circuit (injects
-// MOCK_USER), then validates the encrypted Google session cookie on protected
-// paths and exposes the resolved UserContext as x-user-context for downstream code.
+// Root middleware. Honours AUTH_MODE=mock as a dev short-circuit, then
+// validates the encrypted Google session cookie on protected paths and
+// exposes the resolved UserContext as x-user-context for downstream code.
+// x-user-context is stripped from incoming headers on every code path so it
+// can only carry middleware-validated values — getCurrentUser() trusts it.
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
   .map((p) => p.trim().replace(/\/+$/, ""))
@@ -19,14 +21,18 @@ function isProtected(pathname: string): boolean {
 }
 
 export default async function middleware(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.delete("x-user-context");
+
   if (process.env.AUTH_MODE === "mock") {
-    const headers = new Headers(request.headers);
     headers.set("x-user-context", JSON.stringify(MOCK_USER));
     return NextResponse.next({ request: { headers } });
   }
 
   const { pathname } = request.nextUrl;
-  if (!isProtected(pathname)) return NextResponse.next();
+  if (!isProtected(pathname)) {
+    return NextResponse.next({ request: { headers } });
+  }
 
   const token = readSessionToken(request);
   if (!token) {
@@ -37,7 +43,6 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/api/auth/login/google", request.url));
   }
 
-  const headers = new Headers(request.headers);
   headers.set("x-user-context", JSON.stringify(mapGoogleUserToUserContext(user)));
   return NextResponse.next({ request: { headers } });
 }

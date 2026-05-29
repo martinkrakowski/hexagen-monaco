@@ -3,10 +3,10 @@ import { readSessionToken } from "./src/infrastructure/auth/session/session-mana
 import { decryptSession } from "./src/infrastructure/auth/magic-link/session-store";
 import { MOCK_USER } from "./src/infrastructure/auth/mock-user";
 
-// Root middleware. Honours AUTH_MODE=mock as a dev short-circuit, then
-// validates the magic-link session cookie on protected paths. The session
-// payload IS the UserContext (magic-link has no third-party user model), so no
-// mapper step is needed here.
+// Root middleware. The session payload IS the UserContext (magic-link has no
+// third-party user model), so no mapper step. x-user-context is stripped from
+// incoming headers on every code path so it can only carry middleware-
+// validated values.
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
   .map((p) => p.trim().replace(/\/+$/, ""))
@@ -19,14 +19,18 @@ function isProtected(pathname: string): boolean {
 }
 
 export default async function middleware(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.delete("x-user-context");
+
   if (process.env.AUTH_MODE === "mock") {
-    const headers = new Headers(request.headers);
     headers.set("x-user-context", JSON.stringify(MOCK_USER));
     return NextResponse.next({ request: { headers } });
   }
 
   const { pathname } = request.nextUrl;
-  if (!isProtected(pathname)) return NextResponse.next();
+  if (!isProtected(pathname)) {
+    return NextResponse.next({ request: { headers } });
+  }
 
   const token = readSessionToken(request);
   if (!token) {
@@ -37,7 +41,6 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const headers = new Headers(request.headers);
   headers.set("x-user-context", JSON.stringify(user));
   return NextResponse.next({ request: { headers } });
 }
