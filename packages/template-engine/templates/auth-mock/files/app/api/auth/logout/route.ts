@@ -13,6 +13,6 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   }
 
   const response = NextResponse.json({ ok: true });
-  response.headers.set("Set-Cookie", buildClearSessionCookieHeader());
+  response.headers.append("Set-Cookie", buildClearSessionCookieHeader());
   return response;
 }

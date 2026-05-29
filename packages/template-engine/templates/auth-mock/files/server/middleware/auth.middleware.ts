@@ -45,7 +45,7 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
     const response = NextResponse.next({ request: { headers: requestHeaders } });
 
     if (!user) {
-      response.headers.set("Set-Cookie", buildSessionCookieHeader(activeToken));
+      response.headers.append("Set-Cookie", buildSessionCookieHeader(activeToken));
     }
 
     return response;

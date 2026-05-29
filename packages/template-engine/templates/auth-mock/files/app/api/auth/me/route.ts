@@ -3,13 +3,6 @@ import { authService, MOCK_USER } from "../../../../src/infrastructure/auth";
 import { readSessionToken } from "../../../../src/infrastructure/auth/session/session-manager";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  // Prefer the user context injected by auth middleware (already validated upstream)
-  const injected = request.headers.get("x-user-context");
-  if (injected) {
-    return NextResponse.json(JSON.parse(injected));
-  }
-
-  // Fallback: validate the session cookie directly (e.g. when middleware is not active)
   const token = readSessionToken(request);
 
   if (!token) {

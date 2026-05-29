@@ -1,8 +1,17 @@
 import { MockAuthAdapter } from "./mock/mock-auth.adapter";
-// import { RealAuthAdapter } from "./real/real-auth.adapter.stub"; // swap when AUTH_MODE=real
+import { RealAuthAdapter } from "./real/real-auth.adapter.stub";
 import { AuthService } from "../../application/services/auth.service";
 
-const adapter = new MockAuthAdapter();
+const isReal = process.env.AUTH_MODE === "real";
+
+if (isReal && !process.env.AUTH_SESSION_SECRET) {
+  throw new Error(
+    "AUTH_SESSION_SECRET is required when AUTH_MODE=real. " +
+      "Generate one with: openssl rand -hex 32",
+  );
+}
+
+const adapter = isReal ? new RealAuthAdapter() : new MockAuthAdapter();
 
 export const authService = new AuthService(adapter);
 

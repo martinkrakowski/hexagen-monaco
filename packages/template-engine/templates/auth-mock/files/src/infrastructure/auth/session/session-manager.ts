@@ -1,5 +1,8 @@
 const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "{session_cookie_name}";
-const MAX_AGE = parseInt(process.env.AUTH_SESSION_MAX_AGE ?? "604800", 10);
+const MAX_AGE = (() => {
+  const n = parseInt(process.env.AUTH_SESSION_MAX_AGE ?? "604800", 10);
+  return Number.isFinite(n) && n > 0 ? n : 604800;
+})();
 const IS_SECURE = process.env.NODE_ENV === "production";
 
 /**
@@ -34,7 +37,18 @@ export function buildSessionCookieHeader(token: string): string {
 
 /**
  * Builds a Set-Cookie header string that expires the session cookie immediately.
+ * Mirrors the same attributes as buildSessionCookieHeader so browsers correctly
+ * overwrite the existing cookie (Secure must match in production).
  */
 export function buildClearSessionCookieHeader(): string {
-  return `${COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`;
+  const parts = [
+    `${COOKIE_NAME}=`,
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+  ];
+  if (IS_SECURE) parts.push("Secure");
+  return parts.join("; ");
 }
