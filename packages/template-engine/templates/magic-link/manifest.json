@@ -1,0 +1,76 @@
+{
+  "id": "magic-link",
+  "name": "Magic Link (Passwordless)",
+  "description": "HMAC-SHA256 signed single-use tokens, Resend/Nodemailer transport, 10k-entry LRU replay store, AES-256-GCM stateless session",
+  "version": "1.0.0",
+  "requires": ["auth-mock", "env-setup"],
+  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "questions": [
+    {
+      "id": "email_transport",
+      "type": "select",
+      "prompt": "Email transport?",
+      "options": ["resend", "nodemailer"],
+      "default": "resend"
+    },
+    {
+      "id": "from_address",
+      "type": "text",
+      "prompt": "From address for magic link emails?",
+      "default": "noreply@example.com"
+    },
+    {
+      "id": "token_ttl_minutes",
+      "type": "select",
+      "prompt": "Magic link expiry (minutes)?",
+      "options": ["5", "10", "15", "30"],
+      "default": "15"
+    },
+    {
+      "id": "app_url",
+      "type": "text",
+      "prompt": "Application base URL (used to build the magic link)?",
+      "default": "http://localhost:3000"
+    }
+  ],
+  "envVars": [
+    "MAGIC_LINK_SECRET",
+    "MAGIC_LINK_TTL_MINUTES",
+    "MAGIC_LINK_FROM",
+    "MAGIC_LINK_TRANSPORT",
+    "APP_URL",
+    "RESEND_API_KEY",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASS",
+    "AUTH_SESSION_SECRET"
+  ],
+  "outputs": [
+    "src/infrastructure/auth/magic-link/config.ts",
+    "src/infrastructure/auth/magic-link/token-generator.ts",
+    "src/infrastructure/auth/magic-link/magic-link-store.ts",
+    "src/infrastructure/auth/magic-link/email-templates.ts",
+    "src/infrastructure/auth/magic-link/email-transport.ts",
+    "src/infrastructure/auth/magic-link/user-profile-mapper.ts",
+    "src/infrastructure/auth/magic-link/session-store.ts",
+    "src/infrastructure/auth/magic-link/magic-link-auth.adapter.ts",
+    "app/api/auth/magic-link/request/route.ts",
+    "app/api/auth/magic-link/verify/route.ts",
+    "app/api/auth/logout/route.ts",
+    ".env.magic-link.example"
+  ],
+  "checklist": [
+    "Merge .env.magic-link.example into .env.local",
+    "Generate MAGIC_LINK_SECRET: openssl rand -hex 32",
+    "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
+    "If using Resend: sign up at https://resend.com and set RESEND_API_KEY",
+    "If using Nodemailer: run npm install nodemailer and configure SMTP_* env vars",
+    "Set MAGIC_LINK_FROM to a verified sender address for your transport",
+    "Set AUTH_MODE=real in .env.local to activate the magic link adapter",
+    "Test flow: POST /api/auth/magic-link/request { email } → check inbox → GET /api/auth/magic-link/verify?token=... → /dashboard",
+    "Verify second use of same link returns 'already used' redirect",
+    "Verify DELETE /api/auth/logout clears the session cookie"
+  ],
+  "branch": "feature/generator-template-magic-link"
+}
