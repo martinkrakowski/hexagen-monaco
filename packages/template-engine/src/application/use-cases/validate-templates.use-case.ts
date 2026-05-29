@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { TemplateConfigStorePort } from "../ports/template-config-store.port.js";
 import type { TemplateRegistryPort } from "../ports/template-registry.port.js";
+import { conflictFilePath } from "../../domain/index.js";
 
 export interface ValidationResult {
   templateId: string;
@@ -74,13 +75,12 @@ export class ValidateTemplatesUseCase {
       const conflictFiles: string[] = [];
       const record = config.templates[id];
       for (const generated of record.generatedFiles) {
-        const conflictPath = path.join(
-          projectRoot,
-          generated.path + ".hexagen-update.ts",
+        const absConflict = conflictFilePath(
+          path.join(projectRoot, generated.path),
         );
         try {
-          await fs.access(conflictPath);
-          conflictFiles.push(generated.path + ".hexagen-update.ts");
+          await fs.access(absConflict);
+          conflictFiles.push(path.relative(projectRoot, absConflict));
         } catch {
           // no conflict file — good
         }
