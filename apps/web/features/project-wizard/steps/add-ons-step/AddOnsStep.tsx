@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { StepHeader } from "../StepHeader";
 import { WizardFooter } from "../../WizardFooter";
 import { AddOnCard } from "./AddOnCard";
@@ -28,8 +30,13 @@ export function AddOnsStep({
   description,
 }: AddOnsStepProps) {
   const { selectedIds, toggle, isSelected } = useSelectedAddOns();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(
+        CATEGORIES.map((c) => [c, c === "foundation"]),
+      ) as Record<string, boolean>,
+  );
 
-  // Compute which deps are missing for each selected entry
   function missingDeps(id: string): string[] {
     const entry = TEMPLATE_CATALOG.find((e) => e.id === id);
     if (!entry) return [];
@@ -51,29 +58,67 @@ export function AddOnsStep({
       />
 
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-4">
-        <div className="space-y-6">
+        <div className="space-y-1">
           {CATEGORIES.map((category) => {
             const entries = TEMPLATE_CATALOG.filter(
               (e) => e.category === category,
             );
+            const isOpen = expanded[category];
+            const selectedInCategory = entries.filter((e) =>
+              isSelected(e.id),
+            ).length;
+
             return (
-              <div key={category}>
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                  {CATEGORY_LABELS[category]}
-                </div>
-                <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))]">
-                  {entries.map((entry) => (
-                    <AddOnCard
-                      key={entry.id}
-                      entry={entry}
-                      isSelected={isSelected(entry.id)}
-                      onToggle={() => toggle(entry.id)}
-                      blockedBy={
-                        isSelected(entry.id) ? missingDeps(entry.id) : []
-                      }
-                    />
-                  ))}
-                </div>
+              <div
+                key={category}
+                className="rounded-lg border border-border overflow-hidden"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpanded((prev) => ({
+                      ...prev,
+                      [category]: !prev[category],
+                    }))
+                  }
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {CATEGORY_LABELS[category]}
+                    </span>
+                    {selectedInCategory > 0 && (
+                      <span className="text-xs font-semibold bg-primary/15 text-primary rounded-full px-1.5 leading-none">
+                        {selectedInCategory}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronDown
+                    size={13}
+                    className={[
+                      "text-muted-foreground/60 transition-transform",
+                      isOpen ? "rotate-180" : "",
+                    ].join(" ")}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="px-3 pb-3 pt-1">
+                    <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))]">
+                      {entries.map((entry) => (
+                        <AddOnCard
+                          key={entry.id}
+                          entry={entry}
+                          isSelected={isSelected(entry.id)}
+                          onToggle={() => toggle(entry.id)}
+                          blockedBy={
+                            isSelected(entry.id) ? missingDeps(entry.id) : []
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
