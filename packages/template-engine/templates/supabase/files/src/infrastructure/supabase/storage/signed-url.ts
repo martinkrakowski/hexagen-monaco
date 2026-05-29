@@ -8,7 +8,11 @@ export async function getSignedUrl(
   path: string,
   expiresIn?: number,
 ): Promise<Result<string, StorageError>> {
-  const ttl = expiresIn ?? Number(process.env.SUPABASE_SIGNED_URL_EXPIRY ?? 3600);
+  // Guard against a blank ("" → 0) or non-numeric env value, which would
+  // otherwise expire the URL immediately or produce NaN.
+  const parsedTtl = Number(process.env.SUPABASE_SIGNED_URL_EXPIRY);
+  const ttl =
+    expiresIn ?? (Number.isFinite(parsedTtl) && parsedTtl > 0 ? parsedTtl : 3600);
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.storage
