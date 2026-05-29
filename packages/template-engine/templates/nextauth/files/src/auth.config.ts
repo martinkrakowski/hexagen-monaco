@@ -28,7 +28,7 @@ export default {
     authorized({ request, auth }) {
       const { pathname } = request.nextUrl;
       const isProtected = PROTECTED_PATHS.some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+        (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
       );
       if (!isProtected) return true;
       return !!auth?.user;
