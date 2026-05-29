@@ -15,11 +15,13 @@ export function outputPath(output: ManifestOutput): string {
  */
 export function isOutputEnabled(
   output: ManifestOutput,
-  answers: AnswerMap,
+  answers: AnswerMap | null | undefined,
 ): boolean {
   if (typeof output === "string") return true;
 
-  const value = answers[output.when.answer];
+  // Tolerate a missing/corrupt answers map (e.g. config loaded from disk without
+  // validation) — optional chaining yields undefined instead of throwing.
+  const value = answers?.[output.when.answer];
   const { equals, includes } = output.when;
 
   if (includes !== undefined) {

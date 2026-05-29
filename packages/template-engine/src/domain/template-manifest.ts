@@ -1,4 +1,8 @@
-import type { TemplateQuestion, ManifestOutput } from "./question.js";
+import type {
+  TemplateQuestion,
+  ManifestOutput,
+  OutputCondition,
+} from "./question.js";
 
 export interface TemplateManifest {
   /** Unique kebab-case identifier, e.g. "rate-limiting" */
@@ -40,6 +44,9 @@ export function validateManifest(raw: unknown): TemplateManifest {
     }
   }
 
+  const questions = validatedQuestions(m.questions);
+  const questionIds = new Set(questions.map((q) => q.id));
+
   return {
     id: m.id as string,
     name: m.name as string,
@@ -47,9 +54,9 @@ export function validateManifest(raw: unknown): TemplateManifest {
     version: m.version as string,
     requires: validatedStringArray(m.requires, "requires"),
     conflicts: validatedStringArray(m.conflicts, "conflicts"),
-    questions: validatedQuestions(m.questions),
+    questions,
     envVars: validatedStringArray(m.envVars, "envVars"),
-    outputs: validatedOutputs(m.outputs),
+    outputs: validatedOutputs(m.outputs, questionIds),
     checklist: validatedStringArray(m.checklist, "checklist"),
     branch: typeof m.branch === "string" ? m.branch : undefined,
   };
@@ -67,7 +74,10 @@ function validatedStringArray(raw: unknown, field: string): string[] {
   return raw as string[];
 }
 
-function validatedOutputs(raw: unknown): ManifestOutput[] {
+function validatedOutputs(
+  raw: unknown,
+  questionIds: Set<string>,
+): ManifestOutput[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((o): ManifestOutput => {
     if (typeof o === "string") return o;
@@ -93,18 +103,41 @@ function validatedOutputs(raw: unknown): ManifestOutput[] {
         `Template manifest: gated output '${obj.path}' must have a 'when' with a string 'answer'`,
       );
     }
-    return {
-      path: obj.path,
-      when: {
-        answer: when.answer,
-        ...(when.equals !== undefined
-          ? { equals: when.equals as string | boolean }
-          : {}),
-        ...(typeof when.includes === "string"
-          ? { includes: when.includes }
-          : {}),
-      },
-    };
+    // The answer key must reference a declared question, so a typo or rename
+    // fails fast instead of silently disabling the output (and hiding it from
+    // validate). All answer keys originate from question ids.
+    if (!questionIds.has(when.answer)) {
+      throw new Error(
+        `Template manifest: gated output '${obj.path}' references unknown answer '${when.answer}' — it must match a question id`,
+      );
+    }
+    const hasEquals = when.equals !== undefined;
+    const hasIncludes = when.includes !== undefined;
+    // `equals` and `includes` are mutually exclusive — allowing both would make
+    // the gate ambiguous (the evaluator would silently prefer one).
+    if (hasEquals && hasIncludes) {
+      throw new Error(
+        `Template manifest: gated output '${obj.path}' must set at most one of 'equals' or 'includes'`,
+      );
+    }
+    if (
+      hasEquals &&
+      typeof when.equals !== "string" &&
+      typeof when.equals !== "boolean"
+    ) {
+      throw new Error(
+        `Template manifest: gated output '${obj.path}' 'equals' must be a string or boolean`,
+      );
+    }
+    if (hasIncludes && (typeof when.includes !== "string" || !when.includes)) {
+      throw new Error(
+        `Template manifest: gated output '${obj.path}' 'includes' must be a non-empty string`,
+      );
+    }
+    const condition: OutputCondition = { answer: when.answer };
+    if (hasEquals) condition.equals = when.equals as string | boolean;
+    if (hasIncludes) condition.includes = when.includes as string;
+    return { path: obj.path, when: condition };
   });
 }
 

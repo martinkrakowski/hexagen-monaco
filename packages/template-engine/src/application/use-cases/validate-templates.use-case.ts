@@ -61,7 +61,13 @@ export class ValidateTemplatesUseCase {
 
       // Gated outputs are evaluated against the answers recorded at install time,
       // so files that were intentionally not emitted aren't reported as missing.
-      const answers = config.templates[id].answers;
+      // The config is loaded from disk without schema validation, so coerce a
+      // missing/corrupt `answers` to an empty map rather than risk a crash.
+      const record = config.templates[id];
+      const answers =
+        record && typeof record.answers === "object" && record.answers !== null
+          ? record.answers
+          : {};
 
       const missingFiles: string[] = [];
       for (const output of manifest.outputs) {

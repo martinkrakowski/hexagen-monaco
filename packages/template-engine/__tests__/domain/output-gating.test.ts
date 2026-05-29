@@ -41,6 +41,17 @@ describe("isOutputEnabled", () => {
     assert.equal(isOutputEnabled(o, {}), false);
   });
 
+  it("tolerates a missing or corrupt answers map without throwing", () => {
+    const o: ManifestOutput = {
+      path: "a.ts",
+      when: { answer: "orm", equals: true },
+    };
+    assert.equal(isOutputEnabled(o, undefined), false);
+    assert.equal(isOutputEnabled(o, null), false);
+    // a plain string output is always enabled regardless of answers
+    assert.equal(isOutputEnabled("a.ts", undefined), true);
+  });
+
   it("treats a bare answer condition as truthiness", () => {
     const o: ManifestOutput = { path: "a.ts", when: { answer: "x" } };
     assert.equal(isOutputEnabled(o, { x: true }), true);
