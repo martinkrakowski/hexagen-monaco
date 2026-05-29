@@ -108,12 +108,99 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     category: "auth",
   },
   {
+    id: "google-oauth",
+    name: "Google OAuth",
+    description:
+      "Server-side OAuth 2.0 callback route, ID token verification via googleapis, session hydration, typed GoogleUser value object",
+    requires: ["auth-mock", "env-setup"],
+    conflicts: ["nextauth", "clerk", "better-auth"],
+    category: "auth",
+  },
+  {
+    id: "github-oauth",
+    name: "GitHub OAuth",
+    description:
+      "GitHub OAuth app flow, access token exchange, user profile fetch, typed GitHubUser value object",
+    requires: ["auth-mock", "env-setup"],
+    conflicts: ["nextauth", "clerk", "better-auth"],
+    category: "auth",
+  },
+  {
+    id: "microsoft-entra",
+    name: "Microsoft Entra",
+    description:
+      "MSAL confidential-client flow, token cache, group-claim role mapping, typed EntraUser value object",
+    requires: ["auth-mock", "env-setup"],
+    conflicts: ["nextauth", "clerk", "better-auth"],
+    category: "auth",
+  },
+  {
+    id: "magic-link",
+    name: "Magic Link",
+    description:
+      "Passwordless email flow, signed token generation, Resend/Nodemailer transport, expiry and replay protection",
+    requires: ["auth-mock", "env-setup"],
+    conflicts: ["nextauth", "clerk", "better-auth"],
+    category: "auth",
+  },
+  {
+    id: "nextauth",
+    name: "Auth.js (NextAuth v5)",
+    description:
+      "Auth.js v5 with Google, GitHub and Credentials providers, JWT session strategy, middleware route protection",
+    requires: ["env-setup"],
+    conflicts: [
+      "google-oauth",
+      "github-oauth",
+      "microsoft-entra",
+      "magic-link",
+      "adobe-ims-spa",
+      "clerk",
+      "better-auth",
+    ],
+    category: "auth",
+  },
+  {
+    id: "clerk",
+    name: "Clerk",
+    description:
+      "Clerk SDK, middleware, useUser/useAuth hooks, JWT template for API routes, org-aware role guards",
+    requires: ["env-setup"],
+    conflicts: [
+      "google-oauth",
+      "github-oauth",
+      "microsoft-entra",
+      "magic-link",
+      "adobe-ims-spa",
+      "nextauth",
+      "better-auth",
+    ],
+    category: "auth",
+  },
+  {
+    id: "better-auth",
+    name: "Better Auth",
+    description:
+      "Better Auth server setup, social providers, magic-link plugin, schema migration, typed session client",
+    requires: ["env-setup"],
+    conflicts: [
+      "google-oauth",
+      "github-oauth",
+      "microsoft-entra",
+      "magic-link",
+      "adobe-ims-spa",
+      "nextauth",
+      "clerk",
+    ],
+    category: "auth",
+  },
+  {
     id: "adobe-ims-spa",
     name: "Adobe IMS SPA (PKCE)",
     description:
       "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, token store, auto-refresh",
     requires: ["auth-mock", "env-setup"],
-    conflicts: [],
+    conflicts: ["nextauth", "clerk", "better-auth"],
     category: "auth",
   },
   {
