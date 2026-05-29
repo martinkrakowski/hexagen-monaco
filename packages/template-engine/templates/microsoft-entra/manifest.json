@@ -1,0 +1,72 @@
+{
+  "id": "microsoft-entra",
+  "name": "Microsoft Entra ID (Azure AD)",
+  "description": "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM stateless session",
+  "version": "1.0.0",
+  "requires": ["auth-mock", "env-setup"],
+  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "questions": [
+    {
+      "id": "redirect_uri",
+      "type": "text",
+      "prompt": "OAuth callback URI?",
+      "default": "http://localhost:3000/api/auth/callback/entra"
+    },
+    {
+      "id": "scopes",
+      "type": "text",
+      "prompt": "API scopes (comma-separated)?",
+      "default": "openid,profile,email,User.Read"
+    },
+    {
+      "id": "group_role_mapping",
+      "type": "boolean",
+      "prompt": "Map AAD group object IDs to application roles?",
+      "default": false
+    },
+    {
+      "id": "group_role_map",
+      "type": "text",
+      "prompt": "Group role map JSON? (e.g. {\"<oid>\":\"admin\"})",
+      "default": "{}"
+    }
+  ],
+  "envVars": [
+    "ENTRA_TENANT_ID",
+    "ENTRA_CLIENT_ID",
+    "ENTRA_CLIENT_SECRET",
+    "ENTRA_REDIRECT_URI",
+    "ENTRA_SCOPES",
+    "ENTRA_GROUP_ROLE_MAPPING",
+    "ENTRA_GROUP_ROLE_MAP",
+    "AUTH_SESSION_SECRET"
+  ],
+  "outputs": [
+    "src/domain/value-objects/entra-user.ts",
+    "src/infrastructure/auth/entra/config.ts",
+    "src/infrastructure/auth/entra/pkce.ts",
+    "src/infrastructure/auth/entra/entra-client.ts",
+    "src/infrastructure/auth/entra/group-role-mapper.ts",
+    "src/infrastructure/auth/entra/user-profile-mapper.ts",
+    "src/infrastructure/auth/entra/session-store.ts",
+    "src/infrastructure/auth/entra/entra-auth.adapter.ts",
+    "app/api/auth/login/entra/route.ts",
+    "app/api/auth/callback/entra/route.ts",
+    "app/api/auth/logout/entra/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    ".env.microsoft-entra.example"
+  ],
+  "checklist": [
+    "Register an app at https://portal.azure.com > Azure Active Directory > App registrations",
+    "Add http://localhost:3000/api/auth/callback/entra as a Web redirect URI",
+    "Add Microsoft Graph API permission: User.Read (delegated)",
+    "If using group role mapping: add GroupMember.Read.All (delegated) and grant admin consent",
+    "Merge .env.microsoft-entra.example into .env.local",
+    "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
+    "Set AUTH_MODE=real in .env.local — the template has already wired EntraAuthAdapter as RealAuthAdapter",
+    "Test flow: GET /api/auth/login/entra → Microsoft → GET /api/auth/callback/entra → /dashboard",
+    "Verify GET /api/auth/me returns UserContext with correct roles",
+    "Verify DELETE /api/auth/logout/entra clears the session cookie"
+  ],
+  "branch": "feature/generator-template-microsoft-entra"
+}
