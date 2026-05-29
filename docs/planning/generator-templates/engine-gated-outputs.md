@@ -1,7 +1,7 @@
 # Engine Enhancement: Gated Outputs (Conditional File Emission)
 
-**Branch:** `feature/template-engine-gated-outputs`
-**Status:** Proposed (design sketch — not yet implemented)
+**Implementation branch:** `feature/template-engine-gated-outputs` (PR #101)
+**Status:** Implemented
 **Relates to:** [00-template-system-design.md](./00-template-system-design.md), [05-supabase.md](./05-supabase.md)
 
 ---
@@ -50,10 +50,11 @@ the file is skipped — never read, never written, never recorded.
 
 ```ts
 export interface OutputCondition {
-  answer: string; // question id to test
+  answer: string; // question id to test (validated to exist)
   equals?: string | boolean; // exact match (boolean toggles, select)
   includes?: string; // multiselect contains this value
 }
+// `equals` and `includes` are mutually exclusive — validateManifest rejects both.
 
 // Plain string = always emitted (back-compat). Object = conditional.
 export type ManifestOutput = string | { path: string; when: OutputCondition };
@@ -71,10 +72,11 @@ export function outputPath(o: ManifestOutput): string {
 
 export function isOutputEnabled(
   o: ManifestOutput,
-  answers: AnswerMap,
+  answers: AnswerMap | null | undefined,
 ): boolean {
   if (typeof o === "string") return true;
-  const v = answers[o.when.answer];
+  // Optional chaining tolerates a missing/corrupt answers map (no throw).
+  const v = answers?.[o.when.answer];
   const { equals, includes } = o.when;
   if (includes !== undefined) return Array.isArray(v) && v.includes(includes);
   if (equals !== undefined) return v === equals;
@@ -95,10 +97,20 @@ Pure and isolated — slots into the existing domain test suite.
 
 ### 1. `domain/template-manifest.ts`
 
-- Interface (line 18): `outputs: ManifestOutput[]`.
-- `validateManifest` (line 49): accept a string **or**
-  `{ path: string, when: { answer: string, equals?, includes? } }`; throw on
-  malformed objects (mirror the existing `validatedQuestions` style).
+- Interface: `outputs: ManifestOutput[]`.
+- `validateManifest`: accept a string **or**
+  `{ path: string, when: { answer: string, equals?, includes? } }`. The
+  `validatedOutputs` validator **fails fast** (mirroring `validatedQuestions`):
+  - **`when.answer` must match a declared `questions[].id`.** All answer keys
+    originate from questions, so an unknown key means a typo/rename — which would
+    otherwise silently disable the output _and_ hide it from validate. Reject it.
+  - **`equals` and `includes` are mutually exclusive** — at most one may be set.
+    Allowing both would make the gate ambiguous (the evaluator prefers `includes`).
+  - **Type-check the values:** `equals` must be a `string | boolean`; `includes`
+    must be a non-empty `string`. (The bare `{ answer }` truthiness mode stays.)
+
+  Because `validatedOutputs` needs the question ids, `validateManifest` validates
+  `questions` first, builds a `Set` of their ids, and passes it in.
 
 ### 2. `infrastructure/file-emitter.adapter.ts` (loop at line 42)
 
@@ -119,11 +131,21 @@ conflict detection are unchanged.
 
 Validation flags any declared output missing from disk. Gated-off files
 legitimately won't exist, so it must evaluate gating against the **recorded
-answers** (`record.answers`, already persisted in `TemplateConfig`):
+answers** (`record.answers`, already persisted in `TemplateConfig`).
+
+The config is loaded from disk **without** schema validation, so a missing or
+corrupt `answers` must not crash validation. Coerce it to `{}`, and
+`isOutputEnabled` additionally tolerates `null | undefined` via optional chaining:
 
 ```ts
+const record = config.templates[id];
+const answers =
+  record && typeof record.answers === "object" && record.answers !== null
+    ? record.answers
+    : {};
+
 for (const out of manifest.outputs) {
-  if (!isOutputEnabled(out, record.answers)) continue;
+  if (!isOutputEnabled(out, answers)) continue;
   const p = outputPath(out);
   // …existing fs.access check…
 }
@@ -167,12 +189,17 @@ contradiction, no "answer ignored."
 
 ## Testing
 
-- New domain test for `isOutputEnabled`: boolean true/false, select `equals`,
-  multiselect `includes`, bare-`answer` truthiness, and missing-answer → false.
-- Extend `__tests__/infrastructure/file-emitter.test.ts` with a gated-off case
-  asserting the file is **not** written and **not** in `generatedFiles`.
-- Extend the validate-templates test so a gated-off output is not reported
-  missing when its answer is absent/false.
+- Domain test for `isOutputEnabled`: boolean true/false, select `equals`,
+  multiselect `includes`, bare-`answer` truthiness, missing-answer → false, and
+  a `null | undefined` answers map → no throw.
+- `validateManifest` tests: a gated output referencing an **unknown answer** is
+  rejected; setting **both `equals` and `includes`** is rejected; an `equals`
+  that isn't `string | boolean` is rejected; an empty/`non-string` `includes`
+  is rejected.
+- `file-emitter.test.ts`: a gated-off output is **not** written and **not** in
+  `generatedFiles`; a gated-on output is written.
+- `validate-templates.test.ts`: a gated-off output is not reported missing when
+  its answer is absent/false.
 
 ## Scope
 
