@@ -241,4 +241,30 @@ describe("FileSystemFileEmitter", () => {
     );
     assert.equal(content, "Hello World!");
   });
+
+  it("removes the temp file when the write fails", async () => {
+    const projectRoot = await freshProject();
+    // Destination is an existing directory, so the final rename fails.
+    await fs.mkdir(path.join(projectRoot, "blocked"), { recursive: true });
+    await fs.writeFile(
+      path.join(templatesDir, "__test__", "files", "blocked"),
+      "x",
+      "utf-8",
+    );
+    const emitter = new FileSystemFileEmitter(templatesDir);
+
+    await assert.rejects(
+      emitter.emit(
+        testManifest(["blocked"]),
+        { name: "X" },
+        projectRoot,
+        emptyConfig(),
+      ),
+    );
+
+    const leftovers = (await fs.readdir(projectRoot)).filter((f) =>
+      f.includes(".tmp."),
+    );
+    assert.deepEqual(leftovers, [], "no temp file should remain after failure");
+  });
 });

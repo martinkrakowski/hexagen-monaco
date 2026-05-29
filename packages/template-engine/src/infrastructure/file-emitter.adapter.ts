@@ -132,16 +132,22 @@ async function atomicWrite(
 ): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp.${Date.now()}`;
-  await fs.writeFile(tmp, content, "utf-8");
-  // Restore only the source's executable bits (masked by umask), keeping the
-  // read/write bits as writeFile created them. This preserves script
-  // executability without widening permissions beyond what the umask allows.
-  if (mode !== undefined && (mode & 0o111) !== 0) {
-    const created = (await fs.stat(tmp)).mode & 0o777;
-    const execBits = mode & 0o111 & ~process.umask();
-    await fs.chmod(tmp, created | execBits);
+  try {
+    await fs.writeFile(tmp, content, "utf-8");
+    // Restore only the source's executable bits (masked by umask), keeping the
+    // read/write bits as writeFile created them. This preserves script
+    // executability without widening permissions beyond what the umask allows.
+    if (mode !== undefined && (mode & 0o111) !== 0) {
+      const created = (await fs.stat(tmp)).mode & 0o777;
+      const execBits = mode & 0o111 & ~process.umask();
+      await fs.chmod(tmp, created | execBits);
+    }
+    await fs.rename(tmp, filePath);
+  } catch (err) {
+    // Don't leave a stale temp file behind if any step failed.
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw err;
   }
-  await fs.rename(tmp, filePath);
 }
 
 function sha256(content: string): string {
