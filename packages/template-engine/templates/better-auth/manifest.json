@@ -1,0 +1,76 @@
+{
+  "id": "better-auth",
+  "name": "Better Auth",
+  "description": "Standalone Better Auth server: email/password + Google/GitHub social providers, magic-link plugin, built-in rate limiting, typed auth client, and core DB schema + migration",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [
+    "google-oauth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link",
+    "adobe-ims-spa",
+    "nextauth",
+    "clerk"
+  ],
+  "questions": [
+    {
+      "id": "providers",
+      "type": "multiselect",
+      "prompt": "Which providers?",
+      "options": ["email-password", "google", "github", "magic-link"],
+      "default": ["email-password", "google"]
+    },
+    {
+      "id": "database",
+      "type": "select",
+      "prompt": "Database adapter?",
+      "options": ["prisma", "drizzle", "kysely"],
+      "default": "prisma"
+    },
+    {
+      "id": "session_expiry_days",
+      "type": "select",
+      "prompt": "Session expiry (days)?",
+      "options": ["1", "7", "30"],
+      "default": "7"
+    },
+    {
+      "id": "rate_limiting",
+      "type": "boolean",
+      "prompt": "Enable Better Auth built-in rate limiting?",
+      "default": true
+    }
+  ],
+  "envVars": [
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "RESEND_API_KEY"
+  ],
+  "outputs": [
+    "src/lib/auth.ts",
+    "src/lib/auth-client.ts",
+    "app/api/auth/[...all]/route.ts",
+    "src/db/schema/better-auth.ts",
+    "src/db/migrations/0001_better_auth.sql",
+    ".env.better-auth.example"
+  ],
+  "checklist": [
+    "Install dependencies: npm install better-auth (plus your adapter, e.g. drizzle-orm or @prisma/client)",
+    "Merge .env.better-auth.example into .env.local",
+    "Generate BETTER_AUTH_SECRET: openssl rand -hex 32",
+    "Set BETTER_AUTH_URL to your deployment URL",
+    "Wire your database adapter in src/lib/auth.ts (selected: prisma/drizzle/kysely)",
+    "Run npx @better-auth/cli generate to emit the authoritative schema for your adapter, then apply src/db/migrations/0001_better_auth.sql (or your migration tool)",
+    "Set social provider credentials for the providers you enabled; remove unused providers from src/lib/auth.ts",
+    "For magic-link, implement sendMagicLink() in src/lib/auth.ts using your email transport",
+    "Built-in rateLimit is enabled per the rate_limiting answer — if you also add the standalone rate-limiting template, reconcile the two",
+    "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
+    "Test flow: sign up with email/password, then GET /api/auth/get-session returns the session; social sign-in redirects through /api/auth/*"
+  ],
+  "branch": "feature/generator-template-better-auth"
+}
