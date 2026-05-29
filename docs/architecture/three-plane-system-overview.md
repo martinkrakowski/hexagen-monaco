@@ -24,15 +24,15 @@ The MVK (Minimal Viable Kernel) specification in `.architecture/mvk/spec-v1.md` 
 
 ## Primary Sources of Truth
 
-- [.architecture/manifest.yaml](../.architecture/manifest.yaml) — Bounded contexts, ports, apps
-- [.architecture/mvk/spec-v1.md](../.architecture/mvk/spec-v1.md) — DomainAST, NodeVisualSpec, RRP/REM contracts
-- [.architecture/decisions/](../.architecture/decisions/) — 39+ Architecture Decision Records
-- [.architecture/invariants/](../.architecture/invariants/) — Layer rules + linter configuration
+- [.architecture/manifest.yaml](../../.architecture/manifest.yaml) — Bounded contexts, ports, apps
+- [.architecture/mvk/spec-v1.md](../../.architecture/mvk/spec-v1.md) — DomainAST, NodeVisualSpec, RRP/REM contracts
+- [.architecture/decisions/](../../.architecture/decisions/) — 39+ Architecture Decision Records
+- [.architecture/invariants/](../../.architecture/invariants/) — Layer rules + linter configuration
 
 ## Entry Points for Contributors
 
 - New to the architecture? Start with the [Decisions Index](decisions/index.md) and this overview.
-- Making structural changes? Read `.architecture/README.md` and the relevant ADRs first.
+- Making structural changes? Read the [`.architecture/README.md`](../../.architecture/README.md) and the relevant ADRs first.
 - Planning or remediation work? See the sibling [Planning](../planning/) and [Remediation](../remediation/) sections in the parent docs folder.
 
 This document is intentionally short. The real detail lives in the contracts and decision records.

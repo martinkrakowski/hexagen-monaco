@@ -4,7 +4,7 @@ This section contains synthesized, human-readable explanations of the HexaGen Mo
 
 It is **not** the source of truth for enforcement or code generation. The authoritative contracts live in the sibling directory:
 
-→ [.architecture/](../.architecture/README.md)
+→ [.architecture/](../../.architecture/README.md)
 
 ## What Lives Here
 
