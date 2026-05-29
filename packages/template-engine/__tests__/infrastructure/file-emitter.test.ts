@@ -5,9 +5,14 @@ import path from "node:path";
 import os from "node:os";
 import { FileSystemFileEmitter } from "../../src/infrastructure/file-emitter.adapter.js";
 import { emptyConfig, conflictFilePath } from "../../src/domain/index.js";
-import type { TemplateManifest } from "../../src/domain/index.js";
+import type {
+  TemplateManifest,
+  ManifestOutput,
+} from "../../src/domain/index.js";
 
-function testManifest(outputs: string[] = ["output.txt"]): TemplateManifest {
+function testManifest(
+  outputs: ManifestOutput[] = ["output.txt"],
+): TemplateManifest {
   return {
     id: "__test__",
     name: "Test",
@@ -175,5 +180,42 @@ describe("FileSystemFileEmitter", () => {
     // output.txt has a template; missing-template.ts does not → only 1 generated file
     assert.equal(result.generatedFiles.length, 1);
     assert.equal(result.generatedFiles[0].path, "output.txt");
+  });
+
+  it("skips a gated output when its condition is not met", async () => {
+    const projectRoot = await freshProject();
+    const emitter = new FileSystemFileEmitter(templatesDir);
+    const manifest = testManifest([
+      { path: "output.txt", when: { answer: "enabled", equals: true } },
+    ]);
+    const result = await emitter.emit(
+      manifest,
+      { name: "World", enabled: false },
+      projectRoot,
+      emptyConfig(),
+    );
+    assert.equal(result.generatedFiles.length, 0);
+    await assert.rejects(fs.access(path.join(projectRoot, "output.txt")));
+  });
+
+  it("emits a gated output when its condition is met", async () => {
+    const projectRoot = await freshProject();
+    const emitter = new FileSystemFileEmitter(templatesDir);
+    const manifest = testManifest([
+      { path: "output.txt", when: { answer: "enabled", equals: true } },
+    ]);
+    const result = await emitter.emit(
+      manifest,
+      { name: "World", enabled: true },
+      projectRoot,
+      emptyConfig(),
+    );
+    assert.equal(result.generatedFiles.length, 1);
+    assert.equal(result.generatedFiles[0].path, "output.txt");
+    const content = await fs.readFile(
+      path.join(projectRoot, "output.txt"),
+      "utf-8",
+    );
+    assert.equal(content, "Hello World!");
   });
 });

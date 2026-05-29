@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { TemplateConfigStorePort } from "../ports/template-config-store.port.js";
 import type { TemplateRegistryPort } from "../ports/template-registry.port.js";
-import { conflictFilePath } from "../../domain/index.js";
+import {
+  conflictFilePath,
+  isOutputEnabled,
+  outputPath,
+} from "../../domain/index.js";
 
 export interface ValidationResult {
   templateId: string;
@@ -55,13 +59,19 @@ export class ValidateTemplatesUseCase {
         continue;
       }
 
+      // Gated outputs are evaluated against the answers recorded at install time,
+      // so files that were intentionally not emitted aren't reported as missing.
+      const answers = config.templates[id].answers;
+
       const missingFiles: string[] = [];
-      for (const outputPath of manifest.outputs) {
-        const abs = path.join(projectRoot, outputPath);
+      for (const output of manifest.outputs) {
+        if (!isOutputEnabled(output, answers)) continue;
+        const rel = outputPath(output);
+        const abs = path.join(projectRoot, rel);
         try {
           await fs.access(abs);
         } catch {
-          missingFiles.push(outputPath);
+          missingFiles.push(rel);
         }
       }
 
@@ -75,9 +85,10 @@ export class ValidateTemplatesUseCase {
       // Scan all declared outputs — not just record.generatedFiles — because
       // the emitter does not add an entry to generatedFiles when a conflict occurs.
       const conflictFiles: string[] = [];
-      for (const outputPath of manifest.outputs) {
+      for (const output of manifest.outputs) {
+        if (!isOutputEnabled(output, answers)) continue;
         const absConflict = conflictFilePath(
-          path.join(projectRoot, outputPath),
+          path.join(projectRoot, outputPath(output)),
         );
         try {
           await fs.access(absConflict);

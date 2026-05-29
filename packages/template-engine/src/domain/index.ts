@@ -8,7 +8,11 @@ export type {
   AutoQuestion,
   QuestionAnswer,
   AnswerMap,
+  OutputCondition,
+  ManifestOutput,
 } from "./question.js";
+
+export { outputPath, isOutputEnabled } from "./output-gating.js";
 
 export type { TemplateManifest } from "./template-manifest.js";
 export { validateManifest } from "./template-manifest.js";

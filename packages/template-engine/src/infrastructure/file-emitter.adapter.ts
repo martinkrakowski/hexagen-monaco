@@ -13,7 +13,11 @@ import type {
   AnswerMap,
   GeneratedFileRecord,
 } from "../domain/index.js";
-import { conflictFilePath } from "../domain/index.js";
+import {
+  conflictFilePath,
+  isOutputEnabled,
+  outputPath,
+} from "../domain/index.js";
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -39,7 +43,9 @@ export class FileSystemFileEmitter implements FileEmitterPort {
     const templateFilesDir = path.join(this.templatesDir, manifest.id, "files");
 
     const resolvedRoot = path.resolve(projectRoot);
-    for (const outputRelPath of manifest.outputs) {
+    for (const output of manifest.outputs) {
+      if (!isOutputEnabled(output, answers)) continue;
+      const outputRelPath = outputPath(output);
       const destFile = path.resolve(projectRoot, outputRelPath);
       if (
         !destFile.startsWith(resolvedRoot + path.sep) &&

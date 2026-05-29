@@ -12,7 +12,10 @@ import type {
 } from "../../src/domain/index.js";
 import type { TemplateRegistryPort } from "../../src/application/ports/template-registry.port.js";
 
-function makeManifest(id: string, outputs: string[]): TemplateManifest {
+function makeManifest(
+  id: string,
+  outputs: TemplateManifest["outputs"],
+): TemplateManifest {
   return {
     id,
     name: id,
@@ -86,5 +89,37 @@ describe("ValidateTemplatesUseCase — conflict detection", () => {
     );
     assert.match(result.conflictFiles[0], /hexagen-update/);
     assert.equal(output.totalErrors > 0, true);
+  });
+
+  it("does not report a gated-off output as missing", async () => {
+    // Output gated on orm=true; the install answered orm=false, so the file was
+    // never emitted and must not be flagged missing.
+    const manifest = makeManifest("gated", [
+      { path: "drizzle/client.ts", when: { answer: "orm", equals: true } },
+    ]);
+    const config: TemplateConfig = {
+      schemaVersion: "1",
+      templates: {
+        gated: {
+          installedAt: new Date().toISOString(),
+          version: "1.0.0",
+          answers: { orm: false },
+          generatedFiles: [],
+        },
+      },
+    };
+
+    const configStore = new FileSystemTemplateConfigStore();
+    await configStore.save(projectRoot, config);
+
+    const useCase = new ValidateTemplatesUseCase(
+      stubRegistry([manifest]),
+      configStore,
+    );
+    const output = await useCase.execute(projectRoot);
+
+    assert.equal(output.results.length, 1);
+    assert.equal(output.results[0].missingFiles.length, 0);
+    assert.equal(output.results[0].passed, true);
   });
 });
