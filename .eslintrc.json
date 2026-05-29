@@ -28,7 +28,13 @@
       }
     ]
   },
-  "ignorePatterns": ["dist", "node_modules", "**/*.js"],
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "**/*.js",
+    "**/templates/*/files/**",
+    "apps/web/**"
+  ],
   "overrides": [
     {
       "files": ["**/src/application/ports/in/*.ts"],

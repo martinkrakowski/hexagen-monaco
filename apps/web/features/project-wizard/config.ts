@@ -118,6 +118,12 @@ export const wizardSteps = [
     fields: ["boundedContexts"],
   },
   {
+    id: "add_ons",
+    title: "Add-On Templates",
+    description: "Select production add-ons to apply after project generation.",
+    fields: [],
+  },
+  {
     id: "summary",
     title: "Project Summary",
     description: "Review your project configuration.",
