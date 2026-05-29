@@ -65,9 +65,15 @@ export function checkRateLimit(
 }
 
 // Purge expired entries to prevent unbounded memory growth
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of store) {
-    if (now >= entry.resetAt * 1000) store.delete(key);
+if (typeof setInterval !== "undefined") {
+  const cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of store) {
+      if (now >= entry.resetAt * 1000) store.delete(key);
+    }
+  }, WINDOW_MS);
+  // unref() is not available in all runtimes (e.g. edge, serverless)
+  if (typeof (cleanupInterval as { unref?: unknown }).unref === "function") {
+    (cleanupInterval as NodeJS.Timeout).unref();
   }
-}, WINDOW_MS).unref();
+}
