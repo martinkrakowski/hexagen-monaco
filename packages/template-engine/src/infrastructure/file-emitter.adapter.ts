@@ -43,9 +43,9 @@ export class FileSystemFileEmitter implements FileEmitterPort {
     const templateFilesDir = path.join(this.templatesDir, manifest.id, "files");
 
     const resolvedRoot = path.resolve(projectRoot);
-    for (const output of manifest.outputs) {
-      if (!isOutputEnabled(output, answers)) continue;
-      const outputRelPath = outputPath(output);
+    for (const out of manifest.outputs) {
+      if (!isOutputEnabled(out, answers)) continue;
+      const outputRelPath = outputPath(out);
       const destFile = path.resolve(projectRoot, outputRelPath);
       if (
         !destFile.startsWith(resolvedRoot + path.sep) &&
