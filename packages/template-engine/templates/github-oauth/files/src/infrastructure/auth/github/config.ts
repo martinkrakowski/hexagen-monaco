@@ -1,10 +1,10 @@
-const clientId = process.env.GITHUB_CLIENT_ID ?? "{client_id}";
-const clientSecret = process.env.GITHUB_CLIENT_SECRET ?? "{client_secret}";
+const clientId = process.env.GITHUB_CLIENT_ID;
+const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
-if (!clientId || clientId === "{client_id}") {
+if (!clientId) {
   throw new Error("GITHUB_CLIENT_ID is required. Set it in .env.local from your GitHub OAuth App settings.");
 }
-if (!clientSecret || clientSecret === "{client_secret}") {
+if (!clientSecret) {
   throw new Error("GITHUB_CLIENT_SECRET is required. Set it in .env.local from your GitHub OAuth App settings.");
 }
 

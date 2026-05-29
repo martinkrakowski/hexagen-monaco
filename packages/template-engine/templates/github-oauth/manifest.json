@@ -7,18 +7,6 @@
   "conflicts": ["nextauth", "clerk", "better-auth"],
   "questions": [
     {
-      "id": "client_id",
-      "type": "text",
-      "prompt": "GitHub OAuth App Client ID?",
-      "required": true
-    },
-    {
-      "id": "client_secret",
-      "type": "text",
-      "prompt": "GitHub OAuth App Client Secret?",
-      "required": true
-    },
-    {
       "id": "redirect_uri",
       "type": "text",
       "prompt": "OAuth callback URI?",
@@ -54,6 +42,7 @@
     "src/infrastructure/auth/github/github-auth.adapter.ts",
     "app/api/auth/login/github/route.ts",
     "app/api/auth/callback/github/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
     ".env.github-oauth.example"
   ],
   "checklist": [
@@ -62,7 +51,7 @@
     "Merge .env.github-oauth.example into .env.local",
     "Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from the OAuth App settings",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local to activate the GitHub adapter",
+    "Set AUTH_MODE=real in .env.local — the template has already wired GitHubAuthAdapter as RealAuthAdapter",
     "If using GITHUB_ALLOWED_ORGS, ensure the token has read:org scope",
     "Test flow: GET /api/auth/login/github → GitHub → GET /api/auth/callback/github → /dashboard",
     "Verify GET /api/auth/me returns UserContext",
