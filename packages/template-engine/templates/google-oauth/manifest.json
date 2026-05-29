@@ -1,0 +1,60 @@
+{
+  "id": "google-oauth",
+  "name": "Google OAuth 2.0",
+  "description": "Server-side Google OAuth 2.0: authorization code flow, userinfo fetch, AES-256-GCM session, optional hosted-domain restriction",
+  "version": "1.0.0",
+  "requires": ["auth-mock", "env-setup"],
+  "conflicts": ["nextauth", "clerk", "better-auth"],
+  "questions": [
+    {
+      "id": "redirect_uri",
+      "type": "text",
+      "prompt": "OAuth callback URI?",
+      "default": "http://localhost:3000/api/auth/callback/google"
+    },
+    {
+      "id": "scopes",
+      "type": "text",
+      "prompt": "OAuth scopes (comma-separated)?",
+      "default": "openid,email,profile"
+    },
+    {
+      "id": "hd",
+      "type": "text",
+      "prompt": "Restrict to Google Workspace domain? (leave blank for any Google account)",
+      "default": ""
+    }
+  ],
+  "envVars": [
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REDIRECT_URI",
+    "GOOGLE_OAUTH_SCOPES",
+    "GOOGLE_HD",
+    "AUTH_SESSION_SECRET"
+  ],
+  "outputs": [
+    "src/domain/value-objects/google-user.ts",
+    "src/infrastructure/auth/google/config.ts",
+    "src/infrastructure/auth/google/google-client.ts",
+    "src/infrastructure/auth/google/user-profile-mapper.ts",
+    "src/infrastructure/auth/google/session-store.ts",
+    "src/infrastructure/auth/google/google-auth.adapter.ts",
+    "app/api/auth/login/google/route.ts",
+    "app/api/auth/callback/google/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    ".env.google-oauth.example"
+  ],
+  "checklist": [
+    "Create OAuth 2.0 credentials at https://console.cloud.google.com/apis/credentials (Web application type)",
+    "Add http://localhost:3000/api/auth/callback/google to Authorized redirect URIs",
+    "Merge .env.google-oauth.example into .env.local",
+    "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the Google Cloud Console",
+    "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
+    "Set AUTH_MODE=real in .env.local — the template has already wired GoogleAuthAdapter as RealAuthAdapter",
+    "Test flow: GET /api/auth/login/google → Google → GET /api/auth/callback/google → /dashboard",
+    "Verify GET /api/auth/me returns UserContext",
+    "Verify DELETE /api/auth/logout clears the session cookie"
+  ],
+  "branch": "feature/generator-template-google-oauth"
+}
