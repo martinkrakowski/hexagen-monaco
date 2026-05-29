@@ -2,7 +2,7 @@
 -- Regenerate for your adapter/dialect with:  npx @better-auth/cli generate
 -- then apply via your migration tool (drizzle-kit, prisma migrate, etc.).
 
-CREATE TABLE IF NOT EXISTS "user" (
+CREATE TABLE "user" (
   "id" text PRIMARY KEY,
   "name" text NOT NULL,
   "email" text NOT NULL UNIQUE,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS "user" (
   "updated_at" timestamp NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS "session" (
+CREATE TABLE "session" (
   "id" text PRIMARY KEY,
   "user_id" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
   "token" text NOT NULL UNIQUE,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS "session" (
   "updated_at" timestamp NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS "account" (
+CREATE TABLE "account" (
   "id" text PRIMARY KEY,
   "user_id" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
   "account_id" text NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS "account" (
   "updated_at" timestamp NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS "verification" (
+CREATE TABLE "verification" (
   "id" text PRIMARY KEY,
   "identifier" text NOT NULL,
   "value" text NOT NULL,

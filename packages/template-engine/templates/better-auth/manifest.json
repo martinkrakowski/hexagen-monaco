@@ -18,16 +18,16 @@
     {
       "id": "providers",
       "type": "multiselect",
-      "prompt": "Which providers?",
+      "prompt": "Which providers do you plan to use? (all are scaffolded; your selection is recorded in src/lib/auth.ts to guide pruning)",
       "options": ["email-password", "google", "github", "magic-link"],
       "default": ["email-password", "google"]
     },
     {
       "id": "database",
       "type": "select",
-      "prompt": "Database adapter?",
-      "options": ["prisma", "drizzle", "kysely"],
-      "default": "prisma"
+      "prompt": "Database adapter? (the scaffold ships Drizzle/Postgres; other choices require swapping the adapter import and regenerating the schema)",
+      "options": ["drizzle", "prisma", "kysely"],
+      "default": "drizzle"
     },
     {
       "id": "session_expiry_days",
@@ -43,32 +43,25 @@
       "default": true
     }
   ],
-  "envVars": [
-    "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
-    "GITHUB_CLIENT_ID",
-    "GITHUB_CLIENT_SECRET",
-    "RESEND_API_KEY"
-  ],
+  "envVars": ["BETTER_AUTH_SECRET", "BETTER_AUTH_URL", "DATABASE_URL"],
   "outputs": [
     "src/lib/auth.ts",
     "src/lib/auth-client.ts",
+    "src/db/index.ts",
     "app/api/auth/[...all]/route.ts",
     "src/db/schema/better-auth.ts",
     "src/db/migrations/0001_better_auth.sql",
     ".env.better-auth.example"
   ],
   "checklist": [
-    "Install dependencies: npm install better-auth (plus your adapter, e.g. drizzle-orm or @prisma/client)",
+    "Install dependencies: npm install better-auth drizzle-orm pg (and npm install -D @types/pg)",
     "Merge .env.better-auth.example into .env.local",
     "Generate BETTER_AUTH_SECRET: openssl rand -hex 32",
-    "Set BETTER_AUTH_URL to your deployment URL",
-    "Wire your database adapter in src/lib/auth.ts (selected: prisma/drizzle/kysely)",
-    "Run npx @better-auth/cli generate to emit the authoritative schema for your adapter, then apply src/db/migrations/0001_better_auth.sql (or your migration tool)",
+    "Set BETTER_AUTH_URL to your deployment URL and DATABASE_URL to your Postgres connection string",
+    "The Drizzle/Postgres adapter is already wired in src/lib/auth.ts via src/db/index.ts — for Prisma/Kysely, swap the adapter import and regenerate the schema",
+    "Apply src/db/migrations/0001_better_auth.sql to your database (or run your migration tool); regenerate with npx @better-auth/cli generate if you change adapters",
     "Set social provider credentials for the providers you enabled; remove unused providers from src/lib/auth.ts",
-    "For magic-link, implement sendMagicLink() in src/lib/auth.ts using your email transport",
+    "Magic link delivery is unimplemented and rejects by default — implement sendMagicLink() in src/lib/auth.ts with your email transport before enabling it",
     "Built-in rateLimit is enabled per the rate_limiting answer — if you also add the standalone rate-limiting template, reconcile the two",
     "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
     "Test flow: sign up with email/password, then GET /api/auth/get-session returns the session; social sign-in redirects through /api/auth/*"
