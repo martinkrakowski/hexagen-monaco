@@ -14,6 +14,9 @@ const PROTECTED_PATHS = "{protected_paths}"
 // and no Node-only providers (e.g. Credentials with bcrypt), which belong in auth.ts.
 export default {
   trustHost: "{trust_host}" === "true",
+  // Providers selected at setup: {providers}.
+  // Google and GitHub are scaffolded here; the Credentials provider is in auth.ts.
+  // Remove any provider you don't use (and delete its env vars).
   providers: [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,

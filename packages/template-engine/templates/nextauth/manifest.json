@@ -18,7 +18,7 @@
     {
       "id": "providers",
       "type": "multiselect",
-      "prompt": "Which providers?",
+      "prompt": "Which providers do you plan to use? (all are scaffolded; your selection is recorded in auth.config.ts to guide pruning)",
       "options": ["google", "github", "credentials", "email"],
       "default": ["google", "github"]
     },

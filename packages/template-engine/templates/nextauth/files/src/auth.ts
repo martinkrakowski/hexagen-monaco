@@ -30,6 +30,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // adapter: PrismaAdapter(prisma),
   providers: [
     ...authConfig.providers,
+    // Part of the scaffolded provider set — remove this block if "credentials"
+    // is not among your selected providers.
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
