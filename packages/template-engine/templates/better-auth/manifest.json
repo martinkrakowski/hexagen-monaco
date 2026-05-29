@@ -18,7 +18,7 @@
     {
       "id": "providers",
       "type": "multiselect",
-      "prompt": "Which providers do you plan to use? (all are scaffolded; your selection is recorded in src/lib/auth.ts to guide pruning)",
+      "prompt": "Which providers do you plan to use? (social providers activate from env at runtime; magic-link is opt-in via BETTER_AUTH_MAGIC_LINK)",
       "options": ["email-password", "google", "github", "magic-link"],
       "default": ["email-password", "google"]
     },
@@ -60,8 +60,8 @@
     "Set BETTER_AUTH_URL to your deployment URL and DATABASE_URL to your Postgres connection string",
     "The Drizzle/Postgres adapter is already wired in src/lib/auth.ts via src/db/index.ts — for Prisma/Kysely, swap the adapter import and regenerate the schema",
     "Apply src/db/migrations/0001_better_auth.sql to your database (or run your migration tool); regenerate with npx @better-auth/cli generate if you change adapters",
-    "Set social provider credentials for the providers you enabled; remove unused providers from src/lib/auth.ts",
-    "Magic link delivery is unimplemented and rejects by default — implement sendMagicLink() in src/lib/auth.ts with your email transport before enabling it",
+    "Set GOOGLE_/GITHUB_ credentials for the social providers you want — each activates automatically when both its vars are present",
+    "Magic link is off by default — implement sendMagicLink() delivery in src/lib/auth.ts, then set BETTER_AUTH_MAGIC_LINK=true to enable it",
     "Built-in rateLimit is enabled per the rate_limiting answer — if you also add the standalone rate-limiting template, reconcile the two",
     "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
     "Test flow: sign up with email/password, then GET /api/auth/get-session returns the session; social sign-in redirects through /api/auth/*"
