@@ -32,7 +32,8 @@
     "dist",
     "node_modules",
     "**/*.js",
-    "**/templates/*/files/**"
+    "**/templates/*/files/**",
+    "apps/web/**"
   ],
   "overrides": [
     {

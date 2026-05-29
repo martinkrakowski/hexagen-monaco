@@ -16,6 +16,7 @@ import {
   BoundedContextsSummary,
   PeerMappingsSummary,
   WorkspaceTemplateSummary,
+  AddOnsSummary,
   ExportActions,
   GenerateConfirmDialog,
 } from "./summary-step";
@@ -103,6 +104,7 @@ export function SummaryStep({
             />
           )}
           <WorkspaceTemplateSummary workspaceTemplate={workspaceTemplate} />
+          <AddOnsSummary />
           {canExport && (
             <ExportActions
               isAuthenticated={isAuthenticated}

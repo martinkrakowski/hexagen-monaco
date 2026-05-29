@@ -13,6 +13,7 @@ import { wizardSteps } from "../project-wizard/config";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
 import { useEditorSession } from "./hooks/useEditorSession";
 import { ExportProvider } from "@/contexts/ExportContext";
+import { SelectedAddOnsProvider } from "../project-wizard/contexts/SelectedAddOnsContext";
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
@@ -133,17 +134,19 @@ const ProjectWorkspaceLayout = React.memo(
               onRightPanelClose={onCloseRightPanel}
               onLeftPanelClose={onCloseMiddlePanel}
               left={
-                <WizardStepFormProvider>
-                  <WizardStepRouter
-                    currentStepIndex={currentStepIndex}
-                    totalSteps={wizardSteps.length}
-                    onViewModeChange={onViewModeChange}
-                    activeContextId={ui.activeContextId ?? ""}
-                    activeMappingId={ui.activeMappingId ?? ""}
-                    onContextSelect={(id) => ui.setContextId(id)}
-                    onMappingSelect={(id) => ui.setMappingId(id)}
-                  />
-                </WizardStepFormProvider>
+                <SelectedAddOnsProvider>
+                  <WizardStepFormProvider>
+                    <WizardStepRouter
+                      currentStepIndex={currentStepIndex}
+                      totalSteps={wizardSteps.length}
+                      onViewModeChange={onViewModeChange}
+                      activeContextId={ui.activeContextId ?? ""}
+                      activeMappingId={ui.activeMappingId ?? ""}
+                      onContextSelect={(id) => ui.setContextId(id)}
+                      onMappingSelect={(id) => ui.setMappingId(id)}
+                    />
+                  </WizardStepFormProvider>
+                </SelectedAddOnsProvider>
               }
               middle={
                 <ArchitecturePreviewPane

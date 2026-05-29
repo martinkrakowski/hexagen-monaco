@@ -3,6 +3,7 @@ import {
   BoundedContextStep,
   PeerContextMappingStep,
   PortConfigurationStep,
+  AddOnsStep,
   SummaryStep,
 } from "./steps";
 import { wizardSteps } from "./config";
@@ -100,13 +101,24 @@ export function WizardStepRouter({
       );
     case 4:
       return (
+        <AddOnsStep
+          onNext={lifecycle.handleNext}
+          onBack={lifecycle.handleBack}
+          currentStep={5}
+          totalSteps={totalSteps}
+          title={title}
+          description={description}
+        />
+      );
+    case 5:
+      return (
         <SummaryStep
           onBack={lifecycle.handleBack}
           onGenerate={lifecycle.handleGenerate}
           canProceed={lifecycle.canProceed(currentStepIndex)}
           isGenerating={lifecycle.isGenerating}
           onViewModeChange={onViewModeChange}
-          currentStep={5}
+          currentStep={6}
           totalSteps={totalSteps}
           title={title}
           description={description}
