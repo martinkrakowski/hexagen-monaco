@@ -54,6 +54,12 @@
       "type": "boolean",
       "prompt": "Generate a realtime subscription example?",
       "default": false
+    },
+    {
+      "id": "use_auth_mock",
+      "type": "boolean",
+      "prompt": "Wire Supabase Auth into auth-mock's RealAuthAdapter? (requires the auth-mock template and 'auth' in features)",
+      "default": false
     }
   ],
   "envVars": [
@@ -128,6 +134,14 @@
     {
       "path": "drizzle.config.ts",
       "when": { "answer": "orm", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/auth/supabase/supabase-auth.adapter.ts",
+      "when": { "answer": "use_auth_mock", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+      "when": { "answer": "use_auth_mock", "equals": true }
     }
   ],
   "checklist": [
@@ -140,7 +154,7 @@
     "Enable RLS on every table before going to production (see supabase/migrations/0001_example_rls.sql)",
     "If Drizzle is enabled: npm install drizzle-orm postgres tsx (and -D drizzle-kit), add \"migrate\": \"tsx scripts/migrate.ts\" to package.json scripts, set SUPABASE_DB_URL, then yarn migrate",
     "auth helpers use getUser() (server-validated) — never trust getSession() locally for authorization",
-    "To wire Supabase auth into auth-mock's RealAuthAdapter, map getCurrentUser() to a UserContext"
+    "Auth-mock integration: with use_auth_mock=true (and the auth-mock template installed + 'auth' in features), AUTH_MODE=real will activate SupabaseAuthAdapter automatically via the emitted real-auth.adapter.stub.ts — no manual wiring needed"
   ],
   "branch": "feature/generator-template-supabase"
 }
