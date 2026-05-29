@@ -243,6 +243,33 @@ describe("FileSystemFileEmitter", () => {
     assert.equal(content, "Hello World!");
   });
 
+  it("tolerates malformed records in config.templates without crashing", async () => {
+    const projectRoot = await freshProject();
+    const emitter = new FileSystemFileEmitter(templatesDir);
+
+    // Pre-existing file so the cross-template scan code path actually runs.
+    await fs.writeFile(
+      path.join(projectRoot, "output.txt"),
+      "user content",
+      "utf-8",
+    );
+
+    // Simulate a config loaded from disk where one record is corrupt
+    // (generatedFiles missing). The scan must skip it rather than throw —
+    // otherwise a single bad record would block all emission.
+    const config = emptyConfig();
+    config.templates["corrupt"] = {
+      installedAt: new Date().toISOString(),
+      version: "1.0.0",
+      answers: {},
+      // generatedFiles intentionally omitted — simulates corrupt JSON
+    } as unknown as (typeof config.templates)["corrupt"];
+
+    await assert.doesNotReject(
+      emitter.emit(testManifest(), { name: "World" }, projectRoot, config),
+    );
+  });
+
   it("overwrites a file previously emitted by a different template (no conflict)", async () => {
     const projectRoot = await freshProject();
     const emitter = new FileSystemFileEmitter(templatesDir);

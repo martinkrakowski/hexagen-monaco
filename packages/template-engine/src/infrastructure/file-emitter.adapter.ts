@@ -100,12 +100,21 @@ export class FileSystemFileEmitter implements FileEmitterPort {
         // overrides (e.g. an auth provider replacing auth-mock's stub). If no
         // recorded hash matches, the user has modified the file — emit a conflict
         // copy instead.
-        const wasGeneratedByHexagen = Object.values(config.templates).some(
-          (record) =>
-            record.generatedFiles.some(
-              (f) => f.path === outputRelPath && f.contentHash === existingHash,
-            ),
-        );
+        // The config is loaded from disk without schema validation, so a
+        // malformed record (missing/non-array generatedFiles, or templates not
+        // an object) must not crash the scan — treat anything unexpected as
+        // "no matching record" rather than throwing.
+        const wasGeneratedByHexagen =
+          typeof config.templates === "object" &&
+          config.templates !== null &&
+          Object.values(config.templates).some(
+            (record) =>
+              Array.isArray(record?.generatedFiles) &&
+              record.generatedFiles.some(
+                (f) =>
+                  f.path === outputRelPath && f.contentHash === existingHash,
+              ),
+          );
         const isAlreadyIdentical = existingHash === templateHash;
 
         if (!isAlreadyIdentical && !wasGeneratedByHexagen) {
