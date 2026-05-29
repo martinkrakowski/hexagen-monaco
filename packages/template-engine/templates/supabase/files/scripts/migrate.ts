@@ -4,7 +4,13 @@ import postgres from "postgres";
 
 // Apply pending Drizzle migrations. Run with: yarn migrate
 async function main(): Promise<void> {
-  const migrationClient = postgres(process.env.SUPABASE_DB_URL!, { max: 1 });
+  const dbUrl = process.env.SUPABASE_DB_URL;
+  if (!dbUrl) {
+    throw new Error(
+      "SUPABASE_DB_URL is required. Set it in .env.local (see .env.supabase.example).",
+    );
+  }
+  const migrationClient = postgres(dbUrl, { max: 1 });
   await migrate(drizzle(migrationClient), { migrationsFolder: "./drizzle" });
   await migrationClient.end();
 }

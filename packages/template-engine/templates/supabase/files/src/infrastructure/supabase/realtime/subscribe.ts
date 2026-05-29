@@ -12,8 +12,12 @@ export function subscribeToTable<T>(
   onInsert: (record: T) => void,
 ): RealtimeChannel {
   const supabase = getSupabaseClient();
+  // Unique channel name per subscription so multiple subscriptions to the same
+  // table (different filters/callbacks) don't collide or tear each other down.
+  const channelName =
+    "realtime:" + table + ":" + filter + ":" + crypto.randomUUID();
   return supabase
-    .channel("realtime:" + table)
+    .channel(channelName)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table, filter },
