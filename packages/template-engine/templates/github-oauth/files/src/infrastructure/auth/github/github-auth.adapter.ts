@@ -1,29 +1,12 @@
-import type { AuthProviderPort } from "../../../domain/ports/out/auth-provider.port";
-import type { UserContext } from "../../../domain/value-objects/user-context";
 import type { GitHubUser } from "../../../domain/value-objects/github-user";
-import { encryptSession, decryptSession } from "./session-store";
-import { mapGitHubUserToUserContext } from "./user-profile-mapper";
+import { encryptSession } from "./session-store";
 
-export class GitHubAuthAdapter implements AuthProviderPort {
-  async validate(sessionToken: string): Promise<UserContext | null> {
-    const user = await decryptSession(sessionToken);
-    if (!user) return null;
-    return mapGitHubUserToUserContext(user);
-  }
-
-  async createSession(_user: UserContext): Promise<string> {
-    throw new Error(
-      "GitHubAuthAdapter.createSession() requires a GitHubUser. " +
-        "Use createSessionFromGitHubUser() in the callback route.",
-    );
-  }
-
+// Thin helper for the OAuth callback: encrypts the GitHub user into the session
+// cookie. Validation of an existing session happens in middleware via
+// decryptSession + the user-profile mapper, so this no longer implements a
+// generic auth port.
+export class GitHubAuthAdapter {
   async createSessionFromGitHubUser(user: GitHubUser): Promise<string> {
     return encryptSession(user);
-  }
-
-  async revokeSession(_sessionToken: string): Promise<void> {
-    // GitHub access tokens don't expire for OAuth Apps; sessions are stateless blobs.
-    // Clearing the cookie in the logout route is sufficient.
   }
 }

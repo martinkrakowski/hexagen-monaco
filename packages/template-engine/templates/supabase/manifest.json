@@ -1,10 +1,19 @@
 {
   "id": "supabase",
   "name": "Supabase",
-  "description": "SSR-safe browser/server/admin clients, Result-based storage helpers, server-validated auth helpers (getUser not getSession), RLS examples, type generation, optional Drizzle ORM and realtime",
-  "version": "1.0.0",
-  "requires": ["env-setup"],
-  "conflicts": [],
+  "description": "SSR-safe browser/server/admin clients, Result-based storage helpers, server-validated auth via @supabase/ssr middleware, RLS examples, type generation, optional Drizzle ORM and realtime. When 'auth' is selected, ships a root middleware (refreshes the Supabase session + protects configured paths) and src/lib/auth/getCurrentUser+requireAuth — all honouring AUTH_MODE=mock as a dev short-circuit.",
+  "version": "2.0.0",
+  "requires": ["env-setup", "auth-mock"],
+  "conflicts": [
+    "nextauth",
+    "clerk",
+    "better-auth",
+    "google-oauth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link",
+    "adobe-ims-spa"
+  ],
   "questions": [
     {
       "id": "project_url",
@@ -56,10 +65,10 @@
       "default": false
     },
     {
-      "id": "use_auth_mock",
-      "type": "boolean",
-      "prompt": "Wire Supabase Auth into auth-mock's RealAuthAdapter? (requires the auth-mock template and 'auth' in features)",
-      "default": false
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes the middleware should require auth for (comma-separated)? (only used when 'auth' is in features)",
+      "default": "/dashboard,/api/protected"
     }
   ],
   "envVars": [
@@ -96,15 +105,19 @@
       "when": { "answer": "features", "includes": "storage" }
     },
     {
-      "path": "src/infrastructure/supabase/auth/get-user.ts",
+      "path": "src/lib/auth/get-current-user.ts",
       "when": { "answer": "features", "includes": "auth" }
     },
     {
-      "path": "src/infrastructure/supabase/auth/require-auth.ts",
+      "path": "src/lib/auth/require-auth.ts",
       "when": { "answer": "features", "includes": "auth" }
     },
     {
-      "path": "src/infrastructure/supabase/auth/index.ts",
+      "path": "app/api/auth/me/route.ts",
+      "when": { "answer": "features", "includes": "auth" }
+    },
+    {
+      "path": "middleware.ts",
       "when": { "answer": "features", "includes": "auth" }
     },
     {
@@ -134,14 +147,6 @@
     {
       "path": "drizzle.config.ts",
       "when": { "answer": "orm", "equals": true }
-    },
-    {
-      "path": "src/infrastructure/auth/supabase/supabase-auth.adapter.ts",
-      "when": { "answer": "use_auth_mock", "equals": true }
-    },
-    {
-      "path": "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
-      "when": { "answer": "use_auth_mock", "equals": true }
     }
   ],
   "checklist": [
@@ -153,8 +158,10 @@
     "If type generation is enabled: install the supabase CLI, add \"gen:types\": \"bash scripts/gen-types.sh\" to package.json scripts, then run yarn gen:types after supabase start + schema changes",
     "Enable RLS on every table before going to production (see supabase/migrations/0001_example_rls.sql)",
     "If Drizzle is enabled: npm install drizzle-orm postgres tsx (and -D drizzle-kit), add \"migrate\": \"tsx scripts/migrate.ts\" to package.json scripts, set SUPABASE_DB_URL, then yarn migrate",
-    "auth helpers use getUser() (server-validated) — never trust getSession() locally for authorization",
-    "Auth-mock integration: with use_auth_mock=true (and the auth-mock template installed + 'auth' in features), AUTH_MODE=real will activate SupabaseAuthAdapter automatically via the emitted real-auth.adapter.stub.ts — no manual wiring needed"
+    "If 'auth' is in features: the emitted middleware.ts overwrites auth-mock's dev middleware, refreshes the Supabase session on every request, and redirects unauthenticated requests for paths under {protected_paths} to /login",
+    "If 'auth' is in features: import getCurrentUser / requireAuth from src/lib/auth/ in Server Components and Server Actions",
+    "Keep AUTH_MODE=mock for local dev — middleware and getCurrentUser() short-circuit to auth-mock's MOCK_USER",
+    "getCurrentUser uses getUser() (server-validated JWT); never authorize off getSession() locally"
   ],
-  "branch": "feature/generator-template-supabase"
+  "branch": "feature/auth-stack-restructure"
 }

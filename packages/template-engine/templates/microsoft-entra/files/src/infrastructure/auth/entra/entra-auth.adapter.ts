@@ -1,30 +1,14 @@
-import type { AuthProviderPort } from "../../../domain/ports/out/auth-provider.port";
-import type { UserContext } from "../../../domain/value-objects/user-context";
 import type { EntraUser } from "../../../domain/value-objects/entra-user";
-import { encryptSession, decryptSession } from "./session-store";
-import { mapEntraUserToUserContext } from "./user-profile-mapper";
+import { encryptSession } from "./session-store";
 
-export class EntraAuthAdapter implements AuthProviderPort {
-  async validate(sessionToken: string): Promise<UserContext | null> {
-    const user = await decryptSession(sessionToken);
-    if (!user) return null;
-    return mapEntraUserToUserContext(user);
-  }
-
-  async createSession(_user: UserContext): Promise<string> {
-    throw new Error(
-      "EntraAuthAdapter.createSession() requires an EntraUser. " +
-        "Use createSessionFromEntraUser() in the callback route.",
-    );
-  }
-
+// Thin helper for the OAuth callback: encrypts the Entra user into the session
+// cookie. Validation of an existing session happens in middleware via
+// decryptSession + the user-profile mapper, so this no longer implements a
+// generic auth port. For front-channel logout, redirect to
+// https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/logout from your
+// logout route after clearing the cookie.
+export class EntraAuthAdapter {
   async createSessionFromEntraUser(user: EntraUser): Promise<string> {
     return encryptSession(user);
-  }
-
-  async revokeSession(_sessionToken: string): Promise<void> {
-    // Sessions are stateless encrypted blobs — clearing the cookie is sufficient.
-    // For front-channel logout, redirect the user to the Entra logout endpoint:
-    // https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/logout
   }
 }
