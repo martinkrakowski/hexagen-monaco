@@ -5,7 +5,7 @@ import {
   buildClearSessionCookieHeader,
 } from "../../../../../src/infrastructure/auth/session/session-manager";
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const token = readSessionToken(request);
 
   // Clear the local session cookie first

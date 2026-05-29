@@ -7,24 +7,6 @@
   "conflicts": ["nextauth", "clerk", "better-auth"],
   "questions": [
     {
-      "id": "tenant_id",
-      "type": "text",
-      "prompt": "Azure Tenant ID?",
-      "required": true
-    },
-    {
-      "id": "client_id",
-      "type": "text",
-      "prompt": "Azure App Registration Client ID?",
-      "required": true
-    },
-    {
-      "id": "client_secret",
-      "type": "text",
-      "prompt": "Azure App Registration Client Secret?",
-      "required": true
-    },
-    {
       "id": "redirect_uri",
       "type": "text",
       "prompt": "OAuth callback URI?",
@@ -71,6 +53,7 @@
     "app/api/auth/login/entra/route.ts",
     "app/api/auth/callback/entra/route.ts",
     "app/api/auth/logout/entra/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
     ".env.microsoft-entra.example"
   ],
   "checklist": [
@@ -80,10 +63,10 @@
     "If using group role mapping: add GroupMember.Read.All (delegated) and grant admin consent",
     "Merge .env.microsoft-entra.example into .env.local",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local to activate the Entra adapter",
+    "Set AUTH_MODE=real in .env.local — the template has already wired EntraAuthAdapter as RealAuthAdapter",
     "Test flow: GET /api/auth/login/entra → Microsoft → GET /api/auth/callback/entra → /dashboard",
     "Verify GET /api/auth/me returns UserContext with correct roles",
-    "Verify POST /api/auth/logout/entra clears the session cookie"
+    "Verify DELETE /api/auth/logout/entra clears the session cookie"
   ],
   "branch": "feature/generator-template-microsoft-entra"
 }

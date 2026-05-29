@@ -1,14 +1,14 @@
-const tenantId = process.env.ENTRA_TENANT_ID ?? "{tenant_id}";
-const clientId = process.env.ENTRA_CLIENT_ID ?? "{client_id}";
-const clientSecret = process.env.ENTRA_CLIENT_SECRET ?? "{client_secret}";
+const tenantId = process.env.ENTRA_TENANT_ID;
+const clientId = process.env.ENTRA_CLIENT_ID;
+const clientSecret = process.env.ENTRA_CLIENT_SECRET;
 
-if (!tenantId || tenantId === "{tenant_id}") {
+if (!tenantId) {
   throw new Error("ENTRA_TENANT_ID is required. Find it in the Azure portal under Azure Active Directory > Overview.");
 }
-if (!clientId || clientId === "{client_id}") {
+if (!clientId) {
   throw new Error("ENTRA_CLIENT_ID is required. Find it in Azure App Registration > Overview.");
 }
-if (!clientSecret || clientSecret === "{client_secret}") {
+if (!clientSecret) {
   throw new Error("ENTRA_CLIENT_SECRET is required. Create one under Azure App Registration > Certificates & secrets.");
 }
 
