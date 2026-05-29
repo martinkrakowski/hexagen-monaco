@@ -11,6 +11,12 @@ function b64uEncode(buf: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
+function b64uToBinary(str: string): string {
+  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return atob(padded);
+}
+
 async function hmacKey(): Promise<CryptoKey> {
   const raw = new TextEncoder().encode(MAGIC_LINK_CONFIG.secret);
   const buf = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
@@ -44,10 +50,7 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
   const sigB64 = token.slice(dotIdx + 1);
 
   try {
-    const sigBytes = Uint8Array.from(
-      atob(sigB64.replace(/-/g, "+").replace(/_/g, "/")),
-      (c) => c.charCodeAt(0),
-    );
+    const sigBytes = Uint8Array.from(b64uToBinary(sigB64), (c) => c.charCodeAt(0));
     const key = await hmacKey();
     const valid = await crypto.subtle.verify(
       "HMAC",
@@ -57,7 +60,7 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
     );
     if (!valid) return null;
 
-    const payloadJson = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
+    const payloadJson = b64uToBinary(payloadB64);
     const payload = JSON.parse(payloadJson) as TokenPayload;
 
     if (Date.now() > payload.exp) return null;
