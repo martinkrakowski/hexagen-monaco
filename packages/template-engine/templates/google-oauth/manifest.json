@@ -7,18 +7,6 @@
   "conflicts": ["nextauth", "clerk", "better-auth"],
   "questions": [
     {
-      "id": "client_id",
-      "type": "text",
-      "prompt": "Google OAuth Client ID?",
-      "required": true
-    },
-    {
-      "id": "client_secret",
-      "type": "text",
-      "prompt": "Google OAuth Client Secret?",
-      "required": true
-    },
-    {
       "id": "redirect_uri",
       "type": "text",
       "prompt": "OAuth callback URI?",
@@ -54,6 +42,7 @@
     "src/infrastructure/auth/google/google-auth.adapter.ts",
     "app/api/auth/login/google/route.ts",
     "app/api/auth/callback/google/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
     ".env.google-oauth.example"
   ],
   "checklist": [
@@ -62,7 +51,7 @@
     "Merge .env.google-oauth.example into .env.local",
     "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the Google Cloud Console",
     "Generate AUTH_SESSION_SECRET: openssl rand -hex 32",
-    "Set AUTH_MODE=real in .env.local to activate the Google adapter",
+    "Set AUTH_MODE=real in .env.local — the template has already wired GoogleAuthAdapter as RealAuthAdapter",
     "Test flow: GET /api/auth/login/google → Google → GET /api/auth/callback/google → /dashboard",
     "Verify GET /api/auth/me returns UserContext",
     "Verify DELETE /api/auth/logout clears the session cookie"

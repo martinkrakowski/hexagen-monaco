@@ -1,10 +1,10 @@
-const clientId = process.env.GOOGLE_CLIENT_ID ?? "{client_id}";
-const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "{client_secret}";
+const clientId = process.env.GOOGLE_CLIENT_ID;
+const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
-if (!clientId || clientId === "{client_id}") {
+if (!clientId) {
   throw new Error("GOOGLE_CLIENT_ID is required. Set it in .env.local from the Google Cloud Console.");
 }
-if (!clientSecret || clientSecret === "{client_secret}") {
+if (!clientSecret) {
   throw new Error("GOOGLE_CLIENT_SECRET is required. Set it in .env.local from the Google Cloud Console.");
 }
 

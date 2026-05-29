@@ -6,12 +6,8 @@ interface SessionPayload {
   user: GoogleUser;
 }
 
-function secretKey(): Promise<CryptoKey> {
-  const encoded = new TextEncoder().encode(SECRET.slice(0, 32).padEnd(32, "0"));
-  const raw = encoded.buffer.slice(
-    encoded.byteOffset,
-    encoded.byteOffset + encoded.byteLength,
-  ) as ArrayBuffer;
+async function secretKey(): Promise<CryptoKey> {
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SECRET));
   return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
@@ -24,7 +20,8 @@ function base64urlEncode(buf: ArrayBuffer): string {
 
 function base64urlDecode(str: string): Uint8Array {
   const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(base64);
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
