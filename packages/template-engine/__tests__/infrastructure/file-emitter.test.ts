@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { FileSystemFileEmitter } from "../../src/infrastructure/file-emitter.adapter.js";
-import { emptyConfig } from "../../src/domain/index.js";
+import { emptyConfig, conflictFilePath } from "../../src/domain/index.js";
 import type { TemplateManifest } from "../../src/domain/index.js";
 
 function testManifest(outputs: string[] = ["output.txt"]): TemplateManifest {
@@ -136,7 +136,7 @@ describe("FileSystemFileEmitter", () => {
     assert.match(second.warnings[0], /Conflict/);
 
     await assert.doesNotReject(
-      fs.access(path.join(projectRoot, "output.txt.hexagen-update.ts")),
+      fs.access(conflictFilePath(path.join(projectRoot, "output.txt"))),
     );
 
     const content = await fs.readFile(

@@ -23,3 +23,5 @@ export {
   emptyConfig,
   isInstalled,
 } from "./template-config.js";
+
+export { conflictFilePath } from "./conflict-path.js";

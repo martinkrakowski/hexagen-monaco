@@ -5,5 +5,5 @@ Framework: {framework}
 TypeScript: {use_typescript}
 
 Edit this file after generation — the template engine will detect your changes
-and write future updates to example-output.txt.hexagen-update.ts instead of
+and write future updates to example-output.hexagen-update.txt instead of
 overwriting your work.

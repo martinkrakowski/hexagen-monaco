@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { interpolate } from "@hexagen/shared";
 import type {
   FileEmitterPort,
   EmitResult,
@@ -12,6 +13,7 @@ import type {
   AnswerMap,
   GeneratedFileRecord,
 } from "../domain/index.js";
+import { conflictFilePath } from "../domain/index.js";
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -36,17 +38,37 @@ export class FileSystemFileEmitter implements FileEmitterPort {
     const generatedFiles: GeneratedFileRecord[] = [];
     const templateFilesDir = path.join(this.templatesDir, manifest.id, "files");
 
+    const resolvedRoot = path.resolve(projectRoot);
     for (const outputRelPath of manifest.outputs) {
+      const destFile = path.resolve(projectRoot, outputRelPath);
+      if (
+        !destFile.startsWith(resolvedRoot + path.sep) &&
+        destFile !== resolvedRoot
+      ) {
+        throw new Error(
+          `Output path '${outputRelPath}' escapes the project root`,
+        );
+      }
       const sourceFile = path.join(templateFilesDir, outputRelPath);
-      const destFile = path.join(projectRoot, outputRelPath);
 
       let templateContent: string;
       try {
         const raw = await fs.readFile(sourceFile, "utf-8");
-        templateContent = this.interpolate(raw, answers);
-      } catch {
-        // Template has no file content yet (planned but not implemented) — skip silently
-        continue;
+        const { output, warnings: interpWarnings } = interpolate(raw, answers);
+        templateContent = output;
+        for (const key of interpWarnings) {
+          warnings.push(
+            `⚠️  Unresolved template variable '{${key}}' in ${outputRelPath}`,
+          );
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          // Template source file not yet implemented — planned output, skip silently
+          continue;
+        }
+        throw new Error(
+          `Failed to read template source ${sourceFile}: ${(err as Error).message}`,
+        );
       }
 
       const templateHash = sha256(templateContent);
@@ -71,17 +93,15 @@ export class FileSystemFileEmitter implements FileEmitterPort {
           wasGeneratedByUs && previousEntry.contentHash === existingHash;
         const isAlreadyIdentical = existingHash === templateHash;
 
-        if (isAlreadyIdentical || isUnmodified) {
-          // Safe overwrite — idempotent
-        } else {
+        if (!isAlreadyIdentical && !isUnmodified) {
           // User has modified this file — emit conflict copy instead
-          const conflictPath = destFile + ".hexagen-update.ts";
-          await atomicWrite(conflictPath, templateContent);
-          const rel = path.relative(projectRoot, conflictPath);
+          const conflictDest = conflictFilePath(destFile);
+          await atomicWrite(conflictDest, templateContent);
+          const rel = path.relative(projectRoot, conflictDest);
           warnings.push(
             `⚠️  Conflict: ${outputRelPath} has local changes.\n` +
               `   New version written to ${rel}\n` +
-              `   Review and merge manually, then delete the .hexagen-update.ts file.`,
+              `   Review and merge manually, then delete the conflict file.`,
           );
           continue;
         }
@@ -92,18 +112,6 @@ export class FileSystemFileEmitter implements FileEmitterPort {
     }
 
     return { warnings, generatedFiles };
-  }
-
-  /** Minimal {variable} interpolation — mirrors sync package template-engine.ts */
-  private interpolate(template: string, vars: AnswerMap): string {
-    return template.replace(
-      /\{\{|\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}/g,
-      (match, key?: string) => {
-        if (key === undefined) return match === "{{" ? "{" : "}";
-        const value = vars[key];
-        return value !== undefined && value !== null ? String(value) : match;
-      },
-    );
   }
 }
 

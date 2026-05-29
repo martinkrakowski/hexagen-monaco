@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { TemplateConfigStorePort } from "../ports/template-config-store.port.js";
 import type { TemplateRegistryPort } from "../ports/template-registry.port.js";
+import { conflictFilePath } from "../../domain/index.js";
 
 export interface ValidationResult {
   templateId: string;
@@ -66,21 +67,21 @@ export class ValidateTemplatesUseCase {
 
       const missingEnvVars: string[] = [];
       for (const envVar of manifest.envVars) {
-        if (!process.env[envVar]) {
+        if (process.env[envVar] === undefined) {
           missingEnvVars.push(envVar);
         }
       }
 
+      // Scan all declared outputs — not just record.generatedFiles — because
+      // the emitter does not add an entry to generatedFiles when a conflict occurs.
       const conflictFiles: string[] = [];
-      const record = config.templates[id];
-      for (const generated of record.generatedFiles) {
-        const conflictPath = path.join(
-          projectRoot,
-          generated.path + ".hexagen-update.ts",
+      for (const outputPath of manifest.outputs) {
+        const absConflict = conflictFilePath(
+          path.join(projectRoot, outputPath),
         );
         try {
-          await fs.access(conflictPath);
-          conflictFiles.push(generated.path + ".hexagen-update.ts");
+          await fs.access(absConflict);
+          conflictFiles.push(path.relative(projectRoot, absConflict));
         } catch {
           // no conflict file — good
         }

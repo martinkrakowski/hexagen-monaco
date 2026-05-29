@@ -10,8 +10,12 @@ export class FileSystemTemplateConfigStore implements TemplateConfigStorePort {
     try {
       const raw = await fs.readFile(configPath, "utf-8");
       return JSON.parse(raw) as TemplateConfig;
-    } catch {
-      return emptyConfig();
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT")
+        return emptyConfig();
+      throw new Error(
+        `Failed to read template config at ${configPath}: ${(err as Error).message}`,
+      );
     }
   }
 

@@ -49,6 +49,12 @@ export class InteractiveQuestionEngine implements QuestionEnginePort {
           question.options,
           question.default,
         );
+      default: {
+        const _exhaustive: never = question;
+        throw new Error(
+          `Unhandled question type: ${(_exhaustive as { type: string }).type}`,
+        );
+      }
     }
   }
 

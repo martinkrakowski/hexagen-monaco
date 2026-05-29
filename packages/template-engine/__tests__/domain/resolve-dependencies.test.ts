@@ -71,6 +71,23 @@ describe("resolveDependencies", () => {
     );
   });
 
+  it("reports the actual requirer (not the missing id) for transitive missing deps", () => {
+    // a → b → missing; requested is ["a"]; requiredBy should be "b", not "missing"
+    const registry = makeRegistry(
+      manifest("a", ["b"]),
+      manifest("b", ["missing"]),
+    );
+    let caught: MissingTemplateError | null = null;
+    try {
+      resolveDependencies(["a"], registry);
+    } catch (err) {
+      if (err instanceof MissingTemplateError) caught = err;
+    }
+    assert.ok(caught, "expected MissingTemplateError");
+    assert.equal(caught!.templateId, "missing");
+    assert.equal(caught!.requiredBy, "b");
+  });
+
   it("throws CyclicDependencyError on a direct cycle", () => {
     const registry = makeRegistry(manifest("a", ["b"]), manifest("b", ["a"]));
     assert.throws(

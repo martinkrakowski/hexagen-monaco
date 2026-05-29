@@ -107,4 +107,17 @@ export default defineConfig({
   esbuildOptions(options) {
     options.charset = "utf8";
   },
+
+  /**
+   * Post-build: copy template-engine templates into dist/templates/ so that
+   * resolveTemplatesDir() can find them both in the monorepo and in a published
+   * package (the staging script copies dist/ recursively, so dist/templates/ ships).
+   */
+  async onSuccess() {
+    const { cpSync, rmSync } = await import("node:fs");
+    rmSync("dist/templates", { recursive: true, force: true });
+    cpSync("../template-engine/templates", "dist/templates", {
+      recursive: true,
+    });
+  },
 });
