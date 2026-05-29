@@ -104,7 +104,7 @@ export function AddOnsStep({
 
                 {isOpen && (
                   <div className="px-3 pb-3 pt-1">
-                    <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))]">
+                    <div className="flex flex-col gap-2">
                       {entries.map((entry) => (
                         <AddOnCard
                           key={entry.id}
