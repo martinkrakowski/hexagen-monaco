@@ -71,19 +71,17 @@ export function AddOnCard({
           </div>
         )}
 
-        <div className="flex justify-end mt-2">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setInfoOpen(true);
-            }}
-            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-            aria-label={`About ${entry.name}`}
-          >
-            <Info size={13} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setInfoOpen(true);
+          }}
+          className="absolute bottom-2.5 right-2.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+          aria-label={`About ${entry.name}`}
+        >
+          <Info size={13} />
+        </button>
       </div>
 
       <Dialog open={infoOpen} onClose={() => setInfoOpen(false)}>
