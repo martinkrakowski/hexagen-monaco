@@ -1,7 +1,7 @@
 {
   "id": "llm-adapter",
   "name": "LLM Adapter",
-  "description": "Typed port interface, provider adapters (xAI/OpenAI/Anthropic/Ollama), model constants, reasoning routing, retry logic, structured output",
+  "description": "Typed port interface, provider adapters (xAI, OpenAI, Anthropic, Ollama), model constants, reasoning routing, retry logic, structured output",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
@@ -9,14 +9,21 @@
     {
       "id": "providers",
       "type": "multiselect",
-      "prompt": "Which LLM providers?",
-      "options": ["xai"],
+      "prompt": "Which LLM providers do you need?",
+      "options": ["xai", "openai", "anthropic", "ollama", "azure-openai"],
       "default": ["xai"]
+    },
+    {
+      "id": "primary_provider",
+      "type": "select",
+      "prompt": "Primary provider for orchestration (reasoning)?",
+      "options": ["xai", "openai", "anthropic", "ollama", "azure-openai"],
+      "default": "xai"
     },
     {
       "id": "reasoning_routing",
       "type": "boolean",
-      "prompt": "Route orchestration calls to a reasoning model?",
+      "prompt": "Route orchestration calls to a dedicated reasoning model?",
       "default": true
     },
     {
@@ -30,31 +37,60 @@
       "type": "boolean",
       "prompt": "Enable streaming responses?",
       "default": false
+    },
+    {
+      "id": "default_timeout_ms",
+      "type": "select",
+      "prompt": "Default request timeout (ms)?",
+      "options": ["15000", "30000", "60000", "120000"],
+      "default": "30000"
+    },
+    {
+      "id": "max_retries",
+      "type": "select",
+      "prompt": "Max retries on transient failure?",
+      "options": ["0", "1", "2", "3"],
+      "default": "2"
     }
   ],
   "envVars": [
     "XAI_API_KEY",
+    "XAI_BASE_URL",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "OLLAMA_BASE_URL",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AZURE_OPENAI_DEPLOYMENT",
     "LLM_REASONING_MODEL",
     "LLM_FAST_MODEL",
-    "LLM_DEFAULT_TIMEOUT_MS"
+    "LLM_VISION_MODEL",
+    "LLM_DEFAULT_TIMEOUT_MS",
+    "LLM_MAX_RETRIES"
   ],
   "outputs": [
     "src/domain/ports/out/llm-client.port.ts",
     "src/infrastructure/llm/constants/models.ts",
     "src/infrastructure/llm/constants/capabilities.ts",
-    "src/infrastructure/llm/adapters/xai-llm-client.adapter.ts",
-    "src/infrastructure/llm/router/llm-router.ts",
+    "src/infrastructure/llm/errors/llm-errors.ts",
     "src/infrastructure/llm/utils/retry.ts",
     "src/infrastructure/llm/utils/timeout.ts",
     "src/infrastructure/llm/utils/structured-output.ts",
-    "src/infrastructure/llm/errors/llm-errors.ts",
-    "src/infrastructure/llm/index.ts"
+    "src/infrastructure/llm/adapters/xai-llm-client.adapter.ts",
+    "src/infrastructure/llm/adapters/openai-llm-client.adapter.ts",
+    "src/infrastructure/llm/adapters/anthropic-llm-client.adapter.ts",
+    "src/infrastructure/llm/adapters/ollama-llm-client.adapter.ts",
+    "src/infrastructure/llm/router/llm-router.ts",
+    "src/infrastructure/llm/index.ts",
+    ".env.llm.example"
   ],
   "checklist": [
-    "Add XAI_API_KEY (and other provider keys) to .env.local",
-    "Verify LLM_REASONING_MODEL matches a model on your current tier",
-    "Check xAI console for RPM and TPM limits — set TEXT_RPM accordingly",
-    "See SETUP.md → LLM Adapter for model name reference and tier limits"
+    "Copy .env.llm.example values into your .env.local",
+    "Add your XAI_API_KEY (and any other provider keys) to .env.local",
+    "Verify LLM_REASONING_MODEL matches a model available on your current API tier",
+    "Run: npx tsx src/infrastructure/llm/index.ts to smoke-test the router",
+    "See SETUP.md → LLM Adapter for model reference and tier limits"
   ],
   "branch": "feature/generator-template-llm-adapter"
 }
