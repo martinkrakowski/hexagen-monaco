@@ -58,6 +58,7 @@
     "app/api/auth/magic-link/request/route.ts",
     "app/api/auth/magic-link/verify/route.ts",
     "app/api/auth/logout/route.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
     ".env.magic-link.example"
   ],
   "checklist": [
@@ -67,7 +68,7 @@
     "If using Resend: sign up at https://resend.com and set RESEND_API_KEY",
     "If using Nodemailer: run npm install nodemailer and configure SMTP_* env vars",
     "Set MAGIC_LINK_FROM to a verified sender address for your transport",
-    "Set AUTH_MODE=real in .env.local to activate the magic link adapter",
+    "Set AUTH_MODE=real in .env.local — the template has already wired MagicLinkAuthAdapter as RealAuthAdapter",
     "Test flow: POST /api/auth/magic-link/request { email } → check inbox → GET /api/auth/magic-link/verify?token=... → /dashboard",
     "Verify second use of same link returns 'already used' redirect",
     "Verify DELETE /api/auth/logout clears the session cookie"
