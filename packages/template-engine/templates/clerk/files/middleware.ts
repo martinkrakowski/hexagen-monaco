@@ -6,7 +6,7 @@ const isProtectedRoute = createRouteMatcher(
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean)
-    .map((p) => `${p}(.*)`),
+    .map((p) => p + "(.*)"),
 );
 
 export default clerkMiddleware(async (auth, req) => {
