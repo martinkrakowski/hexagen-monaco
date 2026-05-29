@@ -61,7 +61,7 @@ export function AddOnsStep({
                 <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
                   {CATEGORY_LABELS[category]}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr))]">
                   {entries.map((entry) => (
                     <AddOnCard
                       key={entry.id}
