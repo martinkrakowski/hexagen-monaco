@@ -49,7 +49,15 @@ export function AddOnCard({
           <div className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-primary" />
         )}
 
-        <div className="font-semibold text-sm mb-1 pr-4">{entry.name}</div>
+        <div className="flex items-center gap-2 mb-1 pr-4">
+          <span className="font-semibold text-sm">{entry.name}</span>
+          {entry.note && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              <Info size={10} />
+              {entry.note.badge}
+            </span>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground flex-1">
           {entry.description}
         </p>
@@ -114,6 +122,15 @@ export function AddOnCard({
               ))}
             </ul>
           </div>
+
+          {entry.note && (
+            <div className="mt-4 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+              <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+                <Info size={14} className="flex-shrink-0 mt-0.5" />
+                <span>{entry.note.detail}</span>
+              </p>
+            </div>
+          )}
 
           {entry.conflicts.length > 0 && (
             <div className="mt-4 rounded-md bg-muted/40 border border-border px-3 py-2">
