@@ -200,6 +200,7 @@ describe("FileSystemFileEmitter", () => {
 
   it("preserves the executable bit from the template source file", async () => {
     const src = path.join(templatesDir, "__test__", "files", "output.txt");
+    const originalMode = (await fs.stat(src)).mode & 0o777;
     await fs.chmod(src, 0o755);
     try {
       const projectRoot = await freshProject();
@@ -217,7 +218,7 @@ describe("FileSystemFileEmitter", () => {
         "emitted file should be executable",
       );
     } finally {
-      await fs.chmod(src, 0o644);
+      await fs.chmod(src, originalMode);
     }
   });
 
