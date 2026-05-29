@@ -35,7 +35,6 @@
     ".agents/tech-stack.md"
   ],
   "checklist": [
-    "Edit AGENTS.md → project description line with your actual description",
     "Review .agents/tech-stack.md — add any tools not auto-detected",
     "Run: cat AGENTS.md to verify Claude Code will read the correct instructions"
   ],

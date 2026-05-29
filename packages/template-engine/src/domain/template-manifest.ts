@@ -42,14 +42,52 @@ export function validateManifest(raw: unknown): TemplateManifest {
     name: m.name as string,
     description: m.description as string,
     version: m.version as string,
-    requires: Array.isArray(m.requires) ? (m.requires as string[]) : [],
-    conflicts: Array.isArray(m.conflicts) ? (m.conflicts as string[]) : [],
-    questions: Array.isArray(m.questions)
-      ? (m.questions as TemplateQuestion[])
-      : [],
-    envVars: Array.isArray(m.envVars) ? (m.envVars as string[]) : [],
-    outputs: Array.isArray(m.outputs) ? (m.outputs as string[]) : [],
-    checklist: Array.isArray(m.checklist) ? (m.checklist as string[]) : [],
+    requires: validatedStringArray(m.requires, "requires"),
+    conflicts: validatedStringArray(m.conflicts, "conflicts"),
+    questions: validatedQuestions(m.questions),
+    envVars: validatedStringArray(m.envVars, "envVars"),
+    outputs: validatedStringArray(m.outputs, "outputs"),
+    checklist: validatedStringArray(m.checklist, "checklist"),
     branch: typeof m.branch === "string" ? m.branch : undefined,
   };
+}
+
+function validatedStringArray(raw: unknown, field: string): string[] {
+  if (!Array.isArray(raw)) return [];
+  for (const el of raw) {
+    if (typeof el !== "string") {
+      throw new Error(
+        `Template manifest field '${field}' must be an array of strings`,
+      );
+    }
+  }
+  return raw as string[];
+}
+
+function validatedQuestions(raw: unknown): TemplateQuestion[] {
+  if (!Array.isArray(raw)) return [];
+  const validTypes = new Set([
+    "select",
+    "multiselect",
+    "text",
+    "boolean",
+    "auto",
+  ]);
+  for (const q of raw) {
+    if (!q || typeof q !== "object") {
+      throw new Error("Template manifest: each question must be an object");
+    }
+    const qObj = q as Record<string, unknown>;
+    if (typeof qObj.id !== "string" || !qObj.id) {
+      throw new Error(
+        "Template manifest: each question must have a string 'id'",
+      );
+    }
+    if (typeof qObj.type !== "string" || !validTypes.has(qObj.type)) {
+      throw new Error(
+        `Template manifest: question '${qObj.id}' has invalid type '${qObj.type}'`,
+      );
+    }
+  }
+  return raw as TemplateQuestion[];
 }

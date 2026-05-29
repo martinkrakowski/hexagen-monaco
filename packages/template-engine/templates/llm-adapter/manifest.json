@@ -10,7 +10,7 @@
       "id": "providers",
       "type": "multiselect",
       "prompt": "Which LLM providers?",
-      "options": ["xai", "openai", "anthropic", "ollama", "azure-openai"],
+      "options": ["xai"],
       "default": ["xai"]
     },
     {

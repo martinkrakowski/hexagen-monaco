@@ -39,6 +39,8 @@ export async function addTemplateCommand(
   const fileEmitter = new FileSystemFileEmitter(templatesDir);
   const configStore = new FileSystemTemplateConfigStore();
 
+  let skipInstalled = !options.force;
+
   // Check installed templates and warn about re-applies
   if (!options.force) {
     const config = await configStore.load(projectRoot);
@@ -48,7 +50,9 @@ export async function addTemplateCommand(
       const proceed = await confirm("Re-apply? (will skip unless --force)", {
         default: false,
       });
-      if (!proceed) {
+      if (proceed) {
+        skipInstalled = false;
+      } else {
         console.log(
           "Skipping already-installed templates. Use --force to re-apply.",
         );
@@ -72,7 +76,7 @@ export async function addTemplateCommand(
     const result = await useCase.execute({
       templateIds,
       projectRoot,
-      skipInstalled: !options.force,
+      skipInstalled,
     });
 
     if (result.warnings.length > 0) {

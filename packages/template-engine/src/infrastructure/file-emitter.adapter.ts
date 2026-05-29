@@ -38,9 +38,18 @@ export class FileSystemFileEmitter implements FileEmitterPort {
     const generatedFiles: GeneratedFileRecord[] = [];
     const templateFilesDir = path.join(this.templatesDir, manifest.id, "files");
 
+    const resolvedRoot = path.resolve(projectRoot);
     for (const outputRelPath of manifest.outputs) {
+      const destFile = path.resolve(projectRoot, outputRelPath);
+      if (
+        !destFile.startsWith(resolvedRoot + path.sep) &&
+        destFile !== resolvedRoot
+      ) {
+        throw new Error(
+          `Output path '${outputRelPath}' escapes the project root`,
+        );
+      }
       const sourceFile = path.join(templateFilesDir, outputRelPath);
-      const destFile = path.join(projectRoot, outputRelPath);
 
       let templateContent: string;
       try {

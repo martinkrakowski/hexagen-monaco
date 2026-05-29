@@ -34,7 +34,7 @@
       "default": true
     }
   ],
-  "envVars": [],
+  "envVars": ["REGISTRY_ORG"],
   "outputs": [
     "Dockerfile",
     ".dockerignore",

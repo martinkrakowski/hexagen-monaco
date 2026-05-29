@@ -10,7 +10,11 @@
       "id": "primary_color",
       "type": "text",
       "prompt": "Primary brand color (hex)?",
-      "default": "#6366f1"
+      "default": "#6366f1",
+      "validation": {
+        "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+        "message": "Must be a 3- or 6-digit hex color, e.g. #6366f1"
+      }
     },
     {
       "id": "typography",
@@ -55,7 +59,6 @@
   ],
   "checklist": [
     "Review DESIGN.md — it is now an immutable design contract for Claude Code",
-    "Update --color-brand-primary in src/styles/tokens.css with your brand colour",
     "Import globals.css in app/layout.tsx if not already present"
   ],
   "branch": "feature/generator-template-design-system"

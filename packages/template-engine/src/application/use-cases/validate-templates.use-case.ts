@@ -67,7 +67,7 @@ export class ValidateTemplatesUseCase {
 
       const missingEnvVars: string[] = [];
       for (const envVar of manifest.envVars) {
-        if (!process.env[envVar]) {
+        if (process.env[envVar] === undefined) {
           missingEnvVars.push(envVar);
         }
       }

@@ -25,10 +25,10 @@ export async function listTemplatesCommand(): Promise<void> {
     // Not in a project — still show the list
   }
 
-  console.log(`\nAvailable templates (${all.length}):\n`);
+  const visible = all.filter((m) => !m.id.startsWith("__"));
+  console.log(`\nAvailable templates (${visible.length}):\n`);
 
-  for (const m of all) {
-    if (m.id.startsWith("__")) continue; // hide internal templates
+  for (const m of visible) {
     const status = installed.has(m.id) ? " ✅" : "   ";
     const requires =
       m.requires.length > 0 ? `  [requires: ${m.requires.join(", ")}]` : "";

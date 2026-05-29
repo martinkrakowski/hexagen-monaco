@@ -37,6 +37,12 @@
       "type": "boolean",
       "prompt": "Auto-refresh access tokens before expiry?",
       "default": true
+    },
+    {
+      "id": "scopes",
+      "type": "text",
+      "prompt": "IMS OAuth scopes (comma-separated)?",
+      "default": "openid,AdobeID,read_organizations"
     }
   ],
   "envVars": [

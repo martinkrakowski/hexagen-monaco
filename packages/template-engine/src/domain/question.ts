@@ -42,7 +42,7 @@ export interface AutoQuestion {
   type: "auto";
   /** Template ID and question ID to copy the answer from, e.g. "rate-limiting.framework" */
   derivedFrom: string;
-  default?: string;
+  default?: QuestionAnswer;
 }
 
 export type TemplateQuestion =
