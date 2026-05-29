@@ -4,7 +4,7 @@ import { decryptSession } from "../../infrastructure/auth/google/session-store";
 import { mapGoogleUserToUserContext } from "../../infrastructure/auth/google/user-profile-mapper";
 import { MOCK_USER } from "../../infrastructure/auth/mock-user";
 
-const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "{session_cookie_name}";
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 
 // Server-only helper for resolving the current user inside Server Components,
 // Route Handlers, and Server Actions. Mirrors the middleware: honours

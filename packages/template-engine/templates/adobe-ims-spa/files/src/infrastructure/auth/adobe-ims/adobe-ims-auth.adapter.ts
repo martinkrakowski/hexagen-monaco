@@ -6,18 +6,28 @@ import { encryptTokens, decryptTokens } from "./token-store";
 import { mapIMSProfileToUserContext } from "./user-profile-mapper";
 
 // Session-related helpers for Adobe IMS. The session cookie's value is the
-// encrypted IMSTokens blob — validation requires a Microsoft Graph-style
-// round-trip to IMS to fetch the current profile and (optionally) refresh the
-// access token. This used to implement the generic AuthProviderPort, but each
-// auth provider now owns its own middleware + helpers end-to-end.
+// encrypted IMSTokens blob — validation requires a round-trip to IMS to fetch
+// the current profile and (optionally) refresh the access token.
 
 const imsClient = new IMSClient();
 
+// validate() returns the resolved user and, when a refresh fired, the new
+// encrypted IMSTokens blob the caller should persist back to the cookie.
+// Returns null on any validation/refresh failure.
+//
+// Concurrent-refresh note: two simultaneous in-window requests will both
+// refresh. The first Set-Cookie response wins; the second is harmless under
+// Adobe IMS's refresh-token rotation policy (the previous refresh token
+// remains valid through one rotation cycle). Strict single-flight refresh
+// would require a shared server-side store, which intentionally isn't part of
+// a stateless cookie template.
+export interface ValidatedSession {
+  readonly user: UserContext;
+  readonly refreshedToken?: string;
+}
+
 export class AdobeIMSAuthAdapter {
-  // Resolves the session cookie value into a UserContext. Used by middleware,
-  // by getCurrentUser, and by /api/auth/me. Auto-refreshes the access token
-  // when within the configured refresh window.
-  async validate(sessionToken: string): Promise<UserContext | null> {
+  async validate(sessionToken: string): Promise<ValidatedSession | null> {
     const tokens = await decryptTokens(sessionToken);
     if (!tokens) return null;
 
@@ -29,7 +39,13 @@ export class AdobeIMSAuthAdapter {
       try {
         const refreshed = await imsClient.refreshToken(tokens.refreshToken);
         const profile = await imsClient.fetchProfile(refreshed.accessToken);
-        return mapIMSProfileToUserContext(profile);
+        // Encrypt the full refreshed bundle so the new refresh_token (Adobe
+        // rotates it on every exchange) is persisted, not just the access token.
+        const refreshedToken = await encryptTokens(refreshed);
+        return {
+          user: mapIMSProfileToUserContext(profile),
+          refreshedToken,
+        };
       } catch {
         return null;
       }
@@ -37,7 +53,7 @@ export class AdobeIMSAuthAdapter {
 
     try {
       const profile = await imsClient.fetchProfile(tokens.accessToken);
-      return mapIMSProfileToUserContext(profile);
+      return { user: mapIMSProfileToUserContext(profile) };
     } catch {
       return null;
     }

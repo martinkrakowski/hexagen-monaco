@@ -45,12 +45,6 @@
       "type": "text",
       "prompt": "Path prefixes the middleware should require auth for (comma-separated)?",
       "default": "/dashboard,/api/protected"
-    },
-    {
-      "id": "session_cookie_name",
-      "type": "text",
-      "prompt": "Session cookie name? (must match auth-mock's session_cookie_name)",
-      "default": "__auth_session"
     }
   ],
   "envVars": [
@@ -86,7 +80,7 @@
     "Keep AUTH_MODE=mock for local dev — both the middleware and getCurrentUser() short-circuit to MOCK_USER",
     "Test flow: GET /api/auth/login → IMS authorize → GET /api/auth/callback → /dashboard",
     "Verify GET /api/auth/me returns UserContext after login",
-    "Verify DELETE /api/auth/logout clears both session and token cookies",
+    "Verify DELETE /api/auth/logout clears the session cookie",
     "Confirm middleware redirects unauthenticated requests to /api/auth/login for paths under {protected_paths}",
     "Use getCurrentUser() / requireAuth() in Server Components and Server Actions"
   ],

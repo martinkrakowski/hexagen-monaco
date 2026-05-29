@@ -4,7 +4,7 @@ import { decryptSession } from "../../infrastructure/auth/github/session-store";
 import { mapGitHubUserToUserContext } from "../../infrastructure/auth/github/user-profile-mapper";
 import { MOCK_USER } from "../../infrastructure/auth/mock-user";
 
-const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "{session_cookie_name}";
+const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 
 export async function getCurrentUser(): Promise<UserContext | null> {
   if (process.env.AUTH_MODE === "mock") return MOCK_USER;

@@ -1,12 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { readSessionToken } from "./src/infrastructure/auth/session/session-manager";
+import {
+  readSessionToken,
+  buildSessionCookieHeader,
+} from "./src/infrastructure/auth/session/session-manager";
 import { AdobeIMSAuthAdapter } from "./src/infrastructure/auth/adobe-ims/adobe-ims-auth.adapter";
 import { MOCK_USER } from "./src/infrastructure/auth/mock-user";
 
 // Root middleware. Honours AUTH_MODE=mock as a dev short-circuit, then on
 // protected paths validates the encrypted IMS-tokens cookie by calling IMS
 // (fetchProfile + optional refresh) and emits the resolved UserContext as
-// x-user-context.
+// x-user-context. When validate refreshes the access token, the new
+// encrypted IMSTokens blob is written back via Set-Cookie so subsequent
+// requests don't pay the refresh round-trip.
 const PROTECTED_PATHS = "{protected_paths}"
   .split(",")
   .map((p) => p.trim().replace(/\/+$/, ""))
@@ -34,14 +39,21 @@ export default async function middleware(request: NextRequest) {
   if (!token) {
     return NextResponse.redirect(new URL("/api/auth/login", request.url));
   }
-  const user = await adapter.validate(token);
-  if (!user) {
+  const result = await adapter.validate(token);
+  if (!result) {
     return NextResponse.redirect(new URL("/api/auth/login", request.url));
   }
 
   const headers = new Headers(request.headers);
-  headers.set("x-user-context", JSON.stringify(user));
-  return NextResponse.next({ request: { headers } });
+  headers.set("x-user-context", JSON.stringify(result.user));
+  const response = NextResponse.next({ request: { headers } });
+  if (result.refreshedToken) {
+    response.headers.append(
+      "Set-Cookie",
+      buildSessionCookieHeader(result.refreshedToken),
+    );
+  }
+  return response;
 }
 
 export const config = {
