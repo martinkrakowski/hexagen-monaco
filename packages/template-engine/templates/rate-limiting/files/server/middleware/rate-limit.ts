@@ -21,7 +21,7 @@ import {
 } from "../errors/rate-limit-exceeded.error.js";
 import type { RateLimitBucket } from "../../types/rate-limit.js";
 
-const DIFFERENTIATED = { differentiated };
+const DIFFERENTIATED = {differentiated};
 
 // Add or reorder entries to customise bucket routing.
 // The first matching rule wins; unmatched requests fall through to "general".

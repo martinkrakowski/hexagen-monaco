@@ -1,0 +1,4 @@
+# Template source files are emitted verbatim into user projects.
+# Formatting them here would corrupt {placeholder} tokens (e.g. prettier
+# expands {identifier} to { identifier } which breaks interpolation).
+**/templates/*/files/**
