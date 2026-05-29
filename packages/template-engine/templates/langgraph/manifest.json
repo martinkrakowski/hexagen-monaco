@@ -1,0 +1,66 @@
+{
+  "id": "langgraph",
+  "name": "LangGraph",
+  "description": "AgentGraphPort interface, typed state, node stubs, graph compilation, checkpointing, optional streaming and human-in-the-loop",
+  "version": "1.0.0",
+  "requires": ["llm-adapter", "env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "deployment",
+      "type": "select",
+      "prompt": "LangGraph deployment target?",
+      "options": ["local", "langgraph-cloud", "self-hosted"],
+      "default": "local"
+    },
+    {
+      "id": "checkpointing",
+      "type": "select",
+      "prompt": "Checkpointing backend?",
+      "options": ["memory", "supabase", "redis", "postgres"],
+      "default": "memory"
+    },
+    {
+      "id": "streaming",
+      "type": "boolean",
+      "prompt": "Enable streaming token output?",
+      "default": false
+    },
+    {
+      "id": "graph_type",
+      "type": "select",
+      "prompt": "Example graph to generate?",
+      "options": [
+        "simple-chain",
+        "research-agent",
+        "multi-step-generation",
+        "none"
+      ],
+      "default": "simple-chain"
+    },
+    {
+      "id": "human_in_loop",
+      "type": "boolean",
+      "prompt": "Include human-in-the-loop interrupt example?",
+      "default": false
+    }
+  ],
+  "envVars": ["LANGGRAPH_DEPLOYMENT", "LANGGRAPH_CHECKPOINTER"],
+  "outputs": [
+    "src/domain/ports/out/agent-graph.port.ts",
+    "src/infrastructure/langgraph/state/graph-state.ts",
+    "src/infrastructure/langgraph/edges/routing.ts",
+    "src/infrastructure/langgraph/graphs/main.graph.ts",
+    "src/infrastructure/langgraph/checkpointers/index.ts",
+    "src/infrastructure/langgraph/adapters/langgraph.adapter.ts",
+    "src/infrastructure/langgraph/index.ts",
+    "app/api/agent/invoke/route.ts"
+  ],
+  "checklist": [
+    "Install LangGraph: yarn add @langchain/langgraph @langchain/core",
+    "Merge .env.langgraph.example into .env.local",
+    "POST /api/agent/invoke with { \"prompt\": \"Hello\" } to verify the graph works",
+    "Switch LANGGRAPH_CHECKPOINTER=supabase or redis for persistent memory"
+  ],
+  "branch": "feature/generator-template-langgraph"
+}

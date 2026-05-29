@@ -1,0 +1,47 @@
+{
+  "id": "observability",
+  "name": "Observability",
+  "description": "Structured JSON logging, correlation IDs via AsyncLocalStorage, request logger middleware, /api/health endpoint",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "log_format",
+      "type": "select",
+      "prompt": "Log format?",
+      "options": ["json", "pretty-dev", "auto"],
+      "default": "auto"
+    },
+    {
+      "id": "correlation_header",
+      "type": "select",
+      "prompt": "Correlation ID header name?",
+      "options": ["x-request-id", "x-correlation-id", "x-trace-id"],
+      "default": "x-request-id"
+    },
+    {
+      "id": "otel",
+      "type": "boolean",
+      "prompt": "Set up OpenTelemetry tracing?",
+      "default": false
+    }
+  ],
+  "envVars": ["LOG_LEVEL", "LOG_FORMAT", "CORRELATION_ID_HEADER"],
+  "outputs": [
+    "src/infrastructure/logging/logger.ts",
+    "src/infrastructure/logging/correlation.ts",
+    "src/infrastructure/logging/context.ts",
+    "src/infrastructure/logging/redact.ts",
+    "src/infrastructure/logging/index.ts",
+    "server/middleware/request-logger.ts",
+    "app/api/health/route.ts"
+  ],
+  "checklist": [
+    "Merge .env.observability.example into .env.local",
+    "Visit http://localhost:3000/api/health — verify all checks are green",
+    "Set LOG_LEVEL=debug to see all request logs during development",
+    "Check response headers for X-Request-Id on every API response"
+  ],
+  "branch": "feature/generator-template-observability"
+}

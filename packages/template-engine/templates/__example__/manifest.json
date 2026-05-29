@@ -1,0 +1,44 @@
+{
+  "id": "__example__",
+  "name": "Example Template",
+  "description": "End-to-end smoke test for the template engine framework",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "project_name",
+      "type": "text",
+      "prompt": "Project name?",
+      "default": "my-app",
+      "required": true
+    },
+    {
+      "id": "framework",
+      "type": "select",
+      "prompt": "Which framework?",
+      "options": ["next.js", "express", "fastify"],
+      "default": "next.js"
+    },
+    {
+      "id": "features",
+      "type": "multiselect",
+      "prompt": "Which features?",
+      "options": ["auth", "database", "queue"],
+      "default": ["auth"]
+    },
+    {
+      "id": "use_typescript",
+      "type": "boolean",
+      "prompt": "Use TypeScript?",
+      "default": true
+    }
+  ],
+  "envVars": ["EXAMPLE_API_KEY"],
+  "outputs": ["example-output.txt"],
+  "checklist": [
+    "Set EXAMPLE_API_KEY in .env.local",
+    "Run: yarn dev to verify the template output"
+  ],
+  "branch": "feature/generator-template-system-core"
+}

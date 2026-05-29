@@ -1,0 +1,35 @@
+{
+  "name": "@hexagen/template-engine",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Hexagen add-on template system — registry, question engine, file emitter, and dependency resolution",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"__tests__/**/*.test.ts\"",
+    "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\"",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@hexagen/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.5"
+  },
+  "private": true
+}

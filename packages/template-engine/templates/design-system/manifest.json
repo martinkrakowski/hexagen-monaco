@@ -1,0 +1,62 @@
+{
+  "id": "design-system",
+  "name": "Design System",
+  "description": "Populated DESIGN.md contract, CSS custom property tokens, Tailwind config extension, base component stubs",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "primary_color",
+      "type": "text",
+      "prompt": "Primary brand color (hex)?",
+      "default": "#6366f1"
+    },
+    {
+      "id": "typography",
+      "type": "select",
+      "prompt": "Base font stack?",
+      "options": ["system-ui", "inter", "geist", "custom"],
+      "default": "geist"
+    },
+    {
+      "id": "dark_mode",
+      "type": "select",
+      "prompt": "Dark mode support?",
+      "options": ["none", "css-class", "media-query", "both"],
+      "default": "css-class"
+    },
+    {
+      "id": "component_base",
+      "type": "select",
+      "prompt": "UI component base?",
+      "options": ["shadcn-ui", "radix-primitives", "headlessui", "none"],
+      "default": "shadcn-ui"
+    },
+    {
+      "id": "storybook",
+      "type": "boolean",
+      "prompt": "Set up Storybook?",
+      "default": false
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    "DESIGN.md",
+    "src/styles/tokens.css",
+    "src/styles/globals.css",
+    "src/styles/theme.ts",
+    "src/components/ui/button.tsx",
+    "src/components/ui/card.tsx",
+    "src/components/ui/input.tsx",
+    "src/components/ui/index.ts",
+    "src/lib/cn.ts",
+    "tailwind.config.ts"
+  ],
+  "checklist": [
+    "Review DESIGN.md — it is now an immutable design contract for Claude Code",
+    "Update --color-brand-primary in src/styles/tokens.css with your brand colour",
+    "Import globals.css in app/layout.tsx if not already present"
+  ],
+  "branch": "feature/generator-template-design-system"
+}

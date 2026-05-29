@@ -1,0 +1,52 @@
+{
+  "id": "bullmq",
+  "name": "BullMQ",
+  "description": "Typed job queues, workers, Redis fallback to in-process sync execution, optional Bull Board dashboard",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "worker_mode",
+      "type": "select",
+      "prompt": "Where does the worker run?",
+      "options": ["same-process", "separate-service"],
+      "default": "same-process"
+    },
+    {
+      "id": "queue_names",
+      "type": "text",
+      "prompt": "Queue names (comma-separated)?",
+      "default": "default,images,notifications"
+    },
+    {
+      "id": "redis_source",
+      "type": "select",
+      "prompt": "Redis connection?",
+      "options": ["local", "redis-cloud", "upstash", "docker-compose"],
+      "default": "local"
+    },
+    {
+      "id": "bull_board",
+      "type": "boolean",
+      "prompt": "Include Bull Board web dashboard?",
+      "default": true
+    }
+  ],
+  "envVars": ["REDIS_URL", "BULLMQ_FALLBACK_MODE", "WORKER_CONCURRENCY"],
+  "outputs": [
+    "src/infrastructure/queue/connection.ts",
+    "src/infrastructure/queue/queues.ts",
+    "src/infrastructure/queue/fallback/sync-executor.ts",
+    "src/infrastructure/queue/scheduler/job-scheduler.ts",
+    "src/infrastructure/queue/index.ts",
+    "server/startup/start-workers.ts"
+  ],
+  "checklist": [
+    "Merge .env.bullmq.example into .env.local",
+    "Start Redis locally: redis-server  (or: docker compose up redis)",
+    "If BULLMQ_FALLBACK_MODE=auto, app works without Redis — check logs for [bullmq:fallback]",
+    "Visit http://localhost:3000/admin/queues for Bull Board (if enabled)"
+  ],
+  "branch": "feature/generator-template-bullmq"
+}

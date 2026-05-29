@@ -1,0 +1,66 @@
+{
+  "id": "auth-mock",
+  "name": "Auth Mock",
+  "description": "AUTH_MODE=mock|real toggle, UserContext value object, session cookie, and real-provider stub",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "session_cookie_name",
+      "type": "text",
+      "prompt": "Session cookie name?",
+      "default": "__auth_session"
+    },
+    {
+      "id": "mock_user_name",
+      "type": "text",
+      "prompt": "Mock user display name?",
+      "default": "Demo User"
+    },
+    {
+      "id": "mock_user_email",
+      "type": "text",
+      "prompt": "Mock user email?",
+      "default": "demo@example.com"
+    },
+    {
+      "id": "real_provider_slot",
+      "type": "select",
+      "prompt": "Which real provider will replace mock later?",
+      "options": [
+        "adobe-ims",
+        "nextauth",
+        "clerk",
+        "supabase-auth",
+        "custom",
+        "none"
+      ],
+      "default": "none"
+    }
+  ],
+  "envVars": [
+    "AUTH_MODE",
+    "AUTH_SESSION_SECRET",
+    "MOCK_USER_NAME",
+    "MOCK_USER_EMAIL"
+  ],
+  "outputs": [
+    "src/domain/value-objects/user-context.ts",
+    "src/domain/ports/out/auth-provider.port.ts",
+    "src/application/services/auth.service.ts",
+    "src/application/use-cases/get-current-user.use-case.ts",
+    "src/infrastructure/auth/mock/mock-auth.adapter.ts",
+    "src/infrastructure/auth/real/real-auth.adapter.stub.ts",
+    "src/infrastructure/auth/session/session-manager.ts",
+    "server/middleware/auth.middleware.ts",
+    "app/api/auth/logout/route.ts"
+  ],
+  "checklist": [
+    "Merge .env.auth.example into .env.local",
+    "Set AUTH_MODE=mock for local development",
+    "Verify __auth_session cookie is set on first browser request",
+    "Call GET /api/auth/me to confirm UserContext is returned"
+  ],
+  "branch": "feature/generator-template-auth-mock"
+}

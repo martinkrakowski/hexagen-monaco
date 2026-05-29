@@ -1,0 +1,61 @@
+{
+  "id": "supabase",
+  "name": "Supabase",
+  "description": "SSR-safe client setup, storage helpers, auth helpers (getUser not getSession), RLS examples, type generation",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "features",
+      "type": "multiselect",
+      "prompt": "Which Supabase features?",
+      "options": ["database", "storage", "auth", "realtime", "edge-functions"],
+      "default": ["database", "storage"]
+    },
+    {
+      "id": "storage_buckets",
+      "type": "text",
+      "prompt": "Storage bucket names (comma-separated)?",
+      "default": "uploads"
+    },
+    {
+      "id": "orm",
+      "type": "boolean",
+      "prompt": "Use Drizzle ORM over Supabase?",
+      "default": false
+    },
+    {
+      "id": "type_gen",
+      "type": "boolean",
+      "prompt": "Set up automatic TypeScript type generation?",
+      "default": true
+    }
+  ],
+  "envVars": [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY"
+  ],
+  "outputs": [
+    "src/infrastructure/supabase/client.ts",
+    "src/infrastructure/supabase/server.ts",
+    "src/infrastructure/supabase/admin.ts",
+    "src/infrastructure/supabase/storage/upload.ts",
+    "src/infrastructure/supabase/storage/signed-url.ts",
+    "src/infrastructure/supabase/storage/delete.ts",
+    "src/infrastructure/supabase/auth/get-user.ts",
+    "src/infrastructure/supabase/auth/require-auth.ts",
+    "src/infrastructure/supabase/types/database.types.ts",
+    "supabase/migrations/.gitkeep",
+    "scripts/gen-types.sh"
+  ],
+  "checklist": [
+    "Merge .env.supabase.example into .env.local",
+    "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY from your project settings",
+    "Set SUPABASE_SERVICE_ROLE_KEY — server-only, never prefix with NEXT_PUBLIC_",
+    "Run: yarn gen:types  (after supabase init + any schema changes)",
+    "Enable RLS on all tables before going to production"
+  ],
+  "branch": "feature/generator-template-supabase"
+}

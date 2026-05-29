@@ -8,6 +8,12 @@ import { portCommander } from "./commands/arch/port.js";
 import { contextCommander } from "./commands/arch/context/command.js";
 import { removeCommander } from "./commands/arch/remove.js";
 import { diffCommander } from "./commands/arch/diff.js";
+import {
+  listTemplatesCommand,
+  templateInfoCommand,
+} from "./commands/templates/index.js";
+import { addTemplateCommand } from "./commands/add/index.js";
+import { validateTemplatesCommand } from "./commands/add/validate.js";
 import { editCommander } from "./commands/arch/edit.js";
 import { refactorCommander } from "./commands/arch/refactor.js";
 import { manifestCommander } from "./commands/manifest/index.js";
@@ -101,6 +107,44 @@ function buildProgram(): Command {
   archCommand.addCommand(refactorCommander);
 
   program.addCommand(manifestCommander);
+
+  // hexagen templates list / info
+  const templatesCommand = program
+    .command("templates")
+    .description("Manage and inspect add-on templates");
+
+  templatesCommand
+    .command("list")
+    .description("List all available add-on templates")
+    .action(async () => {
+      await listTemplatesCommand();
+    });
+
+  templatesCommand
+    .command("info <id>")
+    .description("Show detailed information about a template")
+    .action(async (id: string) => {
+      await templateInfoCommand(id);
+    });
+
+  // hexagen add <template-id>
+  program
+    .command("add <ids...>")
+    .description("Apply one or more add-on templates to the current project")
+    .option("--force", "Re-apply already-installed templates")
+    .action(async (ids: string[], options: { force?: boolean }) => {
+      await addTemplateCommand(ids, { force: options.force });
+    });
+
+  // hexagen validate templates
+  program
+    .command("validate-templates")
+    .description(
+      "Validate installed templates — check output files, env vars, and conflict files",
+    )
+    .action(async () => {
+      await validateTemplatesCommand();
+    });
 
   return program;
 }

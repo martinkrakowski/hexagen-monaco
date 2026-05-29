@@ -1,0 +1,49 @@
+{
+  "id": "ci-github-actions",
+  "name": "CI / GitHub Actions",
+  "description": "Build+typecheck+lint+test CI, Vercel/Railway/Fly/VPS deploy workflow, PR preview deploys, Dependabot",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "deploy_target",
+      "type": "select",
+      "prompt": "Deploy target?",
+      "options": ["vercel", "railway", "fly-io", "vps-ssh", "none"],
+      "default": "vercel"
+    },
+    {
+      "id": "preview_deploys",
+      "type": "boolean",
+      "prompt": "PR preview deploys?",
+      "default": true
+    },
+    {
+      "id": "node_version",
+      "type": "select",
+      "prompt": "Node.js version?",
+      "options": ["20", "22", "23"],
+      "default": "22"
+    },
+    {
+      "id": "docker_build",
+      "type": "boolean",
+      "prompt": "Build and push Docker image in CI?",
+      "default": false
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/deploy.yml",
+    ".github/dependabot.yml"
+  ],
+  "checklist": [
+    "Push to a feature branch and verify CI workflow runs green",
+    "Add required secrets to GitHub repo → Settings → Secrets and variables → Actions",
+    "Set TURBO_TOKEN and TURBO_TEAM for remote Turbo cache",
+    "Merge to main and verify deploy workflow triggers"
+  ],
+  "branch": "feature/generator-template-ci-github-actions"
+}

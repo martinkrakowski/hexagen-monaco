@@ -1,0 +1,28 @@
+name: template-engine
+type: supporting
+description: Add-on template system — manifest-driven scaffolds, dependency resolution, idempotent file emission, conflict detection
+layers:
+  domain:
+    entities:
+      - TemplateManifest
+      - TemplateConfig
+      - TemplateQuestion
+  application:
+    use_cases:
+      - AddTemplateUseCase
+      - ValidateTemplatesUseCase
+    ports:
+      in:
+        - TemplateRegistryPort
+        - QuestionEnginePort
+        - FileEmitterPort
+        - TemplateConfigStorePort
+  infrastructure:
+    adapters:
+      - FileSystemTemplateRegistry
+      - InteractiveQuestionEngine
+      - FileSystemFileEmitter
+      - FileSystemTemplateConfigStore
+depends_on:
+  - shared
+plane: infrastructure

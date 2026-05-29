@@ -20,6 +20,7 @@
   "references": [
     { "path": "../shared" },
     { "path": "../project-configuration" },
+    { "path": "../template-engine" },
     { "path": "../visualization" },
     { "path": "../governance" }
   ]

@@ -44,6 +44,7 @@ package_rules:
       - '@hexagen/visualization'
       - '@hexagen/governance'
       - '@hexagen/core-domain'
+      - '@hexagen/template-engine'
 
   - name: 'project-generation'
     allowed_imports:
