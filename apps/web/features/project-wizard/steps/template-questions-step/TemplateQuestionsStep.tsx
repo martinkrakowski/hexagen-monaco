@@ -57,6 +57,51 @@ export function TemplateQuestionsStep({
     })
     .filter((s) => s.interactive.length > 0);
 
+  // Gate Next on validation: required text questions must be non-empty, and
+  // any text question with a validation.pattern must match. The template
+  // engine validates required/pattern during *interactive* prompting but not
+  // through overrideAnswers, so the wizard has to enforce it here. Silent
+  // bypass would re-prompt the user at CLI install time (for required) or
+  // ship an unchecked value (for pattern).
+  function isAnswered(value: AnswerValue | undefined): boolean {
+    if (value === undefined) return false;
+    if (typeof value === "string") return value.length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    return true; // boolean is always considered answered
+  }
+
+  const canProceed = sections.every(({ id, interactive }) =>
+    interactive.every((q) => {
+      const value = answers[id]?.[q.id];
+      if (q.type === "text") {
+        const resolved = typeof value === "string" ? value : (q.default ?? "");
+        if (q.required && !resolved) return false;
+        if (q.validation?.pattern && resolved) {
+          try {
+            if (!new RegExp(q.validation.pattern).test(resolved)) return false;
+          } catch {
+            // Malformed pattern in the manifest — don't block the user.
+            return true;
+          }
+        }
+        return true;
+      }
+      if (q.type === "select") {
+        const resolved = typeof value === "string" ? value : q.default;
+        return resolved !== undefined && resolved !== "";
+      }
+      if (q.type === "multiselect") {
+        const resolved = Array.isArray(value) ? value : (q.default ?? []);
+        // Multiselect is "answered" even when empty — manifests use it for
+        // optional feature sets where [] is a legitimate choice.
+        void resolved;
+        return true;
+      }
+      // boolean: default exists, always answered.
+      return isAnswered(value) || typeof q.default === "boolean";
+    }),
+  );
+
   return (
     <div className="flex flex-col h-full bg-card">
       <StepHeader
@@ -112,7 +157,7 @@ export function TemplateQuestionsStep({
       <WizardFooter
         onBack={onBack}
         onNext={onNext}
-        canProceed={true}
+        canProceed={canProceed}
         currentStep={currentStep ?? 6}
         totalSteps={totalSteps ?? 7}
         nextLabel="Review"
@@ -139,15 +184,24 @@ function QuestionField({
   const inputId = `q-${question.id}`;
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={inputId} className="text-xs font-medium text-foreground">
-        {question.prompt}
-        {"required" in question && question.required && (
-          <span className="text-destructive" aria-hidden>
-            {" "}
-            *
-          </span>
-        )}
-      </label>
+      {/* For boolean questions the prompt is rendered inside the inner
+          <label> wrapping the checkbox (below), so we suppress the outer
+          header to avoid duplicating the text — screen readers would
+          otherwise announce the prompt twice. */}
+      {question.type !== "boolean" && (
+        <label
+          htmlFor={inputId}
+          className="text-xs font-medium text-foreground"
+        >
+          {question.prompt}
+          {"required" in question && question.required && (
+            <span className="text-destructive" aria-hidden>
+              {" "}
+              *
+            </span>
+          )}
+        </label>
+      )}
 
       {question.type === "text" && (
         <input

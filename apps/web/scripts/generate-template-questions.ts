@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Reads every template manifest from packages/template-engine/templates/<id>/
  * and emits a TS module mapping template id → questions[]. The wizard's
@@ -13,6 +12,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import prettier from "prettier";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(SCRIPT_DIR, "..");
@@ -63,7 +63,7 @@ async function readManifests(): Promise<Record<string, RawQuestion[]>> {
   return out;
 }
 
-function render(map: Record<string, RawQuestion[]>): string {
+async function render(map: Record<string, RawQuestion[]>): Promise<string> {
   const banner = [
     "// AUTO-GENERATED — DO NOT EDIT BY HAND.",
     "// Regenerate via `yarn workspace web gen:template-questions`.",
@@ -76,13 +76,22 @@ function render(map: Record<string, RawQuestion[]>): string {
   const ids = Object.keys(map).sort();
   const ordered: Record<string, RawQuestion[]> = {};
   for (const id of ids) ordered[id] = map[id];
-  return banner + JSON.stringify(ordered, null, 2) + ";\n";
+  const raw = banner + JSON.stringify(ordered, null, 2) + ";\n";
+
+  // Run the raw output through Prettier so byte-equality with the committed
+  // file (which the repo's pre-commit hook also reformats) is preserved.
+  // Without this, --check would report drift on every run because Prettier
+  // rewrites the generic split (Record<\n  string,\n  ...\n>), unquotes
+  // identifier keys (bullmq:, supabase: …), and adjusts trailing commas.
+  // Both the write and the check paths must produce the same canonical
+  // formatted string.
+  return prettier.format(raw, { parser: "typescript", filepath: OUT_FILE });
 }
 
 async function main(): Promise<void> {
   const checkMode = process.argv.includes("--check");
   const map = await readManifests();
-  const generated = render(map);
+  const generated = await render(map);
 
   if (checkMode) {
     let onDisk = "";
