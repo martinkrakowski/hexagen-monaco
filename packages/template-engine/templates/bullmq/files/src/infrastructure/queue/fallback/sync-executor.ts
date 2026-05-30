@@ -84,7 +84,11 @@ export async function executeSync<TData, TResult>(
   return {
     id,
     name: jobName,
-    data,
+    // Read job.data, not the original `data` arg — handlers can call
+    // updateData() to evolve the payload, and BullMQ's real Job exposes
+    // the mutated value here. Returning the original would silently
+    // diverge fallback behaviour from the BullMQ path.
+    data: job.data,
     returnvalue,
     timestamp,
     finishedOn: Date.now(),

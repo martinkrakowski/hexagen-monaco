@@ -34,15 +34,18 @@ async function gracefulExit(signal: NodeJS.Signals): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  await bootstrapWorkers();
-  // eslint-disable-next-line no-console
-  console.log("[bullmq:worker] up");
-  // Keep the process alive — workers are event-driven, not request-driven.
+  // Register signal handlers BEFORE awaiting bootstrap so a SIGINT/SIGTERM
+  // received during startup (e.g. a long Redis handshake under a container
+  // health-check that decides to kill the worker) still routes through
+  // gracefulExit() instead of slamming the process with the default handler.
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
       void gracefulExit(signal);
     });
   }
+  await bootstrapWorkers();
+  // eslint-disable-next-line no-console
+  console.log("[bullmq:worker] up");
 }
 
 main().catch((err) => {

@@ -2,27 +2,76 @@ import { Queue, type Job, type JobsOptions } from "bullmq";
 import { getRedisConnection, isFallbackActive } from "./connection";
 import { executeSync, type SyncJob } from "./fallback/sync-executor";
 
-// Queue names configured at install time; comma-separated env var overrides
-// the static default so a deployment can adjust without re-running the
-// template generator.
-const QUEUE_NAMES_RAW =
-  process.env.BULLMQ_QUEUE_NAMES ?? "{queue_names}";
+// The install-time comma-list is captured as a string literal *type* so
+// the typed surface (QueueName) is a literal union of the configured names,
+// not the broad `string`. The runtime list is derived from the same answer
+// (or a BULLMQ_QUEUE_NAMES override, validated against the install set
+// further down) so the two stay in lock-step.
+type InstallQueueNamesLiteral = "{queue_names}";
 
-export const QUEUE_NAMES = QUEUE_NAMES_RAW.split(",")
-  .map((n) => n.trim())
-  .filter(Boolean);
+type _TrimWs<S extends string> = S extends ` ${infer R}`
+  ? _TrimWs<R>
+  : S extends `${infer R} `
+    ? _TrimWs<R>
+    : S;
+
+type _SplitCsv<S extends string> = S extends `${infer Head},${infer Tail}`
+  ? _TrimWs<Head> | _SplitCsv<Tail>
+  : _TrimWs<S>;
 
 /**
- * Compile-time-narrow type for the configured queue names. Built from a
- * runtime list because the install-time answer is a free-text comma list,
- * but a callsite that imports `QueueName` from this module gets the same
- * IntelliSense as a literal union.
+ * Literal union of every queue name configured at install time. addJob(),
+ * getQueue(), and registerJobHandler() all narrow their `queue` arg to this
+ * union, so typos surface at compile time rather than as a runtime
+ * "no handler registered" error after the job has already been enqueued.
  */
-export type QueueName = (typeof QUEUE_NAMES)[number];
+export type QueueName = _SplitCsv<InstallQueueNamesLiteral>;
+
+const INSTALL_QUEUE_NAMES = "{queue_names}"
+  .split(",")
+  .map((n) => n.trim())
+  .filter(Boolean) as QueueName[];
+
+// BULLMQ_QUEUE_NAMES can override the install-time list at deploy time, but
+// only with a *subset* of the names declared at install — anything else
+// would mean workers start for a queue without a registered handler, or
+// handlers register for a queue that no Worker ever opens. We validate up
+// front and throw with the offending names so the misconfiguration surfaces
+// at boot rather than as a per-job dispatcher error later.
+function resolveRuntimeQueueNames(): QueueName[] {
+  const override = process.env.BULLMQ_QUEUE_NAMES;
+  if (!override) return INSTALL_QUEUE_NAMES;
+  const parsed = override
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const unknown = parsed.filter(
+    (n) => !(INSTALL_QUEUE_NAMES as string[]).includes(n),
+  );
+  if (unknown.length > 0) {
+    throw new Error(
+      `BULLMQ_QUEUE_NAMES contains queues not declared at install time: ${unknown.join(", ")}. Install-time queues: ${INSTALL_QUEUE_NAMES.join(", ")}.`,
+    );
+  }
+  return parsed as QueueName[];
+}
+
+export const QUEUE_NAMES = resolveRuntimeQueueNames();
 
 const queues = new Map<QueueName, Queue>();
 
 function getQueueInternal(name: QueueName): Queue {
+  // Fallback mode means Redis is unreachable; addJob() routes to the
+  // in-process executor instead. Handing out a Queue here would let a
+  // caller bypass the fallback contract and enqueue into BullMQ's still-
+  // open client, where the writes would either time out or pile up
+  // waiting for a reconnect that never comes. Force callers through
+  // addJob() so the routing decision stays in one place.
+  if (isFallbackActive()) {
+    throw new Error(
+      `getQueue('${name}'): fallback mode is active. Use addJob() so the in-process executor is used automatically.`,
+    );
+  }
   let queue = queues.get(name);
   if (!queue) {
     const connection = getRedisConnection();
