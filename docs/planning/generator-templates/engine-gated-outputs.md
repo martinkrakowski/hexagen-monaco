@@ -221,3 +221,24 @@ manifests that need gating change).
   covers all current needs; revisit if a template needs `A && B`.
 - Should the wizard catalog surface gating so the UI can preview which files a
   given answer set produces? Out of scope for the engine change.
+
+## What gating is NOT applied to
+
+Gated outputs are the only schema feature in this family. **Gated requires and
+gated conflicts are not supported.** PR #108 added a `ManifestConflict` union
+that mirrored gated outputs for the `conflicts` array; it was rolled back
+because the only caller of `resolveDependencies` did not (and could not, in a
+single-pass install) supply per-template answers, so every gated conflict
+evaluated inactive — dormant code with no enforcement path. A two-phase
+collect-then-resolve refactor was considered and rejected as significant
+complexity for zero current consumers.
+
+The replacement pattern of record is **template splitting**: when a template
+should require or conflict with another only under certain answers, split it
+into a base and an addon. The canonical example is `supabase` / `supabase-auth`
+(see [05-supabase.md](./05-supabase.md) and [15-supabase-auth.md](./15-supabase-auth.md)):
+the base is storage-only and has zero auth conflicts; the addon statically
+requires the base plus the shared-types/auth-mock foundation and conflicts
+unconditionally with every other auth provider. The dependency graph stays
+static, `resolveDependencies` runs once, and the install set is correct under
+the existing use-case shape.

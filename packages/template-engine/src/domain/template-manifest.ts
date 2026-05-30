@@ -1,7 +1,6 @@
 import type {
   TemplateQuestion,
   ManifestOutput,
-  ManifestConflict,
   OutputCondition,
 } from "./question.js";
 
@@ -15,11 +14,12 @@ export interface TemplateManifest {
   /** IDs of templates that must be applied before this one */
   requires: string[];
   /**
-   * IDs of templates that cannot coexist with this one. Each entry is either
-   * a plain id (always in conflict) or a `{ id, when }` object whose conflict
-   * is gated on this template's answer (same `when` shape as gated outputs).
+   * IDs of templates that cannot coexist with this one. Conditional
+   * coupling (a template that conflicts with others only under certain
+   * answers) is expressed by splitting the template into a base and an
+   * addon — see supabase / supabase-auth as the canonical example.
    */
-  conflicts: ManifestConflict[];
+  conflicts: string[];
   questions: TemplateQuestion[];
   /** Env var names this template introduces (for validate command) */
   envVars: string[];
@@ -58,7 +58,7 @@ export function validateManifest(raw: unknown): TemplateManifest {
     description: m.description as string,
     version: m.version as string,
     requires: validatedStringArray(m.requires, "requires"),
-    conflicts: validatedConflicts(m.conflicts, questionIds),
+    conflicts: validatedStringArray(m.conflicts, "conflicts"),
     questions,
     envVars: validatedStringArray(m.envVars, "envVars"),
     outputs: validatedOutputs(m.outputs, questionIds),
@@ -143,70 +143,6 @@ function validatedOutputs(
     if (hasEquals) condition.equals = when.equals as string | boolean;
     if (hasIncludes) condition.includes = when.includes as string;
     return { path: obj.path, when: condition };
-  });
-}
-
-function validatedConflicts(
-  raw: unknown,
-  questionIds: Set<string>,
-): ManifestConflict[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((c): ManifestConflict => {
-    if (typeof c === "string") return c;
-    if (!c || typeof c !== "object") {
-      throw new Error(
-        "Template manifest: each conflict must be a string or a { id, when } object",
-      );
-    }
-    const obj = c as Record<string, unknown>;
-    if (typeof obj.id !== "string" || !obj.id) {
-      throw new Error(
-        "Template manifest: a gated conflict must have a non-empty string 'id'",
-      );
-    }
-    const when = obj.when as Record<string, unknown> | undefined;
-    if (
-      !when ||
-      typeof when !== "object" ||
-      typeof when.answer !== "string" ||
-      !when.answer
-    ) {
-      throw new Error(
-        `Template manifest: gated conflict '${obj.id}' must have a 'when' with a string 'answer'`,
-      );
-    }
-    // The answer key must reference a declared question, so a typo or rename
-    // fails fast instead of silently disabling the conflict.
-    if (!questionIds.has(when.answer)) {
-      throw new Error(
-        `Template manifest: gated conflict '${obj.id}' references unknown answer '${when.answer}' — it must match a question id`,
-      );
-    }
-    const hasEquals = when.equals !== undefined;
-    const hasIncludes = when.includes !== undefined;
-    if (hasEquals && hasIncludes) {
-      throw new Error(
-        `Template manifest: gated conflict '${obj.id}' must set at most one of 'equals' or 'includes'`,
-      );
-    }
-    if (
-      hasEquals &&
-      typeof when.equals !== "string" &&
-      typeof when.equals !== "boolean"
-    ) {
-      throw new Error(
-        `Template manifest: gated conflict '${obj.id}' 'equals' must be a string or boolean`,
-      );
-    }
-    if (hasIncludes && (typeof when.includes !== "string" || !when.includes)) {
-      throw new Error(
-        `Template manifest: gated conflict '${obj.id}' 'includes' must be a non-empty string`,
-      );
-    }
-    const condition: OutputCondition = { answer: when.answer };
-    if (hasEquals) condition.equals = when.equals as string | boolean;
-    if (hasIncludes) condition.includes = when.includes as string;
-    return { id: obj.id, when: condition };
   });
 }
 

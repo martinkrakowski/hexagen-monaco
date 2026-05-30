@@ -117,51 +117,14 @@ describe("validateManifest", () => {
     );
   });
 
-  it("accepts a gated conflict with the same when shape as gated outputs", () => {
-    const m = validateManifest({
-      ...base,
-      conflicts: [
-        "always-conflicts",
-        { id: "auth-rival", when: { answer: "features", includes: "auth" } },
-        { id: "orm-rival", when: { answer: "orm", equals: true } },
-      ],
-    });
-    assert.equal(m.conflicts.length, 3);
-    assert.equal(m.conflicts[0], "always-conflicts");
-  });
-
-  it("throws when a gated conflict references an unknown answer", () => {
+  it("rejects non-string entries in conflicts (gated conflicts no longer supported)", () => {
     assert.throws(
       () =>
         validateManifest({
           ...base,
-          conflicts: [{ id: "x", when: { answer: "nope", includes: "y" } }],
+          conflicts: [{ id: "x", when: { answer: "orm", equals: true } }],
         }),
-      /gated conflict 'x' references unknown answer 'nope'/,
-    );
-  });
-
-  it("throws when a gated conflict sets both equals and includes", () => {
-    assert.throws(
-      () =>
-        validateManifest({
-          ...base,
-          conflicts: [
-            { id: "x", when: { answer: "orm", equals: true, includes: "y" } },
-          ],
-        }),
-      /at most one of 'equals' or 'includes'/,
-    );
-  });
-
-  it("throws when a gated conflict is missing an id", () => {
-    assert.throws(
-      () =>
-        validateManifest({
-          ...base,
-          conflicts: [{ when: { answer: "orm", equals: true } }],
-        }),
-      /gated conflict must have a non-empty string 'id'/,
+      /must be an array of strings/,
     );
   });
 });
