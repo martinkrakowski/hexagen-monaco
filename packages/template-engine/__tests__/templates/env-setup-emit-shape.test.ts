@@ -1,9 +1,24 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+// Resolve the tsx CLI from the repo so the emitted check-env.ts can be run as a
+// subprocess from a temp dir that has no node_modules of its own.
+const requireFromHere = createRequire(import.meta.url);
+const tsxPkgJson = requireFromHere.resolve("tsx/package.json");
+const tsxBin = JSON.parse(readFileSync(tsxPkgJson, "utf8")).bin as
+  | string
+  | { tsx: string };
+const TSX_CLI = path.join(
+  path.dirname(tsxPkgJson),
+  typeof tsxBin === "string" ? tsxBin : tsxBin.tsx,
+);
 import { AddTemplateUseCase } from "../../src/application/use-cases/add-template.use-case.js";
 import { FileSystemFileEmitter } from "../../src/infrastructure/file-emitter.adapter.js";
 import { FileSystemTemplateConfigStore } from "../../src/infrastructure/template-config-store.adapter.js";
@@ -139,6 +154,18 @@ describe("env-setup template — emit shape", () => {
       assert.ok(checkEnv.includes("readdirSync"));
       assert.ok(checkEnv.includes('endsWith(".example")'));
     });
+
+    it("env barrel re-exports types only (no runtime server import into client bundles)", async () => {
+      const barrel = await read(projectRoot, "src/config/env.ts");
+      assert.ok(
+        barrel.includes('export type { ServerEnv } from "./env.server"'),
+      );
+      assert.ok(
+        barrel.includes('export type { ClientEnv } from "./env.client"'),
+      );
+      // A non-type runtime re-export would pull env.server into client bundles.
+      assert.ok(!/export\s*\{\s*serverEnv/.test(barrel));
+    });
   });
 
   describe("strict_validation=false, framework=express", () => {
@@ -164,6 +191,72 @@ describe("env-setup template — emit shape", () => {
     it("interpolates the chosen framework", async () => {
       const setup = await read(projectRoot, "SETUP.md");
       assert.ok(setup.includes("Framework: **express**"));
+    });
+  });
+
+  // Run the emitted check-env.ts as a real subprocess against crafted env files
+  // to lock in: (a) requiredness comes from a `# required` annotation, not an
+  // empty value; (b) inline comments are stripped; (c) all .env.*.example files
+  // are scanned.
+  describe("check-env.ts behaviour", () => {
+    let projectRoot: string;
+
+    function runCheckEnv(): { code: number; out: string } {
+      try {
+        const out = execFileSync(
+          process.execPath,
+          [TSX_CLI, "scripts/check-env.ts"],
+          {
+            cwd: projectRoot,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        return { code: 0, out };
+      } catch (err) {
+        const e = err as { status?: number; stdout?: string; stderr?: string };
+        return {
+          code: e.status ?? 1,
+          out: (e.stdout ?? "") + (e.stderr ?? ""),
+        };
+      }
+    }
+
+    before(async () => {
+      projectRoot = await freshProject();
+      await install(projectRoot);
+      // A per-template example file: one annotated-required key (with an inline
+      // comment), one intentionally-empty optional placeholder.
+      await fs.writeFile(
+        path.join(projectRoot, ".env.svc.example"),
+        "SVC_TOKEN=          # required — get it from the dashboard\nSVC_OPTIONAL=\n",
+        "utf8",
+      );
+    });
+
+    after(async () => {
+      await fs.rm(projectRoot, { recursive: true, force: true });
+    });
+
+    it("fails when an annotated-required var is missing, ignoring optional empties", () => {
+      const { code, out } = runCheckEnv();
+      assert.equal(code, 1);
+      assert.ok(out.includes("SVC_TOKEN"), "should report the required var");
+      assert.ok(
+        !out.includes("SVC_OPTIONAL"),
+        "must not force an unannotated empty placeholder",
+      );
+    });
+
+    it("passes once the required var is set in .env.local", async () => {
+      await fs.writeFile(
+        path.join(projectRoot, ".env.local"),
+        "SVC_TOKEN=abc123\n",
+        "utf8",
+      );
+      const { code, out } = runCheckEnv();
+      assert.equal(code, 0, out);
+      assert.ok(out.includes("All required env vars are set."));
     });
   });
 });

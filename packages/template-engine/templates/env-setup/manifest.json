@@ -31,9 +31,11 @@
   ],
   "checklist": [
     "Install Zod: npm install zod",
-    "cp .env.example .env.local, then fill in any variable with an empty = value (those are required)",
+    "Ensure .gitignore ignores .env.local and .env.*.local (and does NOT ignore .env.example) — never commit real secrets",
+    "cp .env.example .env.local, then set every variable annotated # required (here and in any .env.<template>.example)",
     "Add a script to package.json: \"check:env\": \"tsx scripts/check-env.ts\"",
     "npm run check:env  ← validates .env.local before first run / demo / deploy",
+    "Server code imports { serverEnv } from src/config/env.server; client code imports { clientEnv } from src/config/env.client (the src/config/env barrel re-exports types only)",
     "Read SETUP.md for the env model (server vs client split, strict validation)"
   ],
   "branch": "feature/generator-template-env-setup"
