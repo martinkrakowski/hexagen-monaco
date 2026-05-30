@@ -14,10 +14,12 @@ import {
 import { StepHeader } from "../StepHeader";
 import { WizardFooter } from "../../WizardFooter";
 import { AddOnCard } from "./AddOnCard";
+import { CompanionBanner } from "./CompanionBanner";
 import {
   TEMPLATE_CATALOG,
   CATEGORIES,
   CATEGORY_LABELS,
+  findCompanionSuggestions,
   findConflicts,
   type CatalogEntry,
 } from "./template-catalog";
@@ -83,7 +85,19 @@ export function AddOnsStep({
     setConflict(null);
   }
 
+  // Adding a companion goes through the same conflict-check path as a normal
+  // selection so the user gets the conflict dialog if the suggestion clashes
+  // with an existing pick.
+  function handleAddCompanion(id: string): void {
+    const entry = TEMPLATE_CATALOG.find((e) => e.id === id);
+    if (!entry) return;
+    handleSelect(entry);
+  }
+
   const totalSelected = selectedIds.length;
+  const companionSuggestions = findCompanionSuggestions(selectedIds).map(
+    (e) => ({ id: e.id, name: e.name, description: e.description }),
+  );
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -163,6 +177,13 @@ export function AddOnsStep({
             );
           })}
         </div>
+
+        {companionSuggestions.length > 0 && (
+          <CompanionBanner
+            suggestions={companionSuggestions}
+            onAdd={handleAddCompanion}
+          />
+        )}
 
         {totalSelected > 0 && (
           <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">

@@ -19,6 +19,13 @@ export interface CatalogEntry {
   category: "foundation" | "infrastructure" | "ai" | "auth" | "tooling";
   details: TemplateDetails;
   note?: CatalogNote;
+  /**
+   * IDs of templates that are commonly used together with this one. The
+   * add-ons step surfaces them as one-click "Add X" suggestions in a banner
+   * when this template is selected but the companion is not. Discoverability
+   * only — does not affect dependency resolution or conflict detection.
+   */
+  companions?: string[];
 }
 
 const STANDALONE_NOTE: CatalogNote = {
@@ -486,6 +493,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "SSR-safe clients, storage helpers, RLS examples, type generation, optional Drizzle ORM. Pure storage/database layer — add the Supabase Auth template to layer @supabase/ssr-based session middleware on top.",
     requires: ["env-setup"],
     conflicts: [],
+    companions: ["supabase-auth"],
     category: "infrastructure",
     details: {
       overview:
@@ -571,6 +579,36 @@ export function findConflicts(
         candidate.conflicts.includes(e.id) ||
         e.conflicts.includes(candidate.id),
     );
+}
+
+/**
+ * Returns the catalog entries that are companions of any selected template
+ * but are themselves not selected. Used by the discoverability banner in the
+ * add-ons step. The result preserves declaration order: each selected
+ * template's companions are returned in the order they appear in that
+ * template's `companions` field, and selected templates are walked in
+ * `selectedIds` order. Duplicates are de-deduplicated (a companion mentioned
+ * by two selected templates appears once).
+ */
+export function findCompanionSuggestions(
+  selectedIds: string[],
+): CatalogEntry[] {
+  const selectedSet = new Set(selectedIds);
+  const seen = new Set<string>();
+  const out: CatalogEntry[] = [];
+  for (const id of selectedIds) {
+    const entry = CATALOG_BY_ID.get(id);
+    if (!entry?.companions) continue;
+    for (const compId of entry.companions) {
+      if (seen.has(compId)) continue;
+      if (selectedSet.has(compId)) continue;
+      const comp = CATALOG_BY_ID.get(compId);
+      if (!comp) continue;
+      seen.add(compId);
+      out.push(comp);
+    }
+  }
+  return out;
 }
 
 export const CATEGORY_LABELS: Record<CatalogEntry["category"], string> = {
