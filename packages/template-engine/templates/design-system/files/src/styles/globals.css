@@ -1,0 +1,37 @@
+/**
+ * Global stylesheet — import this once at the app root (e.g. app/layout.tsx).
+ *
+ * Order matters: tokens first (so custom properties exist), then Tailwind's
+ * layers, then a minimal base reset that consumes the tokens.
+ */
+
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    font-family: var(--font-sans);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Token-driven focus ring — components opt in via `focus-visible` utilities. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-primary);
+    outline-offset: 2px;
+  }
+}

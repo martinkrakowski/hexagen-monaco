@@ -26,14 +26,14 @@
     {
       "id": "dark_mode",
       "type": "select",
-      "prompt": "Dark mode support?",
+      "prompt": "Dark mode strategy? (shipped as class-toggle; DESIGN.md documents switching to media-query/none)",
       "options": ["none", "css-class", "media-query", "both"],
       "default": "css-class"
     },
     {
       "id": "component_base",
       "type": "select",
-      "prompt": "UI component base?",
+      "prompt": "UI component base to grow the stubs toward? (stubs are framework-agnostic; install the chosen library yourself)",
       "options": ["shadcn-ui", "radix-primitives", "headlessui", "none"],
       "default": "shadcn-ui"
     },
@@ -55,11 +55,27 @@
     "src/components/ui/input.tsx",
     "src/components/ui/index.ts",
     "src/lib/cn.ts",
-    "tailwind.config.ts"
+    "tailwind.config.ts",
+    {
+      "path": ".storybook/main.ts",
+      "when": { "answer": "storybook", "equals": true }
+    },
+    {
+      "path": ".storybook/preview.ts",
+      "when": { "answer": "storybook", "equals": true }
+    },
+    {
+      "path": "src/components/ui/button.stories.tsx",
+      "when": { "answer": "storybook", "equals": true }
+    }
   ],
   "checklist": [
-    "Review DESIGN.md — it is now an immutable design contract for Claude Code",
-    "Import globals.css in app/layout.tsx if not already present"
+    "Install peer deps: npm install clsx tailwind-merge (plus tailwindcss + your component_base library, e.g. shadcn-ui/radix/headlessui)",
+    "Review DESIGN.md — it is now the design contract; AI agents and reviewers treat it as the source of truth",
+    "Import src/styles/globals.css once at the app root (e.g. app/layout.tsx)",
+    "Set --color-brand-primary (and the neutrals) in src/styles/tokens.css; the hover shade derives from primary automatically",
+    "Verify token classes resolve: run the app and check e.g. text-brand-primary / bg-surface in DevTools",
+    "Storybook (if enabled): npm install -D @storybook/nextjs @storybook/addon-essentials, then npx storybook dev -p 6006"
   ],
   "branch": "feature/generator-template-design-system"
 }
