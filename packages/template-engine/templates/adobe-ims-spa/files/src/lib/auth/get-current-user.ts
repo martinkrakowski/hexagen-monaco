@@ -5,8 +5,8 @@ import {
   type ValidatedSession,
 } from "../../infrastructure/auth/adobe-ims/adobe-ims-auth.adapter";
 import { MOCK_USER } from "../../infrastructure/auth/mock-user";
+import { COOKIE_NAME } from "../../infrastructure/auth/session/session-manager";
 
-const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 const adapter = new AdobeIMSAuthAdapter();
 
 // Server-only helper for Server Components / Server Actions. Short-circuits

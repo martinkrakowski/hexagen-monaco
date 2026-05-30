@@ -1,0 +1,40 @@
+{
+  "id": "supabase-auth",
+  "name": "Supabase Auth",
+  "description": "Authentication provider built on Supabase: @supabase/ssr root middleware that refreshes the session and protects configured paths, getCurrentUser/requireAuth helpers, and /api/auth/me — all honouring AUTH_MODE=mock as a dev short-circuit. Layer on top of the supabase template.",
+  "version": "1.0.0",
+  "requires": ["supabase", "shared-types", "auth-mock", "env-setup"],
+  "conflicts": [
+    "nextauth",
+    "clerk",
+    "better-auth",
+    "google-oauth",
+    "github-oauth",
+    "microsoft-entra",
+    "magic-link",
+    "adobe-ims-spa"
+  ],
+  "questions": [
+    {
+      "id": "protected_paths",
+      "type": "text",
+      "prompt": "Path prefixes the middleware should require auth for (comma-separated)?",
+      "default": "/dashboard,/api/protected"
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    "middleware.ts",
+    "src/lib/auth/get-current-user.ts",
+    "src/lib/auth/require-auth.ts",
+    "app/api/auth/me/route.ts"
+  ],
+  "checklist": [
+    "Sign-in/sign-up wiring is your responsibility — use supabase.auth.signInWithPassword / signInWithOAuth from the supabase template's client",
+    "Set AUTH_MODE=mock in development; middleware short-circuits to MOCK_USER from shared-types",
+    "Set AUTH_MODE=real (or unset) in production — this template's middleware overwrites auth-mock's dev middleware",
+    "getCurrentUser uses Supabase's server-validated getUser() — never authorize off getSession() locally",
+    "Configure protected_paths above; middleware redirects unauthenticated requests under those prefixes to /login"
+  ],
+  "branch": "feature/shared-types-and-derived-answers"
+}

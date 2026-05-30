@@ -56,11 +56,12 @@ hexagen new my-project --add rate-limiting,llm-adapter,env-setup,docker
 
 ### Foundation
 
-| ID          | Branch                                 | One-liner                                                                                  | Requires |
-| ----------- | -------------------------------------- | ------------------------------------------------------------------------------------------ | -------- |
-| `env-setup` | `feature/generator-template-env-setup` | Categorised `.env.example`, Zod validation, `check-env` script, `SETUP.md` first-day guide | —        |
+| ID             | Branch                                     | One-liner                                                                                        | Requires    |
+| -------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------- |
+| `env-setup`    | `feature/generator-template-env-setup`     | Categorised `.env.example`, Zod validation, `check-env` script, `SETUP.md` first-day guide       | —           |
+| `shared-types` | `feature/shared-types-and-derived-answers` | `UserContext` domain type, `MOCK_USER` (env-overridable), session-cookie helpers + `COOKIE_NAME` | `env-setup` |
 
-`env-setup` is the universal prerequisite. All other templates declare it as a dependency.
+`env-setup` is the universal prerequisite. `shared-types` is the auth-ecosystem prerequisite, depended on by `auth-mock` and every real auth provider.
 
 ---
 
@@ -77,19 +78,24 @@ hexagen new my-project --add rate-limiting,llm-adapter,env-setup,docker
 
 ### Auth
 
-| ID              | Branch                                     | One-liner                                                                                      | Priority |
-| --------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------- |
-| `auth-mock`     | `feature/generator-template-auth-mock`     | `AUTH_MODE=mock\|real` toggle, `UserContext` value object, session cookie, real-provider stub  | P1       |
-| `adobe-ims-spa` | `feature/generator-template-adobe-ims-spa` | PKCE-flow login/callback/logout routes, token store, auto-refresh, fills `auth-mock` real stub | P1       |
+| ID                | Branch                                       | One-liner                                                                                      | Priority |
+| ----------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| `auth-mock`       | `feature/shared-types-and-derived-answers`   | Dev-only AUTH_MODE=mock root middleware (slimmed v3.0 — types moved to `shared-types`)         | P1       |
+| `google-oauth`    | `feature/generator-template-google-oauth`    | OAuth 2.0 code flow, encrypted session, optional hosted-domain restriction, root middleware    | P1       |
+| `github-oauth`    | `feature/generator-template-github-oauth`    | OAuth App flow, primary-email + org gate, encrypted session, root middleware                   | P1       |
+| `microsoft-entra` | `feature/generator-template-microsoft-entra` | Entra ID PKCE, Microsoft Graph profile + group fetch, AAD group→role mapping, root middleware  | P1       |
+| `magic-link`      | `feature/generator-template-magic-link`      | HMAC-signed single-use tokens, Resend/Nodemailer transport, encrypted session, root middleware | P1       |
+| `adobe-ims-spa`   | `feature/generator-template-adobe-ims-spa`   | PKCE-flow login/callback/logout routes, encrypted token store, auto-refresh, root middleware   | P1       |
+| `supabase-auth`   | `feature/shared-types-and-derived-answers`   | `@supabase/ssr` session middleware on top of `supabase` (auto-resolves)                        | P1       |
 
 ---
 
 ### Persistence & Background Jobs
 
-| ID         | Branch                                | One-liner                                                                              | Priority |
-| ---------- | ------------------------------------- | -------------------------------------------------------------------------------------- | -------- |
-| `supabase` | `feature/generator-template-supabase` | SSR-safe client, storage helpers, auth helpers (`getUser`), RLS stubs, type generation | P1       |
-| `bullmq`   | `feature/generator-template-bullmq`   | Typed queues, workers, Redis fallback to in-process, optional Bull Board dashboard     | P2       |
+| ID         | Branch                                | One-liner                                                                                                                              | Priority |
+| ---------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `supabase` | `feature/generator-template-supabase` | SSR-safe client, storage helpers, RLS stubs, type generation, optional Drizzle (storage-only; `supabase-auth` adds session middleware) | P1       |
+| `bullmq`   | `feature/generator-template-bullmq`   | Typed queues, workers, Redis fallback to in-process, optional Bull Board dashboard                                                     | P2       |
 
 ---
 
@@ -125,22 +131,31 @@ hexagen new my-project --add rate-limiting,llm-adapter,env-setup,docker
 env-setup (prerequisite for all)
 ├── rate-limiting
 ├── llm-adapter
-│   └── langgraph (requires llm-adapter)
+│   └── langgraph
 ├── error-handling
 ├── observability
-├── auth-mock
-│   ├── adobe-ims-spa (extends auth-mock real stub)
-│   └── supabase (extends auth-mock)
-│       └── bullmq (Supabase result store, optional enrichment)
-│           └── docker (adds redis service to compose)
-│               └── ci-github-actions (image push integration)
+├── shared-types (UserContext + MOCK_USER + session-manager)
+│   └── auth-mock (dev AUTH_MODE=mock middleware)
+│       ├── google-oauth
+│       ├── github-oauth
+│       ├── microsoft-entra
+│       ├── magic-link
+│       ├── adobe-ims-spa
+│       └── supabase-auth (also requires supabase)
+├── supabase (storage/database, no auth)
+│   └── supabase-auth (adds @supabase/ssr session middleware)
+├── bullmq
+│   └── docker (adds redis service to compose)
+│       └── ci-github-actions
 ├── design-system
 └── agents-md
 ```
 
 Conflicts declared in manifests:
 
-- `adobe-ims-spa` conflicts with any other concrete auth provider (only one PKCE flow per project)
+- All six real auth providers (`google-oauth`, `github-oauth`, `microsoft-entra`, `magic-link`, `adobe-ims-spa`, `supabase-auth`) are mutually exclusive (each ships a root middleware; only one can win).
+- The three standalone frameworks (`nextauth`, `clerk`, `better-auth`) conflict with all six real providers and with `auth-mock`.
+- `supabase` (storage-only) has no auth-provider conflicts — coexists with any auth provider.
 
 ---
 

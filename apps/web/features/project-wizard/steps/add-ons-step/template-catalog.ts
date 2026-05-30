@@ -258,7 +258,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Google OAuth",
     description:
       "Server-side OAuth 2.0 (login → callback → AES-256-GCM session), optional hosted-domain restriction, root middleware that protects configured paths",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -267,6 +267,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "microsoft-entra",
       "magic-link",
       "adobe-ims-spa",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -286,7 +287,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "GitHub OAuth",
     description:
       "GitHub OAuth App flow with primary-email fetch, optional org-membership gate, AES-256-GCM session, and a root middleware that protects configured paths",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -295,6 +296,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "microsoft-entra",
       "magic-link",
       "adobe-ims-spa",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -315,7 +317,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Microsoft Entra",
     description:
       "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM session, root middleware",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -324,6 +326,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "github-oauth",
       "magic-link",
       "adobe-ims-spa",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -344,7 +347,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Magic Link",
     description:
       "Passwordless email flow, HMAC-SHA256 single-use tokens, Resend/Nodemailer transport, replay protection, AES-256-GCM session, root middleware",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -353,6 +356,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "github-oauth",
       "microsoft-entra",
       "adobe-ims-spa",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -383,6 +387,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "adobe-ims-spa",
       "clerk",
       "better-auth",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -413,6 +418,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "adobe-ims-spa",
       "nextauth",
       "better-auth",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -442,6 +448,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "adobe-ims-spa",
       "nextauth",
       "clerk",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -461,7 +468,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Adobe IMS SPA (PKCE)",
     description:
       "Adobe IMS PKCE flow with encrypted token store, auto-refresh, and a root middleware that validates IMS sessions on configured paths",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -470,6 +477,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       "github-oauth",
       "microsoft-entra",
       "magic-link",
+      "supabase-auth",
     ],
     category: "auth",
     details: {
@@ -489,33 +497,48 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     id: "supabase",
     name: "Supabase",
     description:
-      "SSR-safe clients, storage helpers, RLS examples, type generation, optional Drizzle ORM. When 'auth' is selected, ships @supabase/ssr middleware + getCurrentUser/requireAuth as a full auth provider",
-    requires: ["env-setup", "auth-mock"],
-    // Supabase only ships an auth middleware when features ⊇ {auth}. The
-    // catalog's findConflicts skips gated entries because user answers don't
-    // exist yet at selection time — the engine's resolveDependencies catches
-    // them at install time when answers are known.
-    conflicts: [
-      { id: "nextauth", when: { answer: "features", includes: "auth" } },
-      { id: "clerk", when: { answer: "features", includes: "auth" } },
-      { id: "better-auth", when: { answer: "features", includes: "auth" } },
-      { id: "google-oauth", when: { answer: "features", includes: "auth" } },
-      { id: "github-oauth", when: { answer: "features", includes: "auth" } },
-      { id: "microsoft-entra", when: { answer: "features", includes: "auth" } },
-      { id: "magic-link", when: { answer: "features", includes: "auth" } },
-      { id: "adobe-ims-spa", when: { answer: "features", includes: "auth" } },
-    ],
+      "SSR-safe clients, storage helpers, RLS examples, type generation, optional Drizzle ORM. Pure storage/database layer — add the Supabase Auth template to layer @supabase/ssr-based session middleware on top.",
+    requires: ["env-setup"],
+    conflicts: [],
     category: "infrastructure",
     details: {
       overview:
-        "SSR-safe Supabase client setup with auth, storage, RLS, optional Drizzle ORM and realtime. When 'auth' is in features, also owns the full auth stack: @supabase/ssr middleware that refreshes the Supabase session and protects configured paths, plus /api/auth/me and getCurrentUser()/requireAuth() helpers in src/lib/auth/ — all honouring AUTH_MODE=mock as a dev short-circuit.",
+        "SSR-safe Supabase client setup with storage, RLS, optional Drizzle ORM and realtime. No auth code — that's the separate Supabase Auth template, which requires this one. Coexists with any auth provider when used storage-only.",
       includes: [
         "SSR-safe createServerClient and createBrowserClient setup",
         "Storage helpers (upload, download, signed URLs, delete)",
-        "Auth: @supabase/ssr root middleware that refreshes the session every request",
-        "Auth: getCurrentUser uses getUser() (server-validated JWT) — never the deprecated getSession()",
         "RLS policy examples and type generation script (supabase gen types)",
         "Optional Drizzle ORM layer + realtime subscription example",
+        "For Supabase-backed session auth, add the Supabase Auth template",
+      ],
+    },
+  },
+  {
+    id: "supabase-auth",
+    name: "Supabase Auth",
+    description:
+      "Auth provider built on the Supabase template: @supabase/ssr root middleware, getCurrentUser/requireAuth, and /api/auth/me — all honouring AUTH_MODE=mock as a dev short-circuit.",
+    requires: ["supabase", "shared-types", "auth-mock", "env-setup"],
+    conflicts: [
+      "nextauth",
+      "clerk",
+      "better-auth",
+      "google-oauth",
+      "github-oauth",
+      "microsoft-entra",
+      "magic-link",
+      "adobe-ims-spa",
+    ],
+    category: "auth",
+    details: {
+      overview:
+        "Server-validated session auth on top of Supabase. Owns the full auth stack: @supabase/ssr root middleware that refreshes the session and protects configured paths, /api/auth/me, and getCurrentUser()/requireAuth() helpers in src/lib/auth/ — all honouring AUTH_MODE=mock as a dev short-circuit. Requires the Supabase template (auto-resolved).",
+      includes: [
+        "@supabase/ssr root middleware: session refresh + protected-path enforcement",
+        "getCurrentUser uses server-validated getUser() — never the deprecated getSession()",
+        "/api/auth/me for client-side bootstrap",
+        "AUTH_MODE=mock dev short-circuit injects MOCK_USER from shared-types",
+        "Mutually exclusive with Group A providers and Group B frameworks",
       ],
     },
   },

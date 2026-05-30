@@ -3,7 +3,7 @@
   "name": "GitHub OAuth",
   "description": "GitHub OAuth App integration: code exchange, primary-email fetch, org-membership gate, AES-256-GCM stateless session cookie, and a root middleware that protects configured paths while still honouring AUTH_MODE=mock as a dev short-circuit.",
   "version": "2.0.0",
-  "requires": ["auth-mock", "env-setup"],
+  "requires": ["shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",
     "clerk",
@@ -11,7 +11,8 @@
     "google-oauth",
     "microsoft-entra",
     "magic-link",
-    "adobe-ims-spa"
+    "adobe-ims-spa",
+    "supabase-auth"
   ],
   "questions": [
     {

@@ -1,36 +1,36 @@
 # Templates: Real Auth Providers
 
-**Branch:** `feature/auth-stack-restructure`
-**Status:** Implemented (v2.0). Group A / Group B framing dropped.
+**Branch:** `feature/shared-types-and-derived-answers`
+**Status:** Implemented (v2.x). Updated after the shared-types extraction.
 
 ## Scope
 
-Six "real" auth provider templates, each owning its own end-to-end auth stack:
+Six "real" auth provider templates, each owning its own end-to-end auth stack. After the shared-types extraction (PR landing this design):
 
-| Template          | Mechanism                                               | Conflicts with           |
-| ----------------- | ------------------------------------------------------- | ------------------------ |
-| `google-oauth`    | OAuth 2.0 authorization-code, encrypted session         | all other auth providers |
-| `github-oauth`    | OAuth App, primary-email + org gate                     | all other auth providers |
-| `microsoft-entra` | PKCE confidential-client, group→role mapping            | all other auth providers |
-| `magic-link`      | HMAC-signed single-use email tokens                     | all other auth providers |
-| `adobe-ims-spa`   | IMS PKCE + encrypted tokens + auto-refresh              | all other auth providers |
-| `supabase`        | `@supabase/ssr` middleware (when `auth` is in features) | all other auth providers |
+| Template          | Mechanism                                             | Requires                                             |
+| ----------------- | ----------------------------------------------------- | ---------------------------------------------------- |
+| `google-oauth`    | OAuth 2.0 code flow, encrypted session                | `shared-types`, `auth-mock`, `env-setup`             |
+| `github-oauth`    | OAuth App, primary-email + org gate                   | `shared-types`, `auth-mock`, `env-setup`             |
+| `microsoft-entra` | PKCE confidential-client, group→role mapping          | `shared-types`, `auth-mock`, `env-setup`             |
+| `magic-link`      | HMAC-signed single-use email tokens                   | `shared-types`, `auth-mock`, `env-setup`             |
+| `adobe-ims-spa`   | IMS PKCE + encrypted tokens + auto-refresh            | `shared-types`, `auth-mock`, `env-setup`             |
+| `supabase-auth`   | `@supabase/ssr` middleware (separate from `supabase`) | `supabase`, `shared-types`, `auth-mock`, `env-setup` |
 
-The three Group B frameworks (`nextauth`, `clerk`, `better-auth`) still exist as standalone-framework templates that bring their own auth model and conflict with everything above and `auth-mock`.
+The three Group B frameworks (`nextauth`, `clerk`, `better-auth`) bring their own auth model and conflict with every entry above plus `auth-mock`.
 
 ---
 
-## Shared Architecture (post-restructure)
+## Shared architecture
 
 Each real provider:
 
-- `requires: ["auth-mock", "env-setup"]` — so `UserContext`, `MOCK_USER`, and session-cookie helpers are present.
+- `requires: ["shared-types", "auth-mock", "env-setup"]`. `shared-types` is the new home for `UserContext`, `MOCK_USER`, and the session-cookie helpers (including `COOKIE_NAME`).
 - `conflicts` with **every other real provider** (each one ships its own root `middleware.ts`; only one can win).
 - Ships these files (paths relative to project root):
 
   ```text
   middleware.ts                          # Root middleware. AUTH_MODE=mock short-circuit, then provider validation.
-  src/lib/auth/get-current-user.ts       # Server helper. Honours AUTH_MODE=mock.
+  src/lib/auth/get-current-user.ts       # Server helper. Imports COOKIE_NAME from session-manager.
   src/lib/auth/require-auth.ts           # redirect-on-fail wrapper around get-current-user.
   app/api/auth/me/route.ts               # GET → UserContext or 401.
   app/api/auth/login/<provider>/route.ts # Initiates the flow.
@@ -43,45 +43,42 @@ Each real provider:
 - Asks one shared install-time question in addition to provider-specific ones:
   - `protected_paths` (default `/dashboard,/api/protected`) — comma-separated path prefixes the middleware enforces.
 
-  The session cookie name lives only in auth-mock (single source of truth). Provider helpers hardcode `"__auth_session"` as the fallback and pick up runtime overrides from `AUTH_COOKIE_NAME`.
+  The session cookie name lives in `shared-types` (single source of truth). Provider helpers import `COOKIE_NAME` from `session-manager.ts` and pick up runtime overrides from `AUTH_COOKIE_NAME`.
 
 ### Middleware shape
 
 ```ts
 export default async function middleware(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.delete("x-user-context"); // never trust client-supplied value
+
   if (process.env.AUTH_MODE === "mock") {
-    // attach JSON.stringify(MOCK_USER) as x-user-context, pass through
-    return ...;
+    if (process.env.NODE_ENV !== "development") throw new Error("...");
+    headers.set("x-user-context", JSON.stringify(MOCK_USER));
+    return NextResponse.next({ request: { headers } });
   }
-  if (!isProtected(request.nextUrl.pathname)) return NextResponse.next();
+  if (!isProtected(request.nextUrl.pathname)) {
+    return NextResponse.next({ request: { headers } });
+  }
 
   const token = readSessionToken(request);
   if (!token) return redirectToLogin();
-
-  const user = await decryptSession(token);          // provider-specific
+  const user = await decryptSession(token); // provider-specific
   if (!user) return redirectToLogin();
 
-  const ctx = mapProviderUserToUserContext(user);    // provider-specific
-  // attach JSON.stringify(ctx) as x-user-context
-  return ...;
+  headers.set(
+    "x-user-context",
+    JSON.stringify(mapProviderUserToUserContext(user)),
+  );
+  return NextResponse.next({ request: { headers } });
 }
 ```
 
-Adobe IMS and Supabase deviate slightly (IMS calls IMS to fetch profile and may refresh tokens; Supabase uses `@supabase/ssr`'s session-refresh pattern with cookie round-tripping). The contract — `AUTH_MODE=mock` short-circuit, protect configured paths, attach UserContext as `x-user-context` — is identical.
+Adobe IMS deviates slightly (calls IMS to fetch the profile and may refresh tokens; refresh persists via `Set-Cookie`); Supabase Auth uses `@supabase/ssr`'s session-refresh pattern with cookie round-tripping. The contract is identical: AUTH_MODE=mock short-circuit, protect configured paths, attach UserContext as `x-user-context`.
 
 ### Adapter classes (trimmed)
 
-Each provider's `<provider>-auth.adapter.ts` used to implement the dropped `AuthProviderPort`. Now it's a thin helper used only by the callback route:
-
-```ts
-export class GoogleAuthAdapter {
-  async createSessionFromGoogleUser(user: GoogleUser): Promise<string> {
-    // hosted-domain check, then encryptSession
-  }
-}
-```
-
-Validation logic moved to `middleware.ts` and `src/lib/auth/get-current-user.ts`. Adobe IMS keeps its `validate()` method on the adapter because IMS validation involves a profile-fetch + refresh round-trip — `middleware.ts` and `get-current-user.ts` both reuse it.
+Each provider's `<provider>-auth.adapter.ts` used to implement the dropped `AuthProviderPort`. Now it's a thin helper used only by the callback route. Validation logic moved to `middleware.ts` and `src/lib/auth/get-current-user.ts`. Adobe IMS keeps its `validate()` method on the adapter because IMS validation involves a profile-fetch + refresh round-trip.
 
 ---
 
@@ -89,7 +86,7 @@ Validation logic moved to `middleware.ts` and `src/lib/auth/get-current-user.ts`
 
 ```json
 {
-  "requires": ["auth-mock", "env-setup"],
+  "requires": ["shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",
     "clerk",
@@ -114,10 +111,8 @@ Validation logic moved to `middleware.ts` and `src/lib/auth/get-current-user.ts`
 }
 ```
 
-The Supabase manifest gates the auth files on `features` including `"auth"` so the same template can be installed for storage/database-only use without bringing auth machinery.
-
 ---
 
 ## What this replaces
 
-Pre-restructure (v1) had a single `AuthProviderPort`, an auth-mock-shipped `server/middleware/auth.middleware.ts`, an `application/services/auth.service.ts`, and each provider shipping a `real-auth.adapter.stub.ts` that re-exported the provider's adapter as `RealAuthAdapter`. That stub-override pattern was silently broken until PR #106 (cross-template `wasGeneratedByHexagen` scan), and the port abstraction couldn't model providers that needed request-scoped state (e.g. Supabase cookies, IMS auto-refresh). The restructure deletes the abstraction and lets every provider own its full stack.
+Pre-restructure (v1) had a single `AuthProviderPort`, an auth-mock-shipped `server/middleware/auth.middleware.ts`, an `application/services/auth.service.ts`, and each provider shipping a `real-auth.adapter.stub.ts`. PR #108 replaced that with per-provider middleware. This iteration further moves the shared types out of `auth-mock` into `shared-types`, and splits Supabase into a storage-only template plus a separate `supabase-auth` auth provider — see [15-supabase-auth.md](./15-supabase-auth.md).

@@ -12,7 +12,8 @@
     "magic-link",
     "adobe-ims-spa",
     "nextauth",
-    "clerk"
+    "clerk",
+    "supabase-auth"
   ],
   "questions": [
     {
@@ -58,12 +59,12 @@
     "Merge .env.better-auth.example into .env.local",
     "Generate BETTER_AUTH_SECRET: openssl rand -hex 32",
     "Set BETTER_AUTH_URL to your deployment URL and DATABASE_URL to your Postgres connection string",
-    "The Drizzle/Postgres adapter is already wired in src/lib/auth.ts via src/db/index.ts — for Prisma/Kysely, swap the adapter import and regenerate the schema",
+    "The Drizzle/Postgres adapter is already wired in src/lib/auth.ts via src/db/index.ts \u2014 for Prisma/Kysely, swap the adapter import and regenerate the schema",
     "Apply src/db/migrations/0001_better_auth.sql to your database (or run your migration tool); regenerate with npx @better-auth/cli generate if you change adapters",
-    "Set GOOGLE_/GITHUB_ credentials for the social providers you want — each activates automatically when both its vars are present",
-    "Magic link is off by default — implement sendMagicLink() delivery in src/lib/auth.ts, then set BETTER_AUTH_MAGIC_LINK=true to enable it",
-    "Built-in rateLimit is enabled per the rate_limiting answer — if you also add the standalone rate-limiting template, reconcile the two",
-    "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
+    "Set GOOGLE_/GITHUB_ credentials for the social providers you want \u2014 each activates automatically when both its vars are present",
+    "Magic link is off by default \u2014 implement sendMagicLink() delivery in src/lib/auth.ts, then set BETTER_AUTH_MAGIC_LINK=true to enable it",
+    "Built-in rateLimit is enabled per the rate_limiting answer \u2014 if you also add the standalone rate-limiting template, reconcile the two",
+    "Standalone framework \u2014 conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
     "Test flow: sign up with email/password, then GET /api/auth/get-session returns the session; social sign-in redirects through /api/auth/*"
   ],
   "branch": "feature/generator-template-better-auth"
