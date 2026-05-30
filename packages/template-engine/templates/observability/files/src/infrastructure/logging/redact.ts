@@ -1,3 +1,10 @@
+// Redaction policy: masking is by field *name* only. An Error's `message` and
+// `stack` are logged verbatim (see redactInternal) — they are not scrubbed, so
+// they can surface file paths and any secret a caller embedded in an error
+// message. Keep secrets out of error construction, and treat logs as sensitive
+// at rest. This is a deliberate trade-off: key-redacting stack traces is
+// unreliable and destroys their debugging value.
+
 /**
  * Field-name fragments whose values are masked in logs. Matched case-insensitively
  * as substrings, so "apiKey", "AUTHORIZATION", and "user_password" all redact.

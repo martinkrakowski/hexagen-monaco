@@ -179,6 +179,15 @@ describe("observability template — emit shape", () => {
         "all three optional OTel imports should be webpackIgnore",
       );
     });
+
+    it("surfaces unexpected OTel bootstrap errors but stays quiet when not installed", async () => {
+      const instr = await read(projectRoot, "instrumentation.ts");
+      assert.ok(instr.includes("console.warn"), "warns on real failures");
+      assert.ok(
+        instr.includes("ERR_MODULE_NOT_FOUND"),
+        "stays silent for the not-installed case",
+      );
+    });
   });
 
   // Run the emitted logging stack as a real subprocess to prove behaviour.

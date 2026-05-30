@@ -40,7 +40,13 @@ export async function register(): Promise<void> {
       instrumentations: [getNodeAutoInstrumentations()],
     });
     sdk.start();
-  } catch {
-    // OpenTelemetry packages not installed — tracing stays disabled.
+  } catch (err) {
+    // A missing optional package is the expected "tracing not installed" case —
+    // stay silent. Surface anything else (a real bootstrap failure) so it is not
+    // swallowed behind the optional-dependency guard.
+    const code = (err as { code?: string }).code;
+    if (code !== "ERR_MODULE_NOT_FOUND" && code !== "MODULE_NOT_FOUND") {
+      console.warn("[instrumentation] OpenTelemetry bootstrap failed:", err);
+    }
   }
 }
