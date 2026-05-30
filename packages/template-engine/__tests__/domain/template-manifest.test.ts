@@ -117,51 +117,71 @@ describe("validateManifest", () => {
     );
   });
 
-  it("accepts a gated conflict with the same when shape as gated outputs", () => {
+  it("rejects non-string entries in conflicts (gated conflicts no longer supported)", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          conflicts: [{ id: "x", when: { answer: "orm", equals: true } }],
+        }),
+      /must be an array of strings/,
+    );
+  });
+
+  it("rejects a conflicts field that is a string (no silent coercion to [])", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          conflicts: "rate-limiting",
+        }),
+      /Template manifest field 'conflicts' must be an array of strings/,
+    );
+  });
+
+  it("rejects a conflicts field that is an object (no silent coercion to [])", () => {
+    // The dormant gated-conflict shape was a `{ id, when }` object; verify
+    // a literal object-shaped conflicts field can't slip through validation
+    // as "no conflicts".
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          conflicts: {
+            id: "rate-limiting",
+            when: { answer: "x", equals: true },
+          },
+        }),
+      /Template manifest field 'conflicts' must be an array of strings/,
+    );
+  });
+
+  it("rejects a requires field that is a string (no silent coercion to [])", () => {
+    // Same strictness applies to other string-array fields — validate the
+    // helper itself, not just the conflicts call site.
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          requires: "env-setup",
+        }),
+      /Template manifest field 'requires' must be an array of strings/,
+    );
+  });
+
+  it("accepts absent (undefined) array fields as empty (back-compat)", () => {
+    // The previous behaviour for the "absent field" case stays — when a
+    // manifest simply doesn't declare requires/conflicts/envVars/checklist,
+    // the validator treats it as empty rather than throwing.
     const m = validateManifest({
-      ...base,
-      conflicts: [
-        "always-conflicts",
-        { id: "auth-rival", when: { answer: "features", includes: "auth" } },
-        { id: "orm-rival", when: { answer: "orm", equals: true } },
-      ],
+      id: "min",
+      name: "Min",
+      description: "minimal",
+      version: "1.0.0",
     });
-    assert.equal(m.conflicts.length, 3);
-    assert.equal(m.conflicts[0], "always-conflicts");
-  });
-
-  it("throws when a gated conflict references an unknown answer", () => {
-    assert.throws(
-      () =>
-        validateManifest({
-          ...base,
-          conflicts: [{ id: "x", when: { answer: "nope", includes: "y" } }],
-        }),
-      /gated conflict 'x' references unknown answer 'nope'/,
-    );
-  });
-
-  it("throws when a gated conflict sets both equals and includes", () => {
-    assert.throws(
-      () =>
-        validateManifest({
-          ...base,
-          conflicts: [
-            { id: "x", when: { answer: "orm", equals: true, includes: "y" } },
-          ],
-        }),
-      /at most one of 'equals' or 'includes'/,
-    );
-  });
-
-  it("throws when a gated conflict is missing an id", () => {
-    assert.throws(
-      () =>
-        validateManifest({
-          ...base,
-          conflicts: [{ when: { answer: "orm", equals: true } }],
-        }),
-      /gated conflict must have a non-empty string 'id'/,
-    );
+    assert.deepEqual(m.requires, []);
+    assert.deepEqual(m.conflicts, []);
+    assert.deepEqual(m.envVars, []);
+    assert.deepEqual(m.checklist, []);
   });
 });

@@ -10,26 +10,12 @@ export interface CatalogNote {
   detail: string;
 }
 
-/**
- * A conflict declaration. Plain string = unconditional conflict. Object form
- * mirrors the engine's gated conflicts: only active when the declaring
- * template's `when` condition is satisfied at install time. The wizard skips
- * gated entries during selection because user answers don't exist yet; the
- * engine catches them at install time via resolveDependencies.
- */
-export type CatalogConflict =
-  | string
-  | {
-      id: string;
-      when: { answer: string; equals?: string | boolean; includes?: string };
-    };
-
 export interface CatalogEntry {
   id: string;
   name: string;
   description: string;
   requires: string[];
-  conflicts: CatalogConflict[];
+  conflicts: string[];
   category: "foundation" | "infrastructure" | "ai" | "auth" | "tooling";
   details: TemplateDetails;
   note?: CatalogNote;
@@ -569,32 +555,21 @@ const CATALOG_BY_ID = new Map(TEMPLATE_CATALOG.map((e) => [e.id, e]));
  * Returns the already-selected entries that conflict with `candidateId`.
  * The check is symmetric: a conflict declared on either side counts, since
  * catalog `conflicts` lists are not always reciprocal.
- *
- * Gated (object-form) conflicts are skipped here because user answers for
- * each template aren't available at selection time. The engine evaluates
- * those at install time via resolveDependencies; surfacing them in the
- * wizard would either require asking gating questions up-front (bad UX) or
- * produce false positives by assuming every gate fires.
  */
-function unconditionalConflicts(entry: CatalogEntry): string[] {
-  return entry.conflicts.filter((c): c is string => typeof c === "string");
-}
-
 export function findConflicts(
   candidateId: string,
   selectedIds: string[],
 ): CatalogEntry[] {
   const candidate = CATALOG_BY_ID.get(candidateId);
   if (!candidate) return [];
-  const candidateConflicts = unconditionalConflicts(candidate);
   return selectedIds
     .filter((id) => id !== candidateId)
     .map((id) => CATALOG_BY_ID.get(id))
     .filter((e): e is CatalogEntry => e !== undefined)
     .filter(
       (e) =>
-        candidateConflicts.includes(e.id) ||
-        unconditionalConflicts(e).includes(candidate.id),
+        candidate.conflicts.includes(e.id) ||
+        e.conflicts.includes(candidate.id),
     );
 }
 
