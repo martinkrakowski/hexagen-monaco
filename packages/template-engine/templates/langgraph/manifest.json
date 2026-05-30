@@ -1,9 +1,9 @@
 {
   "id": "langgraph",
   "name": "LangGraph",
-  "description": "AgentGraphPort interface, typed state, node stubs, graph compilation, checkpointing, optional streaming and human-in-the-loop",
+  "description": "Hexagonal LangGraph integration: typed AgentGraphPort, shared GraphState, node files, conditional edge routing, swap-by-env checkpointers (memory/supabase/redis/postgres), and Next.js routes for invoke / optional streaming / optional human-in-the-loop resume. Comes with one of two working example graphs (simple-chain or research-agent) so the wiring is end-to-end out of the box.",
   "version": "1.0.0",
-  "requires": ["llm-adapter", "env-setup"],
+  "requires": ["env-setup", "llm-adapter"],
   "conflicts": [],
   "questions": [
     {
@@ -30,37 +30,102 @@
       "id": "graph_type",
       "type": "select",
       "prompt": "Example graph to generate?",
-      "options": [
-        "simple-chain",
-        "research-agent",
-        "multi-step-generation",
-        "none"
-      ],
+      "options": ["simple-chain", "research-agent"],
       "default": "simple-chain"
     },
     {
       "id": "human_in_loop",
       "type": "boolean",
-      "prompt": "Include human-in-the-loop interrupt example?",
+      "prompt": "Include human-in-the-loop interrupt scaffolding?",
       "default": false
     }
   ],
-  "envVars": ["LANGGRAPH_DEPLOYMENT", "LANGGRAPH_CHECKPOINTER"],
+  "envVars": [
+    "LANGGRAPH_DEPLOYMENT",
+    "LANGGRAPH_API_URL",
+    "LANGGRAPH_API_KEY",
+    "LANGGRAPH_CHECKPOINTER",
+    "LANGGRAPH_HITL_ENABLED"
+  ],
   "outputs": [
     "src/domain/ports/out/agent-graph.port.ts",
     "src/infrastructure/langgraph/state/graph-state.ts",
     "src/infrastructure/langgraph/edges/routing.ts",
-    "src/infrastructure/langgraph/graphs/main.graph.ts",
+    "src/infrastructure/langgraph/checkpointers/memory-checkpointer.ts",
     "src/infrastructure/langgraph/checkpointers/index.ts",
     "src/infrastructure/langgraph/adapters/langgraph.adapter.ts",
     "src/infrastructure/langgraph/index.ts",
-    "app/api/agent/invoke/route.ts"
+    "app/api/agent/invoke/route.ts",
+    ".env.langgraph.example",
+    {
+      "path": "src/infrastructure/langgraph/nodes/input-processor.node.ts",
+      "when": { "answer": "graph_type", "equals": "simple-chain" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/nodes/llm-call.node.ts",
+      "when": { "answer": "graph_type", "equals": "simple-chain" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/nodes/output-formatter.node.ts",
+      "when": { "answer": "graph_type", "equals": "simple-chain" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/graphs/simple-chain.graph.ts",
+      "when": { "answer": "graph_type", "equals": "simple-chain" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/nodes/planner.node.ts",
+      "when": { "answer": "graph_type", "equals": "research-agent" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/nodes/researcher.node.ts",
+      "when": { "answer": "graph_type", "equals": "research-agent" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/nodes/synthesiser.node.ts",
+      "when": { "answer": "graph_type", "equals": "research-agent" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/graphs/research-agent.graph.ts",
+      "when": { "answer": "graph_type", "equals": "research-agent" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/checkpointers/supabase-checkpointer.ts",
+      "when": { "answer": "checkpointing", "equals": "supabase" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/checkpointers/redis-checkpointer.ts",
+      "when": { "answer": "checkpointing", "equals": "redis" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/checkpointers/postgres-checkpointer.ts",
+      "when": { "answer": "checkpointing", "equals": "postgres" }
+    },
+    {
+      "path": "src/infrastructure/langgraph/streaming/token-stream.ts",
+      "when": { "answer": "streaming", "equals": true }
+    },
+    {
+      "path": "app/api/agent/stream/route.ts",
+      "when": { "answer": "streaming", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/langgraph/nodes/human-review.node.ts",
+      "when": { "answer": "human_in_loop", "equals": true }
+    },
+    {
+      "path": "app/api/agent/resume/route.ts",
+      "when": { "answer": "human_in_loop", "equals": true }
+    }
   ],
   "checklist": [
     "Install LangGraph: yarn add @langchain/langgraph @langchain/core",
     "Merge .env.langgraph.example into .env.local",
-    "POST /api/agent/invoke with { \"prompt\": \"Hello\" } to verify the graph works",
-    "Switch LANGGRAPH_CHECKPOINTER=supabase or redis for persistent memory"
+    "Sanity check: POST /api/agent/invoke with { \"prompt\": \"Hello\" } — the example graph runs end-to-end against your llm-adapter",
+    "Swap LANGGRAPH_CHECKPOINTER=memory → supabase/redis/postgres for cross-request persistence (each option auto-installs the matching checkpointer file)",
+    "Customise the graph in src/infrastructure/langgraph/graphs/<graph_type>.graph.ts; nodes live alongside in nodes/",
+    "If you picked streaming=true: POST /api/agent/stream returns SSE chunks for the running graph",
+    "If you picked human_in_loop=true: human-review.node.ts and /api/agent/resume are emitted as scaffolding — wire human-review into your graph with `interruptBefore: [\"human-review\"]` in compile(), then POST /api/agent/resume with { threadId, humanInput } to continue"
   ],
   "branch": "feature/generator-template-langgraph"
 }
