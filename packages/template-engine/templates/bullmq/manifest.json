@@ -79,7 +79,7 @@
       "when": { "answer": "worker_mode", "equals": "separate-service" }
     },
     {
-      "path": "app/api/bull-board/[[...slug]]/route.ts",
+      "path": "app/admin/queues/[[...slug]]/route.ts",
       "when": { "answer": "bull_board", "equals": true }
     },
     {

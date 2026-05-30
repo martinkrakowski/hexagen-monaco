@@ -116,11 +116,31 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "default,images,notifications",
     },
     {
+      id: "job_examples",
+      type: "multiselect",
+      prompt: "Generate example job types?",
+      options: [
+        "image-processing",
+        "email",
+        "webhook",
+        "export",
+        "ai-generation",
+      ],
+      default: [],
+    },
+    {
       id: "redis_source",
       type: "select",
       prompt: "Redis connection?",
       options: ["local", "redis-cloud", "upstash", "docker-compose"],
       default: "local",
+    },
+    {
+      id: "concurrency",
+      type: "select",
+      prompt: "Default worker concurrency per queue?",
+      options: ["1", "2", "5", "10"],
+      default: "2",
     },
     {
       id: "bull_board",

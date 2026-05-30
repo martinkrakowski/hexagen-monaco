@@ -92,7 +92,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
     it("emits the bull-board route (default bull_board=true)", async () => {
       assert.ok(
         await exists(
-          path.join(projectRoot, "app/api/bull-board/[[...slug]]/route.ts"),
+          path.join(projectRoot, "app/admin/queues/[[...slug]]/route.ts"),
         ),
       );
     });
@@ -187,7 +187,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
     it("does NOT emit the bull-board route when bull_board=false", async () => {
       assert.equal(
         await exists(
-          path.join(projectRoot, "app/api/bull-board/[[...slug]]/route.ts"),
+          path.join(projectRoot, "app/admin/queues/[[...slug]]/route.ts"),
         ),
         false,
       );

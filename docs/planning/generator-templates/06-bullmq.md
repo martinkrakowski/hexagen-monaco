@@ -73,8 +73,8 @@ server/
     start-workers.ts                      # bootstrapWorkers() / shutdownWorkers() — host installs lifecycle hooks
 
 app/
-  api/
-    bull-board/[[...slug]]/route.ts       # (gated on bull_board=true) Basic-Auth-protected in production
+  admin/
+    queues/[[...slug]]/route.ts           # (gated on bull_board=true) Basic-Auth-protected in production; URL matches BULL_BOARD_BASE_PATH default
 
 scripts/
   start-worker.ts                         # (gated on worker_mode=separate-service) standalone worker process
@@ -280,7 +280,7 @@ Validation: Unit test with `REDIS_URL` unset — assert job handler is called sy
 
 Install: `@bull-board/nextjs`, `@bull-board/api`
 
-`app/api/bull-board/[[...slug]]/route.ts`:
+`app/admin/queues/[[...slug]]/route.ts` (so Next.js serves it at `/admin/queues/...`, matching the Bull Board adapter's default `basePath`):
 
 - Registers all queues with Bull Board
 - Wraps with Basic Auth middleware in production
