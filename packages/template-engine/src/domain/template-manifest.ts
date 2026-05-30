@@ -68,7 +68,16 @@ export function validateManifest(raw: unknown): TemplateManifest {
 }
 
 function validatedStringArray(raw: unknown, field: string): string[] {
-  if (!Array.isArray(raw)) return [];
+  // Absent / null → default to empty array. Anything else that isn't an
+  // array (e.g. a string, a `{ id, when }` object) is a schema mistake and
+  // throws so it can't silently degrade to "no entries" — which would, for
+  // `conflicts`, disable conflict enforcement entirely.
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(
+      `Template manifest field '${field}' must be an array of strings`,
+    );
+  }
   for (const el of raw) {
     if (typeof el !== "string") {
       throw new Error(

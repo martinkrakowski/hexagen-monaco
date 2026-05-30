@@ -127,4 +127,61 @@ describe("validateManifest", () => {
       /must be an array of strings/,
     );
   });
+
+  it("rejects a conflicts field that is a string (no silent coercion to [])", () => {
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          conflicts: "rate-limiting",
+        }),
+      /Template manifest field 'conflicts' must be an array of strings/,
+    );
+  });
+
+  it("rejects a conflicts field that is an object (no silent coercion to [])", () => {
+    // The dormant gated-conflict shape was a `{ id, when }` object; verify
+    // a literal object-shaped conflicts field can't slip through validation
+    // as "no conflicts".
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          conflicts: {
+            id: "rate-limiting",
+            when: { answer: "x", equals: true },
+          },
+        }),
+      /Template manifest field 'conflicts' must be an array of strings/,
+    );
+  });
+
+  it("rejects a requires field that is a string (no silent coercion to [])", () => {
+    // Same strictness applies to other string-array fields — validate the
+    // helper itself, not just the conflicts call site.
+    assert.throws(
+      () =>
+        validateManifest({
+          ...base,
+          requires: "env-setup",
+        }),
+      /Template manifest field 'requires' must be an array of strings/,
+    );
+  });
+
+  it("accepts absent (undefined) array fields as empty (back-compat)", () => {
+    // The previous behaviour for the "absent field" case stays — when a
+    // manifest simply doesn't declare requires/conflicts/envVars/checklist,
+    // the validator treats it as empty rather than throwing.
+    const m = validateManifest({
+      id: "min",
+      name: "Min",
+      description: "minimal",
+      version: "1.0.0",
+    });
+    assert.deepEqual(m.requires, []);
+    assert.deepEqual(m.conflicts, []);
+    assert.deepEqual(m.envVars, []);
+    assert.deepEqual(m.checklist, []);
+  });
 });
