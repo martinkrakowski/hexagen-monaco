@@ -60,14 +60,15 @@ Harden the live path now (it's what ships). Reconciliation moves the GitHub **de
 
 ### Phase 0 — Bug fix + safety net ✅ shipped (PR #121, `f77ce052`)
 
-1. ✅ Fix empty-repo ref bug: probe `refs/heads/<branch>` → `POST` create or `PATCH` update; the create path falls back to `PATCH` on a 422 so a check-then-act race (concurrent export / double-submit) doesn't fail the export.
-2. ✅ Integration tests for `GitHubExporterAdapter` against an order-enforcing mocked `fetch`: fresh repo, existing branch, repo-already-exists, ref-create race fallback, 401, missing-config; assert create→blob→tree→commit→ref sequence.
-3. ⏳ **Deferred to Phase 1** (needs the structured-error change below): map GitHub error codes to precise HTTP statuses instead of blanket 500.
+1. ✅ Fix empty-repo ref bug: probe `refs/heads/<branch>` head → `POST` create (fresh repo) or `PATCH` update (existing branch).
+2. ✅ **Non-destructive pushes** (pulled forward from Phase 1, step 5): probe the branch head before committing; chain it as the new commit's `parents` and fast-forward the ref with **`force: false`** so existing history is never rewritten. A branch created concurrently (race) surfaces a `409` conflict instead of a force-overwrite.
+3. ✅ Integration tests for `GitHubExporterAdapter` against an order-enforcing mocked `fetch` (asserts the blob→tree→probe→commit→ref sequence and full route consumption): fresh repo (parentless), existing branch (parent + `force:false`), existing repo with history, race→conflict, 401, missing-config.
+4. ⏳ **Deferred to Phase 1** (needs the structured-error change below): map GitHub error codes to precise HTTP statuses instead of blanket 500.
 
 ### Phase 1 — Push to existing repo / branch + structured errors
 
 4. Extend `GitHubExportConfig` / `ExportIntent.repoConfig` with `targetBranch?` and `mode:"create"|"push"`.
-5. **Non-destructive updates:** on push to an existing branch, fetch the head SHA, pass it as the commit's `parents`, and update the ref with **`force: false`** so prior history is never discarded and concurrent pushes fail loudly (no orphan commits). Create the branch ref off the base only when it's new.
+5. ✅ **Non-destructive updates** — done in Phase 0 / PR #121 (commit `parents` + `force:false` fast-forward). Remaining here: apply the same to an arbitrary `targetBranch` (not just `main`), creating it off the base when new.
 6. **Structured error union** (carries over the deferred Phase 0 item 3): replace generic `Error` in the exporter/port with a typed union `{ code: "auth-failed" | "not-found" | "rate-limit" | "conflict" | "validation"; message }`. Map codes to HTTP statuses (401/404/429/409/422) in `route.ts`. (`GitHubApiError.status` added in Phase 0 is the seam to translate from.)
 7. **Bounded blob concurrency:** replace the unbounded `Promise.all` over files with batches of ~5–10 to avoid GitHub secondary rate limits / socket exhaustion.
 8. UI: create-new / push-to-existing choice + branch field in `ExportDialog`.

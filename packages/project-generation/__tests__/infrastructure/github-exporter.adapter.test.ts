@@ -111,15 +111,15 @@ describe("GitHubExporterAdapter", () => {
     await fs.rm(sourceDir, { recursive: true, force: true });
   });
 
-  it("creates the branch ref (POST) when pushing to a fresh repo", async () => {
+  it("creates a parentless commit + POST ref when pushing to a fresh repo", async () => {
     const mock = installFetchMock([
       route("POST", "/user/repos", 201, { name: "hexagen-app" }),
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
       route("POST", "/git/trees", 201, { sha: "tree1" }),
-      route("POST", "/git/commits", 201, { sha: "commit1" }),
-      // Fresh repo has no main ref yet.
+      // Fresh repo has no main ref yet — probed before committing.
       route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
+      route("POST", "/git/commits", 201, { sha: "commit1" }),
       route("POST", "/git/refs", 201, { ref: "refs/heads/main" }),
     ]);
     restore = mock.restore;
@@ -134,12 +134,17 @@ describe("GitHubExporterAdapter", () => {
       result.destinationUrl,
       "https://github.com/octocat/hexagen-app",
     );
+    // Initial commit has no parents.
+    const commit = mock.calls.find((c) => c.path.endsWith("/git/commits"));
+    assert.ok(commit, "expected a commit to be created");
+    assert.ok(
+      !("parents" in (commit!.body as Record<string, unknown>)),
+      "initial commit should be parentless",
+    );
     // The ref is created, never PATCH-updated, on a fresh repo.
     const createRef = mock.calls.find(
       (c) => c.path === "/repos/octocat/hexagen-app/git/refs",
     );
-    assert.ok(createRef, "expected POST /git/refs to create the branch");
-    assert.strictEqual(createRef?.method, "POST");
     assert.deepStrictEqual(createRef?.body, {
       ref: "refs/heads/main",
       sha: "commit1",
@@ -150,17 +155,18 @@ describe("GitHubExporterAdapter", () => {
     );
   });
 
-  it("updates the branch ref (PATCH) when main already exists", async () => {
+  it("chains the existing head as parent and fast-forwards (force:false) on an existing branch", async () => {
     const mock = installFetchMock([
       route("POST", "/user/repos", 201, { name: "hexagen-app" }),
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
       route("POST", "/git/trees", 201, { sha: "tree1" }),
-      route("POST", "/git/commits", 201, { sha: "commit2" }),
+      // Probe returns the current head before we build the commit.
       route("GET", "/git/ref/heads/main", 200, {
         ref: "refs/heads/main",
-        object: { sha: "old" },
+        object: { sha: "existing-head" },
       }),
+      route("POST", "/git/commits", 201, { sha: "commit2" }),
       route("PATCH", "/git/refs/heads/main", 200, { ref: "refs/heads/main" }),
     ]);
     restore = mock.restore;
@@ -171,12 +177,17 @@ describe("GitHubExporterAdapter", () => {
     );
 
     assert.strictEqual(result.success, true);
+    // Commit chains the prior head so history is preserved.
+    const commit = mock.calls.find((c) => c.path.endsWith("/git/commits"));
+    assert.deepStrictEqual((commit!.body as { parents?: string[] }).parents, [
+      "existing-head",
+    ]);
+    // Ref update is a non-destructive fast-forward.
     const patch = mock.calls.find((c) => c.method === "PATCH");
-    assert.ok(patch, "expected PATCH to update existing ref");
-    assert.deepStrictEqual(patch?.body, { sha: "commit2", force: true });
+    assert.deepStrictEqual(patch?.body, { sha: "commit2", force: false });
   });
 
-  it("continues when the repo already exists", async () => {
+  it("pushes non-destructively when the target repo already exists with history", async () => {
     const mock = installFetchMock([
       route("POST", "/user/repos", 422, {
         message: "Repository creation failed.",
@@ -185,34 +196,11 @@ describe("GitHubExporterAdapter", () => {
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
       route("POST", "/git/trees", 201, { sha: "tree1" }),
-      route("POST", "/git/commits", 201, { sha: "commit3" }),
-      route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
-      route("POST", "/git/refs", 201, { ref: "refs/heads/main" }),
-    ]);
-    restore = mock.restore;
-
-    const result = await new GitHubExporterAdapter().export(
-      sourceDir,
-      githubConfig(),
-    );
-
-    assert.strictEqual(result.success, true);
-  });
-
-  it("falls back to PATCH when the ref is created during a race (POST → 422)", async () => {
-    const mock = installFetchMock([
-      route("POST", "/user/repos", 201, { name: "hexagen-app" }),
-      route("POST", "/git/blobs", 201, { sha: "blob1" }),
-      route("POST", "/git/blobs", 201, { sha: "blob2" }),
-      route("POST", "/git/trees", 201, { sha: "tree1" }),
-      route("POST", "/git/commits", 201, { sha: "commit4" }),
-      // Probe sees no ref...
-      route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
-      // ...but a concurrent export created it before our POST lands.
-      route("POST", "/git/refs", 422, {
-        message: "Reference already exists",
+      route("GET", "/git/ref/heads/main", 200, {
+        ref: "refs/heads/main",
+        object: { sha: "prior-head" },
       }),
-      // Fallback: update the now-existing ref instead of failing.
+      route("POST", "/git/commits", 201, { sha: "commit3" }),
       route("PATCH", "/git/refs/heads/main", 200, { ref: "refs/heads/main" }),
     ]);
     restore = mock.restore;
@@ -223,9 +211,41 @@ describe("GitHubExporterAdapter", () => {
     );
 
     assert.strictEqual(result.success, true);
+    const commit = mock.calls.find((c) => c.path.endsWith("/git/commits"));
+    assert.deepStrictEqual((commit!.body as { parents?: string[] }).parents, [
+      "prior-head",
+    ]);
     const patch = mock.calls.find((c) => c.method === "PATCH");
-    assert.ok(patch, "expected PATCH fallback after 422 on ref create");
-    assert.deepStrictEqual(patch?.body, { sha: "commit4", force: true });
+    assert.strictEqual((patch?.body as { force?: boolean }).force, false);
+  });
+
+  it("surfaces a conflict (no force) when the branch is created during a race", async () => {
+    const mock = installFetchMock([
+      route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+      route("POST", "/git/blobs", 201, { sha: "blob1" }),
+      route("POST", "/git/blobs", 201, { sha: "blob2" }),
+      route("POST", "/git/trees", 201, { sha: "tree1" }),
+      // Probe sees no ref, so we build a parentless commit...
+      route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
+      route("POST", "/git/commits", 201, { sha: "commit4" }),
+      // ...but a concurrent export created the branch before our POST lands.
+      route("POST", "/git/refs", 422, { message: "Reference already exists" }),
+    ]);
+    restore = mock.restore;
+
+    const result = await new GitHubExporterAdapter().export(
+      sourceDir,
+      githubConfig(),
+    );
+
+    // A parentless commit can't fast-forward onto the new history, so we
+    // surface a conflict rather than force-overwriting it.
+    assert.strictEqual(result.success, false);
+    assert.match(result.error ?? "", /concurrently|409/);
+    assert.ok(
+      !mock.calls.some((c) => c.method === "PATCH"),
+      "must not force-PATCH over concurrently-created history",
+    );
   });
 
   it("fails with the API error when the token is unauthorized", async () => {
