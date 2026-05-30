@@ -12,6 +12,21 @@ interface FileEntry {
   sha?: string;
 }
 
+/**
+ * Error carrying the HTTP status from a failed GitHub API call, so callers
+ * can branch on status (e.g. 404 → ref does not exist) instead of string
+ * matching.
+ */
+class GitHubApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GitHubApiError";
+  }
+}
+
 export class GitHubExporterAdapter implements ProjectExporterPort {
   private baseUrl = "https://api.github.com";
 
@@ -50,15 +65,36 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
 
       const tree = await this.createTree(token, owner, repoName, blobs);
 
+      // Probe the branch head *before* committing: when it already exists we
+      // chain its SHA as the new commit's parent so existing history is
+      // preserved (non-fast-forward updates are then impossible). A fresh repo
+      // has no ref, so the initial commit is parentless.
+      const parentSha = await this.getBranchHeadSha(
+        token,
+        owner,
+        repoName,
+        "main",
+      );
+
       const commitSha = await this.createCommit(
         token,
         owner,
         repoName,
         tree,
-        "Initial commit: Hexagonal architecture scaffold",
+        parentSha
+          ? "Update project: Hexagonal architecture scaffold"
+          : "Initial commit: Hexagonal architecture scaffold",
+        parentSha ? [parentSha] : [],
       );
 
-      await this.updateRef(token, owner, repoName, commitSha);
+      await this.upsertRef(
+        token,
+        owner,
+        repoName,
+        "main",
+        commitSha,
+        parentSha !== null,
+      );
 
       return {
         success: true,
@@ -93,7 +129,8 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error (${response.status}): ${JSON.stringify(error)}`,
       );
     }
@@ -201,6 +238,7 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     repo: string,
     treeSha: string,
     message: string,
+    parents: string[] = [],
   ): Promise<string> {
     const result = (await this.request(
       token,
@@ -209,26 +247,95 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
       {
         message,
         tree: treeSha,
+        ...(parents.length > 0 ? { parents } : {}),
       },
     )) as { sha: string };
 
     return result.sha;
   }
 
+  /**
+   * Point `refs/heads/<branch>` at `commitSha`.
+   *
+   * - Fresh branch (`branchExisted === false`): the repo has no ref yet, so the
+   *   branch is created with `POST /git/refs`.
+   * - Existing branch: updated with `force: false`. Because `commitSha` was
+   *   built on the branch's head as its parent, this is a fast-forward; if the
+   *   branch moved since we probed it, GitHub rejects the non-fast-forward
+   *   (422) and we surface a conflict rather than rewriting history.
+   */
+  private async upsertRef(
+    token: string,
+    owner: string,
+    repo: string,
+    branch: string,
+    commitSha: string,
+    branchExisted: boolean,
+  ): Promise<void> {
+    if (branchExisted) {
+      await this.updateRef(token, owner, repo, branch, commitSha);
+      return;
+    }
+
+    try {
+      await this.request(token, "POST", `/repos/${owner}/${repo}/git/refs`, {
+        ref: `refs/heads/${branch}`,
+        sha: commitSha,
+      });
+    } catch (err) {
+      // Check-then-act race: the branch was created between our head probe and
+      // this POST (concurrent export / double-submit). Our commit is parentless
+      // so it cannot fast-forward onto the new history — surface a conflict
+      // instead of force-overwriting whatever just landed.
+      if (err instanceof GitHubApiError && err.status === 422) {
+        throw new GitHubApiError(
+          409,
+          `Branch '${branch}' was created concurrently during export; ` +
+            `re-run the export to build on the new history.`,
+        );
+      }
+      throw err;
+    }
+  }
+
   private async updateRef(
     token: string,
     owner: string,
     repo: string,
+    branch: string,
     commitSha: string,
   ): Promise<void> {
     await this.request(
       token,
       "PATCH",
-      `/repos/${owner}/${repo}/git/refs/heads/main`,
-      {
-        sha: commitSha,
-        force: true,
-      },
+      `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      { sha: commitSha, force: false },
     );
+  }
+
+  /**
+   * Returns the commit SHA `refs/heads/<branch>` points at, or `null` when the
+   * branch does not exist (fresh repo). Used to chain the new commit onto
+   * existing history.
+   */
+  private async getBranchHeadSha(
+    token: string,
+    owner: string,
+    repo: string,
+    branch: string,
+  ): Promise<string | null> {
+    try {
+      const res = (await this.request(
+        token,
+        "GET",
+        `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+      )) as { object?: { sha?: string } };
+      return res.object?.sha ?? null;
+    } catch (err) {
+      if (err instanceof GitHubApiError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
   }
 }
