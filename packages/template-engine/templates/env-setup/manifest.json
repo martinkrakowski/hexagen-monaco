@@ -18,6 +18,13 @@
       "type": "boolean",
       "prompt": "Fail hard at startup if required env vars are missing?",
       "default": true
+    },
+    {
+      "id": "dotenv_tool",
+      "type": "select",
+      "prompt": "Env loader? (next.js-built-in for Next.js/Nitro — they parse .env natively; pick dotenv/dotenv-expand only for plain Node entrypoints)",
+      "options": ["next.js-built-in", "dotenv", "dotenv-expand"],
+      "default": "next.js-built-in"
     }
   ],
   "envVars": ["NODE_ENV", "NEXT_PUBLIC_APP_URL"],
@@ -28,10 +35,19 @@
     "src/config/env.server.ts",
     "src/config/env.client.ts",
     "scripts/check-env.ts",
-    "SETUP.md"
+    "SETUP.md",
+    {
+      "path": "src/config/load-env.ts",
+      "when": { "answer": "dotenv_tool", "equals": "dotenv" }
+    },
+    {
+      "path": "src/config/load-env.ts",
+      "when": { "answer": "dotenv_tool", "equals": "dotenv-expand" }
+    }
   ],
   "checklist": [
     "Install Zod: npm install zod",
+    "If you chose a dotenv loader: npm install dotenv (plus dotenv-expand for the dotenv-expand option), and import './config/load-env' first in your entrypoint — Next.js/Nitro need neither",
     "Append the secret-ignore rules to your .gitignore: cat .gitignore.hexagen >> .gitignore (keep the .gitignore.hexagen reference file — never commit real secrets)",
     "cp .env.example .env.local, then set every variable annotated # required (here and in any .env.<template>.example)",
     "Add a script to package.json: \"check:env\": \"tsx scripts/check-env.ts\"",

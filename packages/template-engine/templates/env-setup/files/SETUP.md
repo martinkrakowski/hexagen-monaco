@@ -49,6 +49,10 @@ clear list of any missing required variables.
   put a secret in a `NEXT_PUBLIC_` variable — it is shipped to the browser.
 - Import typed env via `src/config/env.ts` (`serverEnv` on the server,
   `clientEnv` in the browser).
+- **Loading `.env` files:** Next.js and Nitro do this natively. If you chose the
+  `dotenv` or `dotenv-expand` loader, a `src/config/load-env.ts` is generated —
+  `npm install dotenv` (plus `dotenv-expand` for that option) and `import
+  "./config/load-env"` as the very first line of your entrypoint.
 
 ## Adding More Variables
 

@@ -57,7 +57,15 @@ that had none.
 
 ---
 
-## B2 — Wire `dotenv_tool` to a gated loader
+## B2 — Wire `dotenv_tool` to a gated loader ✅ (implemented)
+
+> Shipped: `dotenv_tool` question + gated `src/config/load-env.ts` (emitted only
+> for `dotenv`/`dotenv-expand`). Implemented with an **indirected** dynamic import
+> (`const moduleName: string = "dotenv-expand"; import(moduleName)`) rather than a
+> static import + `@ts-expect-error`/`@ts-ignore`: the indirection means TS never
+> resolves the optional dep, so it neither breaks `typecheck` when missing nor
+> leaves an "unused directive" once installed — and it stays lint-clean
+> (`ban-ts-comment`). The `useDotenvExpand` constant avoids `no-constant-condition`.
 
 **Goal:** Make the `dotenv_tool` select (`next.js-built-in` | `dotenv` |
 `dotenv-expand`) drive real output instead of being inert.

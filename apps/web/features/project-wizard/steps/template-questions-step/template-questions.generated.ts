@@ -287,6 +287,14 @@ export const TEMPLATE_QUESTIONS: Record<
       prompt: "Fail hard at startup if required env vars are missing?",
       default: true,
     },
+    {
+      id: "dotenv_tool",
+      type: "select",
+      prompt:
+        "Env loader? (next.js-built-in for Next.js/Nitro — they parse .env natively; pick dotenv/dotenv-expand only for plain Node entrypoints)",
+      options: ["next.js-built-in", "dotenv", "dotenv-expand"],
+      default: "next.js-built-in",
+    },
   ],
   "error-handling": [
     {
