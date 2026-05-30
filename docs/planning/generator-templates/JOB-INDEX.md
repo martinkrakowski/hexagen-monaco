@@ -2,7 +2,7 @@
 
 > **Status:** Core framework shipped (`feature/generator-template-system-core`, PR #83).
 > Most templates now ship scaffold content; the `docker` template landed on `feature/generator-template-docker`.
-> Remaining content gaps: `env-setup`, `error-handling`, `observability`, `design-system`, `ci-github-actions`, `agents-md`.
+> Remaining content gaps: `env-setup`, `error-handling`, `observability`, `ci-github-actions`, `agents-md`.
 
 ---
 
@@ -173,7 +173,7 @@ Conflicts declared in manifests:
 | CLI commands                         | ✅ Shipped     | `templates list`, `templates info`, `add`, `validate-templates`                                                                                                           |
 | `interpolate()` in `@hexagen/shared` | ✅ Shipped     | Unified — no more duplicate in file-emitter                                                                                                                               |
 | Template manifests (all 14)          | ✅ Shipped     | Questions, outputs, env vars, checklist, dependency declarations                                                                                                          |
-| **Template file content**            | 🚧 In progress | Scaffold files landed for most templates (incl. `docker`); still empty: `env-setup`, `error-handling`, `observability`, `design-system`, `ci-github-actions`, `agents-md` |
+| **Template file content**            | 🚧 In progress | Scaffold files landed for most templates (incl. `docker`, `design-system`); still empty: `env-setup`, `error-handling`, `observability`, `ci-github-actions`, `agents-md` |
 | `--add` flag at `hexagen new`        | ⏳ Pending     | Wire `AddTemplateUseCase` into the generation pipeline                                                                                                                    |
 | `RemoteTemplateRegistry` adapter     | ⏳ Future      | Port abstraction already in place                                                                                                                                         |
 

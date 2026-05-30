@@ -218,14 +218,16 @@ export const TEMPLATE_QUESTIONS: Record<
     {
       id: "dark_mode",
       type: "select",
-      prompt: "Dark mode support?",
+      prompt:
+        "Dark mode strategy? (shipped as class-toggle; DESIGN.md documents switching to media-query/none)",
       options: ["none", "css-class", "media-query", "both"],
       default: "css-class",
     },
     {
       id: "component_base",
       type: "select",
-      prompt: "UI component base?",
+      prompt:
+        "UI component base to grow the stubs toward? (stubs are framework-agnostic; install the chosen library yourself)",
       options: ["shadcn-ui", "radix-primitives", "headlessui", "none"],
       default: "shadcn-ui",
     },
@@ -254,15 +256,21 @@ export const TEMPLATE_QUESTIONS: Record<
     {
       id: "registry",
       type: "select",
-      prompt: "Container registry?",
+      prompt:
+        "Container registry? (the generated workflow targets ghcr.io; ecr/docker-hub require switching the commented login/env steps in docker-build.yml)",
       options: ["ghcr", "ecr", "docker-hub", "none"],
       default: "ghcr",
     },
     {
-      id: "health_check",
-      type: "boolean",
-      prompt: "Include health check in Dockerfile?",
-      default: true,
+      id: "health_path",
+      type: "text",
+      prompt:
+        "HTTP path for the container health check? (use / for any app, or /api/health if you also install the observability template)",
+      default: "/",
+      validation: {
+        pattern: "^/[a-zA-Z0-9/_.-]*$",
+        message: "Must be a URL path starting with /, e.g. / or /api/health",
+      },
     },
   ],
   "env-setup": [

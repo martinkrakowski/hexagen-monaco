@@ -1,0 +1,73 @@
+/**
+ * Design tokens — the single source of truth for the visual system.
+ *
+ * Every colour, font, radius, and shadow used in the app resolves to one of
+ * these CSS custom properties (directly, or via the Tailwind `brand`/token
+ * scale in tailwind.config.ts). Change a value here and it propagates
+ * everywhere without a TypeScript recompile. See DESIGN.md for the contract.
+ */
+
+:root {
+  /* Brand — primary is the generated brand colour; adjust the others to taste */
+  --color-brand-primary: {primary_color};
+  --color-brand-primary-hover: color-mix(in srgb, var(--color-brand-primary) 85%, black);
+  --color-brand-secondary: #8b5cf6;
+
+  /* Neutral surfaces & text */
+  --color-background: #ffffff;
+  --color-surface: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+
+  /* Semantic */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Typography — {typography} is the chosen base family; load the actual font
+     (next/font or @font-face) and keep this stack as the fallback chain. */
+  --font-sans: {typography}, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "Geist Mono", "SFMono-Regular", monospace;
+
+  /* Spacing — 4px base unit (mirrors Tailwind's default scale) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * Dark theme — class-strategy by default (toggle by adding `dark` to <html>).
+ * Only the tokens that differ in dark mode are overridden; everything else
+ * inherits from :root. If you selected a different dark_mode strategy, see the
+ * Dark Mode note in DESIGN.md.
+ */
+.dark {
+  --color-background: #0f172a;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+}
