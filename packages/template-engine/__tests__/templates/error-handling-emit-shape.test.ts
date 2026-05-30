@@ -141,6 +141,13 @@ describe("error-handling template — emit shape", () => {
       assert.ok(handler.includes('"false" === "true"'));
       assert.ok(!handler.includes("{http_mapping}"));
       assert.ok(!handler.includes("{sentry}"));
+      // error.context must be spread BEFORE the authoritative RFC 7807 fields so
+      // it can't clobber `status`/`type`/etc.
+      assert.ok(
+        handler.indexOf("...(error.context") <
+          handler.indexOf("type: TYPE_BASE_URL"),
+        "context spread must precede the standard fields",
+      );
     });
 
     it("also installs its env-setup dependency", async () => {

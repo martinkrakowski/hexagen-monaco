@@ -56,7 +56,7 @@
     "Return Result<T, E> (src/shared/result.ts) from use cases that can fail expectedly; throw only for programmer/config errors",
     "Wrap infrastructure failures as err(new ExternalServiceError(...)), then wrap at the application boundary (UseCaseError) so lower layers don't leak upward",
     "Use handleError(error, instance) in routes/middleware: Next.js → Response.json(body, { status }); Express → res.status(status).json(body)",
-    "If you generated the React boundary: wrap top-level trees with <ErrorBoundary> in app/layout.tsx",
+    "If you generated the React boundary: wrap top-level trees with <ErrorBoundary> in app/layout.tsx, and swap its componentDidCatch console.error for your observability logger if the observability template is installed",
     "If you enabled Sentry: npm install @sentry/node, merge .env.sentry.example into .env.local, set SENTRY_DSN (the handler then reports unhandled errors automatically)"
   ],
   "branch": "feature/generator-template-error-handling"

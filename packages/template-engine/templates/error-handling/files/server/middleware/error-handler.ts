@@ -68,13 +68,16 @@ export function handleError(error: unknown, instance?: string): HttpError {
   if (isTypedError(error)) {
     const status = HTTP_STATUS_BY_CODE[error.code] ?? 500;
     const body: ProblemDetails = {
+      // Spread context FIRST so a stray context key (e.g. `status`) can never
+      // override the authoritative RFC 7807 fields below — that would desync the
+      // body's status from the HTTP status and break client parsing.
+      ...(error.context ?? {}),
       type: TYPE_BASE_URL + error.code,
       title: error.name,
       status,
       detail: error.message,
       code: error.code,
       ...(instance ? { instance } : {}),
-      ...(error.context ?? {}),
     };
     return { status, body };
   }
