@@ -17,6 +17,7 @@ export function buildWizardData(
   externalContexts: ProjectConfig["externalContexts"],
   peerMappings: ProjectConfig["peerMappings"],
   governance: ProjectConfig["governance"],
+  addOnsAnswers: ProjectConfig["addOnsAnswers"] = {},
 ): WizardData {
   return {
     boundedContexts:
@@ -25,5 +26,6 @@ export function buildWizardData(
       externalContexts as unknown as WizardData["externalContexts"],
     peerMappings: peerMappings as unknown as WizardData["peerMappings"],
     governance,
+    addOnsAnswers,
   };
 }

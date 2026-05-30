@@ -162,6 +162,8 @@ export function useManifestImport(): UseManifestImportReturn {
           governance:
             (manifest.governance as ProjectConfig["governance"]) ??
             emptyFormValues.governance,
+          addOnsAnswers:
+            (manifest.addOnsAnswers as ProjectConfig["addOnsAnswers"]) ?? {},
         };
 
         const wizardData = buildWizardData(

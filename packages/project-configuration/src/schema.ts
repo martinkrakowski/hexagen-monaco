@@ -139,6 +139,23 @@ export const ProjectSpecSchema = z.object({
     },
   }),
   peerMappings: z.array(PeerContextMappingSchema).default([]),
+  /**
+   * Per-template install-time answers collected by the wizard. Keyed by
+   * template id; each value is a record of question-id → answer. The CLI
+   * use case consumes this via its `overrideAnswers` parameter, so the
+   * wizard can feed answers gathered in the UI directly into a non-
+   * interactive install. Defaults to an empty object for projects that
+   * are scaffolded without the per-template questions step.
+   */
+  addOnsAnswers: z
+    .record(
+      z.string(),
+      z.record(
+        z.string(),
+        z.union([z.string(), z.boolean(), z.array(z.string())]),
+      ),
+    )
+    .default({}),
 });
 
 // --- Type Exports for Apps/Web & Orchestration ---

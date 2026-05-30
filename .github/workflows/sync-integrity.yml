@@ -45,5 +45,13 @@ jobs:
       - name: "Verify Architectural Rules After Sync"
         run: yarn workspace @hexagen/sync run cli sync --dry-run --allow-dirty
 
+      - name: "Verify Template Questions Generator Parity"
+        # Asserts apps/web/features/project-wizard/steps/template-questions-step/
+        # template-questions.generated.ts is in sync with the manifests under
+        # packages/template-engine/templates. If a manifest's questions array
+        # was edited without re-running `yarn workspace web gen:template-questions`,
+        # this step fails the build with instructions.
+        run: yarn workspace web check:template-questions
+
       - name: "Run Test Suite"
         run: yarn turbo run test --output-logs=full --log-order=stream
