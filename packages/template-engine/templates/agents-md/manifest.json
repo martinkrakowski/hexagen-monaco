@@ -32,11 +32,18 @@
     ".agents/architecture.md",
     ".agents/testing.md",
     ".agents/git.md",
-    ".agents/tech-stack.md"
+    ".agents/tech-stack.md",
+    {
+      "path": ".agents/session-log.md",
+      "when": { "answer": "session_logging", "equals": true }
+    }
   ],
   "checklist": [
-    "Review .agents/tech-stack.md — add any tools not auto-detected",
-    "Run: cat AGENTS.md to verify Claude Code will read the correct instructions"
+    "Edit the description line at the top of AGENTS.md so it accurately names your project",
+    "Confirm the architecture style in .agents/architecture.md matches how the code is actually organised",
+    "Review .agents/tech-stack.md — add any tools not listed (and a row per installed Hexagen template)",
+    "Run: cat AGENTS.md to verify your AI agent will read the correct instructions",
+    "Session logging (if enabled): add .agents/session-log.md to .gitignore if you don't want it tracked"
   ],
   "branch": "feature/generator-template-agents-md"
 }
