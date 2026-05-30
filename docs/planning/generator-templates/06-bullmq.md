@@ -1,6 +1,31 @@
 # Template: BullMQ
 
 **Branch:** `feature/generator-template-bullmq`
+**Status:** Implemented (v1.0). 15 outputs (7 gated), 6 questions. See PR for details.
+
+## What shipped vs. the plan
+
+The plan called for 8 phases. v1 ships 7:
+
+- **Phases 1, 2, 5 (always emit):** Redis connection factory with auto/always/never fallback modes; typed `addJob` / `getQueue` / `registerFallbackHandler` API; in-process sync executor that returns BullMQ-shaped Job stubs so consumer code is identical in either mode.
+- **Phase 3 (gated per example):** Five opt-in job files — `image-processing`, `email`, `webhook`, `export`, `ai-generation` — each gated on `job_examples` including the matching value. Per-file emission preserves the plan's "one handler file per type" pattern.
+- **Phase 4 (always):** Single `workers.ts` that iterates `QUEUE_NAMES` and dispatches by `job.name` through a registered handler map. Deviates from the plan's "one worker file per queue" only because the template engine doesn't support templated paths in outputs; the dispatcher-table approach is structurally cleaner and lets handlers be registered in any order at boot.
+- **Phase 6 (gated on `bull_board`):** Bull Board mounted at `BULL_BOARD_BASE_PATH` with HTTP Basic Auth in production, 503 in fallback mode.
+- **Phase 7 (always):** Recurring-job scheduler that re-registers all definitions idempotently every startup and prunes stale schedules — kills the classic "I changed the cron but the old one is still running in Redis" trap.
+- **Same-process / separate-service split:** `server/startup/start-workers.ts` always emits; `scripts/start-worker.ts` is gated on `worker_mode=separate-service`.
+
+**Phase 8 (Supabase job result store) is deferred** — it requires a soft dependency on the supabase template plus a migration, which is non-trivial to coordinate. Tracked separately; the existing `addJob` API leaves the door open for a result-store wrapper to land later without breaking callers.
+
+## Test coverage
+
+`packages/template-engine/__tests__/templates/bullmq-emit-shape.test.ts` exercises two install scenarios end-to-end against the real template directory:
+
+- minimal install (defaults) — asserts the 8 always-on files emit, plus the bull-board route; asserts neither `start-worker.ts` nor any `jobs/*.job.ts` appear.
+- full install (separate-service + all five job examples + `bull_board=false`) — asserts the separate-service entrypoint emits, all five job files emit, and the bull-board route is absent.
+
+The supabase emit-shape test in the same directory exercises the cross-cutting "templates that adapt to answers" guarantee for Supabase; the bullmq test does the same for BullMQ, giving us hard regression guards on both the most-gated templates.
+
+---
 
 ## Purpose
 
