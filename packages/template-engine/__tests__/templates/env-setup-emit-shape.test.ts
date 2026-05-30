@@ -124,6 +124,21 @@ describe("env-setup template — emit shape", () => {
       assert.ok(barrel.includes("Framework: next.js"));
       assert.ok(!setup.includes("{framework}"));
     });
+
+    it("non-strict fallback uses pure defaults that cannot throw", async () => {
+      const serverEnv = await read(projectRoot, "src/config/env.server.ts");
+      assert.ok(serverEnv.includes("ServerEnvSchema.parse({})"));
+      assert.ok(
+        !serverEnv.includes("parse({ NODE_ENV: process.env.NODE_ENV })"),
+        "fallback must not re-parse a possibly-invalid NODE_ENV",
+      );
+    });
+
+    it("check-env scans per-template .env.*.example files, not just .env.example", async () => {
+      const checkEnv = await read(projectRoot, "scripts/check-env.ts");
+      assert.ok(checkEnv.includes("readdirSync"));
+      assert.ok(checkEnv.includes('endsWith(".example")'));
+    });
   });
 
   describe("strict_validation=false, framework=express", () => {

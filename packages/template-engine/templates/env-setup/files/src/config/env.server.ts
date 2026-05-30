@@ -40,8 +40,10 @@ function loadServerEnv(): ServerEnv {
   if (STRICT_ENV_VALIDATION) throw new Error(message);
 
   console.warn(message);
-  // Non-strict fallback: keep the process alive using schema defaults.
-  return ServerEnvSchema.parse({ NODE_ENV: process.env.NODE_ENV });
+  // Non-strict fallback: keep the process alive on pure schema defaults. Parsing
+  // an empty object never throws (every field has a default), so an invalid env
+  // value (e.g. NODE_ENV=staging) degrades to defaults instead of crashing.
+  return ServerEnvSchema.parse({});
 }
 
 export const serverEnv = loadServerEnv();
