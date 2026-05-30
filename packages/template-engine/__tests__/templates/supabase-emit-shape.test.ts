@@ -27,10 +27,19 @@ const TEMPLATES_DIR = path.resolve(
 // Question engine that returns each question's default and never blocks for input.
 // We use this for end-to-end emit tests where the goal is shape verification,
 // not answer-flow verification.
+//
+// Auto-typed questions MUST be short-circuited by AddTemplateUseCase before
+// reaching the engine (see add-template.use-case.ts:107-116). If ask() is
+// invoked for an auto question, that short-circuit has regressed — fail
+// loudly so the bug isn't masked by silently falling back to a default.
 function defaultsQuestionEngine(): QuestionEnginePort {
   return {
     ask: async (q: TemplateQuestion): Promise<QuestionAnswer> => {
-      if (q.type === "auto") return q.default ?? "";
+      if (q.type === "auto") {
+        throw new Error(
+          `defaultsQuestionEngine.ask invoked for auto-typed question '${q.id}' (derivedFrom=${q.derivedFrom}) — the use case should have resolved this from the source template's record without prompting`,
+        );
+      }
       if (q.type === "boolean") return q.default ?? false;
       if (q.type === "multiselect") return q.default ?? [];
       if (q.type === "select") return q.default ?? q.options[0] ?? "";
@@ -76,7 +85,7 @@ describe("supabase template — storage-only emit shape (regression guard)", () 
         supabase: {
           project_url: "https://example.supabase.co",
           anon_key: "stub-anon-key",
-          features: ["database", "storage"],
+          features: ["storage"],
           storage_buckets: "uploads",
           orm: false,
           type_gen: true,
@@ -154,7 +163,7 @@ describe("supabase-auth template — full-stack emit", () => {
         supabase: {
           project_url: "https://example.supabase.co",
           anon_key: "stub-anon-key",
-          features: ["database", "storage"],
+          features: ["storage"],
           storage_buckets: "uploads",
           orm: false,
           type_gen: true,

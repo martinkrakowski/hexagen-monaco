@@ -258,7 +258,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Google OAuth",
     description:
       "Server-side OAuth 2.0 (login → callback → AES-256-GCM session), optional hosted-domain restriction, root middleware that protects configured paths",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -287,7 +287,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "GitHub OAuth",
     description:
       "GitHub OAuth App flow with primary-email fetch, optional org-membership gate, AES-256-GCM session, and a root middleware that protects configured paths",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -317,7 +317,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Microsoft Entra",
     description:
       "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM session, root middleware",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -347,7 +347,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Magic Link",
     description:
       "Passwordless email flow, HMAC-SHA256 single-use tokens, Resend/Nodemailer transport, replay protection, AES-256-GCM session, root middleware",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",
@@ -468,7 +468,7 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     name: "Adobe IMS SPA (PKCE)",
     description:
       "Adobe IMS PKCE flow with encrypted token store, auto-refresh, and a root middleware that validates IMS sessions on configured paths",
-    requires: ["auth-mock", "env-setup"],
+    requires: ["shared-types", "auth-mock", "env-setup"],
     conflicts: [
       "nextauth",
       "clerk",

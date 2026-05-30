@@ -69,4 +69,4 @@ A regression test (`__tests__/templates/supabase-emit-shape.test.ts`) asserts at
 
 ## Conflicts
 
-None. Storage/database Supabase is compatible with any auth provider. `supabase-auth` carries the auth-provider conflict list (unconditional plain-string conflicts with all six other auth providers and the three Group B frameworks).
+None. Storage/database Supabase is compatible with any auth provider. `supabase-auth` carries the auth-provider conflict list — eight unconditional plain-string conflicts total: the five other Group A providers (`google-oauth`, `github-oauth`, `microsoft-entra`, `magic-link`, `adobe-ims-spa`) plus the three Group B frameworks (`nextauth`, `clerk`, `better-auth`).

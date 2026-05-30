@@ -21,9 +21,9 @@
     {
       "id": "features",
       "type": "multiselect",
-      "prompt": "Which Supabase features? (storage helpers emitted when selected)",
-      "options": ["database", "storage", "realtime", "edge-functions"],
-      "default": ["database", "storage"]
+      "prompt": "Which Supabase features? (drives optional storage helper emission)",
+      "options": ["storage"],
+      "default": ["storage"]
     },
     {
       "id": "storage_buckets",
