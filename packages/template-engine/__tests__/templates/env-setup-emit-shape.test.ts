@@ -245,6 +245,13 @@ describe("env-setup template — emit shape", () => {
         // need a ts-ignore / break typecheck when the dep isn't installed.
         assert.ok(loader.includes("const moduleName"));
         assert.ok(!loader.includes('import("dotenv-expand")'));
+        // Awaited (not fire-and-forget) so expansion completes before the module
+        // finishes loading — no race against later process.env reads.
+        assert.ok(loader.includes("await import(moduleName)"));
+        assert.ok(!loader.includes("void import("));
+        // Only a missing-module error is tolerated; everything else rethrows.
+        assert.ok(loader.includes("ERR_MODULE_NOT_FOUND"));
+        assert.ok(loader.includes("throw err"));
       } finally {
         await fs.rm(projectRoot, { recursive: true, force: true });
       }

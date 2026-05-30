@@ -14,15 +14,27 @@ const useDotenvExpand = "{dotenv_tool}" === "dotenv-expand";
 
 if (useDotenvExpand) {
   // dotenv-expand is an optional peer — install it when you choose this loader
-  // (`npm install dotenv-expand`). The specifier is held in a variable so a
-  // project that hasn't installed it still typechecks; variable expansion is
-  // simply skipped if the module is missing at runtime.
+  // (`npm install dotenv-expand`). Awaited at the top level so expansion finishes
+  // before this module finishes loading — i.e. before any later module reads
+  // process.env (a non-awaited import would race against that). The specifier is
+  // held in a variable so a project that hasn't installed it still typechecks;
+  // expansion is skipped if the module is missing at runtime.
   const moduleName: string = "dotenv-expand";
-  void import(moduleName)
-    .then((mod) => {
-      (mod as { expand: (parsed: typeof result) => unknown }).expand(result);
-    })
-    .catch(() => {
-      // dotenv-expand not installed — variables load without reference expansion.
-    });
+  try {
+    const mod = (await import(moduleName)) as {
+      expand: (parsed: typeof result) => unknown;
+    };
+    mod.expand(result);
+  } catch (err) {
+    // Tolerate only "dotenv-expand isn't installed" (variables then load without
+    // reference expansion). Anything else — a broken install, a syntax/init
+    // error, a missing transitive dep — propagates so the misconfiguration
+    // surfaces at startup instead of being silently swallowed.
+    const code = (err as { code?: string }).code;
+    const moduleMissing =
+      (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") &&
+      err instanceof Error &&
+      err.message.includes(moduleName);
+    if (!moduleMissing) throw err;
+  }
 }
