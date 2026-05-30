@@ -15,6 +15,14 @@ export interface ImageProcessingJobResult {
 
 export const IMAGE_PROCESSING_JOB_NAME = "image-processing";
 
+
+/**
+ * Default queue this job runs on. Used by start-workers.ts to register
+ * the handler only on the matching queue (when present in BULLMQ_QUEUE_NAMES).
+ * Fall-through is "default" — the convention is that every install has a
+ * "default" queue.
+ */
+export const IMAGE_PROCESSING_DEFAULT_QUEUE = "images";
 /**
  * Stub handler — replace the body with a real image pipeline (sharp, Cloudinary,
  * etc.). Kept pure so it can be unit-tested without a Redis connection.

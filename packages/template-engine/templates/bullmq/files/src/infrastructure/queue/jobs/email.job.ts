@@ -15,6 +15,14 @@ export interface EmailJobResult {
 
 export const EMAIL_JOB_NAME = "email";
 
+
+/**
+ * Default queue this job runs on. Used by start-workers.ts to register
+ * the handler only on the matching queue (when present in BULLMQ_QUEUE_NAMES).
+ * Fall-through is "default" — the convention is that every install has a
+ * "default" queue.
+ */
+export const EMAIL_DEFAULT_QUEUE = "default";
 /**
  * Stub handler — replace with your transport (Resend, SES, SendGrid, etc.).
  * Pure so it can be unit-tested without a Redis connection.

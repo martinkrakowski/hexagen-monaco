@@ -1,3 +1,5 @@
+import type { Job } from "bullmq";
+
 // Drop-in stand-in for BullMQ's `Job` shape returned by Queue.add() when the
 // queue layer is running in fallback mode. The minimal surface area covers
 // the fields most callers read (id, name, data, return value), so consumer
@@ -22,20 +24,63 @@ function nextId(): string {
 }
 
 /**
+ * Build a Job-shaped object that satisfies the structural minimum BullMQ
+ * worker callbacks use — id, name, data, log(), updateProgress(), etc. The
+ * type assertion is isolated to this single factory: every other piece of
+ * fallback code receives a "real-looking" Job instead of an ad-hoc inline
+ * stub, so if a handler later starts using a field we don't proxy here,
+ * the failure surfaces in one well-named place rather than as a runtime
+ * TypeError deep inside a per-job wrapper.
+ */
+function makeFallbackJob<TData>(
+  id: string,
+  name: string,
+  data: TData,
+  timestamp: number,
+): Job<TData> {
+  const stub: Partial<Job<TData>> & { progress: number | object } = {
+    id,
+    name,
+    data,
+    timestamp,
+    attemptsMade: 0,
+    progress: 0,
+    log: async (row: string): Promise<number> => {
+      // eslint-disable-next-line no-console
+      console.log(`[bullmq:fallback:${name}:${id}] ${row}`);
+      return 0;
+    },
+    updateProgress: async function (next: number | object): Promise<void> {
+      stub.progress = next;
+    },
+    updateData: async function (next: TData): Promise<void> {
+      stub.data = next;
+    },
+    getState: async (): Promise<"completed"> => "completed",
+    isCompleted: async (): Promise<boolean> => true,
+    isFailed: async (): Promise<boolean> => false,
+    remove: async (): Promise<void> => undefined,
+  };
+  return stub as unknown as Job<TData>;
+}
+
+/**
  * Runs the handler synchronously in the current process and returns a
- * BullMQ-shaped Job stub. Throws if the handler throws — same semantics as
- * BullMQ.Worker would surface via the `failed` event, but inline.
+ * BullMQ-shaped Job stub. The handler receives a fallback Job rather than
+ * raw data so its signature stays identical to the BullMQ worker path —
+ * no per-handler wrappers, no `as never` casts at the call site.
  */
 export async function executeSync<TData, TResult>(
   jobName: string,
   data: TData,
-  handler: (data: TData) => Promise<TResult>,
+  handler: (job: Job<TData>) => Promise<TResult>,
 ): Promise<SyncJob<TData, TResult>> {
   const id = nextId();
   const timestamp = Date.now();
   // eslint-disable-next-line no-console
   console.log(`[bullmq:fallback] executing ${jobName} (${id}) inline`);
-  const returnvalue = await handler(data);
+  const job = makeFallbackJob(id, jobName, data, timestamp);
+  const returnvalue = await handler(job);
   return {
     id,
     name: jobName,

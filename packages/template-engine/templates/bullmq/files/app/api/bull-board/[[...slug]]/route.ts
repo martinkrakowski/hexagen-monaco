@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createBullBoard } from "@bull-board/api";
@@ -41,6 +42,22 @@ function unauthorized(): NextResponse {
   });
 }
 
+// Constant-time string comparison. timingSafeEqual requires equal-length
+// buffers; pad / mismatch handling keeps the runtime constant regardless of
+// the inputs so an attacker can't learn the expected username or password
+// length from the response time.
+function safeCompare(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) {
+    // Still do a constant-time op on a same-length buffer so the length-
+    // mismatch path takes a comparable wall-clock time.
+    timingSafeEqual(aBuf, aBuf);
+    return false;
+  }
+  return timingSafeEqual(aBuf, bBuf);
+}
+
 function checkAuth(request: NextRequest): NextResponse | null {
   if (!IS_PRODUCTION) return null;
   if (!USERNAME || !PASSWORD) {
@@ -56,7 +73,12 @@ function checkAuth(request: NextRequest): NextResponse | null {
   if (idx < 0) return unauthorized();
   const user = decoded.slice(0, idx);
   const pass = decoded.slice(idx + 1);
-  if (user !== USERNAME || pass !== PASSWORD) return unauthorized();
+  // Evaluate BOTH sides so a wrong username doesn't short-circuit the
+  // password comparison — that asymmetry would leak whether the username
+  // was correct via the response time.
+  const userOk = safeCompare(user, USERNAME);
+  const passOk = safeCompare(pass, PASSWORD);
+  if (!userOk || !passOk) return unauthorized();
   return null;
 }
 

@@ -17,6 +17,14 @@ export interface WebhookJobResult {
 
 export const WEBHOOK_JOB_NAME = "webhook";
 
+
+/**
+ * Default queue this job runs on. Used by start-workers.ts to register
+ * the handler only on the matching queue (when present in BULLMQ_QUEUE_NAMES).
+ * Fall-through is "default" — the convention is that every install has a
+ * "default" queue.
+ */
+export const WEBHOOK_DEFAULT_QUEUE = "default";
 const RESPONSE_TRUNCATE_BYTES = 512;
 
 /**

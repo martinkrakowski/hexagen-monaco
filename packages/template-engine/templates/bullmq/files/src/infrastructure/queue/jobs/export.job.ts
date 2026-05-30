@@ -17,6 +17,14 @@ export interface ExportJobResult {
 
 export const EXPORT_JOB_NAME = "export";
 
+
+/**
+ * Default queue this job runs on. Used by start-workers.ts to register
+ * the handler only on the matching queue (when present in BULLMQ_QUEUE_NAMES).
+ * Fall-through is "default" — the convention is that every install has a
+ * "default" queue.
+ */
+export const EXPORT_DEFAULT_QUEUE = "default";
 /**
  * Stub handler for long-running data exports — typically too slow for
  * request/response (CSV of all orders, etc.). Replace the body with your

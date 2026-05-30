@@ -13,14 +13,29 @@ const FALLBACK_MODE = process.env.BULLMQ_FALLBACK_MODE ?? "auto";
 
 let connection: Redis | null = null;
 let fallbackActive = false;
-let warned = false;
+// Logging guards: each side flips the *other* guard on transition so the
+// pair stays in sync (every fallback re-arms the recovery announce; every
+// recovery re-arms the fallback announce).
+let warnedFallback = false;
+let warnedRecovery = false;
 
 function announceFallback(reason: string): void {
-  if (warned) return;
-  warned = true;
+  if (warnedFallback) return;
+  warnedFallback = true;
+  warnedRecovery = false;
   // eslint-disable-next-line no-console
   console.warn(
     `[bullmq:fallback] Redis unavailable (${reason}) — running jobs synchronously in-process. Set BULLMQ_FALLBACK_MODE=never to disable.`,
+  );
+}
+
+function announceRecovery(): void {
+  if (warnedRecovery) return;
+  warnedRecovery = true;
+  warnedFallback = false;
+  // eslint-disable-next-line no-console
+  console.info(
+    "[bullmq:fallback] Redis recovered — resuming real BullMQ queues.",
   );
 }
 
@@ -45,6 +60,18 @@ if (FALLBACK_MODE === "always") {
         announceFallback(err.message);
       }
     });
+    // Recover from a transient blip: when ioredis reconnects (after a
+    // socket drop / Redis restart / network flake), clear fallback so
+    // addJob() resumes pushing to BullMQ instead of permanently degrading
+    // to in-process execution until process restart.
+    const onUp = () => {
+      if (FALLBACK_MODE === "auto" && fallbackActive) {
+        fallbackActive = false;
+        announceRecovery();
+      }
+    };
+    connection.on("ready", onUp);
+    connection.on("connect", onUp);
   } catch (err) {
     if (FALLBACK_MODE === "auto") {
       fallbackActive = true;

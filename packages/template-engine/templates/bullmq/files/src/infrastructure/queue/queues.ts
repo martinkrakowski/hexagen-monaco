@@ -52,7 +52,11 @@ export function getQueue(name: QueueName): Queue {
  * registered handler while Redis is down, the call rejects so the
  * misconfiguration surfaces immediately.
  */
-type FallbackHandler<TData, TResult> = (data: TData) => Promise<TResult>;
+// Fallback handlers take a Job-shaped argument (built by executeSync), so
+// the signature matches the BullMQ Worker callback exactly — the same
+// handler can be passed unmodified to both the worker dispatcher and the
+// fallback registry, without `as never` casts at the call site.
+type FallbackHandler<TData, TResult> = (job: Job<TData>) => Promise<TResult>;
 
 const fallbackHandlers = new Map<string, FallbackHandler<unknown, unknown>>();
 
