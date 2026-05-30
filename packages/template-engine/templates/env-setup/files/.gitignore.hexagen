@@ -1,0 +1,13 @@
+# ─── env-setup: secret-ignore rules ─────────────────────────────────────────
+# Append these to your project's .gitignore so real secrets never get committed,
+# then delete this sidecar file:
+#
+#   cat .gitignore.hexagen >> .gitignore && rm .gitignore.hexagen
+#
+# Ignores your local/secret env files but keeps the committed *.example
+# references tracked.
+
+.env
+.env.*
+!.env.example
+!.env.*.example

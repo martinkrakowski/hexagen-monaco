@@ -10,21 +10,26 @@ First-day guide for getting this project running. Framework: **{framework}**.
 
 ## First-Time Setup
 
-1. Copy the env reference and fill in your values:
+1. Make sure secrets can't be committed — append the secret-ignore rules to your
+   `.gitignore`, then remove the sidecar:
+   ```bash
+   cat .gitignore.hexagen >> .gitignore && rm .gitignore.hexagen
+   ```
+2. Copy the env reference and fill in your values:
    ```bash
    cp .env.example .env.local
    ```
-2. Set every variable annotated `# required` (in `.env.example` and in any
+3. Set every variable annotated `# required` (in `.env.example` and in any
    `.env.<template>.example` file). Plain empty values are optional placeholders.
-3. Install dependencies:
+4. Install dependencies:
    ```bash
    npm install
    ```
-4. Register the env check (one-time) by adding this script to `package.json`:
+5. Register the env check (one-time) by adding this script to `package.json`:
    ```json
    "check:env": "tsx scripts/check-env.ts"
    ```
-5. Validate your environment, then start the app:
+6. Validate your environment, then start the app:
    ```bash
    npm run check:env
    npm run dev
