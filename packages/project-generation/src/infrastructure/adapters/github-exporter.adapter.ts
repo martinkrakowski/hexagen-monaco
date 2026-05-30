@@ -250,19 +250,41 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     const exists = await this.refExists(token, owner, repo, branch);
 
     if (exists) {
-      await this.request(
-        token,
-        "PATCH",
-        `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
-        { sha: commitSha, force: true },
-      );
+      await this.updateRef(token, owner, repo, branch, commitSha);
       return;
     }
 
-    await this.request(token, "POST", `/repos/${owner}/${repo}/git/refs`, {
-      ref: `refs/heads/${branch}`,
-      sha: commitSha,
-    });
+    try {
+      await this.request(token, "POST", `/repos/${owner}/${repo}/git/refs`, {
+        ref: `refs/heads/${branch}`,
+        sha: commitSha,
+      });
+    } catch (err) {
+      // Check-then-act race: the ref may have been created between the 404
+      // probe and this POST (concurrent export / double-submit). GitHub
+      // answers a create-on-existing ref with 422 — fall back to updating
+      // the now-existing ref rather than failing the whole export.
+      if (err instanceof GitHubApiError && err.status === 422) {
+        await this.updateRef(token, owner, repo, branch, commitSha);
+        return;
+      }
+      throw err;
+    }
+  }
+
+  private async updateRef(
+    token: string,
+    owner: string,
+    repo: string,
+    branch: string,
+    commitSha: string,
+  ): Promise<void> {
+    await this.request(
+      token,
+      "PATCH",
+      `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      { sha: commitSha, force: true },
+    );
   }
 
   private async refExists(

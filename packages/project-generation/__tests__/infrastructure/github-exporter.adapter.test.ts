@@ -38,11 +38,18 @@ function installFetchMock(routes: MockRoute[]): {
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
     calls.push({ method, path: apiPath, body });
 
-    const idx = remaining.findIndex((r) => r.match(method, apiPath));
-    if (idx === -1) {
-      throw new Error(`Unexpected request: ${method} ${apiPath}`);
+    // Strict head-of-queue matching: each call must match the *next* expected
+    // route, so a regression in the create→blob→tree→commit→ref ordering is
+    // caught instead of silently consuming a later route. (The two blob POSTs
+    // share an interchangeable matcher, so their relative order is free.)
+    const route = remaining[0];
+    if (!route || !route.match(method, apiPath)) {
+      throw new Error(
+        `Unexpected request: ${method} ${apiPath}` +
+          (route ? ` (expected to match route at head of queue)` : ""),
+      );
     }
-    const [route] = remaining.splice(idx, 1);
+    remaining.shift();
     const status = route.status;
     return {
       ok: status >= 200 && status < 300,
@@ -178,6 +185,35 @@ describe("GitHubExporterAdapter", () => {
     );
 
     assert.strictEqual(result.success, true);
+  });
+
+  it("falls back to PATCH when the ref is created during a race (POST → 422)", async () => {
+    const mock = installFetchMock([
+      route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+      route("POST", "/git/blobs", 201, { sha: "blob1" }),
+      route("POST", "/git/blobs", 201, { sha: "blob2" }),
+      route("POST", "/git/trees", 201, { sha: "tree1" }),
+      route("POST", "/git/commits", 201, { sha: "commit4" }),
+      // Probe sees no ref...
+      route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
+      // ...but a concurrent export created it before our POST lands.
+      route("POST", "/git/refs", 422, {
+        message: "Reference already exists",
+      }),
+      // Fallback: update the now-existing ref instead of failing.
+      route("PATCH", "/git/refs/heads/main", 200, { ref: "refs/heads/main" }),
+    ]);
+    restore = mock.restore;
+
+    const result = await new GitHubExporterAdapter().export(
+      sourceDir,
+      githubConfig(),
+    );
+
+    assert.strictEqual(result.success, true);
+    const patch = mock.calls.find((c) => c.method === "PATCH");
+    assert.ok(patch, "expected PATCH fallback after 422 on ref create");
+    assert.deepStrictEqual(patch?.body, { sha: "commit4", force: true });
   });
 
   it("fails with the API error when the token is unauthorized", async () => {

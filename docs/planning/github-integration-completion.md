@@ -60,8 +60,8 @@ Harden the live path now (it's what ships). Reconciliation moves the GitHub **de
 
 ### Phase 0 — Bug fix + safety net ✅ shipped (PR #121, `f77ce052`)
 
-1. ✅ Fix empty-repo ref bug: probe `refs/heads/<branch>` → `POST` create or `PATCH` update.
-2. ✅ Integration tests for `GitHubExporterAdapter` against mocked `fetch`: fresh repo, existing branch, repo-already-exists, 401, missing-config; assert create→blob→tree→commit→ref sequence.
+1. ✅ Fix empty-repo ref bug: probe `refs/heads/<branch>` → `POST` create or `PATCH` update; the create path falls back to `PATCH` on a 422 so a check-then-act race (concurrent export / double-submit) doesn't fail the export.
+2. ✅ Integration tests for `GitHubExporterAdapter` against an order-enforcing mocked `fetch`: fresh repo, existing branch, repo-already-exists, ref-create race fallback, 401, missing-config; assert create→blob→tree→commit→ref sequence.
 3. ⏳ **Deferred to Phase 1** (needs the structured-error change below): map GitHub error codes to precise HTTP statuses instead of blanket 500.
 
 ### Phase 1 — Push to existing repo / branch + structured errors
