@@ -1,11 +1,23 @@
 {
   "id": "ci-github-actions",
   "name": "CI / GitHub Actions",
-  "description": "Build+typecheck+lint+test CI, Vercel/Railway/Fly/VPS deploy workflow, PR preview deploys, Dependabot",
+  "description": "GitHub Actions CI (build/typecheck/lint/test) with Turbo cache, a per-target deploy workflow (Vercel/Railway/Fly.io/VPS), optional PR preview deploys, and Dependabot",
   "version": "1.0.0",
-  "requires": ["env-setup"],
+  "requires": [],
   "conflicts": [],
   "questions": [
+    {
+      "id": "ci_triggers",
+      "type": "multiselect",
+      "prompt": "When should CI run?",
+      "options": [
+        "push-all-branches",
+        "push-main-only",
+        "pull-request",
+        "manual"
+      ],
+      "default": ["push-all-branches", "pull-request"]
+    },
     {
       "id": "deploy_target",
       "type": "select",
@@ -16,7 +28,7 @@
     {
       "id": "preview_deploys",
       "type": "boolean",
-      "prompt": "PR preview deploys?",
+      "prompt": "PR preview deploys? (Vercel-based; pair with deploy_target vercel/railway)",
       "default": true
     },
     {
@@ -27,23 +39,68 @@
       "default": "22"
     },
     {
+      "id": "package_manager",
+      "type": "auto",
+      "derivedFrom": "env-setup.package_manager",
+      "default": "yarn"
+    },
+    {
       "id": "docker_build",
       "type": "boolean",
-      "prompt": "Build and push Docker image in CI?",
+      "prompt": "Build and push a Docker image in CI? (the docker template owns docker-build.yml; this records the intent)",
       "default": false
+    },
+    {
+      "id": "run_tests",
+      "type": "boolean",
+      "prompt": "Run tests in CI?",
+      "default": true
+    },
+    {
+      "id": "cache_strategy",
+      "type": "select",
+      "prompt": "Dependency cache strategy?",
+      "options": ["node-modules", "yarn-cache", "turbo-cache"],
+      "default": "turbo-cache"
     }
   ],
   "envVars": [],
   "outputs": [
     ".github/workflows/ci.yml",
-    ".github/workflows/deploy.yml",
-    ".github/dependabot.yml"
+    ".github/dependabot.yml",
+    {
+      "path": ".github/workflows/deploy-vercel.yml",
+      "when": { "answer": "deploy_target", "equals": "vercel" }
+    },
+    {
+      "path": ".github/workflows/deploy-railway.yml",
+      "when": { "answer": "deploy_target", "equals": "railway" }
+    },
+    {
+      "path": ".github/workflows/deploy-fly.yml",
+      "when": { "answer": "deploy_target", "equals": "fly-io" }
+    },
+    {
+      "path": "fly.toml",
+      "when": { "answer": "deploy_target", "equals": "fly-io" }
+    },
+    {
+      "path": ".github/workflows/deploy-vps.yml",
+      "when": { "answer": "deploy_target", "equals": "vps-ssh" }
+    },
+    {
+      "path": ".github/workflows/preview.yml",
+      "when": { "answer": "preview_deploys", "equals": true }
+    }
   ],
   "checklist": [
-    "Push to a feature branch and verify CI workflow runs green",
-    "Add required secrets to GitHub repo → Settings → Secrets and variables → Actions",
-    "Set TURBO_TOKEN and TURBO_TEAM for remote Turbo cache",
-    "Merge to main and verify deploy workflow triggers"
+    "Push to a feature branch and verify the CI workflow runs green (Actions tab)",
+    "Add required secrets: GitHub repo → Settings → Secrets and variables → Actions (look for the # TODO comments in the generated workflow files)",
+    "Set TURBO_TOKEN (secret) and TURBO_TEAM (variable) for the remote Turbo cache — CI is much faster after the first run",
+    "The 'Validate env vars' step runs `check:env`, provided by the env-setup template; delete that step if you did not install env-setup",
+    "Merge to main and verify the deploy workflow triggers (only the workflow for your chosen deploy_target was generated)",
+    "If preview deploys are enabled, open a PR and verify the preview URL comment appears",
+    "Dependabot opens weekly PRs to keep Actions and dev dependencies current — review and merge them"
   ],
   "branch": "feature/generator-template-ci-github-actions"
 }

@@ -1,0 +1,39 @@
+name: Deploy to Vercel
+
+# Production deploy on every merge to main.
+#
+# TODO: add these in GitHub repo → Settings → Secrets and variables → Actions:
+#   - VERCEL_TOKEN       (secret)   vercel.com → Account Settings → Tokens
+#   - VERCEL_ORG_ID      (secret)   from `vercel link` → .vercel/project.json
+#   - VERCEL_PROJECT_ID  (secret)   from `vercel link` → .vercel/project.json
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: {node_version}
+          cache: "{package_manager}"
+
+      - run: {package_manager} install --immutable
+
+      - name: Deploy to Vercel (prebuilt)
+        run: |
+          npx vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+          npx vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+          npx vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"

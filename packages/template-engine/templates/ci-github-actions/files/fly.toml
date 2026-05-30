@@ -1,0 +1,23 @@
+# Fly.io app configuration.
+#
+# TODO before first deploy:
+#   1. fly apps create <your-app-name>   (then set `app` below)
+#   2. pick a region near your users:    fly platform regions
+#   3. set runtime secrets:              fly secrets set KEY=value
+app = "your-app-name"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

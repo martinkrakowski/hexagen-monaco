@@ -156,6 +156,23 @@ describe("docker template — emit shape", () => {
         "workflow must lowercase github.repository before pushing",
       );
     });
+
+    it("preserves GitHub Actions ${{ }} expressions through interpolation", async () => {
+      const workflow = await read(
+        projectRoot,
+        ".github/workflows/docker-build.yml",
+      );
+      // The interpolator must not collapse the double braces of a GHA
+      // expression to single braces (which GitHub would not evaluate).
+      assert.ok(
+        workflow.includes("${{ secrets.GITHUB_TOKEN }}"),
+        "secret reference must keep its ${{ }} braces",
+      );
+      assert.ok(
+        !/\$\{ [a-z]/.test(workflow),
+        "no GHA expression should be mangled to single-brace ${ ... }",
+      );
+    });
   });
 
   describe("non-default answers (node_version=20, services=[redis,postgres])", () => {

@@ -1,0 +1,30 @@
+name: Deploy to Railway
+
+# Production deploy on every merge to main. Railway natively runs background
+# worker services alongside the web service — pair with the bullmq template's
+# separate-worker mode by adding a second deploy step targeting that service.
+#
+# TODO: add in GitHub repo → Settings → Secrets and variables → Actions:
+#   - RAILWAY_TOKEN    (secret)    Railway → Account → Tokens
+#   - RAILWAY_SERVICE  (variable)  the service name to redeploy (optional)
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        uses: bervProject/railway-deploy@main
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
+          service: ${{ vars.RAILWAY_SERVICE }}
