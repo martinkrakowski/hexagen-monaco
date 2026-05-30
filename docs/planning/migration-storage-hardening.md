@@ -110,32 +110,55 @@ currently defines its **own** inline `MigrationOrchestrator` (≈120 lines) — 
 that already contains the `getStorage()` try/catch the production class lacks. So
 the suite is green while production is buggy, and the test validates nothing real.
 
-### Plan
+### Make it actually run in CI first
 
-- Delete the inline class; import the real one
-  (`../../../src/infrastructure/migration/migration-orchestrator.js`).
-- Reconcile the API differences the copy drifted on:
-  - real status key is `hexagen:migration:status` (copy used `…-status`),
-  - real `lastRunAt` is `number | null` (copy used `string | null`),
-  - real `getStatus()` re-derives from storage each call (copy kept an in-memory
-    `Set`),
-  - real `runPending()` early-returns when `window` is undefined.
-- Keep the existing `beforeEach` that sets `globalThis.window = { localStorage:
-mockStorage }` — after W1 the real class reads `window.localStorage`, so the
-  mock drives it directly.
+The existing `__tests__/` test **does not run today**: web-driver's `test` script
+is `node --test 'src/**/*.test.ts' 2>/dev/null || true` (only `src/`, errors
+suppressed) and its `tsconfig.json` `include` is `["src/**/*"]`, so `__tests__/`
+is neither executed nor compiled. Simply editing that file in place would still
+leave CI without the coverage. Pick a home that runs:
+
+- **Recommended (PR 1): put the rewritten test where `tsx --test` already runs —
+  `apps/web/**`** (the `apps/web` `test`script is`tsx … --test '**/\*.test.ts'`,
+and `apps/web` is the real consumer of the orchestrator). Import the class
+  **through the package's public surface, not a relative `src/...` path\*\*:
+  - `MigrationOrchestrator` is currently **not** re-exported from
+    `packages/web-driver/src/index.ts` — add it to the package's public exports as
+    part of this change, then `import { MigrationOrchestrator } from
+"@hexagen/web-driver"`. This tests the shipped artifact and avoids
+    runner/extension (`.js`/`.ts`) mismatches.
+  - Delete the divergent inline reimplementation in
+    `packages/web-driver/__tests__/…/migration-orchestrator.test.ts`.
+- **Alternative (separate, larger):** give `@hexagen/web-driver` a real
+  TS-capable runner (`tsx --test`) and add a test `tsconfig` that includes
+  `__tests__/`, so package-local tests run. Keeps unit tests next to the code but
+  is broader (the package currently has **no** working test run); track as its own
+  cleanup rather than blocking the hardening.
+
+### Test content
+
+- Reconcile the API the inline copy drifted on (it was written against a different
+  shape): real status key is `hexagen:migration:status` (copy used `…-status`),
+  real `lastRunAt` is `number | null` (copy used `string`), real `getStatus()`
+  re-derives from storage each call (copy kept an in-memory `Set`), real
+  `runPending()` early-returns when `window` is undefined.
+- Drive it via `globalThis.window = { localStorage: mockStorage }` — after W1 the
+  real class reads `window.localStorage`, so the mock drives it directly.
 - Add the throwing-storage case: define `window.localStorage` as a getter that
-  throws, assert `runPending()`/`getStatus()` don't throw.
+  throws and assert `runPending()`/`getStatus()` don't throw.
 
-This makes the test exercise the shipped code and locks in the W1 guarantees.
+This makes the test exercise the shipped code **and run in CI**, locking in the
+W1 guarantees.
 
 ---
 
 ## Sequencing, risk, effort
 
 1. **PR 1 (P0 + W2):** `safe-local-storage.ts` helper, route the orchestrator and
-   the 3 migration steps through it, add the `runPending` no-storage guard, and
-   rewrite the orchestrator test against the real class with throwing-storage
-   coverage. ~2–3 hrs.
+   the 3 migration steps through it, add the `runPending` no-storage guard, export
+   `MigrationOrchestrator` from the package entrypoint, and add the rewritten test
+   under `apps/web/**` (importing via `@hexagen/web-driver`) with throwing-storage
+   coverage — deleting the divergent web-driver `__tests__` copy. ~2–3 hrs.
 2. **PR 2 (P1):** audit and guard the remaining adapters (quota monitor,
    verification cache, encrypted vault). ~1–2 hrs.
 
@@ -151,9 +174,8 @@ reason); add the unit coverage above.
 
 ## Out of scope
 
-- The web-driver package's own `test` script is effectively a no-op
-  (`node --test 'src/**/*.test.ts' 2>/dev/null || true`, and the migration test
-  lives under `__tests__/`). Wiring up a real test runner for the package is a
-  separate cleanup; until then, the rewritten test should live where the suite
-  that actually runs will pick it up.
+- Giving `@hexagen/web-driver` a working package-local test runner (its `test`
+  script is a no-op today — see W2's "Alternative"). PR 1 sidesteps this by
+  homing the rewritten test in `apps/web/**`; making the package run its own
+  `__tests__/` is a worthwhile but separate cleanup.
 - A general `SafeStorage` abstraction over IndexedDB as well as localStorage.
