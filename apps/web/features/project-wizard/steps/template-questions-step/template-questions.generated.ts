@@ -267,6 +267,10 @@ export const TEMPLATE_QUESTIONS: Record<
       prompt:
         "HTTP path for the container health check? (use / for any app, or /api/health if you also install the observability template)",
       default: "/",
+      validation: {
+        pattern: "^/[a-zA-Z0-9/_.-]*$",
+        message: "Must be a URL path starting with /, e.g. / or /api/health",
+      },
     },
   ],
   "env-setup": [
