@@ -2,7 +2,7 @@
 
 > **Status:** Core framework shipped (`feature/generator-template-system-core`, PR #83).
 > Most templates now ship scaffold content; the `docker` template landed on `feature/generator-template-docker`.
-> Remaining content gaps: `observability`, `ci-github-actions`.
+> Remaining content gaps: `ci-github-actions`.
 > Planned (design only, no manifest yet): the **Amazon Bedrock AgentCore** family
 > ([`16-bedrock-agentcore.md`](./16-bedrock-agentcore.md)) — `bedrock-agentcore-runtime`,
 > `bedrock-agentcore-services`, `llm-adapter-bedrock`; the **Adobe Firefly Services** family
@@ -246,7 +246,7 @@ adapters, not new logic"). The moment it absorbs business rules, the boundary is
 | CLI commands                         | ✅ Shipped     | `templates list`, `templates info`, `add`, `validate-templates`                                                                                                           |
 | `interpolate()` in `@hexagen/shared` | ✅ Shipped     | Unified — no more duplicate in file-emitter                                                                                                                               |
 | Template manifests (all 14)          | ✅ Shipped     | Questions, outputs, env vars, checklist, dependency declarations                                                                                                          |
-| **Template file content**            | 🚧 In progress | Scaffold files landed for most templates (incl. `env-setup`, `error-handling`, `docker`, `design-system`, `agents-md`); still empty: `observability`, `ci-github-actions` |
+| **Template file content**            | 🚧 In progress | Scaffold files landed for most templates (incl. `env-setup`, `error-handling`, `observability`, `docker`, `design-system`, `agents-md`); still empty: `ci-github-actions` |
 | `--add` flag at `hexagen new`        | ⏳ Pending     | Wire `AddTemplateUseCase` into the generation pipeline                                                                                                                    |
 | `RemoteTemplateRegistry` adapter     | ⏳ Future      | Port abstraction already in place                                                                                                                                         |
 
