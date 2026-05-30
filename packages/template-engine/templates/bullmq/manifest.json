@@ -67,6 +67,7 @@
   ],
   "outputs": [
     "src/infrastructure/queue/connection.ts",
+    "src/infrastructure/queue/parse-int-env.ts",
     "src/infrastructure/queue/queues.ts",
     "src/infrastructure/queue/workers.ts",
     "src/infrastructure/queue/fallback/sync-executor.ts",

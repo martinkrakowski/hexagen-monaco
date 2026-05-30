@@ -74,6 +74,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
     it("emits the always-on core files", async () => {
       for (const p of [
         "src/infrastructure/queue/connection.ts",
+        "src/infrastructure/queue/parse-int-env.ts",
         "src/infrastructure/queue/queues.ts",
         "src/infrastructure/queue/workers.ts",
         "src/infrastructure/queue/index.ts",

@@ -1,4 +1,7 @@
 import IORedis, { type Redis } from "ioredis";
+import { parseIntEnv } from "./parse-int-env";
+
+export { parseIntEnv };
 
 // Single Redis connection used by all queues + workers. We probe it once at
 // module load: if the URL is unreachable or REDIS_URL is unset, the queue
@@ -7,8 +10,8 @@ import IORedis, { type Redis } from "ioredis";
 // logged so the mode is visible.
 
 const REDIS_URL = process.env.REDIS_URL ?? "";
-const MAX_RETRIES = Number(process.env.REDIS_MAX_RETRIES ?? 3);
-const CONNECT_TIMEOUT_MS = Number(process.env.REDIS_CONNECTION_TIMEOUT_MS ?? 5000);
+const MAX_RETRIES = parseIntEnv("REDIS_MAX_RETRIES", 3, 0);
+const CONNECT_TIMEOUT_MS = parseIntEnv("REDIS_CONNECTION_TIMEOUT_MS", 5000, 1);
 const FALLBACK_MODE = process.env.BULLMQ_FALLBACK_MODE ?? "auto";
 
 let connection: Redis | null = null;

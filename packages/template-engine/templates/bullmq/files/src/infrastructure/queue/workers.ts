@@ -1,8 +1,18 @@
 import { Worker, type Job, type Processor } from "bullmq";
 import { getRedisConnection, isFallbackActive } from "./connection";
+import { parseIntEnv } from "./parse-int-env";
 import { QUEUE_NAMES, type QueueName } from "./queues";
 
-const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? "{concurrency}");
+// The install-time default is interpolated as a string ("1", "2", "5", "10");
+// the fallback after the `||` guards against the (unexpected) case where
+// the placeholder wasn't replaced. WORKER_CONCURRENCY env overrides it via
+// parseIntEnv, which logs + falls back if the env value is non-numeric.
+const INSTALL_DEFAULT_CONCURRENCY = Number.parseInt("{concurrency}", 10) || 2;
+const CONCURRENCY = parseIntEnv(
+  "WORKER_CONCURRENCY",
+  INSTALL_DEFAULT_CONCURRENCY,
+  1,
+);
 
 const workers: Worker[] = [];
 

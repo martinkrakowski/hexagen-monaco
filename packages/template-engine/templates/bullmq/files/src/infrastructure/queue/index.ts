@@ -18,10 +18,11 @@ export {
 } from "./workers";
 
 export {
+  disconnectRedis,
   getRedisConnection,
   isFallbackActive,
   isRedisAvailable,
-  disconnectRedis,
+  parseIntEnv,
 } from "./connection";
 
 export { scheduleRecurringJobs } from "./scheduler/job-scheduler";
