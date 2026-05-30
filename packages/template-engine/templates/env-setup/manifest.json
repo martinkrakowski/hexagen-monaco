@@ -30,9 +30,11 @@
     "SETUP.md"
   ],
   "checklist": [
-    "cp .env.example .env.local",
-    "Fill in required values (lines with empty = values)",
-    "yarn check:env  ← validates your .env.local before first run"
+    "Install Zod: npm install zod",
+    "cp .env.example .env.local, then fill in any variable with an empty = value (those are required)",
+    "Add a script to package.json: \"check:env\": \"tsx scripts/check-env.ts\"",
+    "npm run check:env  ← validates .env.local before first run / demo / deploy",
+    "Read SETUP.md for the env model (server vs client split, strict validation)"
   ],
   "branch": "feature/generator-template-env-setup"
 }
