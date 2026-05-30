@@ -1,7 +1,8 @@
 # Generator Add-On Templates — Job Index
 
 > **Status:** Core framework shipped (`feature/generator-template-system-core`, PR #83).
-> Template file content not yet implemented — manifests are complete, actual scaffolded files per branch are pending.
+> Most templates now ship scaffold content; the `docker` template landed on `feature/generator-template-docker`.
+> Remaining content gaps: `env-setup`, `error-handling`, `observability`, `design-system`, `ci-github-actions`, `agents-md`.
 
 ---
 
@@ -161,20 +162,20 @@ Conflicts declared in manifests:
 
 ## Implementation Status
 
-| Layer                                | Status     | Notes                                                                       |
-| ------------------------------------ | ---------- | --------------------------------------------------------------------------- |
-| `@hexagen/template-engine` domain    | ✅ Shipped | Manifest schema, config model, `conflictFilePath()`, question types         |
-| Dependency resolver                  | ✅ Shipped | DFS topological sort, cycle + missing + conflict detection                  |
-| `AddTemplateUseCase`                 | ✅ Shipped | Questions, file emission, config persistence, checklist                     |
-| `ValidateTemplatesUseCase`           | ✅ Shipped | Missing files, missing env vars, open conflict files                        |
-| `FileSystemFileEmitter`              | ✅ Shipped | SHA-256 idempotency, atomic write, extension-preserving conflict files      |
-| `InteractiveQuestionEngine`          | ✅ Shipped | select / multiselect / text / boolean / auto                                |
-| CLI commands                         | ✅ Shipped | `templates list`, `templates info`, `add`, `validate-templates`             |
-| `interpolate()` in `@hexagen/shared` | ✅ Shipped | Unified — no more duplicate in file-emitter                                 |
-| Template manifests (all 14)          | ✅ Shipped | Questions, outputs, env vars, checklist, dependency declarations            |
-| **Template file content**            | ⏳ Pending | Each branch above owns the actual scaffold files in `templates/<id>/files/` |
-| `--add` flag at `hexagen new`        | ⏳ Pending | Wire `AddTemplateUseCase` into the generation pipeline                      |
-| `RemoteTemplateRegistry` adapter     | ⏳ Future  | Port abstraction already in place                                           |
+| Layer                                | Status         | Notes                                                                                                                                                                     |
+| ------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@hexagen/template-engine` domain    | ✅ Shipped     | Manifest schema, config model, `conflictFilePath()`, question types                                                                                                       |
+| Dependency resolver                  | ✅ Shipped     | DFS topological sort, cycle + missing + conflict detection                                                                                                                |
+| `AddTemplateUseCase`                 | ✅ Shipped     | Questions, file emission, config persistence, checklist                                                                                                                   |
+| `ValidateTemplatesUseCase`           | ✅ Shipped     | Missing files, missing env vars, open conflict files                                                                                                                      |
+| `FileSystemFileEmitter`              | ✅ Shipped     | SHA-256 idempotency, atomic write, extension-preserving conflict files                                                                                                    |
+| `InteractiveQuestionEngine`          | ✅ Shipped     | select / multiselect / text / boolean / auto                                                                                                                              |
+| CLI commands                         | ✅ Shipped     | `templates list`, `templates info`, `add`, `validate-templates`                                                                                                           |
+| `interpolate()` in `@hexagen/shared` | ✅ Shipped     | Unified — no more duplicate in file-emitter                                                                                                                               |
+| Template manifests (all 14)          | ✅ Shipped     | Questions, outputs, env vars, checklist, dependency declarations                                                                                                          |
+| **Template file content**            | 🚧 In progress | Scaffold files landed for most templates (incl. `docker`); still empty: `env-setup`, `error-handling`, `observability`, `design-system`, `ci-github-actions`, `agents-md` |
+| `--add` flag at `hexagen new`        | ⏳ Pending     | Wire `AddTemplateUseCase` into the generation pipeline                                                                                                                    |
+| `RemoteTemplateRegistry` adapter     | ⏳ Future      | Port abstraction already in place                                                                                                                                         |
 
 ---
 
