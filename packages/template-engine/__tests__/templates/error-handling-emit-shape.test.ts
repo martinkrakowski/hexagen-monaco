@@ -157,10 +157,14 @@ describe("error-handling template — emit shape", () => {
       assert.ok(!handler.includes("{http_mapping}"));
       assert.ok(!handler.includes("{sentry}"));
       // Domain context must be spread BEFORE the authoritative RFC 7807 fields
-      // so it can't clobber `status`/`type`/etc.
+      // so it can't clobber `status`/`type`/etc. Assert both markers exist first
+      // — otherwise a missing marker (indexOf === -1) would pass the order check.
+      const ctxIdx = handler.indexOf("error.context");
+      const typeIdx = handler.indexOf("type: TYPE_BASE_URL");
+      assert.ok(ctxIdx >= 0, "expected the error.context spread to be present");
+      assert.ok(typeIdx >= 0, "expected the type: field to be present");
       assert.ok(
-        handler.indexOf("error.context") <
-          handler.indexOf("type: TYPE_BASE_URL"),
+        ctxIdx < typeIdx,
         "context spread must precede the standard fields",
       );
     });
