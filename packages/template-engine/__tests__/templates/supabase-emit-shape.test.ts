@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { AddTemplateUseCase } from "../../src/application/use-cases/add-template.use-case.js";
 import { FileSystemFileEmitter } from "../../src/infrastructure/file-emitter.adapter.js";
 import { FileSystemTemplateConfigStore } from "../../src/infrastructure/template-config-store.adapter.js";
@@ -13,8 +14,11 @@ import type {
 } from "../../src/domain/index.js";
 import type { QuestionEnginePort } from "../../src/application/ports/question-engine.port.js";
 
+// fileURLToPath handles Windows file:// URLs correctly (URL.pathname returns
+// "/C:/foo" on Windows, which path.dirname mangles). Matches the pattern in
+// src/infrastructure/template-registry.adapter.ts.
 const TEMPLATES_DIR = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
   "templates",
