@@ -1,9 +1,24 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+// Resolve the tsx CLI from the repo so the emitted error-handling code can be
+// run as a real subprocess from a temp project with no node_modules of its own.
+const requireFromHere = createRequire(import.meta.url);
+const tsxPkgJson = requireFromHere.resolve("tsx/package.json");
+const tsxBin = JSON.parse(readFileSync(tsxPkgJson, "utf8")).bin as
+  | string
+  | { tsx: string };
+const TSX_CLI = path.join(
+  path.dirname(tsxPkgJson),
+  typeof tsxBin === "string" ? tsxBin : tsxBin.tsx,
+);
 import { AddTemplateUseCase } from "../../src/application/use-cases/add-template.use-case.js";
 import { FileSystemFileEmitter } from "../../src/infrastructure/file-emitter.adapter.js";
 import { FileSystemTemplateConfigStore } from "../../src/infrastructure/template-config-store.adapter.js";
@@ -141,10 +156,10 @@ describe("error-handling template — emit shape", () => {
       assert.ok(handler.includes('"false" === "true"'));
       assert.ok(!handler.includes("{http_mapping}"));
       assert.ok(!handler.includes("{sentry}"));
-      // error.context must be spread BEFORE the authoritative RFC 7807 fields so
-      // it can't clobber `status`/`type`/etc.
+      // Domain context must be spread BEFORE the authoritative RFC 7807 fields
+      // so it can't clobber `status`/`type`/etc.
       assert.ok(
-        handler.indexOf("...(error.context") <
+        handler.indexOf("error.context") <
           handler.indexOf("type: TYPE_BASE_URL"),
         "context spread must precede the standard fields",
       );
@@ -189,6 +204,87 @@ describe("error-handling template — emit shape", () => {
         "server/middleware/error-handler.ts",
       );
       assert.ok(handler.includes('"true" === "true"'));
+    });
+  });
+
+  // Run the emitted error system as a real subprocess to prove behaviour (not
+  // just file shape): RFC 7807 mapping, layer-aware client exposure, Result.
+  describe("runtime behaviour", () => {
+    let projectRoot: string;
+    let out: {
+      notFound: { status: number; body: Record<string, unknown> };
+      external: { status: number; body: Record<string, unknown> };
+      unknown: { status: number; body: Record<string, unknown> };
+      nfIsDomain: boolean;
+      okWorks: boolean;
+      errWorks: boolean;
+    };
+
+    before(async () => {
+      projectRoot = await freshProject();
+      await install(projectRoot);
+      const driver = [
+        'import { handleError } from "./server/middleware/error-handler";',
+        'import { NotFoundError } from "./src/domain/errors/not-found.error";',
+        'import { ExternalServiceError } from "./src/infrastructure/errors/external-service.error";',
+        'import { DomainError } from "./src/domain/errors/domain.error";',
+        'import { ok, err, isOk, isErr } from "./src/shared/result";',
+        'const notFound = handleError(new NotFoundError("Project", "1"), "/projects/1");',
+        'const external = handleError(new ExternalServiceError("openai", 429));',
+        'const unknown = handleError(new Error("boom"));',
+        "console.log(JSON.stringify({",
+        "  notFound, external, unknown,",
+        '  nfIsDomain: new NotFoundError("Project", "1") instanceof DomainError,',
+        "  okWorks: isOk(ok(5)),",
+        '  errWorks: isErr(err(new Error("x"))),',
+        "}));",
+      ].join("\n");
+      await fs.writeFile(path.join(projectRoot, "driver.ts"), driver, "utf8");
+      const stdout = execFileSync(process.execPath, [TSX_CLI, "driver.ts"], {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      out = JSON.parse(stdout);
+    });
+
+    after(async () => {
+      await fs.rm(projectRoot, { recursive: true, force: true });
+    });
+
+    it("maps a domain NotFoundError to a 404 RFC 7807 body (context exposed)", () => {
+      assert.equal(out.notFound.status, 404);
+      assert.equal(out.notFound.body.code, "NOT_FOUND");
+      assert.ok(String(out.notFound.body.type).endsWith("NOT_FOUND"));
+      assert.equal(out.notFound.body.title, "NotFoundError");
+      assert.equal(out.notFound.body.instance, "/projects/1");
+      // Domain context is client-safe and surfaced.
+      assert.equal(out.notFound.body.resource, "Project");
+      assert.equal(out.notFound.body.id, "1");
+      assert.ok(String(out.notFound.body.detail).includes("Project"));
+    });
+
+    it("does NOT leak infrastructure detail/context to the client", () => {
+      assert.equal(out.external.status, 502);
+      assert.equal(out.external.body.code, "EXTERNAL_SERVICE_FAILED");
+      assert.equal(
+        out.external.body.detail,
+        "The request could not be completed.",
+      );
+      // The upstream service name must not reach the client.
+      assert.ok(!JSON.stringify(out.external.body).includes("openai"));
+      assert.equal(out.external.body.service, undefined);
+    });
+
+    it("maps an unknown error to a generic 500", () => {
+      assert.equal(out.unknown.status, 500);
+      assert.equal(out.unknown.body.code, "INTERNAL");
+    });
+
+    it("instanceof holds across the hierarchy, and Result works", () => {
+      assert.equal(out.nfIsDomain, true);
+      assert.equal(out.okWorks, true);
+      assert.equal(out.errWorks, true);
     });
   });
 });

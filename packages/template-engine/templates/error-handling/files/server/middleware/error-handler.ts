@@ -67,15 +67,26 @@ export interface HttpError {
 export function handleError(error: unknown, instance?: string): HttpError {
   if (isTypedError(error)) {
     const status = HTTP_STATUS_BY_CODE[error.code] ?? 500;
+
+    // Only domain errors are safe to surface verbatim. Application and
+    // infrastructure errors can carry internal/provider detail in their message
+    // and context (e.g. an upstream service name), so the client gets a generic
+    // body while the full error is logged and reported server-side. The stable
+    // `code` is always sent — it's the machine-readable contract, not a leak.
+    const clientSafe = error.layer === "domain";
+    if (!clientSafe) {
+      console.error("Unhandled " + error.layer + " error:", error);
+      if (SENTRY_ENABLED) void reportToSentry(error);
+    }
+
     const body: ProblemDetails = {
-      // Spread context FIRST so a stray context key (e.g. `status`) can never
-      // override the authoritative RFC 7807 fields below — that would desync the
-      // body's status from the HTTP status and break client parsing.
-      ...(error.context ?? {}),
+      // Domain context (e.g. validation `fields`) is client-safe; spread it
+      // FIRST so it can never override the authoritative fields below.
+      ...(clientSafe ? (error.context ?? {}) : {}),
       type: TYPE_BASE_URL + error.code,
-      title: error.name,
+      title: clientSafe ? error.name : "Request Failed",
       status,
-      detail: error.message,
+      detail: clientSafe ? error.message : "The request could not be completed.",
       code: error.code,
       ...(instance ? { instance } : {}),
     };

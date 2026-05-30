@@ -16,6 +16,9 @@ export abstract class ApplicationError extends Error {
     public readonly context?: Record<string, unknown>,
   ) {
     super(message);
+    // Restore the subclass prototype so `instanceof` works under any compile
+    // target (the HTTP handler discriminates errors via instanceof).
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = new.target.name;
   }
 }
