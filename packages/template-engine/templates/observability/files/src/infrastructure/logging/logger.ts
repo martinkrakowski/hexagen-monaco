@@ -27,34 +27,42 @@ function enabled(level: Level): boolean {
   return PRIORITY[level] <= PRIORITY[ACTIVE_LEVEL];
 }
 
-function emit(level: Level, fields: Record<string, unknown>, message?: string): void {
+type Fields = Record<string, unknown> | Error;
+
+function emit(level: Level, fields: Fields, message?: string): void {
   if (!enabled(level)) return;
   const ctx = getRequestContext();
+  // A bare Error has non-enumerable name/message/stack, so spreading it would
+  // log an empty object. Normalize `logger.error(err)` into `{ err }` so
+  // redact() can serialize the error's details.
+  const normalized = fields instanceof Error ? { err: fields } : fields;
   const base: Record<string, unknown> = {
     level,
     time: new Date().toISOString(),
     ...(ctx ? { requestId: ctx.requestId, userId: ctx.userId } : {}),
     ...(message ? { message } : {}),
-    ...fields,
+    ...normalized,
   };
-  const record = redact(base);
 
   if (USE_PRETTY) {
     const reqId = ctx ? " [" + ctx.requestId + "]" : "";
-    const tail = Object.keys(fields).length > 0 ? " " + JSON.stringify(redact(fields)) : "";
+    const tail =
+      Object.keys(normalized).length > 0
+        ? " " + JSON.stringify(redact(normalized))
+        : "";
     console.log("[" + level.toUpperCase() + "]" + reqId + " " + (message ?? "") + tail);
   } else {
-    console.log(JSON.stringify(record));
+    console.log(JSON.stringify(redact(base)));
   }
 }
 
 export const logger = {
-  error: (fields: Record<string, unknown> = {}, message?: string): void =>
+  error: (fields: Fields = {}, message?: string): void =>
     emit("error", fields, message),
-  warn: (fields: Record<string, unknown> = {}, message?: string): void =>
+  warn: (fields: Fields = {}, message?: string): void =>
     emit("warn", fields, message),
-  info: (fields: Record<string, unknown> = {}, message?: string): void =>
+  info: (fields: Fields = {}, message?: string): void =>
     emit("info", fields, message),
-  debug: (fields: Record<string, unknown> = {}, message?: string): void =>
+  debug: (fields: Fields = {}, message?: string): void =>
     emit("debug", fields, message),
 };

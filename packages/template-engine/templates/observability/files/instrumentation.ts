@@ -5,7 +5,10 @@
 //   npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http \
 //     @opentelemetry/auto-instrumentations-node
 // Their specifiers are held in variables so a project that hasn't installed them
-// still typechecks; registration is skipped if they're missing at runtime.
+// still typechecks; registration is skipped if they're missing at runtime. The
+// `webpackIgnore` hints keep Next.js/Webpack from trying to resolve these
+// optional imports at build time (which would emit a "Critical dependency"
+// warning); they are left as native runtime imports.
 
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -15,13 +18,17 @@ export async function register(): Promise<void> {
   const autoModule: string = "@opentelemetry/auto-instrumentations-node";
 
   try {
-    const { NodeSDK } = (await import(sdkModule)) as {
+    const { NodeSDK } = (await import(/* webpackIgnore: true */ sdkModule)) as {
       NodeSDK: new (config: unknown) => { start(): void };
     };
-    const { OTLPTraceExporter } = (await import(otlpModule)) as {
+    const { OTLPTraceExporter } = (await import(
+      /* webpackIgnore: true */ otlpModule
+    )) as {
       OTLPTraceExporter: new (config: unknown) => unknown;
     };
-    const { getNodeAutoInstrumentations } = (await import(autoModule)) as {
+    const { getNodeAutoInstrumentations } = (await import(
+      /* webpackIgnore: true */ autoModule
+    )) as {
       getNodeAutoInstrumentations: () => unknown;
     };
 

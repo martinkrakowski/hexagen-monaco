@@ -170,6 +170,15 @@ describe("observability template — emit shape", () => {
       assert.ok(await exists(path.join(projectRoot, "instrumentation.ts")));
       assert.ok(await exists(path.join(projectRoot, ".env.otel.example")));
     });
+
+    it("marks the optional OTel dynamic imports webpackIgnore", async () => {
+      const instr = await read(projectRoot, "instrumentation.ts");
+      assert.equal(
+        (instr.match(/webpackIgnore: true/g) ?? []).length,
+        3,
+        "all three optional OTel imports should be webpackIgnore",
+      );
+    });
   });
 
   // Run the emitted logging stack as a real subprocess to prove behaviour.
@@ -183,6 +192,7 @@ describe("observability template — emit shape", () => {
       redactedCycle: Record<string, unknown>;
       redactedErr: Record<string, unknown>;
       reqLog: Record<string, unknown>;
+      errLog: Record<string, unknown>;
       firstLog: Record<string, unknown>;
       contextLog: Record<string, unknown>;
       ctxId: string;
@@ -230,6 +240,12 @@ describe("observability template — emit shape", () => {
         "if (fakeRes._finish) fakeRes._finish();",
         "console.log = realLog2;",
         "const reqLog = JSON.parse(reqLines[reqLines.length - 1]);",
+        "const errLines: string[] = [];",
+        "const realLog3 = console.log;",
+        "console.log = (...a: unknown[]) => { errLines.push(a.map(String).join(' ')); };",
+        "logger.error(new Error('kaboom'));",
+        "console.log = realLog3;",
+        "const errLog = JSON.parse(errLines[errLines.length - 1]);",
         "real(JSON.stringify({",
         "  header: CORRELATION_ID_HEADER,",
         '  fromHeader: getOrCreateCorrelationId((n) => (n === CORRELATION_ID_HEADER ? "incoming" : null)),',
@@ -238,6 +254,7 @@ describe("observability template — emit shape", () => {
         "  redactedCycle,",
         "  redactedErr,",
         "  reqLog,",
+        "  errLog,",
         "  firstLog: JSON.parse(lines[0]),",
         "  contextLog: JSON.parse(lines[1]),",
         "  ctxId,",
@@ -294,6 +311,14 @@ describe("observability template — emit shape", () => {
       assert.equal(typeof err.stack, "string");
       assert.equal(out.redactedErr.when, "2020-01-01T00:00:00.000Z");
       assert.equal(out.redactedErr.token, "[REDACTED]");
+    });
+
+    it("normalizes a bare Error argument into a populated { err } field", () => {
+      assert.equal(out.errLog.level, "error");
+      const err = out.errLog.err as Record<string, unknown>;
+      assert.equal(err.name, "Error");
+      assert.equal(err.message, "kaboom");
+      assert.equal(typeof err.stack, "string");
     });
 
     it("propagates the correlation id into logs via AsyncLocalStorage", () => {
