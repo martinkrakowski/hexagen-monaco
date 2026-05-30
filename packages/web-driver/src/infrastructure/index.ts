@@ -3,5 +3,6 @@
 export * from "./adapters/index.js";
 export * from "./constants/index.js";
 export * from "./migration/index.js";
+export * from "./persistence-domain-registry.js";
+export * from "./storage-quota-monitor.js";
 export * from "./utils/index.js";
-export { PersistenceDomainRegistry } from "./persistence-domain-registry.js";
