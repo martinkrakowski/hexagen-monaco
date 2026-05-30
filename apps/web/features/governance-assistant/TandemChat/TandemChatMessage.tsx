@@ -138,7 +138,7 @@ export function TandemChatMessage({
         {tokenInfoButton}
       </div>
       <p
-        className={`text-sm whitespace-pre-wrap text-foreground transition-opacity duration-[400ms] ${
+        className={`text-sm whitespace-pre-wrap text-foreground transition-opacity [transition-duration:400ms] ${
           isTransitioningWithNoStage3 ? "opacity-50" : "opacity-100"
         }`}
       >
