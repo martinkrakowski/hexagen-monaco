@@ -4,6 +4,9 @@ A running record of AI-assisted work sessions. After each session, append an
 entry using the template below. Keep entries short — this is a memory aid for
 the next session, not documentation.
 
+Unlike the other `.agents/*.md` spec files (which AGENTS.md marks "never edit"),
+this file is **append-only by design** — adding session entries is expected.
+
 To keep this file out of version control, add `.agents/session-log.md` to
 `.gitignore`.
 

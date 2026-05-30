@@ -55,7 +55,7 @@ Each rule has a reason; agents follow rules they understand.
 | File                          | Reason                                                       |
 | ----------------------------- | ----------------------------------------------------------- |
 | `AGENTS.md`                   | This contract. Change it deliberately, never as a side effect. |
-| `.agents/*.md`                | Spec files — edit only when explicitly asked to update specs. |
+| `.agents/*.md` (except `session-log.md`) | Spec files — edit only when explicitly asked to update specs. `session-log.md` is the deliberate exception: append to it after each session. |
 | `package-lock.json`           | Updated only via `npm` commands, never by hand.             |
 | `DESIGN.md`                   | Design contract (if present). Changes require design review. |
 
