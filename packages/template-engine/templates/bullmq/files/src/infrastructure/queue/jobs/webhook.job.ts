@@ -1,4 +1,5 @@
 import type { Job } from "bullmq";
+import { parseIntEnv } from "../parse-int-env";
 
 export interface WebhookJobData {
   url: string;
@@ -28,6 +29,16 @@ export const WEBHOOK_JOB_NAME = "webhook";
  */
 export const WEBHOOK_DEFAULT_QUEUE = "default";
 const RESPONSE_TRUNCATE_BYTES = 512;
+// Hard cap on the outbound fetch. Without it, a target that accepts the
+// connection but never returns headers would tie up the worker until the
+// node-level keepalive eventually closes the socket. 30s gives slow
+// receivers room while still bounding the blast radius. Operators can
+// override via env without re-rendering the template.
+const WEBHOOK_FETCH_TIMEOUT_MS = parseIntEnv(
+  "WEBHOOK_FETCH_TIMEOUT_MS",
+  30_000,
+  1,
+);
 
 /**
  * Read at most `limit` bytes from a `fetch()` response body, stopping (and
@@ -87,22 +98,42 @@ export async function processWebhookJob(
 ): Promise<WebhookJobResult> {
   const start = Date.now();
   await job.log(`webhook ${job.data.method} ${job.data.url}`);
-  const response = await fetch(job.data.url, {
-    method: job.data.method,
-    headers: {
-      "content-type": "application/json",
-      ...(job.data.headers ?? {}),
-    },
-    body: JSON.stringify(job.data.body),
-  });
-  const { text, truncated } = await readResponseBounded(
-    response,
-    RESPONSE_TRUNCATE_BYTES,
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    WEBHOOK_FETCH_TIMEOUT_MS,
   );
-  return {
-    status: response.status,
-    responseSnippet: text,
-    truncated,
-    durationMs: Date.now() - start,
-  };
+  try {
+    const response = await fetch(job.data.url, {
+      method: job.data.method,
+      headers: {
+        "content-type": "application/json",
+        ...(job.data.headers ?? {}),
+      },
+      body: JSON.stringify(job.data.body),
+      signal: controller.signal,
+    });
+    const { text, truncated } = await readResponseBounded(
+      response,
+      RESPONSE_TRUNCATE_BYTES,
+    );
+    return {
+      status: response.status,
+      responseSnippet: text,
+      truncated,
+      durationMs: Date.now() - start,
+    };
+  } catch (err) {
+    // Rethrow as a clearer error when the abort fired; BullMQ records the
+    // failure and applies the queue's retry policy, which is the right
+    // outcome for a timing-out upstream.
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        `webhook ${job.data.method} ${job.data.url} timed out after ${WEBHOOK_FETCH_TIMEOUT_MS}ms`,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
