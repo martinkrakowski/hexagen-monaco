@@ -1,4 +1,9 @@
-const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "{session_cookie_name}";
+// The canonical session-cookie name resolver. Provider code should import this
+// constant rather than re-deriving it — see get-current-user.ts in each
+// provider template.
+export const COOKIE_NAME =
+  process.env.AUTH_COOKIE_NAME ?? "{session_cookie_name}";
+
 const MAX_AGE = (() => {
   const n = parseInt(process.env.AUTH_SESSION_MAX_AGE ?? "604800", 10);
   return Number.isFinite(n) && n > 0 ? n : 604800;

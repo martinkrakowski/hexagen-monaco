@@ -3,8 +3,8 @@ import type { UserContext } from "../../domain/value-objects/user-context";
 import { decryptSession } from "../../infrastructure/auth/google/session-store";
 import { mapGoogleUserToUserContext } from "../../infrastructure/auth/google/user-profile-mapper";
 import { MOCK_USER } from "../../infrastructure/auth/mock-user";
+import { COOKIE_NAME } from "../../infrastructure/auth/session/session-manager";
 
-const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 
 // Server-only helper. Honours AUTH_MODE=mock, then short-circuits via the
 // x-user-context header that middleware emits after validating the session

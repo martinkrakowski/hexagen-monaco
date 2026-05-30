@@ -12,7 +12,8 @@
     "magic-link",
     "adobe-ims-spa",
     "nextauth",
-    "better-auth"
+    "better-auth",
+    "supabase-auth"
   ],
   "questions": [
     {
@@ -59,8 +60,8 @@
     "If using org/role features: enable Organizations in the Clerk dashboard; RoleGuard org=true gates on orgRole",
     "For app-level roles: set sessionClaims.metadata.role via a custom session token claim",
     "Create the JWT template in the Clerk dashboard (name must match your 'JWT template name for API auth?' answer) if the API example mints downstream tokens",
-    "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
-    "Test flow: visit a protected path while signed out → redirected to /sign-in; GET /api/protected-example returns 401 without a session"
+    "Standalone framework \u2014 conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
+    "Test flow: visit a protected path while signed out \u2192 redirected to /sign-in; GET /api/protected-example returns 401 without a session"
   ],
   "branch": "feature/generator-template-clerk"
 }

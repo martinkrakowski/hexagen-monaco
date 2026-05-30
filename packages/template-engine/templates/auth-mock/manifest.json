@@ -1,60 +1,23 @@
 {
   "id": "auth-mock",
   "name": "Auth Mock",
-  "description": "UserContext value object, MOCK_USER for development, generic session-cookie helpers, and a dev-only root middleware that injects MOCK_USER when AUTH_MODE=mock. Real auth providers (google-oauth, supabase, etc.) overwrite the middleware with their own.",
-  "version": "2.0.0",
-  "requires": ["env-setup"],
+  "description": "Dev-only root middleware that injects shared-types' MOCK_USER as x-user-context when AUTH_MODE=mock. Real auth providers ship their own middleware that overwrites this one and still honours AUTH_MODE=mock as a dev short-circuit.",
+  "version": "3.0.0",
+  "requires": ["shared-types", "env-setup"],
   "conflicts": [],
   "questions": [
     {
       "id": "session_cookie_name",
-      "type": "text",
-      "prompt": "Session cookie name? (used by the session-manager cookie helpers)",
-      "default": "__auth_session"
-    },
-    {
-      "id": "mock_user_name",
-      "type": "text",
-      "prompt": "Mock user display name?",
-      "default": "Demo User"
-    },
-    {
-      "id": "mock_user_email",
-      "type": "text",
-      "prompt": "Mock user email?",
-      "default": "demo@example.com"
-    },
-    {
-      "id": "mock_user_roles",
-      "type": "text",
-      "prompt": "Mock user roles (comma-separated)?",
-      "default": "user"
+      "type": "auto",
+      "derivedFrom": "shared-types.session_cookie_name"
     }
   ],
-  "envVars": [
-    "AUTH_MODE",
-    "AUTH_COOKIE_NAME",
-    "AUTH_SESSION_MAX_AGE",
-    "MOCK_USER_ID",
-    "MOCK_USER_NAME",
-    "MOCK_USER_EMAIL",
-    "MOCK_USER_ROLES",
-    "MOCK_USER_AVATAR_URL"
-  ],
-  "outputs": [
-    "src/domain/value-objects/user-context.ts",
-    "src/infrastructure/auth/mock-user.ts",
-    "src/infrastructure/auth/session/session-manager.ts",
-    "middleware.ts",
-    ".env.auth.example"
-  ],
+  "envVars": ["AUTH_MODE"],
+  "outputs": ["middleware.ts", ".env.auth.example"],
   "checklist": [
-    "Copy .env.auth.example values into your .env.local",
-    "Set AUTH_MODE=mock for local development — the dev middleware will inject MOCK_USER as x-user-context on every request",
-    "Override MOCK_USER fields at runtime via MOCK_USER_NAME / MOCK_USER_EMAIL / MOCK_USER_ROLES / MOCK_USER_AVATAR_URL",
-    "Domain code depends on UserContext (src/domain/value-objects/user-context.ts) — not on a vendor user shape",
-    "Add a real auth provider template (google-oauth, github-oauth, microsoft-entra, magic-link, adobe-ims-spa, supabase) — its middleware will overwrite the dev middleware and handle real-mode auth end-to-end, while still honouring AUTH_MODE=mock as a dev short-circuit",
-    "Group B frameworks (nextauth, clerk, better-auth) own their own auth model and don't use this template's middleware"
+    "Set AUTH_MODE=mock in development; the middleware injects MOCK_USER from shared-types as x-user-context on every request",
+    "MOCK_USER values + runtime overrides (MOCK_USER_NAME / MOCK_USER_EMAIL / MOCK_USER_ROLES / MOCK_USER_AVATAR_URL) live in shared-types",
+    "A real auth provider template overwrites this middleware with its own and still honours AUTH_MODE=mock as a dev short-circuit"
   ],
-  "branch": "feature/auth-stack-restructure"
+  "branch": "feature/shared-types-and-derived-answers"
 }

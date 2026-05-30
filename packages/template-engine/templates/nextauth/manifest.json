@@ -12,7 +12,8 @@
     "magic-link",
     "adobe-ims-spa",
     "clerk",
-    "better-auth"
+    "better-auth",
+    "supabase-auth"
   ],
   "questions": [
     {
@@ -66,8 +67,8 @@
     "Set AUTH_URL to your deployment URL (required in production)",
     "Remove any providers you don't use from src/auth.config.ts and src/auth.ts",
     "For Credentials login, implement lookupUser() in src/auth.ts against your user store",
-    "Standalone framework — conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
-    "Test flow: GET /api/auth/signin → provider → redirect back; protected paths require a session"
+    "Standalone framework \u2014 conflicts with all Group A adapters and the other Group B frameworks; use only one auth strategy",
+    "Test flow: GET /api/auth/signin \u2192 provider \u2192 redirect back; protected paths require a session"
   ],
   "branch": "feature/generator-template-nextauth"
 }

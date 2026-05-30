@@ -3,7 +3,7 @@
   "name": "Adobe IMS SPA (PKCE)",
   "description": "Modern Adobe IMS Single Page App + PKCE flow: login, callback, logout routes, AES-256-GCM token store, silent auto-refresh, and a root middleware that protects configured paths and validates IMS sessions while still honouring AUTH_MODE=mock as a dev short-circuit.",
   "version": "2.0.0",
-  "requires": ["auth-mock", "env-setup"],
+  "requires": ["shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",
     "clerk",
@@ -11,7 +11,8 @@
     "google-oauth",
     "github-oauth",
     "microsoft-entra",
-    "magic-link"
+    "magic-link",
+    "supabase-auth"
   ],
   "questions": [
     {

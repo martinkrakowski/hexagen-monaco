@@ -3,8 +3,8 @@ import type { UserContext } from "../../domain/value-objects/user-context";
 import { decryptSession } from "../../infrastructure/auth/github/session-store";
 import { mapGitHubUserToUserContext } from "../../infrastructure/auth/github/user-profile-mapper";
 import { MOCK_USER } from "../../infrastructure/auth/mock-user";
+import { COOKIE_NAME } from "../../infrastructure/auth/session/session-manager";
 
-const COOKIE_NAME = process.env.AUTH_COOKIE_NAME ?? "__auth_session";
 
 export async function getCurrentUser(): Promise<UserContext | null> {
   if (process.env.AUTH_MODE === "mock") {

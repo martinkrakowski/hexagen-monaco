@@ -1,37 +1,10 @@
 {
   "id": "supabase",
   "name": "Supabase",
-  "description": "SSR-safe browser/server/admin clients, Result-based storage helpers, server-validated auth via @supabase/ssr middleware, RLS examples, type generation, optional Drizzle ORM and realtime. When 'auth' is selected, ships a root middleware (refreshes the Supabase session + protects configured paths) and src/lib/auth/getCurrentUser+requireAuth — all honouring AUTH_MODE=mock as a dev short-circuit.",
-  "version": "2.0.0",
-  "requires": ["env-setup", "auth-mock"],
-  "conflicts": [
-    { "id": "nextauth", "when": { "answer": "features", "includes": "auth" } },
-    { "id": "clerk", "when": { "answer": "features", "includes": "auth" } },
-    {
-      "id": "better-auth",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "id": "google-oauth",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "id": "github-oauth",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "id": "microsoft-entra",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "id": "magic-link",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "id": "adobe-ims-spa",
-      "when": { "answer": "features", "includes": "auth" }
-    }
-  ],
+  "description": "SSR-safe browser/server/admin clients, Result-based storage helpers, RLS examples, type generation, optional Drizzle ORM and realtime. Pure storage/database layer — no auth code. Add the supabase-auth template to layer @supabase/ssr-based session middleware on top.",
+  "version": "3.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
   "questions": [
     {
       "id": "project_url",
@@ -48,8 +21,8 @@
     {
       "id": "features",
       "type": "multiselect",
-      "prompt": "Which Supabase features? (storage and auth helpers are emitted when selected)",
-      "options": ["database", "storage", "auth", "realtime", "edge-functions"],
+      "prompt": "Which Supabase features? (storage helpers emitted when selected)",
+      "options": ["database", "storage", "realtime", "edge-functions"],
       "default": ["database", "storage"]
     },
     {
@@ -81,12 +54,6 @@
       "type": "boolean",
       "prompt": "Generate a realtime subscription example?",
       "default": false
-    },
-    {
-      "id": "protected_paths",
-      "type": "text",
-      "prompt": "Path prefixes the middleware should require auth for (comma-separated)? (only used when 'auth' is in features)",
-      "default": "/dashboard,/api/protected"
     }
   ],
   "envVars": [
@@ -121,22 +88,6 @@
     {
       "path": "src/infrastructure/supabase/storage/index.ts",
       "when": { "answer": "features", "includes": "storage" }
-    },
-    {
-      "path": "src/lib/auth/get-current-user.ts",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "path": "src/lib/auth/require-auth.ts",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "path": "app/api/auth/me/route.ts",
-      "when": { "answer": "features", "includes": "auth" }
-    },
-    {
-      "path": "middleware.ts",
-      "when": { "answer": "features", "includes": "auth" }
     },
     {
       "path": "scripts/gen-types.sh",
@@ -176,10 +127,7 @@
     "If type generation is enabled: install the supabase CLI, add \"gen:types\": \"bash scripts/gen-types.sh\" to package.json scripts, then run yarn gen:types after supabase start + schema changes",
     "Enable RLS on every table before going to production (see supabase/migrations/0001_example_rls.sql)",
     "If Drizzle is enabled: npm install drizzle-orm postgres tsx (and -D drizzle-kit), add \"migrate\": \"tsx scripts/migrate.ts\" to package.json scripts, set SUPABASE_DB_URL, then yarn migrate",
-    "If 'auth' is in features: the emitted middleware.ts overwrites auth-mock's dev middleware, refreshes the Supabase session on every request, and redirects unauthenticated requests for paths under {protected_paths} to /login",
-    "If 'auth' is in features: import getCurrentUser / requireAuth from src/lib/auth/ in Server Components and Server Actions",
-    "Keep AUTH_MODE=mock for local dev — middleware and getCurrentUser() short-circuit to auth-mock's MOCK_USER",
-    "getCurrentUser uses getUser() (server-validated JWT); never authorize off getSession() locally"
+    "To add Supabase-based session auth, install the supabase-auth template — it ships the @supabase/ssr middleware, getCurrentUser/requireAuth, and /api/auth/me on top of this template"
   ],
-  "branch": "feature/auth-stack-restructure"
+  "branch": "feature/shared-types-and-derived-answers"
 }
