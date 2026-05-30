@@ -111,4 +111,74 @@ describe("CompanionBanner", () => {
       ),
     );
   });
+
+  it("re-shows a dismissed suggestion after it disappears and re-appears in the prop", () => {
+    // Reproducer for the qodo PR #111 finding:
+    // - User has Template A selected; banner shows suggestions [X, Y].
+    // - User dismisses X. dismissed = {X}. Banner stays mounted because Y is visible.
+    // - User deselects A. suggestions = [Y]. X is gone from the prop but
+    //   the previous bug kept it in `dismissed`.
+    // - User re-selects A. suggestions = [X, Y]. Without reconciliation X
+    //   stays hidden; with reconciliation X re-appears.
+    const { rerender } = render(
+      h(CompanionBanner, {
+        suggestions: [mkSuggestion("x"), mkSuggestion("y")],
+        onAdd: () => {},
+      }),
+    );
+    // Dismiss X.
+    fireEvent.click(screen.getByLabelText("Dismiss x suggestion"));
+    assert.equal(screen.queryByRole("button", { name: /\+ Add x/i }), null);
+    assert.ok(screen.queryByRole("button", { name: /\+ Add y/i }));
+
+    // Parent re-renders with only Y (X's parent template deselected).
+    rerender(
+      h(CompanionBanner, {
+        suggestions: [mkSuggestion("y")],
+        onAdd: () => {},
+      }),
+    );
+    // Y still visible; X gone from prop entirely.
+    assert.ok(screen.queryByRole("button", { name: /\+ Add y/i }));
+
+    // Parent re-selects X's source template. suggestions includes X again.
+    rerender(
+      h(CompanionBanner, {
+        suggestions: [mkSuggestion("x"), mkSuggestion("y")],
+        onAdd: () => {},
+      }),
+    );
+    // X must be visible again — the reconciliation effect dropped it from
+    // `dismissed` when it disappeared, so its re-appearance is fresh.
+    assert.ok(
+      screen.queryByRole("button", { name: /\+ Add x/i }),
+      "expected x to re-appear after parent re-selects its source template",
+    );
+  });
+
+  it("keeps a dismissal active while the suggestion is still present across re-renders", () => {
+    // Counterpart to the previous test: dismissal should NOT be cleared by
+    // unrelated parent re-renders. As long as X is still in `suggestions`,
+    // dismissing X keeps it hidden across structurally-equal prop updates.
+    const { rerender } = render(
+      h(CompanionBanner, {
+        suggestions: [mkSuggestion("x"), mkSuggestion("y")],
+        onAdd: () => {},
+      }),
+    );
+    fireEvent.click(screen.getByLabelText("Dismiss x suggestion"));
+    // Re-render with a fresh array but the same ids (simulates parent re-render).
+    rerender(
+      h(CompanionBanner, {
+        suggestions: [mkSuggestion("x"), mkSuggestion("y")],
+        onAdd: () => {},
+      }),
+    );
+    assert.equal(
+      screen.queryByRole("button", { name: /\+ Add x/i }),
+      null,
+      "dismissal must persist while the suggestion is still in the prop",
+    );
+    assert.ok(screen.queryByRole("button", { name: /\+ Add y/i }));
+  });
 });

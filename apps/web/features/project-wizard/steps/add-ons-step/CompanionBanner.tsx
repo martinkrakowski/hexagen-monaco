@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Lightbulb, X } from "lucide-react";
 import { Button } from "@hexagen/ui";
 
@@ -48,6 +48,40 @@ export function CompanionBanner({
 }: CompanionBannerProps): React.ReactElement | null {
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const [expanded, setExpanded] = useState(false);
+
+  // Reconcile dismissed against current suggestions: if a dismissed id is no
+  // longer in the prop (e.g. its parent template was deselected), drop it so
+  // that when the parent is re-selected, the suggestion re-appears fresh.
+  // Without this, the banner stays mounted whenever some other suggestion is
+  // present and the dismissed Set grows monotonically, permanently hiding
+  // valid suggestions across multi-template selection sessions.
+  //
+  // Keyed on the sorted id list rather than the array reference so a parent
+  // re-render that produces a structurally-equal array doesn't fire the
+  // reconciliation needlessly.
+  const suggestionsKey = suggestions
+    .map((s) => s.id)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    const currentIds = new Set(suggestions.map((s) => s.id));
+    setDismissed((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (currentIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      // Return prev unchanged when nothing was dropped so React skips the
+      // re-render — avoids infinite loops if a stale dep ever sneaks in.
+      return changed ? next : prev;
+    });
+    // suggestionsKey is the stable cache key; suggestions itself is captured
+    // from the same render, so referencing it inside the effect is safe.
+  }, [suggestionsKey]);
 
   const visible = suggestions.filter((s) => !dismissed.has(s.id));
   if (visible.length === 0) return null;
