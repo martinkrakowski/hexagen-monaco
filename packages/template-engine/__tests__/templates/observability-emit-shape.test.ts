@@ -177,6 +177,8 @@ describe("observability template — emit shape", () => {
       fromHeader: string;
       minted: string;
       redacted: Record<string, unknown>;
+      redactedCycle: Record<string, unknown>;
+      reqLog: Record<string, unknown>;
       firstLog: Record<string, unknown>;
       contextLog: Record<string, unknown>;
       ctxId: string;
@@ -199,6 +201,7 @@ describe("observability template — emit shape", () => {
         'import { CORRELATION_ID_HEADER, getOrCreateCorrelationId } from "./src/infrastructure/logging/correlation";',
         'import { runWithContext, getRequestContext } from "./src/infrastructure/logging/context";',
         'import { redact } from "./src/infrastructure/logging/redact";',
+        'import { requestLoggerMiddleware } from "./server/middleware/request-logger";',
         'import { GET } from "./app/api/health/route";',
         "const lines: string[] = [];",
         "const real = console.log;",
@@ -211,11 +214,24 @@ describe("observability template — emit shape", () => {
         "console.log = real;",
         "const healthRes = await GET();",
         "const healthBody = await healthRes.json();",
+        "const cyc: Record<string, unknown> = { name: 'root', token: 'abc' };",
+        "cyc.self = cyc;",
+        "const redactedCycle = redact(cyc) as Record<string, unknown>;",
+        "const reqLines: string[] = [];",
+        "const realLog2 = console.log;",
+        "console.log = (...a: unknown[]) => { reqLines.push(a.map(String).join(' ')); };",
+        "const fakeRes = { statusCode: 200, setHeader() {}, _finish: null as null | (() => void), on(_e: string, cb: () => void) { this._finish = cb; } };",
+        "requestLoggerMiddleware({ method: 'GET', url: '/users?token=abc&id=1', headers: {} }, fakeRes, () => {});",
+        "if (fakeRes._finish) fakeRes._finish();",
+        "console.log = realLog2;",
+        "const reqLog = JSON.parse(reqLines[reqLines.length - 1]);",
         "real(JSON.stringify({",
         "  header: CORRELATION_ID_HEADER,",
         '  fromHeader: getOrCreateCorrelationId((n) => (n === CORRELATION_ID_HEADER ? "incoming" : null)),',
         "  minted: getOrCreateCorrelationId(() => null),",
         '  redacted: redact({ user: "alice", token: "abc" }),',
+        "  redactedCycle,",
+        "  reqLog,",
         "  firstLog: JSON.parse(lines[0]),",
         "  contextLog: JSON.parse(lines[1]),",
         "  ctxId,",
@@ -251,6 +267,18 @@ describe("observability template — emit shape", () => {
       assert.equal(out.firstLog.password, "[REDACTED]");
       assert.equal(out.redacted.user, "alice");
       assert.equal(out.redacted.token, "[REDACTED]");
+    });
+
+    it("replaces cyclic references with [CIRCULAR] instead of overflowing", () => {
+      // Reaching this assertion at all proves redact() did not stack-overflow
+      // on the self-referential object built in the driver.
+      assert.equal(out.redactedCycle.token, "[REDACTED]");
+      assert.equal(out.redactedCycle.self, "[CIRCULAR]");
+    });
+
+    it("logs the request path without the query string", () => {
+      assert.equal(out.reqLog.type, "request");
+      assert.equal(out.reqLog.path, "/users");
     });
 
     it("propagates the correlation id into logs via AsyncLocalStorage", () => {

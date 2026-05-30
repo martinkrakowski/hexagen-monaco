@@ -39,7 +39,10 @@ export function requestLoggerMiddleware(
     logger.info({
       type: "request",
       method: req.method,
-      path: req.url,
+      // Log the path only — strip the query string so secrets passed as query
+      // params (e.g. ?token=...) never reach the logs. Redaction is key-based
+      // and cannot scrub values embedded inside a URL string.
+      path: req.url?.split("?")[0],
       status: res.statusCode,
       durationMs: Date.now() - startedAt,
       requestId,
