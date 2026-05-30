@@ -202,6 +202,9 @@ describe("observability template — emit shape", () => {
       redactedErr: Record<string, unknown>;
       reqLog: Record<string, unknown>;
       errLog: Record<string, unknown>;
+      tooLong: string;
+      malformed: string;
+      validIncoming: string;
       firstLog: Record<string, unknown>;
       contextLog: Record<string, unknown>;
       ctxId: string;
@@ -255,6 +258,9 @@ describe("observability template — emit shape", () => {
         "logger.error(new Error('kaboom'));",
         "console.log = realLog3;",
         "const errLog = JSON.parse(errLines[errLines.length - 1]);",
+        "const tooLong = getOrCreateCorrelationId(() => 'a'.repeat(200));",
+        "const malformed = getOrCreateCorrelationId(() => 'has space/and?');",
+        "const validIncoming = getOrCreateCorrelationId(() => '  trace-1.2_3  ');",
         "real(JSON.stringify({",
         "  header: CORRELATION_ID_HEADER,",
         '  fromHeader: getOrCreateCorrelationId((n) => (n === CORRELATION_ID_HEADER ? "incoming" : null)),',
@@ -264,6 +270,9 @@ describe("observability template — emit shape", () => {
         "  redactedErr,",
         "  reqLog,",
         "  errLog,",
+        "  tooLong,",
+        "  malformed,",
+        "  validIncoming,",
         "  firstLog: JSON.parse(lines[0]),",
         "  contextLog: JSON.parse(lines[1]),",
         "  ctxId,",
@@ -333,6 +342,14 @@ describe("observability template — emit shape", () => {
     it("propagates the correlation id into logs via AsyncLocalStorage", () => {
       assert.equal(out.ctxId, "req-xyz");
       assert.equal(out.contextLog.requestId, "req-xyz");
+    });
+
+    it("mints a fresh id for oversized or malformed incoming headers", () => {
+      // Over the 128-char cap, and contains chars outside the safe charset.
+      assert.match(out.tooLong, /^[0-9a-f-]{36}$/);
+      assert.match(out.malformed, /^[0-9a-f-]{36}$/);
+      // A well-formed value is still trusted (and trimmed).
+      assert.equal(out.validIncoming, "trace-1.2_3");
     });
 
     it("serves /api/health with a 200 'ok' body", () => {
