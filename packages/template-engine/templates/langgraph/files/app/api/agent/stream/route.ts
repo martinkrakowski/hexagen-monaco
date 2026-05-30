@@ -46,12 +46,11 @@ export async function POST(request: Request): Promise<Response> {
       },
     );
   }
-  const { prompt, threadId, context } = body as {
+  const { prompt, threadId } = body as {
     prompt: string;
     threadId?: string;
-    context?: string;
   };
-  const events = langGraphAdapter.stream({ prompt, threadId, context });
+  const events = langGraphAdapter.stream({ prompt, threadId });
   return new Response(streamGraphAsSse(events), {
     headers: {
       "content-type": "text/event-stream",

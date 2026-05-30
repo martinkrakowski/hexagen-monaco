@@ -23,20 +23,34 @@ import { buildMainGraph } from "../graphs/{graph_type}.graph";
  * pool and start a fresh one. Same singleton-across-reloads pattern as
  * the checkpointer factory.
  */
-type CompiledGraph = ReturnType<typeof buildMainGraph>;
+type CompiledGraph = Awaited<ReturnType<typeof buildMainGraph>>;
 const COMPILED_KEY = Symbol.for("hexagen.langgraph.compiledGraph");
 
+// Memoise the *Promise* of the compiled graph, not the resolved value.
+// If two requests race the cold-start path the resolved-value version
+// would let both pass the `if` guard, both call buildMainGraph (and,
+// transitively, getCheckpointer's setup() against the same DB) before
+// either had cached anything. Caching the in-flight promise serialises
+// concurrent first-callers onto the same resolution.
 type GlobalCompiledCache = typeof globalThis & {
-  [COMPILED_KEY]?: CompiledGraph;
+  [COMPILED_KEY]?: Promise<CompiledGraph>;
 };
 
-async function compileOnce(): Promise<CompiledGraph> {
+function compileOnce(): Promise<CompiledGraph> {
   const g = globalThis as GlobalCompiledCache;
   if (g[COMPILED_KEY]) return g[COMPILED_KEY];
-  const checkpointer = await getCheckpointer();
-  const instance = buildMainGraph(checkpointer);
-  g[COMPILED_KEY] = instance;
-  return instance;
+  g[COMPILED_KEY] = (async () => {
+    try {
+      const checkpointer = await getCheckpointer();
+      return await buildMainGraph(checkpointer);
+    } catch (err) {
+      // Drop the failed promise from the cache so the next request can
+      // retry instead of always replaying the original boot-time error.
+      delete g[COMPILED_KEY];
+      throw err;
+    }
+  })();
+  return g[COMPILED_KEY];
 }
 
 export class LangGraphAdapter implements AgentGraphPort {

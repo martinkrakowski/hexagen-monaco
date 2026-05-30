@@ -24,23 +24,58 @@ import { synthesiserNode } from "../nodes/synthesiser.node";
  *      ╱      ╲
  *   error    continue
  *      ╲      ╱
+ *  (human-review)        ← inserted only if LANGGRAPH_HITL_ENABLED=true
+ *        │
+ *        ▼
  *    synthesiser
  *        │
  *        ▼
  *       END
+ *
+ * The human-review node is dynamic-imported only when the env var is
+ * set so projects that didn't install the HITL scaffolding (the file
+ * isn't emitted unless `human_in_loop=true` at install) don't pay an
+ * unresolved-import cost.
  */
-export function buildMainGraph(checkpointer: BaseCheckpointSaver) {
+export async function buildMainGraph(checkpointer: BaseCheckpointSaver) {
   const builder = new StateGraph(GraphStateAnnotation)
     .addNode("planner", plannerNode)
     .addNode("researcher", researcherNode)
-    .addNode("synthesiser", synthesiserNode)
-    .addEdge(START, "planner")
-    .addEdge("planner", "researcher")
-    .addConditionalEdges("researcher", routeAfterError, {
-      continue: "synthesiser",
-      error: "synthesiser",
-    })
-    .addEdge("synthesiser", END);
+    .addNode("synthesiser", synthesiserNode);
 
-  return builder.compile({ checkpointer });
+  const interruptBefore: string[] = [];
+
+  if (process.env.LANGGRAPH_HITL_ENABLED === "true") {
+    let humanReviewNode: typeof import("../nodes/human-review.node").humanReviewNode;
+    try {
+      ({ humanReviewNode } = await import("../nodes/human-review.node"));
+    } catch (err) {
+      throw new Error(
+        "LANGGRAPH_HITL_ENABLED=true but ../nodes/human-review.node is not present. Re-run the template generator with human_in_loop=true (or unset LANGGRAPH_HITL_ENABLED to disable the interrupt).",
+        { cause: err },
+      );
+    }
+    builder
+      .addNode("human-review", humanReviewNode)
+      .addEdge(START, "planner")
+      .addEdge("planner", "researcher")
+      .addConditionalEdges("researcher", routeAfterError, {
+        continue: "human-review",
+        error: "synthesiser",
+      })
+      .addEdge("human-review", "synthesiser")
+      .addEdge("synthesiser", END);
+    interruptBefore.push("human-review");
+  } else {
+    builder
+      .addEdge(START, "planner")
+      .addEdge("planner", "researcher")
+      .addConditionalEdges("researcher", routeAfterError, {
+        continue: "synthesiser",
+        error: "synthesiser",
+      })
+      .addEdge("synthesiser", END);
+  }
+
+  return builder.compile({ checkpointer, interruptBefore });
 }

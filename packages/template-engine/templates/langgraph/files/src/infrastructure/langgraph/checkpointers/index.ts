@@ -23,42 +23,58 @@ import { createMemoryCheckpointer } from "./memory-checkpointer";
  */
 const CACHE_KEY = Symbol.for("hexagen.langgraph.checkpointer");
 
+// Cache the *promise* of the checkpointer (not the resolved instance).
+// The dynamic import + setup() inside each factory is async, so two
+// concurrent first-callers would otherwise both pass the `if` guard,
+// both `await import(...)`, and both run setup() — opening duplicate
+// connection pools or registering duplicate Redis indexes. Holding the
+// in-flight promise serialises them onto one resolution.
 type GlobalCache = typeof globalThis & {
-  [CACHE_KEY]?: BaseCheckpointSaver;
+  [CACHE_KEY]?: Promise<BaseCheckpointSaver>;
 };
 
-export async function getCheckpointer(): Promise<BaseCheckpointSaver> {
-  const g = globalThis as GlobalCache;
-  if (g[CACHE_KEY]) return g[CACHE_KEY];
+async function resolveCheckpointer(): Promise<BaseCheckpointSaver> {
   const choice = (process.env.LANGGRAPH_CHECKPOINTER ?? "memory").toLowerCase();
-  let instance: BaseCheckpointSaver;
   switch (choice) {
+    case "memory":
+      return createMemoryCheckpointer();
     case "supabase": {
       const { createSupabaseCheckpointer } = await import(
         "./supabase-checkpointer"
       );
-      instance = await createSupabaseCheckpointer();
-      break;
+      return createSupabaseCheckpointer();
     }
     case "postgres": {
       const { createPostgresCheckpointer } = await import(
         "./postgres-checkpointer"
       );
-      instance = await createPostgresCheckpointer();
-      break;
+      return createPostgresCheckpointer();
     }
     case "redis": {
       const { createRedisCheckpointer } = await import("./redis-checkpointer");
-      instance = await createRedisCheckpointer();
-      break;
+      return createRedisCheckpointer();
     }
-    case "memory":
     default:
-      instance = createMemoryCheckpointer();
-      break;
+      // Unknown values used to fall through to the memory branch, which
+      // silently dropped persistence in production for typos like
+      // "postgress". Fail loud instead — the env var is operator-set, so
+      // misconfiguration should be obvious at boot.
+      throw new Error(
+        `Unknown LANGGRAPH_CHECKPOINTER value "${process.env.LANGGRAPH_CHECKPOINTER}". Expected one of: memory, supabase, postgres, redis.`,
+      );
   }
-  g[CACHE_KEY] = instance;
-  return instance;
+}
+
+export function getCheckpointer(): Promise<BaseCheckpointSaver> {
+  const g = globalThis as GlobalCache;
+  if (g[CACHE_KEY]) return g[CACHE_KEY];
+  g[CACHE_KEY] = resolveCheckpointer().catch((err) => {
+    // Drop the failed promise so the next caller can retry on a freshly
+    // applied env var instead of replaying the original boot-time error.
+    delete g[CACHE_KEY];
+    throw err;
+  });
+  return g[CACHE_KEY];
 }
 
 /** Test/dev hook: drop the cached checkpointer so the next call resolves fresh. */

@@ -32,7 +32,6 @@ export interface AgentGraphPort {
 
 export interface GraphInput {
   prompt: string;
-  context?: string;
   /** Reuse this to continue a paused graph (HITL) or to keep a multi-turn thread alive. */
   threadId?: string;
 }
@@ -45,7 +44,6 @@ export interface GraphOutput {
 
 export interface GraphConfig {
   maxSteps?: number;
-  timeoutMs?: number;
 }
 
 export interface GraphEvent {

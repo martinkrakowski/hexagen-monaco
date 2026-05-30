@@ -32,12 +32,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 400 },
     );
   }
-  const { prompt, threadId, context } = body as {
+  const { prompt, threadId } = body as {
     prompt: string;
     threadId?: string;
-    context?: string;
   };
-  const result = await langGraphAdapter.invoke({ prompt, threadId, context });
+  const result = await langGraphAdapter.invoke({ prompt, threadId });
   if (!result.ok) {
     const status = result.error.kind === "invalid-input" ? 400 : 500;
     return NextResponse.json(
