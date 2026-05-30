@@ -47,6 +47,14 @@ import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-eve
 import { OpenAIManifestGenerationAdapter } from "./infrastructure/adapters/manifest-generation.adapter.js";
 import { ReportGovernanceAdapter } from "./infrastructure/adapters/report-governance.adapter.js";
 
+// Re-exported for in-process consumers (e.g. the Skybridge presentation layer)
+// that delegate to the governance engine instead of re-implementing it.
+export { AuditBoundariesToolUseCase } from "./application/use-cases/audit-boundaries-tool.use-case.js";
+export type {
+  AuditBoundariesInput,
+  AuditBoundariesOutput,
+} from "./application/use-cases/audit-boundaries-tool.use-case.js";
+
 export interface MCPCompositionRoot {
   projectConfigurationReadPort: ProjectConfigurationReadPort;
   governanceReadPort: GovernanceReadPort;
