@@ -58,7 +58,19 @@ function installFetchMock(routes: MockRoute[]): {
     } as Response;
   }) as typeof fetch;
 
-  return { calls, restore: () => void (globalThis.fetch = original) };
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = original;
+      // Every expected route must have been consumed; a leftover means the
+      // adapter skipped a request we asserted it would make.
+      assert.strictEqual(
+        remaining.length,
+        0,
+        `Unused mocked routes remain: ${remaining.length}`,
+      );
+    },
+  };
 }
 
 const route = (
