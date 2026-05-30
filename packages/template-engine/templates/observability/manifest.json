@@ -27,7 +27,7 @@
       "default": false
     }
   ],
-  "envVars": ["LOG_LEVEL", "LOG_FORMAT", "CORRELATION_ID_HEADER"],
+  "envVars": [],
   "outputs": [
     "src/infrastructure/logging/logger.ts",
     "src/infrastructure/logging/correlation.ts",
@@ -35,13 +35,23 @@
     "src/infrastructure/logging/redact.ts",
     "src/infrastructure/logging/index.ts",
     "server/middleware/request-logger.ts",
-    "app/api/health/route.ts"
+    "app/api/health/route.ts",
+    ".env.observability.example",
+    {
+      "path": "instrumentation.ts",
+      "when": { "answer": "otel", "equals": true }
+    },
+    {
+      "path": ".env.otel.example",
+      "when": { "answer": "otel", "equals": true }
+    }
   ],
   "checklist": [
-    "Merge .env.observability.example into .env.local",
-    "Visit http://localhost:3000/api/health — verify all checks are green",
-    "Set LOG_LEVEL=debug to see all request logs during development",
-    "Check response headers for X-Request-Id on every API response"
+    "Merge .env.observability.example into .env.local (all vars are optional — the logger has defaults)",
+    "Wire requestLoggerMiddleware into your server (Express) or call runWithContext/getOrCreateCorrelationId from a Next.js middleware/route wrapper",
+    "Visit http://localhost:3000/api/health — extend its checks array as you add Redis/Supabase/LLM templates",
+    "Set LOG_LEVEL=debug to see all request logs; check responses for the correlation header (default x-request-id)",
+    "If you enabled OTel: npm install @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http @opentelemetry/auto-instrumentations-node, then merge .env.otel.example and set OTEL_EXPORTER_OTLP_ENDPOINT"
   ],
   "branch": "feature/generator-template-observability"
 }
