@@ -19,9 +19,18 @@ const encoder = new TextEncoder();
 export function streamGraphAsSse(
   events: AsyncIterable<GraphEvent>,
 ): ReadableStream<Uint8Array> {
+  // Hold the live iterator + heartbeat on the closure so cancel() can
+  // tear them down promptly when the client disconnects. Without this,
+  // the underlying for-await loop keeps draining graph events (and
+  // burning LLM tokens) until the upstream generator naturally ends.
+  let iterator: AsyncIterator<GraphEvent> | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+  let cancelled = false;
+
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const heartbeat = setInterval(() => {
+      iterator = events[Symbol.asyncIterator]();
+      heartbeat = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(": heartbeat\n\n"));
         } catch {
@@ -30,12 +39,18 @@ export function streamGraphAsSse(
         }
       }, HEARTBEAT_INTERVAL_MS);
       try {
-        for await (const evt of events) {
-          const frame = `event: ${evt.type}\ndata: ${JSON.stringify(evt.data)}\n\n`;
+        while (true) {
+          const { done, value } = await iterator.next();
+          if (done) break;
+          if (cancelled) break;
+          const frame = `event: ${value.type}\ndata: ${JSON.stringify(value.data)}\n\n`;
           controller.enqueue(encoder.encode(frame));
         }
-        controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
+        if (!cancelled) {
+          controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
+        }
       } catch (err) {
+        if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);
         const frame = `event: error\ndata: ${JSON.stringify({ message })}\n\n`;
         try {
@@ -44,8 +59,25 @@ export function streamGraphAsSse(
           // Best-effort error frame; if the controller is gone, drop it.
         }
       } finally {
-        clearInterval(heartbeat);
-        controller.close();
+        if (heartbeat) clearInterval(heartbeat);
+        heartbeat = null;
+        try {
+          controller.close();
+        } catch {
+          // Already closed via cancel() — fine.
+        }
+      }
+    },
+    async cancel() {
+      // The client disconnected (closed tab, Abort signal, edge timeout
+      // …). Stop the heartbeat AND tell the upstream generator to wind
+      // down, otherwise it would keep advancing through LangGraph nodes
+      // for a connection that nobody is listening to.
+      cancelled = true;
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = null;
+      if (iterator?.return) {
+        await iterator.return(undefined).catch(() => undefined);
       }
     },
   });

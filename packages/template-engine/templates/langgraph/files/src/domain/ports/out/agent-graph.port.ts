@@ -10,6 +10,19 @@ export interface AgentGraphPort {
     input: GraphInput,
     config?: GraphConfig,
   ): Promise<GraphInvokeResult>;
+  /**
+   * Continue a graph paused at a human-review interrupt. Distinct from
+   * invoke() because resume passes ONLY the reviewer's input as a partial
+   * state update — the original prompt and the rest of the checkpointed
+   * state are restored by LangGraph from the matching thread_id. Mixing
+   * this into invoke() would mean overwriting `state.input` with the
+   * reviewer's text and losing the original prompt.
+   */
+  resume?(
+    threadId: string,
+    humanInput: string,
+    config?: GraphConfig,
+  ): Promise<GraphInvokeResult>;
   stream?(
     input: GraphInput,
     config?: GraphConfig,

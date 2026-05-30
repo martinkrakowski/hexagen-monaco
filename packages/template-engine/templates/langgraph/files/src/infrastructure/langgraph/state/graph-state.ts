@@ -39,6 +39,18 @@ export const GraphStateAnnotation = Annotation.Root({
     reducer: (_left, right) => right,
     default: () => null,
   }),
+  /**
+   * Carries the reviewer's feedback when a paused graph is resumed via the
+   * /api/agent/resume route. Kept as its own field — deliberately NOT
+   * folded into `input` — so the original user prompt remains intact and
+   * the human-review node (or any downstream node) can branch on the two
+   * independently. The adapter's resume() method writes only this key, so
+   * the checkpointed `input` is preserved.
+   */
+  humanInput: Annotation<string | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
 });
 
 export type GraphState = typeof GraphStateAnnotation.State;

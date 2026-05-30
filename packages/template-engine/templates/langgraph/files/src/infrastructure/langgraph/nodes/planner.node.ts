@@ -1,3 +1,4 @@
+import { AIMessage } from "@langchain/core/messages";
 import type { GraphState, GraphStateUpdate } from "../state/graph-state";
 import { llmClient } from "../../llm";
 
@@ -37,15 +38,14 @@ export async function plannerNode(
     .filter(Boolean);
   // The downstream researcher node reads the sub-questions back out via
   // the last AI message — we tag it so the synthesiser can identify it.
+  // Construct a real AIMessage instance (rather than a plain { type, content }
+  // object cast through `as never`) so the messages array stays homogeneous
+  // and downstream `instanceof BaseMessage` checks succeed.
+  const planMessage = new AIMessage(
+    `<plan>\n${subQuestions.join("\n")}\n</plan>`,
+  );
   return {
-    messages: response.value.content
-      ? [
-          {
-            type: "ai",
-            content: `<plan>\n${subQuestions.join("\n")}\n</plan>`,
-          } as never,
-        ]
-      : [],
+    messages: response.value.content ? [planMessage] : [],
     steps: [`planner:ok:${subQuestions.length}-questions`],
   };
 }

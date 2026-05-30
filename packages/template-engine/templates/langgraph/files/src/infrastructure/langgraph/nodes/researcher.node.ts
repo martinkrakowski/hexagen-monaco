@@ -1,3 +1,4 @@
+import { AIMessage } from "@langchain/core/messages";
 import type { GraphState, GraphStateUpdate } from "../state/graph-state";
 import { llmClient } from "../../llm";
 
@@ -49,13 +50,14 @@ export async function researcherNode(
       return `Q: ${q}\nA: ${response.value.content}`;
     }),
   );
+  // Real AIMessage instance so the messages array stays type-correct;
+  // downstream nodes (and any consumer that does `instanceof BaseMessage`)
+  // see a uniform shape instead of a plain object cast through `as never`.
+  const answersMessage = new AIMessage(
+    `<answers>\n${answers.join("\n\n")}\n</answers>`,
+  );
   return {
-    messages: [
-      {
-        type: "ai",
-        content: `<answers>\n${answers.join("\n\n")}\n</answers>`,
-      } as never,
-    ],
+    messages: [answersMessage],
     steps: [`researcher:ok:${answers.length}-answered`],
   };
 }

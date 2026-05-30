@@ -39,15 +39,22 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 400 },
     );
   }
-  // The adapter's invoke() uses the threadId from the input *or* generates
-  // one; passing the existing threadId here resumes the paused graph from
-  // its checkpoint instead of starting fresh. The prompt is empty because
-  // the original input is already on state — humanInput layers on top via
-  // the human-review node.
-  const result = await langGraphAdapter.invoke({
-    prompt: humanInput,
-    threadId,
-  });
+  if (!langGraphAdapter.resume) {
+    // Adapter built without resume support — surface clearly rather than 500.
+    return NextResponse.json(
+      {
+        error: "Resume is not enabled on this adapter",
+        kind: "invalid-input",
+      },
+      { status: 501 },
+    );
+  }
+  // resume() writes ONLY humanInput as a partial state update. The
+  // checkpointer restores the rest of the paused state (including the
+  // original `input` prompt) for the matching thread_id, so the original
+  // user question is preserved instead of being overwritten by the
+  // reviewer's text.
+  const result = await langGraphAdapter.resume(threadId, humanInput);
   if (!result.ok) {
     const status = result.error.kind === "invalid-input" ? 400 : 500;
     return NextResponse.json(

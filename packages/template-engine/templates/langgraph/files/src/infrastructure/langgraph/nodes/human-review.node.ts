@@ -5,29 +5,29 @@ import type { GraphState, GraphStateUpdate } from "../state/graph-state";
  * node you want a human to approve, and compile with
  * `interruptBefore: ["human-review"]` so LangGraph pauses execution
  * when control reaches this node. The graph state is checkpointed at
- * the pause; the /api/agent/resume route reads the human's input from
- * the request and calls `graph.invoke({ humanInput }, { configurable:
- * { thread_id: threadId } })` to continue.
+ * the pause; the /api/agent/resume route calls
+ * `adapter.resume(threadId, humanInput)`, which writes ONLY humanInput
+ * as a partial state update — the original `input` prompt stays intact.
  *
- * This node intentionally does almost nothing — the value-add is the
- * pause + checkpoint LangGraph provides around it. When resumed, the
- * upstream invoke call carries `humanInput` into state via this node's
- * return so downstream nodes can read it from `state.input` (or wherever
- * you choose to merge it; this default re-assigns to `input` which is
- * usually the field downstream nodes already key off).
+ * Downstream nodes can read state.humanInput AND state.input as two
+ * distinct values: the original user question vs the reviewer's
+ * feedback. This node intentionally does not fold humanInput into
+ * input — that would erase the original prompt and surprise any
+ * subsequent node that re-reads it.
  *
  * Toggle the interrupt at runtime via `LANGGRAPH_HITL_ENABLED` if you
  * want a single graph definition that can run with or without the
  * pause depending on environment.
  */
 export async function humanReviewNode(
-  state: GraphState & { humanInput?: string },
+  state: GraphState,
 ): Promise<GraphStateUpdate> {
   if (typeof state.humanInput === "string" && state.humanInput.length > 0) {
-    return {
-      input: state.humanInput,
-      steps: ["human-review:resumed"],
-    };
+    // Tag the audit trail so downstream nodes and `/getState` consumers
+    // can tell a resumed run from a first-pass one. The humanInput stays
+    // on state for downstream nodes to read; clearing it would silently
+    // drop the reviewer's signal between this node and the next.
+    return { steps: ["human-review:resumed"] };
   }
   // Resumed without input — treat as "approve unchanged" and continue.
   return { steps: ["human-review:approved-noop"] };

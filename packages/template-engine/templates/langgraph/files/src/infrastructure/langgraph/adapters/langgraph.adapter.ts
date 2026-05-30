@@ -17,17 +17,26 @@ import { buildMainGraph } from "../graphs/{graph_type}.graph";
  *
  * The compiled graph is memoised because compilation isn't free —
  * StateGraph builds an internal topology each call — and the checkpointer
- * is configured once at module load.
+ * is configured once at module load. The cache lives on `globalThis` so
+ * Next.js Fast Refresh / HMR (which re-evaluates this module on edits)
+ * doesn't drop the existing compiled-graph + checkpointer connection
+ * pool and start a fresh one. Same singleton-across-reloads pattern as
+ * the checkpointer factory.
  */
-let compiled:
-  | Awaited<ReturnType<typeof buildMainGraph>>
-  | null = null;
+type CompiledGraph = ReturnType<typeof buildMainGraph>;
+const COMPILED_KEY = Symbol.for("hexagen.langgraph.compiledGraph");
 
-async function compileOnce() {
-  if (compiled) return compiled;
+type GlobalCompiledCache = typeof globalThis & {
+  [COMPILED_KEY]?: CompiledGraph;
+};
+
+async function compileOnce(): Promise<CompiledGraph> {
+  const g = globalThis as GlobalCompiledCache;
+  if (g[COMPILED_KEY]) return g[COMPILED_KEY];
   const checkpointer = await getCheckpointer();
-  compiled = buildMainGraph(checkpointer);
-  return compiled;
+  const instance = buildMainGraph(checkpointer);
+  g[COMPILED_KEY] = instance;
+  return instance;
 }
 
 export class LangGraphAdapter implements AgentGraphPort {
@@ -52,6 +61,49 @@ export class LangGraphAdapter implements AgentGraphPort {
             kind: "node-failed",
             message: result.errorMessage,
           },
+        };
+      }
+      return {
+        ok: true,
+        value: {
+          result: result.output ?? "",
+          steps: result.steps ?? [],
+          threadId,
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          kind: "unknown",
+          message: err instanceof Error ? err.message : String(err),
+          cause: err,
+        },
+      };
+    }
+  }
+
+  async resume(
+    threadId: string,
+    humanInput: string,
+    config?: GraphConfig,
+  ): Promise<GraphInvokeResult> {
+    try {
+      const graph = await compileOnce();
+      // Partial state update: ONLY humanInput. Omitting `input` here
+      // lets the checkpointer restore the original prompt from the
+      // paused thread instead of last-write-wins-clobbering it.
+      const result = await graph.invoke(
+        { humanInput },
+        {
+          configurable: { thread_id: threadId },
+          recursionLimit: config?.maxSteps ?? 25,
+        },
+      );
+      if (result.errorMessage) {
+        return {
+          ok: false,
+          error: { kind: "node-failed", message: result.errorMessage },
         };
       }
       return {
