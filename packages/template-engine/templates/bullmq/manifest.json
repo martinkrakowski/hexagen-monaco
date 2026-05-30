@@ -1,7 +1,7 @@
 {
   "id": "bullmq",
   "name": "BullMQ",
-  "description": "Typed job queues, workers, Redis fallback to in-process sync execution, optional Bull Board dashboard",
+  "description": "Typed BullMQ job queues with workers, scheduler, Redis fallback to in-process sync execution, optional Bull Board dashboard, and per-queue routing. Designed for background processing (image generation, email, webhooks, exports) where tasks are too slow for request/response cycles.",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
@@ -20,11 +20,31 @@
       "default": "default,images,notifications"
     },
     {
+      "id": "job_examples",
+      "type": "multiselect",
+      "prompt": "Generate example job types?",
+      "options": [
+        "image-processing",
+        "email",
+        "webhook",
+        "export",
+        "ai-generation"
+      ],
+      "default": []
+    },
+    {
       "id": "redis_source",
       "type": "select",
       "prompt": "Redis connection?",
       "options": ["local", "redis-cloud", "upstash", "docker-compose"],
       "default": "local"
+    },
+    {
+      "id": "concurrency",
+      "type": "select",
+      "prompt": "Default worker concurrency per queue?",
+      "options": ["1", "2", "5", "10"],
+      "default": "2"
     },
     {
       "id": "bull_board",
@@ -33,20 +53,68 @@
       "default": true
     }
   ],
-  "envVars": ["REDIS_URL", "BULLMQ_FALLBACK_MODE", "WORKER_CONCURRENCY"],
+  "envVars": [
+    "REDIS_URL",
+    "REDIS_MAX_RETRIES",
+    "REDIS_CONNECTION_TIMEOUT_MS",
+    "BULLMQ_FALLBACK_MODE",
+    "BULLMQ_QUEUE_NAMES",
+    "WORKER_CONCURRENCY",
+    "WEBHOOK_FETCH_TIMEOUT_MS",
+    "BULL_BOARD_ENABLED",
+    "BULL_BOARD_BASE_PATH",
+    "BULL_BOARD_USERNAME",
+    "BULL_BOARD_PASSWORD"
+  ],
   "outputs": [
     "src/infrastructure/queue/connection.ts",
+    "src/infrastructure/queue/parse-int-env.ts",
     "src/infrastructure/queue/queues.ts",
+    "src/infrastructure/queue/workers.ts",
     "src/infrastructure/queue/fallback/sync-executor.ts",
     "src/infrastructure/queue/scheduler/job-scheduler.ts",
     "src/infrastructure/queue/index.ts",
-    "server/startup/start-workers.ts"
+    "server/startup/start-workers.ts",
+    ".env.bullmq.example",
+    {
+      "path": "scripts/start-worker.ts",
+      "when": { "answer": "worker_mode", "equals": "separate-service" }
+    },
+    {
+      "path": "app/admin/queues/[[...slug]]/route.ts",
+      "when": { "answer": "bull_board", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/queue/jobs/image-processing.job.ts",
+      "when": { "answer": "job_examples", "includes": "image-processing" }
+    },
+    {
+      "path": "src/infrastructure/queue/jobs/email.job.ts",
+      "when": { "answer": "job_examples", "includes": "email" }
+    },
+    {
+      "path": "src/infrastructure/queue/jobs/webhook.job.ts",
+      "when": { "answer": "job_examples", "includes": "webhook" }
+    },
+    {
+      "path": "src/infrastructure/queue/jobs/export.job.ts",
+      "when": { "answer": "job_examples", "includes": "export" }
+    },
+    {
+      "path": "src/infrastructure/queue/jobs/ai-generation.job.ts",
+      "when": { "answer": "job_examples", "includes": "ai-generation" }
+    }
   ],
   "checklist": [
+    "Install dependencies: npm install bullmq ioredis (and @bull-board/nextjs @bull-board/api if bull_board=true)",
     "Merge .env.bullmq.example into .env.local",
-    "Start Redis locally: redis-server  (or: docker compose up redis)",
-    "If BULLMQ_FALLBACK_MODE=auto, app works without Redis — check logs for [bullmq:fallback]",
-    "Visit http://localhost:3000/admin/queues for Bull Board (if enabled)"
+    "Start Redis locally: redis-server (or `docker compose up redis` if you also installed the docker template)",
+    "If BULLMQ_FALLBACK_MODE=auto, the app works without Redis — watch for [bullmq:fallback] warnings in the console",
+    "Same-process mode: server/startup/start-workers.ts is imported at server startup — wire it into your Next.js custom server or instrumentation hook",
+    "Separate-service mode: run `node --import tsx/esm scripts/start-worker.ts` on a worker dyno/machine; same-process startup file is still emitted but should not be imported",
+    "Visit http://localhost:3000/admin/queues for Bull Board (if enabled). Set BULL_BOARD_USERNAME/PASSWORD before production",
+    "Add jobs via `addJob('<queue>', '<jobName>', data)` from src/infrastructure/queue; routes by job.name to the handler in src/infrastructure/queue/jobs/",
+    "Recurring jobs: edit src/infrastructure/queue/scheduler/job-scheduler.ts — definitions stay in code, stale ones are removed on next startup"
   ],
   "branch": "feature/generator-template-bullmq"
 }

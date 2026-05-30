@@ -212,18 +212,22 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     id: "bullmq",
     name: "BullMQ",
     description:
-      "Typed job queues, workers, Redis fallback to in-process sync execution, optional Bull Board dashboard",
+      "Typed BullMQ queues + workers with single-file dispatcher, Redis fallback to in-process sync execution, recurring-job scheduler, optional Bull Board dashboard, and same-process / separate-service deployment modes",
     requires: ["env-setup"],
     conflicts: [],
     category: "infrastructure",
     details: {
       overview:
-        "Typed job queue infrastructure backed by Redis. Falls back to synchronous in-process execution when Redis is unavailable, making it safe for local dev without a running Redis instance.",
+        "Background job processing on top of BullMQ. One worker per configured queue dispatches by job name to typed handlers; the queue layer transparently falls back to inline execution when Redis is unavailable, so local dev works without a running Redis instance. Ships with optional Bull Board (Basic-Auth-gated in production) and a recurring-job scheduler that re-registers definitions idempotently every startup so cron changes can't strand stale schedules in Redis.",
       includes: [
-        "Typed queue and worker factory with DI-friendly ports",
-        "Redis connection with health check and graceful shutdown",
-        "In-process sync fallback for local dev (no Redis required)",
-        "Optional Bull Board dashboard at /admin/queues",
+        "Typed addJob(queue, jobName, data) with per-queue / per-job-name routing",
+        "Single Redis connection factory with auto / always / never fallback modes",
+        "In-process sync fallback executor for local dev (no Redis required)",
+        "Configurable per-queue worker concurrency",
+        "Five opt-in example job handlers: image-processing, email, webhook, export, ai-generation",
+        "Recurring-job scheduler with stale-cron pruning",
+        "Optional Bull Board dashboard at /admin/queues with Basic Auth in production",
+        "Same-process bootstrap (server/startup) and separate-service entrypoint (scripts/start-worker.ts)",
       ],
     },
   },

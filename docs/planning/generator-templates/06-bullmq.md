@@ -1,6 +1,31 @@
 # Template: BullMQ
 
 **Branch:** `feature/generator-template-bullmq`
+**Status:** Implemented (v1.0). 15 outputs (7 gated), 6 questions. See PR for details.
+
+## What shipped vs. the plan
+
+The plan called for 8 phases. v1 ships 7:
+
+- **Phases 1, 2, 5 (always emit):** Redis connection factory with auto/always/never fallback modes; typed `addJob` / `getQueue` / `registerFallbackHandler` API; in-process sync executor that returns BullMQ-shaped Job stubs so consumer code is identical in either mode.
+- **Phase 3 (gated per example):** Five opt-in job files — `image-processing`, `email`, `webhook`, `export`, `ai-generation` — each gated on `job_examples` including the matching value. Per-file emission preserves the plan's "one handler file per type" pattern.
+- **Phase 4 (always):** Single `workers.ts` that iterates `QUEUE_NAMES` and dispatches by `job.name` through a registered handler map. Deviates from the plan's "one worker file per queue" only because the template engine doesn't support templated paths in outputs; the dispatcher-table approach is structurally cleaner and lets handlers be registered in any order at boot.
+- **Phase 6 (gated on `bull_board`):** Bull Board mounted at `BULL_BOARD_BASE_PATH` with HTTP Basic Auth in production, 503 in fallback mode.
+- **Phase 7 (always):** Recurring-job scheduler that re-registers all definitions idempotently every startup and prunes stale schedules — kills the classic "I changed the cron but the old one is still running in Redis" trap.
+- **Same-process / separate-service split:** `server/startup/start-workers.ts` always emits; `scripts/start-worker.ts` is gated on `worker_mode=separate-service`.
+
+**Phase 8 (Supabase job result store) is deferred** — it requires a soft dependency on the supabase template plus a migration, which is non-trivial to coordinate. Tracked separately; the existing `addJob` API leaves the door open for a result-store wrapper to land later without breaking callers.
+
+## Test coverage
+
+`packages/template-engine/__tests__/templates/bullmq-emit-shape.test.ts` exercises two install scenarios end-to-end against the real template directory:
+
+- minimal install (defaults) — asserts the 8 always-on files emit, plus the bull-board route; asserts neither `start-worker.ts` nor any `jobs/*.job.ts` appear.
+- full install (separate-service + all five job examples + `bull_board=false`) — asserts the separate-service entrypoint emits, all five job files emit, and the bull-board route is absent.
+
+The supabase emit-shape test in the same directory exercises the cross-cutting "templates that adapt to answers" guarantee for Supabase; the bullmq test does the same for BullMQ, giving us hard regression guards on both the most-gated templates.
+
+---
 
 ## Purpose
 
@@ -22,43 +47,50 @@ Generates a fully typed BullMQ job queue with worker setup, job type definitions
 
 ---
 
-## Files Generated
+## Files Generated (as shipped in v1.0)
 
-```
+```text
 src/
   infrastructure/
     queue/
-      connection.ts           # Redis connection factory with fallback detection
-      queues.ts               # Typed queue instances per queue name
-      workers/
-        <queue-name>.worker.ts   # One worker file per queue
-      jobs/
-        <job-type>.job.ts     # Type definition + handler for each job type
-      scheduler/
-        job-scheduler.ts      # Add recurring/cron jobs
+      connection.ts                       # Redis factory with auto/always/never fallback + recover-on-reconnect
+      queues.ts                           # addJob(queue, jobName, data) + getQueue() + fallback handler registry
+      workers.ts                          # Single worker dispatcher: iterates QUEUE_NAMES, routes by job.name
       fallback/
-        sync-executor.ts      # In-process fallback when Redis unavailable
-      result-store/
-        job-result.ts         # Optional: persist job result to Supabase
-      errors/
-        job-errors.ts
-      index.ts                # Barrel: exports addJob, getQueue, etc.
+        sync-executor.ts                  # Inline executor; passes a real BullMQ-shaped Job mock to handlers
+      scheduler/
+        job-scheduler.ts                  # Recurring jobs in code; prunes stale schedules every startup
+      jobs/
+        image-processing.job.ts           # (gated: job_examples includes "image-processing")
+        email.job.ts                      # (gated: job_examples includes "email")
+        webhook.job.ts                    # (gated: job_examples includes "webhook")
+        export.job.ts                     # (gated: job_examples includes "export")
+        ai-generation.job.ts              # (gated: job_examples includes "ai-generation")
+      index.ts                            # Barrel: addJob, QUEUE_NAMES, etc.
 
 server/
   startup/
-    start-workers.ts          # Called at server startup (same-process mode)
+    start-workers.ts                      # bootstrapWorkers() / shutdownWorkers() — host installs lifecycle hooks
 
 app/
-  api/
-    bull-board/               # (if bull_board=true)
-      [[...slug]]/
-        route.ts              # Bull Board Next.js adapter
+  admin/
+    queues/[[...slug]]/route.ts           # (gated on bull_board=true) Basic-Auth-protected in production; URL matches BULL_BOARD_BASE_PATH default
 
 scripts/
-  start-worker.ts             # Entrypoint for separate-service mode
+  start-worker.ts                         # (gated on worker_mode=separate-service) standalone worker process
 
 .env.bullmq.example
 ```
+
+### Differences from the original plan
+
+The original plan envisioned per-queue worker files (`workers/<queue-name>.worker.ts`) and per-job-type handler files (`jobs/<job-type>.job.ts`). The engine doesn't support templated paths for outputs, so v1 ships:
+
+- **One `workers.ts`** that iterates `QUEUE_NAMES` and dispatches by `job.name` through a registered handler map. Adding a new queue is an env-var change, not a code generation step.
+- **Per-job-type files** as planned — each is gated on `job_examples includes "<name>"`, so picking the example set toggles individual files on/off.
+- **Plus**: each job file exports a `<NAME>_DEFAULT_QUEUE` constant so `start-workers.ts` can register the handler on the appropriate queue (image-processing → "images"; the rest → "default"), with fallback to the first enabled queue if the declared one isn't configured.
+
+A `result-store/` / Supabase result persistence layer was deferred to a separate follow-up because it needs a soft dep on the supabase template plus a migration; the `addJob` API leaves the door open for a wrapper to land later without breaking callers. A dedicated `errors/job-errors.ts` was inlined into `queues.ts` — too small to justify its own file.
 
 ---
 
@@ -70,13 +102,14 @@ REDIS_URL=redis://localhost:6379
 REDIS_MAX_RETRIES=3
 REDIS_CONNECTION_TIMEOUT_MS=5000
 BULLMQ_FALLBACK_MODE=auto      # auto | always | never
-                                # auto = use in-process if Redis unavailable
+                                # auto = in-process executor if Redis unavailable; recovers on reconnect
+BULLMQ_QUEUE_NAMES=default,images,notifications  # overrides the install-time default
 
 # Bull Board (if enabled)
 BULL_BOARD_ENABLED=true
 BULL_BOARD_BASE_PATH=/admin/queues
 BULL_BOARD_USERNAME=admin
-BULL_BOARD_PASSWORD=            # Set in production
+BULL_BOARD_PASSWORD=            # Required in production; Basic Auth via timingSafeEqual
 
 # Worker
 WORKER_CONCURRENCY=2
@@ -86,15 +119,19 @@ WORKER_CONCURRENCY=2
 
 ## Key Design Decisions
 
-**`worker_mode=same-process`** is the default because it works without any process manager or separate deploy step — ideal for demos and early-stage projects. Switching to `separate-service` means pointing `start-worker.ts` at a separate process (PM2, Railway worker, Fly Machine) without changing job or queue code.
+**`worker_mode=same-process`** is the default because it works without any process manager or separate deploy step — ideal for demos and early-stage projects. Switching to `separate-service` means pointing `scripts/start-worker.ts` at a separate process (PM2, Railway worker, Fly Machine) without changing job or queue code.
 
-**Graceful Redis fallback:** When `BULLMQ_FALLBACK_MODE=auto` and Redis is unreachable at startup, the queue layer automatically routes `addJob()` calls to `sync-executor.ts`, which runs the job handler synchronously in the same request. This means the app works without Redis during local development. A warning is logged so developers know they're in fallback mode.
+**Graceful Redis fallback with auto-recovery:** When `BULLMQ_FALLBACK_MODE=auto` and Redis is unreachable at startup or transitions to an `error` state, the queue layer routes `addJob()` calls to `sync-executor.ts`. When ioredis subsequently fires `ready` or `connect` (after a Redis restart / network blip), the fallback flag is cleared and the queue resumes pushing to BullMQ — so a transient outage doesn't permanently degrade the app until process restart.
 
-**One worker file per queue:** This makes concurrency, error handling, and job routing easy to reason about. The worker files are thin — they import job handlers from `jobs/` and delegate.
+**Process lifecycle is the host's responsibility in same-process mode.** `start-workers.ts` exposes `bootstrapWorkers()` and `shutdownWorkers()` but does NOT install SIGINT/SIGTERM handlers — registering them inside the web server's process would hijack Next.js's own graceful HTTP shutdown and drop in-flight requests. Wire `shutdownWorkers()` into the host's existing exit hook. The separate-service entrypoint `scripts/start-worker.ts` installs its own signal handlers because it owns the process.
 
-**Job handlers are pure functions:** Each `<job-type>.job.ts` exports a `process(job: Job<JobData>): Promise<JobResult>` function with no side effects on the queue itself. This makes handlers unit-testable without a Redis connection.
+**Single dispatcher with per-job queue affinity:** `workers.ts` runs one BullMQ Worker per `QUEUE_NAMES` entry and dispatches by `job.name` to a registered handler. Each job file declares its preferred queue via a `<NAME>_DEFAULT_QUEUE` constant; `start-workers.ts` honours that affinity (or falls through to the first enabled queue if the declared one isn't configured).
 
-**Bull Board is protected:** In production, the `/admin/queues` route requires `BULL_BOARD_USERNAME` + `BULL_BOARD_PASSWORD` via HTTP Basic Auth. In development, it's open. The middleware checks `NODE_ENV`.
+**Fallback executor passes a real Job mock:** `executeSync()` constructs a Job-shaped object with `id`, `log()`, `updateProgress()`, etc. and passes it to the handler — same signature as the BullMQ worker callback path. Consumer code is identical in either mode; no per-handler wrappers, no `as never` casts at the call site.
+
+**Job handlers are pure functions:** Each `<job-type>.job.ts` exports a `process(job: Job<JobData>): Promise<JobResult>` function with no side effects on the queue itself. Unit-testable without a Redis connection.
+
+**Bull Board uses constant-time auth:** In production, the `/admin/queues` route requires `BULL_BOARD_USERNAME` + `BULL_BOARD_PASSWORD` via HTTP Basic Auth, compared with `crypto.timingSafeEqual` so the response time doesn't leak which side mismatched. In development the route is open. In fallback mode it returns 503 rather than rendering an empty board.
 
 ---
 
@@ -243,7 +280,7 @@ Validation: Unit test with `REDIS_URL` unset — assert job handler is called sy
 
 Install: `@bull-board/nextjs`, `@bull-board/api`
 
-`app/api/bull-board/[[...slug]]/route.ts`:
+`app/admin/queues/[[...slug]]/route.ts` (so Next.js serves it at `/admin/queues/...`, matching the Bull Board adapter's default `basePath`):
 
 - Registers all queues with Bull Board
 - Wraps with Basic Auth middleware in production
