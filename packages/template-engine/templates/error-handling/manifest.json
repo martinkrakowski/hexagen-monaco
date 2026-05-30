@@ -39,14 +39,25 @@
     "src/infrastructure/errors/external-service.error.ts",
     "src/infrastructure/errors/llm-errors.ts",
     "server/middleware/error-handler.ts",
-    "app/components/ErrorBoundary.tsx",
-    "app/components/ErrorFallback.tsx"
+    {
+      "path": "app/components/ErrorBoundary.tsx",
+      "when": { "answer": "react_boundary", "equals": true }
+    },
+    {
+      "path": "app/components/ErrorFallback.tsx",
+      "when": { "answer": "react_boundary", "equals": true }
+    },
+    {
+      "path": ".env.sentry.example",
+      "when": { "answer": "sentry", "equals": true }
+    }
   ],
   "checklist": [
-    "Import Result from 'src/shared/result.ts' in new use cases",
-    "Wrap infrastructure calls in try/catch and return err(new ExternalServiceError(...))",
-    "Register handleError in your server middleware chain",
-    "Wrap top-level React trees with <ErrorBoundary> in app/layout.tsx"
+    "Return Result<T, E> (src/shared/result.ts) from use cases that can fail expectedly; throw only for programmer/config errors",
+    "Wrap infrastructure failures as err(new ExternalServiceError(...)), then wrap at the application boundary (UseCaseError) so lower layers don't leak upward",
+    "Use handleError(error, instance) in routes/middleware: Next.js → Response.json(body, { status }); Express → res.status(status).json(body)",
+    "If you generated the React boundary: wrap top-level trees with <ErrorBoundary> in app/layout.tsx, and swap its componentDidCatch console.error for your observability logger if the observability template is installed",
+    "If you enabled Sentry: npm install @sentry/node, merge .env.sentry.example into .env.local, set SENTRY_DSN (the handler then reports unhandled errors automatically)"
   ],
   "branch": "feature/generator-template-error-handling"
 }
