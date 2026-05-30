@@ -40,17 +40,18 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=deps    /app/node_modules ./node_modules
 COPY --from=builder /app/.next        ./.next
 COPY --from=builder /app/public       ./public
-COPY --from=builder /app/package.json ./package.json
-# next.config.* is optional — the trailing glob keeps the COPY from failing
-# when the project has no config file.
-COPY --from=builder /app/next.config.* ./
+# package.json guarantees at least one match, so the optional next.config.*
+# glob can resolve to nothing without failing the build ("no source files
+# were specified" under BuildKit).
+COPY --from=builder /app/package.json /app/next.config.* ./
 
 USER appuser
 EXPOSE 3000
 
-# Calls the app's own /api/health route (provided by the observability template).
-# Exits 0 on HTTP 200, non-zero otherwise — Docker marks the container unhealthy.
+# Probes the configured health_path (default "/", which any app serves). Set it
+# to /api/health if you install the observability template. Exits 0 on HTTP 200,
+# non-zero otherwise — Docker then marks the container unhealthy.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||3000)+'/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+  CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||3000)+'{health_path}',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 CMD ["npm", "start"]

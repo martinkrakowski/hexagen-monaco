@@ -126,8 +126,24 @@ describe("docker template — emit shape", () => {
 
     it("documents an empty COMPOSE_PROFILES default when no services selected", async () => {
       const compose = await read(projectRoot, "docker-compose.yml");
-      assert.ok(compose.includes("COMPOSE_PROFILES="));
+      // Anchored to end-of-line so a non-empty value (e.g. =redis) can't pass.
+      assert.match(compose, /COMPOSE_PROFILES=\s*$/m);
       assert.ok(!compose.includes("{services}"));
+    });
+
+    it("defaults the health check to / (no dependency on the observability route)", async () => {
+      const dockerfile = await read(projectRoot, "Dockerfile");
+      const compose = await read(projectRoot, "docker-compose.yml");
+      assert.ok(
+        dockerfile.includes("'+(process.env.PORT||3000)+'/'"),
+        "Dockerfile health check should probe the default path /",
+      );
+      assert.ok(
+        compose.includes("http://localhost:3000/'"),
+        "compose health check should probe the default path /",
+      );
+      assert.ok(!dockerfile.includes("{health_path}"));
+      assert.ok(!compose.includes("{health_path}"));
     });
 
     it("lowercases the image name in the CI workflow (GHCR requires lowercase)", async () => {
@@ -151,7 +167,7 @@ describe("docker template — emit shape", () => {
         node_version: "20",
         services: ["redis", "postgres"],
         registry: "ghcr",
-        health_check: true,
+        health_path: "/api/health",
       });
     });
 
@@ -181,6 +197,15 @@ describe("docker template — emit shape", () => {
           `expected a profile gate for ${svc}`,
         );
       }
+    });
+
+    it("interpolates a custom health_path into both health checks", async () => {
+      const dockerfile = await read(projectRoot, "Dockerfile");
+      const compose = await read(projectRoot, "docker-compose.yml");
+      assert.ok(
+        dockerfile.includes("'+(process.env.PORT||3000)+'/api/health'"),
+      );
+      assert.ok(compose.includes("http://localhost:3000/api/health'"));
     });
   });
 });

@@ -20,8 +20,11 @@ services:
     image: ${IMAGE_NAME:-app}:${IMAGE_TAG:-local}
     ports:
       - "3000:3000"
+    # Long-form env_file with required: false (Docker Compose v2.24.0+) so a
+    # missing .env.local doesn't hard-fail the first run before you create it.
     env_file:
-      - .env.local
+      - path: .env.local
+        required: false
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -30,7 +33,7 @@ services:
         - CMD
         - node
         - -e
-        - "require('http').get('http://localhost:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+        - "require('http').get('http://localhost:3000{health_path}',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
       interval: 30s
       timeout: 10s
       start_period: 20s

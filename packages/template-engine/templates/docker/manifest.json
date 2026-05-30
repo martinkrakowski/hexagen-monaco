@@ -23,15 +23,15 @@
     {
       "id": "registry",
       "type": "select",
-      "prompt": "Container registry?",
+      "prompt": "Container registry? (the generated workflow targets ghcr.io; ecr/docker-hub require switching the commented login/env steps in docker-build.yml)",
       "options": ["ghcr", "ecr", "docker-hub", "none"],
       "default": "ghcr"
     },
     {
-      "id": "health_check",
-      "type": "boolean",
-      "prompt": "Include health check in Dockerfile?",
-      "default": true
+      "id": "health_path",
+      "type": "text",
+      "prompt": "HTTP path for the container health check? (use / for any app, or /api/health if you also install the observability template)",
+      "default": "/"
     }
   ],
   "envVars": [],
@@ -47,7 +47,7 @@
     "Create .env.local (docker-compose reads it via env_file) — copy from .env.example",
     "docker compose up --build   (dev mode + hot reload; merges docker-compose.override.yml automatically)",
     "Enable backing services with profiles, e.g. COMPOSE_PROFILES=redis,postgres docker compose up — or persist COMPOSE_PROFILES in .env.local",
-    "Verify the app at http://localhost:3000/api/health (health route comes from the observability template)",
+    "Verify the app at http://localhost:3000/ — the container health check probes the health_path you chose (default /); point it at /api/health if you install the observability template",
     "Production-equivalent run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build",
     "ghcr.io needs no extra secrets (uses GITHUB_TOKEN). For Docker Hub/ECR, set the REGISTRY_ORG repo variable and switch the commented login step in .github/workflows/docker-build.yml"
   ],
