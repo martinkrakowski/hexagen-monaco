@@ -125,6 +125,9 @@ describe("env-setup template — emit shape", () => {
       assert.ok(sidecar.includes(".env.*"));
       assert.ok(sidecar.includes("!.env.example"));
       assert.ok(sidecar.includes("!.env.*.example"));
+      // Leads with a blank line so `cat >> .gitignore` can't merge onto the
+      // last line of a target file that has no trailing newline.
+      assert.ok(sidecar.startsWith("\n"));
     });
 
     it("leaves no unresolved template variables (guards ts/md brace collisions)", () => {

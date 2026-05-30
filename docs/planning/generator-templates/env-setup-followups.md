@@ -64,30 +64,47 @@ that had none.
 
 **Approach (gated loader file):**
 
-- Add the `dotenv_tool` question (default `next.js-built-in`).
+- Add the `dotenv_tool` question (default `next.js-built-in`). The engine has no
+  conditional question rendering, so the prompt is shown even for frameworks with
+  a native loader (Next.js, Nitro). Make the prompt/options self-documenting, e.g.
+  prompt: "Env loader? (use next.js-built-in for Next.js/Nitro — they parse .env
+  natively; pick dotenv/dotenv-expand only for plain Node entrypoints)".
 - Add `src/config/load-env.ts` as a **gated** output, registered twice at the same
   path:
   - `when: { answer: "dotenv_tool", equals: "dotenv" }`
   - `when: { answer: "dotenv_tool", equals: "dotenv-expand" }`
     Exactly one fires; `next.js-built-in` emits nothing (Next loads `.env` itself).
-- The single source file branches by `{dotenv_tool}`. Because `dotenv` and
-  `dotenv-expand` have different APIs, decide at build time between:
-  - **(i)** one source with a runtime guard (`config()` always; dynamically apply
-    `expand()` when `dotenv_tool === "dotenv-expand"`), or
-  - **(ii)** two distinct source paths (`load-env.ts` is emitted for both, but
-    interpolation can't express two APIs cleanly) — prefer **(i)**.
-    Lean toward **(i)**: import `config` from `dotenv` unconditionally, then a
-    comment-documented optional `dotenv-expand` step keyed off the interpolated
-    `{dotenv_tool}` constant (same `"{dotenv_tool}" === "..."` string-encoding trick
-    used for `strict_validation`).
+- One source file, gated to dotenv/dotenv-expand. **Use a guarded dynamic import
+  for `dotenv-expand`, never a static one** — a static `import { expand } from
+"dotenv-expand"` would fail `tsc`/`yarn typecheck` (`Cannot find module
+'dotenv-expand'`) for users who chose plain `dotenv` and never installed it.
+  Pattern:
+
+  ```ts
+  import { config } from "dotenv";
+  const result = config();
+  if ("{dotenv_tool}" === "dotenv-expand") {
+    // @ts-expect-error optional dep, installed only when selected in the wizard
+    import("dotenv-expand")
+      .then(({ expand }) => expand(result))
+      .catch(() => {});
+  }
+  ```
+
+  The `"{dotenv_tool}" === "..."` string-encoding mirrors the `strict_validation`
+  trick (valid TS pre-interpolation, lint-safe). Confirm `@ts-expect-error` vs
+  `@ts-ignore` against the repo's tsconfig at build time (`@ts-expect-error`
+  errors if the suppression becomes unnecessary, which is preferable).
+
 - `SETUP.md` + checklist note which package to `npm install` for the chosen tool.
 
 **Touches:** `manifest.json` (1 question + 2 gated outputs), `files/src/config/load-env.ts`,
 `SETUP.md`/checklist, gated-emit test (present for dotenv/dotenv-expand, absent for
 built-in). **Question added → regenerate `template-questions.generated.ts`.**
 
-**Risk:** low; main care is the brace/`${}` discipline in the loader file and the
-two-entry-same-path gate. **Est:** ~1–1.5 hr.
+**Risk:** low; main care is (a) the guarded dynamic import so an unselected
+optional dep never breaks `yarn typecheck`, (b) the brace/`${}` discipline in the
+loader file, and (c) the two-entry-same-path gate. **Est:** ~1–1.5 hr.
 
 ---
 
