@@ -12,6 +12,21 @@ interface FileEntry {
   sha?: string;
 }
 
+/**
+ * Error carrying the HTTP status from a failed GitHub API call, so callers
+ * can branch on status (e.g. 404 → ref does not exist) instead of string
+ * matching.
+ */
+class GitHubApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GitHubApiError";
+  }
+}
+
 export class GitHubExporterAdapter implements ProjectExporterPort {
   private baseUrl = "https://api.github.com";
 
@@ -58,7 +73,7 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         "Initial commit: Hexagonal architecture scaffold",
       );
 
-      await this.updateRef(token, owner, repoName, commitSha);
+      await this.upsertRef(token, owner, repoName, "main", commitSha);
 
       return {
         success: true,
@@ -93,7 +108,8 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(
+      throw new GitHubApiError(
+        response.status,
         `GitHub API error (${response.status}): ${JSON.stringify(error)}`,
       );
     }
@@ -215,20 +231,58 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     return result.sha;
   }
 
-  private async updateRef(
+  /**
+   * Point `refs/heads/<branch>` at `commitSha`, creating the ref when it does
+   * not yet exist.
+   *
+   * A freshly created repo (`auto_init: false`) has no commits and therefore
+   * no branch ref, so the GitHub API rejects a `PATCH` to update it (422).
+   * The branch must be created with `POST /git/refs`. We probe the ref first
+   * and create-or-update accordingly.
+   */
+  private async upsertRef(
     token: string,
     owner: string,
     repo: string,
+    branch: string,
     commitSha: string,
   ): Promise<void> {
-    await this.request(
-      token,
-      "PATCH",
-      `/repos/${owner}/${repo}/git/refs/heads/main`,
-      {
-        sha: commitSha,
-        force: true,
-      },
-    );
+    const exists = await this.refExists(token, owner, repo, branch);
+
+    if (exists) {
+      await this.request(
+        token,
+        "PATCH",
+        `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+        { sha: commitSha, force: true },
+      );
+      return;
+    }
+
+    await this.request(token, "POST", `/repos/${owner}/${repo}/git/refs`, {
+      ref: `refs/heads/${branch}`,
+      sha: commitSha,
+    });
+  }
+
+  private async refExists(
+    token: string,
+    owner: string,
+    repo: string,
+    branch: string,
+  ): Promise<boolean> {
+    try {
+      await this.request(
+        token,
+        "GET",
+        `/repos/${owner}/${repo}/git/ref/heads/${branch}`,
+      );
+      return true;
+    } catch (err) {
+      if (err instanceof GitHubApiError && err.status === 404) {
+        return false;
+      }
+      throw err;
+    }
   }
 }
