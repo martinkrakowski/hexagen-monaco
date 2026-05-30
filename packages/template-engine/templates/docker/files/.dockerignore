@@ -1,0 +1,34 @@
+# Build artifacts & dependencies — reinstalled/recompiled inside the image.
+node_modules
+.next
+.turbo
+dist
+build
+coverage
+out
+
+# VCS & local tooling
+.git
+.gitignore
+.github
+
+# Secrets — never bake env files into an image. Keep the example for reference.
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise
+.vscode
+.idea
+.DS_Store
+*.log
+
+# Docs & meta — not needed at runtime, keeps build context small.
+*.md
+docs
+.hexagen-template-config.json
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose*.yml

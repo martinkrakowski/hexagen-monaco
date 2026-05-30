@@ -1,0 +1,20 @@
+# Dev overrides — applied automatically by `docker compose up` (no -f needed).
+#
+# Stops the build at the `builder` stage (devDependencies present), runs the
+# Next.js dev server, and bind-mounts the source for hot reload. The anonymous
+# volumes on node_modules and .next keep the container's own copies from being
+# shadowed by the host bind mount.
+
+services:
+  app:
+    build:
+      context: .
+      target: builder
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    restart: "no"

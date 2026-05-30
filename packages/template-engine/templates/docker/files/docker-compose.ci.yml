@@ -1,0 +1,22 @@
+# CI overrides — deterministic, no host bind mounts, no auto-restart.
+#
+# Because docker-compose.override.yml is merged implicitly, CI must opt out of
+# it by listing files explicitly and ending with this one:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up \
+#     --build --abort-on-container-exit --exit-code-from app
+#
+# This rebuilds the production image (runner stage), runs it with no source
+# mounts, and propagates the app container's exit code to the CI job.
+
+services:
+  app:
+    build:
+      context: .
+      target: runner
+    command: npm start
+    environment:
+      NODE_ENV: production
+    # Drop the dev override's bind mounts.
+    volumes: []
+    restart: "no"

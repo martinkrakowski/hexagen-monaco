@@ -1,0 +1,74 @@
+name: Docker Build & Push
+
+# Builds and pushes the production image on every merge to main, and builds
+# (without pushing) on PRs so a broken Dockerfile is caught before merge.
+#
+# Default target: GitHub Container Registry (ghcr.io) — zero extra secrets,
+# uses the built-in GITHUB_TOKEN. To target another registry, see the commented
+# alternatives in the "Log in" and "env" sections below and set REGISTRY_ORG.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository is "owner/repo" — a valid ghcr image path as-is. For other
+  # registries, replace with: ${{ vars.REGISTRY_ORG }}/<image-name>
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHCR/Docker registry paths must be lowercase, but github.repository can
+      # contain uppercase (e.g. MyOrg/MyRepo). Lowercase it before tagging or the
+      # push fails with "invalid reference format".
+      - name: Lowercase image name
+        run: echo "IMAGE_NAME=${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+        env:
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+
+      - name: Log in to registry
+        # Skip login on PRs from forks — no push, and secrets are unavailable.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          # --- Docker Hub --------------------------------------------------
+          # registry: docker.io
+          # username: ${{ vars.REGISTRY_ORG }}
+          # password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # --- Amazon ECR (use aws-actions/amazon-ecr-login@v2 instead) -----
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # Don't push on PRs — build only, to validate the Dockerfile.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
