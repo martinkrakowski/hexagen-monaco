@@ -118,17 +118,17 @@ suppressed) and its `tsconfig.json` `include` is `["src/**/*"]`, so `__tests__/`
 is neither executed nor compiled. Simply editing that file in place would still
 leave CI without the coverage. Pick a home that runs:
 
-- **Recommended (PR 1): put the rewritten test where `tsx --test` already runs —
-  `apps/web/**`** (the `apps/web` `test`script is`tsx … --test '**/\*.test.ts'`,
-and `apps/web` is the real consumer of the orchestrator). Import the class
-  **through the package's public surface, not a relative `src/...` path\*\*:
-  - `MigrationOrchestrator` is currently **not** re-exported from
-    `packages/web-driver/src/index.ts` — add it to the package's public exports as
-    part of this change, then `import { MigrationOrchestrator } from
-"@hexagen/web-driver"`. This tests the shipped artifact and avoids
-    runner/extension (`.js`/`.ts`) mismatches.
-  - Delete the divergent inline reimplementation in
-    `packages/web-driver/__tests__/…/migration-orchestrator.test.ts`.
+- **Recommended (PR 1):** home the rewritten test in `apps/web`, whose `test`
+  script already runs a TS test runner (`tsx --test`) and which is the real
+  consumer of the orchestrator. Import the class through the package's public
+  surface rather than a relative `src/` path:
+  - `MigrationOrchestrator` is currently NOT re-exported from the
+    `@hexagen/web-driver` entrypoint (`src/index.ts`) — add it to the package's
+    public exports as part of this change, then
+    `import { MigrationOrchestrator } from "@hexagen/web-driver"`. This tests the
+    shipped artifact and avoids runner / file-extension mismatches.
+  - Delete the divergent inline reimplementation in the package's
+    `__tests__/.../migration-orchestrator.test.ts`.
 - **Alternative (separate, larger):** give `@hexagen/web-driver` a real
   TS-capable runner (`tsx --test`) and add a test `tsconfig` that includes
   `__tests__/`, so package-local tests run. Keeps unit tests next to the code but
