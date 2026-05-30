@@ -39,6 +39,7 @@ const TEMPLATES_DIR = path.resolve(
 
 const OUTPUTS = [
   ".env.example",
+  ".gitignore.hexagen",
   "src/config/env.ts",
   "src/config/env.server.ts",
   "src/config/env.client.ts",
@@ -113,10 +114,20 @@ describe("env-setup template — emit shape", () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
-    it("emits all six outputs", async () => {
+    it("emits all outputs", async () => {
       for (const p of OUTPUTS) {
         assert.ok(await exists(path.join(projectRoot, p)), `expected ${p}`);
       }
+    });
+
+    it("ships a git-ignore sidecar that ignores secrets but keeps *.example", async () => {
+      const sidecar = await read(projectRoot, ".gitignore.hexagen");
+      assert.ok(sidecar.includes(".env.*"));
+      assert.ok(sidecar.includes("!.env.example"));
+      assert.ok(sidecar.includes("!.env.*.example"));
+      // Leads with a blank line so `cat >> .gitignore` can't merge onto the
+      // last line of a target file that has no trailing newline.
+      assert.ok(sidecar.startsWith("\n"));
     });
 
     it("leaves no unresolved template variables (guards ts/md brace collisions)", () => {

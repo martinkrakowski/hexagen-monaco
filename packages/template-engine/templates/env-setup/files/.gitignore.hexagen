@@ -1,0 +1,16 @@
+
+# ─── env-setup: secret-ignore rules ─────────────────────────────────────────
+# Append these to your project's .gitignore so real secrets never get committed:
+#
+#   cat .gitignore.hexagen >> .gitignore
+#
+# Keep this file — it's the committed reference for the env-ignore rules (like
+# .env.example), and `hexagen validate-templates` expects every template output
+# to stay present. The leading blank line above keeps these rules from merging
+# onto the last line of a .gitignore with no trailing newline. Ignores your
+# local/secret env files but keeps the committed *.example references tracked.
+
+.env
+.env.*
+!.env.example
+!.env.*.example
