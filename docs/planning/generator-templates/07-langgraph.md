@@ -1,12 +1,57 @@
 # Template: LangGraph
 
-**Branch:** `feature/generator-template-langgraph`
+**Branch:** `feature/generator-template-langgraph` (merged via PR #115)
+**Status:** Implemented (v1.0). 24 outputs (15 gated), 5 questions. See PR for details.
+
+## What shipped vs. the plan
+
+The plan called for 8 phases. v1 ships all 8:
+
+- **Phases 1, 2, 4 (always emit):** `AgentGraphPort` (invoke / resume / stream / getState + a lightweight `GraphInvokeResult` discriminant); `GraphStateAnnotation` with append-reducers for `messages` + `steps`, last-write-wins for `input` / `output` / `threadId` / `errorMessage` / `humanInput`; `routeAfterError` / `routeAfterOutput` helpers.
+- **Phase 3 (gated on `graph_type`):** Per-graph-type node sets — three nodes per type — for `simple-chain` (input-processor → llm-call → output-formatter) and `research-agent` (planner → researcher (parallel fan-out) → synthesiser). Tagged `<plan>` / `<answers>` AIMessage instances pass context between nodes without widening the state schema.
+- **Phase 5 (gated on `graph_type`):** One graph file per type. Adapter imports the chosen graph via `{graph_type}` interpolation; the unused variant's file is never emitted.
+- **Phase 6 (gated on `checkpointing`):** Memory backend always; supabase / redis / postgres each emit on demand. The factory dynamic-imports the matching file when `LANGGRAPH_CHECKPOINTER` selects it, throws on unknown values, and caches the in-flight promise on `globalThis` to survive Next.js HMR.
+- **Phase 7 (always):** `LangGraphAdapter` is the only file that touches `@langchain/langgraph`; compileOnce caches the compiled-graph promise on `globalThis` to survive HMR and serialise concurrent first-callers. `/api/agent/invoke` route is always-on; `/api/agent/stream` is gated on `streaming=true`.
+- **Phase 8 (gated on `human_in_loop=true`):** Emits `human-review.node.ts` + `/api/agent/resume` route. Both example graphs auto-rewire to insert the human-review node and compile with `interruptBefore: ["human-review"]` when `LANGGRAPH_HITL_ENABLED=true` (the env example templates this from the install answer, so a `human_in_loop=true` install is fully functional out-of-the-box). The adapter's `resume(threadId, humanInput)` passes ONLY humanInput as a partial state update so the checkpointer restores the original `input` prompt intact.
+
+### Deferred from the plan
+
+- **`graph_type=none`** — would require a not-equals gate the template engine doesn't support. Defaulting to `simple-chain` matches the template's "ship a working example" intent; users wanting a custom graph edit the emitted file (the "owned by the project" promise).
+- **`multi-step-generation` graph type** — the plan doc didn't fully spec the node set; deferred to a follow-up once the shape is settled.
+
+## Test coverage
+
+`packages/template-engine/__tests__/templates/langgraph-emit-shape.test.ts` exercises two install scenarios end-to-end against the real template directory:
+
+- minimal install (defaults: `local`, `memory`, `simple-chain`, no streaming, no HITL) — asserts the 9 always-on files + 4 simple-chain files emit; asserts research-agent nodes, non-memory checkpointers, streaming, and HITL files do NOT emit. Also asserts the `{graph_type}` placeholder in the adapter resolves to `../graphs/simple-chain.graph`.
+- full install (`langgraph-cloud`, `supabase`, `research-agent`, streaming, HITL) — asserts research-agent nodes + supabase-checkpointer + streaming + HITL files emit; asserts simple-chain nodes and the other checkpointers do NOT emit.
+
+---
 
 ## Purpose
 
 Generates a clean hexagonal LangGraph integration: a typed port interface, state definition, node stubs, graph compilation, checkpointing, and optional streaming. Provides a working reference graph so developers understand the pattern before customizing it. Designed to be useful even as the LangGraph API evolves, since the generated code is owned by the project.
 
 ---
+
+## Original plan (pre-v1)
+
+> The sections below are the **pre-implementation** spec. Anything here that
+> conflicts with `What shipped vs. the plan` above is historical — refer to
+> the shipped manifest (`packages/template-engine/templates/langgraph/manifest.json`)
+> and the emit-shape test for current behaviour. Specifically:
+>
+> - `graph_type` ships as `simple-chain | research-agent` only (the table
+>   below also lists `multi-step-generation` and `none`, both deferred).
+> - The graph file emits as `graphs/<graph_type>.graph.ts` per the
+>   selected variant (the file tree below shows the pre-v1 single
+>   `main.graph.ts`).
+> - When `checkpointing=postgres` is selected, a `postgres-checkpointer.ts`
+>   emits alongside the supabase/redis variants (the file tree below
+>   omits it).
+> - When `human_in_loop=true` is selected, `nodes/human-review.node.ts`
+>   and `app/api/agent/resume/route.ts` emit, and the example graphs
+>   auto-rewire through human-review when `LANGGRAPH_HITL_ENABLED=true`.
 
 ## Install-Time Questions
 
