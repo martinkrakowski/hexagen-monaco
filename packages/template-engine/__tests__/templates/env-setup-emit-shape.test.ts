@@ -205,6 +205,52 @@ describe("env-setup template — emit shape", () => {
     });
   });
 
+  describe("dotenv_tool gates the load-env loader", () => {
+    async function installWith(tool: string): Promise<string> {
+      const projectRoot = await freshProject();
+      await install(projectRoot, { dotenv_tool: tool });
+      return projectRoot;
+    }
+
+    it("does NOT emit load-env.ts for next.js-built-in (the default)", async () => {
+      const projectRoot = await installWith("next.js-built-in");
+      try {
+        assert.equal(
+          await exists(path.join(projectRoot, "src/config/load-env.ts")),
+          false,
+        );
+      } finally {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("emits load-env.ts for dotenv (expansion branch stays inert)", async () => {
+      const projectRoot = await installWith("dotenv");
+      try {
+        const loader = await read(projectRoot, "src/config/load-env.ts");
+        assert.ok(loader.includes('"dotenv" === "dotenv-expand"'));
+        assert.ok(loader.includes('from "dotenv"'));
+        assert.ok(!loader.includes("{dotenv_tool}"));
+      } finally {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("emits load-env.ts for dotenv-expand (expansion branch active)", async () => {
+      const projectRoot = await installWith("dotenv-expand");
+      try {
+        const loader = await read(projectRoot, "src/config/load-env.ts");
+        assert.ok(loader.includes('"dotenv-expand" === "dotenv-expand"'));
+        // Indirected specifier — no static import("dotenv-expand") that would
+        // need a ts-ignore / break typecheck when the dep isn't installed.
+        assert.ok(loader.includes("const moduleName"));
+        assert.ok(!loader.includes('import("dotenv-expand")'));
+      } finally {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
   // Run the emitted check-env.ts as a real subprocess against crafted env files
   // to lock in: (a) requiredness comes from a `# required` annotation, not an
   // empty value; (b) inline comments are stripped; (c) all .env.*.example files
