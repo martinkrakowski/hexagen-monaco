@@ -11,9 +11,9 @@ First-day guide for getting this project running. Framework: **{framework}**.
 ## First-Time Setup
 
 1. Make sure secrets can't be committed — append the secret-ignore rules to your
-   `.gitignore`, then remove the sidecar:
+   `.gitignore` (keep `.gitignore.hexagen` as the committed reference):
    ```bash
-   cat .gitignore.hexagen >> .gitignore && rm .gitignore.hexagen
+   cat .gitignore.hexagen >> .gitignore
    ```
 2. Copy the env reference and fill in your values:
    ```bash

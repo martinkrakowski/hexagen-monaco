@@ -32,7 +32,7 @@
   ],
   "checklist": [
     "Install Zod: npm install zod",
-    "Append the secret-ignore rules and remove the sidecar: cat .gitignore.hexagen >> .gitignore && rm .gitignore.hexagen (never commit real secrets)",
+    "Append the secret-ignore rules to your .gitignore: cat .gitignore.hexagen >> .gitignore (keep the .gitignore.hexagen reference file — never commit real secrets)",
     "cp .env.example .env.local, then set every variable annotated # required (here and in any .env.<template>.example)",
     "Add a script to package.json: \"check:env\": \"tsx scripts/check-env.ts\"",
     "npm run check:env  ← validates .env.local before first run / demo / deploy",
