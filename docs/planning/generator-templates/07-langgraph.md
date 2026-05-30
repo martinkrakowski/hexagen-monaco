@@ -34,6 +34,25 @@ Generates a clean hexagonal LangGraph integration: a typed port interface, state
 
 ---
 
+## Original plan (pre-v1)
+
+> The sections below are the **pre-implementation** spec. Anything here that
+> conflicts with `What shipped vs. the plan` above is historical — refer to
+> the shipped manifest (`packages/template-engine/templates/langgraph/manifest.json`)
+> and the emit-shape test for current behaviour. Specifically:
+>
+> - `graph_type` ships as `simple-chain | research-agent` only (the table
+>   below also lists `multi-step-generation` and `none`, both deferred).
+> - The graph file emits as `graphs/<graph_type>.graph.ts` per the
+>   selected variant (the file tree below shows the pre-v1 single
+>   `main.graph.ts`).
+> - When `checkpointing=postgres` is selected, a `postgres-checkpointer.ts`
+>   emits alongside the supabase/redis variants (the file tree below
+>   omits it).
+> - When `human_in_loop=true` is selected, `nodes/human-review.node.ts`
+>   and `app/api/agent/resume/route.ts` emit, and the example graphs
+>   auto-rewire through human-review when `LANGGRAPH_HITL_ENABLED=true`.
+
 ## Install-Time Questions
 
 | ID              | Prompt                                       | Type    | Options                                                           | Default        |
