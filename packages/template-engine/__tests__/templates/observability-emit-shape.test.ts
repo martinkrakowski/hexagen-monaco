@@ -146,8 +146,11 @@ describe("observability template — emit shape", () => {
         projectRoot,
         "src/infrastructure/logging/logger.ts",
       );
-      assert.ok(corr.includes('CORRELATION_ID_HEADER = "x-request-id"'));
-      assert.ok(logger.includes('LOG_FORMAT = "auto"'));
+      // Wizard value is interpolated as the default, with a runtime env override.
+      assert.ok(
+        corr.includes('process.env.CORRELATION_ID_HEADER ?? "x-request-id"'),
+      );
+      assert.ok(logger.includes('process.env.LOG_FORMAT ?? "auto"'));
       assert.ok(!logger.includes("{log_format}"));
       assert.ok(!corr.includes("{correlation_header}"));
     });
@@ -178,6 +181,7 @@ describe("observability template — emit shape", () => {
       minted: string;
       redacted: Record<string, unknown>;
       redactedCycle: Record<string, unknown>;
+      redactedErr: Record<string, unknown>;
       reqLog: Record<string, unknown>;
       firstLog: Record<string, unknown>;
       contextLog: Record<string, unknown>;
@@ -217,6 +221,7 @@ describe("observability template — emit shape", () => {
         "const cyc: Record<string, unknown> = { name: 'root', token: 'abc' };",
         "cyc.self = cyc;",
         "const redactedCycle = redact(cyc) as Record<string, unknown>;",
+        "const redactedErr = redact({ err: new Error('boom'), when: new Date('2020-01-01T00:00:00.000Z'), token: 'x' }) as Record<string, unknown>;",
         "const reqLines: string[] = [];",
         "const realLog2 = console.log;",
         "console.log = (...a: unknown[]) => { reqLines.push(a.map(String).join(' ')); };",
@@ -231,6 +236,7 @@ describe("observability template — emit shape", () => {
         "  minted: getOrCreateCorrelationId(() => null),",
         '  redacted: redact({ user: "alice", token: "abc" }),',
         "  redactedCycle,",
+        "  redactedErr,",
         "  reqLog,",
         "  firstLog: JSON.parse(lines[0]),",
         "  contextLog: JSON.parse(lines[1]),",
@@ -279,6 +285,15 @@ describe("observability template — emit shape", () => {
     it("logs the request path without the query string", () => {
       assert.equal(out.reqLog.type, "request");
       assert.equal(out.reqLog.path, "/users");
+    });
+
+    it("preserves Error and Date payloads instead of emptying them", () => {
+      const err = out.redactedErr.err as Record<string, unknown>;
+      assert.equal(err.name, "Error");
+      assert.equal(err.message, "boom");
+      assert.equal(typeof err.stack, "string");
+      assert.equal(out.redactedErr.when, "2020-01-01T00:00:00.000Z");
+      assert.equal(out.redactedErr.token, "[REDACTED]");
     });
 
     it("propagates the correlation id into logs via AsyncLocalStorage", () => {

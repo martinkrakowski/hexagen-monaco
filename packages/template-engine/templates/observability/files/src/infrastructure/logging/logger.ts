@@ -16,8 +16,9 @@ const ACTIVE_LEVEL = ((): Level => {
   return raw in PRIORITY ? (raw as Level) : "info";
 })();
 
-// Set by the observability wizard via the `log_format` answer.
-const LOG_FORMAT = "{log_format}";
+// Default set by the observability wizard via the `log_format` answer; the
+// LOG_FORMAT env var (see .env.observability.example) overrides it at runtime.
+const LOG_FORMAT = process.env.LOG_FORMAT ?? "{log_format}";
 const USE_PRETTY =
   LOG_FORMAT === "pretty-dev" ||
   (LOG_FORMAT === "auto" && process.env.NODE_ENV !== "production");

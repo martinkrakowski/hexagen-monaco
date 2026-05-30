@@ -35,6 +35,32 @@ export function redact(value: unknown): unknown {
 }
 
 function redactInternal(value: unknown, seen: WeakSet<object>): unknown {
+  // Preserve Date — the generic object branch sees no enumerable keys and would
+  // emit `{}`. Returned as-is so JSON serialization renders it as an ISO string.
+  if (value instanceof Date) {
+    return value;
+  }
+  // Error's name/message/stack are non-enumerable, so Object.entries() yields
+  // nothing and the object branch would erase the crash details. Extract them
+  // explicitly, plus the cause chain and any enumerable own props (redacted).
+  if (value instanceof Error) {
+    if (seen.has(value)) return CIRCULAR;
+    seen.add(value);
+    const out: Record<string, unknown> = {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+    const cause = (value as { cause?: unknown }).cause;
+    if (cause !== undefined) {
+      out.cause = redactInternal(cause, seen);
+    }
+    for (const [key, child] of Object.entries(value)) {
+      out[key] = isSensitive(key) ? MASK : redactInternal(child, seen);
+    }
+    seen.delete(value);
+    return out;
+  }
   if (Array.isArray(value)) {
     if (seen.has(value)) return CIRCULAR;
     seen.add(value);
