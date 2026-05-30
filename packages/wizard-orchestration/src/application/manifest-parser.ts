@@ -183,6 +183,7 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
         adapterSuffix: ".adapter.ts",
       },
     },
+    addOnsAnswers: {},
   };
 
   return wizardData;

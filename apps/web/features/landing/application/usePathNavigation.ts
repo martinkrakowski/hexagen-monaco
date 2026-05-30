@@ -43,6 +43,7 @@ function createBlankProjectConfig(): ProjectConfig {
     ],
     externalContexts: [],
     peerMappings: [],
+    addOnsAnswers: {},
   };
 }
 

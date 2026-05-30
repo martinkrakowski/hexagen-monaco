@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --tsconfig tsconfig.test.json --import ./test-setup.ts --test '**/*.test.ts'"
+    "test": "tsx --tsconfig tsconfig.test.json --import ./test-setup.ts --test '**/*.test.ts'",
+    "gen:template-questions": "tsx scripts/generate-template-questions.ts",
+    "check:template-questions": "tsx scripts/generate-template-questions.ts --check"
   },
   "dependencies": {
     "@auth/core": "^0.34.3",

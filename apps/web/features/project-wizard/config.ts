@@ -90,6 +90,7 @@ export const emptyFormValues: ProjectConfig = {
   ],
   externalContexts: [],
   peerMappings: [],
+  addOnsAnswers: {},
 };
 
 export const wizardSteps = [
@@ -122,6 +123,13 @@ export const wizardSteps = [
     title: "Add-On Templates",
     description: "Select production add-ons to apply after project generation.",
     fields: [],
+  },
+  {
+    id: "template_questions",
+    title: "Template Questions",
+    description:
+      "Answer the questions for the add-on templates you selected. Skipped automatically when no template needs answers.",
+    fields: ["addOnsAnswers"],
   },
   {
     id: "summary",
