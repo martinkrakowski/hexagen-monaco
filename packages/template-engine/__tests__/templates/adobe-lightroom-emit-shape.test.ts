@@ -109,6 +109,9 @@ describe("adobe-lightroom template — emit shape", () => {
     assert.ok(adapter.includes("image.adobe.io"));
     assert.ok(adapter.includes("/lrService/"));
     assert.ok(adapter.includes("normalizeBase"));
+    // scheme is lowercased so a "HTTPS://" env value still matches fireflyClient's
+    // case-sensitive absolute-URL check (not mis-prefixed with the Firefly base).
+    assert.ok(adapter.includes("scheme.toLowerCase()"));
     assert.ok(adapter.includes("getStoragePresigner()"));
     assert.ok(adapter.includes("fireflyClient.post("));
     assert.ok(adapter.includes("toJobHandle("));
