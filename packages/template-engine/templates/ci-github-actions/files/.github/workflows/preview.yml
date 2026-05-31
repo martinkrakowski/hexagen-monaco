@@ -17,6 +17,11 @@ jobs:
   preview:
     name: Deploy Preview
     runs-on: ubuntu-latest
+    # Explicit least-privilege token scopes — the comment step needs
+    # pull-requests:write, which is not granted under a read-only default token.
+    permissions:
+      contents: read
+      pull-requests: write
     # Secrets are not exposed to PRs from forks, so this job would always fail
     # for external contributors — skip it there instead.
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -29,9 +34,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "{node_version}"
-          cache: "{package_manager}"
+          cache: "yarn"
 
-      - run: "{package_manager} install --immutable"
+      - run: "yarn install --immutable"
 
       - name: Deploy preview
         id: deploy

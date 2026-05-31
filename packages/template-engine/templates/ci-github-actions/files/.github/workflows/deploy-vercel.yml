@@ -28,9 +28,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "{node_version}"
-          cache: "{package_manager}"
+          cache: "yarn"
 
-      - run: "{package_manager} install --immutable"
+      - run: "yarn install --immutable"
 
       - name: Deploy to Vercel (prebuilt)
         run: |

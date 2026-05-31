@@ -39,12 +39,6 @@
       "default": "22"
     },
     {
-      "id": "package_manager",
-      "type": "auto",
-      "derivedFrom": "env-setup.package_manager",
-      "default": "yarn"
-    },
-    {
       "id": "docker_build",
       "type": "boolean",
       "prompt": "Build and push a Docker image in CI? (the docker template owns docker-build.yml; this records the intent)",

@@ -29,6 +29,6 @@ jobs:
           script: |
             cd ~/app
             git pull origin main
-            {package_manager} install --immutable
-            {package_manager} build
+            yarn install --immutable
+            yarn build
             pm2 restart app

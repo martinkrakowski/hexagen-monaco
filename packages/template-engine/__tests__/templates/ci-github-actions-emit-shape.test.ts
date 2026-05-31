@@ -284,5 +284,14 @@ describe("ci-github-actions template — emit shape", () => {
         "preview job should skip on forked PRs where secrets are unavailable",
       );
     });
+
+    it("declares least-privilege permissions for the PR comment step", async () => {
+      const preview = await read(projectRoot, `${WORKFLOWS}/preview.yml`);
+      assert.ok(preview.includes("permissions:"));
+      assert.ok(
+        preview.includes("pull-requests: write"),
+        "commenting on the PR requires pull-requests: write under a read-only default token",
+      );
+    });
   });
 });
