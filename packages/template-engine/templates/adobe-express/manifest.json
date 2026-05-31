@@ -1,0 +1,32 @@
+{
+  "id": "adobe-express",
+  "name": "Adobe Express API",
+  "description": "Express batch automation for Adobe Firefly Services (image.adobe.io): an ExpressAutomationPort + adapter that renders many variants from a published Express template in one async batch job — the localization use case (translated copy + regional imagery per locale) over the adobe-firefly-core foundation. Async.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "output_format",
+      "type": "select",
+      "prompt": "Default output format for rendered variants?",
+      "options": ["jpg", "png", "pdf"],
+      "default": "jpg"
+    }
+  ],
+  "envVars": ["ADOBE_EXPRESS_BASE_URL", "ADOBE_EXPRESS_FORMAT"],
+  "outputs": [
+    "src/domain/ports/out/express.port.ts",
+    "src/infrastructure/adobe/express/express.adapter.ts",
+    ".env.adobe-express.example"
+  ],
+  "checklist": [
+    "Confirm the Express API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current host/endpoints/payloads against Adobe docs — the Express batch API is configured via ADOBE_EXPRESS_BASE_URL (defaults to the image.adobe.io host family; the client posts absolute URLs there)",
+    "Provide a published Express template id plus a presigned output href per variant (asset-valued modifications are presigned input hrefs) — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Localization batch: one items[] entry per locale/region maps translated copy + regional imagery onto the template; default variant format is ADOBE_EXPRESS_FORMAT (set at install)",
+    "Pairs naturally with adobe-creative-production for bulk/templated production",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-express"
+}
