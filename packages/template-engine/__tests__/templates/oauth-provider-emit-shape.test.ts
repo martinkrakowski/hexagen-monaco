@@ -101,9 +101,17 @@ describe("oauth provider templates — user DTO lives in infrastructure", () => 
           root,
           `src/infrastructure/auth/${dir}/${dir}-auth.adapter.ts`,
         );
-        assert.ok(
-          adapter.includes(`from "./${file}"`),
-          "adapter should import the DTO relatively (./<provider>-user)",
+        // Anchor to an actual import statement ending exactly at `./<file>`, so
+        // the check can't pass on a comment or a longer specifier
+        // (e.g. `./<file>-profile`). `file` is a fixed `<provider>-user` slug
+        // with no regex metacharacters, so it needs no escaping.
+        assert.match(
+          adapter,
+          new RegExp(
+            String.raw`^\s*import\s+(?:type\s+)?\{[^}]+\}\s+from\s+["']\./${file}(?:\.js)?["'];?`,
+            "m",
+          ),
+          "adapter should import the DTO via a colocated relative import (./<provider>-user)",
         );
       });
     });
