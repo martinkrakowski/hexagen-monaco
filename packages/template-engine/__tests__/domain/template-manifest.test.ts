@@ -51,6 +51,7 @@ describe("validateManifest", () => {
     questions: [
       { id: "orm", type: "boolean", prompt: "ORM?" },
       { id: "features", type: "multiselect", prompt: "Features?", options: [] },
+      { id: "mode", type: "select", prompt: "Mode?", options: ["a", "b"] },
     ],
   };
 
@@ -77,7 +78,7 @@ describe("validateManifest", () => {
     );
   });
 
-  it("throws when a gated output sets both equals and includes", () => {
+  it("throws when a gated output sets more than one of equals/includes/in", () => {
     assert.throws(
       () =>
         validateManifest({
@@ -89,8 +90,86 @@ describe("validateManifest", () => {
             },
           ],
         }),
-      /at most one of 'equals' or 'includes'/,
+      /at most one of 'equals', 'includes', or 'in'/,
     );
+  });
+
+  it("accepts a gated output with a non-empty 'in' array on a select answer", () => {
+    const m = validateManifest({
+      ...base,
+      outputs: [{ path: "load.ts", when: { answer: "mode", in: ["a", "b"] } }],
+    });
+    assert.deepEqual(m.outputs, [
+      { path: "load.ts", when: { answer: "mode", in: ["a", "b"] } },
+    ]);
+  });
+
+  it("throws when 'in' is empty or not an array of non-empty strings", () => {
+    for (const bad of [[], ["ok", ""], "x", [1]]) {
+      assert.throws(
+        () =>
+          validateManifest({
+            ...base,
+            outputs: [{ path: "a.ts", when: { answer: "mode", in: bad } }],
+          }),
+        /'in' must be a non-empty array of non-empty strings/,
+      );
+    }
+  });
+
+  it("rejects an operator that doesn't fit the question type", () => {
+    const cases: Array<[Record<string, unknown>, RegExp]> = [
+      // `in` / `equals` on a multiselect answer
+      [
+        { answer: "features", in: ["a"] },
+        /multiselect answer supports only 'includes'/,
+      ],
+      [
+        { answer: "features", equals: "a" },
+        /multiselect answer supports only 'includes'/,
+      ],
+      // `includes` / `in` on a boolean answer
+      [
+        { answer: "orm", includes: "x" },
+        /boolean answer supports only 'equals/,
+      ],
+      [{ answer: "orm", in: ["a"] }, /boolean answer supports only 'equals/],
+      // string `equals` on a boolean answer
+      [
+        { answer: "orm", equals: "true" },
+        /'equals' on a boolean answer must be true or false/,
+      ],
+      // `includes` on a select answer
+      [
+        { answer: "mode", includes: "a" },
+        /'includes' applies only to a multiselect/,
+      ],
+      // boolean `equals` on a select answer
+      [
+        { answer: "mode", equals: true },
+        /'equals' on a string answer must be a string/,
+      ],
+    ];
+    for (const [when, re] of cases) {
+      assert.throws(
+        () => validateManifest({ ...base, outputs: [{ path: "a.ts", when }] }),
+        re,
+      );
+    }
+  });
+
+  it("accepts operators that fit their question type", () => {
+    const m = validateManifest({
+      ...base,
+      outputs: [
+        { path: "1.ts", when: { answer: "orm", equals: true } },
+        { path: "2.ts", when: { answer: "features", includes: "realtime" } },
+        { path: "3.ts", when: { answer: "mode", equals: "a" } },
+        { path: "4.ts", when: { answer: "mode", in: ["a", "b"] } },
+        { path: "5.ts", when: { answer: "orm" } }, // bare gate is fine for any type
+      ],
+    });
+    assert.equal(m.outputs.length, 5);
   });
 
   it("throws when equals is not a string or boolean", () => {

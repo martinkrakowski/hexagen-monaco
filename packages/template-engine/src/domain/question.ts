@@ -63,6 +63,12 @@ export interface OutputCondition {
   equals?: string | boolean;
   /** Require this value to be present in a multiselect answer. */
   includes?: string;
+  /**
+   * Match when a scalar (select/text) answer is one of these values — i.e. the
+   * "answer is one of N" gate, so an output need not be duplicated once per
+   * value. Mutually exclusive with `equals` / `includes`.
+   */
+  in?: string[];
 }
 
 /**

@@ -50,7 +50,7 @@ export function validateManifest(raw: unknown): TemplateManifest {
   }
 
   const questions = validatedQuestions(m.questions);
-  const questionIds = new Set(questions.map((q) => q.id));
+  const questionTypes = new Map(questions.map((q) => [q.id, q.type]));
 
   return {
     id: m.id as string,
@@ -61,7 +61,7 @@ export function validateManifest(raw: unknown): TemplateManifest {
     conflicts: validatedStringArray(m.conflicts, "conflicts"),
     questions,
     envVars: validatedStringArray(m.envVars, "envVars"),
-    outputs: validatedOutputs(m.outputs, questionIds),
+    outputs: validatedOutputs(m.outputs, questionTypes),
     checklist: validatedStringArray(m.checklist, "checklist"),
     branch: typeof m.branch === "string" ? m.branch : undefined,
   };
@@ -90,7 +90,7 @@ function validatedStringArray(raw: unknown, field: string): string[] {
 
 function validatedOutputs(
   raw: unknown,
-  questionIds: Set<string>,
+  questionTypes: Map<string, string>,
 ): ManifestOutput[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((o): ManifestOutput => {
@@ -120,18 +120,19 @@ function validatedOutputs(
     // The answer key must reference a declared question, so a typo or rename
     // fails fast instead of silently disabling the output (and hiding it from
     // validate). All answer keys originate from question ids.
-    if (!questionIds.has(when.answer)) {
+    if (!questionTypes.has(when.answer)) {
       throw new Error(
         `Template manifest: gated output '${obj.path}' references unknown answer '${when.answer}' — it must match a question id`,
       );
     }
     const hasEquals = when.equals !== undefined;
     const hasIncludes = when.includes !== undefined;
-    // `equals` and `includes` are mutually exclusive — allowing both would make
-    // the gate ambiguous (the evaluator would silently prefer one).
-    if (hasEquals && hasIncludes) {
+    const hasIn = when.in !== undefined;
+    // `equals`, `includes`, and `in` are mutually exclusive — allowing more than
+    // one would make the gate ambiguous (the evaluator picks the first set).
+    if (Number(hasEquals) + Number(hasIncludes) + Number(hasIn) > 1) {
       throw new Error(
-        `Template manifest: gated output '${obj.path}' must set at most one of 'equals' or 'includes'`,
+        `Template manifest: gated output '${obj.path}' must set at most one of 'equals', 'includes', or 'in'`,
       );
     }
     if (
@@ -148,9 +149,48 @@ function validatedOutputs(
         `Template manifest: gated output '${obj.path}' 'includes' must be a non-empty string`,
       );
     }
+    if (
+      hasIn &&
+      (!Array.isArray(when.in) ||
+        when.in.length === 0 ||
+        !when.in.every((v) => typeof v === "string" && v))
+    ) {
+      throw new Error(
+        `Template manifest: gated output '${obj.path}' 'in' must be a non-empty array of non-empty strings`,
+      );
+    }
+    // Operator must fit the question's type, or the gate silently never fires
+    // (e.g. `in` on a boolean answer is never a string, so the file is never
+    // emitted). `auto` answers are type-erased at authoring time, so skip them.
+    const qType = questionTypes.get(when.answer);
+    if (qType && qType !== "auto") {
+      const fail = (msg: string): never => {
+        throw new Error(
+          `Template manifest: gated output '${obj.path}' — ${msg} (answer '${when.answer}' is '${qType}')`,
+        );
+      };
+      if (qType === "multiselect") {
+        if (hasEquals || hasIn)
+          fail(
+            "a multiselect answer supports only 'includes' (or a bare gate)",
+          );
+      } else if (qType === "boolean") {
+        if (hasIncludes || hasIn)
+          fail("a boolean answer supports only 'equals: true|false'");
+        if (hasEquals && typeof when.equals !== "boolean")
+          fail("'equals' on a boolean answer must be true or false");
+      } else {
+        // select | text — scalar string answers
+        if (hasIncludes)
+          fail("'includes' applies only to a multiselect answer");
+        if (hasEquals && typeof when.equals === "boolean")
+          fail("'equals' on a string answer must be a string (or use 'in')");
+      }
+    }
     const condition: OutputCondition = { answer: when.answer };
     if (hasEquals) condition.equals = when.equals as string | boolean;
     if (hasIncludes) condition.includes = when.includes as string;
+    if (hasIn) condition.in = when.in as string[];
     return { path: obj.path, when: condition };
   });
 }
