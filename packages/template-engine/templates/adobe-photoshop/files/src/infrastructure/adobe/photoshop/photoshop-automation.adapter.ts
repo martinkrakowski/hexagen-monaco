@@ -35,7 +35,12 @@ const PHOTOSHOP_BASE = normalizeBase(process.env.ADOBE_PHOTOSHOP_BASE_URL?.trim(
  * mis-prefixed with the Firefly base URL and break every Photoshop request.
  */
 function normalizeBase(raw: string): string {
-  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  // Lowercase the scheme too: fireflyClient now matches case-insensitively, but
+  // keeping the emitted URL lowercase is defensive and consistent with the other
+  // image.adobe.io adapter (Lightroom).
+  const withScheme = /^https?:\/\//i.test(raw)
+    ? raw.replace(/^https?:\/\//i, (scheme) => scheme.toLowerCase())
+    : `https://${raw}`;
   return withScheme.replace(/\/+$/, "");
 }
 // Strictly validate the env value rather than blind-casting — an invalid value

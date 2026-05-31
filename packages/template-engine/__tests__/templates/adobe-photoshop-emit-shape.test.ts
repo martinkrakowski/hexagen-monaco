@@ -150,6 +150,9 @@ describe("adobe-photoshop template — emit shape", () => {
     // base URL normalised: a schemeless host gets https:// so fireflyClient treats it as absolute
     assert.ok(adapter.includes("normalizeBase"));
     assert.ok(adapter.includes("`https://${raw}`"));
+    // scheme lowercased (consistent with Lightroom; defensive even though the
+    // core client now matches case-insensitively)
+    assert.ok(adapter.includes("scheme.toLowerCase()"));
     assert.ok(adapter.includes('"jpeg"'));
     assert.ok(adapter.includes("smartObject"));
     assert.ok(!adapter.includes("{output_format}"));
