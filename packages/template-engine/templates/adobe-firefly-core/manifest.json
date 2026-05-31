@@ -1,0 +1,85 @@
+{
+  "id": "adobe-firefly-core",
+  "name": "Adobe Firefly Services — Core",
+  "description": "Shared foundation for Adobe Firefly Services: IMS OAuth Server-to-Server token provider (cached), a base REST client (x-api-key + bearer, retry, timeout), the async job port (polling or webhook), a presigned-URL storage seam (passthrough default), and Adobe error classification. Service addons require this and add one port + adapter each.",
+  "version": "1.0.0",
+  "requires": ["env-setup", "error-handling"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "ims_region",
+      "type": "select",
+      "prompt": "Adobe IMS region host?",
+      "options": ["ims-na1", "ims-eu1"],
+      "default": "ims-na1"
+    },
+    {
+      "id": "job_mode",
+      "type": "select",
+      "prompt": "How do async jobs report completion?",
+      "options": ["polling", "webhook"],
+      "default": "polling"
+    },
+    {
+      "id": "storage_mode",
+      "type": "select",
+      "prompt": "Presigned-URL storage for inputs/outputs?",
+      "options": ["passthrough", "addon"],
+      "default": "passthrough"
+    },
+    {
+      "id": "default_timeout_ms",
+      "type": "select",
+      "prompt": "Per-request timeout (ms)?",
+      "options": ["30000", "60000", "120000"],
+      "default": "60000"
+    },
+    {
+      "id": "max_retries",
+      "type": "select",
+      "prompt": "Max retries on transient failure?",
+      "options": ["0", "1", "2", "3"],
+      "default": "2"
+    }
+  ],
+  "envVars": [
+    "ADOBE_CLIENT_ID",
+    "ADOBE_CLIENT_SECRET",
+    "ADOBE_SCOPES",
+    "ADOBE_IMS_ORG_ID",
+    "ADOBE_IMS_HOST",
+    "ADOBE_FIREFLY_BASE_URL",
+    "ADOBE_JOB_POLL_INTERVAL_MS",
+    "ADOBE_WEBHOOK_SECRET"
+  ],
+  "outputs": [
+    "src/domain/ports/out/firefly-auth.port.ts",
+    "src/domain/ports/out/firefly-job.port.ts",
+    "src/domain/ports/out/firefly-storage.port.ts",
+    "src/infrastructure/adobe/auth/ims-token-provider.adapter.ts",
+    "src/infrastructure/adobe/auth/smoke-token.ts",
+    "src/infrastructure/adobe/http/firefly-client.ts",
+    "src/infrastructure/adobe/jobs/job-result.ts",
+    "src/infrastructure/adobe/jobs/job-poller.ts",
+    "src/infrastructure/adobe/jobs/job-port.ts",
+    "src/infrastructure/adobe/storage/passthrough-storage.adapter.ts",
+    "src/infrastructure/adobe/errors/firefly-errors.ts",
+    "src/infrastructure/adobe/index.ts",
+    ".env.adobe.example",
+    {
+      "path": "src/infrastructure/adobe/jobs/webhook-verifier.ts",
+      "when": { "answer": "job_mode", "equals": "webhook" }
+    }
+  ],
+  "checklist": [
+    "Create an Adobe Developer Console project and add the Firefly Services / API entitlement",
+    "Generate OAuth Server-to-Server credentials; set ADOBE_CLIENT_ID / ADOBE_CLIENT_SECRET / ADOBE_SCOPES in .env.local",
+    "Do NOT use JWT — the Service-Account/JWT flow is retired. @adobe/jwt-auth is not used; this is Server-to-Server (client_credentials)",
+    "Confirm your entitlement covers the specific service addons you install — scopes differ per service",
+    "If job_mode=webhook: expose the receiver route publicly and set ADOBE_WEBHOOK_SECRET (the verifier fails closed without it)",
+    "Webhook mode parks completion promises IN MEMORY — correct only for a single long-lived instance. On serverless / multi-instance deploys use polling, or back jobPort's registry with a shared store (Redis/BullMQ, Postgres)",
+    "Smoke the token flow: npx tsx src/infrastructure/adobe/auth/smoke-token.ts",
+    "infrastructure/adobe/** is @hexagen-server-only — never import it from a client bundle (it holds the IMS token)"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-core"
+}
