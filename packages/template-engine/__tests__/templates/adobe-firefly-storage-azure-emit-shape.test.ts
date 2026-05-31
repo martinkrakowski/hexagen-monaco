@@ -126,6 +126,16 @@ describe("adobe-firefly-storage-azure template — emit shape", () => {
     assert.ok(adapter.includes("StorageSharedKeyCredential"));
     assert.ok(adapter.includes("DefaultAzureCredential"));
     assert.ok(adapter.includes("getUserDelegationKey"));
+    // the user-delegation key is cached on the instance and reused across presigns
+    // (one control-plane call per window, not per ref) — getUserDelegationKey is
+    // invoked from exactly one place (getDelegationKey), behind the cache.
+    assert.ok(adapter.includes("private async getDelegationKey"));
+    assert.ok(adapter.includes("this.delegationKey"));
+    assert.equal(
+      (adapter.match(/getUserDelegationKey\(/g) || []).length,
+      1,
+      "getUserDelegationKey must be called from a single cached path, not per presign",
+    );
     // getService returns a statically non-optional client (a local) for strict TS
     assert.ok(adapter.includes("private getService"));
     assert.ok(adapter.includes("const created ="));

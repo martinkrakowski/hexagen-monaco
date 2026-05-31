@@ -4,6 +4,7 @@ import {
   StorageSharedKeyCredential,
   BlobSASPermissions,
   generateBlobSASQueryParameters,
+  type UserDelegationKey,
 } from "@azure/storage-blob";
 import { DefaultAzureCredential } from "@azure/identity";
 import type {
@@ -39,8 +40,20 @@ function resolveExpiry(value: number): number {
   return Math.max(1, Math.min(Math.floor(value), 604_800));
 }
 
+// Back-date SAS/key starts a little to absorb clock skew.
+const CLOCK_SKEW_MS = 5 * 60_000;
+// In managed-identity mode the user-delegation key is reused for this long beyond a
+// SAS window, so a single Firefly request (which presigns 2–3+ refs) makes ONE
+// getUserDelegationKey control-plane call instead of one per ref.
+const DELEGATION_KEY_CACHE_MS = 5 * 60_000;
+// User-delegation keys (and the SAS they sign) max out at 7 days.
+const MAX_SAS_WINDOW_MS = 604_800 * 1000;
+
 export class AzureBlobPresignStorageAdapter implements FireflyStoragePort {
   private service: BlobServiceClient | undefined;
+  // Cached managed-identity user-delegation key + the epoch ms it is valid until.
+  private delegationKey: UserDelegationKey | undefined;
+  private delegationKeyExpiresOnMs = 0;
 
   constructor(service?: BlobServiceClient) {
     // Capture NO env here (same reasoning as the s3/gcs presigners). This adapter is
@@ -84,7 +97,7 @@ export class AzureBlobPresignStorageAdapter implements FireflyStoragePort {
       .getBlobClient(blobName);
 
     // Back-date the start a little for clock skew; bound the end by the install TTL.
-    const startsOn = new Date(Date.now() - 5 * 60_000);
+    const startsOn = new Date(Date.now() - CLOCK_SKEW_MS);
     const expiresOn = new Date(Date.now() + URL_EXPIRY_SECONDS * 1000);
     // read → "r"; write → create + write so Firefly can create the output blob.
     const permissions = BlobSASPermissions.parse(action === "read" ? "r" : "cw");
@@ -98,11 +111,36 @@ export class AzureBlobPresignStorageAdapter implements FireflyStoragePort {
         )
       : generateBlobSASQueryParameters(
           values,
-          // No key → mint a user-delegation key via the managed identity.
-          await this.getService().getUserDelegationKey(startsOn, expiresOn),
+          // No key → reuse a cached user-delegation key (one control-plane call per
+          // ~window, not per presign), minted via the managed identity.
+          await this.getDelegationKey(expiresOn.getTime()),
           account,
         );
     return `${blobClient.url}?${sas.toString()}`;
+  }
+
+  private async getDelegationKey(
+    neededUntilMs: number,
+  ): Promise<UserDelegationKey> {
+    // Reuse the cached key while it still covers this SAS's expiry — the SAS expiry
+    // must fall within the key's validity window.
+    if (this.delegationKey && this.delegationKeyExpiresOnMs >= neededUntilMs) {
+      return this.delegationKey;
+    }
+    // Mint a key valid a little beyond the SAS window so the next few presigns reuse
+    // it; never exceed the 7-day user-delegation ceiling.
+    const startsOn = new Date(Date.now() - CLOCK_SKEW_MS);
+    const expiresOnMs = Math.min(
+      neededUntilMs + DELEGATION_KEY_CACHE_MS,
+      Date.now() + MAX_SAS_WINDOW_MS,
+    );
+    const key = await this.getService().getUserDelegationKey(
+      startsOn,
+      new Date(expiresOnMs),
+    );
+    this.delegationKey = key;
+    this.delegationKeyExpiresOnMs = expiresOnMs;
+    return key;
   }
 
   private key(ref: string): string {
