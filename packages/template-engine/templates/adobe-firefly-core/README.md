@@ -86,24 +86,27 @@ npx tsx src/infrastructure/adobe/auth/smoke-token.ts
 
 ## Configuration
 
-| Env var                                   | Purpose                                                           |
-| ----------------------------------------- | ----------------------------------------------------------------- |
-| `ADOBE_CLIENT_ID` / `ADOBE_CLIENT_SECRET` | Server-to-Server OAuth credentials                                |
-| `ADOBE_SCOPES`                            | space/comma-separated scopes (per entitlement)                    |
-| `ADOBE_IMS_ORG_ID`                        | IMS org id                                                        |
-| `ADOBE_IMS_HOST`                          | e.g. `ims-na1.adobelogin.com`                                     |
-| `ADOBE_FIREFLY_BASE_URL`                  | default `https://firefly-api.adobe.io`                            |
-| `ADOBE_JOB_POLL_INTERVAL_MS`              | poll backoff base (default 2000)                                  |
-| `ADOBE_WEBHOOK_SECRET`                    | required in `job_mode=webhook` (verifier fails closed without it) |
+| Env var                                   | Purpose                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| `ADOBE_CLIENT_ID` / `ADOBE_CLIENT_SECRET` | Server-to-Server OAuth credentials                                 |
+| `ADOBE_SCOPES`                            | space/comma-separated scopes (per entitlement)                     |
+| `ADOBE_IMS_ORG_ID`                        | IMS org id                                                         |
+| `ADOBE_IMS_HOST`                          | e.g. `ims-na1.adobelogin.com`                                      |
+| `ADOBE_FIREFLY_BASE_URL`                  | default `https://firefly-api.adobe.io`                             |
+| `ADOBE_JOB_POLL_INTERVAL_MS`              | poll backoff base (default 2000)                                   |
+| `ADOBE_WEBHOOK_SECRET`                    | required in `job_mode=webhook` (verifier fails closed without it)  |
+| `ADOBE_WEBHOOK_TIMEOUT_MS`                | webhook-mode await timeout in ms (read at runtime, default 600000) |
 
 ## Notes for agents
 
-- **`infrastructure/adobe/**`is`@hexagen-server-only` (ADR-0037)\*\* — the IMS token must
-  never reach a client bundle.
+- **Server-only boundary (ADR-0037).** `infrastructure/adobe/**` is `@hexagen-server-only` —
+  the IMS token must never reach a client bundle.
 - **Server-to-Server only.** Do not reintroduce JWT / `@adobe/jwt-auth`.
 - **Webhook mode parks completion promises in memory** — correct for a single long-lived
   instance only. On serverless/multi-instance, use polling or back the registry with a
   shared store (Redis/BullMQ, Postgres).
+- In webhook mode the await times out after `ADOBE_WEBHOOK_TIMEOUT_MS` (default 600000) — raise
+  it for long-running services like [`adobe-substance-3d`](../adobe-substance-3d).
 - `done.outputs` is always a `JobOutput[]` (`{ href?, data? }`); `parseJobResult` is total
   (never throws). There is no per-output id — batch services align positionally.
 
