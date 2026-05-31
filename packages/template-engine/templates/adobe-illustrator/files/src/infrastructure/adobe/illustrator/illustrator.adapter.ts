@@ -7,7 +7,7 @@ import type {
   ScaleVectorRequest,
 } from "../../../domain/ports/out/illustrator.port";
 import { fireflyClient } from "../http/firefly-client";
-import { pollJobStatus } from "../jobs/job-poller";
+import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
 import {
@@ -114,7 +114,7 @@ export class IllustratorAdapter implements IllustratorPort {
       if (!handle.statusUrl) {
         return err(new FireflyError("Illustrator submit response had no status URL to track the job."));
       }
-      const done = await pollJobStatus(handle);
+      const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
         return err(new FireflyError(done.error ?? "Illustrator job did not succeed."));
       }

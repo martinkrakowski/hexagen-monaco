@@ -122,13 +122,16 @@ describe("adobe-photoshop template — emit shape", () => {
     assert.ok(adapter.includes("fireflyClient.post("));
     assert.ok(adapter.includes("toJobHandle("));
     assert.ok(adapter.includes('storage: "external"'));
-    // Photoshop tracks jobs by status URL (often no jobId) — accept either, not the
-    // strict jobId-only guard the Firefly image services use.
-    assert.ok(adapter.includes("!handle.jobId && !handle.statusUrl"));
-    // a status-URL-only job polls directly (works in webhook mode too, where
-    // jobPort.await would reject a missing jobId); jobId-only falls back to await.
-    assert.ok(adapter.includes("pollJobStatus(handle)"));
-    assert.ok(adapter.includes("? await pollJobStatus(handle)"));
+    // image.adobe.io is polled by status URL regardless of job_mode; a missing
+    // status URL is a clear error, and jobPort.await (which fails for a jobId-only
+    // handle in polling mode) is not used.
+    assert.ok(adapter.includes("if (!handle.statusUrl)"));
+    assert.ok(adapter.includes("jobPort.poll(handle)"));
+    assert.ok(adapter.includes("no status URL to track"));
+    assert.ok(
+      !adapter.includes("jobPort.await"),
+      "must not route through jobPort.await",
+    );
     assert.ok(
       adapter.includes("return ok(") && adapter.includes("return err("),
     );

@@ -217,6 +217,8 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     assert.match(jobPort, /SCALING LIMIT/);
     assert.ok(jobPort.includes("Set<Waiter>"), "multiple waiters per jobId");
     assert.ok(jobPort.includes("did not arrive within"), "webhook TTL reject");
+    // centralised always-poll entry point for status-URL-only (image.adobe.io) services
+    assert.ok(jobPort.includes("async poll(handle"), "jobPort.poll() exposed");
 
     // parseJobResult is total — never throws on a malformed body.
     const jobResult = await read(root, `${ADOBE}/jobs/job-result.ts`);

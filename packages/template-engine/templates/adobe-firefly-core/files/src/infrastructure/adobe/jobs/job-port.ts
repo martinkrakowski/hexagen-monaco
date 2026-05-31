@@ -103,6 +103,18 @@ class FireflyJobAdapter implements FireflyJobPort {
     return fetchStatus(handle);
   }
 
+  /**
+   * Await terminal completion by polling the status URL, regardless of the
+   * configured `job_mode`. For services tracked only by a status URL that do not
+   * deliver Firefly webhooks (the image.adobe.io Photoshop/Lightroom/Illustrator
+   * APIs), call this instead of `await()` — it keeps the wait path centralised on
+   * the port (so timeouts/tracing/metrics added here cover those adapters too)
+   * rather than importing the poller directly.
+   */
+  async poll(handle: JobHandle): Promise<JobResult> {
+    return pollJobStatus(handle);
+  }
+
   /** Webhook seam: settle a job as completed (all waiters), or buffer if none yet. */
   resolveJob(jobId: string, result: JobResult): void {
     this.settle(jobId, { result });
