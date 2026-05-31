@@ -10,7 +10,7 @@
 > The **Adobe Firefly Services** family ([`17-adobe-firefly.md`](./17-adobe-firefly.md)) is
 > underway: `adobe-firefly-core`, `adobe-firefly-upscale`, and the `adobe-firefly-storage-s3`
 > presigner are **implemented** (on their `feature/generator-template-adobe-firefly-*` branches);
-> the remaining 11 service addons + 2 storage presigners (gcs/azure) are design-only
+> the remaining 11 service addons + 2 storage presigners (GCS/Azure) are design-only
 > (build order: generate → …).
 > Planned (design only, no manifest yet): **`mcp-server`** ([`18-mcp-server.md`](./18-mcp-server.md)).
 
