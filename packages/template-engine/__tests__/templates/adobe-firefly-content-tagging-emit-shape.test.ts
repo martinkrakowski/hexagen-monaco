@@ -114,9 +114,10 @@ describe("adobe-firefly-content-tagging template — emit shape", () => {
     assert.ok(adapter.includes("toJobHandle("));
     // non-asset path: reads JobResult.outputs[].data, not href
     assert.ok(adapter.includes("done.outputs[0]?.data"));
-    // sync-tolerant: only awaits when a job id is present; an empty job id is NOT
-    // an error here (unlike the image services).
-    assert.ok(adapter.includes("if (handle.jobId)"));
+    // sync-tolerant: awaits when the response carried a status URL OR a job id;
+    // only a response with NEITHER is treated as synchronous (tags inline).
+    assert.ok(adapter.includes("handle.statusUrl || handle.jobId"));
+    assert.ok(adapter.includes("if (isAsync)"));
     assert.ok(
       !adapter.includes("did not include a job id"),
       "content tagging must not fail on a missing job id (sync responses have none)",

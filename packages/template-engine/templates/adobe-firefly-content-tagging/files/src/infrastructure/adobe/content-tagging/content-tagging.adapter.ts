@@ -43,12 +43,15 @@ export class FireflyContentTaggingAdapter implements ContentTaggingPort {
         image: { href: input.href, storage: "external" },
       });
 
-      // Sync path: tags returned inline (no job id). Async path: await the job and
-      // read its non-asset `data`. Note: unlike the image services this does NOT
-      // require a job id — an empty one just means the response was synchronous.
+      // Async if the submit response carried EITHER a status URL or a job id —
+      // polling only needs statusUrl, webhook needs jobId, so check both. Only a
+      // response with neither is truly synchronous (tags returned inline). When
+      // async, jobPort.await applies the mode's own guard (a status-URL-only
+      // response fails fast in webhook mode, as it should).
       let payload: unknown = response;
       const handle = toJobHandle(response);
-      if (handle.jobId) {
+      const isAsync = Boolean(handle.statusUrl || handle.jobId);
+      if (isAsync) {
         const done = await jobPort.await(handle);
         if (done.status !== "succeeded") {
           return err(new FireflyError(done.error ?? "Content tagging job did not succeed."));
