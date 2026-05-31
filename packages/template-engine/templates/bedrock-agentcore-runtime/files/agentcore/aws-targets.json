@@ -1,0 +1,7 @@
+{
+  "account": "REPLACE_WITH_AWS_ACCOUNT_ID",
+  "region": "{aws_region}",
+  "ecrRepository": "{agent_name}",
+  "executionRoleName": "{agent_name}-runtime-role",
+  "runtimeName": "{agent_name}"
+}

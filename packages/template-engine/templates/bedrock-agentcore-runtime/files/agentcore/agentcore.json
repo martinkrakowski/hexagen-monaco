@@ -1,0 +1,16 @@
+{
+  "name": "{agent_name}",
+  "protocol": "{protocol}",
+  "buildType": "{build_type}",
+  "region": "{aws_region}",
+  "network": "PUBLIC",
+  "inboundAuth": "{inbound_auth}",
+  "container": {
+    "platform": "linux/arm64",
+    "dockerfile": "Dockerfile.agentcore",
+    "port": 8080,
+    "healthPath": "/ping",
+    "invokePath": "/invocations"
+  },
+  "executionRolePolicy": "iam/agentcore-runtime-role.policy.json"
+}

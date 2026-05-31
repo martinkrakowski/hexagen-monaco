@@ -1,0 +1,100 @@
+name: Deploy AgentCore Runtime
+
+# Builds the ARM64 runtime image, pushes it to ECR, and creates/updates the
+# Bedrock AgentCore runtime via the AWS CLI (no interactive agentcore-cli needed
+# in CI). Auth uses GitHub OIDC -> an IAM role (no long-lived keys).
+#
+# Required repo configuration:
+#   secrets.AWS_DEPLOY_ROLE_ARN   IAM role to assume (trusts GitHub OIDC)
+#   vars.AWS_ACCOUNT_ID           target account id
+#   The runtime execution role ({agent_name}-runtime-role) must already exist
+#   with iam/agentcore-runtime-role.policy.json attached.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/infrastructure/agentcore/**"
+      - "Dockerfile.agentcore"
+      - "agentcore/**"
+      - ".github/workflows/deploy-agentcore.yml"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: agentcore-deploy-{agent_name}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: "{aws_region}"
+  AGENT_NAME: "{agent_name}"
+  ECR_REPOSITORY: "{agent_name}"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" \
+            || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ARM64 image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          docker buildx build \
+            --platform linux/arm64 \
+            -f Dockerfile.agentcore \
+            -t "$IMAGE_URI" \
+            --push .
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update AgentCore runtime
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+          EXECUTION_ROLE_ARN: "arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/{agent_name}-runtime-role"
+        run: |
+          set -euo pipefail
+          # NOTE: the bedrock-agentcore-control CLI shape evolves; adjust flags to
+          # your installed AWS CLI version if a parameter name differs.
+          EXISTING_ID="$(aws bedrock-agentcore-control list-agent-runtimes --region "$AWS_REGION" \
+            --query "agentRuntimes[?agentRuntimeName=='$AGENT_NAME'].agentRuntimeId | [0]" \
+            --output text 2>/dev/null || echo "None")"
+
+          if [ "$EXISTING_ID" = "None" ] || [ -z "$EXISTING_ID" ]; then
+            echo "Creating runtime $AGENT_NAME"
+            aws bedrock-agentcore-control create-agent-runtime \
+              --region "$AWS_REGION" \
+              --agent-runtime-name "$AGENT_NAME" \
+              --role-arn "$EXECUTION_ROLE_ARN" \
+              --network-configuration '{"networkMode":"PUBLIC"}' \
+              --agent-runtime-artifact "{\"containerConfiguration\":{\"containerUri\":\"$IMAGE_URI\"}}"
+          else
+            echo "Updating runtime $AGENT_NAME ($EXISTING_ID)"
+            aws bedrock-agentcore-control update-agent-runtime \
+              --region "$AWS_REGION" \
+              --agent-runtime-id "$EXISTING_ID" \
+              --role-arn "$EXECUTION_ROLE_ARN" \
+              --agent-runtime-artifact "{\"containerConfiguration\":{\"containerUri\":\"$IMAGE_URI\"}}"
+          fi

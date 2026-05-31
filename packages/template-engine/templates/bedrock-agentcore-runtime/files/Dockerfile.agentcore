@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+#
+# Bedrock AgentCore Runtime container.
+#
+# AgentCore Runtime runs on AWS Graviton, so the image MUST be linux/arm64 and
+# MUST listen on :8080 serving GET /ping + POST /invocations (see http/server.ts).
+# Build with buildx:
+#   docker buildx build --platform linux/arm64 -f Dockerfile.agentcore -t {agent_name} .
+#
+# This scaffold runs the TypeScript entrypoint with `tsx` for zero build config.
+# For a leaner production image, swap the CMD for a compiled build (tsc/esbuild)
+# and copy only the emitted JS + production node_modules.
+
+FROM --platform=linux/arm64 node:22-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+# Full install (incl. devDeps) so `tsx` is available at runtime.
+RUN npm ci
+
+FROM --platform=linux/arm64 node:22-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV AGENTCORE_RUNTIME_PORT=8080
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY src ./src
+
+# AgentCore polls /ping on this port to gate traffic.
+EXPOSE 8080
+
+# tsx must be resolvable (declare it as a project dependency, not only a devDep,
+# if you prune devDeps in your own pipeline).
+CMD ["npx", "tsx", "src/infrastructure/agentcore/http/server.ts"]
