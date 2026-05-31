@@ -136,9 +136,9 @@ function outputSpec(href: string): { href: string; storage: "external"; type: st
  * mis-prefixed with the Firefly base URL and break every Lightroom request.
  */
 function normalizeBase(raw: string): string {
-  // Lowercase the scheme too: fireflyClient's absolute-URL check is case-sensitive
-  // (`/^https?:\/\//`), so an uppercase "HTTPS://" would otherwise be treated as a
-  // relative path and mis-prefixed with the Firefly base URL.
+  // Lowercase the scheme too: fireflyClient now matches case-insensitively, but
+  // keeping the emitted URL lowercase is defensive and consistent with the other
+  // image.adobe.io adapter (Photoshop).
   const withScheme = /^https?:\/\//i.test(raw)
     ? raw.replace(/^https?:\/\//i, (scheme) => scheme.toLowerCase())
     : `https://${raw}`;
