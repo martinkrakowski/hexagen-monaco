@@ -8,10 +8,10 @@
 > `bedrock-agentcore-services` on `feature/generator-template-bedrock-agentcore-services`, and the
 > `llm-adapter-bedrock` companion on `feature/generator-template-bedrock`.
 > The **Adobe Firefly Services** family ([`17-adobe-firefly.md`](./17-adobe-firefly.md)) is
-> underway: the `adobe-firefly-core` foundation and the `adobe-firefly-upscale` service are
-> **implemented** (on `feature/generator-template-adobe-firefly-core` and
-> `feature/generator-template-adobe-firefly-upscale`); the remaining 12 service addons + 3 storage
-> presigners are design-only (build order: storage-s3 → generate → …).
+> underway: `adobe-firefly-core`, `adobe-firefly-upscale`, and the `adobe-firefly-storage-s3`
+> presigner are **implemented** (on their `feature/generator-template-adobe-firefly-*` branches);
+> the remaining 11 service addons + 2 storage presigners (GCS/Azure) are design-only
+> (build order: generate → …).
 > Planned (design only, no manifest yet): **`mcp-server`** ([`18-mcp-server.md`](./18-mcp-server.md)).
 
 ---
