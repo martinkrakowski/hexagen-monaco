@@ -34,7 +34,14 @@ const RUNNING = new Set(["running", "pending", "in_progress", "in-progress", "qu
 const SUCCEEDED = new Set(["succeeded", "success", "done", "complete", "completed"]);
 
 export function parseJobResult(raw: unknown, fallbackJobId: string): JobResult {
-  const p = jobPayloadSchema.parse(raw ?? {});
+  // Total by design — never throws. An unrecognised payload (e.g. a non-object)
+  // resolves to a terminal `failed` so neither the poller nor the webhook path
+  // loops or crashes on a malformed body.
+  const parsed = jobPayloadSchema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    return { jobId: fallbackJobId, status: "failed", outputs: [], error: "Unrecognised job payload" };
+  }
+  const p = parsed.data;
   const jobId = p.jobId ?? p.id ?? fallbackJobId;
   const status = normaliseStatus(p.status ?? p.jobStatus);
 

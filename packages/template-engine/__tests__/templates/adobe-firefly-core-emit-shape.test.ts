@@ -194,10 +194,17 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     );
     assert.ok(!client.includes("instanceof DOMException"));
 
-    // job-port buffers a webhook result that arrives before await() parks it.
+    // job-port buffers a webhook result that arrives before await() parks it,
+    // supports multiple waiters per jobId, and times out (no hang/leak).
     const jobPort = await read(root, `${ADOBE}/jobs/job-port.ts`);
     assert.ok(jobPort.includes("settled"));
     assert.match(jobPort, /SCALING LIMIT/);
+    assert.ok(jobPort.includes("Set<Waiter>"), "multiple waiters per jobId");
+    assert.ok(jobPort.includes("did not arrive within"), "webhook TTL reject");
+
+    // parseJobResult is total — never throws on a malformed body.
+    const jobResult = await read(root, `${ADOBE}/jobs/job-result.ts`);
+    assert.ok(jobResult.includes("safeParse"));
   });
 
   it("barrel and job-port never static-import the gated webhook file", async () => {
@@ -254,6 +261,8 @@ describe("adobe-firefly-core template — gating (webhook mode)", () => {
     assert.ok(verifier.includes("timingSafeEqual"));
     // fail closed: no secret -> reject
     assert.ok(verifier.includes("if (!secret || !signature) return false"));
+    // malformed payload / empty jobId -> settle nothing
+    assert.ok(verifier.includes("if (!result.jobId) return { ok: false }"));
     // it imports the always-emitted job-port, not vice versa
     assert.ok(verifier.includes('from "./job-port"'));
 

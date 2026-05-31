@@ -52,6 +52,9 @@ export function handleFireflyWebhook(rawBody: string, signature: string): Webhoo
     "";
   const result = parseJobResult(payload, fallbackId);
 
+  // No job id to correlate (malformed payload) — acknowledge nothing, settle nothing.
+  if (!result.jobId) return { ok: false };
+
   if (result.status === "failed") {
     jobPort.rejectJob(result.jobId, new Error(result.error ?? "Firefly job failed"));
   } else if (result.status === "succeeded") {
