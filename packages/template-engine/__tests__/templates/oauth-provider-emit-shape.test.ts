@@ -36,8 +36,7 @@ function defaultsQuestionEngine(): QuestionEnginePort {
   };
 }
 
-async function install(templateId: string): Promise<string> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-oauth-test-"));
+async function install(templateId: string, projectRoot: string): Promise<void> {
   const useCase = new AddTemplateUseCase(
     new FileSystemTemplateRegistry(TEMPLATES_DIR),
     defaultsQuestionEngine(),
@@ -45,8 +44,7 @@ async function install(templateId: string): Promise<string> {
     new FileSystemTemplateConfigStore(),
   );
   // requires (shared-types, auth-mock, env-setup) auto-resolve and co-emit.
-  await useCase.execute({ templateIds: [templateId], projectRoot: root });
-  return root;
+  await useCase.execute({ templateIds: [templateId], projectRoot });
 }
 
 async function read(root: string, rel: string): Promise<string> {
@@ -75,7 +73,10 @@ describe("oauth provider templates — user DTO lives in infrastructure", () => 
     describe(id, () => {
       let root: string;
       before(async () => {
-        root = await install(id);
+        // Create the temp dir first so `root` is assigned before the throwable
+        // install — the `after` hook then cleans up even if installation fails.
+        root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-oauth-test-"));
+        await install(id, root);
       });
       after(async () => {
         // `root` is unset if `before` failed before install — guard so cleanup
