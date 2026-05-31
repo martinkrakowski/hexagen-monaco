@@ -105,8 +105,10 @@ npx tsx src/infrastructure/adobe/auth/smoke-token.ts
 - **Webhook mode parks completion promises in memory** — correct for a single long-lived
   instance only. On serverless/multi-instance, use polling or back the registry with a
   shared store (Redis/BullMQ, Postgres).
-- In webhook mode the await times out after `ADOBE_WEBHOOK_TIMEOUT_MS` (default 600000) — raise
-  it for long-running services like [`adobe-substance-3d`](../adobe-substance-3d).
+- In `job_mode=webhook`, `await()` times out after `ADOBE_WEBHOOK_TIMEOUT_MS` (default 600000).
+  This applies only to the webhook-delivering `firefly-api.adobe.io` services (generate / upscale
+  / composite / content-tagging). The `image.adobe.io` services (photoshop … substance-3d) always
+  poll by status URL — webhook mode doesn't apply; throttle them with `ADOBE_JOB_POLL_INTERVAL_MS`.
 - `done.outputs` is always a `JobOutput[]` (`{ href?, data? }`); `parseJobResult` is total
   (never throws). There is no per-output id — batch services align positionally.
 
