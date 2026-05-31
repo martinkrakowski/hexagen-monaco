@@ -78,7 +78,9 @@ describe("oauth provider templates — user DTO lives in infrastructure", () => 
         root = await install(id);
       });
       after(async () => {
-        await fs.rm(root, { recursive: true, force: true });
+        // `root` is unset if `before` failed before install — guard so cleanup
+        // can't throw a confusing TypeError that masks the real failure.
+        if (root) await fs.rm(root, { recursive: true, force: true });
       });
 
       it("emits the provider user DTO under src/infrastructure/auth", async () => {
@@ -89,7 +91,7 @@ describe("oauth provider templates — user DTO lives in infrastructure", () => 
       });
 
       it("does NOT leak the provider user DTO into the domain layer", async () => {
-        assert.equal(
+        assert.strictEqual(
           await exists(root, `src/domain/value-objects/${file}.ts`),
           false,
           "provider wire-shape must not live in src/domain/",
