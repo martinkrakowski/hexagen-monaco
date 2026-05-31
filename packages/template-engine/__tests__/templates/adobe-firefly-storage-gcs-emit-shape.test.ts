@@ -125,8 +125,10 @@ describe("adobe-firefly-storage-gcs template — emit shape", () => {
       !adapter.includes("keyFilename") && !adapter.includes("credentials:"),
       "must rely on ADC, not hardcoded credentials",
     );
-    // bucket validation is DEFERRED to presign time (import must not crash startup)
-    assert.ok(adapter.includes('process.env.ADOBE_GCS_BUCKET ?? ""'));
+    // bucket + prefix are read from process.env at PRESIGN time, not snapshotted in
+    // the constructor — so a .env loaded after gcs-register's side-effect import is
+    // still honoured (and a missing bucket can't crash startup).
+    assert.ok(adapter.includes("process.env.ADOBE_GCS_BUCKET?.trim()"));
     assert.ok(adapter.includes("requireBucket"));
     assert.ok(adapter.includes("ADOBE_GCS_BUCKET is not set"));
     const ctorBlock = adapter.slice(
@@ -134,12 +136,16 @@ describe("adobe-firefly-storage-gcs template — emit shape", () => {
       adapter.indexOf("async presignInput"),
     );
     assert.ok(
-      !ctorBlock.includes("ADOBE_GCS_BUCKET is not set"),
-      "constructor must not throw on a missing bucket",
+      !ctorBlock.includes("ADOBE_GCS_BUCKET"),
+      "constructor must not read/snapshot the bucket env (read at presign time)",
+    );
+    assert.ok(
+      !ctorBlock.includes("ADOBE_GCS_PREFIX"),
+      "constructor must not read/snapshot the prefix env (read at presign time)",
     );
     // reject path traversal so a ref can't escape the prefix
     assert.ok(adapter.includes("path traversal"));
-    // prefix normalised (no leading "/") so object names never start with "/"
+    // prefix normalised (no leading "/") at call time so object names never start with "/"
     assert.ok(adapter.includes('process.env.ADOBE_GCS_PREFIX ?? "").replace'));
   });
 

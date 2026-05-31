@@ -36,20 +36,16 @@ function resolveExpiry(value: number): number {
 
 export class GcsPresignStorageAdapter implements FireflyStoragePort {
   private readonly storage: Storage;
-  private readonly bucket: string;
-  private readonly prefix: string;
 
   constructor(storage?: Storage) {
     // Credentials + project resolve from the Google ADC chain; never hardcoded.
+    // Bucket/prefix are NOT captured here — they're read from process.env at
+    // presign time. This adapter is constructed at import time by gcs-register.ts
+    // (a side-effect import at startup), so snapshotting env in the constructor
+    // would permanently lock in whatever was set before .env loaded. Reading at
+    // call time honours a .env loaded later AND keeps startup crash-free
+    // (validation stays deferred to presign time).
     this.storage = storage ?? new Storage();
-    // Read config but DON'T throw here. This adapter is constructed at import time
-    // by gcs-register.ts, so throwing on a missing bucket would crash startup for
-    // every app that registers GCS — even in dev/CI or on routes that never touch
-    // Firefly. Validation is deferred to presign time (requireBucket).
-    this.bucket = process.env.ADOBE_GCS_BUCKET ?? "";
-    // Normalise the prefix to a slash-free path segment so a "/firefly" (path-style)
-    // prefix can't yield object names that start with "/".
-    this.prefix = (process.env.ADOBE_GCS_PREFIX ?? "").replace(/^\/+/, "").replace(/\/+$/, "");
   }
 
   async presignInput(ref: string): Promise<PresignedHref> {
@@ -76,11 +72,13 @@ export class GcsPresignStorageAdapter implements FireflyStoragePort {
   }
 
   private requireBucket(): string {
+    // Read at call time so a .env loaded after this module is imported is honoured.
     // Fail loud + fast at the point of use (a config error), not at import.
-    if (!this.bucket) {
+    const bucket = process.env.ADOBE_GCS_BUCKET?.trim();
+    if (!bucket) {
       throw new Error("ADOBE_GCS_BUCKET is not set — set the bucket the Firefly GCS presigner uses.");
     }
-    return this.bucket;
+    return bucket;
   }
 
   private key(ref: string): string {
@@ -89,8 +87,11 @@ export class GcsPresignStorageAdapter implements FireflyStoragePort {
     if (cleanRef.split("/").some((segment) => segment === "..")) {
       throw new Error(`Invalid GCS object name ${JSON.stringify(ref)}: path traversal ("..") is not allowed.`);
     }
-    if (!this.prefix) return cleanRef;
-    return `${this.prefix}/${cleanRef}`;
+    // Normalise the prefix at call time to a slash-free segment so a "/firefly"
+    // (path-style) prefix can't yield object names that start with "/".
+    const prefix = (process.env.ADOBE_GCS_PREFIX ?? "").replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!prefix) return cleanRef;
+    return `${prefix}/${cleanRef}`;
   }
 }
 
