@@ -53,6 +53,13 @@ class FireflyJobAdapter implements FireflyJobPort {
     if (JOB_MODE !== "webhook") return pollJobStatus(handle);
 
     const { jobId } = handle;
+    // Webhook mode keys the pending registry by jobId — an empty id (a submit
+    // response that carried no job id) would collide unrelated jobs and settle the
+    // wrong waiter. Fail fast so the service adapter surfaces a clear error.
+    // (Polling mode is already guarded by the poller's status-URL check.)
+    if (!jobId) {
+      throw new FireflyError("Cannot await a webhook job: the submit response carried no job id to correlate.");
+    }
     // Fast-job race: the webhook may have landed before we got here.
     const early = this.settled.get(jobId);
     if (early) {
