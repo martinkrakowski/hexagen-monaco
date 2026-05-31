@@ -292,5 +292,7 @@ describe("adobe-firefly-core template — gating (webhook mode)", () => {
 
     const jobPort = await read(root, `${ADOBE}/jobs/job-port.ts`);
     assert.ok(jobPort.includes('const JOB_MODE = "webhook"'));
+    // Webhook await() rejects an empty jobId (no pending-map collisions).
+    assert.ok(jobPort.includes("carried no job id"));
   });
 });
