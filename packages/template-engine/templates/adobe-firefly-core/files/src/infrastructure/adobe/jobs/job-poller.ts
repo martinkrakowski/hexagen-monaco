@@ -38,7 +38,12 @@ export async function pollJobStatus(handle: JobHandle, opts: PollOptions = {}): 
 
 /** Single status read, shared by the poller and the port's `status()`. */
 export async function fetchStatus(handle: JobHandle): Promise<JobResult> {
-  const raw = await fireflyClient.get<unknown>(handle.statusUrl ?? "");
+  if (!handle.statusUrl) {
+    // Without a status URL we'd otherwise GET the base endpoint — fail fast
+    // instead, consistent with `pollJobStatus`.
+    throw new FireflyError(`Cannot check job ${handle.jobId}: no status URL was captured at submit.`);
+  }
+  const raw = await fireflyClient.get<unknown>(handle.statusUrl);
   return parseJobResult(raw, handle.jobId);
 }
 

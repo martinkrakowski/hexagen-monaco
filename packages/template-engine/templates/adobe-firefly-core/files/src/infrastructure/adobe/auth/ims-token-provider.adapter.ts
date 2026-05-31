@@ -1,6 +1,6 @@
 // @hexagen-server-only
 import type { FireflyAuthPort } from "../../../domain/ports/out/firefly-auth.port";
-import { classifyAdobeError } from "../errors/firefly-errors";
+import { classifyAdobeError, FireflyServiceError } from "../errors/firefly-errors";
 
 /**
  * Adobe IMS OAuth Server-to-Server token provider.
@@ -12,6 +12,9 @@ import { classifyAdobeError } from "../errors/firefly-errors";
  * `infrastructure/adobe/**`.
  */
 const REFRESH_SKEW_MS = 5 * 60 * 1000; // refresh 5 min before expiry
+// Bound the token request so a stuck IMS connection can't hang every caller
+// waiting behind the shared in-flight promise.
+const IMS_TOKEN_TIMEOUT_MS = Number(process.env.ADOBE_IMS_TOKEN_TIMEOUT_MS ?? 15_000);
 
 interface CachedToken {
   token: string;
@@ -51,25 +54,40 @@ class ImsTokenProvider implements FireflyAuthPort {
       scope: scopes.split(",").map((s) => s.trim()).filter(Boolean).join(","),
     });
 
-    const response = await fetch(`https://${host}/ims/token/v3`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body,
-    });
-
-    if (!response.ok) {
-      throw classifyAdobeError({
-        status: response.status,
-        body: await safeBody(response),
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), IMS_TOKEN_TIMEOUT_MS);
+    try {
+      const response = await fetch(`https://${host}/ims/token/v3`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body,
+        signal: controller.signal,
       });
-    }
 
-    const json = (await response.json()) as ImsTokenResponse;
-    this.cached = {
-      token: json.access_token,
-      expiresAt: Date.now() + json.expires_in * 1000,
-    };
-    return this.cached.token;
+      if (!response.ok) {
+        throw classifyAdobeError({
+          status: response.status,
+          body: await safeBody(response),
+        });
+      }
+
+      const json = (await response.json()) as ImsTokenResponse;
+      this.cached = {
+        token: json.access_token,
+        expiresAt: Date.now() + json.expires_in * 1000,
+      };
+      return this.cached.token;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        // Retryable — a timed-out token request may succeed next time.
+        throw new FireflyServiceError(
+          `Adobe IMS token request timed out after ${IMS_TOKEN_TIMEOUT_MS}ms`,
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

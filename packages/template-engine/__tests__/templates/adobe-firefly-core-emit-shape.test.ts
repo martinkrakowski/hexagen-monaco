@@ -205,6 +205,19 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     // parseJobResult is total — never throws on a malformed body.
     const jobResult = await read(root, `${ADOBE}/jobs/job-result.ts`);
     assert.ok(jobResult.includes("safeParse"));
+
+    // fetchStatus fails fast on a missing status URL instead of hitting BASE_URL.
+    const poller = await read(root, `${ADOBE}/jobs/job-poller.ts`);
+    assert.ok(poller.includes("Cannot check job"));
+
+    // IMS token fetch is bounded by a timeout (like the REST client).
+    const auth = await read(
+      root,
+      `${ADOBE}/auth/ims-token-provider.adapter.ts`,
+    );
+    assert.ok(auth.includes("AbortController"));
+    assert.ok(auth.includes("IMS_TOKEN_TIMEOUT_MS"));
+    assert.ok(auth.includes("clearTimeout"));
   });
 
   it("barrel and job-port never static-import the gated webhook file", async () => {
