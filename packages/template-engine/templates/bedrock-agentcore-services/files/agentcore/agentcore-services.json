@@ -1,0 +1,14 @@
+{
+  "_comment": "AgentCore service resource blocks for the services you enabled. This template does NOT overwrite agentcore/agentcore.json (created by bedrock-agentcore-runtime) — merge the relevant blocks below into it, or provision them with `agentcore add memory|gateway`. memory.strategies is a comma list because it derives from a multiselect answer.",
+  "memory": {
+    "namespace": "default",
+    "retention": "{memory_mode}",
+    "strategies": "{memory_strategies}"
+  },
+  "gateway": {
+    "targetSource": "{gateway_targets}"
+  },
+  "identity": {
+    "idp": "{identity_idp}"
+  }
+}

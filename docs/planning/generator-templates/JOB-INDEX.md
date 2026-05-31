@@ -3,11 +3,11 @@
 > **Status:** Core framework shipped (`feature/generator-template-system-core`, PR #83).
 > Most templates now ship scaffold content; the `docker` template landed on `feature/generator-template-docker`.
 > All standalone templates now ship scaffold content (`ci-github-actions` landed on `feature/generator-template-ci-github-actions`).
-> Planned (design only, no manifest yet): the **Amazon Bedrock AgentCore** family
-> ([`16-bedrock-agentcore.md`](./16-bedrock-agentcore.md)) — `bedrock-agentcore-runtime` is
-> **implemented** on `feature/generator-template-bedrock-agentcore-runtime`; `bedrock-agentcore-services`
-> remains design-only (the `llm-adapter-bedrock` companion of this family is
-> **implemented** on `feature/generator-template-bedrock`); the **Adobe Firefly Services** family
+> The **Amazon Bedrock AgentCore** family ([`16-bedrock-agentcore.md`](./16-bedrock-agentcore.md))
+> is now fully implemented: `bedrock-agentcore-runtime` on `feature/generator-template-bedrock-agentcore-runtime`,
+> `bedrock-agentcore-services` on `feature/generator-template-bedrock-agentcore-services`, and the
+> `llm-adapter-bedrock` companion on `feature/generator-template-bedrock`.
+> Planned (design only, no manifest yet): the **Adobe Firefly Services** family
 > ([`17-adobe-firefly.md`](./17-adobe-firefly.md)) — `adobe-firefly-core` + 13 service addons;
 > and **`mcp-server`** ([`18-mcp-server.md`](./18-mcp-server.md)).
 

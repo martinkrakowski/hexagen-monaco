@@ -1,0 +1,97 @@
+{
+  "id": "bedrock-agentcore-services",
+  "name": "Bedrock AgentCore Services",
+  "description": "Hexagonal ports + adapters for Amazon Bedrock AgentCore stateful services — Memory (multi-turn + long-term recall), Gateway (APIs/Lambdas/MCP as MCP tools), and Identity (workload token + IdP claim bridge to UserContext). The application layer depends only on the ports; install @aws-sdk/client-bedrock-agentcore.",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "services",
+      "type": "multiselect",
+      "prompt": "Which AgentCore services?",
+      "options": ["memory", "gateway", "identity"],
+      "default": ["memory", "gateway", "identity"]
+    },
+    {
+      "id": "memory_mode",
+      "type": "select",
+      "prompt": "Memory retention?",
+      "options": ["shortTerm", "longAndShortTerm"],
+      "default": "longAndShortTerm"
+    },
+    {
+      "id": "memory_strategies",
+      "type": "multiselect",
+      "prompt": "Long-term memory strategies?",
+      "options": ["SEMANTIC", "SUMMARY", "USER_PREFERENCE"],
+      "default": ["SEMANTIC", "SUMMARY"]
+    },
+    {
+      "id": "gateway_targets",
+      "type": "select",
+      "prompt": "Initial gateway tool source?",
+      "options": ["lambda", "openapi", "mcp", "none"],
+      "default": "lambda"
+    },
+    {
+      "id": "identity_idp",
+      "type": "select",
+      "prompt": "Identity provider to bridge to UserContext?",
+      "options": ["cognito", "okta", "entra", "auth0", "none"],
+      "default": "cognito"
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    {
+      "path": "src/domain/ports/out/agent-memory.port.ts",
+      "when": { "answer": "services", "includes": "memory" }
+    },
+    {
+      "path": "src/infrastructure/agentcore/memory/agentcore-memory.adapter.ts",
+      "when": { "answer": "services", "includes": "memory" }
+    },
+    {
+      "path": "src/infrastructure/agentcore/memory/memory-config.ts",
+      "when": { "answer": "services", "includes": "memory" }
+    },
+    {
+      "path": "src/domain/ports/out/tool-gateway.port.ts",
+      "when": { "answer": "services", "includes": "gateway" }
+    },
+    {
+      "path": "src/infrastructure/agentcore/gateway/agentcore-gateway.adapter.ts",
+      "when": { "answer": "services", "includes": "gateway" }
+    },
+    {
+      "path": "src/infrastructure/agentcore/gateway/mcp-tool-mapper.ts",
+      "when": { "answer": "services", "includes": "gateway" }
+    },
+    {
+      "path": "src/domain/ports/out/agent-identity.port.ts",
+      "when": { "answer": "services", "includes": "identity" }
+    },
+    {
+      "path": "src/infrastructure/agentcore/identity/agentcore-identity.adapter.ts",
+      "when": { "answer": "services", "includes": "identity" }
+    },
+    {
+      "path": "src/infrastructure/agentcore/identity/idp-bridge.ts",
+      "when": { "answer": "services", "includes": "identity" }
+    },
+    "agentcore/agentcore-services.json",
+    ".env.agentcore-services.example"
+  ],
+  "checklist": [
+    "Install the SDK (no manifest deps field — this is the only channel): npm install @aws-sdk/client-bedrock-agentcore",
+    "Provision the resources you enabled: `agentcore add memory --strategies SEMANTIC,SUMMARY` ; `agentcore add gateway` ; then `agentcore deploy`",
+    "Copy AGENTCORE_MEMORY_ID / AGENTCORE_GATEWAY_URL / AGENTCORE_WORKLOAD_IDENTITY_ARN from `agentcore status` into .env.local",
+    "Grant the runtime execution role access to the new Memory/Gateway resources (extend iam/agentcore-runtime-role.policy.json)",
+    "Merge the blocks in agentcore/agentcore-services.json into agentcore/agentcore.json (this template does not overwrite the runtime's file)",
+    "If using Identity: set AGENTCORE_IDP_DISCOVERY_URL and confirm idp-bridge.ts maps your IdP's claims onto UserContext (reuse an installed auth provider's mapping if present)",
+    "Gateway adapter is a minimal MCP-over-HTTP client — swap in @modelcontextprotocol/sdk if your Gateway needs the full session/initialize handshake",
+    "Wire each adapter behind its port at composition root; run your port-fake tests before hitting live AWS"
+  ],
+  "branch": "feature/generator-template-bedrock-agentcore-services"
+}
