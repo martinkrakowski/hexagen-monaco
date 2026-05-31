@@ -8,6 +8,15 @@ export const TEMPLATE_QUESTIONS: Record<
   string,
   ReadonlyArray<TemplateQuestion>
 > = {
+  "adobe-firefly-composite": [
+    {
+      id: "default_candidates",
+      type: "select",
+      prompt: "Default number of candidate composites to request?",
+      options: ["1", "2", "3", "4"],
+      default: "2",
+    },
+  ],
   "adobe-firefly-content-tagging": [
     {
       id: "min_confidence",
