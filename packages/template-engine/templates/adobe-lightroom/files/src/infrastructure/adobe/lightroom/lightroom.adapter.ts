@@ -6,7 +6,7 @@ import type {
   LightroomRequest,
 } from "../../../domain/ports/out/lightroom.port";
 import { fireflyClient } from "../http/firefly-client";
-import { pollJobStatus } from "../jobs/job-poller";
+import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
 import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
@@ -96,7 +96,7 @@ export class LightroomAdapter implements LightroomPort {
       if (!handle.statusUrl) {
         return err(new FireflyError("Lightroom submit response had no status URL to track the job."));
       }
-      const done = await pollJobStatus(handle);
+      const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
         return err(new FireflyError(done.error ?? "Lightroom job did not succeed."));
       }

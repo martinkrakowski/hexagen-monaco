@@ -8,7 +8,7 @@ import type {
   SmartObjectRequest,
 } from "../../../domain/ports/out/photoshop-automation.port";
 import { fireflyClient } from "../http/firefly-client";
-import { pollJobStatus } from "../jobs/job-poller";
+import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
 import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
@@ -153,7 +153,7 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
       if (!handle.statusUrl) {
         return err(new FireflyError("Photoshop submit response had no status URL to track the job."));
       }
-      const done = await pollJobStatus(handle);
+      const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
         return err(new FireflyError(done.error ?? "Photoshop job did not succeed."));
       }

@@ -126,7 +126,7 @@ describe("adobe-photoshop template — emit shape", () => {
     // status URL is a clear error, and jobPort.await (which fails for a jobId-only
     // handle in polling mode) is not used.
     assert.ok(adapter.includes("if (!handle.statusUrl)"));
-    assert.ok(adapter.includes("await pollJobStatus(handle)"));
+    assert.ok(adapter.includes("jobPort.poll(handle)"));
     assert.ok(adapter.includes("no status URL to track"));
     assert.ok(
       !adapter.includes("jobPort.await"),

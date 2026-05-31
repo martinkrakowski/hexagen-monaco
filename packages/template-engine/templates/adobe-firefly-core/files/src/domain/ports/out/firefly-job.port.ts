@@ -37,7 +37,13 @@ export interface JobHandle {
 }
 
 export interface FireflyJobPort {
-  /** Await terminal completion (polling or webhook, transparently). */
+  /**
+   * Await terminal completion (polling or webhook, transparently) for
+   * webhook-capable services. Some services are tracked only by a status URL and
+   * never deliver Firefly webhooks (the image.adobe.io Photoshop/Lightroom/
+   * Illustrator APIs); those force polling via the concrete `jobPort.poll(handle)`
+   * rather than `await()`, keeping the wait path on the port.
+   */
   await(handle: JobHandle): Promise<JobResult>;
   /** One-shot status check without waiting. */
   status(handle: JobHandle): Promise<JobResult>;
