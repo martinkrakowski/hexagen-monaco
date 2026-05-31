@@ -119,6 +119,15 @@ describe("adobe-firefly-generate template — emit shape", () => {
     assert.match(adapter, /@hexagen-server-only/);
     assert.ok(adapter.includes("getStoragePresigner()"));
     assert.ok(adapter.includes("fireflyClient.post("));
+    // must target the ASYNC endpoints (they return a job to await); the sync
+    // endpoints return outputs inline with no jobId and would fail the guard.
+    assert.ok(adapter.includes("/v3/images/generate-async"));
+    assert.ok(adapter.includes("/v3/images/fill-async"));
+    assert.ok(adapter.includes("/v3/images/expand-async"));
+    assert.ok(
+      !/"\/v3\/images\/(generate|fill|expand)"/.test(adapter),
+      "must not call sync endpoints",
+    );
     assert.ok(adapter.includes("toJobHandle("));
     assert.ok(adapter.includes("jobPort.await(handle)"));
     assert.ok(adapter.includes('storage: "external"'));

@@ -33,16 +33,16 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
     return this.run(async () => {
       const output = await getStoragePresigner().presignOutput(req.outputHref);
       const body = this.applyOptions({ prompt: req.prompt, output: external(output.href) }, req);
-      return { path: "/v3/images/generate", body };
+      return { path: "/v3/images/generate-async", body };
     });
   }
 
   async generativeFill(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
-    return this.edit("/v3/images/fill", req);
+    return this.edit("/v3/images/fill-async", req);
   }
 
   async generativeExpand(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
-    return this.edit("/v3/images/expand", req);
+    return this.edit("/v3/images/expand-async", req);
   }
 
   async imageToImage(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
@@ -56,7 +56,7 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
         output: external(output.href),
       };
       if (req.prompt) body.prompt = req.prompt;
-      return { path: "/v3/images/generate", body: this.applyOptions(body, req) };
+      return { path: "/v3/images/generate-async", body: this.applyOptions(body, req) };
     });
   }
 
@@ -70,7 +70,7 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
         output: external(output.href),
       };
       if (req.prompt) body.prompt = req.prompt;
-      return { path: "/v3/images/generate", body: this.applyOptions(body, req) };
+      return { path: "/v3/images/generate-async", body: this.applyOptions(body, req) };
     });
   }
 

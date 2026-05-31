@@ -35,7 +35,7 @@
   ],
   "checklist": [
     "Confirm the Firefly Generate entitlement + scope on your Adobe Developer Console project",
-    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to /v3/images/{generate,fill,expand})",
+    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to the async endpoints /v3/images/{generate,fill,expand}-async, which return a job to await)",
     "The edit operations (fill/expand/image-to-image/style-transfer) need presigned input + output hrefs — use core passthrough or install an adobe-firefly-storage-* addon",
     "Content Credentials (C2PA) and safety/moderation are pass-through options on the port (contentCredentials / safety) — set them per call, they are not hardcoded",
     "Override the model per environment via ADOBE_FIREFLY_DEFAULT_MODEL; default output size is set at install (ADOBE_FIREFLY_SIZE)",
