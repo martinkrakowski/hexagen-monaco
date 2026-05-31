@@ -1,0 +1,31 @@
+{
+  "id": "adobe-firefly-content-tagging",
+  "name": "Adobe Firefly — Content Tagging",
+  "description": "Content Tagging service for Adobe Firefly: a ContentTaggingPort + adapter that returns structured tags/metadata for an image (the one service whose result is JSON, not an asset — exercises the foundation's non-asset path). Sync or short async; presigns the input only.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "min_confidence",
+      "type": "select",
+      "prompt": "Drop tags below this confidence (0-1)?",
+      "options": ["0", "0.5", "0.7"],
+      "default": "0.5"
+    }
+  ],
+  "envVars": ["ADOBE_TAGGING_MIN_CONFIDENCE"],
+  "outputs": [
+    "src/domain/ports/out/content-tagging.port.ts",
+    "src/infrastructure/adobe/content-tagging/content-tagging.adapter.ts",
+    ".env.adobe-content-tagging.example"
+  ],
+  "checklist": [
+    "Confirm the Content Tagging entitlement + scope on your Adobe Developer Console project",
+    "Verify the current endpoint/payload against Adobe docs — the adapter handles both a sync response (tags inline) and a short async job, so it works either way; confirm the path",
+    "Provide a presigned input href (core passthrough) or install an adobe-firefly-storage-* addon — no output storage is needed (the result is JSON, not an asset)",
+    "Tune the confidence floor per environment via ADOBE_TAGGING_MIN_CONFIDENCE (install default set the baseline)",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-content-tagging"
+}
