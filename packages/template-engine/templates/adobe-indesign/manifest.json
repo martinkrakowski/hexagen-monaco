@@ -1,0 +1,38 @@
+{
+  "id": "adobe-indesign",
+  "name": "Adobe InDesign API",
+  "description": "InDesign automation for Adobe Firefly Services (image.adobe.io): an InDesignPort + adapter for data merge (template + data source), layout rendering, and PDF export over the adobe-firefly-core foundation. Async.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "operations",
+      "type": "multiselect",
+      "prompt": "Which InDesign operations will you use?",
+      "options": ["dataMerge", "renderLayout", "exportPdf"],
+      "default": ["dataMerge"]
+    },
+    {
+      "id": "output_format",
+      "type": "select",
+      "prompt": "Default output format? (exportPdf is always PDF)",
+      "options": ["pdf", "jpg", "png"],
+      "default": "pdf"
+    }
+  ],
+  "envVars": ["ADOBE_INDESIGN_BASE_URL", "ADOBE_INDESIGN_FORMAT"],
+  "outputs": [
+    "src/domain/ports/out/indesign.port.ts",
+    "src/infrastructure/adobe/indesign/indesign.adapter.ts",
+    ".env.adobe-indesign.example"
+  ],
+  "checklist": [
+    "Confirm the InDesign API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current endpoints/payloads against Adobe docs — the InDesign API lives on image.adobe.io (same host family as Photoshop/Lightroom/Illustrator; the client posts absolute URLs there)",
+    "Provide presigned template (.indd) + output hrefs (and a data source for dataMerge) — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Template + data-source merge: dataMerge maps records into a published InDesign template; default output format is ADOBE_INDESIGN_FORMAT (set at install), exportPdf is always PDF",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-indesign"
+}
