@@ -90,14 +90,27 @@ export class ExpressAdapter implements ExpressAutomationPort {
           new FireflyError(done.error ?? "Express batch job did not succeed."),
         );
       }
-      // `done.outputs` is a non-optional JobOutput[] (parseJobResult always returns
-      // an array), so it maps directly — one rendered variant per entry. Keep the
-      // resolvable hrefs; an empty result is the no-output error path below.
-      const hrefs = done.outputs
-        .map((o) => o.href)
-        .filter((h): h is string => typeof h === "string" && h.length > 0);
-      if (hrefs.length === 0) {
-        return err(new FireflyError("Express batch job produced no output."));
+      // The port promises one href per item, in request order. `done.outputs` is a
+      // non-optional JobOutput[] (parseJobResult always returns an array), but an
+      // entry can carry inline `data` instead of an `href`, so VALIDATE the 1:1
+      // alignment rather than filtering — silently dropping an hrefless entry would
+      // return a shorter array that no longer lines up with req.items.
+      if (done.outputs.length !== req.items.length) {
+        return err(
+          new FireflyError(
+            `Express batch returned ${done.outputs.length} outputs for ${req.items.length} items.`,
+          ),
+        );
+      }
+      const hrefs: string[] = [];
+      for (let i = 0; i < done.outputs.length; i++) {
+        const href = done.outputs[i]?.href;
+        if (!href) {
+          return err(
+            new FireflyError(`Express batch output ${i} has no href.`),
+          );
+        }
+        hrefs.push(href);
       }
       return ok(hrefs);
     } catch (error) {

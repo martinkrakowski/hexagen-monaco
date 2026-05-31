@@ -131,6 +131,12 @@ describe("adobe-express template — emit shape", () => {
     assert.ok(adapter.includes("req.items.map("));
     // guards an empty batch before spending an API round-trip
     assert.ok(adapter.includes("req.items.length === 0"));
+    // validates 1:1 output↔item alignment (no silent filtering that breaks order)
+    assert.ok(adapter.includes("done.outputs.length !== req.items.length"));
+    assert.ok(
+      !adapter.includes(".filter("),
+      "must validate alignment, not filter hrefs",
+    );
     // avoids the Express.js name collision
     assert.ok(adapter.includes("export const expressAutomation"));
     assert.ok(
