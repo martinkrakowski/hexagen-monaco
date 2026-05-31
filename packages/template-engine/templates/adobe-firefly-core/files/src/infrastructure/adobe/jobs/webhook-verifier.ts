@@ -55,9 +55,11 @@ export function handleFireflyWebhook(rawBody: string, signature: string): Webhoo
   // No job id to correlate (malformed payload) — acknowledge nothing, settle nothing.
   if (!result.jobId) return { ok: false };
 
-  if (result.status === "failed") {
-    jobPort.rejectJob(result.jobId, new Error(result.error ?? "Firefly job failed"));
-  } else if (result.status === "succeeded") {
+  // Resolve BOTH terminal states with the JobResult envelope so callers handle
+  // success vs. failure through one code path regardless of transport — polling
+  // also resolves a `failed` JobResult. Promise rejection is reserved for transport
+  // errors (the await timeout), not a completed-but-failed job.
+  if (result.status === "succeeded" || result.status === "failed") {
     jobPort.resolveJob(result.jobId, result);
   }
   // `running` callbacks (progress pings) are acknowledged but not settled.

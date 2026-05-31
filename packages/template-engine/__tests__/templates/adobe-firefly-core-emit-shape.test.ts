@@ -280,6 +280,13 @@ describe("adobe-firefly-core template — gating (webhook mode)", () => {
     assert.ok(verifier.includes("if (!secret || !signature) return false"));
     // malformed payload / empty jobId -> settle nothing
     assert.ok(verifier.includes("if (!result.jobId) return { ok: false }"));
+    // both terminal states RESOLVE the JobResult (transport-uniform with polling);
+    // a completed-but-failed job is never rejected.
+    assert.ok(verifier.includes("jobPort.resolveJob"));
+    assert.ok(
+      !verifier.includes("rejectJob"),
+      "webhook must not reject a completed job",
+    );
     // it imports the always-emitted job-port, not vice versa
     assert.ok(verifier.includes('from "./job-port"'));
 
