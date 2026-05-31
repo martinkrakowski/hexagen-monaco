@@ -115,6 +115,14 @@ describe("bedrock-agentcore-runtime template — emit shape (defaults)", () => {
     assert.ok(server.includes('"/ping"'));
     assert.ok(server.includes('"/invocations"'));
     assert.match(server, /AGENTCORE_RUNTIME_PORT\s*\?\?\s*8080/);
+    // Entrypoint guard must resolve both sides to fs paths so `npx tsx` starts the
+    // server — a raw `file://${process.argv[1]}` compare would never match.
+    assert.ok(server.includes("fileURLToPath(import.meta.url)"));
+    assert.ok(server.includes("path.resolve(process.argv[1])"));
+    assert.ok(
+      !server.includes("`file://${process.argv[1]}`"),
+      "must not use the fragile string-compare entrypoint guard",
+    );
   });
 
   it("keeps the inbound adapter depending only on the AgentRuntimePort", async () => {
@@ -128,6 +136,24 @@ describe("bedrock-agentcore-runtime template — emit shape (defaults)", () => {
     assert.ok(handler.includes("AGENTCORE_OAUTH_DISCOVERY_URL"));
     const payload = await read(root, `${AGENTCORE}/runtime/payload.ts`);
     assert.ok(payload.includes("interface AgentRuntimePort"));
+  });
+
+  it("makes OAuth inbound auth fail-closed (no default accept-all verifier)", async () => {
+    const handler = await read(
+      root,
+      `${AGENTCORE}/http/invocations.handler.ts`,
+    );
+    // The verifier defaults to null — never an accept-all `() => true`.
+    assert.ok(handler.includes("TokenVerifier | null = null"));
+    assert.ok(
+      !/let verifyToken[^\n]*=\s*\(\)\s*=>\s*true/.test(handler),
+      "verifyToken must not default to accept-all",
+    );
+    // OAuth enabled but no verifier registered -> reject, not silently accept.
+    assert.ok(handler.includes("no token verifier is"));
+    assert.match(handler, /if \(!verifier\)/);
+    // Verifier may be async (real JWKS verification is).
+    assert.ok(handler.includes("await verifier(token)"));
   });
 
   it("seeds the observability correlation store without importing it", async () => {

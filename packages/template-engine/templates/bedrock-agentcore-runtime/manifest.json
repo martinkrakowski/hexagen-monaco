@@ -83,7 +83,7 @@
     "Attach iam/agentcore-runtime-role.policy.json to the runtime execution role (bedrock:InvokeModel/Converse, logs, bedrock-agentcore)",
     "Invoke: `agentcore invoke --prompt \"hello\"` (or boto3/SDK InvokeAgentRuntime with the ARN), then copy AGENTCORE_RUNTIME_ARN from `agentcore status` into .env.local",
     "If observability is installed, the handler seeds the correlation store from runtimeSessionId so app logs and AgentCore's OTEL->CloudWatch traces share one id (see session.ts)",
-    "If inbound_auth=OAuth, set AGENTCORE_OAUTH_DISCOVERY_URL / AGENTCORE_OAUTH_ALLOWED_AUDIENCE; otherwise the runtime boundary is IAM (SigV4)"
+    "If inbound_auth=OAuth, set AGENTCORE_OAUTH_DISCOVERY_URL / AGENTCORE_OAUTH_ALLOWED_AUDIENCE AND register a real verifier via setTokenVerifier() at startup — OAuth mode is fail-closed and rejects every call until you do; otherwise the runtime boundary is IAM (SigV4)"
   ],
   "branch": "feature/generator-template-bedrock-agentcore-runtime"
 }

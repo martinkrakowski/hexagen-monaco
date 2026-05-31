@@ -17,7 +17,7 @@ export function createInvocationHandler(
   agent: AgentRuntimePort,
 ): (request: Request) => Promise<Response> {
   return async function handleInvocation(request: Request): Promise<Response> {
-    const auth = authenticateInbound(request.headers);
+    const auth = await authenticateInbound(request.headers);
     if (!auth.ok) return auth.response;
 
     let body: unknown;
@@ -96,12 +96,15 @@ function streamResponse(
 /**
  * Inbound auth gate. When `AGENTCORE_OAUTH_DISCOVERY_URL` is set (inbound_auth =
  * OAuth) a Bearer token is required on every call. Full JWT signature/audience
- * verification against the discovery document is environment-specific — register
- * a verifier via {@link setTokenVerifier} to enable it; the default enforces
- * token *presence* only. With no discovery URL the runtime boundary is IAM
- * (SigV4), already enforced by AgentCore upstream, so this is a pass-through.
+ * verification against the discovery document is environment-specific, so it is
+ * supplied via {@link setTokenVerifier}. This is **fail-closed**: if OAuth mode
+ * is enabled but no verifier has been registered, every call is rejected (rather
+ * than silently accepting any token). With no discovery URL the runtime boundary
+ * is IAM (SigV4), already enforced by AgentCore upstream, so this is a pass-through.
  */
-function authenticateInbound(headers: Headers): { ok: true } | { ok: false; response: Response } {
+async function authenticateInbound(
+  headers: Headers,
+): Promise<{ ok: true } | { ok: false; response: Response }> {
   const discoveryUrl = process.env.AGENTCORE_OAUTH_DISCOVERY_URL;
   if (!discoveryUrl) return { ok: true };
 
@@ -112,17 +115,29 @@ function authenticateInbound(headers: Headers): { ok: true } | { ok: false; resp
   if (!token) {
     return { ok: false, response: json(401, { error: "Missing bearer token" }) };
   }
-  if (!verifyToken(token)) {
+  const verifier = verifyToken;
+  if (!verifier) {
+    // Fail closed: OAuth is on but no real verifier was wired. Accepting the
+    // token here would be an auth bypass, so reject and tell the operator.
+    // eslint-disable-next-line no-console
+    console.error(
+      "[agentcore] AGENTCORE_OAUTH_DISCOVERY_URL is set but no token verifier is " +
+        "registered — call setTokenVerifier() at startup. Rejecting request.",
+    );
+    return { ok: false, response: json(500, { error: "Inbound auth is misconfigured" }) };
+  }
+  if (!(await verifier(token))) {
     return { ok: false, response: json(401, { error: "Invalid bearer token" }) };
   }
   return { ok: true };
 }
 
-type TokenVerifier = (token: string) => boolean;
+type TokenVerifier = (token: string) => boolean | Promise<boolean>;
 
-// Default verifier: presence already checked above. Replace with real JWKS /
-// audience verification against AGENTCORE_OAUTH_DISCOVERY_URL (see checklist).
-let verifyToken: TokenVerifier = () => true;
+// No default verifier: OAuth mode is fail-closed until one is registered. Wire
+// real JWKS / audience verification (audience = AGENTCORE_OAUTH_ALLOWED_AUDIENCE)
+// against AGENTCORE_OAUTH_DISCOVERY_URL via setTokenVerifier() at startup.
+let verifyToken: TokenVerifier | null = null;
 
 /** Register real inbound-token verification (audience = AGENTCORE_OAUTH_ALLOWED_AUDIENCE). */
 export function setTokenVerifier(verifier: TokenVerifier): void {

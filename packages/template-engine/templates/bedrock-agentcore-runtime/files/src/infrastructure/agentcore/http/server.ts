@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createInvocationHandler } from "./invocations.handler";
 import { handlePing } from "./ping.handler";
 import type { AgentRuntimePort } from "../runtime/payload";
@@ -119,6 +121,14 @@ const placeholderAgent: AgentRuntimePort = {
 };
 
 // Run only when executed as the entrypoint, not when imported by tests.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// Compare both sides as resolved filesystem paths — `import.meta.url` is a
+// (possibly percent-encoded) file:// URL while `process.argv[1]` is a path that
+// is often relative under `npx tsx src/.../server.ts`, so concatenating a file://
+// URL from argv[1] and string-comparing it would never match and the runtime
+// would never bind.
+const isMain =
+  process.argv[1] != null &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
   void startAgentCoreServer(placeholderAgent);
 }
