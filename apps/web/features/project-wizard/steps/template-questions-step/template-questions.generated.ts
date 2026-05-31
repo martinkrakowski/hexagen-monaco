@@ -154,6 +154,22 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "/dashboard,/api/protected",
     },
   ],
+  "adobe-indesign": [
+    {
+      id: "operations",
+      type: "multiselect",
+      prompt: "Which InDesign operations will you use?",
+      options: ["dataMerge", "renderLayout", "exportPdf"],
+      default: ["dataMerge"],
+    },
+    {
+      id: "output_format",
+      type: "select",
+      prompt: "Default output format? (exportPdf is always PDF)",
+      options: ["pdf", "jpg", "png"],
+      default: "pdf",
+    },
+  ],
   "adobe-lightroom": [
     {
       id: "operations",
