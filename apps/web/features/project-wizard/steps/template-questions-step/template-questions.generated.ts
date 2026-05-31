@@ -8,6 +8,43 @@ export const TEMPLATE_QUESTIONS: Record<
   string,
   ReadonlyArray<TemplateQuestion>
 > = {
+  "adobe-firefly-core": [
+    {
+      id: "ims_region",
+      type: "select",
+      prompt: "Adobe IMS region host?",
+      options: ["ims-na1", "ims-eu1"],
+      default: "ims-na1",
+    },
+    {
+      id: "job_mode",
+      type: "select",
+      prompt: "How do async jobs report completion?",
+      options: ["polling", "webhook"],
+      default: "polling",
+    },
+    {
+      id: "storage_mode",
+      type: "select",
+      prompt: "Presigned-URL storage for inputs/outputs?",
+      options: ["passthrough", "addon"],
+      default: "passthrough",
+    },
+    {
+      id: "default_timeout_ms",
+      type: "select",
+      prompt: "Per-request timeout (ms)?",
+      options: ["30000", "60000", "120000"],
+      default: "60000",
+    },
+    {
+      id: "max_retries",
+      type: "select",
+      prompt: "Max retries on transient failure?",
+      options: ["0", "1", "2", "3"],
+      default: "2",
+    },
+  ],
   "adobe-ims-spa": [
     {
       id: "redirect_uri",
