@@ -36,15 +36,21 @@ and passes through verbatim.** The token grammar, in precedence order, is:
 
 1. `${{ … }}` — a GitHub Actions expression, passed through unchanged.
 2. `{{` / `}}` — brace escape sequences.
-3. `(?<!$){identifier}` — variable substitution, **only when not preceded by `$`**.
+3. `{identifier}` — variable substitution, **unless the `{` is immediately
+   preceded by `$`** (then it is part of a `${…}` expression and left as-is).
 
 Implementation:
-`/\$\{\{[\s\S]*?\}\}|\{\{|\}\}|(?<!\$)\{([A-Za-z_][A-Za-z0-9_.-]*)\}/`
+`/\$\{\{[\s\S]*?\}\}|\{\{|\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}/`
 
 - The leading `${{ … }}` alternative is matched first (non-greedy), so a GHA
   expression is consumed whole and its inner `{{`/`}}` never reach rules 2–3.
-- The negative lookbehind `(?<!\$)` on the placeholder rule means a `${ … }`
-  (JS template literal or shell expansion) is left untouched too.
+- The `${ … }` (JS template literal / shell) case is handled in the `replace`
+  callback: a `{identifier}` match whose preceding character (`template[offset-1]`)
+  is `$` is returned unchanged. **A regex lookbehind (`(?<!\$)`) was deliberately
+  avoided** — it throws a parse-time `SyntaxError` in JS runtimes without
+  lookbehind support (e.g. Safari < 16.4), and this module ships to the browser
+  via `@hexagen/shared` (a `transpilePackages` entry, not marked side-effect-free,
+  so not reliably tree-shaken out of client bundles).
 
 The consequence for template authors: **workflow YAML, emitted TypeScript, and
 shell scripts use `${{ … }}` / `${ … }` exactly as written** — no quadrupling
@@ -61,11 +67,11 @@ variable" warning on every literal — and, worse, a latent footgun: a
 value, corrupting the output. (This is why the `observability` template used
 string concatenation instead of template literals.)
 
-The lookbehind closes both: `${id}` is never a placeholder, so JS/shell
-expressions emit verbatim, the warning channel is trustworthy (a remaining
-"unresolved variable" now means a genuine dead `{placeholder}`), and the footgun
-is gone. Verified: no template contained a `${answerId}` relying on the old
-behaviour, so emitted output is unchanged.
+The `$`-preceding-char check closes both: `${id}` is never a placeholder, so
+JS/shell expressions emit verbatim, the warning channel is trustworthy (a
+remaining "unresolved variable" now means a genuine dead `{placeholder}`), and
+the footgun is gone. Verified: no template contained a `${answerId}` relying on
+the old behaviour, so emitted output is unchanged.
 
 ## Rejected Alternatives
 

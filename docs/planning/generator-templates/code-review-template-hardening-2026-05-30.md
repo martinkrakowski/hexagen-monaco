@@ -67,10 +67,14 @@ test. Full suite **165/165**.
 `{ident}`, so JS/shell `${ident}` had its inner braces read as a placeholder —
 emitting spurious "unresolved variable" warnings on every template literal, and
 a latent footgun where `${someAnswerId}` would be silently replaced in emitted
-code. Added a negative lookbehind:
+code. Fixed by leaving any `{ident}` whose preceding character is `$` untouched.
+The check is done in the `replace` callback via `offset` (not a regex
+lookbehind, which parse-errors on Safari < 16.4 — and this module is bundled to
+the browser through `@hexagen/shared`):
 
 ```
-/\$\{\{[\s\S]*?\}\}|\{\{|\}\}|(?<!\$)\{([A-Za-z_][A-Za-z0-9_.-]*)\}/
+/\$\{\{[\s\S]*?\}\}|\{\{|\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}/
+// + callback: if template[offset-1] === "$", return the match unchanged
 ```
 
 Now only a _bare_ `{var}` is a placeholder; `${…}` and `${{…}}` pass through.

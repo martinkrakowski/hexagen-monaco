@@ -3,13 +3,17 @@
 //   - `${{ ... }}` — GitHub Actions expression (matched first, whole, so its
 //     inner `{{`/`}}` never reach the escape rules; non-greedy body so adjacent
 //     `${{ a }}${{ b }}` don't merge).
-//   - `${ ... }`   — JS template literal / shell expansion: the `(?<!\$)`
-//     lookbehind stops the placeholder rule from matching the `{...}` inside it,
-//     so e.g. `${res.status}` or `${COOKIE_NAME}` are left verbatim (no spurious
-//     "unresolved variable" warning, and no risk of a `${someQuestionId}` being
-//     silently rewritten in emitted code).
-const TOKEN_RE =
-  /\$\{\{[\s\S]*?\}\}|\{\{|\}\}|(?<!\$)\{([A-Za-z_][A-Za-z0-9_.-]*)\}/g;
+//   - `${ ... }`   — JS template literal / shell expansion: a `{ident}` whose
+//     preceding character is `$` is part of a `${...}` expression and is left
+//     verbatim, so e.g. `${res.status}` or `${COOKIE_NAME}` aren't rewritten and
+//     don't warn.
+//
+// The `${...}` case is detected via the replace callback's `offset` argument
+// rather than a regex lookbehind: a lookbehind literal throws a parse-time
+// SyntaxError in some JS runtimes (e.g. Safari < 16.4), and this module is
+// bundled into the browser through `@hexagen/shared` (listed in the web app's
+// `transpilePackages`).
+const TOKEN_RE = /\$\{\{[\s\S]*?\}\}|\{\{|\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}/g;
 
 export interface InterpolationResult {
   output: string;
@@ -33,21 +37,27 @@ export function interpolate(
 ): InterpolationResult {
   const warnings: string[] = [];
 
-  const output = template.replace(TOKEN_RE, (match, identifier?: string) => {
-    // A GitHub Actions `${{ ... }}` expression — emit it verbatim.
-    if (match.startsWith("$")) return match;
-    if (identifier === undefined) return match === "{{" ? "{" : "}";
-    if (!(identifier in vars)) {
-      warnings.push(identifier);
-      return match;
-    }
-    const value = vars[identifier];
-    if (value === null || value === undefined) {
-      warnings.push(identifier);
-      return match;
-    }
-    return String(value);
-  });
+  const output = template.replace(
+    TOKEN_RE,
+    (match: string, identifier: string | undefined, offset: number) => {
+      // A GitHub Actions `${{ ... }}` expression — emit it verbatim.
+      if (match.startsWith("$")) return match;
+      if (identifier === undefined) return match === "{{" ? "{" : "}";
+      // `${identifier}` (JS template literal / shell): the `{` is preceded by
+      // `$`, so this is code, not a placeholder — leave it untouched.
+      if (offset > 0 && template[offset - 1] === "$") return match;
+      if (!(identifier in vars)) {
+        warnings.push(identifier);
+        return match;
+      }
+      const value = vars[identifier];
+      if (value === null || value === undefined) {
+        warnings.push(identifier);
+        return match;
+      }
+      return String(value);
+    },
+  );
 
   return { output, warnings };
 }

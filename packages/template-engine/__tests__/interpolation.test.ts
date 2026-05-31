@@ -59,4 +59,11 @@ describe("interpolate — placeholder vs $-prefixed expressions", () => {
       "cost: 5",
     );
   });
+
+  it("handles the string boundaries (placeholder at offset 0; leading ${...})", () => {
+    // A bare placeholder at offset 0 can't be `$`-preceded, so it interpolates.
+    assert.equal(interpolate("{x} y", { x: "Z" }).output, "Z y");
+    // A `${...}` at the very start is still left untouched.
+    assert.equal(interpolate("${x} y", { x: "Z" }).output, "${x} y");
+  });
 });
