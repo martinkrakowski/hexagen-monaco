@@ -1,0 +1,120 @@
+// @hexagen-server-only
+import type {
+  ContentTag,
+  ContentTaggingPort,
+  ContentTaggingResult,
+} from "../../../domain/ports/out/content-tagging.port";
+import { fireflyClient } from "../http/firefly-client";
+import { jobPort } from "../jobs/job-port";
+import { toJobHandle } from "../jobs/job-result";
+import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
+import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { ok, err, type Result } from "../../../shared/result";
+
+/**
+ * Content Tagging adapter — the AWS-of-Adobe↔domain boundary for
+ * {@link ContentTaggingPort}.
+ *
+ * The one service whose result is JSON rather than an asset. It is sync (tags
+ * returned inline) or a short async job, so the adapter handles BOTH: it submits,
+ * and only awaits via `FireflyJobPort` when the response carried a job id —
+ * otherwise it reads the tags straight from the response. Either way the payload
+ * flows through the foundation's non-asset path (`JobResult.outputs[].data`).
+ *
+ * NOTE: Firefly paths/payloads version frequently — verify against Adobe docs.
+ */
+const ENDPOINT = "/v3/images/tag";
+
+// Confidence floor. Empty/invalid env falls back to the (always-valid) install
+// default rather than producing NaN — `??` would let "" through.
+const MIN_CONFIDENCE = resolveMinConfidence(process.env.ADOBE_TAGGING_MIN_CONFIDENCE);
+
+function resolveMinConfidence(raw: string | undefined): number {
+  const fallback = Number("{min_confidence}");
+  const value = Number(raw?.trim() || "{min_confidence}");
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
+}
+
+export class FireflyContentTaggingAdapter implements ContentTaggingPort {
+  async tag(inputHref: string): Promise<Result<ContentTaggingResult, FireflyError>> {
+    try {
+      const input = await getStoragePresigner().presignInput(inputHref);
+      const response = await fireflyClient.post<unknown>(ENDPOINT, {
+        image: { href: input.href, storage: "external" },
+      });
+
+      // Async if the submit response carried EITHER a status URL or a job id —
+      // polling only needs statusUrl, webhook needs jobId, so check both. Only a
+      // response with neither is truly synchronous (tags returned inline). When
+      // async, jobPort.await applies the mode's own guard (a status-URL-only
+      // response fails fast in webhook mode, as it should).
+      let payload: unknown = response;
+      const handle = toJobHandle(response);
+      const isAsync = Boolean(handle.statusUrl || handle.jobId);
+      if (isAsync) {
+        const done = await jobPort.await(handle);
+        if (done.status !== "succeeded") {
+          return err(new FireflyError(done.error ?? "Content tagging job did not succeed."));
+        }
+        const data = done.outputs[0]?.data;
+        if (data === undefined) {
+          // A succeeded job with no data means the provider payload shape changed —
+          // surface it rather than masking it as an empty success. Do NOT fall back
+          // to the submit response on the async path.
+          return err(new FireflyError(done.error ?? "Content tagging job produced no output data."));
+        }
+        payload = data;
+      }
+
+      return ok({ tags: extractTags(payload), raw: payload });
+    } catch (error) {
+      return err(classifyAdobeError(error));
+    }
+  }
+}
+
+/** Flatten a (per-tenant-variable) tag payload to the domain shape, applying the floor. */
+function extractTags(payload: unknown): ContentTag[] {
+  const source = (payload ?? {}) as {
+    tags?: unknown;
+    outputs?: Array<{ tags?: unknown }>;
+  };
+  const rawTags = Array.isArray(source.tags)
+    ? source.tags
+    : Array.isArray(source.outputs?.[0]?.tags)
+      ? (source.outputs![0]!.tags as unknown[])
+      : [];
+
+  return (rawTags as unknown[]).flatMap((entry) => {
+    const tag = toTag(entry);
+    if (!tag) return [];
+    if (tag.confidence !== undefined && tag.confidence < MIN_CONFIDENCE) return [];
+    return [tag];
+  });
+}
+
+function toTag(entry: unknown): ContentTag | undefined {
+  if (typeof entry === "string") return { name: entry };
+  if (entry && typeof entry === "object") {
+    const obj = entry as { name?: unknown; tag?: unknown; confidence?: unknown };
+    const name =
+      typeof obj.name === "string" ? obj.name : typeof obj.tag === "string" ? obj.tag : undefined;
+    if (name) {
+      return { name, confidence: toConfidence(obj.confidence) };
+    }
+  }
+  return undefined;
+}
+
+/** Coerce confidence to a finite number — some gateways serialize it as a string ("0.8"). */
+function toConfidence(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+/** Shared singleton. */
+export const fireflyContentTagging = new FireflyContentTaggingAdapter();

@@ -8,6 +8,15 @@ export const TEMPLATE_QUESTIONS: Record<
   string,
   ReadonlyArray<TemplateQuestion>
 > = {
+  "adobe-firefly-content-tagging": [
+    {
+      id: "min_confidence",
+      type: "select",
+      prompt: "Drop tags below this confidence (0-1)?",
+      options: ["0", "0.5", "0.7"],
+      default: "0.5",
+    },
+  ],
   "adobe-firefly-core": [
     {
       id: "ims_region",
