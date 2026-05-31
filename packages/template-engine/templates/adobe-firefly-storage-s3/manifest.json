@@ -1,0 +1,31 @@
+{
+  "id": "adobe-firefly-storage-s3",
+  "name": "Adobe Firefly — S3 Presigned Storage",
+  "description": "Registers an Amazon S3 presigner for the adobe-firefly-core storage seam: presigns GET URLs for Firefly inputs and PUT URLs for outputs (storage: \"external\"). Mutually exclusive with the GCS/Azure presigners. Install @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": ["adobe-firefly-storage-gcs", "adobe-firefly-storage-azure"],
+  "questions": [
+    {
+      "id": "url_expiry_seconds",
+      "type": "select",
+      "prompt": "Presigned-URL lifetime (seconds)?",
+      "options": ["300", "900", "3600"],
+      "default": "900"
+    }
+  ],
+  "envVars": ["ADOBE_S3_BUCKET", "ADOBE_S3_REGION", "ADOBE_S3_PREFIX"],
+  "outputs": [
+    "src/infrastructure/adobe/storage/s3-presign.adapter.ts",
+    "src/infrastructure/adobe/storage/s3-register.ts",
+    ".env.adobe-storage-s3.example"
+  ],
+  "checklist": [
+    "Install the AWS SDK (the only channel — manifests have no deps field): npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner",
+    "Set ADOBE_S3_BUCKET; grant the runtime IAM role s3:GetObject + s3:PutObject on it (presigned URLs inherit the signer's permissions)",
+    "Import the registration once at startup, before any Firefly service call: import './infrastructure/adobe/storage/s3-register'",
+    "Pass S3 object keys (not full URLs) as input/output refs — the adapter presigns GET for inputs, PUT for outputs (an http(s) ref is passed through unchanged)",
+    "Region + credentials use the AWS chain: leave ADOBE_S3_REGION unset on AWS infra (IAM role), set AWS_* for local dev"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-storage-s3"
+}

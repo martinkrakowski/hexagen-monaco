@@ -1,6 +1,11 @@
 // @hexagen-server-only
 import { z } from "zod";
-import type { JobOutput, JobResult, JobStatus } from "../../../domain/ports/out/firefly-job.port";
+import type {
+  JobHandle,
+  JobOutput,
+  JobResult,
+  JobStatus,
+} from "../../../domain/ports/out/firefly-job.port";
 
 /**
  * Normalises Adobe's (per-service-variable) job status payloads into the domain
@@ -59,6 +64,32 @@ export function parseJobResult(raw: unknown, fallbackJobId: string): JobResult {
     status,
     outputs,
     error: status === "failed" ? describeError(p) : undefined,
+  };
+}
+
+/**
+ * Map an async submit response onto a `JobHandle`. Firefly services return the
+ * job id and status URL under varying keys (`jobId`/`id`, `statusUrl`/`self.href`/
+ * `_links.self.href`); every service adapter funnels its POST result through this
+ * so the job port can poll or correlate a webhook. Total — never throws.
+ */
+const submitSchema = z
+  .object({
+    jobId: z.string().optional(),
+    id: z.string().optional(),
+    statusUrl: z.string().optional(),
+    self: z.object({ href: z.string().optional() }).optional(),
+    _links: z.object({ self: z.object({ href: z.string().optional() }).optional() }).optional(),
+  })
+  .passthrough();
+
+export function toJobHandle(raw: unknown): JobHandle {
+  const parsed = submitSchema.safeParse(raw ?? {});
+  if (!parsed.success) return { jobId: "" };
+  const r = parsed.data;
+  return {
+    jobId: r.jobId ?? r.id ?? "",
+    statusUrl: r.statusUrl ?? r.self?.href ?? r._links?.self?.href,
   };
 }
 

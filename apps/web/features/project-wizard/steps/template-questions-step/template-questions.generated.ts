@@ -45,6 +45,15 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2",
     },
   ],
+  "adobe-firefly-storage-s3": [
+    {
+      id: "url_expiry_seconds",
+      type: "select",
+      prompt: "Presigned-URL lifetime (seconds)?",
+      options: ["300", "900", "3600"],
+      default: "900",
+    },
+  ],
   "adobe-ims-spa": [
     {
       id: "redirect_uri",

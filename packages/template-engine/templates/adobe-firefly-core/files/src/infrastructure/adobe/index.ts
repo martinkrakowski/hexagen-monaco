@@ -13,7 +13,7 @@ export { fireflyClient, FireflyClient } from "./http/firefly-client";
 export type { FireflyRequestOptions } from "./http/firefly-client";
 export { jobPort, FireflyJobAdapter } from "./jobs/job-port";
 export { pollJobStatus, fetchStatus } from "./jobs/job-poller";
-export { parseJobResult } from "./jobs/job-result";
+export { parseJobResult, toJobHandle } from "./jobs/job-result";
 export {
   PassthroughStorageAdapter,
   getStoragePresigner,

@@ -205,6 +205,10 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     // parseJobResult is total — never throws on a malformed body.
     const jobResult = await read(root, `${ADOBE}/jobs/job-result.ts`);
     assert.ok(jobResult.includes("safeParse"));
+    // toJobHandle maps a submit response -> JobHandle for service adapters.
+    assert.ok(jobResult.includes("export function toJobHandle"));
+    const barrel = await read(root, `${ADOBE}/index.ts`);
+    assert.ok(barrel.includes("toJobHandle"));
 
     // fetchStatus fails fast on a missing status URL instead of hitting BASE_URL.
     const poller = await read(root, `${ADOBE}/jobs/job-poller.ts`);
@@ -276,10 +280,19 @@ describe("adobe-firefly-core template — gating (webhook mode)", () => {
     assert.ok(verifier.includes("if (!secret || !signature) return false"));
     // malformed payload / empty jobId -> settle nothing
     assert.ok(verifier.includes("if (!result.jobId) return { ok: false }"));
+    // both terminal states RESOLVE the JobResult (transport-uniform with polling);
+    // a completed-but-failed job is never rejected.
+    assert.ok(verifier.includes("jobPort.resolveJob"));
+    assert.ok(
+      !verifier.includes("rejectJob"),
+      "webhook must not reject a completed job",
+    );
     // it imports the always-emitted job-port, not vice versa
     assert.ok(verifier.includes('from "./job-port"'));
 
     const jobPort = await read(root, `${ADOBE}/jobs/job-port.ts`);
     assert.ok(jobPort.includes('const JOB_MODE = "webhook"'));
+    // Webhook await() rejects an empty jobId (no pending-map collisions).
+    assert.ok(jobPort.includes("carried no job id"));
   });
 });
