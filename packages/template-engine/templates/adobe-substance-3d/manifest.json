@@ -1,0 +1,39 @@
+{
+  "id": "adobe-substance-3d",
+  "name": "Adobe Substance 3D API",
+  "description": "Substance 3D automation for Adobe Firefly Services (image.adobe.io): a Substance3DPort + adapter for scene render, composite, and relight over the adobe-firefly-core foundation. Async, compute-heavy — the longest-running Firefly jobs; webhook job_mode + high timeout recommended.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "operations",
+      "type": "multiselect",
+      "prompt": "Which Substance 3D operations will you use?",
+      "options": ["render", "composite", "relight"],
+      "default": ["render"]
+    },
+    {
+      "id": "output_format",
+      "type": "select",
+      "prompt": "Default output image format?",
+      "options": ["png", "jpg"],
+      "default": "png"
+    }
+  ],
+  "envVars": ["ADOBE_SUBSTANCE_3D_BASE_URL", "ADOBE_SUBSTANCE_3D_FORMAT"],
+  "outputs": [
+    "src/domain/ports/out/substance-3d.port.ts",
+    "src/infrastructure/adobe/substance-3d/substance-3d.adapter.ts",
+    ".env.adobe-substance-3d.example"
+  ],
+  "checklist": [
+    "Confirm the Substance 3D API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current host/endpoints/payloads against Adobe docs — configured via ADOBE_SUBSTANCE_3D_BASE_URL (defaults to the image.adobe.io host family; the client posts absolute URLs there)",
+    "Provide presigned input (scene/mesh/material) + output hrefs; composite also needs a background plate, relight a lighting environment (HDRI) — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Long-running jobs: these are the heaviest Firefly renders. Prefer webhook job_mode and raise ADOBE_WEBHOOK_TIMEOUT_MS; if polling, raise ADOBE_JOB_POLL_INTERVAL_MS to reduce status-check volume during long renders",
+    "Default output format is ADOBE_SUBSTANCE_3D_FORMAT (set at install)",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-substance-3d"
+}
