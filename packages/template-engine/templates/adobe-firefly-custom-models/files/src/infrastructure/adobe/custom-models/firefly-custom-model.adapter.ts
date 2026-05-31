@@ -79,7 +79,15 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
       const raw = await fireflyClient.get<unknown>(
         `/v3/custom-models/${encodeURIComponent(modelId)}`,
       );
-      return ok(toTrainedModel(raw));
+      const model = toTrainedModel(raw);
+      if (!model) {
+        // Don't return ok with an empty, unusable model id — that just pushes the
+        // failure to the next call (status/generateWith expect a real id).
+        return err(
+          new FireflyError("Custom-model status response had no model id."),
+        );
+      }
+      return ok(model);
     } catch (error) {
       return err(classifyAdobeError(error));
     }
@@ -90,7 +98,12 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
       const raw = await fireflyClient.get<unknown>("/v3/custom-models");
       const models = (raw as { models?: unknown[] })?.models;
       const items = Array.isArray(models) ? models : [];
-      return ok(items.map(toTrainedModel));
+      // Drop entries without a usable model id — they can't be passed to
+      // status()/generateWith() anyway — rather than fail the whole list on one.
+      const trained = items
+        .map(toTrainedModel)
+        .filter((m): m is TrainedModel => m !== undefined);
+      return ok(trained);
     } catch (error) {
       return err(classifyAdobeError(error));
     }
@@ -146,18 +159,18 @@ function extractModelId(
   return data?.modelId ?? data?.id;
 }
 
-function toTrainedModel(raw: unknown): TrainedModel {
+// Returns undefined when the payload has no usable model id, so callers never
+// surface a successful-but-unusable `{ modelId: "" }`.
+function toTrainedModel(raw: unknown): TrainedModel | undefined {
   const r = (raw ?? {}) as {
     modelId?: string;
     id?: string;
     name?: string;
     status?: string;
   };
-  return {
-    modelId: r.modelId ?? r.id ?? "",
-    name: r.name,
-    status: normaliseStatus(r.status),
-  };
+  const modelId = r.modelId ?? r.id;
+  if (!modelId) return undefined;
+  return { modelId, name: r.name, status: normaliseStatus(r.status) };
 }
 
 function normaliseStatus(status: string | undefined): CustomModelStatus {

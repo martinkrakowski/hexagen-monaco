@@ -53,7 +53,7 @@ const trained = await fireflyCustomModel.train({
   name: "acme-brand",
   datasetHref: "s3://b/datasets/acme.zip", // 10–50 curated images + JSONL captions
 });
-if (!trained.ok) throw trained.error;
+if (!trained.success) throw trained.error;
 const modelId = trained.value;
 
 await fireflyCustomModel.status(modelId);

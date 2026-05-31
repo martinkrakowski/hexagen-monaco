@@ -140,6 +140,11 @@ describe("adobe-firefly-custom-models template — emit shape", () => {
     assert.ok(
       adapter.includes("return ok(") && adapter.includes("return err("),
     );
+    // status() must not return ok with an empty/unusable model id; list() filters
+    // entries without one. toTrainedModel signals the missing id via undefined.
+    assert.ok(adapter.includes("TrainedModel | undefined"));
+    assert.ok(adapter.includes("had no model id"));
+    assert.ok(!adapter.includes('?? ""'), "no empty-string modelId fallback");
   });
 
   it("resolves the base model from env and interpolates the caption format", async () => {
