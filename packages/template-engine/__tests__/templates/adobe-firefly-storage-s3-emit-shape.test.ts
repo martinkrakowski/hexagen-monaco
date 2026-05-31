@@ -119,8 +119,20 @@ describe("adobe-firefly-storage-s3 template — emit shape", () => {
     assert.ok(adapter.includes("PutObjectCommand"));
     assert.ok(adapter.includes("getSignedUrl"));
     assert.match(adapter, /region\s*\?\s*\{\s*region\s*\}\s*:\s*\{\s*\}/);
-    // fail fast on missing bucket
+    // bucket validation is DEFERRED to presign time (import must not crash startup)
+    assert.ok(adapter.includes('process.env.ADOBE_S3_BUCKET ?? ""'));
+    assert.ok(adapter.includes("requireBucket"));
     assert.ok(adapter.includes("ADOBE_S3_BUCKET is not set"));
+    const ctorBlock = adapter.slice(
+      adapter.indexOf("constructor"),
+      adapter.indexOf("async presignInput"),
+    );
+    assert.ok(
+      !ctorBlock.includes("ADOBE_S3_BUCKET is not set"),
+      "constructor must not throw on a missing bucket",
+    );
+    // reject path traversal so a ref can't escape the prefix
+    assert.ok(adapter.includes("path traversal"));
   });
 
   it("interpolates the presigned-URL lifetime", async () => {
