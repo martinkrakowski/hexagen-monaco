@@ -9,7 +9,11 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import {
+  classifyAdobeError,
+  FireflyError,
+  FireflyValidationError,
+} from "../errors/firefly-errors";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -25,8 +29,17 @@ import { ok, err, type Result } from "../../../shared/result";
  * NOTE: Firefly Generate paths/payloads version frequently — verify against the
  * current Adobe docs.
  */
-const DEFAULT_MODEL = process.env.ADOBE_FIREFLY_DEFAULT_MODEL ?? "firefly_v3";
-const DEFAULT_SIZE = process.env.ADOBE_FIREFLY_SIZE ?? "{default_size}";
+// Treat a defined-but-empty env var as unset (a common .env/CI misconfiguration)
+// and fall back to the install default — `??` would let "" through.
+const DEFAULT_MODEL = process.env.ADOBE_FIREFLY_DEFAULT_MODEL?.trim() || "firefly_v3";
+// The install default is always a valid "WxH" select value; fall back to it if
+// ADOBE_FIREFLY_SIZE is empty or unparseable rather than silently omitting size.
+const DEFAULT_SIZE = resolveDefaultSize(process.env.ADOBE_FIREFLY_SIZE);
+
+function resolveDefaultSize(raw: string | undefined): string {
+  const value = raw?.trim();
+  return value && parseSize(value) ? value : "{default_size}";
+}
 
 export class FireflyGenerateAdapter implements ImageGenerationPort {
   async textToImage(req: TextToImageRequest): Promise<Result<string[], FireflyError>> {
@@ -122,9 +135,16 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
     body: Record<string, unknown>,
     opts: GenerateOptions,
   ): Record<string, unknown> {
-    body.model = opts.model ?? DEFAULT_MODEL;
-    const size = parseSize(opts.size ?? DEFAULT_SIZE);
-    if (size) body.size = size;
+    body.model = opts.model?.trim() || DEFAULT_MODEL;
+    // Always send a valid size. DEFAULT_SIZE is pre-validated, so this throws only
+    // when the caller passed an explicit, malformed `size` — fail fast rather than
+    // silently dropping it and changing the request semantics.
+    const raw = opts.size?.trim() || DEFAULT_SIZE;
+    const size = parseSize(raw);
+    if (!size) {
+      throw new FireflyValidationError(`Invalid size ${JSON.stringify(raw)} — expected "WIDTHxHEIGHT".`);
+    }
+    body.size = size;
     if (opts.numVariations !== undefined) body.numVariations = opts.numVariations;
     if (opts.seed !== undefined) body.seeds = [opts.seed];
     // Policy flags pass through verbatim — never hardcoded.

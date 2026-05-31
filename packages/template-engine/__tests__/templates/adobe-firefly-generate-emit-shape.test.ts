@@ -151,6 +151,12 @@ describe("adobe-firefly-generate template — emit shape", () => {
     assert.ok(adapter.includes("text-to-image"));
     assert.ok(!adapter.includes("{default_size}"));
     assert.ok(!adapter.includes("{operations}"));
+    // defined-but-empty env falls back (no `model: ""` / omitted size)
+    assert.ok(adapter.includes("ADOBE_FIREFLY_DEFAULT_MODEL?.trim() ||"));
+    assert.ok(adapter.includes("resolveDefaultSize"));
+    // an explicitly-invalid size fails fast instead of being silently dropped
+    assert.ok(adapter.includes("FireflyValidationError"));
+    assert.ok(adapter.includes("Invalid size"));
     const env = await read(root, ".env.adobe-generate.example");
     assert.ok(env.includes("ADOBE_FIREFLY_SIZE=2048x2048"));
     assert.ok(env.includes("Enabled operations: text-to-image"));
