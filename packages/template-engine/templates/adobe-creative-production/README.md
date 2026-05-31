@@ -55,7 +55,7 @@ const res = await creativeProduction.runWorkflow({
     { id: "a2", inputHref: "s3://b/in/2.png", outputHref: "s3://b/out/2.png" },
   ],
 });
-if (res.ok) {
+if (res.success) {
   for (const a of res.value) {
     if (a.status === "succeeded") console.log(a.id, a.outputHref);
     else console.warn(a.id, a.error); // in-band failure

@@ -44,7 +44,7 @@ const res = await fireflyUpscale.upscale({
   outputHref: "s3://bucket/out/large.png",
   factor: 4, // optional; default from ADOBE_UPSCALE_FACTOR
 });
-if (res.ok) console.log(res.value);
+if (res.success) console.log(res.value);
 ```
 
 ## Configuration

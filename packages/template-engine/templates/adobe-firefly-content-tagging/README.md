@@ -43,7 +43,7 @@ Env: `ADOBE_TAGGING_MIN_CONFIDENCE`. Emits `content-tagging.port.ts`,
 import { fireflyContentTagging } from "@/infrastructure/adobe/content-tagging/content-tagging.adapter";
 
 const res = await fireflyContentTagging.tag("s3://bucket/in/photo.jpg");
-if (res.ok) {
+if (res.success) {
   for (const t of res.value.tags) console.log(t.name, t.confidence);
 }
 ```
