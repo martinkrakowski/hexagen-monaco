@@ -129,7 +129,7 @@ describe("llm-adapter-bedrock template — emit shape", () => {
     assert.ok(adapter.includes("ConverseCommand"));
     assert.match(adapter, /@hexagen-server-only/);
     // region is only passed when explicitly set — never a hardcoded literal
-    assert.match(adapter, /region \? \{ region \} : \{\}/);
+    assert.match(adapter, /region\s*\?\s*\{\s*region\s*\}\s*:\s*\{\s*\}/);
   });
 
   it("leaves no unresolved template variables", () => {
