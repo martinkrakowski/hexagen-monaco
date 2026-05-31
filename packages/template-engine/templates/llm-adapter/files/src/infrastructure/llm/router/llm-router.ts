@@ -44,16 +44,28 @@ export class LLMRouter implements LLMClientPort {
     ]);
     this.models = new Map<string, ProviderModels>(Object.entries(MODELS));
     // Merge providers registered by addon templates (e.g. llm-adapter-bedrock).
+    // Honour the lazy `factory` contract: only the *selected* provider's adapter
+    // is instantiated — unused addon adapters (and their SDK clients) are never
+    // built. A registered name may not shadow a built-in.
     for (const [name, reg] of registeredProviders()) {
-      this.adapters.set(name, reg.factory());
+      if (this.adapters.has(name)) {
+        throw new Error(
+          `Registered LLM provider "${name}" collides with a built-in provider.`,
+        );
+      }
       this.models.set(name, reg.models);
+      if (name === primaryProvider) {
+        this.adapters.set(name, reg.factory());
+      }
     }
-    // Fail fast with an actionable message rather than a generic error at first
-    // call — the usual cause for an addon provider is a missing registration
-    // side-effect import.
+    // Fail fast at construction (a config error) with an actionable message —
+    // the usual cause for an addon provider is a missing registration
+    // side-effect import. Because this validates here, `resolve()` (and thus
+    // `call()`) never has to handle an unknown provider.
     if (!this.adapters.has(primaryProvider)) {
+      const known = [...this.adapters.keys(), ...registeredProviders().keys()];
       throw new Error(
-        `Unknown LLM provider "${primaryProvider}". Available: ${[...this.adapters.keys()].join(", ")}. ` +
+        `Unknown LLM provider "${primaryProvider}". Available: ${known.join(", ")}. ` +
           `If it is an addon provider (e.g. "bedrock"), import its registration module once at ` +
           `startup before constructing LLMRouter — e.g. ` +
           `import "./infrastructure/llm/adapters/bedrock-register";`,
@@ -82,11 +94,11 @@ export class LLMRouter implements LLMClientPort {
 
   private resolve(callType: CallType): ResolvedTarget {
     const provider = this.primaryProvider;
-    const adapter = this.adapters.get(provider);
-    const providerModels = this.models.get(provider);
-    if (!adapter || !providerModels) {
-      throw new Error(`Unknown LLM provider: ${provider}`);
-    }
+    // The constructor validated the primary provider, so its adapter and models
+    // are present — resolve never throws, keeping call()/callStructured() within
+    // the Result contract.
+    const adapter = this.adapters.get(provider)!;
+    const providerModels = this.models.get(provider)!;
 
     const model: string = (() => {
       switch (callType) {

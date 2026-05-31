@@ -101,6 +101,16 @@ describe("llm-adapter-bedrock template — emit shape", () => {
     );
     assert.match(router, /Unknown LLM provider/);
     assert.ok(router.includes("import its registration module"));
+    // Registered adapters are lazy — only the selected provider is instantiated.
+    assert.match(router, /if \(name === primaryProvider\)/);
+    // A registered name may not shadow a built-in.
+    assert.ok(router.includes("collides with a built-in"));
+    // The registry rejects duplicate registrations.
+    const registry = await read(
+      root,
+      "src/infrastructure/llm/router/provider-registry.ts",
+    );
+    assert.ok(registry.includes("is already registered"));
   });
 
   it("registers bedrock and interpolates the chosen inference profile", async () => {

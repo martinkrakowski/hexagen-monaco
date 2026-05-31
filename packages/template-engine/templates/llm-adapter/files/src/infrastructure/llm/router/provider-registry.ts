@@ -31,6 +31,11 @@ export function registerProvider(
   name: string,
   registration: ProviderRegistration,
 ): void {
+  // Reject duplicates so a typo or a second addon can't silently replace an
+  // already-registered provider and change routing with no signal.
+  if (registry.has(name)) {
+    throw new Error(`LLM provider "${name}" is already registered.`);
+  }
   registry.set(name, registration);
 }
 
