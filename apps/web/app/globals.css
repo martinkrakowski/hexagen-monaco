@@ -25,11 +25,17 @@
  *   --radius                      Base border radius
  *
  * Font variables:
- *   --app-font-sans is injected by next/font on <html> — do not redefine here.
+ *   --app-font-sans is "Inter Variable" (self-hosted via @fontsource-variable/inter,
+ *     imported in app/layout.tsx) with a system-font fallback stack.
  *   --app-font-mono is a system-font stack.
  */
 
 :root {
+  /* Sans font — self-hosted Inter, falls back to the system stack */
+  --app-font-sans:
+    "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
   /* Mono font — system stack, no external dependency */
   --app-font-mono: "Menlo", "Monaco", "Cascadia Code", "Courier New", monospace;
 

@@ -1587,6 +1587,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource-variable/inter@npm:^5.1.0":
+  version: 5.2.8
+  resolution: "@fontsource-variable/inter@npm:5.2.8"
+  checksum: 10c0/35b46df31c8c18f55f87228acf6297e4dac6cc9f38d0faaafdaf5a40e40c386cf1bfb115fb0fe0dcdb9b7e14f582843693ccf070d9c903072a5b2fc0f8dfde56
+  languageName: node
+  linkType: hard
+
 "@gar/promise-retry@npm:^1.0.0":
   version: 1.0.2
   resolution: "@gar/promise-retry@npm:1.0.2"
@@ -15871,6 +15878,7 @@ __metadata:
   dependencies:
     "@auth/core": "npm:^0.34.3"
     "@dagrejs/dagre": "npm:^2.0.4"
+    "@fontsource-variable/inter": "npm:^5.1.0"
     "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/ai-pipeline": "workspace:*"
     "@hexagen/byok": "workspace:*"

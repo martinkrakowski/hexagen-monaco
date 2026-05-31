@@ -137,6 +137,11 @@ All styling must use these resolved tokens. Tailwind classes map to CSS variable
 
 ```css
 :root {
+  /* Sans font — self-hosted Inter (@fontsource-variable/inter), system fallback */
+  --app-font-sans:
+    "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
   /* Mono font — system stack, no external dependency */
   --app-font-mono: "Menlo", "Monaco", "Cascadia Code", "Courier New", monospace;
 
@@ -380,7 +385,7 @@ fontFamily: {
 }
 ```
 
-`--app-font-sans` is injected at runtime by `next/font`. `--app-font-mono` is a system-font stack defined in `globals.css`.
+`--app-font-sans` is "Inter Variable", self-hosted via `@fontsource-variable/inter` (imported in `app/layout.tsx`) and defined in `globals.css` with a system-font fallback — no build-time fetch to Google Fonts. `--app-font-mono` is a system-font stack, also defined in `globals.css`.
 
 #### Plugins
 
@@ -405,19 +410,19 @@ fontFamily: {
 
 ### 4.5 Typography
 
-| Token     | Tailwind Class                       | Use Case               |
-| --------- | ------------------------------------ | ---------------------- |
-| Font Sans | `font-sans` (injected via next/font) | All UI text            |
-| Font Mono | `font-mono` (system stack)           | Code, IDs, timestamps  |
-| XS        | `text-xs`                            | Badges, chip labels    |
-| SM        | `text-sm`                            | Body copy, table cells |
-| Base      | `text-base`                          | Default paragraph      |
-| LG        | `text-lg`                            | Subheadings            |
-| 2XL       | `text-2xl`                           | Section headings       |
-| 4XL       | `text-4xl`                           | Page-level headings    |
-| Normal    | `font-normal`                        | Body text              |
-| Medium    | `font-medium`                        | Labels, nav items      |
-| Bold      | `font-bold`                          | Headings, emphasis     |
+| Token     | Tailwind Class                                  | Use Case               |
+| --------- | ----------------------------------------------- | ---------------------- |
+| Font Sans | `font-sans` (self-hosted Inter via @fontsource) | All UI text            |
+| Font Mono | `font-mono` (system stack)                      | Code, IDs, timestamps  |
+| XS        | `text-xs`                                       | Badges, chip labels    |
+| SM        | `text-sm`                                       | Body copy, table cells |
+| Base      | `text-base`                                     | Default paragraph      |
+| LG        | `text-lg`                                       | Subheadings            |
+| 2XL       | `text-2xl`                                      | Section headings       |
+| 4XL       | `text-4xl`                                      | Page-level headings    |
+| Normal    | `font-normal`                                   | Body text              |
+| Medium    | `font-medium`                                   | Labels, nav items      |
+| Bold      | `font-bold`                                     | Headings, emphasis     |
 
 ### 4.6 Component Token Definitions
 
