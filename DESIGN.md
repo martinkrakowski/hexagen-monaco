@@ -137,6 +137,11 @@ All styling must use these resolved tokens. Tailwind classes map to CSS variable
 
 ```css
 :root {
+  /* Sans font — self-hosted Inter (@fontsource-variable/inter), system fallback */
+  --app-font-sans:
+    "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
   /* Mono font — system stack, no external dependency */
   --app-font-mono: "Menlo", "Monaco", "Cascadia Code", "Courier New", monospace;
 
