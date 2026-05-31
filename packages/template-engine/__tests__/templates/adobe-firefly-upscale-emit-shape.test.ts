@@ -118,10 +118,16 @@ describe("adobe-firefly-upscale template — emit shape", () => {
     );
   });
 
-  it("interpolates the default factor (env-overridable)", async () => {
+  it("interpolates the default factor (env-overridable) and validates it", async () => {
     const adapter = await read(root, `${ADOBE}/upscale/upscale.adapter.ts`);
-    assert.ok(adapter.includes('process.env.ADOBE_UPSCALE_FACTOR ?? "2"'));
+    // install default interpolated as the fallback; env can override
+    assert.ok(adapter.includes('Number("2")'));
+    assert.ok(adapter.includes("process.env.ADOBE_UPSCALE_FACTOR"));
     assert.ok(!adapter.includes("{default_factor}"));
+    // a misconfigured env / bad req.factor must not reach the API as NaN/0
+    assert.ok(adapter.includes("isValidFactor"));
+    assert.ok(adapter.includes("Number.isFinite"));
+    assert.ok(adapter.includes("FireflyValidationError"));
     const env = await read(root, ".env.adobe-upscale.example");
     assert.ok(env.includes("ADOBE_UPSCALE_FACTOR=2"));
   });
