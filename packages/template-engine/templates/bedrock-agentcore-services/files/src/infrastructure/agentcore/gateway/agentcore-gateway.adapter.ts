@@ -65,8 +65,11 @@ export class AgentCoreGatewayAdapter implements ToolGatewayPort {
   private async rpc<T>(method: string, params: unknown): Promise<T> {
     const headers: Record<string, string> = {
       "content-type": "application/json",
-      // MCP Streamable HTTP servers may reply with JSON or an SSE stream.
-      accept: "application/json, text/event-stream",
+      // JSON-only: this minimal client reads a single JSON-RPC response and does
+      // not parse SSE frames. Requesting application/json keeps a Streamable-HTTP
+      // Gateway from replying with an event stream that response.json() can't
+      // parse. For streaming, swap in @modelcontextprotocol/sdk (see class docs).
+      accept: "application/json",
     };
     const token = await this.getToken?.();
     if (token) headers.authorization = `Bearer ${token}`;

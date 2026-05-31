@@ -171,6 +171,11 @@ describe("bedrock-agentcore-services template — emit shape (all services)", ()
     assert.ok(gateway.includes("fetch("));
     // documents the swap to the official SDK for full MCP handshakes
     assert.ok(gateway.includes("@modelcontextprotocol/sdk"));
+    // JSON-only client: must not advertise SSE it can't parse (response.json()).
+    assert.ok(
+      !gateway.includes("text/event-stream"),
+      "JSON-only client must not request text/event-stream",
+    );
   });
 
   it("interpolates memory + identity answers into config", async () => {
