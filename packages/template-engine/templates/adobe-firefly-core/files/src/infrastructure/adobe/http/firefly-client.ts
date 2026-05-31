@@ -36,7 +36,10 @@ class FireflyClient {
     opts: FireflyRequestOptions,
   ): Promise<T> {
     // Status URLs returned by Firefly are absolute; service paths are relative.
-    const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
+    // Case-insensitive: services that post to another host (Photoshop/Lightroom on
+    // image.adobe.io) may carry an upper/mixed-case scheme ("HTTPS://…"); without
+    // the `i` flag those would be treated as relative and mis-prefixed with BASE_URL.
+    const url = /^https?:\/\//i.test(pathOrUrl) ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
     const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     let lastError: FireflyError | undefined;
