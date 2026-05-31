@@ -1,5 +1,5 @@
 import type { GitHubUserResponse } from "./github-client";
-import type { GitHubUser } from "../../../domain/value-objects/github-user";
+import type { GitHubUser } from "./github-user";
 import type { UserContext } from "../../../domain/value-objects/user-context";
 
 export function mapGitHubUser(user: GitHubUserResponse, primaryEmail: string): GitHubUser {

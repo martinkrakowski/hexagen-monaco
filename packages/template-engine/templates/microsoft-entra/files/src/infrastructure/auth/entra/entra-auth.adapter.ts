@@ -1,4 +1,4 @@
-import type { EntraUser } from "../../../domain/value-objects/entra-user";
+import type { EntraUser } from "./entra-user";
 import { encryptSession } from "./session-store";
 
 // Thin helper for the OAuth callback: encrypts the Entra user into the session

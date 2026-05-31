@@ -1,5 +1,5 @@
 import type { EntraGraphProfile } from "./entra-client";
-import type { EntraUser } from "../../../domain/value-objects/entra-user";
+import type { EntraUser } from "./entra-user";
 import type { UserContext } from "../../../domain/value-objects/user-context";
 
 export function mapEntraProfile(

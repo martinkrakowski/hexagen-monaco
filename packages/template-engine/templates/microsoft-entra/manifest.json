@@ -57,7 +57,7 @@
     "AUTH_SESSION_SECRET"
   ],
   "outputs": [
-    "src/domain/value-objects/entra-user.ts",
+    "src/infrastructure/auth/entra/entra-user.ts",
     "src/infrastructure/auth/entra/config.ts",
     "src/infrastructure/auth/entra/pkce.ts",
     "src/infrastructure/auth/entra/entra-client.ts",

@@ -1,4 +1,4 @@
-import type { GitHubUser } from "../../../domain/value-objects/github-user";
+import type { GitHubUser } from "./github-user";
 
 const SECRET = process.env.AUTH_SESSION_SECRET ?? "";
 
