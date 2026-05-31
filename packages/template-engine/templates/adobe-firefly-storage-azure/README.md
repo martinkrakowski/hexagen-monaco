@@ -65,9 +65,11 @@ await fireflyUpscale.upscale({
 
 - **No `deps` field exists in manifests** — installing the SDKs is a checklist step:
   `npm install @azure/storage-blob @azure/identity`.
-- **Managed-identity (keyless) signing** mints a _user-delegation_ SAS — grant the identity
-  **Storage Blob Data Contributor** on the container and the account-level `generateUserDelegationKey`
-  action, or `getUserDelegationKey` fails.
+- **Managed-identity (keyless) signing** mints a _user-delegation_ SAS — grant the identity the
+  **Storage Blob Delegator** role (which grants
+  `Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action`, required to mint
+  the delegation key) plus **Storage Blob Data Contributor** for the blob read/write, or
+  `getUserDelegationKey` fails.
 - Account/container/prefix are **read at presign time** (and the `BlobServiceClient` built lazily),
   so a `.env` loaded after `azure-register`'s side-effect import is honoured and startup stays
   crash-free. Refs reject `..` path traversal.
@@ -76,8 +78,9 @@ await fireflyUpscale.upscale({
 ## Checklist (post-install)
 
 Install `@azure/storage-blob @azure/identity`; set account + container; choose account-key or
-managed-identity signing (grant the identity Blob Data Contributor + `generateUserDelegationKey`
-for keyless); import `azure-register` once at startup; pass blob names (not URLs) as refs.
+managed-identity signing (for keyless, grant the identity **Storage Blob Delegator** +
+**Storage Blob Data Contributor**); import `azure-register` once at startup; pass blob names (not
+URLs) as refs.
 
 ## Related
 
