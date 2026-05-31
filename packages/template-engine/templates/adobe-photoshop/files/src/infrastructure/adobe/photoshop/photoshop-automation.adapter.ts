@@ -9,6 +9,7 @@ import type {
 } from "../../../domain/ports/out/photoshop-automation.port";
 import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
+import { pollJobStatus } from "../jobs/job-poller";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
 import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
@@ -26,7 +27,17 @@ import { ok, err, type Result } from "../../../shared/result";
  *
  * NOTE: paths/payloads version frequently — verify against Adobe docs.
  */
-const PHOTOSHOP_BASE = process.env.ADOBE_PHOTOSHOP_BASE_URL?.trim() || "https://image.adobe.io";
+const PHOTOSHOP_BASE = normalizeBase(process.env.ADOBE_PHOTOSHOP_BASE_URL?.trim() || "https://image.adobe.io");
+
+/**
+ * Guarantee an absolute, scheme-qualified base with no trailing slash. fireflyClient
+ * only treats `http(s)://…` as absolute, so a schemeless `image.adobe.io` would be
+ * mis-prefixed with the Firefly base URL and break every Photoshop request.
+ */
+function normalizeBase(raw: string): string {
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.replace(/\/+$/, "");
+}
 const DEFAULT_FORMAT = (process.env.ADOBE_PHOTOSHOP_FORMAT?.trim() || "{output_format}") as
   | "jpeg"
   | "png";
@@ -132,7 +143,14 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
       if (!handle.jobId && !handle.statusUrl) {
         return err(new FireflyError("Photoshop submit response did not include a job handle."));
       }
-      const done = await jobPort.await(handle);
+      // Poll the status URL directly when present: that is Photoshop's native
+      // tracking, and it works in BOTH polling and webhook deployments. Using
+      // jobPort.await() here would reject a status-URL-only job in webhook mode
+      // (it requires a job id to correlate the callback). Fall back to await()
+      // only for a jobId-only handle.
+      const done = handle.statusUrl
+        ? await pollJobStatus(handle)
+        : await jobPort.await(handle);
       if (done.status !== "succeeded") {
         return err(new FireflyError(done.error ?? "Photoshop job did not succeed."));
       }

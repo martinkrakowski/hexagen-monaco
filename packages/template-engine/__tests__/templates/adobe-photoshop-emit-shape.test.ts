@@ -121,11 +121,14 @@ describe("adobe-photoshop template — emit shape", () => {
     assert.ok(adapter.includes("getStoragePresigner()"));
     assert.ok(adapter.includes("fireflyClient.post("));
     assert.ok(adapter.includes("toJobHandle("));
-    assert.ok(adapter.includes("jobPort.await(handle)"));
     assert.ok(adapter.includes('storage: "external"'));
     // Photoshop tracks jobs by status URL (often no jobId) — accept either, not the
     // strict jobId-only guard the Firefly image services use.
     assert.ok(adapter.includes("!handle.jobId && !handle.statusUrl"));
+    // a status-URL-only job polls directly (works in webhook mode too, where
+    // jobPort.await would reject a missing jobId); jobId-only falls back to await.
+    assert.ok(adapter.includes("pollJobStatus(handle)"));
+    assert.ok(adapter.includes("? await pollJobStatus(handle)"));
     assert.ok(
       adapter.includes("return ok(") && adapter.includes("return err("),
     );
@@ -138,6 +141,9 @@ describe("adobe-photoshop template — emit shape", () => {
     );
     assert.ok(adapter.includes("ADOBE_PHOTOSHOP_BASE_URL?.trim() ||"));
     assert.ok(adapter.includes("ADOBE_PHOTOSHOP_FORMAT?.trim() ||"));
+    // base URL normalised: a schemeless host gets https:// so fireflyClient treats it as absolute
+    assert.ok(adapter.includes("normalizeBase"));
+    assert.ok(adapter.includes("`https://${raw}`"));
     assert.ok(adapter.includes('"jpeg"'));
     assert.ok(adapter.includes("smartObject"));
     assert.ok(!adapter.includes("{output_format}"));
