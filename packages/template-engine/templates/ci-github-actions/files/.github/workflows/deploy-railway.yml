@@ -24,7 +24,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy to Railway
-        uses: bervProject/railway-deploy@main
+        # Pinned to a commit SHA (not @main) so an upstream change can't alter
+        # the deploy step; Dependabot bumps it via the github-actions ecosystem.
+        uses: bervProject/railway-deploy@4a1cfdb24551aee5c891e0bc716e8de963c4fbe6 # 0.2.0-beta
         with:
           railway_token: ${{ secrets.RAILWAY_TOKEN }}
           service: ${{ vars.RAILWAY_SERVICE }}

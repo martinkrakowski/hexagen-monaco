@@ -17,6 +17,9 @@ jobs:
   preview:
     name: Deploy Preview
     runs-on: ubuntu-latest
+    # Secrets are not exposed to PRs from forks, so this job would always fail
+    # for external contributors — skip it there instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -25,10 +28,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: {node_version}
+          node-version: "{node_version}"
           cache: "{package_manager}"
 
-      - run: {package_manager} install --immutable
+      - run: "{package_manager} install --immutable"
 
       - name: Deploy preview
         id: deploy

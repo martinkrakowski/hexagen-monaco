@@ -20,7 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned to a commit SHA (not @master); Dependabot bumps it via the
+      # github-actions ecosystem.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
 
       - name: Deploy to Fly.io
         run: flyctl deploy --remote-only

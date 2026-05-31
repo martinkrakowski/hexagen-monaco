@@ -126,9 +126,10 @@ describe("ci-github-actions template — emit shape", () => {
 
     it("interpolates node version, package manager, and recorded choices", async () => {
       const ci = await read(projectRoot, `${WORKFLOWS}/ci.yml`);
-      assert.ok(ci.includes("node-version: 22"));
+      // Quoted so the templated scalar is valid YAML before interpolation too.
+      assert.ok(ci.includes('node-version: "22"'));
       assert.ok(ci.includes('cache: "yarn"'));
-      assert.ok(ci.includes("yarn install --immutable"));
+      assert.ok(ci.includes('"yarn install --immutable"'));
       assert.ok(!ci.includes("{node_version}"));
       assert.ok(!ci.includes("{package_manager}"));
       // multiselect + select answers recorded in the config summary comment
@@ -158,11 +159,17 @@ describe("ci-github-actions template — emit shape", () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
-    it("emits only the Railway deploy workflow", async () => {
+    it("emits only the Railway deploy workflow, with a SHA-pinned action", async () => {
       assert.ok(await exists(projectRoot, `${WORKFLOWS}/deploy-railway.yml`));
       assert.equal(
         await exists(projectRoot, `${WORKFLOWS}/deploy-vercel.yml`),
         false,
+      );
+      const wf = await read(projectRoot, `${WORKFLOWS}/deploy-railway.yml`);
+      assert.ok(!wf.includes("railway-deploy@main"), "no floating @main ref");
+      assert.ok(
+        /railway-deploy@[0-9a-f]{40}/.test(wf),
+        "pinned to a commit SHA",
       );
     });
   });
@@ -177,13 +184,16 @@ describe("ci-github-actions template — emit shape", () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
-    it("emits the Fly deploy workflow and fly.toml", async () => {
+    it("emits the Fly deploy workflow and fly.toml, with a SHA-pinned action", async () => {
       assert.ok(await exists(projectRoot, `${WORKFLOWS}/deploy-fly.yml`));
       assert.ok(await exists(projectRoot, "fly.toml"));
       assert.equal(
         await exists(projectRoot, `${WORKFLOWS}/deploy-vercel.yml`),
         false,
       );
+      const wf = await read(projectRoot, `${WORKFLOWS}/deploy-fly.yml`);
+      assert.ok(!wf.includes("setup-flyctl@master"), "no floating @master ref");
+      assert.ok(/setup-flyctl@[0-9a-f]{40}/.test(wf), "pinned to a commit SHA");
     });
   });
 
@@ -250,8 +260,29 @@ describe("ci-github-actions template — emit shape", () => {
 
     it("interpolates the chosen node version into ci.yml", async () => {
       const ci = await read(projectRoot, `${WORKFLOWS}/ci.yml`);
-      assert.ok(ci.includes("node-version: 20"));
-      assert.ok(!ci.includes("node-version: 22"));
+      assert.ok(ci.includes('node-version: "20"'));
+      assert.ok(!ci.includes('node-version: "22"'));
+    });
+  });
+
+  describe("preview workflow hardening", () => {
+    let projectRoot: string;
+    before(async () => {
+      projectRoot = await freshProject();
+      await install(projectRoot, { preview_deploys: true });
+    });
+    after(async () => {
+      await fs.rm(projectRoot, { recursive: true, force: true });
+    });
+
+    it("guards the preview job against fork PRs (no secrets)", async () => {
+      const preview = await read(projectRoot, `${WORKFLOWS}/preview.yml`);
+      assert.ok(
+        preview.includes(
+          "github.event.pull_request.head.repo.full_name == github.repository",
+        ),
+        "preview job should skip on forked PRs where secrets are unavailable",
+      );
     });
   });
 });

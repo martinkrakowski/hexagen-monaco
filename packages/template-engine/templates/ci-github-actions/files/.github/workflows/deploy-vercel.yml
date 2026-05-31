@@ -27,10 +27,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: {node_version}
+          node-version: "{node_version}"
           cache: "{package_manager}"
 
-      - run: {package_manager} install --immutable
+      - run: "{package_manager} install --immutable"
 
       - name: Deploy to Vercel (prebuilt)
         run: |

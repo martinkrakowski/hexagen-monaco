@@ -33,12 +33,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: {node_version}
+          node-version: "{node_version}"
           cache: "{package_manager}"
 
       # npm projects: replace with `npm ci`.
       - name: Install dependencies
-        run: {package_manager} install --immutable
+        run: "{package_manager} install --immutable"
 
       # Turbo caches task outputs keyed by input hash, so unchanged packages are
       # skipped on warm runs (cache_strategy = {cache_strategy}). Set TURBO_TOKEN
@@ -54,12 +54,12 @@ jobs:
       # `check:env` is provided by the env-setup template. Delete this step if
       # you did not install it.
       - name: Validate env vars
-        run: {package_manager} check:env
+        run: "{package_manager} check:env"
         env:
           NODE_ENV: test
 
       - name: Build
-        run: {package_manager} build
+        run: "{package_manager} build"
         env:
           # TODO: add TURBO_TOKEN (secret) and TURBO_TEAM (variable) for the
           # remote Turbo cache. Safe to omit — the build just won't share cache.
@@ -67,13 +67,13 @@ jobs:
           TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
       - name: Typecheck
-        run: {package_manager} typecheck
+        run: "{package_manager} typecheck"
 
       - name: Lint
-        run: {package_manager} lint
+        run: "{package_manager} lint"
 
       # run_tests = {run_tests}; delete this step to skip tests in CI.
       - name: Test
-        run: {package_manager} test
+        run: "{package_manager} test"
         env:
           NODE_ENV: test
