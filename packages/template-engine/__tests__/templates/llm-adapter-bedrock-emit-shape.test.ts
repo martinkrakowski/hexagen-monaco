@@ -93,6 +93,14 @@ describe("llm-adapter-bedrock template — emit shape", () => {
     );
     const barrel = await read(root, "src/infrastructure/llm/index.ts");
     assert.match(barrel, /export \{ registerProvider \}/);
+    // The router fails fast with an actionable message if a provider isn't
+    // registered (missing side-effect import), instead of a generic error.
+    const router = await read(
+      root,
+      "src/infrastructure/llm/router/llm-router.ts",
+    );
+    assert.match(router, /Unknown LLM provider/);
+    assert.ok(router.includes("import its registration module"));
   });
 
   it("registers bedrock and interpolates the chosen inference profile", async () => {

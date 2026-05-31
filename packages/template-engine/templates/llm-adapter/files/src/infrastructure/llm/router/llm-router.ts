@@ -48,6 +48,17 @@ export class LLMRouter implements LLMClientPort {
       this.adapters.set(name, reg.factory());
       this.models.set(name, reg.models);
     }
+    // Fail fast with an actionable message rather than a generic error at first
+    // call — the usual cause for an addon provider is a missing registration
+    // side-effect import.
+    if (!this.adapters.has(primaryProvider)) {
+      throw new Error(
+        `Unknown LLM provider "${primaryProvider}". Available: ${[...this.adapters.keys()].join(", ")}. ` +
+          `If it is an addon provider (e.g. "bedrock"), import its registration module once at ` +
+          `startup before constructing LLMRouter — e.g. ` +
+          `import "./infrastructure/llm/adapters/bedrock-register";`,
+      );
+    }
   }
 
   async call(

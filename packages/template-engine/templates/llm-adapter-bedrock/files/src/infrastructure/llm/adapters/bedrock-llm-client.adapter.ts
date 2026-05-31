@@ -96,6 +96,8 @@ export class BedrockLLMClientAdapter implements LLMClientPort {
         timeoutMs,
       );
 
+      // Converse can return non-text blocks (e.g. `toolUse`), but LLMClientPort
+      // is text / structured-output focused, so concatenate text blocks only.
       const content =
         response.output?.message?.content
           ?.map((block) => block.text ?? "")
