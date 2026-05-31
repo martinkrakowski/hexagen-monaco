@@ -25,7 +25,7 @@
     "Set ADOBE_GCS_BUCKET; grant the runtime service account access on it (roles/storage.objectViewer for inputs + roles/storage.objectCreator for outputs, or roles/storage.objectAdmin for both)",
     "Provide credentials via the Google ADC chain: set GOOGLE_APPLICATION_CREDENTIALS to a service-account key for local dev; on Cloud Run/GCE/GKE use the attached service account",
     "V4 signing without a local key file uses the IAM Credentials SignBlob API — grant the service account roles/iam.serviceAccountTokenCreator on itself and enable the IAM Credentials API, or getSignedUrl cannot sign",
-    "Performance: keyless (ADC) signing makes one IAM SignBlob round-trip per presigned URL — GCS signs each V4 URL individually, so there is no reusable key to cache (unlike Azure's user-delegation key). Firefly presigns 2-3+ refs per request; supply a service-account key file via GOOGLE_APPLICATION_CREDENTIALS to sign locally and avoid the per-URL round-trips",
+    "Performance: keyless signing (ADC WITHOUT a key file — e.g. the GCE/Cloud Run metadata server or Workload Identity) makes one IAM SignBlob round-trip per presigned URL — GCS signs each V4 URL individually, so there is no reusable key to cache (unlike Azure's user-delegation key). Firefly presigns 2-3+ refs per request; supply a service-account key file via GOOGLE_APPLICATION_CREDENTIALS to sign locally and avoid the per-URL round-trips",
     "Import the registration once at startup, before any Firefly service call: import './infrastructure/adobe/storage/gcs-register'",
     "Pass GCS object names (not full URLs) as input/output refs — the adapter signs read for inputs, write for outputs (an http(s) ref is passed through unchanged)"
   ],
