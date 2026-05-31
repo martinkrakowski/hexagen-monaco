@@ -63,6 +63,11 @@ await fireflyUpscale.upscale({
   `npm install @google-cloud/storage`.
 - **V4 signing without a key file** uses the IAM Credentials SignBlob API — grant the SA
   `roles/iam.serviceAccountTokenCreator` on itself and enable the IAM Credentials API.
+- **Keyless signing makes one SignBlob round-trip _per presigned URL_.** GCS signs each V4 URL
+  individually — the signature is per-URL, so there's no reusable key to cache (unlike Azure's
+  user-delegation key). Firefly adapters presign 2–3+ refs per request, so this is N control-plane
+  calls per request in keyless mode. To sign **locally** with no per-URL calls, supply a
+  service-account key file via `GOOGLE_APPLICATION_CREDENTIALS`.
 - Bucket validation is **deferred to presign time** (`requireBucket`) so a missing bucket can't crash
   startup when `gcs-register` is imported. Refs reject `..` path traversal so they can't escape the prefix.
 - Mutually exclusive with the S3/Azure presigners (declared `conflicts`).
