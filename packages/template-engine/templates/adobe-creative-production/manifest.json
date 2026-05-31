@@ -1,0 +1,25 @@
+{
+  "id": "adobe-creative-production",
+  "name": "Adobe Creative Production API",
+  "description": "Creative Production batch automation for Adobe Firefly Services (image.adobe.io): a CreativeProductionPort + adapter that maps a published workflow over N assets in one async batch job and surfaces per-asset status (partial success) over the adobe-firefly-core foundation. Async batch.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [],
+  "envVars": ["ADOBE_CREATIVE_PRODUCTION_BASE_URL"],
+  "outputs": [
+    "src/domain/ports/out/creative-production.port.ts",
+    "src/infrastructure/adobe/creative-production/creative-production.adapter.ts",
+    ".env.adobe-creative-production.example"
+  ],
+  "checklist": [
+    "Confirm the Creative Production API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current host/endpoints/payloads against Adobe docs — the Creative Production API is configured via ADOBE_CREATIVE_PRODUCTION_BASE_URL (defaults to the image.adobe.io host family; the client posts absolute URLs there)",
+    "Provide a published workflow id plus a presigned input + output href per asset — use core passthrough or install an adobe-firefly-storage-* addon",
+    "runWorkflow returns one per-asset result (status + output href) in request order; a failed asset is reported in-band rather than failing the whole batch",
+    "Soft dependency: persist the per-asset batch status in your own store (e.g. supabase/DB) for long-running batches — the adapter returns the breakdown but does not persist it",
+    "Pairs naturally with adobe-express for localized variant production",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-creative-production"
+}

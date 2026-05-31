@@ -8,6 +8,7 @@ export const TEMPLATE_QUESTIONS: Record<
   string,
   ReadonlyArray<TemplateQuestion>
 > = {
+  "adobe-creative-production": [],
   "adobe-express": [
     {
       id: "output_format",
