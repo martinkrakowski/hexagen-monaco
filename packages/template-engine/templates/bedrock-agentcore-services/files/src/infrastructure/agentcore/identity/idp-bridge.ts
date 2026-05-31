@@ -6,18 +6,21 @@
  * (google-oauth, microsoft-entra, supabase-auth, …) speak the same currency.
  *
  * `UserContext` is declared locally so this template stays self-contained
- * (`shared-types` is a soft dependency). If `shared-types` is installed, delete
- * this interface and import its `UserContext` instead — the field names align.
+ * (`shared-types` is a soft dependency). The shape mirrors `shared-types`'
+ * `src/domain/value-objects/user-context.ts` exactly, so when that template is
+ * installed you can delete this interface and import its `UserContext` instead
+ * without touching the mapper:
+ *
+ *   import type { UserContext } from "@/domain/value-objects/user-context";
  */
 export type IdpProvider = "cognito" | "okta" | "entra" | "auth0" | "none";
 
 export interface UserContext {
-  readonly userId: string;
-  readonly email?: string;
-  readonly displayName?: string;
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
   readonly roles: string[];
-  readonly provider: string;
-  readonly claims: Record<string, unknown>;
+  readonly avatarUrl?: string;
 }
 
 /** The provider chosen at install time. */
@@ -34,19 +37,20 @@ const ROLE_CLAIM: Record<IdpProvider, string> = {
 
 /**
  * Map a verified token's claims onto `UserContext`. `sub` (or Entra's `oid`)
- * becomes the stable user id; the IdP-specific role claim becomes `roles`.
+ * becomes the stable `id`; the IdP-specific role claim becomes `roles`. Required
+ * canonical fields default to "" when a claim is absent so the result always
+ * satisfies the shared `UserContext` contract.
  */
 export function claimsToUserContext(
   claims: Record<string, unknown>,
   idp: IdpProvider = CONFIGURED_IDP,
 ): UserContext {
   return {
-    userId: asString(claims.sub) ?? asString(claims.oid) ?? "",
-    email: asString(claims.email),
-    displayName: asString(claims.name) ?? asString(claims.preferred_username),
+    id: asString(claims.sub) ?? asString(claims.oid) ?? "",
+    email: asString(claims.email) ?? "",
+    name: asString(claims.name) ?? asString(claims.preferred_username) ?? "",
     roles: asStringArray(claims[ROLE_CLAIM[idp]]),
-    provider: idp,
-    claims,
+    avatarUrl: asString(claims.picture),
   };
 }
 

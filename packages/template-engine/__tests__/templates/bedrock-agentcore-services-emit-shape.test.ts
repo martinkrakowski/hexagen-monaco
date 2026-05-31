@@ -164,6 +164,12 @@ describe("bedrock-agentcore-services template — emit shape (all services)", ()
     assert.ok(bridge.includes("cognito:groups"));
     assert.ok(bridge.includes("interface UserContext"));
     assert.ok(!bridge.includes("{identity_idp}"));
+    // Local UserContext must mirror shared-types' shape exactly so the documented
+    // import-swap compiles — guard against drift back to non-canonical names.
+    assert.ok(bridge.includes("readonly id: string"));
+    assert.ok(bridge.includes("readonly name: string"));
+    assert.ok(!bridge.includes("userId"));
+    assert.ok(!bridge.includes("displayName"));
 
     const services = JSON.parse(
       await read(root, "agentcore/agentcore-services.json"),
