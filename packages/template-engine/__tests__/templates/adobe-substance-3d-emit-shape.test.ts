@@ -132,9 +132,14 @@ describe("adobe-substance-3d template — emit shape", () => {
       !adapter.includes("pollJobStatus"),
       "must use jobPort.poll, not the poller directly",
     );
-    // long-running guidance points at the real core knobs
-    assert.ok(adapter.includes("ADOBE_WEBHOOK_TIMEOUT_MS"));
+    // long-running guidance points at the poll-interval knob — these jobs always
+    // poll by status URL, so it must NOT recommend webhook-timeout tuning (which
+    // doesn't apply to image.adobe.io services).
     assert.ok(adapter.includes("ADOBE_JOB_POLL_INTERVAL_MS"));
+    assert.ok(
+      !adapter.includes("ADOBE_WEBHOOK_TIMEOUT_MS"),
+      "must not recommend webhook-timeout tuning (status-URL polled)",
+    );
     assert.ok(adapter.includes("export const substance3d"));
     assert.ok(
       adapter.includes("return ok(") && adapter.includes("return err("),

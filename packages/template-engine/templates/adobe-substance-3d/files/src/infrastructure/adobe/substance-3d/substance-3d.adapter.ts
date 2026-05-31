@@ -22,10 +22,12 @@ import { ok, err, type Result } from "../../../shared/result";
  * ABSOLUTE URLs; the shared `fireflyClient` passes those through with the same
  * IMS auth. Each call presigns its IO, submits the async job, and awaits the result.
  *
- * These are the LONGEST-RUNNING Firefly jobs. The wait goes through the centralised
- * job port, which polls without a max-wait cap (so a long render is not cut off);
- * prefer webhook job_mode (raise ADOBE_WEBHOOK_TIMEOUT_MS) or raise
- * ADOBE_JOB_POLL_INTERVAL_MS to throttle status checks during long renders.
+ * These are the LONGEST-RUNNING Firefly jobs. image.adobe.io services don't deliver
+ * Firefly webhooks, so the wait ALWAYS goes through the centralised job port's
+ * status-URL poll, regardless of the project's job_mode — webhook mode and its
+ * timeout knob don't apply here. The poll has no max-wait cap (so a long render is
+ * not cut off); raise ADOBE_JOB_POLL_INTERVAL_MS to throttle status checks during
+ * long renders.
  *
  * NOTE: host/paths/payloads version frequently — verify against Adobe docs.
  */

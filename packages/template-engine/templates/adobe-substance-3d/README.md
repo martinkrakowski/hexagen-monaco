@@ -68,9 +68,11 @@ await substance3d.relight({
 
 ## Notes for agents
 
-- **Longest-running jobs.** Prefer `job_mode=webhook` and raise `ADOBE_WEBHOOK_TIMEOUT_MS`;
-  if polling, raise `ADOBE_JOB_POLL_INTERVAL_MS` to throttle status checks. No new infra —
-  these are existing `adobe-firefly-core` knobs.
+- **Longest-running jobs.** These are polled by status URL regardless of `job_mode` —
+  `image.adobe.io` services don't deliver Firefly webhooks, so webhook mode and
+  `ADOBE_WEBHOOK_TIMEOUT_MS` don't apply here. `jobPort.poll()` has no max-wait cap, so a
+  long render isn't cut off; raise `ADOBE_JOB_POLL_INTERVAL_MS` to throttle status checks.
+  No new infra — these are existing `adobe-firefly-core` knobs.
 - `composite`/`relight` each presign an extra input alongside the source asset.
 
 ## Checklist (post-install)
