@@ -118,6 +118,12 @@ describe("adobe-firefly-content-tagging template — emit shape", () => {
     // only a response with NEITHER is treated as synchronous (tags inline).
     assert.ok(adapter.includes("handle.statusUrl || handle.jobId"));
     assert.ok(adapter.includes("if (isAsync)"));
+    // a succeeded async job with no data is an error, not a fake empty success
+    assert.ok(adapter.includes("produced no output data"));
+    assert.ok(
+      !adapter.includes("done.outputs[0]?.data ?? response"),
+      "async-success path must not fall back to the submit response",
+    );
     assert.ok(
       !adapter.includes("did not include a job id"),
       "content tagging must not fail on a missing job id (sync responses have none)",

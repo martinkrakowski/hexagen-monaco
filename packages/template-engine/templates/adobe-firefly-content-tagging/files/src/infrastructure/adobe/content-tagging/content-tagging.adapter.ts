@@ -56,7 +56,14 @@ export class FireflyContentTaggingAdapter implements ContentTaggingPort {
         if (done.status !== "succeeded") {
           return err(new FireflyError(done.error ?? "Content tagging job did not succeed."));
         }
-        payload = done.outputs[0]?.data ?? response;
+        const data = done.outputs[0]?.data;
+        if (data === undefined) {
+          // A succeeded job with no data means the provider payload shape changed —
+          // surface it rather than masking it as an empty success. Do NOT fall back
+          // to the submit response on the async path.
+          return err(new FireflyError(done.error ?? "Content tagging job produced no output data."));
+        }
+        payload = data;
       }
 
       return ok({ tags: extractTags(payload), raw: payload });
