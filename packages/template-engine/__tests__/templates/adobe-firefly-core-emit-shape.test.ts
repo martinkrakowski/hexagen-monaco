@@ -174,7 +174,8 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     assert.ok(client.includes('Number("2")'));
     // absolute-URL detection is case-insensitive so other-host services
     // (image.adobe.io) with an upper/mixed-case scheme aren't mis-prefixed.
-    assert.ok(client.includes("/i.test(pathOrUrl)"));
+    // Lock the EXACT regex (anchor + scheme + i flag), not just the tail.
+    assert.ok(client.includes("/^https?:\\/\\//i.test(pathOrUrl)"));
 
     const auth = await read(
       root,
