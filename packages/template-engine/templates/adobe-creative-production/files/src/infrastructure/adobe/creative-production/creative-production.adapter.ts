@@ -83,10 +83,14 @@ export class CreativeProductionAdapter implements CreativeProductionPort {
         );
       }
       // Align outputs 1:1 with the requested assets so every entry maps to its
-      // request id in order. A length mismatch is a batch-level failure (the
-      // results can't be correlated to assets); a per-asset missing href is
-      // reported IN-BAND as a "failed" asset, not a whole-batch error — that's
-      // the partial-success contract this service exists to provide.
+      // request id in order. Alignment is POSITIONAL by necessity: the shared
+      // JobOutput is {href?, data?} with no id, so there is nothing to correlate
+      // on — the batch API is relied upon to return outputs in submission order
+      // (the count-mismatch guard below is the integrity check). A length
+      // mismatch is a batch-level failure (results can't be correlated to
+      // assets); a per-asset missing href is reported IN-BAND as a "failed"
+      // asset, not a whole-batch error — the partial-success contract this
+      // service exists to provide.
       if (done.outputs.length !== req.assets.length) {
         return err(
           new FireflyError(
