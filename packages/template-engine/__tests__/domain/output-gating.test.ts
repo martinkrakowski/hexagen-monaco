@@ -52,6 +52,19 @@ describe("isOutputEnabled", () => {
     assert.equal(isOutputEnabled("a.ts", undefined), true);
   });
 
+  it("'in' matches when a scalar answer is one of the listed values", () => {
+    const o: ManifestOutput = {
+      path: "load.ts",
+      when: { answer: "tool", in: ["dotenv", "dotenv-expand"] },
+    };
+    assert.equal(isOutputEnabled(o, { tool: "dotenv" }), true);
+    assert.equal(isOutputEnabled(o, { tool: "dotenv-expand" }), true);
+    assert.equal(isOutputEnabled(o, { tool: "none" }), false);
+    assert.equal(isOutputEnabled(o, {}), false);
+    // non-string answers never satisfy `in`
+    assert.equal(isOutputEnabled(o, { tool: true }), false);
+  });
+
   it("treats a bare answer condition as truthiness", () => {
     const o: ManifestOutput = { path: "a.ts", when: { answer: "x" } };
     assert.equal(isOutputEnabled(o, { x: true }), true);

@@ -77,7 +77,7 @@ describe("validateManifest", () => {
     );
   });
 
-  it("throws when a gated output sets both equals and includes", () => {
+  it("throws when a gated output sets more than one of equals/includes/in", () => {
     assert.throws(
       () =>
         validateManifest({
@@ -89,8 +89,33 @@ describe("validateManifest", () => {
             },
           ],
         }),
-      /at most one of 'equals' or 'includes'/,
+      /at most one of 'equals', 'includes', or 'in'/,
     );
+  });
+
+  it("accepts a gated output with a non-empty 'in' array", () => {
+    const m = validateManifest({
+      ...base,
+      outputs: [
+        { path: "load.ts", when: { answer: "features", in: ["a", "b"] } },
+      ],
+    });
+    assert.deepEqual(m.outputs, [
+      { path: "load.ts", when: { answer: "features", in: ["a", "b"] } },
+    ]);
+  });
+
+  it("throws when 'in' is empty or not an array of non-empty strings", () => {
+    for (const bad of [[], ["ok", ""], "x", [1]]) {
+      assert.throws(
+        () =>
+          validateManifest({
+            ...base,
+            outputs: [{ path: "a.ts", when: { answer: "features", in: bad } }],
+          }),
+        /'in' must be a non-empty array of non-empty strings/,
+      );
+    }
   });
 
   it("throws when equals is not a string or boolean", () => {

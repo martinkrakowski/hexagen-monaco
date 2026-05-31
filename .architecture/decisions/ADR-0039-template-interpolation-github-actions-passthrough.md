@@ -1,8 +1,13 @@
-# ADR-0039: Template Interpolation Reserves `{…}` and Passes GitHub Actions `${{…}}` Through
+# ADR-0039: Template Interpolation Reserves Bare `{…}` and Passes `$`-Prefixed Expressions Through
 
 **Date:** 2026-05-30
 **Status:** Accepted
 **Type:** Architecture
+
+> **Amended 2026-05-30:** generalized from "GitHub Actions `${{…}}` only" to **all
+> `$`-prefixed expressions** (`${{…}}` GitHub Actions _and_ `${…}` JS template
+> literals / shell expansion). Only a **bare** `{var}` is a placeholder. See the
+> "JS/shell `${…}`" subsection below.
 
 ## Context
 
@@ -26,21 +31,41 @@ unavoidable and forced a decision.
 
 ## Decision
 
-**`interpolate()` treats a GitHub Actions `${{ … }}` expression as an atom and
-emits it verbatim.** The token grammar, in precedence order, is:
+**Only a _bare_ `{identifier}` is a placeholder. Anything `$`-prefixed is code
+and passes through verbatim.** The token grammar, in precedence order, is:
 
 1. `${{ … }}` — a GitHub Actions expression, passed through unchanged.
 2. `{{` / `}}` — brace escape sequences.
-3. `{identifier}` — variable substitution.
+3. `(?<!$){identifier}` — variable substitution, **only when not preceded by `$`**.
 
-Implementation: the matcher tries the `${{ … }}` alternative first
-(`/\$\{\{[\s\S]*?\}\}|\{\{|\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}/`), so the inner
-braces of a GHA expression are consumed whole and never reach rules 2–3. The
-body is non-greedy so adjacent expressions (`${{ a }}${{ b }}`) stay separate.
+Implementation:
+`/\$\{\{[\s\S]*?\}\}|\{\{|\}\}|(?<!\$)\{([A-Za-z_][A-Za-z0-9_.-]*)\}/`
 
-The consequence for template authors: **workflow files use GHA expressions
-exactly as GitHub documents them** — no quadrupling (`${{{{ … }}}}`), no
-per-file interpolation opt-out.
+- The leading `${{ … }}` alternative is matched first (non-greedy), so a GHA
+  expression is consumed whole and its inner `{{`/`}}` never reach rules 2–3.
+- The negative lookbehind `(?<!\$)` on the placeholder rule means a `${ … }`
+  (JS template literal or shell expansion) is left untouched too.
+
+The consequence for template authors: **workflow YAML, emitted TypeScript, and
+shell scripts use `${{ … }}` / `${ … }` exactly as written** — no quadrupling
+(`${{{{ … }}}}`), no string-concatenation workarounds (`"[" + x + "]"` instead
+of a template literal), no per-file opt-out.
+
+### JS/shell `${…}` (the amendment)
+
+The original decision covered only `${{ … }}`. But the same brace-collision hit
+ordinary `${ … }`: a JS template literal like `` `status ${res.status}` `` had
+its `{res.status}` read as a placeholder, producing a spurious "unresolved
+variable" warning on every literal — and, worse, a latent footgun: a
+`${someAnswerId}` in emitted code would be **silently replaced** by an answer
+value, corrupting the output. (This is why the `observability` template used
+string concatenation instead of template literals.)
+
+The lookbehind closes both: `${id}` is never a placeholder, so JS/shell
+expressions emit verbatim, the warning channel is trustworthy (a remaining
+"unresolved variable" now means a genuine dead `{placeholder}`), and the footgun
+is gone. Verified: no template contained a `${answerId}` relying on the old
+behaviour, so emitted output is unchanged.
 
 ## Rejected Alternatives
 

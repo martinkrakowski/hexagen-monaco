@@ -11,6 +11,7 @@ export function outputPath(output: ManifestOutput): string {
  *
  * - `includes` tests multiselect array membership.
  * - `equals` is an exact boolean/string match.
+ * - `in` matches when a scalar answer is one of the listed values.
  * - A bare `{ answer }` is satisfied by any truthy value (boolean true,
  *   non-empty array, non-empty string).
  *
@@ -29,6 +30,9 @@ export function matchesCondition(
   }
   if (equals !== undefined) {
     return value === equals;
+  }
+  if (when.in !== undefined) {
+    return typeof value === "string" && when.in.includes(value);
   }
   return (
     value === true ||

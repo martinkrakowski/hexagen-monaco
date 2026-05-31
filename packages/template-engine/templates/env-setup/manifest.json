@@ -38,11 +38,7 @@
     "SETUP.md",
     {
       "path": "src/config/load-env.ts",
-      "when": { "answer": "dotenv_tool", "equals": "dotenv" }
-    },
-    {
-      "path": "src/config/load-env.ts",
-      "when": { "answer": "dotenv_tool", "equals": "dotenv-expand" }
+      "when": { "answer": "dotenv_tool", "in": ["dotenv", "dotenv-expand"] }
     }
   ],
   "checklist": [

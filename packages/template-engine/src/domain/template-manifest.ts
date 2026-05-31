@@ -127,11 +127,12 @@ function validatedOutputs(
     }
     const hasEquals = when.equals !== undefined;
     const hasIncludes = when.includes !== undefined;
-    // `equals` and `includes` are mutually exclusive — allowing both would make
-    // the gate ambiguous (the evaluator would silently prefer one).
-    if (hasEquals && hasIncludes) {
+    const hasIn = when.in !== undefined;
+    // `equals`, `includes`, and `in` are mutually exclusive — allowing more than
+    // one would make the gate ambiguous (the evaluator picks the first set).
+    if (Number(hasEquals) + Number(hasIncludes) + Number(hasIn) > 1) {
       throw new Error(
-        `Template manifest: gated output '${obj.path}' must set at most one of 'equals' or 'includes'`,
+        `Template manifest: gated output '${obj.path}' must set at most one of 'equals', 'includes', or 'in'`,
       );
     }
     if (
@@ -148,9 +149,20 @@ function validatedOutputs(
         `Template manifest: gated output '${obj.path}' 'includes' must be a non-empty string`,
       );
     }
+    if (
+      hasIn &&
+      (!Array.isArray(when.in) ||
+        when.in.length === 0 ||
+        !when.in.every((v) => typeof v === "string" && v))
+    ) {
+      throw new Error(
+        `Template manifest: gated output '${obj.path}' 'in' must be a non-empty array of non-empty strings`,
+      );
+    }
     const condition: OutputCondition = { answer: when.answer };
     if (hasEquals) condition.equals = when.equals as string | boolean;
     if (hasIncludes) condition.includes = when.includes as string;
+    if (hasIn) condition.in = when.in as string[];
     return { path: obj.path, when: condition };
   });
 }

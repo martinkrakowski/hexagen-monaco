@@ -1,8 +1,15 @@
-// Order matters: the leading `${{ ... }}` alternative is matched first so a
-// GitHub Actions expression is consumed whole and its inner `{{`/`}}` are never
-// seen by the escape rules. The body is non-greedy so adjacent expressions
-// (`${{ a }}${{ b }}`) don't merge into one match.
-const TOKEN_RE = /\$\{\{[\s\S]*?\}\}|\{\{|\}\}|\{([A-Za-z_][A-Za-z0-9_.-]*)\}/g;
+// A placeholder is a *bare* `{identifier}`. Anything `$`-prefixed is code, not a
+// placeholder, and must pass through untouched:
+//   - `${{ ... }}` — GitHub Actions expression (matched first, whole, so its
+//     inner `{{`/`}}` never reach the escape rules; non-greedy body so adjacent
+//     `${{ a }}${{ b }}` don't merge).
+//   - `${ ... }`   — JS template literal / shell expansion: the `(?<!\$)`
+//     lookbehind stops the placeholder rule from matching the `{...}` inside it,
+//     so e.g. `${res.status}` or `${COOKIE_NAME}` are left verbatim (no spurious
+//     "unresolved variable" warning, and no risk of a `${someQuestionId}` being
+//     silently rewritten in emitted code).
+const TOKEN_RE =
+  /\$\{\{[\s\S]*?\}\}|\{\{|\}\}|(?<!\$)\{([A-Za-z_][A-Za-z0-9_.-]*)\}/g;
 
 export interface InterpolationResult {
   output: string;
@@ -15,8 +22,9 @@ export interface InterpolationResult {
  * - Missing or null/undefined keys leave the placeholder verbatim and add the
  *   identifier to `warnings`.
  * - `{{` → literal `{`, `}}` → literal `}` (escape sequences).
- * - GitHub Actions `${{ ... }}` expressions pass through untouched, so workflow
- *   templates can use them without quadrupling braces.
+ * - `$`-prefixed expressions pass through untouched — GitHub Actions
+ *   `${{ ... }}` and JS/shell `${ ... }` — so workflow templates and emitted
+ *   TypeScript can use them freely. Only a *bare* `{var}` is a placeholder.
  * - A single pass only — values containing braces are not re-interpolated.
  */
 export function interpolate(
