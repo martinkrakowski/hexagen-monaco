@@ -1,0 +1,45 @@
+{
+  "id": "adobe-photoshop",
+  "name": "Adobe Photoshop API",
+  "description": "Photoshop automation for Adobe Firefly Services (image.adobe.io/pie/psdService): a PhotoshopAutomationPort + adapter for Smart Object replacement, text-layer edits, action JSON, crop, and PSD rendering over the adobe-firefly-core foundation. Async; inputs are named layers in a pre-authored .psd.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "operations",
+      "type": "multiselect",
+      "prompt": "Which Photoshop operations will you use?",
+      "options": [
+        "smartObject",
+        "editTextLayer",
+        "applyActionJson",
+        "crop",
+        "renderPsd"
+      ],
+      "default": ["smartObject"]
+    },
+    {
+      "id": "output_format",
+      "type": "select",
+      "prompt": "Default render output format?",
+      "options": ["jpeg", "png"],
+      "default": "jpeg"
+    }
+  ],
+  "envVars": ["ADOBE_PHOTOSHOP_BASE_URL", "ADOBE_PHOTOSHOP_FORMAT"],
+  "outputs": [
+    "src/domain/ports/out/photoshop-automation.port.ts",
+    "src/infrastructure/adobe/photoshop/photoshop-automation.adapter.ts",
+    ".env.adobe-photoshop.example"
+  ],
+  "checklist": [
+    "Confirm the Photoshop API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current endpoints/payloads against Adobe docs — the Photoshop API lives on image.adobe.io/pie/psdService (a different host than firefly-api.adobe.io; the client posts absolute URLs there)",
+    "Your input .psd MUST contain named Smart Object / text layers — smartObject/editTextLayer target layers by name and fail if they are absent",
+    "Provide presigned input (.psd), replacement-image, and output hrefs — use core passthrough or install an adobe-firefly-storage-* addon",
+    "renderPsd output format defaults to ADOBE_PHOTOSHOP_FORMAT (set at install); override per call",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-photoshop"
+}
