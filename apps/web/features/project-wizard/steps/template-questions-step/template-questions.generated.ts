@@ -120,6 +120,43 @@ export const TEMPLATE_QUESTIONS: Record<
       default: true,
     },
   ],
+  "bedrock-agentcore-services": [
+    {
+      id: "services",
+      type: "multiselect",
+      prompt: "Which AgentCore services?",
+      options: ["memory", "gateway", "identity"],
+      default: ["memory", "gateway", "identity"],
+    },
+    {
+      id: "memory_mode",
+      type: "select",
+      prompt: "Memory retention?",
+      options: ["shortTerm", "longAndShortTerm"],
+      default: "longAndShortTerm",
+    },
+    {
+      id: "memory_strategies",
+      type: "multiselect",
+      prompt: "Long-term memory strategies?",
+      options: ["SEMANTIC", "SUMMARY", "USER_PREFERENCE"],
+      default: ["SEMANTIC", "SUMMARY"],
+    },
+    {
+      id: "gateway_targets",
+      type: "select",
+      prompt: "Initial gateway tool source?",
+      options: ["lambda", "openapi", "mcp", "none"],
+      default: "lambda",
+    },
+    {
+      id: "identity_idp",
+      type: "select",
+      prompt: "Identity provider to bridge to UserContext?",
+      options: ["cognito", "okta", "entra", "auth0", "none"],
+      default: "cognito",
+    },
+  ],
   "better-auth": [
     {
       id: "providers",
