@@ -1,0 +1,37 @@
+{
+  "id": "adobe-firefly-storage-azure",
+  "name": "Adobe Firefly — Azure Blob Presigned Storage",
+  "description": "Registers an Azure Blob Storage presigner for the adobe-firefly-core storage seam: mints read SAS URLs for Firefly inputs and create/write SAS URLs for outputs (storage: \"external\"). Signs with an account key, or a managed-identity user-delegation key when no key is set. Mutually exclusive with the S3/GCS presigners. Install @azure/storage-blob + @azure/identity.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": ["adobe-firefly-storage-s3", "adobe-firefly-storage-gcs"],
+  "questions": [
+    {
+      "id": "url_expiry_seconds",
+      "type": "select",
+      "prompt": "Presigned-URL (SAS) lifetime (seconds)?",
+      "options": ["300", "900", "3600"],
+      "default": "900"
+    }
+  ],
+  "envVars": [
+    "ADOBE_AZURE_STORAGE_ACCOUNT",
+    "ADOBE_AZURE_CONTAINER",
+    "ADOBE_AZURE_STORAGE_KEY",
+    "ADOBE_AZURE_PREFIX"
+  ],
+  "outputs": [
+    "src/infrastructure/adobe/storage/azure-blob-presign.adapter.ts",
+    "src/infrastructure/adobe/storage/azure-register.ts",
+    ".env.adobe-storage-azure.example"
+  ],
+  "checklist": [
+    "Install the Azure SDKs (the only channel — manifests have no deps field): npm install @azure/storage-blob @azure/identity",
+    "Set ADOBE_AZURE_STORAGE_ACCOUNT (the storage account name) and ADOBE_AZURE_CONTAINER",
+    "Account-key signing: set ADOBE_AZURE_STORAGE_KEY (a storage account access key) — signs the SAS locally; simplest for non-Azure hosts",
+    "Managed-identity signing (recommended on Azure): leave ADOBE_AZURE_STORAGE_KEY unset — the adapter falls back to DefaultAzureCredential and mints a USER-DELEGATION SAS. Grant the identity the Storage Blob Data Contributor role on the container, plus the account-level generateUserDelegationKey action",
+    "Import the registration once at startup, before any Firefly service call: import './infrastructure/adobe/storage/azure-register'",
+    "Pass blob names (not full URLs) as input/output refs — the adapter mints a read SAS for inputs and a create/write SAS for outputs (an http(s) ref is passed through unchanged)"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-storage-azure"
+}

@@ -95,6 +95,15 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2048x2048",
     },
   ],
+  "adobe-firefly-storage-azure": [
+    {
+      id: "url_expiry_seconds",
+      type: "select",
+      prompt: "Presigned-URL (SAS) lifetime (seconds)?",
+      options: ["300", "900", "3600"],
+      default: "900",
+    },
+  ],
   "adobe-firefly-storage-gcs": [
     {
       id: "url_expiry_seconds",
