@@ -49,7 +49,7 @@ const res = await fireflyGenerate.textToImage({
   numVariations: 2,
   contentCredentials: true,
 });
-if (res.ok) for (const href of res.value) console.log(href);
+if (res.success) for (const href of res.value) console.log(href);
 else console.error(res.error.message);
 
 // Edit ops take a presigned input + (optional) mask:

@@ -57,7 +57,7 @@ const res = await expressAutomation.renderBatch({
     },
   ],
 });
-if (res.ok) res.value.forEach((href) => console.log(href)); // one per item, in order
+if (res.success) res.value.forEach((href) => console.log(href)); // one per item, in order
 ```
 
 ## Configuration

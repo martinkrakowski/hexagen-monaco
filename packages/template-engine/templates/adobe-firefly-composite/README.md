@@ -47,7 +47,7 @@ const res = await fireflyComposite.composite({
   numVariations: 3,
   prompt: "on a marble counter, morning light",
 });
-if (res.ok)
+if (res.success)
   res.value.forEach((href, i) => console.log(`candidate ${i}: ${href}`));
 ```
 

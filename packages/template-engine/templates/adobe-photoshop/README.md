@@ -50,7 +50,7 @@ const res = await photoshopAutomation.smartObject({
   layerName: "hero", // a named Smart Object in the .psd
   replacementHref: "s3://bucket/in/product.png",
 });
-if (res.ok) console.log(res.value);
+if (res.success) console.log(res.value);
 
 await photoshopAutomation.editTextLayer({
   inputHref,
