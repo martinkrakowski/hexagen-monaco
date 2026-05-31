@@ -1,0 +1,89 @@
+{
+  "id": "bedrock-agentcore-runtime",
+  "name": "Bedrock AgentCore Runtime",
+  "description": "Deploy the Hexagen TypeScript server to Amazon Bedrock AgentCore Runtime as an ARM64 container implementing the HTTP contract (POST /invocations, GET /ping). Generates agentcore.json, an IAM execution policy, and an optional deploy GitHub Action — no Python agent scaffolding.",
+  "version": "1.0.0",
+  "requires": ["docker", "env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "aws_region",
+      "type": "select",
+      "prompt": "AWS region for AgentCore Runtime?",
+      "options": ["us-west-2", "us-east-1", "eu-central-1", "ap-southeast-2"],
+      "default": "us-west-2"
+    },
+    {
+      "id": "agent_name",
+      "type": "text",
+      "prompt": "AgentCore agent name?",
+      "default": "hexagen-agent"
+    },
+    {
+      "id": "protocol",
+      "type": "select",
+      "prompt": "Runtime protocol?",
+      "options": ["HTTP", "MCP", "A2A"],
+      "default": "HTTP"
+    },
+    {
+      "id": "build_type",
+      "type": "select",
+      "prompt": "Build type? (Container is required for a TypeScript runtime)",
+      "options": ["Container", "CodeZip"],
+      "default": "Container"
+    },
+    {
+      "id": "inbound_auth",
+      "type": "select",
+      "prompt": "Inbound auth on the runtime endpoint?",
+      "options": ["IAM", "OAuth"],
+      "default": "IAM"
+    },
+    {
+      "id": "provision",
+      "type": "select",
+      "prompt": "How to provision the runtime?",
+      "options": ["agentcore-cli", "cdk", "none"],
+      "default": "agentcore-cli"
+    },
+    {
+      "id": "deploy_ci",
+      "type": "boolean",
+      "prompt": "Generate a deploy GitHub Action (ARM64 build -> ECR -> create/update runtime)?",
+      "default": true
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    "Dockerfile.agentcore",
+    "src/infrastructure/agentcore/http/invocations.handler.ts",
+    "src/infrastructure/agentcore/http/ping.handler.ts",
+    "src/infrastructure/agentcore/http/server.ts",
+    "src/infrastructure/agentcore/runtime/payload.ts",
+    "src/infrastructure/agentcore/runtime/session.ts",
+    "agentcore/agentcore.json",
+    "agentcore/aws-targets.json",
+    "iam/agentcore-runtime-role.policy.json",
+    ".env.agentcore.example",
+    {
+      "path": ".github/workflows/deploy-agentcore.yml",
+      "when": { "answer": "deploy_ci", "equals": true }
+    },
+    {
+      "path": "infra/agentcore-stack.ts",
+      "when": { "answer": "provision", "equals": "cdk" }
+    }
+  ],
+  "checklist": [
+    "Enable model access for your Bedrock model in the Bedrock console (per account, per region) — invocations fail with AccessDeniedException until you do",
+    "Wire your agent into the runtime: implement AgentRuntimePort (run / optional runStream) and pass it to createAgentCoreServer() in src/infrastructure/agentcore/http/server.ts",
+    "Build + smoke the HTTP contract locally: docker buildx build --platform linux/arm64 -f Dockerfile.agentcore -t agent . ; docker run -p 8080:8080 agent ; curl localhost:8080/ping",
+    "Provision: `agentcore deploy` (agentcore-cli) — or if you chose cdk, `cdk bootstrap` once then `cdk deploy` infra/agentcore-stack.ts",
+    "Attach iam/agentcore-runtime-role.policy.json to the runtime execution role (bedrock:InvokeModel/Converse, logs, bedrock-agentcore)",
+    "Invoke: `agentcore invoke --prompt \"hello\"` (or boto3/SDK InvokeAgentRuntime with the ARN), then copy AGENTCORE_RUNTIME_ARN from `agentcore status` into .env.local",
+    "If observability is installed, the handler seeds the correlation store from runtimeSessionId so app logs and AgentCore's OTEL->CloudWatch traces share one id (see session.ts)",
+    "If inbound_auth=OAuth, set AGENTCORE_OAUTH_DISCOVERY_URL / AGENTCORE_OAUTH_ALLOWED_AUDIENCE AND register a real verifier via setTokenVerifier() at startup — OAuth mode is fail-closed and rejects every call until you do; otherwise the runtime boundary is IAM (SigV4)"
+  ],
+  "branch": "feature/generator-template-bedrock-agentcore-runtime"
+}

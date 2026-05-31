@@ -70,6 +70,56 @@ export const TEMPLATE_QUESTIONS: Record<
       derivedFrom: "shared-types.session_cookie_name",
     },
   ],
+  "bedrock-agentcore-runtime": [
+    {
+      id: "aws_region",
+      type: "select",
+      prompt: "AWS region for AgentCore Runtime?",
+      options: ["us-west-2", "us-east-1", "eu-central-1", "ap-southeast-2"],
+      default: "us-west-2",
+    },
+    {
+      id: "agent_name",
+      type: "text",
+      prompt: "AgentCore agent name?",
+      default: "hexagen-agent",
+    },
+    {
+      id: "protocol",
+      type: "select",
+      prompt: "Runtime protocol?",
+      options: ["HTTP", "MCP", "A2A"],
+      default: "HTTP",
+    },
+    {
+      id: "build_type",
+      type: "select",
+      prompt: "Build type? (Container is required for a TypeScript runtime)",
+      options: ["Container", "CodeZip"],
+      default: "Container",
+    },
+    {
+      id: "inbound_auth",
+      type: "select",
+      prompt: "Inbound auth on the runtime endpoint?",
+      options: ["IAM", "OAuth"],
+      default: "IAM",
+    },
+    {
+      id: "provision",
+      type: "select",
+      prompt: "How to provision the runtime?",
+      options: ["agentcore-cli", "cdk", "none"],
+      default: "agentcore-cli",
+    },
+    {
+      id: "deploy_ci",
+      type: "boolean",
+      prompt:
+        "Generate a deploy GitHub Action (ARM64 build -> ECR -> create/update runtime)?",
+      default: true,
+    },
+  ],
   "better-auth": [
     {
       id: "providers",
