@@ -6,6 +6,21 @@
 - `feature/generator-template-bedrock-agentcore-services` — Memory / Gateway / Identity (AI / Agents)
 - `feature/generator-template-bedrock` — Bedrock model inference provider (companion, inside `llm-adapter`)
 
+**Status:** ✅ Implemented & merged (2026-05-31).
+
+| Deliverable                              | Template id                  | PR            |
+| ---------------------------------------- | ---------------------------- | ------------- |
+| Companion — Bedrock model inference      | `llm-adapter-bedrock`        | #136 (merged) |
+| Template 1 — deploy target (DevOps)      | `bedrock-agentcore-runtime`  | #137 (merged) |
+| Template 2 — Memory / Gateway / Identity | `bedrock-agentcore-services` | #138 (merged) |
+
+Both pre-coding decisions are resolved as shipped: **TS Container + HTTP contract** (not a
+Python agent) and **hybrid provisioning** (`agentcore.json` + IAM policy + direct-SDK deploy CI).
+The remaining items are live-AWS / GA-SDK validation only (see
+[Cross-Cutting Risks & Open Questions](#cross-cutting-risks--open-questions)) — surfaced in
+generated code comments and checklists, not code gaps. The out-of-scope v1 services
+(Code Interpreter, Browser, Evaluations, Payments, Policy, Registry) remain future templates.
+
 ## Purpose
 
 Make a Hexagen project a first-class citizen of **Amazon Bedrock AgentCore** — AWS's
@@ -60,7 +75,7 @@ Consequences:
 - `agentcore.json` and `aws-targets.json` are generated as config the developer can hand to
   either the `agentcore` CLI or our own CDK stack.
 
-> **Decision to confirm before coding:** provision via the **`@aws/agentcore` CLI's CDK**
+> **Decision (resolved — shipped as the hybrid below):** provision via the **`@aws/agentcore` CLI's CDK**
 > (less code, AWS-owned, but adds an npm global + Python/CDK prereqs) **vs.** a **thin
 > hand-written CDK/SDK deploy** we own (more code, fewer external prereqs, full control).
 > This plan assumes a **hybrid**: generate `agentcore.json` so the AWS CLI works out of the
@@ -427,10 +442,18 @@ Template 2 under **AI / Agents** (sibling to `langgraph`); companion as a standa
 
 ## Cross-Cutting Risks & Open Questions
 
+> **Resolution status (post-implementation):** #1, #2, #3, #4, #5, #7, #9 are resolved as shipped
+> across the three merged templates. The only items still requiring a live AWS account / GA SDK to
+> confirm are **#6's open detail** (exact session-id field) and the AgentCore data-plane SDK command
+> shapes used by the Memory/Identity adapters — both flagged in generated code comments. #8 is
+> intentionally out of scope for v1.
+
 1. **TS vs Python runtime** — confirm the Container-build + HTTP-contract approach (above) is
    acceptable vs. scaffolding a separate Python agent. This is the load-bearing decision.
+   — ✅ **Resolved:** Container + HTTP contract shipped in `bedrock-agentcore-runtime`.
 2. **Provisioning path** — `@aws/agentcore` CLI (extra Node/Python/CDK prereqs) vs. our own
    thin CDK/SDK deploy. Plan assumes the hybrid; confirm.
+   — ✅ **Resolved:** hybrid shipped (`agentcore.json` + IAM policy + direct-SDK deploy CI; optional CDK stack).
 3. **`check-env` + `AWS_*` optionality** — coordinate with `env-setup` so IAM-role deploys
    don't fail the env gate (same constraint as the Bedrock inference companion).
 4. **ARM64 build** — `docker buildx` (Graviton) must be available in CI; the `docker` template's
