@@ -1,0 +1,32 @@
+{
+  "id": "adobe-firefly-composite",
+  "name": "Adobe Firefly — Composite",
+  "description": "Composite Operations service for Adobe Firefly: a CompositePort + adapter that blends a product image into a scene (matching tone/lighting/shadow) over the adobe-firefly-core foundation. Async; returns multiple candidate outputs (the port returns an array of hrefs).",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "default_candidates",
+      "type": "select",
+      "prompt": "Default number of candidate composites to request?",
+      "options": ["1", "2", "3", "4"],
+      "default": "2"
+    }
+  ],
+  "envVars": ["ADOBE_FIREFLY_DEFAULT_MODEL", "ADOBE_COMPOSITE_CANDIDATES"],
+  "outputs": [
+    "src/domain/ports/out/composite.port.ts",
+    "src/infrastructure/adobe/composite/composite.adapter.ts",
+    ".env.adobe-composite.example"
+  ],
+  "checklist": [
+    "Confirm the Composite Operations entitlement + scope on your Adobe Developer Console project",
+    "Verify the current endpoint/payload against Adobe docs — this scaffold posts to the async endpoint /v3/images/composite-async (returns a job to await)",
+    "Provide presigned product + scene input hrefs and an output href — use core passthrough or install an adobe-firefly-storage-* addon",
+    "The port returns an ARRAY of candidate output hrefs; tune the count via ADOBE_COMPOSITE_CANDIDATES (install default set the baseline)",
+    "Content Credentials (C2PA) and safety are pass-through options (contentCredentials / safety) — set them per call, they are not hardcoded",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-composite"
+}
