@@ -37,16 +37,25 @@ const ROLE_CLAIM: Record<IdpProvider, string> = {
 
 /**
  * Map a verified token's claims onto `UserContext`. `sub` (or Entra's `oid`)
- * becomes the stable `id`; the IdP-specific role claim becomes `roles`. Required
- * canonical fields default to "" when a claim is absent so the result always
- * satisfies the shared `UserContext` contract.
+ * becomes the stable `id`; the IdP-specific role claim becomes `roles`.
+ *
+ * Throws when neither subject claim is present: `id` is the identity key used for
+ * authz, caching, and audit, so minting an empty `""` id would silently collapse
+ * distinct callers into one principal. The display-only `email`/`name` fields
+ * still default to "" to satisfy the canonical contract.
  */
 export function claimsToUserContext(
   claims: Record<string, unknown>,
   idp: IdpProvider = CONFIGURED_IDP,
 ): UserContext {
+  const id = asString(claims.sub) ?? asString(claims.oid);
+  if (!id) {
+    throw new Error(
+      "Token is missing a subject claim (sub/oid) — cannot derive a stable user id.",
+    );
+  }
   return {
-    id: asString(claims.sub) ?? asString(claims.oid) ?? "",
+    id,
     email: asString(claims.email) ?? "",
     name: asString(claims.name) ?? asString(claims.preferred_username) ?? "",
     roles: asStringArray(claims[ROLE_CLAIM[idp]]),

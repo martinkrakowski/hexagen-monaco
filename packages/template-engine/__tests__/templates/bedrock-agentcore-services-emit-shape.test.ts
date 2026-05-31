@@ -196,6 +196,12 @@ describe("bedrock-agentcore-services template — emit shape (all services)", ()
     assert.ok(bridge.includes("readonly name: string"));
     assert.ok(!bridge.includes("userId"));
     assert.ok(!bridge.includes("displayName"));
+    // Missing subject claim must fail loud, not mint an empty stable id.
+    assert.ok(bridge.includes("missing a subject claim"));
+    assert.ok(
+      !/\bid:\s*asString\(claims\.sub\)[^\n]*\?\?\s*""/.test(bridge),
+      "id must not fall back to an empty string",
+    );
 
     const services = JSON.parse(
       await read(root, "agentcore/agentcore-services.json"),
