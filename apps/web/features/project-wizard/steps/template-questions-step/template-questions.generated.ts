@@ -218,6 +218,22 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "jpeg",
     },
   ],
+  "adobe-substance-3d": [
+    {
+      id: "operations",
+      type: "multiselect",
+      prompt: "Which Substance 3D operations will you use?",
+      options: ["render", "composite", "relight"],
+      default: ["render"],
+    },
+    {
+      id: "output_format",
+      type: "select",
+      prompt: "Default output image format?",
+      options: ["png", "jpg"],
+      default: "png",
+    },
+  ],
   "agents-md": [
     {
       id: "project_description",
