@@ -23,7 +23,7 @@ Result-returning storage helpers, optional Drizzle ORM, type generation, and exa
 
 - `src/infrastructure/supabase/{client,server,admin,result}.ts` + generated `types/database.types.ts`.
 - Optional `storage/*` helpers (upload/download/signed-url/delete), `drizzle/*`, `realtime/subscribe.ts`.
-- `supabase/seed.sql`, optional `migrations/0001_example_rls.sql`, `scripts/gen-types.sh`.
+- `supabase/seed.sql` (always); optional `migrations/0001_example_rls.sql` (`rls_examples`) and `scripts/gen-types.sh` (`type_gen`).
 
 ## Install
 

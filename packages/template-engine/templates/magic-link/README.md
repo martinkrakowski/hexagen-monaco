@@ -59,7 +59,7 @@ const user = await getCurrentUser();
 ## Checklist (post-install)
 
 Set both secrets; configure the transport + verified `from`; test request→inbox→verify→
-`/dashboard`; confirm reuse is rejected; verify `/api/auth/me` and logout.
+`/dashboard`; confirm reuse is rejected; verify `/api/auth/me`, then log out via `DELETE /api/auth/logout`.
 
 ## Related
 

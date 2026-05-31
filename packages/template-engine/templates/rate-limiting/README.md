@@ -43,7 +43,9 @@ Env: `TEXT_RPM`, `IMAGE_RPM`, `GENERAL_RPM`, `RATE_LIMIT_WARN_AT`, `RATE_LIMIT_S
 ## Usage
 
 Wire `server/middleware/rate-limit.ts` into your framework's middleware chain; it classifies the
-request, identifies the caller, and throws `RateLimitExceededError` (→ 429) when over the limit.
+request, identifies the caller, and on exceeding the limit raises an **HTTP 429** via the
+framework's `createError` with a structured body (from `buildRateLimitExceededBody`) — handle it
+as an HTTP response error, not a thrown `RateLimitExceededError` instance.
 
 ## Notes for agents
 

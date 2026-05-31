@@ -24,7 +24,7 @@ application roles on the shared `UserContext`. The emitted `middleware.ts` overw
 
 - **Provider:** Microsoft Entra ID, confidential-client **PKCE**; profile/groups via Microsoft Graph.
 - **Session:** stateless AES-256-GCM cookie. Optional AAD group→role mapping.
-- **Routes:** `GET /api/auth/login/entra`, `/callback/entra`, `/logout/entra`, `GET /api/auth/me`.
+- **Routes:** `GET /api/auth/login/entra`, `GET /api/auth/callback/entra`, `DELETE /api/auth/logout/entra`, `GET /api/auth/me`.
 
 ## Install
 
@@ -42,7 +42,7 @@ import { getCurrentUser } from "@/lib/auth/get-current-user";
 const user = await getCurrentUser(); // UserContext with mapped roles
 ```
 
-Flow: `GET /api/auth/login/entra` → Microsoft → `/callback/entra` → `/dashboard`.
+Flow: `GET /api/auth/login/entra` → Microsoft → `GET /api/auth/callback/entra` → `/dashboard`.
 
 ## Notes for agents
 

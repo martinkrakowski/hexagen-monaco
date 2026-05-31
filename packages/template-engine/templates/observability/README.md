@@ -40,12 +40,10 @@ backing services.
 
 ```ts
 import { logger } from "@/infrastructure/logging";
-import {
-  runWithContext,
-  getOrCreateCorrelationId,
-} from "@/infrastructure/logging/correlation";
+import { runWithContext } from "@/infrastructure/logging/context";
+import { getOrCreateCorrelationId } from "@/infrastructure/logging/correlation";
 
-logger.info("user.created", { userId }); // correlation id attached automatically
+logger.info({ userId }, "user.created"); // fields first; correlation id attached automatically
 ```
 
 ```bash

@@ -23,7 +23,7 @@ overwrites `auth-mock`'s while still honouring `AUTH_MODE=mock` for local dev.
 
 - **Provider:** Google OAuth 2.0 (authorization-code flow); userinfo via Google's endpoint.
 - **Session:** stateless AES-256-GCM cookie (no DB). Optional `hd` Workspace-domain restriction.
-- **Routes:** `GET /api/auth/login/google`, `/callback/google`, `POST /logout/google`, `GET /api/auth/me`.
+- **Routes:** `GET /api/auth/login/google`, `GET /api/auth/callback/google`, `POST /api/auth/logout/google`, `GET /api/auth/me`.
 
 ## Install
 
@@ -42,7 +42,7 @@ import { requireAuth } from "@/lib/auth/require-auth";
 const user = await getCurrentUser(); // UserContext | null
 ```
 
-Flow: `GET /api/auth/login/google` → Google → `/callback/google` → `/dashboard`.
+Flow: `GET /api/auth/login/google` → Google → `GET /api/auth/callback/google` → `/dashboard`.
 
 ## Configuration
 

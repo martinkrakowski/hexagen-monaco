@@ -23,7 +23,7 @@ optional admin dashboard. Good for image generation, email, webhooks, exports, A
 
 - `src/infrastructure/queue/{connection,queues,workers,index}.ts`, `fallback/sync-executor.ts`,
   `scheduler/job-scheduler.ts`.
-- `server/startup/start-workers.ts` (same-process) or `scripts/start-worker.ts` (separate service).
+- `server/startup/start-workers.ts` (always emitted), plus `scripts/start-worker.ts` when `worker_mode=separate-service`.
 - Optional Bull Board route; optional example jobs (image-processing/email/webhook/export/ai-generation).
 
 ## Install

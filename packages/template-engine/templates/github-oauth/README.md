@@ -24,7 +24,7 @@ the user's primary email and maps the profile onto the shared `UserContext`. The
 - **Provider:** GitHub OAuth App (authorization-code flow); primary-email + (optional)
   org-membership fetch.
 - **Session:** stateless AES-256-GCM cookie. Optional `GITHUB_ALLOWED_ORGS` gate.
-- **Routes:** `GET /api/auth/login/github`, `/callback/github`, `/logout/github`, `GET /api/auth/me`.
+- **Routes:** `GET /api/auth/login/github`, `GET /api/auth/callback/github`, `POST /api/auth/logout/github`, `GET /api/auth/me`.
 
 ## Install
 
@@ -41,7 +41,7 @@ import { getCurrentUser } from "@/lib/auth/get-current-user";
 const user = await getCurrentUser(); // UserContext | null
 ```
 
-Flow: `GET /api/auth/login/github` → GitHub → `/callback/github` → `/dashboard`.
+Flow: `GET /api/auth/login/github` → GitHub → `GET /api/auth/callback/github` → `/dashboard`.
 
 ## Notes for agents
 

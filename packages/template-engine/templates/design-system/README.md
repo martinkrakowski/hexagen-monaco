@@ -22,7 +22,7 @@ those tokens, and framework-agnostic component stubs to grow toward your chosen 
 ## What it scaffolds
 
 - `DESIGN.md`, `src/styles/{tokens.css,globals.css,theme.ts}`, `tailwind.config.ts`, `src/lib/cn.ts`.
-- `src/components/ui/{button,card,input,index}.tsx` stubs.
+- `src/components/ui/{button,card,input}.tsx` stubs + the `src/components/ui/index.ts` barrel.
 - Optional Storybook (`.storybook/*`, `button.stories.tsx`).
 
 ## Install
