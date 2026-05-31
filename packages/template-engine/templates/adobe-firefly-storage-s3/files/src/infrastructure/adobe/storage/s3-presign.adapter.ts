@@ -31,7 +31,9 @@ const URL_EXPIRY_SECONDS = resolveExpiry(Number("{url_expiry_seconds}"));
 
 function resolveExpiry(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 900;
-  return Math.min(Math.floor(value), 604_800);
+  // Clamp AFTER flooring — a fractional value like 0.5 floors to 0, which is
+  // outside the 1..604800 range AWS accepts.
+  return Math.max(1, Math.min(Math.floor(value), 604_800));
 }
 
 export class S3PresignStorageAdapter implements FireflyStoragePort {

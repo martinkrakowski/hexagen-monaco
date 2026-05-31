@@ -144,6 +144,8 @@ describe("adobe-firefly-storage-s3 template — emit shape", () => {
     // a bad/overridden value can't reach getSignedUrl as NaN/out-of-range
     assert.ok(adapter.includes("resolveExpiry"));
     assert.ok(adapter.includes("604_800") || adapter.includes("604800"));
+    // clamped to >= 1 after flooring (0.5 would floor to 0, out of range)
+    assert.ok(adapter.includes("Math.max(1"));
   });
 
   it("marks the bucket required in the env example", async () => {
