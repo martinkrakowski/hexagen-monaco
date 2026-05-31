@@ -121,6 +121,9 @@ describe("adobe-firefly-media template — emit shape", () => {
     assert.ok(adapter.includes("toJobHandle("));
     assert.ok(adapter.includes("/v3/videos/"));
     assert.ok(adapter.includes("/v3/audio/"));
+    // translateAudioVideo uses the distinct /v3/audio-video/ path (docs + checklist
+    // must list it too — see the manifest/README endpoint guidance).
+    assert.ok(adapter.includes("/v3/audio-video/translate-async"));
     // firefly-api job path: await (polling OR webhook), jobId guard — NOT the
     // image.adobe.io always-poll / statusUrl path.
     assert.ok(adapter.includes("jobPort.await(handle)"));

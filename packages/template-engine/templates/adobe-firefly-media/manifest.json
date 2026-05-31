@@ -21,7 +21,7 @@
   ],
   "checklist": [
     "Confirm the Audio/Video API entitlement + scope on your Adobe Developer Console project",
-    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to the async /v3/videos/*-async and /v3/audio/*-async endpoints, which return a job to await)",
+    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to the async /v3/videos/*-async, /v3/audio/*-async, and /v3/audio-video/translate-async endpoints, which return a job to await)",
     "Long jobs (minutes): prefer webhook job_mode and raise ADOBE_WEBHOOK_TIMEOUT_MS; if polling, raise ADOBE_JOB_POLL_INTERVAL_MS to scale the poll interval up for these long jobs",
     "Provide presigned input (image for imageToVideo, source media for translateAudioVideo) + output hrefs — use core passthrough or install an adobe-firefly-storage-* addon",
     "Set the default model via ADOBE_FIREFLY_MEDIA_MODEL; pass a per-call model to override",

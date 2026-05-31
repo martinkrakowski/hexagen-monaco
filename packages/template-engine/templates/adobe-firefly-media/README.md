@@ -22,7 +22,8 @@ submits an async job, and resolves to the output href.
 ## Service & API
 
 - **Host:** `firefly-api.adobe.io` (the core `ADOBE_FIREFLY_BASE_URL`) — **not** image.adobe.io.
-  The shared `fireflyClient` posts **relative** paths (`/v3/videos/*-async`, `/v3/audio/*-async`).
+  The shared `fireflyClient` posts **relative** paths (`/v3/videos/*-async`, `/v3/audio/*-async`,
+  and `/v3/audio-video/translate-async` for `translateAudioVideo`).
 - **Auth:** IMS Server-to-Server (inherited from core).
 - **Wait:** `jobPort.await(handle)` — polling **or** webhook, transparently (the firefly-api job path,
   not the image.adobe.io always-poll). Guards a missing `jobId`.
@@ -86,7 +87,8 @@ await fireflyMedia.textToVideo({ prompt: "...", outputHref, model: "veo-3" });
 
 ## Checklist (post-install)
 
-Confirm the Audio/Video entitlement/scope; verify the `/v3/videos/*` + `/v3/audio/*` async endpoints;
+Confirm the Audio/Video entitlement/scope; verify the `/v3/videos/*`, `/v3/audio/*`, and
+`/v3/audio-video/translate-async` endpoints;
 tune webhook/poll timeouts for the long jobs; supply presigned IO; set the default model; pass partner
 models as opaque ids. Optional SDK: `npm install @adobe/firefly-services-sdk-js`.
 
