@@ -29,12 +29,18 @@ export class AgentCoreIdentityAdapter implements AgentIdentityPort {
   constructor(client?: BedrockAgentCoreClient, workloadName?: string) {
     const region = process.env.AGENTCORE_REGION ?? process.env.AWS_REGION;
     this.client = client ?? new BedrockAgentCoreClient(region ? { region } : {});
+    // GetWorkloadAccessToken expects the registered workload *name*, not the ARN.
+    // Prefer an explicit name; otherwise derive it from the ARN, whose final path
+    // segment is the workload identity name (.../workload-identity/<name>).
+    const arn = process.env.AGENTCORE_WORKLOAD_IDENTITY_ARN;
     const resolved =
-      workloadName ?? process.env.AGENTCORE_WORKLOAD_IDENTITY_ARN;
+      workloadName ??
+      process.env.AGENTCORE_WORKLOAD_NAME ??
+      (arn ? workloadNameFromArn(arn) : undefined);
     if (!resolved) {
       throw new Error(
-        "AGENTCORE_WORKLOAD_IDENTITY_ARN is not set — provision identity and copy the value " +
-          "from `agentcore status` into .env.local.",
+        "Set AGENTCORE_WORKLOAD_NAME (or AGENTCORE_WORKLOAD_IDENTITY_ARN) — provision identity " +
+          "and copy the value from `agentcore status` into .env.local.",
       );
     }
     this.workloadName = resolved;
@@ -52,9 +58,12 @@ export class AgentCoreIdentityAdapter implements AgentIdentityPort {
   }
 
   async exchangeForOutbound(resource: string): Promise<OutboundCredential> {
+    // The outbound exchange identifies the agent by its workload identity token,
+    // not its name — fetch the token first, then trade it for the 3p credential.
+    const { token } = await this.getWorkloadToken();
     const res = await this.client.send(
       new GetResourceOauth2TokenCommand({
-        workloadName: this.workloadName,
+        workloadIdentityToken: token,
         resourceCredentialProviderName: resource,
       }),
     );
@@ -64,4 +73,10 @@ export class AgentCoreIdentityAdapter implements AgentIdentityPort {
     }
     return { accessToken, scopes: res.scope?.split(" ").filter(Boolean) };
   }
+}
+
+/** Extract the workload identity name from its ARN (.../workload-identity/<name>). */
+function workloadNameFromArn(arn: string): string {
+  const slash = arn.lastIndexOf("/");
+  return slash >= 0 ? arn.slice(slash + 1) : arn;
 }

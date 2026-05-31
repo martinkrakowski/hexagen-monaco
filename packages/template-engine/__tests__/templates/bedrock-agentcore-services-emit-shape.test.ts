@@ -139,6 +139,27 @@ describe("bedrock-agentcore-services template — emit shape (all services)", ()
     assert.match(identity, /region\s*\?\s*\{\s*region\s*\}\s*:\s*\{\s*\}/);
   });
 
+  it("honours the port contracts: session-scoped recall and token-based exchange", async () => {
+    // Memory: retrieve() must use its sessionId arg so recall stays session-keyed.
+    const memory = await read(
+      root,
+      `${AGENTCORE}/memory/agentcore-memory.adapter.ts`,
+    );
+    assert.ok(memory.includes("scopedNamespace(sessionId)"));
+
+    const identity = await read(
+      root,
+      `${AGENTCORE}/identity/agentcore-identity.adapter.ts`,
+    );
+    // Workload name is derived from the ARN, never passed through as-is.
+    assert.ok(identity.includes("workloadNameFromArn"));
+    // Outbound exchange passes the workload token, not the workload name.
+    assert.ok(identity.includes("workloadIdentityToken: token"));
+    assert.ok(
+      !/GetResourceOauth2TokenCommand\(\{\s*workloadName/.test(identity),
+    );
+  });
+
   it("ships a dependency-free MCP gateway client mapping to the port", async () => {
     const gateway = await read(
       root,

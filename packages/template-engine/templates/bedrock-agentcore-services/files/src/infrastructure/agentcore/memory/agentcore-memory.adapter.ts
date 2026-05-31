@@ -59,7 +59,11 @@ export class AgentCoreMemoryAdapter implements MemoryPort {
     const res = await this.client.send(
       new RetrieveMemoryRecordsCommand({
         memoryId: this.config.memoryId,
-        namespace: this.config.namespace,
+        // Scope recall to the session so long-term records can't bleed across
+        // conversations — the MemoryPort contract is session-keyed. AgentCore
+        // namespaces are hierarchical; adjust the composition if your strategy's
+        // namespace template differs.
+        namespace: this.scopedNamespace(sessionId),
         searchCriteria: { searchQuery: query, topK: limit },
       }),
     );
@@ -70,5 +74,9 @@ export class AgentCoreMemoryAdapter implements MemoryPort {
       score: r.score,
       kind: r.memoryStrategyType,
     }));
+  }
+
+  private scopedNamespace(sessionId: string): string {
+    return `${this.config.namespace}/${sessionId}`;
   }
 }
