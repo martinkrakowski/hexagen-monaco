@@ -140,7 +140,13 @@ describe("adobe-photoshop template — emit shape", () => {
       `${ADOBE}/photoshop/photoshop-automation.adapter.ts`,
     );
     assert.ok(adapter.includes("ADOBE_PHOTOSHOP_BASE_URL?.trim() ||"));
-    assert.ok(adapter.includes("ADOBE_PHOTOSHOP_FORMAT?.trim() ||"));
+    // format strictly validated against the union (no blind cast of a bad env value)
+    assert.ok(adapter.includes("ADOBE_PHOTOSHOP_FORMAT?.trim()"));
+    assert.ok(
+      adapter.includes(
+        'rawDefaultFormat === "jpeg" || rawDefaultFormat === "png"',
+      ),
+    );
     // base URL normalised: a schemeless host gets https:// so fireflyClient treats it as absolute
     assert.ok(adapter.includes("normalizeBase"));
     assert.ok(adapter.includes("`https://${raw}`"));

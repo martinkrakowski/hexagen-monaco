@@ -38,9 +38,12 @@ function normalizeBase(raw: string): string {
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   return withScheme.replace(/\/+$/, "");
 }
-const DEFAULT_FORMAT = (process.env.ADOBE_PHOTOSHOP_FORMAT?.trim() || "{output_format}") as
-  | "jpeg"
-  | "png";
+// Strictly validate the env value rather than blind-casting — an invalid value
+// ("gif", a typo) would otherwise fall through to the JPEG branch silently. Fall
+// back to the (always-valid) install default.
+const rawDefaultFormat = process.env.ADOBE_PHOTOSHOP_FORMAT?.trim();
+const DEFAULT_FORMAT: "jpeg" | "png" =
+  rawDefaultFormat === "jpeg" || rawDefaultFormat === "png" ? rawDefaultFormat : "{output_format}";
 
 const PSD_TYPE = "image/vnd.adobe.photoshop";
 
