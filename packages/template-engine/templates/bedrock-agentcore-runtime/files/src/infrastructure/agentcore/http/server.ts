@@ -54,6 +54,9 @@ async function route(
 }
 
 async function toWebRequest(req: IncomingMessage): Promise<Request> {
+  // Buffer the whole body — AgentCore invocation envelopes are small JSON
+  // (prompt + metadata), so this is fine. If you ever accept large or binary
+  // uploads, stream `req` straight into the Request body instead of concatenating.
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     chunks.push(chunk as Buffer);
