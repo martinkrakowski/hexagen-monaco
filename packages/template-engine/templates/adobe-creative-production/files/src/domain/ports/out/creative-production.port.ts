@@ -11,8 +11,6 @@ import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-
  * "failed") rather than failing the whole batch. Resolves to one result per
  * asset, in request order. Hrefs are presigned URLs (`storage: "external"`).
  */
-export type AssetStatus = "succeeded" | "failed";
-
 export interface CreativeProductionAsset {
   /** Caller-supplied id, echoed back in the result for correlation. */
   readonly id: string;
@@ -29,16 +27,27 @@ export interface RunWorkflowRequest {
   readonly assets: readonly CreativeProductionAsset[];
 }
 
-export interface AssetResult {
-  /** Echoes the request asset id. */
-  readonly id: string;
-  /** Per-asset outcome. */
-  readonly status: AssetStatus;
-  /** Output href when `status` is "succeeded". */
-  readonly outputHref?: string;
-  /** Failure detail when `status` is "failed". */
-  readonly error?: string;
-}
+/**
+ * Per-asset outcome — a discriminated union on `status` so the contract is
+ * compile-time enforced: a succeeded asset always carries `outputHref`, a failed
+ * asset always carries `error`. Callers narrow on `status` rather than guarding
+ * optional fields at runtime.
+ */
+export type AssetResult =
+  | {
+      /** Echoes the request asset id. */
+      readonly id: string;
+      readonly status: "succeeded";
+      /** Presigned output href the workflow wrote for this asset. */
+      readonly outputHref: string;
+    }
+  | {
+      /** Echoes the request asset id. */
+      readonly id: string;
+      readonly status: "failed";
+      /** Failure detail. */
+      readonly error: string;
+    };
 
 export interface CreativeProductionPort {
   /**

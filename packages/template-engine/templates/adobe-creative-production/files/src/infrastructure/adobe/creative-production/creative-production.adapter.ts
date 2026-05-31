@@ -98,7 +98,10 @@ export class CreativeProductionAdapter implements CreativeProductionPort {
           ),
         );
       }
-      const results: AssetResult[] = req.assets.map((asset, i) => {
+      // Annotate the callback return so the `status` literals stay narrow ("succeeded"/
+      // "failed") and satisfy the discriminated AssetResult union — without it they
+      // would widen to `string` and fail the assignment.
+      const results: AssetResult[] = req.assets.map((asset, i): AssetResult => {
         const href = done.outputs[i]?.href;
         return href
           ? { id: asset.id, status: "succeeded", outputHref: href }

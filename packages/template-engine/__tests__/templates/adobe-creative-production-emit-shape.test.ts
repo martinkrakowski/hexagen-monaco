@@ -96,7 +96,15 @@ describe("adobe-creative-production template — emit shape", () => {
     assert.ok(port.includes("runWorkflow("), "port must declare runWorkflow");
     // per-asset result array, in request order
     assert.ok(port.includes("Promise<Result<AssetResult[], FireflyError>>"));
-    assert.ok(port.includes('"succeeded"') && port.includes('"failed"'));
+    // AssetResult is a discriminated union so succeeded⇒outputHref / failed⇒error
+    // are compile-time enforced (not optional fields guarded at runtime)
+    assert.ok(port.includes("export type AssetResult ="));
+    assert.ok(port.includes('readonly status: "succeeded"'));
+    assert.ok(port.includes('readonly status: "failed"'));
+    assert.ok(
+      !port.includes("readonly outputHref?:"),
+      "outputHref must be required on the succeeded arm",
+    );
     assert.match(port, /import type \{\s*FireflyError\s*\}/);
     assert.ok(
       !/^import \{[^}]*FireflyError/m.test(port),
