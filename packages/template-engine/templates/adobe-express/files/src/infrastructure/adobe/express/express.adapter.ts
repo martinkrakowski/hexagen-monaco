@@ -40,6 +40,12 @@ export class ExpressAdapter implements ExpressAutomationPort {
   async renderBatch(
     req: RenderBatchRequest,
   ): Promise<Result<string[], FireflyError>> {
+    // A batch with no variants would submit an empty job the API rejects — guard
+    // up front rather than spending a round-trip to discover it. This is
+    // batch-specific; the single-output image.adobe.io services can't hit it.
+    if (req.items.length === 0) {
+      return err(new FireflyError("renderBatch requires at least one variant."));
+    }
     try {
       // Presign every variant's destination up front. An asset-valued
       // modification is already a presigned input href supplied by the caller,

@@ -129,6 +129,8 @@ describe("adobe-express template — emit shape", () => {
     // batch maps every output to an href (not just [0]) and presigns per variant
     assert.ok(adapter.includes("done.outputs"));
     assert.ok(adapter.includes("req.items.map("));
+    // guards an empty batch before spending an API round-trip
+    assert.ok(adapter.includes("req.items.length === 0"));
     // avoids the Express.js name collision
     assert.ok(adapter.includes("export const expressAutomation"));
     assert.ok(
