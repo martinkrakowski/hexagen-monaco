@@ -138,6 +138,28 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "/dashboard,/api/protected",
     },
   ],
+  "adobe-photoshop": [
+    {
+      id: "operations",
+      type: "multiselect",
+      prompt: "Which Photoshop operations will you use?",
+      options: [
+        "smartObject",
+        "editTextLayer",
+        "applyActionJson",
+        "crop",
+        "renderPsd",
+      ],
+      default: ["smartObject"],
+    },
+    {
+      id: "output_format",
+      type: "select",
+      prompt: "Default render output format?",
+      options: ["jpeg", "png"],
+      default: "jpeg",
+    },
+  ],
   "agents-md": [
     {
       id: "project_description",
