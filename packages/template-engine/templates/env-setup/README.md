@@ -62,8 +62,8 @@ npm run check:env   # validates .env.local
 
 ## Checklist (post-install)
 
-Install Zod; (optionally) a dotenv loader; append `.gitignore.hexagen`; `cp .env.example
-.env.local` and set every `# required` var; add the `check:env` script; read `SETUP.md`.
+Install Zod; (optionally) a dotenv loader; append `.gitignore.hexagen`; copy `.env.example` to
+`.env.local` and set every `# required` var; add the `check:env` script; read `SETUP.md`.
 
 ## Related
 
