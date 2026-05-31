@@ -22,7 +22,17 @@ import type {
  * A ref that is already an http(s) URL is returned unchanged, so callers may mix
  * pre-presigned hrefs with keys.
  */
-const URL_EXPIRY_SECONDS = Number("{url_expiry_seconds}");
+// Interpolated from the url_expiry_seconds answer. Validate + clamp so a bad or
+// overridden value never reaches getSignedUrl as NaN/out-of-range. We deliberately
+// fall back rather than throw at module scope — this file is imported at startup
+// (via s3-register), so a throw here would crash the app. AWS SigV4 presigned URLs
+// allow 1..604800s (7 days); default to 900 (15 min) on an invalid value.
+const URL_EXPIRY_SECONDS = resolveExpiry(Number("{url_expiry_seconds}"));
+
+function resolveExpiry(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 900;
+  return Math.min(Math.floor(value), 604_800);
+}
 
 export class S3PresignStorageAdapter implements FireflyStoragePort {
   private readonly client: S3Client;
@@ -37,7 +47,9 @@ export class S3PresignStorageAdapter implements FireflyStoragePort {
     // every app that registers S3 — even in dev/CI or on routes that never touch
     // Firefly. Validation is deferred to presign time (requireBucket).
     this.bucket = process.env.ADOBE_S3_BUCKET ?? "";
-    this.prefix = process.env.ADOBE_S3_PREFIX ?? "";
+    // Normalise the prefix to a slash-free path segment so a "/firefly" (path-style)
+    // prefix can't yield object keys that start with "/".
+    this.prefix = (process.env.ADOBE_S3_PREFIX ?? "").replace(/^\/+/, "").replace(/\/+$/, "");
   }
 
   async presignInput(ref: string): Promise<PresignedHref> {
@@ -75,7 +87,7 @@ export class S3PresignStorageAdapter implements FireflyStoragePort {
       throw new Error(`Invalid S3 object key ${JSON.stringify(ref)}: path traversal ("..") is not allowed.`);
     }
     if (!this.prefix) return cleanRef;
-    return `${this.prefix.replace(/\/+$/, "")}/${cleanRef}`;
+    return `${this.prefix}/${cleanRef}`;
   }
 }
 

@@ -133,12 +133,17 @@ describe("adobe-firefly-storage-s3 template — emit shape", () => {
     );
     // reject path traversal so a ref can't escape the prefix
     assert.ok(adapter.includes("path traversal"));
+    // prefix normalised (no leading "/") so keys never start with "/"
+    assert.ok(adapter.includes('process.env.ADOBE_S3_PREFIX ?? "").replace'));
   });
 
-  it("interpolates the presigned-URL lifetime", async () => {
+  it("interpolates and clamps the presigned-URL lifetime", async () => {
     const adapter = await read(root, `${STORAGE}/s3-presign.adapter.ts`);
     assert.ok(adapter.includes('Number("900")'));
     assert.ok(!adapter.includes("{url_expiry_seconds}"));
+    // a bad/overridden value can't reach getSignedUrl as NaN/out-of-range
+    assert.ok(adapter.includes("resolveExpiry"));
+    assert.ok(adapter.includes("604_800") || adapter.includes("604800"));
   });
 
   it("marks the bucket required in the env example", async () => {
