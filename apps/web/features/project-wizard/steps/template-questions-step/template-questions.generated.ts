@@ -8,6 +8,15 @@ export const TEMPLATE_QUESTIONS: Record<
   string,
   ReadonlyArray<TemplateQuestion>
 > = {
+  "adobe-express": [
+    {
+      id: "output_format",
+      type: "select",
+      prompt: "Default output format for rendered variants?",
+      options: ["jpg", "png", "pdf"],
+      default: "jpg",
+    },
+  ],
   "adobe-firefly-composite": [
     {
       id: "default_candidates",

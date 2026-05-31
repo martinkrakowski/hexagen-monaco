@@ -10,8 +10,8 @@
 > The **Adobe Firefly Services** family ([`17-adobe-firefly.md`](./17-adobe-firefly.md)) is
 > underway: `adobe-firefly-core`, `adobe-firefly-upscale`, `adobe-firefly-generate`,
 > `adobe-firefly-content-tagging`, `adobe-firefly-composite`, `adobe-photoshop`, `adobe-lightroom`,
-> `adobe-illustrator`, `adobe-indesign`, and the `adobe-firefly-storage-s3` presigner are
-> **implemented** (through illustrator merged to `main`); the remaining 5 service addons + 2 storage
+> `adobe-illustrator`, `adobe-indesign`, `adobe-express`, and the `adobe-firefly-storage-s3` presigner
+> are **implemented** (through indesign merged to `main`); the remaining 4 service addons + 2 storage
 > presigners (GCS/Azure) are design-only (Core Generative done bar media/custom-models; Creative Automation underway).
 > Planned (design only, no manifest yet): **`mcp-server`** ([`18-mcp-server.md`](./18-mcp-server.md)).
 
