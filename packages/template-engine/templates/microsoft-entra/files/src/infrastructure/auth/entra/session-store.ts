@@ -1,4 +1,4 @@
-import type { EntraUser } from "../../../domain/value-objects/entra-user";
+import type { EntraUser } from "./entra-user";
 
 const SECRET = process.env.AUTH_SESSION_SECRET ?? "";
 

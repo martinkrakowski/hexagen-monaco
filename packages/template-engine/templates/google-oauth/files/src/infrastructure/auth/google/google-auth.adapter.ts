@@ -1,4 +1,4 @@
-import type { GoogleUser } from "../../../domain/value-objects/google-user";
+import type { GoogleUser } from "./google-user";
 import { encryptSession } from "./session-store";
 import { GOOGLE_CONFIG } from "./config";
 

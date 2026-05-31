@@ -1,5 +1,5 @@
 import type { GoogleUserInfo } from "./google-client";
-import type { GoogleUser } from "../../../domain/value-objects/google-user";
+import type { GoogleUser } from "./google-user";
 import type { UserContext } from "../../../domain/value-objects/user-context";
 
 export function mapGoogleUserInfo(info: GoogleUserInfo): GoogleUser {

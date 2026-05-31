@@ -1,4 +1,4 @@
-import type { GoogleUser } from "../../../domain/value-objects/google-user";
+import type { GoogleUser } from "./google-user";
 
 const SECRET = process.env.AUTH_SESSION_SECRET ?? "";
 

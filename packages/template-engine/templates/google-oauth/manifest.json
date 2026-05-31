@@ -49,7 +49,7 @@
     "AUTH_SESSION_SECRET"
   ],
   "outputs": [
-    "src/domain/value-objects/google-user.ts",
+    "src/infrastructure/auth/google/google-user.ts",
     "src/infrastructure/auth/google/config.ts",
     "src/infrastructure/auth/google/google-client.ts",
     "src/infrastructure/auth/google/user-profile-mapper.ts",

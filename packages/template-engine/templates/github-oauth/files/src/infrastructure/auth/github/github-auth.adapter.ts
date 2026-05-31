@@ -1,4 +1,4 @@
-import type { GitHubUser } from "../../../domain/value-objects/github-user";
+import type { GitHubUser } from "./github-user";
 import { encryptSession } from "./session-store";
 
 // Thin helper for the OAuth callback: encrypts the GitHub user into the session
