@@ -175,7 +175,10 @@ function normaliseStatus(status: string | undefined): CustomModelStatus {
     case "in_progress":
       return "training";
     default:
-      return "queued";
+      // An unrecognised status (e.g. "cancelled"/"archived", or a status the API
+      // adds later) — surface it honestly rather than guessing "queued" (poll
+      // forever) or "failed" (mislabel a possibly-progressing state).
+      return "unknown";
   }
 }
 

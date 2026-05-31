@@ -11,7 +11,16 @@ import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-
  * long-running (minutes–hours) and webhook-friendly. Hrefs are presigned URLs
  * (`storage: "external"`).
  */
-export type CustomModelStatus = "queued" | "training" | "completed" | "failed";
+export type CustomModelStatus =
+  | "queued"
+  | "training"
+  | "completed"
+  | "failed"
+  // An API state the adapter doesn't recognise (e.g. a newly introduced or
+  // terminal-but-unmapped status like "cancelled"/"archived") — reported as-is
+  // rather than guessed as "queued" (would poll forever) or "failed" (would
+  // mislabel a still-progressing state).
+  | "unknown";
 
 export interface TrainRequest {
   /** Display name for the custom model. */

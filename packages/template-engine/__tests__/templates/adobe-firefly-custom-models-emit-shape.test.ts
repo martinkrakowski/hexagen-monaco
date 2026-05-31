@@ -99,6 +99,13 @@ describe("adobe-firefly-custom-models template — emit shape", () => {
     }
     assert.ok(port.includes("CustomModelStatus"));
     assert.ok(port.includes("TrainedModel"));
+    // unrecognised API statuses are surfaced as "unknown" (not guessed as queued/failed)
+    assert.ok(port.includes('"unknown"'));
+    const adapter = await read(root, ADAPTER);
+    assert.ok(
+      adapter.includes('return "unknown"'),
+      "normaliseStatus default must be unknown",
+    );
     assert.match(port, /import type \{\s*FireflyError\s*\}/);
     assert.ok(
       !/^import \{[^}]*FireflyError/m.test(port),
