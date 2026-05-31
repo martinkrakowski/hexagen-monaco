@@ -1,0 +1,32 @@
+{
+  "id": "adobe-firefly-media",
+  "name": "Adobe Firefly — Audio/Video (Media)",
+  "description": "Audio/Video (Media) generation for Adobe Firefly Services (firefly-api.adobe.io): a MediaGenerationPort + adapter for text-to-video, image-to-video, audio/video translation, speech, and sound effects over the adobe-firefly-core foundation. Async and LONG (minutes) via FireflyJobPort; webhook job_mode strongly recommended. Partner models (Veo/Runway/Kling/ElevenLabs) are opaque model ids where entitled — no partner SDKs.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "partner_model",
+      "type": "boolean",
+      "prompt": "Acknowledge partner-model routing (Veo/Runway/Kling/ElevenLabs as opaque model ids where entitled)?",
+      "default": false
+    }
+  ],
+  "envVars": ["ADOBE_FIREFLY_MEDIA_MODEL"],
+  "outputs": [
+    "src/domain/ports/out/media-generation.port.ts",
+    "src/infrastructure/adobe/media/firefly-media.adapter.ts",
+    ".env.adobe-media.example"
+  ],
+  "checklist": [
+    "Confirm the Audio/Video API entitlement + scope on your Adobe Developer Console project",
+    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to the async /v3/videos/*-async, /v3/audio/*-async, and /v3/audio-video/translate-async endpoints, which return a job to await)",
+    "Long jobs (minutes): prefer webhook job_mode and raise ADOBE_WEBHOOK_TIMEOUT_MS; if polling, raise ADOBE_JOB_POLL_INTERVAL_MS to scale the poll interval up for these long jobs",
+    "Provide presigned input (image for imageToVideo, source media for translateAudioVideo) + output hrefs — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Set the default model via ADOBE_FIREFLY_MEDIA_MODEL; pass a per-call model to override",
+    "Partner models (Veo/Runway/Kling/ElevenLabs) are passed as opaque model ids where your entitlement allows — no partner SDKs are bundled",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-media"
+}

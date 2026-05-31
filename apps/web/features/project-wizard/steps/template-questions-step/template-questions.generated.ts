@@ -95,6 +95,15 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2048x2048",
     },
   ],
+  "adobe-firefly-media": [
+    {
+      id: "partner_model",
+      type: "boolean",
+      prompt:
+        "Acknowledge partner-model routing (Veo/Runway/Kling/ElevenLabs as opaque model ids where entitled)?",
+      default: false,
+    },
+  ],
   "adobe-firefly-storage-azure": [
     {
       id: "url_expiry_seconds",
