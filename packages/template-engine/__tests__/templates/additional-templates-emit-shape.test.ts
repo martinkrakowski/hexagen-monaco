@@ -59,10 +59,7 @@ function defaultsQuestionEngine(): QuestionEnginePort {
   };
 }
 
-async function install(
-  id: string,
-): Promise<{ root: string; warnings: string[] }> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), `hexagen-${id}-test-`));
+async function install(id: string, projectRoot: string): Promise<string[]> {
   const useCase = new AddTemplateUseCase(
     new FileSystemTemplateRegistry(TEMPLATES_DIR),
     defaultsQuestionEngine(),
@@ -70,11 +67,8 @@ async function install(
     new FileSystemTemplateConfigStore(),
   );
   // `requires` auto-resolve and co-emit; we only assert the target's outputs.
-  const result = await useCase.execute({
-    templateIds: [id],
-    projectRoot: root,
-  });
-  return { root, warnings: result.warnings };
+  const result = await useCase.execute({ templateIds: [id], projectRoot });
+  return result.warnings;
 }
 
 async function exists(root: string, rel: string): Promise<boolean> {
@@ -90,8 +84,12 @@ async function exists(root: string, rel: string): Promise<boolean> {
 function defaultAnswers(questions: TemplateQuestion[]): AnswerMap {
   const map: AnswerMap = {};
   for (const q of questions) {
+    // Mirror defaultsQuestionEngine exactly so the gating evaluation here agrees
+    // with the answers the install actually uses (notably: a defaultless select
+    // falls back to its first option, not "").
     if (q.type === "multiselect") map[q.id] = q.default ?? [];
     else if (q.type === "boolean") map[q.id] = q.default ?? false;
+    else if (q.type === "select") map[q.id] = q.default ?? q.options[0] ?? "";
     else map[q.id] = (q.default as string) ?? "";
   }
   return map;
@@ -105,6 +103,9 @@ describe("emit-shape coverage — previously untested templates", () => {
       let expectedOutputs: string[];
 
       before(async () => {
+        // Create the temp dir first so `root` is assigned before any throwable
+        // work — the `after` hook then cleans up even if installation fails.
+        root = await fs.mkdtemp(path.join(os.tmpdir(), `hexagen-${id}-test-`));
         const manifest = validateManifest(
           JSON.parse(
             await fs.readFile(
@@ -117,7 +118,7 @@ describe("emit-shape coverage — previously untested templates", () => {
         expectedOutputs = manifest.outputs
           .filter((o) => isOutputEnabled(o, answers))
           .map(outputPath);
-        ({ root, warnings } = await install(id));
+        warnings = await install(id, root);
       });
 
       after(async () => {
