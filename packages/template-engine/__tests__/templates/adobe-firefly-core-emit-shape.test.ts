@@ -268,6 +268,16 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     assert.match(env, /ADOBE_CLIENT_SECRET=\s*#\s*required/);
   });
 
+  it("documents the webhook await timeout knob (optional, not required)", async () => {
+    const env = await read(root, ".env.adobe.example");
+    // read at runtime by job-port.ts (process.env.ADOBE_WEBHOOK_TIMEOUT_MS ?? 600_000)
+    assert.match(env, /ADOBE_WEBHOOK_TIMEOUT_MS=600000/);
+    assert.ok(
+      !/ADOBE_WEBHOOK_TIMEOUT_MS=\S*\s*#\s*required/.test(env),
+      "timeout is optional",
+    );
+  });
+
   it("leaves no unresolved template variables", () => {
     assert.deepStrictEqual(
       warnings.filter((w) => w.includes("Unresolved template variable")),
