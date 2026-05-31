@@ -1,0 +1,39 @@
+{
+  "id": "adobe-lightroom",
+  "name": "Adobe Lightroom API",
+  "description": "Lightroom automation for Adobe Firefly Services (image.adobe.io/lrService): a LightroomPort + adapter for auto-tone, preset application, and parametric edits over the adobe-firefly-core foundation. Async, batch-oriented photo editing / color grading.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "operations",
+      "type": "multiselect",
+      "prompt": "Which Lightroom operations will you use?",
+      "options": ["autoTone", "applyPreset", "edit"],
+      "default": ["autoTone"]
+    },
+    {
+      "id": "output_format",
+      "type": "select",
+      "prompt": "Default output format?",
+      "options": ["jpeg", "png"],
+      "default": "jpeg"
+    }
+  ],
+  "envVars": ["ADOBE_LIGHTROOM_BASE_URL", "ADOBE_LIGHTROOM_FORMAT"],
+  "outputs": [
+    "src/domain/ports/out/lightroom.port.ts",
+    "src/infrastructure/adobe/lightroom/lightroom.adapter.ts",
+    ".env.adobe-lightroom.example"
+  ],
+  "checklist": [
+    "Confirm the Lightroom API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current endpoints/payloads against Adobe docs — the Lightroom API lives on image.adobe.io/lrService (same host as Photoshop, different service path; the client posts absolute URLs there)",
+    "Provide presigned input (+ preset for applyPreset) and output hrefs — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Batch-oriented: drive autoTone/edit over many images by calling the port per asset (or fan out with the bullmq template)",
+    "Default output format defaults to ADOBE_LIGHTROOM_FORMAT (set at install)",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-lightroom"
+}
