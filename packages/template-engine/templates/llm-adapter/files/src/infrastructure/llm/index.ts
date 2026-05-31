@@ -1,6 +1,12 @@
 export { LLMRouter } from "./router/llm-router";
 export type { CallType, LLMRouterOptions } from "./router/llm-router";
 
+export { registerProvider } from "./router/provider-registry";
+export type {
+  ProviderModels,
+  ProviderRegistration,
+} from "./router/provider-registry";
+
 export { XaiLLMClientAdapter } from "./adapters/xai-llm-client.adapter";
 export { OpenAILLMClientAdapter } from "./adapters/openai-llm-client.adapter";
 export { AnthropicLLMClientAdapter } from "./adapters/anthropic-llm-client.adapter";

@@ -96,6 +96,7 @@
     "src/infrastructure/llm/adapters/ollama-llm-client.adapter.ts",
     "src/infrastructure/llm/adapters/azure-openai-llm-client.adapter.ts",
     "src/infrastructure/llm/router/llm-router.ts",
+    "src/infrastructure/llm/router/provider-registry.ts",
     "src/infrastructure/llm/index.ts",
     "src/infrastructure/llm/smoke-test.ts",
     ".env.llm.example"

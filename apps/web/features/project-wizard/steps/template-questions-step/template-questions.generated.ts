@@ -484,6 +484,35 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2",
     },
   ],
+  "llm-adapter-bedrock": [
+    {
+      id: "bedrock_region",
+      type: "select",
+      prompt:
+        "Default AWS region for Bedrock? (code never hardcodes it — the SDK cascade resolves region; this only seeds .env.bedrock.example)",
+      options: ["us-west-2", "us-east-1", "eu-central-1", "ap-southeast-2"],
+      default: "us-west-2",
+    },
+    {
+      id: "bedrock_inference",
+      type: "select",
+      prompt:
+        "Default Bedrock inference-profile model id? (override per tier via BEDROCK_*_MODEL)",
+      options: [
+        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "us.amazon.nova-pro-v1:0",
+        "us.meta.llama3-3-70b-instruct-v1:0",
+      ],
+      default: "us.anthropic.claude-sonnet-4-20250514-v1:0",
+    },
+    {
+      id: "bedrock_guardrails",
+      type: "boolean",
+      prompt:
+        "Wire optional Bedrock Guardrails support (attached when BEDROCK_GUARDRAIL_ID is set)?",
+      default: false,
+    },
+  ],
   "magic-link": [
     {
       id: "email_transport",
