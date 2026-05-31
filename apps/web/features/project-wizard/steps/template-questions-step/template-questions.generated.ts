@@ -45,6 +45,28 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2",
     },
   ],
+  "adobe-firefly-generate": [
+    {
+      id: "operations",
+      type: "multiselect",
+      prompt: "Which Generate operations will you use?",
+      options: [
+        "text-to-image",
+        "generative-fill",
+        "generative-expand",
+        "image-to-image",
+        "style-transfer",
+      ],
+      default: ["text-to-image"],
+    },
+    {
+      id: "default_size",
+      type: "select",
+      prompt: "Default output size?",
+      options: ["1024x1024", "2048x2048", "1792x1024"],
+      default: "2048x2048",
+    },
+  ],
   "adobe-firefly-storage-s3": [
     {
       id: "url_expiry_seconds",

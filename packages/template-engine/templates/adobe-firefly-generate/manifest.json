@@ -1,0 +1,45 @@
+{
+  "id": "adobe-firefly-generate",
+  "name": "Adobe Firefly — Generate",
+  "description": "Firefly Generate API (the flagship service): an ImageGenerationPort + adapter for text-to-image and the image-edit operations (generative fill/expand, image-to-image, style transfer) over the adobe-firefly-core foundation. Async via FireflyJobPort; presigned IO; content-credentials and safety flags pass through as port options.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "operations",
+      "type": "multiselect",
+      "prompt": "Which Generate operations will you use?",
+      "options": [
+        "text-to-image",
+        "generative-fill",
+        "generative-expand",
+        "image-to-image",
+        "style-transfer"
+      ],
+      "default": ["text-to-image"]
+    },
+    {
+      "id": "default_size",
+      "type": "select",
+      "prompt": "Default output size?",
+      "options": ["1024x1024", "2048x2048", "1792x1024"],
+      "default": "2048x2048"
+    }
+  ],
+  "envVars": ["ADOBE_FIREFLY_DEFAULT_MODEL", "ADOBE_FIREFLY_SIZE"],
+  "outputs": [
+    "src/domain/ports/out/image-generation.port.ts",
+    "src/infrastructure/adobe/generate/firefly-generate.adapter.ts",
+    ".env.adobe-generate.example"
+  ],
+  "checklist": [
+    "Confirm the Firefly Generate entitlement + scope on your Adobe Developer Console project",
+    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to the async endpoints /v3/images/{generate,fill,expand}-async, which return a job to await)",
+    "The edit operations (fill/expand/image-to-image/style-transfer) need presigned input + output hrefs — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Content Credentials (C2PA) and safety/moderation are pass-through options on the port (contentCredentials / safety) — set them per call, they are not hardcoded",
+    "Override the model per environment via ADOBE_FIREFLY_DEFAULT_MODEL; default output size is set at install (ADOBE_FIREFLY_SIZE)",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-generate"
+}
