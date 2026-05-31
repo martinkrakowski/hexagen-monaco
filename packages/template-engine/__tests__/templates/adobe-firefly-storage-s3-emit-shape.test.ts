@@ -119,21 +119,30 @@ describe("adobe-firefly-storage-s3 template — emit shape", () => {
     assert.ok(adapter.includes("PutObjectCommand"));
     assert.ok(adapter.includes("getSignedUrl"));
     assert.match(adapter, /region\s*\?\s*\{\s*region\s*\}\s*:\s*\{\s*\}/);
-    // bucket validation is DEFERRED to presign time (import must not crash startup)
-    assert.ok(adapter.includes('process.env.ADOBE_S3_BUCKET ?? ""'));
+    // bucket + prefix are read from process.env at PRESIGN time, not snapshotted in
+    // the constructor — so a .env loaded after s3-register's side-effect import is
+    // still honoured (and a missing bucket can't crash startup). The client is built
+    // lazily (region read on first use) too.
+    assert.ok(adapter.includes("process.env.ADOBE_S3_BUCKET?.trim()"));
     assert.ok(adapter.includes("requireBucket"));
     assert.ok(adapter.includes("ADOBE_S3_BUCKET is not set"));
+    assert.ok(adapter.includes("private getClient"));
+    // getClient returns a statically non-optional S3Client (a local) so the emitted
+    // code compiles under strict TS (the field is `S3Client | undefined`).
+    assert.ok(adapter.includes("const created = new S3Client"));
+    assert.ok(adapter.includes("return created"));
+    // the constructor body captures NO env at all (everything read at call time)
     const ctorBlock = adapter.slice(
       adapter.indexOf("constructor"),
-      adapter.indexOf("async presignInput"),
+      adapter.indexOf("private getClient"),
     );
     assert.ok(
-      !ctorBlock.includes("ADOBE_S3_BUCKET is not set"),
-      "constructor must not throw on a missing bucket",
+      !ctorBlock.includes("process.env"),
+      "constructor must capture no env (read at presign time / lazy client)",
     );
     // reject path traversal so a ref can't escape the prefix
     assert.ok(adapter.includes("path traversal"));
-    // prefix normalised (no leading "/") so keys never start with "/"
+    // prefix normalised (no leading "/") at call time so keys never start with "/"
     assert.ok(adapter.includes('process.env.ADOBE_S3_PREFIX ?? "").replace'));
   });
 

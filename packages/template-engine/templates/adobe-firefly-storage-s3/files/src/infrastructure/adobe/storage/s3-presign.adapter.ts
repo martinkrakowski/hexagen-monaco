@@ -37,27 +37,33 @@ function resolveExpiry(value: number): number {
 }
 
 export class S3PresignStorageAdapter implements FireflyStoragePort {
-  private readonly client: S3Client;
-  private readonly bucket: string;
-  private readonly prefix: string;
+  private client: S3Client | undefined;
 
   constructor(client?: S3Client) {
+    // Capture NO env here. This adapter is constructed at import time by
+    // s3-register.ts (a side-effect import at startup), so snapshotting env in the
+    // constructor would lock in whatever was set before .env loaded. The client is
+    // built lazily (region read on first use) and bucket/prefix are read at presign
+    // time, so a .env loaded later is honoured — and startup stays crash-free.
+    this.client = client;
+  }
+
+  private getClient(): S3Client {
+    if (this.client) return this.client;
+    // Region resolves from the AWS chain at first use; never hardcoded/required
+    // (ADOBE_S3_REGION → AWS_REGION → SDK default). Return the local so the result
+    // is statically S3Client (strict TS won't narrow the `S3Client | undefined`
+    // field across the assignment).
     const region = process.env.ADOBE_S3_REGION ?? process.env.AWS_REGION;
-    this.client = client ?? new S3Client(region ? { region } : {});
-    // Read config but DON'T throw here. This adapter is constructed at import time
-    // by s3-register.ts, so throwing on a missing bucket would crash startup for
-    // every app that registers S3 — even in dev/CI or on routes that never touch
-    // Firefly. Validation is deferred to presign time (requireBucket).
-    this.bucket = process.env.ADOBE_S3_BUCKET ?? "";
-    // Normalise the prefix to a slash-free path segment so a "/firefly" (path-style)
-    // prefix can't yield object keys that start with "/".
-    this.prefix = (process.env.ADOBE_S3_PREFIX ?? "").replace(/^\/+/, "").replace(/\/+$/, "");
+    const created = new S3Client(region ? { region } : {});
+    this.client = created;
+    return created;
   }
 
   async presignInput(ref: string): Promise<PresignedHref> {
     if (isHttpUrl(ref)) return { href: ref };
     const href = await getSignedUrl(
-      this.client,
+      this.getClient(),
       new GetObjectCommand({ Bucket: this.requireBucket(), Key: this.key(ref) }),
       { expiresIn: URL_EXPIRY_SECONDS },
     );
@@ -67,7 +73,7 @@ export class S3PresignStorageAdapter implements FireflyStoragePort {
   async presignOutput(ref: string): Promise<PresignedHref> {
     if (isHttpUrl(ref)) return { href: ref };
     const href = await getSignedUrl(
-      this.client,
+      this.getClient(),
       new PutObjectCommand({ Bucket: this.requireBucket(), Key: this.key(ref) }),
       { expiresIn: URL_EXPIRY_SECONDS },
     );
@@ -75,11 +81,13 @@ export class S3PresignStorageAdapter implements FireflyStoragePort {
   }
 
   private requireBucket(): string {
+    // Read at call time so a .env loaded after this module is imported is honoured.
     // Fail loud + fast at the point of use (a config error), not at import.
-    if (!this.bucket) {
+    const bucket = process.env.ADOBE_S3_BUCKET?.trim();
+    if (!bucket) {
       throw new Error("ADOBE_S3_BUCKET is not set — set the bucket the Firefly S3 presigner uses.");
     }
-    return this.bucket;
+    return bucket;
   }
 
   private key(ref: string): string {
@@ -88,8 +96,11 @@ export class S3PresignStorageAdapter implements FireflyStoragePort {
     if (cleanRef.split("/").some((segment) => segment === "..")) {
       throw new Error(`Invalid S3 object key ${JSON.stringify(ref)}: path traversal ("..") is not allowed.`);
     }
-    if (!this.prefix) return cleanRef;
-    return `${this.prefix}/${cleanRef}`;
+    // Normalise the prefix at call time to a slash-free segment so a "/firefly"
+    // (path-style) prefix can't yield object keys that start with "/".
+    const prefix = (process.env.ADOBE_S3_PREFIX ?? "").replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!prefix) return cleanRef;
+    return `${prefix}/${cleanRef}`;
   }
 }
 
