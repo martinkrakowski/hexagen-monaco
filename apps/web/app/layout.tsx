@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+// Self-hosted Inter (woff2 shipped in node_modules) — no build-time fetch to
+// Google Fonts, which fails on network-restricted CI runners. Exposes the
+// "Inter Variable" family; --app-font-sans is set in globals.css.
+import "@fontsource-variable/inter";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "./providers/AuthProvider";
@@ -10,16 +13,6 @@ import { ActiveWorkspaceProvider } from "./contexts/ActiveWorkspaceContext";
 import { SecretVaultProvider } from "@/lib/vault-context";
 import { NormalizeErrors } from "./NormalizeErrors";
 import { FreeTierProvider } from "@/lib/free-tier/FreeTierContext";
-
-/*
- * next/font/google handles subsetting, self-hosting, and injects --app-font-sans
- * as a CSS custom property on the <html> element — no external CDN request needed.
- */
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--app-font-sans",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "HexaGen Monaco — Hexagonal Generator",
@@ -34,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script
           id="theme-guard"
