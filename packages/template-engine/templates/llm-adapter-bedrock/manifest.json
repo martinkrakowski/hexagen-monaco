@@ -1,0 +1,51 @@
+{
+  "id": "llm-adapter-bedrock",
+  "name": "LLM Adapter — Amazon Bedrock",
+  "description": "Adds Amazon Bedrock as an LLM provider (Converse API) to the llm-adapter router via the provider-registration seam — no base files overwritten. Auth uses the AWS credential chain; install @aws-sdk/client-bedrock-runtime.",
+  "version": "1.0.0",
+  "requires": ["llm-adapter", "error-handling", "env-setup"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "bedrock_region",
+      "type": "select",
+      "prompt": "Default AWS region for Bedrock? (code never hardcodes it — the SDK cascade resolves region; this only seeds .env.bedrock.example)",
+      "options": ["us-west-2", "us-east-1", "eu-central-1", "ap-southeast-2"],
+      "default": "us-west-2"
+    },
+    {
+      "id": "bedrock_inference",
+      "type": "select",
+      "prompt": "Default Bedrock inference-profile model id? (override per tier via BEDROCK_*_MODEL)",
+      "options": [
+        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "us.amazon.nova-pro-v1:0",
+        "us.meta.llama3-3-70b-instruct-v1:0"
+      ],
+      "default": "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    },
+    {
+      "id": "bedrock_guardrails",
+      "type": "boolean",
+      "prompt": "Wire optional Bedrock Guardrails support (attached when BEDROCK_GUARDRAIL_ID is set)?",
+      "default": false
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    "src/infrastructure/llm/adapters/bedrock-llm-client.adapter.ts",
+    "src/infrastructure/llm/adapters/bedrock-register.ts",
+    "src/infrastructure/llm/errors/bedrock-errors.ts",
+    ".env.bedrock.example"
+  ],
+  "checklist": [
+    "Install the AWS SDK — the only channel, since manifests have no deps field: npm install @aws-sdk/client-bedrock-runtime",
+    "Enable model access for your chosen Bedrock model in the Bedrock console (per account, per region) — calls return AccessDeniedException until you do",
+    "Import the registration once at startup, before constructing the router: import './infrastructure/llm/adapters/bedrock-register'",
+    "Make Bedrock the router's primary provider: new LLMRouter('bedrock')",
+    "Auth uses the AWS credential chain — on ECS/Graviton leave AWS_* unset and grant the task role bedrock:InvokeModel / bedrock:Converse; set AWS_* in .env.local for local dev",
+    "Override model ids per tier via BEDROCK_REASONING_MODEL / BEDROCK_FAST_MODEL / BEDROCK_VISION_MODEL if the install default doesn't fit",
+    "If using Guardrails, set BEDROCK_GUARDRAIL_ID (and optionally BEDROCK_GUARDRAIL_VERSION)"
+  ],
+  "branch": "feature/generator-template-bedrock"
+}
