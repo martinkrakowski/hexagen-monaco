@@ -77,6 +77,7 @@
     "Do NOT use JWT — the Service-Account/JWT flow is retired. @adobe/jwt-auth is not used; this is Server-to-Server (client_credentials)",
     "Confirm your entitlement covers the specific service addons you install — scopes differ per service",
     "If job_mode=webhook: expose the receiver route publicly and set ADOBE_WEBHOOK_SECRET (the verifier fails closed without it)",
+    "Webhook mode parks completion promises IN MEMORY — correct only for a single long-lived instance. On serverless / multi-instance deploys use polling, or back jobPort's registry with a shared store (Redis/BullMQ, Postgres)",
     "Smoke the token flow: npx tsx src/infrastructure/adobe/auth/smoke-token.ts",
     "infrastructure/adobe/** is @hexagen-server-only — never import it from a client bundle (it holds the IMS token)"
   ],

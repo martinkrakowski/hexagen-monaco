@@ -87,7 +87,9 @@ class FireflyClient {
       // 202/empty bodies resolve to an empty object.
       return (await safeBody(response)) as T;
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      // Match on name, not the DOMException subclass — some edge runtimes / shims
+      // throw a plain Error with name "AbortError" rather than a DOMException.
+      if (error instanceof Error && error.name === "AbortError") {
         throw new FireflyError(`Firefly request timed out after ${timeoutMs}ms`, 408, true);
       }
       throw error;

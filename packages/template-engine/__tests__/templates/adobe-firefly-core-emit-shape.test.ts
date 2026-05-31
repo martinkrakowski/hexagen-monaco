@@ -186,6 +186,20 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     }
   });
 
+  it("hardens runtime edges: portable AbortError + webhook fast-job race", async () => {
+    const client = await read(root, `${ADOBE}/http/firefly-client.ts`);
+    // Portable across edge runtimes/shims — match on name, not DOMException.
+    assert.ok(
+      client.includes('error instanceof Error && error.name === "AbortError"'),
+    );
+    assert.ok(!client.includes("instanceof DOMException"));
+
+    // job-port buffers a webhook result that arrives before await() parks it.
+    const jobPort = await read(root, `${ADOBE}/jobs/job-port.ts`);
+    assert.ok(jobPort.includes("settled"));
+    assert.match(jobPort, /SCALING LIMIT/);
+  });
+
   it("barrel and job-port never static-import the gated webhook file", async () => {
     // Doc-comment mentions are fine; what must not exist is a static import of the
     // gated module from an always-emitted file (engine constraint).
