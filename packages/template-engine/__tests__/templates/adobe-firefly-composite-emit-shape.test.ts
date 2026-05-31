@@ -136,6 +136,9 @@ describe("adobe-firefly-composite template — emit shape", () => {
     assert.ok(adapter.includes("ADOBE_FIREFLY_DEFAULT_MODEL?.trim() ||"));
     assert.ok(adapter.includes("resolveCandidates"));
     assert.ok(adapter.includes("Number.isInteger"));
+    // the caller's count is validated too (fail fast, not a downstream 400)
+    assert.ok(adapter.includes("isValidCandidates(req.numVariations)"));
+    assert.ok(adapter.includes("Invalid candidate count"));
     assert.ok(adapter.includes('Number("2")'));
     assert.ok(!adapter.includes("{default_candidates}"));
     const env = await read(root, ".env.adobe-composite.example");

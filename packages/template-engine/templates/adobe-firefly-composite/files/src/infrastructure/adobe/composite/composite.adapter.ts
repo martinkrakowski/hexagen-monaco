@@ -7,7 +7,11 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import {
+  classifyAdobeError,
+  FireflyError,
+  FireflyValidationError,
+} from "../errors/firefly-errors";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -28,14 +32,28 @@ const ENDPOINT = "/v3/images/composite-async";
 const DEFAULT_MODEL = process.env.ADOBE_FIREFLY_DEFAULT_MODEL?.trim() || "firefly_v3";
 const DEFAULT_CANDIDATES = resolveCandidates(process.env.ADOBE_COMPOSITE_CANDIDATES);
 
+function isValidCandidates(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 10;
+}
+
 function resolveCandidates(raw: string | undefined): number {
   const fallback = Number("{default_candidates}");
   const value = Number(raw?.trim() || "{default_candidates}");
-  return Number.isInteger(value) && value >= 1 && value <= 10 ? value : fallback;
+  return isValidCandidates(value) ? value : fallback;
 }
 
 export class FireflyCompositeAdapter implements CompositePort {
   async composite(req: CompositeRequest): Promise<Result<string[], FireflyError>> {
+    // Validate the caller's count up front (the env default is already validated)
+    // rather than letting an out-of-range value reach the API as a 400.
+    if (req.numVariations !== undefined && !isValidCandidates(req.numVariations)) {
+      return err(
+        new FireflyValidationError(
+          `Invalid candidate count ${JSON.stringify(req.numVariations)} — must be an integer between 1 and 10.`,
+        ),
+      );
+    }
+
     try {
       const storage = getStoragePresigner();
       const product = await storage.presignInput(req.productHref);
