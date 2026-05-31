@@ -73,6 +73,15 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2",
     },
   ],
+  "adobe-firefly-custom-models": [
+    {
+      id: "dataset_caption_format",
+      type: "select",
+      prompt: "Dataset caption format?",
+      options: ["jsonl", "csv"],
+      default: "jsonl",
+    },
+  ],
   "adobe-firefly-generate": [
     {
       id: "operations",

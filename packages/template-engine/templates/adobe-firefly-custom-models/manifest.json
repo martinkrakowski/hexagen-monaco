@@ -1,0 +1,33 @@
+{
+  "id": "adobe-firefly-custom-models",
+  "name": "Adobe Firefly — Custom Models",
+  "description": "Custom Models (training + inference) for Adobe Firefly Services (firefly-api.adobe.io): a CustomModelPort + adapter to train a brand-tuned model from a curated dataset, check status, list models, and generate with a trained model, over the adobe-firefly-core foundation. Async, long-running, webhook-friendly via FireflyJobPort.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "dataset_caption_format",
+      "type": "select",
+      "prompt": "Dataset caption format?",
+      "options": ["jsonl", "csv"],
+      "default": "jsonl"
+    }
+  ],
+  "envVars": ["ADOBE_FIREFLY_BASE_MODEL"],
+  "outputs": [
+    "src/domain/ports/out/custom-model.port.ts",
+    "src/infrastructure/adobe/custom-models/firefly-custom-model.adapter.ts",
+    ".env.adobe-custom-models.example"
+  ],
+  "checklist": [
+    "Confirm the Custom Models entitlement + scope on your Adobe Developer Console project — entitlements are per-service, so Custom Models is separate from Firefly Generate",
+    "Verify the current endpoints/payloads against Adobe docs — Firefly paths version frequently (this scaffold posts to /v3/custom-models/train-async and /v3/images/generate-async, and GETs /v3/custom-models and /v3/custom-models/{id})",
+    "Prepare a dataset of 10-50 curated, on-brand images with {dataset_caption_format} captions; upload it to your storage and pass the ref as datasetHref — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Training is long-running (minutes–hours): prefer webhook job_mode and raise ADOBE_WEBHOOK_TIMEOUT_MS; if polling, raise ADOBE_JOB_POLL_INTERVAL_MS",
+    "train() resolves to the trained model id once the job reaches completed — the id is read from the completed job result (verify the field name against Adobe docs); pass it to generateWith() and status()",
+    "Set the base model to fine-tune from via ADOBE_FIREFLY_BASE_MODEL (override per train via baseModel)",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-custom-models"
+}

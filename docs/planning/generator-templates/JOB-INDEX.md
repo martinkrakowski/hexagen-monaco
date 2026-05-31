@@ -8,12 +8,10 @@
 > `bedrock-agentcore-services` on `feature/generator-template-bedrock-agentcore-services`, and the
 > `llm-adapter-bedrock` companion on `feature/generator-template-bedrock`.
 > The **Adobe Firefly Services** family ([`17-adobe-firefly.md`](./17-adobe-firefly.md)) is
-> underway: `adobe-firefly-core`, `adobe-firefly-upscale`, `adobe-firefly-generate`,
-> `adobe-firefly-content-tagging`, `adobe-firefly-composite`, `adobe-photoshop`, `adobe-lightroom`,
-> `adobe-illustrator`, `adobe-indesign`, `adobe-express`, `adobe-creative-production`,
-> `adobe-substance-3d`, `adobe-firefly-media`, and the full `adobe-firefly-storage-{s3,gcs,azure}`
-> presigner trio are **implemented** (through the azure presigner merged to `main`); only
-> `adobe-firefly-custom-models` is design-only (Creative Automation + all 3 storage presigners done; one Core Generative service left).
+> **COMPLETE** — all 14 service addons (core, generate, upscale, composite, content-tagging, media,
+> custom-models, photoshop, lightroom, illustrator, indesign, express, creative-production,
+> substance-3d) plus the s3 / gcs / azure storage presigner trio are implemented and merged to
+> `main`, each with an author/agent README and emit-shape test.
 > Planned (design only, no manifest yet): **`mcp-server`** ([`18-mcp-server.md`](./18-mcp-server.md)).
 
 ---
