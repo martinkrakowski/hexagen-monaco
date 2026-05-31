@@ -123,6 +123,9 @@ describe("adobe-illustrator template — emit shape", () => {
     assert.ok(
       adapter.includes("return ok(") && adapter.includes("return err("),
     );
+    // scaleVector fails fast when no dimension is supplied (guaranteed API 400)
+    assert.ok(adapter.includes("scaleVector requires at least one"));
+    assert.ok(adapter.includes("FireflyValidationError"));
   });
 
   it("validates the format env and interpolates the defaults", async () => {

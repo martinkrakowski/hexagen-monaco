@@ -11,7 +11,11 @@ import { jobPort } from "../jobs/job-port";
 import { pollJobStatus } from "../jobs/job-poller";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import {
+  classifyAdobeError,
+  FireflyError,
+  FireflyValidationError,
+} from "../errors/firefly-errors";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -67,6 +71,13 @@ export class IllustratorAdapter implements IllustratorPort {
   }
 
   async scaleVector(req: ScaleVectorRequest): Promise<Result<string, FireflyError>> {
+    // Fail fast on an empty target: the API rejects scaling with no dimensions,
+    // so surface a clear validation error rather than a downstream 400.
+    if (req.scale === undefined && req.width === undefined && req.height === undefined) {
+      return err(
+        new FireflyValidationError("scaleVector requires at least one of scale, width, or height."),
+      );
+    }
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
