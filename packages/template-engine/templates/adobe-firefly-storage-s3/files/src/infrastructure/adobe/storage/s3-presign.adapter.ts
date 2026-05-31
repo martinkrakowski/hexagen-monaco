@@ -49,13 +49,15 @@ export class S3PresignStorageAdapter implements FireflyStoragePort {
   }
 
   private getClient(): S3Client {
-    if (!this.client) {
-      // Region resolves from the AWS chain at first use; never hardcoded/required
-      // (ADOBE_S3_REGION → AWS_REGION → SDK default).
-      const region = process.env.ADOBE_S3_REGION ?? process.env.AWS_REGION;
-      this.client = new S3Client(region ? { region } : {});
-    }
-    return this.client;
+    if (this.client) return this.client;
+    // Region resolves from the AWS chain at first use; never hardcoded/required
+    // (ADOBE_S3_REGION → AWS_REGION → SDK default). Return the local so the result
+    // is statically S3Client (strict TS won't narrow the `S3Client | undefined`
+    // field across the assignment).
+    const region = process.env.ADOBE_S3_REGION ?? process.env.AWS_REGION;
+    const created = new S3Client(region ? { region } : {});
+    this.client = created;
+    return created;
   }
 
   async presignInput(ref: string): Promise<PresignedHref> {

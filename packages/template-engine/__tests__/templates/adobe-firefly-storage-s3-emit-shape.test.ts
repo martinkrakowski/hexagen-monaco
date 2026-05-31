@@ -127,6 +127,10 @@ describe("adobe-firefly-storage-s3 template — emit shape", () => {
     assert.ok(adapter.includes("requireBucket"));
     assert.ok(adapter.includes("ADOBE_S3_BUCKET is not set"));
     assert.ok(adapter.includes("private getClient"));
+    // getClient returns a statically non-optional S3Client (a local) so the emitted
+    // code compiles under strict TS (the field is `S3Client | undefined`).
+    assert.ok(adapter.includes("const created = new S3Client"));
+    assert.ok(adapter.includes("return created"));
     // the constructor body captures NO env at all (everything read at call time)
     const ctorBlock = adapter.slice(
       adapter.indexOf("constructor"),
