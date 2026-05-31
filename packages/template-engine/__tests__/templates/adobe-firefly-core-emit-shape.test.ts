@@ -268,6 +268,29 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     assert.match(env, /ADOBE_CLIENT_SECRET=\s*#\s*required/);
   });
 
+  it("documents the webhook await timeout knob (optional, not required)", async () => {
+    const env = await read(root, ".env.adobe.example");
+    // read at runtime by job-port.ts (process.env.ADOBE_WEBHOOK_TIMEOUT_MS ?? 600_000).
+    // Anchor to the actual UNCOMMENTED assignment line so a commented-out or
+    // malformed line (e.g. `600000# foo`, which check-env would fold into the value
+    // and Number() would parse to NaN) can't satisfy the test.
+    const line = env
+      .split("\n")
+      .find((l) => /^ADOBE_WEBHOOK_TIMEOUT_MS=/.test(l));
+    assert.ok(
+      line,
+      "ADOBE_WEBHOOK_TIMEOUT_MS must be an uncommented assignment",
+    );
+    // value is exactly 600000, optionally followed by a whitespace-preceded comment
+    // (the form check-env.ts recognises) — nothing glued to the value.
+    assert.match(line!, /^ADOBE_WEBHOOK_TIMEOUT_MS=600000(\s+#.*)?$/);
+    // optional knob — must not carry the inline `# required` annotation
+    assert.ok(
+      !line!.includes("# required"),
+      "timeout is optional, not required",
+    );
+  });
+
   it("leaves no unresolved template variables", () => {
     assert.deepStrictEqual(
       warnings.filter((w) => w.includes("Unresolved template variable")),

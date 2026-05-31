@@ -50,7 +50,8 @@
     "ADOBE_IMS_HOST",
     "ADOBE_FIREFLY_BASE_URL",
     "ADOBE_JOB_POLL_INTERVAL_MS",
-    "ADOBE_WEBHOOK_SECRET"
+    "ADOBE_WEBHOOK_SECRET",
+    "ADOBE_WEBHOOK_TIMEOUT_MS"
   ],
   "outputs": [
     "src/domain/ports/out/firefly-auth.port.ts",
