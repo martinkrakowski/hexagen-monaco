@@ -103,7 +103,7 @@ describe("adobe-illustrator template — emit shape", () => {
     );
   });
 
-  it("targets image.adobe.io and polls a status-URL-only job directly", async () => {
+  it("targets image.adobe.io and always polls the status URL (mode-agnostic)", async () => {
     const adapter = await read(
       root,
       `${ADOBE}/illustrator/illustrator.adapter.ts`,
@@ -117,9 +117,16 @@ describe("adobe-illustrator template — emit shape", () => {
     assert.ok(adapter.includes("fireflyClient.post("));
     assert.ok(adapter.includes("toJobHandle("));
     assert.ok(adapter.includes('storage: "external"'));
-    // status-URL-tolerant guard + direct poll (works in webhook mode too)
-    assert.ok(adapter.includes("!handle.jobId && !handle.statusUrl"));
-    assert.ok(adapter.includes("? await pollJobStatus(handle)"));
+    // image.adobe.io is polled by status URL regardless of job_mode; a missing
+    // status URL is a clear error, and jobPort.await (which fails for a jobId-only
+    // handle in polling mode) is not used.
+    assert.ok(adapter.includes("if (!handle.statusUrl)"));
+    assert.ok(adapter.includes("await pollJobStatus(handle)"));
+    assert.ok(adapter.includes("no status URL to track"));
+    assert.ok(
+      !adapter.includes("jobPort.await"),
+      "must not route through jobPort.await",
+    );
     assert.ok(
       adapter.includes("return ok(") && adapter.includes("return err("),
     );

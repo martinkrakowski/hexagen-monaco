@@ -7,7 +7,6 @@ import type {
   ScaleVectorRequest,
 } from "../../../domain/ports/out/illustrator.port";
 import { fireflyClient } from "../http/firefly-client";
-import { jobPort } from "../jobs/job-port";
 import { pollJobStatus } from "../jobs/job-poller";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
@@ -107,18 +106,15 @@ export class IllustratorAdapter implements IllustratorPort {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
-      // image.adobe.io services track jobs by a status URL (_links.self.href) and
-      // may omit a job id — accept either; only neither is an error.
-      if (!handle.jobId && !handle.statusUrl) {
-        return err(new FireflyError("Illustrator submit response did not include a job handle."));
+      // image.adobe.io services are tracked by a status URL (_links.self.href) and
+      // are polled regardless of the project's job_mode (they don't deliver Firefly
+      // webhooks). A response without a status URL can't be polled, so surface a
+      // clear error rather than routing through the job port's await — which only
+      // resolves a jobId-only handle in webhook mode and would fail in polling builds.
+      if (!handle.statusUrl) {
+        return err(new FireflyError("Illustrator submit response had no status URL to track the job."));
       }
-      // Poll the status URL directly when present: that is the native tracking and
-      // works in BOTH polling and webhook deployments. jobPort.await() would reject
-      // a status-URL-only job in webhook mode (it needs a job id to correlate the
-      // callback). Fall back to await() only for a jobId-only handle.
-      const done = handle.statusUrl
-        ? await pollJobStatus(handle)
-        : await jobPort.await(handle);
+      const done = await pollJobStatus(handle);
       if (done.status !== "succeeded") {
         return err(new FireflyError(done.error ?? "Illustrator job did not succeed."));
       }
