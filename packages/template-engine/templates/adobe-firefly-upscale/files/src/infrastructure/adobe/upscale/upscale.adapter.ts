@@ -62,6 +62,12 @@ export class FireflyUpscaleAdapter implements UpscalePort {
           factor,
         }),
       );
+      // Validate the submit response before awaiting: a missing job id (e.g. an
+      // empty 202 body) can't be correlated and would collide in webhook mode.
+      // The job port also guards this, but failing here gives a precise error.
+      if (!handle.jobId) {
+        return err(new FireflyError("Upscale submit response did not include a job id."));
+      }
 
       const done = await jobPort.await(handle);
       const href = done.outputs[0]?.href;

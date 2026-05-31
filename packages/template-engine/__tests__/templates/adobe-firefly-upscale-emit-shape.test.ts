@@ -110,6 +110,8 @@ describe("adobe-firefly-upscale template — emit shape", () => {
     assert.ok(adapter.includes("getStoragePresigner()"));
     assert.ok(adapter.includes('fireflyClient.post("/v3/images/upscale"'));
     assert.ok(adapter.includes("toJobHandle("));
+    // validates the submit response before awaiting (no empty-jobId correlation)
+    assert.ok(adapter.includes("if (!handle.jobId)"));
     assert.ok(adapter.includes("jobPort.await(handle)"));
     assert.ok(adapter.includes('storage: "external"'));
     // Result at the boundary, not throws.
