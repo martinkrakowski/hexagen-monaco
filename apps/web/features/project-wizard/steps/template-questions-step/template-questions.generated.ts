@@ -138,6 +138,22 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "/dashboard,/api/protected",
     },
   ],
+  "adobe-lightroom": [
+    {
+      id: "operations",
+      type: "multiselect",
+      prompt: "Which Lightroom operations will you use?",
+      options: ["autoTone", "applyPreset", "edit"],
+      default: ["autoTone"],
+    },
+    {
+      id: "output_format",
+      type: "select",
+      prompt: "Default output format?",
+      options: ["jpeg", "png"],
+      default: "jpeg",
+    },
+  ],
   "adobe-photoshop": [
     {
       id: "operations",

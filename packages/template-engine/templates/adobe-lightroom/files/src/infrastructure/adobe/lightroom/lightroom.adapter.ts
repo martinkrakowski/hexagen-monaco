@@ -1,0 +1,149 @@
+// @hexagen-server-only
+import type {
+  ApplyPresetRequest,
+  EditRequest,
+  LightroomPort,
+  LightroomRequest,
+} from "../../../domain/ports/out/lightroom.port";
+import { fireflyClient } from "../http/firefly-client";
+import { jobPort } from "../jobs/job-port";
+import { pollJobStatus } from "../jobs/job-poller";
+import { toJobHandle } from "../jobs/job-result";
+import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
+import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { ok, err, type Result } from "../../../shared/result";
+
+/**
+ * Adobe Lightroom adapter — the AWS-of-Adobe↔domain boundary for {@link LightroomPort}.
+ *
+ * Enabled operations (install): {operations}. The Lightroom API lives on
+ * image.adobe.io (same host as Photoshop, `/lrService` path — a different host
+ * than firefly-api.adobe.io), so the adapter posts ABSOLUTE URLs; the shared
+ * `fireflyClient` passes those through with the same IMS auth. Each call presigns
+ * its IO, submits the async job, awaits the result, and returns the output href.
+ *
+ * NOTE: paths/payloads version frequently — verify against Adobe docs.
+ */
+const LIGHTROOM_BASE = normalizeBase(
+  process.env.ADOBE_LIGHTROOM_BASE_URL?.trim() || "https://image.adobe.io",
+);
+
+// Strictly validate the env value rather than blind-casting — an invalid value
+// would otherwise fall through to the JPEG branch. Fall back to the install default.
+const rawDefaultFormat = process.env.ADOBE_LIGHTROOM_FORMAT?.trim();
+const DEFAULT_FORMAT: "jpeg" | "png" =
+  rawDefaultFormat === "jpeg" || rawDefaultFormat === "png" ? rawDefaultFormat : "{output_format}";
+
+export class LightroomAdapter implements LightroomPort {
+  async autoTone(req: LightroomRequest): Promise<Result<string, FireflyError>> {
+    return this.run(async () => {
+      const { input, output } = await this.presignIO(req);
+      return {
+        path: endpoint("autoTone"),
+        body: { inputs: [external(input)], outputs: [outputSpec(output)] },
+      };
+    });
+  }
+
+  async applyPreset(req: ApplyPresetRequest): Promise<Result<string, FireflyError>> {
+    return this.run(async () => {
+      const storage = getStoragePresigner();
+      const input = await storage.presignInput(req.inputHref);
+      const preset = await storage.presignInput(req.presetHref);
+      const output = await storage.presignOutput(req.outputHref);
+      return {
+        path: endpoint("presets"),
+        body: {
+          inputs: [external(input.href)],
+          options: { presets: [external(preset.href)] },
+          outputs: [outputSpec(output.href)],
+        },
+      };
+    });
+  }
+
+  async edit(req: EditRequest): Promise<Result<string, FireflyError>> {
+    return this.run(async () => {
+      const { input, output } = await this.presignIO(req);
+      return {
+        path: endpoint("edit"),
+        body: {
+          inputs: [external(input)],
+          options: { xmp: req.edits },
+          outputs: [outputSpec(output)],
+        },
+      };
+    });
+  }
+
+  private async presignIO(req: LightroomRequest): Promise<{ input: string; output: string }> {
+    const storage = getStoragePresigner();
+    const input = await storage.presignInput(req.inputHref);
+    const output = await storage.presignOutput(req.outputHref);
+    return { input: input.href, output: output.href };
+  }
+
+  private async run(
+    build: () => Promise<{ path: string; body: unknown }>,
+  ): Promise<Result<string, FireflyError>> {
+    try {
+      const { path, body } = await build();
+      const handle = toJobHandle(await fireflyClient.post(path, body));
+      // Lightroom tracks jobs by a status URL (_links.self.href) and may omit a
+      // job id — accept either; only neither is an error.
+      if (!handle.jobId && !handle.statusUrl) {
+        return err(new FireflyError("Lightroom submit response did not include a job handle."));
+      }
+      // Poll the status URL directly when present: that is Lightroom's native
+      // tracking and works in BOTH polling and webhook deployments. jobPort.await()
+      // would reject a status-URL-only job in webhook mode (it needs a job id to
+      // correlate the callback). Fall back to await() only for a jobId-only handle.
+      const done = handle.statusUrl
+        ? await pollJobStatus(handle)
+        : await jobPort.await(handle);
+      if (done.status !== "succeeded") {
+        return err(new FireflyError(done.error ?? "Lightroom job did not succeed."));
+      }
+      // `done.outputs` is a non-optional JobOutput[] (parseJobResult always returns
+      // an array), so `[0]?.href` is enough — an empty array yields the no-output
+      // path below; no `?.` on `outputs` itself is needed.
+      const href = done.outputs[0]?.href;
+      if (!href) {
+        return err(new FireflyError("Lightroom job produced no output."));
+      }
+      return ok(href);
+    } catch (error) {
+      return err(classifyAdobeError(error));
+    }
+  }
+}
+
+function endpoint(operation: string): string {
+  return `${LIGHTROOM_BASE}/lrService/${operation}`;
+}
+
+function external(href: string): { href: string; storage: "external" } {
+  return { href, storage: "external" };
+}
+
+function outputSpec(href: string): { href: string; storage: "external"; type: string } {
+  return { ...external(href), type: DEFAULT_FORMAT === "png" ? "image/png" : "image/jpeg" };
+}
+
+/**
+ * Guarantee an absolute, scheme-qualified base with no trailing slash. fireflyClient
+ * only treats `http(s)://…` as absolute, so a schemeless `image.adobe.io` would be
+ * mis-prefixed with the Firefly base URL and break every Lightroom request.
+ */
+function normalizeBase(raw: string): string {
+  // Lowercase the scheme too: fireflyClient's absolute-URL check is case-sensitive
+  // (`/^https?:\/\//`), so an uppercase "HTTPS://" would otherwise be treated as a
+  // relative path and mis-prefixed with the Firefly base URL.
+  const withScheme = /^https?:\/\//i.test(raw)
+    ? raw.replace(/^https?:\/\//i, (scheme) => scheme.toLowerCase())
+    : `https://${raw}`;
+  return withScheme.replace(/\/+$/, "");
+}
+
+/** Shared singleton. */
+export const lightroom = new LightroomAdapter();
