@@ -136,6 +136,9 @@ describe("adobe-firefly-content-tagging template — emit shape", () => {
     assert.ok(adapter.includes("resolveMinConfidence"));
     assert.ok(adapter.includes("raw?.trim() ||"));
     assert.ok(adapter.includes("Number.isFinite"));
+    // confidence coerced tolerantly — accepts a numeric string ("0.8"), not just number
+    assert.ok(adapter.includes("toConfidence"));
+    assert.ok(adapter.includes('typeof value === "string"'));
   });
 
   it("interpolates the confidence floor", async () => {

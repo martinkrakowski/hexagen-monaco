@@ -90,11 +90,18 @@ function toTag(entry: unknown): ContentTag | undefined {
     const name =
       typeof obj.name === "string" ? obj.name : typeof obj.tag === "string" ? obj.tag : undefined;
     if (name) {
-      return {
-        name,
-        confidence: typeof obj.confidence === "number" ? obj.confidence : undefined,
-      };
+      return { name, confidence: toConfidence(obj.confidence) };
     }
+  }
+  return undefined;
+}
+
+/** Coerce confidence to a finite number — some gateways serialize it as a string ("0.8"). */
+function toConfidence(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
 }
