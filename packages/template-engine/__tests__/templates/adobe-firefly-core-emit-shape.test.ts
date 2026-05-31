@@ -205,6 +205,10 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     // parseJobResult is total — never throws on a malformed body.
     const jobResult = await read(root, `${ADOBE}/jobs/job-result.ts`);
     assert.ok(jobResult.includes("safeParse"));
+    // toJobHandle maps a submit response -> JobHandle for service adapters.
+    assert.ok(jobResult.includes("export function toJobHandle"));
+    const barrel = await read(root, `${ADOBE}/index.ts`);
+    assert.ok(barrel.includes("toJobHandle"));
 
     // fetchStatus fails fast on a missing status URL instead of hitting BASE_URL.
     const poller = await read(root, `${ADOBE}/jobs/job-poller.ts`);
