@@ -1,0 +1,28 @@
+{
+  "id": "eslint-no-console",
+  "name": "ESLint — no-console (logger enforcement)",
+  "description": "A drop-in ESLint flat-config fragment that bans console.* (no-console) so logging goes through the structured logger instead of console.log technical debt — with the logger transport, server startup, CLI scripts, and config files exempted. Spread it into your eslint.config.mjs.",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "console_level",
+      "type": "select",
+      "prompt": "no-console severity? (error blocks CI; warn nudges)",
+      "options": ["error", "warn"],
+      "default": "error"
+    }
+  ],
+  "envVars": [],
+  "outputs": ["eslint.no-console.mjs"],
+  "checklist": [
+    "Install ESLint if your project doesn't already have it: npm install -D eslint",
+    "Wire the fragment into your eslint.config.mjs AFTER your base config: import { noConsoleConfig } from './eslint.no-console.mjs'; export default [ ...baseConfig, ...noConsoleConfig ];",
+    "Route logging through the structured logger (the observability template ships src/infrastructure/logging/logger.ts) — never console.*; console.log carries no level, correlation id, or redaction",
+    "Sanctioned console sites are pre-exempted: the logger transport (infrastructure/logging/**), server/startup/**, scripts/**, and *.config.* — add a // eslint-disable-next-line no-console for any other deliberate console use",
+    "Run your lint script (e.g. npx eslint .) to surface existing console.* calls to migrate to the logger",
+    "Severity is set at install via console_level (error fails CI; warn only nudges) — start with warn on a legacy codebase, then tighten to error"
+  ],
+  "branch": "feature/generator-template-eslint-no-console"
+}
