@@ -104,6 +104,22 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "2",
     },
   ],
+  "adobe-illustrator": [
+    {
+      id: "operations",
+      type: "multiselect",
+      prompt: "Which Illustrator operations will you use?",
+      options: ["renderArtboard", "dataMerge", "scaleVector"],
+      default: ["renderArtboard"],
+    },
+    {
+      id: "output_format",
+      type: "select",
+      prompt: "Default output format?",
+      options: ["png", "jpeg", "pdf"],
+      default: "png",
+    },
+  ],
   "adobe-ims-spa": [
     {
       id: "redirect_uri",

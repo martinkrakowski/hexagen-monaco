@@ -1,0 +1,38 @@
+{
+  "id": "adobe-illustrator",
+  "name": "Adobe Illustrator API",
+  "description": "Illustrator automation for Adobe Firefly Services (image.adobe.io): an IllustratorPort + adapter for artboard rendering, variable-data merge, and vector scaling (vector→raster at arbitrary scale — ads to billboards) over the adobe-firefly-core foundation. Async.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "operations",
+      "type": "multiselect",
+      "prompt": "Which Illustrator operations will you use?",
+      "options": ["renderArtboard", "dataMerge", "scaleVector"],
+      "default": ["renderArtboard"]
+    },
+    {
+      "id": "output_format",
+      "type": "select",
+      "prompt": "Default output format?",
+      "options": ["png", "jpeg", "pdf"],
+      "default": "png"
+    }
+  ],
+  "envVars": ["ADOBE_ILLUSTRATOR_BASE_URL", "ADOBE_ILLUSTRATOR_FORMAT"],
+  "outputs": [
+    "src/domain/ports/out/illustrator.port.ts",
+    "src/infrastructure/adobe/illustrator/illustrator.adapter.ts",
+    ".env.adobe-illustrator.example"
+  ],
+  "checklist": [
+    "Confirm the Illustrator API entitlement + scope on your Adobe Developer Console project (same IMS Server-to-Server auth as Firefly)",
+    "Verify the current endpoints/payloads against Adobe docs — the Illustrator API lives on image.adobe.io (same host family as Photoshop/Lightroom; the client posts absolute URLs there)",
+    "Provide presigned input (.ai) + output hrefs (and a data source for dataMerge) — use core passthrough or install an adobe-firefly-storage-* addon",
+    "Vector→raster at arbitrary scale: pass scale / width / height on the request; default output format is ADOBE_ILLUSTRATOR_FORMAT (set at install)",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-illustrator"
+}
