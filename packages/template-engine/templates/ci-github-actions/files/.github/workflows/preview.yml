@@ -1,0 +1,58 @@
+name: Preview Deploy
+
+# Vercel preview deploy on every PR, commenting the preview URL back on the PR.
+# Pair with deploy_target vercel (or railway with its own preview setup).
+#
+# TODO: reuse the same secrets as deploy-vercel.yml — VERCEL_TOKEN,
+# VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    # Explicit least-privilege token scopes — the comment step needs
+    # pull-requests:write, which is not granted under a read-only default token.
+    permissions:
+      contents: read
+      pull-requests: write
+    # Secrets are not exposed to PRs from forks, so this job would always fail
+    # for external contributors — skip it there instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "{node_version}"
+          cache: "yarn"
+
+      - run: "yarn install --immutable"
+
+      - name: Deploy preview
+        id: deploy
+        run: |
+          npx vercel pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
+          npx vercel build --token="${{ secrets.VERCEL_TOKEN }}"
+          URL=$(npx vercel deploy --prebuilt --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 Preview: ${{ steps.deploy.outputs.url }}`,
+            });

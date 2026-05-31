@@ -151,6 +151,18 @@ export const TEMPLATE_QUESTIONS: Record<
   ],
   "ci-github-actions": [
     {
+      id: "ci_triggers",
+      type: "multiselect",
+      prompt: "When should CI run?",
+      options: [
+        "push-all-branches",
+        "push-main-only",
+        "pull-request",
+        "manual",
+      ],
+      default: ["push-all-branches", "pull-request"],
+    },
+    {
       id: "deploy_target",
       type: "select",
       prompt: "Deploy target?",
@@ -160,7 +172,8 @@ export const TEMPLATE_QUESTIONS: Record<
     {
       id: "preview_deploys",
       type: "boolean",
-      prompt: "PR preview deploys?",
+      prompt:
+        "PR preview deploys? (Vercel-based; pair with deploy_target vercel/railway)",
       default: true,
     },
     {
@@ -173,8 +186,22 @@ export const TEMPLATE_QUESTIONS: Record<
     {
       id: "docker_build",
       type: "boolean",
-      prompt: "Build and push Docker image in CI?",
+      prompt:
+        "Build and push a Docker image in CI? (the docker template owns docker-build.yml; this records the intent)",
       default: false,
+    },
+    {
+      id: "run_tests",
+      type: "boolean",
+      prompt: "Run tests in CI?",
+      default: true,
+    },
+    {
+      id: "cache_strategy",
+      type: "select",
+      prompt: "Dependency cache strategy?",
+      options: ["node-modules", "yarn-cache", "turbo-cache"],
+      default: "turbo-cache",
     },
   ],
   clerk: [

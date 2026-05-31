@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Keep GitHub Actions versions current — stale, unpinned actions are a real
+  # supply-chain risk.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Group dev-dependency bumps into a single weekly PR to cut noise.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        patterns: ["*"]
+        dependency-type: development
+    open-pull-requests-limit: 5

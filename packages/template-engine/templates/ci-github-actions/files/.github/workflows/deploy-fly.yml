@@ -1,0 +1,30 @@
+name: Deploy to Fly.io
+
+# Production deploy on every merge to main. Fly.io suits apps that need
+# persistent connections / WebSockets. Deploy config lives in fly.toml.
+#
+# TODO: add FLY_API_TOKEN in GitHub repo → Settings → Secrets and variables →
+# Actions  (create one with `fly tokens create deploy`).
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to a commit SHA (not @master); Dependabot bumps it via the
+      # github-actions ecosystem.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
