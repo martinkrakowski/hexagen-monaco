@@ -1,0 +1,30 @@
+{
+  "id": "adobe-firefly-upscale",
+  "name": "Adobe Firefly — Upscale",
+  "description": "Image Upscale service for Adobe Firefly. Adds an UpscalePort + adapter that submits an async upscale job through the adobe-firefly-core foundation (IMS auth, REST client, job port, presigned storage). The lightest service — a good end-to-end validation of the foundation.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "default_factor",
+      "type": "select",
+      "prompt": "Default upscale factor? (override per call via UpscaleRequest.factor)",
+      "options": ["2", "4"],
+      "default": "2"
+    }
+  ],
+  "envVars": ["ADOBE_UPSCALE_FACTOR"],
+  "outputs": [
+    "src/domain/ports/out/upscale.port.ts",
+    "src/infrastructure/adobe/upscale/upscale.adapter.ts",
+    ".env.adobe-upscale.example"
+  ],
+  "checklist": [
+    "Confirm the Upscale entitlement + scope on your Adobe Developer Console project",
+    "Verify the current endpoint/payload against Adobe docs — Firefly paths version frequently (this scaffold posts to /v3/images/upscale)",
+    "Provide presigned input/output hrefs in UpscaleRequest (core passthrough), or install an adobe-firefly-storage-* addon to presign automatically",
+    "Optional official SDK: npm install @adobe/firefly-services-sdk-js"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-upscale"
+}

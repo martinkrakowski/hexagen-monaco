@@ -124,6 +124,18 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
     }
   });
 
+  it("documents the job-port contract accurately: await resolves failed jobs", async () => {
+    const jobPortDoc = await read(root, `${PORTS}/firefly-job.port.ts`);
+    // contract must say a failed job RESOLVES (check status), not throws
+    assert.ok(
+      jobPortDoc.includes("RESOLVES to a `JobResult` for BOTH terminal states"),
+    );
+    assert.ok(
+      !/failed[^\n]*surfaced as thrown/i.test(jobPortDoc),
+      "stale 'failures are thrown' wording must be gone",
+    );
+  });
+
   it("marks every adobe adapter server-only (ADR-0037)", async () => {
     for (const rel of [
       `${ADOBE}/auth/ims-token-provider.adapter.ts`,

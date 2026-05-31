@@ -13,10 +13,12 @@ import { FireflyError } from "../errors/firefly-errors";
  * - `polling` ({job_mode} default): `await()` drives the poller against the
  *   job's status URL.
  * - `webhook`: `await()` parks a promise keyed by jobId; the webhook receiver
- *   (see `webhook-verifier.ts`, emitted only in webhook mode) calls
- *   `resolveJob`/`rejectJob` to settle it. `resolveJob`/`rejectJob` live on the
- *   concrete class — not the port — so the gated webhook file imports this
- *   always-emitted module, never the reverse (no static import of a gated file).
+ *   (see `webhook-verifier.ts`, emitted only in webhook mode) calls `resolveJob`
+ *   to settle BOTH terminal states (a `failed` job resolves with its JobResult,
+ *   matching polling — it does not reject). `rejectJob` exists for transport-level
+ *   failures only. Both live on the concrete class — not the port — so the gated
+ *   webhook file imports this always-emitted module, never the reverse (no static
+ *   import of a gated file).
  *
  * SCALING LIMIT (webhook mode): the pending registry is in-memory, so it is
  * correct only for a SINGLE long-lived instance. In serverless / horizontally

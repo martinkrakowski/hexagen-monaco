@@ -6,8 +6,12 @@
  * that transport — service adapters depend only on `await(handle)` and never know
  * which mode is configured, so switching polling↔webhook touches no adapter.
  *
- * Terminal failures (job `failed`, transport errors) are surfaced as thrown
- * `FireflyError`s; service adapters catch and convert them to `Result`.
+ * `await(handle)` RESOLVES to a `JobResult` for BOTH terminal states — a job
+ * that completed but `failed` resolves with `status: "failed"` (uniform across
+ * polling and webhook), so adapters must check `result.status` rather than rely
+ * on a throw. Only transport/config problems (a missing status URL, a webhook
+ * timeout) throw a `FireflyError`, which service adapters catch and convert to
+ * a `Result`.
  */
 export type JobStatus = "running" | "succeeded" | "failed";
 

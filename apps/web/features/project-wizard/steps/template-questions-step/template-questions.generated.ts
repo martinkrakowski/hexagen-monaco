@@ -54,6 +54,16 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "900",
     },
   ],
+  "adobe-firefly-upscale": [
+    {
+      id: "default_factor",
+      type: "select",
+      prompt:
+        "Default upscale factor? (override per call via UpscaleRequest.factor)",
+      options: ["2", "4"],
+      default: "2",
+    },
+  ],
   "adobe-ims-spa": [
     {
       id: "redirect_uri",
