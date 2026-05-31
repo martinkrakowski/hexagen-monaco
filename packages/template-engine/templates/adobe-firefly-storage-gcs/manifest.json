@@ -1,0 +1,32 @@
+{
+  "id": "adobe-firefly-storage-gcs",
+  "name": "Adobe Firefly — GCS Presigned Storage",
+  "description": "Registers a Google Cloud Storage presigner for the adobe-firefly-core storage seam: signs V4 read URLs for Firefly inputs and V4 write URLs for outputs (storage: \"external\"). Mutually exclusive with the S3/Azure presigners. Install @google-cloud/storage.",
+  "version": "1.0.0",
+  "requires": ["adobe-firefly-core"],
+  "conflicts": ["adobe-firefly-storage-s3", "adobe-firefly-storage-azure"],
+  "questions": [
+    {
+      "id": "url_expiry_seconds",
+      "type": "select",
+      "prompt": "Presigned-URL lifetime (seconds)?",
+      "options": ["300", "900", "3600"],
+      "default": "900"
+    }
+  ],
+  "envVars": ["ADOBE_GCS_BUCKET", "ADOBE_GCS_PREFIX"],
+  "outputs": [
+    "src/infrastructure/adobe/storage/gcs-presign.adapter.ts",
+    "src/infrastructure/adobe/storage/gcs-register.ts",
+    ".env.adobe-storage-gcs.example"
+  ],
+  "checklist": [
+    "Install the Google Cloud Storage SDK (the only channel — manifests have no deps field): npm install @google-cloud/storage",
+    "Set ADOBE_GCS_BUCKET; grant the runtime service account access on it (roles/storage.objectViewer for inputs + roles/storage.objectCreator for outputs, or roles/storage.objectAdmin for both)",
+    "Provide credentials via the Google ADC chain: set GOOGLE_APPLICATION_CREDENTIALS to a service-account key for local dev; on Cloud Run/GCE/GKE use the attached service account",
+    "V4 signing without a local key file uses the IAM Credentials SignBlob API — grant the service account roles/iam.serviceAccountTokenCreator on itself and enable the IAM Credentials API, or getSignedUrl cannot sign",
+    "Import the registration once at startup, before any Firefly service call: import './infrastructure/adobe/storage/gcs-register'",
+    "Pass GCS object names (not full URLs) as input/output refs — the adapter signs read for inputs, write for outputs (an http(s) ref is passed through unchanged)"
+  ],
+  "branch": "feature/generator-template-adobe-firefly-storage-gcs"
+}
