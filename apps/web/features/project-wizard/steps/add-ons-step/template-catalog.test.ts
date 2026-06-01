@@ -1,6 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { findCompanionSuggestions, TEMPLATE_CATALOG } from "./template-catalog";
+import {
+  CATEGORIES,
+  CATEGORY_LABELS,
+  findCompanionSuggestions,
+  TEMPLATE_CATALOG,
+} from "./template-catalog";
+import { TEMPLATE_MANIFESTS } from "./template-manifest.generated";
 
 describe("findCompanionSuggestions", () => {
   it("returns nothing when no selected template declares companions", () => {
@@ -51,6 +57,61 @@ describe("findCompanionSuggestions", () => {
     for (const entry of result) {
       assert.ok(entry, "result must not contain undefined");
       assert.ok(typeof entry.id === "string", "result entries must have ids");
+    }
+  });
+});
+
+describe("catalog ↔ manifest parity (the bidirectional guard)", () => {
+  it("every manifest has a catalog card, and every card has a manifest", () => {
+    const manifestIds = new Set(Object.keys(TEMPLATE_MANIFESTS));
+    const catalogIds = new Set(TEMPLATE_CATALOG.map((e) => e.id));
+    const missingCard = [...manifestIds].filter((id) => !catalogIds.has(id));
+    const ghost = [...catalogIds].filter((id) => !manifestIds.has(id));
+    assert.deepEqual(
+      missingCard,
+      [],
+      `manifests with no catalog presentation entry (unselectable templates): ${missingCard.join(", ")}`,
+    );
+    assert.deepEqual(
+      ghost,
+      [],
+      `catalog cards with no manifest (ghosts): ${ghost.join(", ")}`,
+    );
+  });
+
+  it("merges name/description/requires/conflicts from the manifest (never hand-copied)", () => {
+    for (const entry of TEMPLATE_CATALOG) {
+      const meta = TEMPLATE_MANIFESTS[entry.id];
+      assert.ok(meta, `${entry.id} must have a manifest`);
+      assert.equal(entry.name, meta.name, `${entry.id} name`);
+      assert.equal(
+        entry.description,
+        meta.description,
+        `${entry.id} description`,
+      );
+      assert.deepEqual(
+        entry.requires,
+        [...meta.requires],
+        `${entry.id} requires`,
+      );
+      assert.deepEqual(
+        entry.conflicts,
+        [...meta.conflicts],
+        `${entry.id} conflicts`,
+      );
+    }
+  });
+
+  it("every card's category is registered in CATEGORIES and CATEGORY_LABELS", () => {
+    for (const entry of TEMPLATE_CATALOG) {
+      assert.ok(
+        CATEGORIES.includes(entry.category),
+        `${entry.category} missing from CATEGORIES`,
+      );
+      assert.ok(
+        entry.category in CATEGORY_LABELS,
+        `${entry.category} missing from CATEGORY_LABELS`,
+      );
     }
   });
 });
