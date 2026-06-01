@@ -46,8 +46,11 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      # Read the pinned version from package.json's `packageManager` at runtime
+      # so CI can never drift from what the project declares (no baked version).
       - name: Prepare package manager
-        run: "corepack prepare yarn@4.12.0 --activate"
+        run: |
+          corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
 
       # First run has no committed lockfile, so install is NOT immutable.
       # After you commit yarn.lock, switch this to `yarn install --immutable`

@@ -127,11 +127,12 @@ adding \`--immutable\` to the \`yarn install\` step in
 
 **Notes**
 
-- The \`corepack prepare {packageManager} --activate\` line in \`ci.yml\` bakes the
-  package-manager version at generation time. If you bump \`packageManager\` in
-  \`package.json\`, update that line too.
+- CI reads your package-manager version from \`package.json\` (\`packageManager\`)
+  via Corepack, so bumping it stays in sync automatically — nothing to edit in
+  \`ci.yml\`.
 - **This file is a one-time bootstrap doc — delete it after your first push.**
-  Its pre-lockfile guidance goes stale once \`yarn.lock\` is committed.
+  Its pre-lockfile guidance goes stale once \`yarn.lock\` is committed. (Run
+  \`hexagen sync\` won't bring it back — it's a protected root file.)
 `;
 
 export {

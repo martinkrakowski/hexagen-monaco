@@ -427,12 +427,12 @@ describe("root files", () => {
           "SETUP.md must name the lockfile-commit step",
         );
         assert.ok(
-          setup.includes("corepack prepare yarn@4.12.0"),
-          "SETUP.md must interpolate the project's package manager version",
+          setup.includes("corepack enable") && setup.includes("yarn install"),
+          "SETUP.md must list the first-push bootstrap steps",
         );
         assert.ok(
-          !setup.includes("{packageManager}"),
-          "SETUP.md must not leak an uninterpolated {packageManager} token",
+          !setup.includes("{packageManager}") && !setup.includes("{system}"),
+          "SETUP.md must not leak uninterpolated tokens",
         );
 
         // The bare scaffold's root package.json is still valid and runnable.
@@ -515,6 +515,35 @@ describe("root files", () => {
           await readFile(path.join(workspaceRoot, "SETUP.md")),
           "my notes\n",
           "SETUP.md edits must survive a re-sync",
+        );
+      });
+    });
+
+    it("does NOT recreate a deleted SETUP.md on a normal re-sync", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "del" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        // User follows the "delete after first push" guidance.
+        await fs.rm(path.join(workspaceRoot, "SETUP.md"));
+
+        // A normal sync (no forceRoot) must leave it deleted — protected root
+        // files are only (re)written under --force-root.
+        const result = await generateRootFiles(
+          makeConfig(workspaceRoot, manifest),
+        );
+
+        assert.strictEqual(
+          await fileExists(path.join(workspaceRoot, "SETUP.md")),
+          false,
+          "deleted SETUP.md must stay gone after a normal sync",
+        );
+        assert.strictEqual(
+          result.created.length,
+          0,
+          "a normal re-sync must create nothing (all root files protected)",
         );
       });
     });

@@ -131,7 +131,13 @@ describe("ci-github-actions template — emit shape", () => {
       // First-run-green (Item 2): corepack present, install is NOT immutable
       // (no committed lockfile yet), and no setup-node lockfile-cache.
       assert.ok(ci.includes("corepack enable"));
-      assert.ok(ci.includes("corepack prepare yarn@4.12.0 --activate"));
+      // Version is read from package.json at runtime (no baked yarn@x.y.z that
+      // could drift from the project's `packageManager`).
+      assert.ok(
+        ci.includes('corepack prepare "$(node -p') &&
+          ci.includes("packageManager"),
+      );
+      assert.ok(!ci.includes("corepack prepare yarn@"));
       assert.ok(ci.includes('run: "yarn install"'));
       // Precise to the executable directive — explanatory comments may still
       // mention these forms without tripping the negative assertions.
