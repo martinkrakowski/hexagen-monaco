@@ -66,6 +66,19 @@ describe("sanitizeScope", () => {
     assert.strictEqual(sanitizeScope("acme"), "acme");
     assert.strictEqual(sanitizeScope("my-app"), "my-app");
   });
+
+  it("does not end with a separator when truncation lands on one", () => {
+    // Char 214 (index 213) is "-", char 215 is alphanumeric: slicing to 214
+    // would leave a trailing "-" unless the trim runs after the slice.
+    const raw = "a".repeat(213) + "-x".repeat(50);
+    const out = sanitizeScope(raw);
+    assert.ok(out.length <= 214, "must respect the 214-char limit");
+    assert.ok(
+      !/[._-]$/.test(out),
+      "must not end with a separator after truncation",
+    );
+    assert.strictEqual(out, "a".repeat(213));
+  });
 });
 
 describe("resolveScope precedence", () => {

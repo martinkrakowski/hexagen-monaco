@@ -54,8 +54,10 @@ export function sanitizeScope(raw: string): string {
     .replace(/^@+/, "")
     .replace(/[^a-z0-9._-]/g, "-")
     .replace(/[._-]{2,}/g, "-")
-    .replace(/^[._-]+|[._-]+$/g, "")
-    .slice(0, 214);
+    .slice(0, 214)
+    // Trim AFTER truncating — slicing at the 214-char limit can land on a
+    // separator and reintroduce a trailing one, so this must run last.
+    .replace(/^[._-]+|[._-]+$/g, "");
   return cleaned.length > 0 ? cleaned : "generated-project";
 }
 
