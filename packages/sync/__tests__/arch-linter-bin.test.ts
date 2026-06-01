@@ -25,13 +25,10 @@ describe("resolveArchLinterBin", () => {
     }
   });
 
-  it("returns the co-located candidate when no installed bin is found", async () => {
+  it("returns null when no installed bin is found (so callers report it distinctly)", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "arch-bin-"));
     try {
-      assert.equal(
-        resolveArchLinterBin(root),
-        path.join(root, "node_modules", ".bin", BIN),
-      );
+      assert.equal(resolveArchLinterBin(root), null);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

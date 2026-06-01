@@ -48,6 +48,14 @@ export async function validateManifest(
     // devDependency. It walks up from cwd to find .architecture/manifest.yaml.
     // Quoted so an absolute path with spaces is passed intact to the shell.
     const bin = resolveArchLinterBin(workspaceRoot);
+    if (bin === null) {
+      // Distinct from a lint failure: the tool isn't installed, not "invalid".
+      return err(
+        new Error(
+          "arch-linter not found — install @hexagen-monaco/arch-linter (run your package manager's install)",
+        ),
+      );
+    }
     const { stderr } = await execAsync(`"${bin}"`, {
       cwd: workspaceRoot,
       timeout: 30_000,

@@ -16,24 +16,19 @@ const BIN_NAME =
  * whose `node_modules` is hoisted to a parent). Platform-aware: `.cmd` shim on
  * Windows, extensionless symlink on posix.
  *
- * Returns an absolute path. If no installed bin is found while walking up,
- * returns the co-located candidate so the caller surfaces a clear ENOENT rather
- * than silently skipping validation.
+ * Returns an absolute path, or **`null`** if no installed bin is found while
+ * walking up. Callers must handle `null` explicitly — running a non-existent
+ * path through a shell yields a generic "command not found" (exit 127), which is
+ * indistinguishable from a real lint failure, so the missing-bin case is
+ * reported separately ("arch-linter not installed", not "architecture invalid").
  */
-export function resolveArchLinterBin(startDir: string): string {
+export function resolveArchLinterBin(startDir: string): string | null {
   let dir = path.resolve(startDir);
   for (;;) {
     const candidate = path.join(dir, "node_modules", ".bin", BIN_NAME);
     if (fs.existsSync(candidate)) return candidate;
     const parent = path.dirname(dir);
-    if (parent === dir) {
-      return path.join(
-        path.resolve(startDir),
-        "node_modules",
-        ".bin",
-        BIN_NAME,
-      );
-    }
+    if (parent === dir) return null;
     dir = parent;
   }
 }

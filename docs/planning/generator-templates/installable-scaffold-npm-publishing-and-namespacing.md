@@ -212,11 +212,11 @@ Emit a **`SETUP.md`** at the scaffold root (and a one-line pointer in the genera
 
 ### Guard test (two-sided, precise exception)
 
-For a project generated with scope `acme`: **(1)** no emitted _project_ file contains `@hexagen/` except the **allowlisted tooling devDeps in the root `package.json`** — `["@hexagen/sync", "@hexagen/arch-linter"]` (both co-released tooling packages per Item 0 route (b); keep it a named allowlist constant, not hardcoded strings); `@hexagen/` anywhere in project _source_/packages still fails. **(2)** `@acme/` appears in package names + tsconfig paths + project references. (One-sided would pass a bug that drops all scopes.)
+For a project generated with scope `acme`: **(1)** no emitted _project_ file references a **tooling scope** except the **allowlisted tooling devDeps in the root `package.json`** — `["@hexagen-monaco/sync", "@hexagen-monaco/arch-linter"]` (the published scope; `@hexagen` was unavailable on npm — see P1). Match the tooling scopes **precisely on the `/` boundary** (`@hexagen/` and `@hexagen-monaco/`, so a lookalike project scope like `@hexagenic/` is not a false positive); keep it a named constant, not hardcoded strings. **(2)** `@acme/` appears in package names + tsconfig paths + project references. (One-sided would pass a bug that drops all scopes.) _(As implemented in PR #176.)_
 
 ### Acceptance
 
-- Scope `acme` → `@acme/<m>` package names, `@acme/*` tsconfig alias + project references, internal deps `@acme/*`; `@hexagen/` only as the `@hexagen/sync` and `@hexagen/arch-linter` tooling devDeps.
+- Scope `acme` → `@acme/<m>` package names, `@acme/*` tsconfig alias + project references, internal deps `@acme/*`; a tooling scope appears only as the `@hexagen-monaco/sync` and `@hexagen-monaco/arch-linter` devDeps.
 
 ---
 
