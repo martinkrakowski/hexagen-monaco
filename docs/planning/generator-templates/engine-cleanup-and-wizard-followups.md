@@ -1,6 +1,6 @@
 # Engine Cleanup & Wizard Follow-ups
 
-**Implementation branch:** `feature/engine-cleanup-and-wizard-followups` (proposed)
+**Implementation branches:** shipped across `feature/rollback-gated-conflicts`, `feature/template-questions-step`, and `feature/companion-cta` (per the shipped map below) — the single `feature/engine-cleanup-and-wizard-followups` branch this doc originally proposed was never used; the work was split one branch per item.
 **Status:** Shipped — all three items merged to `main` (verified 2026-06-01).
 
 > **Shipped map:**
