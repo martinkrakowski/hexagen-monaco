@@ -21,19 +21,25 @@ jobs:
       id-token: write # required for `npm publish --provenance`
     steps:
       - name: "Checkout Repository"
-        uses: actions/checkout@v4
-
-      - name: "Setup Node.js"
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v5
         with:
-          node-version: "22.7"
-          registry-url: "https://registry.npmjs.org"
+          persist-credentials: false
 
+      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
+      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
+      # packageManager — classic global yarn errors on that. Enabling Corepack
+      # first makes `yarn` resolve to the pinned 4.12.0 shim during the probe.
       - name: "Enable Corepack"
         run: corepack enable
 
       - name: "Prepare Yarn"
         run: corepack prepare yarn@4.12.0 --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22.7"
+          registry-url: "https://registry.npmjs.org"
 
       # Fail fast (before the build) if the tag doesn't match what would be
       # published, and enforce the co-release invariant (both packages share a
