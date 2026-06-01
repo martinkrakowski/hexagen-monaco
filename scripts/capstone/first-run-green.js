@@ -78,11 +78,15 @@ try {
   const tarball = {};
   for (const { short, dir } of PACKAGES) {
     const version = pkgVersion(dir);
-    sh(`node scripts/prepare-publish-package.js ${dir}`);
-    sh(`npm pack --pack-destination "${packDir}"`, {
-      cwd: path.join(REPO, dir, "publish"),
-    });
-    rmSync(path.join(REPO, dir, "publish"), { recursive: true, force: true });
+    // prepare-publish always creates <dir>/publish; remove it in `finally` so a
+    // pack (or prepare) failure never leaves staging dirs mutating the repo.
+    const publishDir = path.join(REPO, dir, "publish");
+    try {
+      sh(`node scripts/prepare-publish-package.js ${dir}`);
+      sh(`npm pack --pack-destination "${packDir}"`, { cwd: publishDir });
+    } finally {
+      rmSync(publishDir, { recursive: true, force: true });
+    }
     tarball[short] = path.join(
       packDir,
       `hexagen-monaco-${short}-${version}.tgz`,
@@ -195,7 +199,15 @@ try {
   }
   step("No private @hexagen/ scope leaked into project files ✅");
 
-  for (const fn of cleanup) fn();
+  // Best-effort cleanup (matches the failure path): a transient FS error here
+  // must not turn an otherwise-passing capstone into a failure.
+  for (const fn of cleanup) {
+    try {
+      fn();
+    } catch {
+      /* best effort */
+    }
+  }
   console.log("\n✅ CAPSTONE PASSED — first-run-green: the generated project installs the");
   console.log("   @hexagen-monaco tooling and the installed CLI targets it correctly.");
 } catch (err) {

@@ -68,6 +68,25 @@ await runSync({ mode: "external", workspaceRoot: process.cwd() });
 The package is ESM-only (`"type": "module"`). Consumers that still use
 CommonJS must use dynamic `import()` or transpile via their bundler.
 
+### Workspace resolution modes
+
+How the engine locates the workspace root depends on `mode`:
+
+| Mode         | Root resolution                                                       | Used by                                          |
+| ------------ | --------------------------------------------------------------------- | ------------------------------------------------ |
+| `external`   | The explicit `workspaceRoot` you pass (typically `process.cwd()`).    | The published CLI run inside a consumer project. |
+| `self-regen` | The workspace of the **package the engine lives in** — _not_ the cwd. | The hexagen monorepo regenerating itself.        |
+
+> **Monorepo footgun (issue #179).** `self-regen` deliberately ignores the
+> current directory and walks up from the engine's own location. This is
+> correct for the published CLI (installed into your project's `node_modules`,
+> it resolves _your_ project) and for the monorepo regenerating itself. But it
+> means running the monorepo's **built `dist/cli.js` from an unrelated
+> directory targets the monorepo, not that directory** — it will happily
+> rewrite the monorepo's files. To operate on another project, always use
+> `mode: "external"` with an explicit `workspaceRoot`, never the in-tree
+> `dist` CLI. The capstone harness relies on this distinction and guards it.
+
 ---
 
 ## Requirements
