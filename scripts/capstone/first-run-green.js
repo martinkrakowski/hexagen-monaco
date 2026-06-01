@@ -104,7 +104,10 @@ try {
   const projSh = (cmd) =>
     execSync(cmd, { cwd: proj, stdio: "pipe", encoding: "utf8" });
   projSh("corepack enable");
-  projSh(`corepack prepare yarn@${pkg.packageManager.split("@")[1]} --activate`);
+  // Use the full `name@version` packageManager string (not a fragile @-split).
+  const pm =
+    typeof pkg.packageManager === "string" ? pkg.packageManager : "yarn@4.12.0";
+  projSh(`corepack prepare ${pm} --activate`);
   try {
     projSh("yarn install");
   } catch (e) {
@@ -130,8 +133,30 @@ try {
   }
   step("Installed CLI resolves the generated project, not the monorepo ✅");
 
-  // 7. No private @hexagen/ scope in emitted project files (tooling is @hexagen-monaco).
-  for (const f of [".yarnrc.yml", "tsconfig.base.json", "SETUP.md", ".gitignore"]) {
+  // 6b. Materialize for real with the installed CLI. This generates the
+  //     .architecture/invariants + module scaffolding AND runs the installed
+  //     arch-linter (hexagen-lint) internally — exercising BOTH published bins
+  //     end to end, not just resolving them.
+  try {
+    projSh("node_modules/.bin/hexagen sync --force --force-root --allow-dirty");
+  } catch (e) {
+    fail(
+      "`hexagen sync` (real) in the generated project failed — generation or the arch-linter bin broke",
+      String(e.stdout || e),
+    );
+  }
+  step("Installed `hexagen sync` materialized the project + ran arch-linter ✅");
+
+  // 7. No private @hexagen/ scope in emitted project files (tooling is
+  //    @hexagen-monaco). package.json is the highest-risk file (devDeps,
+  //    resolutions, bin-referencing scripts), so include it explicitly.
+  for (const f of [
+    "package.json",
+    ".yarnrc.yml",
+    "tsconfig.base.json",
+    "SETUP.md",
+    ".gitignore",
+  ]) {
     const content = readFileSync(path.join(proj, f), "utf8");
     if (/@hexagen\//.test(content)) {
       fail(`emitted ${f} leaked the private @hexagen/ scope`);

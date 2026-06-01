@@ -2,12 +2,27 @@ name: "Capstone — First-Run-Green"
 
 # Proves a freshly generated project installs the @hexagen-monaco tooling and the
 # installed CLI targets it correctly — hermetic for the tooling (packed tarballs),
-# no real npm release required. See scripts/capstone/first-run-green.mjs.
+# no real npm release required. See scripts/capstone/first-run-green.js.
 on:
+  # Always run on main (safety net: catches anything merged regardless of paths).
   push:
     branches: [main]
+  # On PRs, only run when something that can affect first-run-green changes:
+  # the published tooling + everything tsup inlines into its bundle, the
+  # generator/templates, and the harness/publish scripts.
   pull_request:
     branches: [main]
+    paths:
+      - "packages/sync/**"
+      - "packages/shared/**"
+      - "packages/project-configuration/**"
+      - "packages/governance/**"
+      - "packages/visualization/**"
+      - "packages/template-engine/**"
+      - "tools/arch-linter/**"
+      - "scripts/capstone/**"
+      - "scripts/prepare-publish-package.js"
+      - ".github/workflows/capstone.yml"
   workflow_dispatch:
 
 jobs:
