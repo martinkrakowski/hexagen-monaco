@@ -10,7 +10,7 @@ import type {
   FileTemplate,
   Manifest,
 } from "../types/manifest.js";
-import { portName } from "../types/manifest.js";
+import { portName, resolveScope } from "../types/manifest.js";
 import {
   LAYER_RULES_STRICT_ENTERPRISE,
   LAYER_RULES_MICRO_FRONTEND,
@@ -32,13 +32,6 @@ function resolveWorkspaceTemplate(manifest: Manifest): string {
     return manifest.architecture;
   }
   return "modular-monolith";
-}
-
-function resolveScope(manifest: Manifest): string {
-  if (typeof manifest.scope === "string" && manifest.scope.length > 0) {
-    return manifest.scope;
-  }
-  return "hexagen";
 }
 
 function toPascalCase(stem: string): string {

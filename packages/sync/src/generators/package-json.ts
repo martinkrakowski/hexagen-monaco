@@ -3,7 +3,11 @@ import fs from "node:fs/promises";
 import { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
-import { expandDependsOn, type Manifest } from "../types/manifest.js";
+import {
+  expandDependsOn,
+  resolveScope,
+  type Manifest,
+} from "../types/manifest.js";
 
 /**
  * Generates or updates package.json with merge strategy.
@@ -24,12 +28,17 @@ export async function generatePackageJson(
       m.name === moduleName,
   );
   const moduleOverrides = context?.packageJson ?? {};
-  const dependsOnDeps = context ? expandDependsOn(context) : {};
+  // The project's own npm scope (@{scope}/<pkg>) — distinct from the @hexagen
+  // tooling devDeps. Falls back scope → system → "generated-project".
+  const scope = config.manifest
+    ? resolveScope(config.manifest)
+    : "generated-project";
+  const dependsOnDeps = context ? expandDependsOn(context, scope) : {};
 
   const pkgPath = path.join(modulePath, "package.json");
 
   const desiredPkg: Record<string, unknown> = {
-    name: `@hexagen/${moduleName}`,
+    name: `@${scope}/${moduleName}`,
     version: "0.1.0",
     private: true,
     type: "module",

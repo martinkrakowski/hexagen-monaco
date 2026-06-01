@@ -75,4 +75,6 @@ export {
   isSharedKernel,
   isDriver,
   expandDependsOn,
+  resolveScope,
+  sanitizeScope,
 } from "./helpers.js";

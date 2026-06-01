@@ -39,7 +39,7 @@ const BUILTIN_TSCONFIG_BASE_TEMPLATE = `{
     "declaration": true,
     "emitDeclarationOnly": true,
     "paths": {
-      "@hexagen/*": [
+      "@{scope}/*": [
         "./packages/*/src/index.ts"
       ]
     }

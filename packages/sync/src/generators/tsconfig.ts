@@ -5,6 +5,7 @@ import { MigrationReport } from "../migration-report.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import {
   expandDependsOn,
+  resolveScope,
   type BoundedContext,
   type Manifest,
   type TsConfigTemplate,
@@ -104,6 +105,7 @@ function mergeReferences(
 function buildTemplate(
   base: TsConfigTemplate,
   context: BoundedContext | undefined,
+  scope: string,
 ): TsConfigTemplate {
   const override = context?.generator?.tsConfig;
 
@@ -117,9 +119,11 @@ function buildTemplate(
   // drift in workspaceDefaults cannot break cross-package type resolution.
   compilerOptions.paths = {};
 
+  // Strip the `@{scope}/` prefix to get the bare package directory name —
+  // scope-agnostic (everything up to and including the first `/`).
   const dependsOnRefs: Array<{ path: string }> = context
-    ? Object.keys(expandDependsOn(context)).map((pkg) => ({
-        path: `../${pkg.replace(/^@hexagen\//, "")}`,
+    ? Object.keys(expandDependsOn(context, scope)).map((pkg) => ({
+        path: `../${pkg.slice(pkg.indexOf("/") + 1)}`,
       }))
     : [];
 
@@ -173,7 +177,8 @@ export async function generateTsconfig(
     const context = config.manifest.bounded_contexts?.find(
       (c) => c.name === moduleName,
     );
-    const template = buildTemplate(base, context);
+    const scope = resolveScope(config.manifest);
+    const template = buildTemplate(base, context, scope);
 
     const content = JSON.stringify(template, null, 2) + "\n";
 

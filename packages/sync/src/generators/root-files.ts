@@ -3,7 +3,7 @@ import { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
-import type { Manifest } from "../types/manifest.js";
+import { resolveScope, type Manifest } from "../types/manifest.js";
 import {
   BUILTIN_PACKAGE_JSON_TEMPLATE,
   BUILTIN_TSCONFIG_BASE_TEMPLATE,
@@ -17,10 +17,8 @@ function buildVars(manifest: Manifest): Record<string, string> {
       ? manifest.system
       : "generated-project";
 
-  const scope =
-    typeof manifest.scope === "string" && manifest.scope.length > 0
-      ? manifest.scope
-      : system;
+  // Single source of truth for the project's npm scope (sanitized).
+  const scope = resolveScope(manifest);
 
   const packageManager =
     typeof manifest.monorepo?.packageManager === "string" &&

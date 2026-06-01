@@ -63,7 +63,7 @@ describe("package json", () => {
   it("should return empty object when depends_on is undefined", async () => {
     const ctx: BoundedContext = { name: "foo" };
     assert.deepStrictEqual(
-      expandDependsOn(ctx),
+      expandDependsOn(ctx, "acme"),
       {},
       "expandDependsOn should return {} when depends_on is undefined",
     );
@@ -72,7 +72,7 @@ describe("package json", () => {
   it("should return empty object when depends_on is empty array", async () => {
     const ctx: BoundedContext = { name: "foo", depends_on: [] };
     assert.deepStrictEqual(
-      expandDependsOn(ctx),
+      expandDependsOn(ctx, "acme"),
       {},
       "expandDependsOn should return {} when depends_on is empty array",
     );
@@ -84,18 +84,19 @@ describe("package json", () => {
       depends_on: ["shared", "messaging"],
     };
     assert.deepStrictEqual(
-      expandDependsOn(ctx),
+      expandDependsOn(ctx, "acme"),
       {
-        "@hexagen/shared": "workspace:*",
-        "@hexagen/messaging": "workspace:*",
+        "@acme/shared": "workspace:*",
+        "@acme/messaging": "workspace:*",
       },
-      "expandDependsOn should map each name to @hexagen/<name>: workspace:*",
+      "expandDependsOn should map each name to @<scope>/<name>: workspace:*",
     );
   });
 
   it("should inject workspace deps from depends_on for new package", async () => {
     await withTempWorkspace("test-pkg", async ({ workspaceRoot, pkgPath }) => {
       const manifest: Manifest = {
+        scope: "acme",
         bounded_contexts: [{ name: "test-pkg", depends_on: ["shared"] }],
       };
       const config = makeConfig(workspaceRoot, manifest);
@@ -113,11 +114,16 @@ describe("package json", () => {
       );
 
       const pkg = await readJson(pkgPath);
+      assert.strictEqual(
+        pkg.name,
+        "@acme/test-pkg",
+        "package name must use the manifest scope, not @hexagen",
+      );
       const deps = pkg.dependencies as Record<string, string>;
       assert.deepStrictEqual(
         deps,
-        { "@hexagen/shared": "workspace:*" },
-        "new package.json should include @hexagen/shared from depends_on",
+        { "@acme/shared": "workspace:*" },
+        "new package.json should include @acme/shared from depends_on",
       );
     });
   });
@@ -139,6 +145,7 @@ describe("package json", () => {
         );
 
         const manifest: Manifest = {
+          scope: "acme",
           bounded_contexts: [{ name: "existing-pkg", depends_on: ["shared"] }],
         };
         const config = makeConfig(workspaceRoot, manifest);
@@ -157,7 +164,7 @@ describe("package json", () => {
           "existing dependencies must be preserved verbatim (protectedKeys behavior)",
         );
         assert.strictEqual(
-          "@hexagen/shared" in deps,
+          "@acme/shared" in deps,
           false,
           "depends_on entries must NOT be merged into existing dependencies (Phase 1 zero-behavior-change guarantee)",
         );
