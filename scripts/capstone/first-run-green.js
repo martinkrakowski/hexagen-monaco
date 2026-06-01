@@ -22,6 +22,7 @@
 import { execSync } from "node:child_process";
 import {
   mkdtempSync,
+  mkdirSync,
   rmSync,
   writeFileSync,
   readFileSync,
@@ -103,7 +104,7 @@ try {
     fail("scaffold generation failed", String(e.stdout || e.stderr || e));
   }
   // A manifest with one bounded context, so the installed CLI has work to do.
-  execSync(`mkdir -p "${proj}/.architecture"`);
+  mkdirSync(path.join(proj, ".architecture"), { recursive: true });
   writeFileSync(
     path.join(proj, ".architecture/manifest.yaml"),
     "system: acme-app\nscope: acme\narchitecture: modular-monolith\n" +
