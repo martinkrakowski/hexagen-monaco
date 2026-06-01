@@ -24,8 +24,6 @@
     "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   },
-  "gitHead": "b061ccdb2c4b989a74fcd45130534e89c0926a04",
   "private": true,
-  "type": "module",
-  "dependencies": {}
+  "type": "module"
 }
