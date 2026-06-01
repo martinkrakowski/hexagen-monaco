@@ -1,5 +1,12 @@
 name: "Publish to NPM"
 
+# Co-releases the two published tooling packages under @hexagen-monaco at the
+# tag's version (sync and arch-linter share a version). Each is a self-contained
+# tsup bundle (ADR-0009 + amendment): private @hexagen/* deps are inlined, so the
+# published manifests reference only third-party deps. Staged via
+# prepare-publish-package.js, which strips workspace/private/dev fields and
+# rewrites @hexagen/* → @hexagen-monaco/*. No @hexagen/shared publish and no
+# propagation `sleep`s — the packages don't depend on each other at publish time.
 on:
   push:
     tags:
@@ -7,11 +14,11 @@ on:
 
 jobs:
   publish:
-    name: "Build & Publish Packages"
+    name: "Build & Publish @hexagen-monaco packages"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write # required for `npm publish --provenance`
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@v4
@@ -37,41 +44,35 @@ jobs:
       - name: "TypeCheck All Packages"
         run: yarn turbo run typecheck
 
-      - name: "Publish @hexagen/shared"
-        run: npm publish --access public
-        working-directory: packages/shared
+      # Stage self-contained, scope-rewritten manifests. Each `publish/` dir
+      # holds dist/ + a public package.json (name → @hexagen-monaco/*, no
+      # workspace:* deps).
+      - name: "Stage @hexagen-monaco/sync"
+        run: node scripts/prepare-publish-package.js packages/sync
+
+      - name: "Stage @hexagen-monaco/arch-linter"
+        run: node scripts/prepare-publish-package.js tools/arch-linter
+
+      # Guard: a staged manifest must never reference the private monorepo scope.
+      - name: "Verify staged manifests have no @hexagen/ references"
+        run: |
+          for dir in packages/sync/publish tools/arch-linter/publish; do
+            if grep -q '@hexagen/' "$dir/package.json"; then
+              echo "::error::$dir/package.json still references @hexagen/ (private scope)"
+              cat "$dir/package.json"
+              exit 1
+            fi
+          done
+
+      - name: "Publish @hexagen-monaco/sync"
+        run: npm publish --provenance --access public
+        working-directory: packages/sync/publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: "Wait for npm propagation"
-        run: sleep 10
-
-      - name: "Update @hexagen/sync dependency to published version"
-        run: |
-          VERSION=$(node -p "require('./packages/shared/package.json').version")
-          cd packages/sync
-          yarn remove @hexagen/shared
-          yarn add @hexagen/shared@^${VERSION}
-
-      - name: "Publish @hexagen/sync"
-        run: npm publish --access public
-        working-directory: packages/sync
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: "Wait for npm propagation"
-        run: sleep 10
-
-      - name: "Update @hexagen/arch-linter dependencies to published versions"
-        run: |
-          VERSION=$(node -p "require('./packages/shared/package.json').version")
-          cd tools/arch-linter
-          yarn remove @hexagen/shared @hexagen/sync
-          yarn add @hexagen/shared@^${VERSION} @hexagen/sync@^${VERSION}
-
-      - name: "Publish @hexagen/arch-linter"
-        run: npm publish --access public
-        working-directory: tools/arch-linter
+      - name: "Publish @hexagen-monaco/arch-linter"
+        run: npm publish --provenance --access public
+        working-directory: tools/arch-linter/publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

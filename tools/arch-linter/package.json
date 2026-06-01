@@ -4,6 +4,16 @@
   "description": "HexaGen architecture linter and manifest validation",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinkrakowski/hexagen-monaco.git",
+    "directory": "tools/arch-linter"
+  },
+  "homepage": "https://github.com/martinkrakowski/hexagen-monaco/tree/main/tools/arch-linter#readme",
+  "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
   "main": "dist/index.js",
   "bin": {
     "hexagen-lint": "./dist/index.js"

@@ -43,6 +43,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..");
 
+// Internal monorepo scope → published npm scope. `@hexagen` was unavailable on
+// npm, so the tooling publishes under `@hexagen-monaco`.
+const SOURCE_SCOPE = "@hexagen";
+const PUBLISH_SCOPE = "@hexagen-monaco";
+
 /**
  * Fields retained verbatim from source package.json (when present).
  * Order is the emission order in the staged manifest.
@@ -163,6 +168,17 @@ function prepare(packageDir) {
   const staged = {};
   for (const field of RETAINED_FIELDS) {
     if (srcPkg[field] !== undefined) staged[field] = srcPkg[field];
+  }
+
+  // Rewrite the npm scope to the published org. The monorepo packages keep their
+  // internal `@hexagen/*` names; only the PUBLISHED name uses `@hexagen-monaco`
+  // (the `@hexagen` org was unavailable on npm — see the ADR-0009 amendment).
+  // Self-contained bundles, so no dependency reference needs the same rewrite.
+  if (
+    typeof staged.name === "string" &&
+    staged.name.startsWith(`${SOURCE_SCOPE}/`)
+  ) {
+    staged.name = `${PUBLISH_SCOPE}/${staged.name.slice(SOURCE_SCOPE.length + 1)}`;
   }
 
   const srcDepCount = Object.keys(srcPkg.dependencies || {}).length;
