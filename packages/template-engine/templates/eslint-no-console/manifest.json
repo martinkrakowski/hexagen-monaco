@@ -9,9 +9,9 @@
     {
       "id": "console_level",
       "type": "select",
-      "prompt": "no-console severity? (error blocks CI; warn nudges)",
-      "options": ["error", "warn"],
-      "default": "error"
+      "prompt": "no-console severity? (warn nudges; error blocks CI)",
+      "options": ["warn", "error"],
+      "default": "warn"
     }
   ],
   "envVars": [],
@@ -22,7 +22,7 @@
     "Route logging through the structured logger (the observability template ships src/infrastructure/logging/logger.ts) — never console.*; console.log carries no level, correlation id, or redaction",
     "Sanctioned console sites are pre-exempted: the logger transport (infrastructure/logging/**), server/startup/**, scripts/**, and *.config.* — add a // eslint-disable-next-line no-console for any other deliberate console use",
     "Run your lint script (e.g. npx eslint .) to surface existing console.* calls to migrate to the logger",
-    "Severity is set at install via console_level (error fails CI; warn only nudges) — start with warn on a legacy codebase, then tighten to error"
+    "Severity is set at install via console_level. The default warn is non-breaking — it surfaces console.* (including legitimate console.error in error handlers shipped by other templates like error-handling/oauth) as warnings without failing CI. Migrate or // eslint-disable-next-line no-console those call sites, then tighten to error for hard enforcement"
   ],
   "branch": "feature/generator-template-eslint-no-console"
 }

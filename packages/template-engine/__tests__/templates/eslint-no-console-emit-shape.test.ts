@@ -89,8 +89,8 @@ describe("eslint-no-console template — emit shape", () => {
     const cfg = await read(root, "eslint.no-console.mjs");
     assert.ok(cfg.includes("export const noConsoleConfig"));
     assert.ok(cfg.includes('"no-console"'));
-    // default severity interpolated; no leftover placeholder
-    assert.ok(cfg.includes('"no-console": "error"'));
+    // default severity is the non-breaking "warn"; no leftover placeholder
+    assert.ok(cfg.includes('"no-console": "warn"'));
     assert.ok(!cfg.includes("{console_level}"));
     // the logger transport + startup/scripts/config are exempted (off)
     assert.ok(cfg.includes("infrastructure/logging/**"));
@@ -99,13 +99,13 @@ describe("eslint-no-console template — emit shape", () => {
     assert.ok(cfg.includes('"no-console": "off"'));
   });
 
-  it("honours the console_level answer", async () => {
-    const warnInstall = await install({ console_level: "warn" });
+  it("honours the console_level answer (error override)", async () => {
+    const errorInstall = await install({ console_level: "error" });
     try {
-      const cfg = await read(warnInstall.root, "eslint.no-console.mjs");
-      assert.ok(cfg.includes('"no-console": "warn"'));
+      const cfg = await read(errorInstall.root, "eslint.no-console.mjs");
+      assert.ok(cfg.includes('"no-console": "error"'));
     } finally {
-      await fs.rm(warnInstall.root, { recursive: true, force: true });
+      await fs.rm(errorInstall.root, { recursive: true, force: true });
     }
   });
 

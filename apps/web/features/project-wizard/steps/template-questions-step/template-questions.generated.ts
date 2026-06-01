@@ -663,9 +663,9 @@ export const TEMPLATE_QUESTIONS: Record<
     {
       id: "console_level",
       type: "select",
-      prompt: "no-console severity? (error blocks CI; warn nudges)",
-      options: ["error", "warn"],
-      default: "error",
+      prompt: "no-console severity? (warn nudges; error blocks CI)",
+      options: ["warn", "error"],
+      default: "warn",
     },
   ],
   "github-oauth": [

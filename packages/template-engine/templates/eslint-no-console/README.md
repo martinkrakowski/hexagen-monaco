@@ -18,7 +18,8 @@ Author/agent-facing reference, beside `manifest.json` — not emitted into proje
 Closes the **enforcement gap** behind console.log debt: agents (and people) default to `console.log`
 because nothing stops them. This ships the `no-console` rule the codebase already assumes exists
 (several templates emit `// eslint-disable-next-line no-console` for legitimate console use). With the
-rule in place, `console.*` fails lint/CI and the structured logger becomes the path of least resistance.
+rule in place, `console.*` shows up in lint — a `warn` (the non-breaking default) or a CI-failing
+`error` — and the structured logger becomes the path of least resistance.
 
 It's a **fragment**, not a whole config — it spreads into your existing `eslint.config.mjs` rather than
 fighting it.
@@ -32,9 +33,9 @@ fighting it.
 
 `hexagen add eslint-no-console`. Question:
 
-| Question        | Options (default)                                                 |
-| --------------- | ----------------------------------------------------------------- |
-| `console_level` | `error` / `warn` (`error`) — `error` fails CI; `warn` only nudges |
+| Question        | Options (default)                                                |
+| --------------- | ---------------------------------------------------------------- |
+| `console_level` | `warn` / `error` (`warn`) — `warn` only nudges; `error` fails CI |
 
 ## Usage
 
