@@ -216,7 +216,7 @@ For a project generated with scope `acme`: **(1)** no emitted _project_ file con
 
 ### Acceptance
 
-- Scope `acme` → `@acme/<m>` package names, `@acme/*` tsconfig alias + project references, internal deps `@acme/*`; `@hexagen/` only as the `@hexagen/sync` tooling devDep.
+- Scope `acme` → `@acme/<m>` package names, `@acme/*` tsconfig alias + project references, internal deps `@acme/*`; `@hexagen/` only as the `@hexagen/sync` and `@hexagen/arch-linter` tooling devDeps.
 
 ---
 
@@ -262,3 +262,13 @@ Items 0/4/2 need no npm org and can start immediately; Item 1 runs in parallel o
 - Item 5 (capstone harness): ~0.5 day.
 
 ~5.5–6.5 days + org-verification and ADR-amendment lead time; 5–6 stacked PRs (Item 0 and Item 1's `publish.yml` change kept auditable on their own).
+
+---
+
+## Implementation-time checks (flagged in final review — not plan decisions)
+
+The plan is structurally complete; verify these _in the relevant PR_, not before:
+
+- **Item 0 bin path in the monorepo.** `node_modules/.bin/hexagen-lint` is correct for a _generated_ project (`nodeLinker: node-modules`). But the two call sites (`manifest-service.ts`, `linter.ts`) also run _inside this monorepo_ — confirm Yarn hoists `hexagen-lint` to the root `node_modules/.bin` there (it should), or resolve via the bin's package path. Settle this in the Item 0 pre-work grep.
+- **Item 1 acceptance scope.** "Zero `@hexagen/*` install fetches" tests **`npx @hexagen/sync` alone**, not a full scaffold install (which legitimately fetches the `@hexagen/arch-linter` devDep). Keep the criterion pinned to the sync package in isolation.
+- **Item 5 dry-run flag.** `yarn install --mode=skip-build` is Yarn Berry; confirm it exists in the pinned `yarn@4.12.0` (it does as of 4.x). Universally-available fallback: `yarn install --dry-run`.
