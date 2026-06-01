@@ -20,15 +20,28 @@
  * Exits non-zero on any failure.
  */
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const VERSION = JSON.parse(
-  readFileSync(path.join(REPO, "packages/sync/package.json"), "utf8"),
-).version;
+
+// The two tooling packages, each with its OWN version — they're co-released at
+// the same version today, but read each independently so a divergence doesn't
+// reference a non-existent tarball.
+const PACKAGES = [
+  { short: "sync", dir: "packages/sync" },
+  { short: "arch-linter", dir: "tools/arch-linter" },
+];
+const pkgVersion = (dir) =>
+  JSON.parse(readFileSync(path.join(REPO, dir, "package.json"), "utf8")).version;
 
 const sh = (cmd, opts = {}) =>
   execSync(cmd, { cwd: REPO, stdio: "pipe", encoding: "utf8", ...opts });
@@ -58,19 +71,24 @@ try {
     "yarn turbo run build --filter=@hexagen/sync --filter=@hexagen/arch-linter",
   );
 
-  // 2. Stage + pack → tarballs.
+  // 2. Stage + pack → tarballs. Name each tarball from its OWN version (that's
+  //    what `npm pack` writes), so co-release version drift can't break this.
   const packDir = mkdtempSync(path.join(tmpdir(), "capstone-pack-"));
   cleanup.push(() => rmSync(packDir, { recursive: true, force: true }));
-  for (const dir of ["packages/sync", "tools/arch-linter"]) {
+  const tarball = {};
+  for (const { short, dir } of PACKAGES) {
+    const version = pkgVersion(dir);
     sh(`node scripts/prepare-publish-package.js ${dir}`);
     sh(`npm pack --pack-destination "${packDir}"`, {
       cwd: path.join(REPO, dir, "publish"),
     });
     rmSync(path.join(REPO, dir, "publish"), { recursive: true, force: true });
+    tarball[short] = path.join(
+      packDir,
+      `hexagen-monaco-${short}-${version}.tgz`,
+    );
   }
-  const tgz = (name) =>
-    path.join(packDir, `hexagen-monaco-${name}-${VERSION}.tgz`);
-  step(`Packed @hexagen-monaco/{sync,arch-linter}@${VERSION}`);
+  step("Packed @hexagen-monaco/{sync,arch-linter}");
 
   // 3. Generate a bare scaffold (scope `acme`) into a temp project.
   const proj = mkdtempSync(path.join(tmpdir(), "capstone-proj-"));
@@ -94,8 +112,8 @@ try {
   const pkgPath = path.join(proj, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   pkg.resolutions = {
-    "@hexagen-monaco/sync": `file:${tgz("sync")}`,
-    "@hexagen-monaco/arch-linter": `file:${tgz("arch-linter")}`,
+    "@hexagen-monaco/sync": `file:${tarball.sync}`,
+    "@hexagen-monaco/arch-linter": `file:${tarball["arch-linter"]}`,
   };
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
 
@@ -122,13 +140,16 @@ try {
   } catch (e) {
     dry = String(e.stdout || e);
   }
-  if (!dry.includes(proj)) {
+  // Compare against the realpath too: mkdtemp under os.tmpdir() can be a symlink
+  // (macOS /var/folders → /private/var/folders) and the CLI may log the realpath.
+  const realProj = realpathSync(proj);
+  if (!dry.includes(proj) && !dry.includes(realProj)) {
     fail(
       "installed hexagen CLI did not resolve the generated project root (issue #179 regression)",
       dry,
     );
   }
-  if (dry.includes(REPO)) {
+  if (dry.includes(REPO) || dry.includes(realpathSync(REPO))) {
     fail("installed hexagen CLI resolved the MONOREPO (issue #179 regression)", dry);
   }
   step("Installed CLI resolves the generated project, not the monorepo ✅");
