@@ -33,6 +33,14 @@ The canonical, explicit stack lives in `.agents/tech-stack.md`. It lists both
 what IS used and what is **never** used — read it before suggesting any tool or
 library, to avoid hallucinated dependencies.
 
+## Conventions
+
+- **Logging:** use the structured logger (`src/infrastructure/logging/logger.ts`, from the
+  `observability` template) — e.g. `logger.info({ userId }, "user.created")`. **Never `console.log`**
+  — it has no level, correlation id, or redaction and becomes technical debt. The `eslint-no-console`
+  template enforces this in lint/CI; the only exempt sites are the logger transport, server startup,
+  scripts, and config files.
+
 ## Commands After Edits
 
 Run the matching command after each kind of change. On failure, stop and fix

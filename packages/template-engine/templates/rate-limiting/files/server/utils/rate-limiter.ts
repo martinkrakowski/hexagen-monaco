@@ -47,14 +47,17 @@ export function checkRateLimit(
   if (DEBUG) {
     const pct = entry.count / limit;
     if (!allowed) {
+      // eslint-disable-next-line no-console -- DEBUG-gated rate-limit diagnostic
       console.log(
         `[rate-limit:block] clientId=${clientId} bucket=${bucket} limit=${limit} resetAt=${entry.resetAt}`,
       );
     } else if (pct >= WARN_AT) {
+      // eslint-disable-next-line no-console -- DEBUG-gated rate-limit diagnostic
       console.log(
         `[rate-limit:warn] clientId=${clientId} bucket=${bucket} at ${entry.count}/${limit} (${Math.round(pct * 100)}%)`,
       );
     } else {
+      // eslint-disable-next-line no-console -- DEBUG-gated rate-limit diagnostic
       console.log(
         `[rate-limit] clientId=${clientId} bucket=${bucket} remaining=${remaining}/${limit}`,
       );

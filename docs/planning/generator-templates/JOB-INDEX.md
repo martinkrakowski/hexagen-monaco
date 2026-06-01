@@ -78,12 +78,13 @@ hexagen new my-project --add rate-limiting,llm-adapter,env-setup,docker
 
 ### Core Infrastructure
 
-| ID               | Branch                                      | One-liner                                                                                                        | Priority |
-| ---------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
-| `rate-limiting`  | `feature/generator-template-rate-limiting`  | Differentiated middleware (text/image/general), session+IP hybrid ID, configurable limits, 429 handling          | P0       |
-| `llm-adapter`    | `feature/generator-template-llm-adapter`    | Typed port interface, provider adapters (xAI/OpenAI/Anthropic/Ollama), model constants, reasoning routing, retry | P0       |
-| `error-handling` | `feature/generator-template-error-handling` | 3-layer error hierarchy, RFC 7807 HTTP mapping, LLM error classes, React error boundary                          | P0       |
-| `observability`  | `feature/generator-template-observability`  | Structured JSON logging, correlation IDs via AsyncLocalStorage, request middleware, `/api/health`                | P0       |
+| ID                  | Branch                                         | One-liner                                                                                                        | Priority |
+| ------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
+| `rate-limiting`     | `feature/generator-template-rate-limiting`     | Differentiated middleware (text/image/general), session+IP hybrid ID, configurable limits, 429 handling          | P0       |
+| `llm-adapter`       | `feature/generator-template-llm-adapter`       | Typed port interface, provider adapters (xAI/OpenAI/Anthropic/Ollama), model constants, reasoning routing, retry | P0       |
+| `error-handling`    | `feature/generator-template-error-handling`    | 3-layer error hierarchy, RFC 7807 HTTP mapping, LLM error classes, React error boundary                          | P0       |
+| `observability`     | `feature/generator-template-observability`     | Structured JSON logging, correlation IDs via AsyncLocalStorage, request middleware, `/api/health`                | P0       |
+| `eslint-no-console` | `feature/generator-template-eslint-no-console` | Flat-config fragment banning `console.*` (logger enforcement); logger/startup/scripts/config exempted            | P1       |
 
 ---
 

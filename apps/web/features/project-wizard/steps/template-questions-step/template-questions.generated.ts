@@ -659,6 +659,15 @@ export const TEMPLATE_QUESTIONS: Record<
       default: false,
     },
   ],
+  "eslint-no-console": [
+    {
+      id: "console_level",
+      type: "select",
+      prompt: "no-console severity? (warn nudges; error blocks CI)",
+      options: ["warn", "error"],
+      default: "warn",
+    },
+  ],
   "github-oauth": [
     {
       id: "redirect_uri",
