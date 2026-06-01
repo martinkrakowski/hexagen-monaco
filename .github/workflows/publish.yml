@@ -17,7 +17,7 @@ jobs:
     name: "Build & Publish @hexagen-monaco packages"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # softprops/action-gh-release creates a GitHub Release
       id-token: write # required for OIDC Trusted Publishing + provenance
     steps:
       - name: "Checkout Repository"
@@ -42,8 +42,9 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       # OIDC Trusted Publishing requires npm >= 11.5.1; Node 22.7 ships npm 10.x.
+      # Pinned (not @latest) so the release toolchain is deterministic.
       - name: "Upgrade npm (Trusted Publishing support)"
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.5.1
 
       # Fail fast (before the build) if the tag doesn't match what would be
       # published, and enforce the co-release invariant (both packages share a
