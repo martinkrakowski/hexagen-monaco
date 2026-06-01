@@ -49,10 +49,14 @@ const fail = (msg, detail = "") => {
 const step = (msg) => console.log(`• ${msg}`);
 
 try {
-  // 1. Build the two tooling packages.
-  step("Building @hexagen/sync + @hexagen/arch-linter…");
-  sh("yarn workspace @hexagen/sync build");
-  sh("yarn workspace @hexagen/arch-linter build");
+  // 1. Build the two tooling packages AND their workspace deps. Use turbo
+  //    (build dependsOn ["^build"]) so @hexagen/project-configuration, shared,
+  //    etc. are built first — tsup inlines them and needs their dist/ to exist.
+  //    (`yarn workspace … build` alone fails on a fresh checkout.)
+  step("Building @hexagen/sync + @hexagen/arch-linter (with deps)…");
+  sh(
+    "yarn turbo run build --filter=@hexagen/sync --filter=@hexagen/arch-linter",
+  );
 
   // 2. Stage + pack → tarballs.
   const packDir = mkdtempSync(path.join(tmpdir(), "capstone-pack-"));
