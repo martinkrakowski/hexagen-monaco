@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "test": "turbo test",
+    "capstone": "node scripts/capstone/first-run-green.js",
     "coverage": "c8 --lines 80 --functions 80 --branches 80 --statements 80 turbo test",
     "test:force": "turbo run test --force",
     "typecheck:test": "turbo run typecheck:test",
@@ -60,6 +61,7 @@
     "lint-staged": "^16.4.0",
     "lru-cache": "^7.18.3",
     "prettier": "^3.2.5",
+    "tsx": "^4.21.0",
     "turbo": "^1.13.3",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.0.0",
