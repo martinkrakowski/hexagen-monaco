@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, TriangleAlert, X } from "lucide-react";
+import { Boxes, ChevronDown, TriangleAlert, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,8 @@ import {
   CATEGORIES,
   CATEGORY_LABELS,
   findCompanionSuggestions,
-  findConflicts,
+  planSelection,
+  resolveMissingRequires,
   type CatalogEntry,
 } from "./template-catalog";
 import { useSelectedAddOns } from "../../contexts/SelectedAddOnsContext";
@@ -42,7 +43,7 @@ export function AddOnsStep({
   title,
   description,
 }: AddOnsStepProps) {
-  const { selectedIds, toggle, isSelected, replaceConflicting } =
+  const { selectedIds, toggle, isSelected, resolveSelection } =
     useSelectedAddOns();
   const [expanded, setExpanded] = useState<Record<string, boolean>>(
     () =>
@@ -54,6 +55,14 @@ export function AddOnsStep({
     entry: CatalogEntry;
     conflicts: CatalogEntry[];
   } | null>(null);
+  // The required dependencies the user is being asked to add alongside `entry`.
+  // `removeIds` carries any conflicting selections to swap out in the same atomic
+  // update (set when the dependency prompt follows a conflict switch).
+  const [pendingDeps, setPendingDeps] = useState<{
+    entry: CatalogEntry;
+    deps: CatalogEntry[];
+    removeIds: string[];
+  } | null>(null);
 
   function missingDeps(id: string): string[] {
     const entry = TEMPLATE_CATALOG.find((e) => e.id === id);
@@ -61,28 +70,50 @@ export function AddOnsStep({
     return entry.requires.filter((dep) => !selectedIds.includes(dep));
   }
 
-  // Deselecting is always allowed. When selecting, block conflicting choices and
-  // surface a dialog letting the user switch or keep their current selection.
+  // Selecting routes through planSelection: deselect → conflict prompt →
+  // dependency prompt → plain select (in that priority). Nothing is committed
+  // until the user confirms, so cancelling any dialog leaves the selection clean.
   function handleSelect(entry: CatalogEntry): void {
-    if (isSelected(entry.id)) {
-      toggle(entry.id);
-      return;
+    const plan = planSelection(entry.id, selectedIds);
+    switch (plan.kind) {
+      case "deselect":
+        toggle(entry.id);
+        return;
+      case "conflict":
+        setConflict({ entry, conflicts: plan.conflicts });
+        return;
+      case "deps":
+        setPendingDeps({ entry, deps: plan.deps, removeIds: [] });
+        return;
+      case "select":
+        resolveSelection([entry.id], []);
+        return;
     }
-    const conflicts = findConflicts(entry.id, selectedIds);
-    if (conflicts.length > 0) {
-      setConflict({ entry, conflicts });
-      return;
-    }
-    toggle(entry.id);
   }
 
+  // Conflict resolution first, THEN dependency prompting on the post-switch
+  // state — so we never prompt to add a dep for a template the user is swapping
+  // out. The swap + deps are applied together (one atomic update) on confirm.
   function confirmSwitch(): void {
     if (!conflict) return;
-    replaceConflicting(
-      conflict.entry.id,
-      conflict.conflicts.map((c) => c.id),
-    );
+    const removeIds = conflict.conflicts.map((c) => c.id);
+    const postSwitch = selectedIds.filter((id) => !removeIds.includes(id));
+    const deps = resolveMissingRequires(conflict.entry.id, postSwitch);
     setConflict(null);
+    if (deps.length > 0) {
+      setPendingDeps({ entry: conflict.entry, deps, removeIds });
+    } else {
+      resolveSelection([conflict.entry.id], removeIds);
+    }
+  }
+
+  function confirmAddDeps(): void {
+    if (!pendingDeps) return;
+    resolveSelection(
+      [pendingDeps.entry.id, ...pendingDeps.deps.map((d) => d.id)],
+      pendingDeps.removeIds,
+    );
+    setPendingDeps(null);
   }
 
   // Adding a companion goes through the same conflict-check path as a normal
@@ -107,7 +138,7 @@ export function AddOnsStep({
         title={title ?? "Add-On Templates"}
         description={
           description ??
-          "Select production add-ons to apply after project generation. Dependencies are auto-resolved by the CLI."
+          "Select production add-ons to apply after project generation. Required dependencies and conflicts are resolved here; the CLI re-checks at install."
         }
       />
 
@@ -232,7 +263,7 @@ export function AddOnsStep({
                 <span className="font-medium text-foreground">
                   {conflict.conflicts.map((c) => c.name).join(", ")}
                 </span>
-                . These provide overlapping auth layers, so only one can be
+                . These templates are mutually exclusive — only one can be
                 active.
               </DialogDescription>
             )}
@@ -244,6 +275,54 @@ export function AddOnsStep({
             </Button>
             <Button variant="default" onClick={confirmSwitch}>
               Switch to {conflict?.entry.name}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingDeps !== null} onClose={() => setPendingDeps(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-4">
+              <DialogTitle className="flex items-center gap-2">
+                <Boxes size={18} className="text-primary" />
+                Required dependencies
+              </DialogTitle>
+              <button
+                type="button"
+                onClick={() => setPendingDeps(null)}
+                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 mt-0.5"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {pendingDeps && (
+              <DialogDescription>
+                <span className="font-medium text-foreground">
+                  {pendingDeps.entry.name}
+                </span>{" "}
+                requires{" "}
+                <span className="font-medium text-foreground">
+                  {pendingDeps.deps.map((d) => d.name).join(" · ")}
+                </span>
+                . Add {pendingDeps.deps.length === 1 ? "it" : "them"} too?
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPendingDeps(null)}>
+              Cancel
+            </Button>
+            <Button variant="default" onClick={confirmAddDeps}>
+              {pendingDeps
+                ? `Add ${pendingDeps.entry.name} + ${pendingDeps.deps.length} ${
+                    pendingDeps.deps.length === 1
+                      ? "dependency"
+                      : "dependencies"
+                  }`
+                : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>

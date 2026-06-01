@@ -6,8 +6,14 @@ interface SelectedAddOnsContextValue {
   selectedIds: string[];
   toggle: (id: string) => void;
   isSelected: (id: string) => boolean;
-  /** Atomically deselect `removeIds` and select `addId` (used to resolve conflicts). */
-  replaceConflicting: (addId: string, removeIds: string[]) => void;
+  /**
+   * Atomically deselect `removeIds` and select `addIds` (union). Used to add a
+   * template together with its required dependencies — optionally swapping out
+   * conflicting selections in the same update — so a cancelled prompt never
+   * leaves a partial selection. Already-selected ids keep their position;
+   * only genuinely new ids are appended (deduped, order-stable).
+   */
+  resolveSelection: (addIds: string[], removeIds: string[]) => void;
 }
 
 const SelectedAddOnsContext = createContext<SelectedAddOnsContextValue | null>(
@@ -32,20 +38,32 @@ export function SelectedAddOnsProvider({
     [selectedIds],
   );
 
-  const replaceConflicting = useCallback(
-    (addId: string, removeIds: string[]) => {
+  const resolveSelection = useCallback(
+    (addIds: string[], removeIds: string[]) => {
       const remove = new Set(removeIds);
-      setSelectedIds((prev) => [
-        ...prev.filter((x) => !remove.has(x) && x !== addId),
-        addId,
-      ]);
+      setSelectedIds((prev) => {
+        const next = prev.filter((x) => !remove.has(x));
+        const present = new Set(next);
+        for (const id of addIds) {
+          if (!remove.has(id) && !present.has(id)) {
+            next.push(id);
+            present.add(id);
+          }
+        }
+        return next;
+      });
     },
     [],
   );
 
   return (
     <SelectedAddOnsContext.Provider
-      value={{ selectedIds, toggle, isSelected, replaceConflicting }}
+      value={{
+        selectedIds,
+        toggle,
+        isSelected,
+        resolveSelection,
+      }}
     >
       {children}
     </SelectedAddOnsContext.Provider>

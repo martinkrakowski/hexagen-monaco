@@ -774,6 +774,95 @@ export function findCompanionSuggestions(
   return out;
 }
 
+/**
+ * The complete transitive set of templates that `candidateId` requires (directly
+ * or via its dependencies) and that are not already selected. The full closure is
+ * returned in one call so the add-ons step can prompt "X requires A · B · C — add
+ * all?" in a single dialog rather than chaining one prompt per dependency. The
+ * `requires` graph is sourced from the manifests (merged into each entry), so it
+ * matches what the CLI's resolveDependencies() will do at install time.
+ *
+ * Fails fast on an invalid graph — a dangling `requires` (no catalog/manifest
+ * entry) or a cycle — by throwing, mirroring the CLI's MissingTemplateError /
+ * CyclicDependencyError. The generator's parity check guards the manifests, so in
+ * practice this only fires during local development if a manifest regresses; we'd
+ * rather surface that immediately than accept a selection that breaks at install.
+ */
+export function resolveMissingRequires(
+  candidateId: string,
+  selectedIds: string[],
+): CatalogEntry[] {
+  const have = new Set(selectedIds);
+  const out: CatalogEntry[] = [];
+  const done = new Set<string>();
+  const visiting = new Set<string>();
+
+  // Post-order DFS: a node is appended only after its own requirements, so the
+  // closure is install-ordered (deepest deps first). `visiting` is the active
+  // path — re-entering it means a cycle (distinct from a diamond, where a shared
+  // dep is reached twice via different parents and is correctly deduped by `done`).
+  function visit(id: string, requiredBy: string): void {
+    if (done.has(id)) return;
+    if (visiting.has(id)) {
+      throw new Error(
+        `Cyclic template dependency detected at "${id}" (required by "${requiredBy}")`,
+      );
+    }
+    const dep = CATALOG_BY_ID.get(id);
+    if (!dep) {
+      throw new Error(
+        `Template "${requiredBy}" requires "${id}", which has no catalog/manifest entry`,
+      );
+    }
+    visiting.add(id);
+    for (const req of dep.requires) visit(req, id);
+    visiting.delete(id);
+    done.add(id);
+    // Traverse the whole graph (even through already-selected deps) but only
+    // surface the ones that are still missing.
+    if (!have.has(id)) out.push(dep);
+  }
+
+  const root = CATALOG_BY_ID.get(candidateId);
+  if (!root) {
+    throw new Error(`Unknown template "${candidateId}"`);
+  }
+  // Keep the candidate on the active path so a back-edge to it is caught as a cycle.
+  visiting.add(candidateId);
+  for (const req of root.requires) visit(req, candidateId);
+  visiting.delete(candidateId);
+  return out;
+}
+
+export type SelectionPlan =
+  | { kind: "deselect" }
+  | { kind: "conflict"; conflicts: CatalogEntry[] }
+  | { kind: "deps"; deps: CatalogEntry[] }
+  | { kind: "select" };
+
+/**
+ * Decide what selecting `candidateId` should do, given the current selection.
+ * Priority order:
+ *   1. an already-selected template → deselect (always allowed);
+ *   2. CONFLICTS first — so we never prompt to add a dependency for a template
+ *      the user is about to swap out (the dependency prompt runs afterward on the
+ *      post-switch selection, in the add-ons step);
+ *   3. missing REQUIRED dependencies → prompt;
+ *   4. otherwise → select directly.
+ * Pure and side-effect-free so the whole flow is unit-testable.
+ */
+export function planSelection(
+  candidateId: string,
+  selectedIds: string[],
+): SelectionPlan {
+  if (selectedIds.includes(candidateId)) return { kind: "deselect" };
+  const conflicts = findConflicts(candidateId, selectedIds);
+  if (conflicts.length > 0) return { kind: "conflict", conflicts };
+  const deps = resolveMissingRequires(candidateId, selectedIds);
+  if (deps.length > 0) return { kind: "deps", deps };
+  return { kind: "select" };
+}
+
 export const CATEGORY_LABELS: Record<CatalogCategory, string> = {
   foundation: "Foundation",
   infrastructure: "Infrastructure",

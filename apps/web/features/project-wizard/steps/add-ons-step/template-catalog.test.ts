@@ -4,6 +4,9 @@ import {
   CATEGORIES,
   CATEGORY_LABELS,
   findCompanionSuggestions,
+  findConflicts,
+  planSelection,
+  resolveMissingRequires,
   TEMPLATE_CATALOG,
 } from "./template-catalog";
 import { TEMPLATE_MANIFESTS } from "./template-manifest.generated";
@@ -113,5 +116,81 @@ describe("catalog ↔ manifest parity (the bidirectional guard)", () => {
         `${entry.category} missing from CATEGORY_LABELS`,
       );
     }
+  });
+});
+
+describe("dependency prompting (planSelection / resolveMissingRequires)", () => {
+  it("resolves the full transitive required closure in one pass", () => {
+    // adobe-express → adobe-firefly-core → env-setup + error-handling
+    //                              error-handling → env-setup (deduped)
+    const deps = resolveMissingRequires("adobe-express", []).map((e) => e.id);
+    assert.ok(deps.includes("adobe-firefly-core"), "core");
+    assert.ok(deps.includes("env-setup"), "env-setup");
+    assert.ok(deps.includes("error-handling"), "error-handling");
+    assert.equal(new Set(deps).size, deps.length, "no duplicates");
+  });
+
+  it("excludes dependencies that are already selected", () => {
+    const deps = resolveMissingRequires("adobe-express", [
+      "adobe-firefly-core",
+      "env-setup",
+      "error-handling",
+    ]);
+    assert.deepEqual(deps, []);
+  });
+
+  it("fails fast on an unknown candidate instead of silently returning []", () => {
+    // Parity with the CLI's resolveDependencies (MissingTemplateError): an invalid
+    // graph must surface immediately, not be masked until install time.
+    assert.throws(
+      () => resolveMissingRequires("definitely-not-a-template", []),
+      /Unknown template/,
+    );
+  });
+
+  it("planSelection: missing deps → a deps prompt (candidate is NOT auto-added)", () => {
+    // The plan describes intent only — nothing is selected until the user
+    // confirms — so cancelling the prompt leaves the selection clean.
+    const plan = planSelection("adobe-express", []);
+    assert.equal(plan.kind, "deps");
+    if (plan.kind === "deps") {
+      assert.ok(plan.deps.some((d) => d.id === "adobe-firefly-core"));
+    }
+  });
+
+  it("planSelection: no deps, no conflict → plain select; already selected → deselect", () => {
+    assert.equal(planSelection("env-setup", []).kind, "select");
+    assert.equal(planSelection("env-setup", ["env-setup"]).kind, "deselect");
+  });
+
+  it("planSelection resolves CONFLICTS before dependencies", () => {
+    // gcs conflicts with s3 AND requires adobe-firefly-core (unselected). The
+    // conflict must win — we don't prompt to add a dep for a template the user
+    // is about to swap out.
+    const plan = planSelection("adobe-firefly-storage-gcs", [
+      "adobe-firefly-storage-s3",
+    ]);
+    assert.equal(plan.kind, "conflict");
+    if (plan.kind === "conflict") {
+      assert.deepEqual(
+        plan.conflicts.map((c) => c.id),
+        ["adobe-firefly-storage-s3"],
+      );
+    }
+  });
+
+  it("findConflicts: the storage presigner trio is mutually exclusive", () => {
+    assert.deepEqual(
+      findConflicts("adobe-firefly-storage-gcs", [
+        "adobe-firefly-storage-s3",
+      ]).map((e) => e.id),
+      ["adobe-firefly-storage-s3"],
+    );
+    assert.deepEqual(
+      findConflicts("adobe-firefly-storage-azure", [
+        "adobe-firefly-storage-gcs",
+      ]).map((e) => e.id),
+      ["adobe-firefly-storage-gcs"],
+    );
   });
 });
