@@ -46,6 +46,14 @@ const TOOLING_ALLOWLIST = [
   "@hexagen-monaco/arch-linter",
 ];
 
+// Match the tooling scopes PRECISELY (with the `/` boundary) so a legitimate
+// project scope like @hexagenic/* — which contains the substring "@hexagen" —
+// is NOT flagged. Covers both the legacy @hexagen/ and the published
+// @hexagen-monaco/ scopes.
+const TOOLING_SCOPES = ["@hexagen/", "@hexagen-monaco/"];
+const refsTooling = (s: string): boolean =>
+  TOOLING_SCOPES.some((scope) => s.includes(scope));
+
 describe("sanitizeScope", () => {
   it("strips a leading @ and lowercases", () => {
     assert.strictEqual(sanitizeScope("@My-Scope"), "my-scope");
@@ -147,14 +155,14 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
         "tsconfig.base paths must use @acme/*",
       );
       assert.ok(
-        !tsconfigBase.includes("@hexagen"),
+        !refsTooling(tsconfigBase),
         "tsconfig.base must not retain the tooling namespace",
       );
 
-      // (1) two-sided: walk every emitted file. The tooling namespace
-      // (@hexagen-monaco, and never the legacy @hexagen) may appear ONLY as an
-      // allowlisted devDep on the root package.json. The `@hexagen` substring
-      // catches both scopes.
+      // (1) two-sided: walk every emitted file. A tooling scope (@hexagen-monaco/,
+      // and never the legacy @hexagen/) may appear ONLY as an allowlisted devDep
+      // on the root package.json. `refsTooling` matches on the `/` boundary so a
+      // project scope like @hexagenic/ is not a false positive.
       const files = await walk(workspaceRoot);
       for (const file of files) {
         const content = await fs.readFile(file, "utf8");
@@ -164,7 +172,7 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
             [k: string]: unknown;
           };
           const toolingDevDeps = Object.keys(pkg.devDependencies ?? {}).filter(
-            (k) => k.includes("@hexagen"),
+            (k) => refsTooling(k),
           );
           for (const dep of toolingDevDeps) {
             assert.ok(
@@ -172,17 +180,17 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
               `unexpected tooling devDep: ${dep}`,
             );
           }
-          // The tooling namespace must appear ONLY inside devDependencies.
+          // A tooling scope must appear ONLY inside devDependencies.
           const rest = { ...pkg };
           delete rest.devDependencies;
           assert.ok(
-            !JSON.stringify(rest).includes("@hexagen"),
-            "root package.json must not reference the tooling namespace outside devDependencies",
+            !refsTooling(JSON.stringify(rest)),
+            "root package.json must not reference a tooling scope outside devDependencies",
           );
         } else {
           assert.ok(
-            !content.includes("@hexagen"),
-            `emitted project file leaked the tooling namespace: ${path.relative(workspaceRoot, file)}`,
+            !refsTooling(content),
+            `emitted project file leaked a tooling scope: ${path.relative(workspaceRoot, file)}`,
           );
         }
       }
@@ -221,6 +229,17 @@ describe("emitted code templates reference @{scope}/shared, not @hexagen", () =>
       !out.includes("@hexagen/"),
       "use-case stub must not leak the @hexagen namespace",
     );
+  });
+});
+
+describe("tooling-scope matcher (guard precision)", () => {
+  it("matches the tooling scopes but not lookalike project scopes", () => {
+    assert.equal(refsTooling("@hexagen-monaco/sync"), true);
+    assert.equal(refsTooling("@hexagen/shared"), true);
+    // The whole point: @hexagenic contains the "@hexagen" substring but is a
+    // legitimate, distinct project scope — must NOT be flagged.
+    assert.equal(refsTooling("@hexagenic/core"), false);
+    assert.equal(refsTooling("@acme/core"), false);
   });
 });
 
