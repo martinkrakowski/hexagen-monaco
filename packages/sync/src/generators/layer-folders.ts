@@ -64,7 +64,7 @@ async function generateBarrelContent(dirPath: string): Promise<string> {
   }
 
   // NOTE: Shared kernel re-exports removed.
-  // Each package imports from @hexagen/shared directly where needed.
+  // Each package imports from the project's own shared kernel directly where needed.
   // Re-exporting from another package violates barrel-ownership-boundary.
 
   return exportLines.length > 0
