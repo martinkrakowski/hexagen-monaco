@@ -774,6 +774,66 @@ export function findCompanionSuggestions(
   return out;
 }
 
+/**
+ * The complete transitive set of templates that `candidateId` requires (directly
+ * or via its dependencies) and that are not already selected. The full closure is
+ * returned in one call so the add-ons step can prompt "X requires A · B · C — add
+ * all?" in a single dialog rather than chaining one prompt per dependency. The
+ * `requires` graph is sourced from the manifests (merged into each entry), so it
+ * matches what the CLI's resolveDependencies() will do at install time.
+ */
+export function resolveMissingRequires(
+  candidateId: string,
+  selectedIds: string[],
+): CatalogEntry[] {
+  const have = new Set(selectedIds);
+  const seen = new Set<string>([candidateId]);
+  const out: CatalogEntry[] = [];
+  const queue = [...(CATALOG_BY_ID.get(candidateId)?.requires ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const dep = CATALOG_BY_ID.get(id);
+    if (!dep) continue; // dangling ref — the generator guards against this
+    // Traverse the whole graph (even through already-selected deps) but only
+    // surface the ones that are still missing.
+    queue.push(...dep.requires);
+    if (have.has(id)) continue;
+    out.push(dep);
+  }
+  return out;
+}
+
+export type SelectionPlan =
+  | { kind: "deselect" }
+  | { kind: "conflict"; conflicts: CatalogEntry[] }
+  | { kind: "deps"; deps: CatalogEntry[] }
+  | { kind: "select" };
+
+/**
+ * Decide what selecting `candidateId` should do, given the current selection.
+ * Priority order:
+ *   1. an already-selected template → deselect (always allowed);
+ *   2. CONFLICTS first — so we never prompt to add a dependency for a template
+ *      the user is about to swap out (the dependency prompt runs afterward on the
+ *      post-switch selection, in the add-ons step);
+ *   3. missing REQUIRED dependencies → prompt;
+ *   4. otherwise → select directly.
+ * Pure and side-effect-free so the whole flow is unit-testable.
+ */
+export function planSelection(
+  candidateId: string,
+  selectedIds: string[],
+): SelectionPlan {
+  if (selectedIds.includes(candidateId)) return { kind: "deselect" };
+  const conflicts = findConflicts(candidateId, selectedIds);
+  if (conflicts.length > 0) return { kind: "conflict", conflicts };
+  const deps = resolveMissingRequires(candidateId, selectedIds);
+  if (deps.length > 0) return { kind: "deps", deps };
+  return { kind: "select" };
+}
+
 export const CATEGORY_LABELS: Record<CatalogCategory, string> = {
   foundation: "Foundation",
   infrastructure: "Infrastructure",

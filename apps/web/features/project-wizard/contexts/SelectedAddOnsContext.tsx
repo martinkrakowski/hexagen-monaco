@@ -8,6 +8,13 @@ interface SelectedAddOnsContextValue {
   isSelected: (id: string) => boolean;
   /** Atomically deselect `removeIds` and select `addId` (used to resolve conflicts). */
   replaceConflicting: (addId: string, removeIds: string[]) => void;
+  /**
+   * Atomically deselect `removeIds` and select `addIds` (union). Used to add a
+   * template together with its required dependencies — optionally swapping out
+   * conflicting selections in the same update — so a cancelled prompt never
+   * leaves a partial selection.
+   */
+  resolveSelection: (addIds: string[], removeIds: string[]) => void;
 }
 
 const SelectedAddOnsContext = createContext<SelectedAddOnsContextValue | null>(
@@ -43,9 +50,28 @@ export function SelectedAddOnsProvider({
     [],
   );
 
+  const resolveSelection = useCallback(
+    (addIds: string[], removeIds: string[]) => {
+      const remove = new Set(removeIds);
+      const add = addIds.filter((id) => !remove.has(id));
+      const addSet = new Set(add);
+      setSelectedIds((prev) => [
+        ...prev.filter((x) => !remove.has(x) && !addSet.has(x)),
+        ...add,
+      ]);
+    },
+    [],
+  );
+
   return (
     <SelectedAddOnsContext.Provider
-      value={{ selectedIds, toggle, isSelected, replaceConflicting }}
+      value={{
+        selectedIds,
+        toggle,
+        isSelected,
+        replaceConflicting,
+        resolveSelection,
+      }}
     >
       {children}
     </SelectedAddOnsContext.Provider>
