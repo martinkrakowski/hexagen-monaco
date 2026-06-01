@@ -1,0 +1,36 @@
+name: "Capstone — First-Run-Green"
+
+# Proves a freshly generated project installs the @hexagen-monaco tooling and the
+# installed CLI targets it correctly — hermetic for the tooling (packed tarballs),
+# no real npm release required. See scripts/capstone/first-run-green.mjs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  first-run-green:
+    name: "Generate → install → verify"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.7"
+
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare yarn@4.12.0 --activate
+
+      - name: "Install Dependencies"
+        run: yarn install --immutable
+
+      - name: "Run capstone (first-run-green)"
+        run: yarn capstone
