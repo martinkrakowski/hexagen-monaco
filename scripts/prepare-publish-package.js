@@ -184,7 +184,20 @@ function prepare(packageDir) {
   const srcDepCount = Object.keys(srcPkg.dependencies || {}).length;
   const cleanedDeps = cleanDependencies(srcPkg.dependencies);
   if (cleanedDeps) staged.dependencies = cleanedDeps;
-  const strippedDepCount = srcDepCount - Object.keys(cleanedDeps || {}).length;
+  let strippedDepCount = srcDepCount - Object.keys(cleanedDeps || {}).length;
+
+  // peerDependencies / optionalDependencies are retained verbatim by the
+  // projection above, so they need the same workspace:* stripping as
+  // dependencies — otherwise the staged manifest can violate the
+  // "no workspace:* references" guarantee and become uninstallable.
+  for (const field of ["peerDependencies", "optionalDependencies"]) {
+    if (!staged[field]) continue;
+    const before = Object.keys(staged[field]).length;
+    const cleaned = cleanDependencies(staged[field]);
+    if (cleaned) staged[field] = cleaned;
+    else delete staged[field];
+    strippedDepCount += before - Object.keys(cleaned || {}).length;
+  }
 
   fs.writeFileSync(
     path.join(publishDir, "package.json"),
