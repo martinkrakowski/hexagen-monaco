@@ -781,27 +781,56 @@ export function findCompanionSuggestions(
  * all?" in a single dialog rather than chaining one prompt per dependency. The
  * `requires` graph is sourced from the manifests (merged into each entry), so it
  * matches what the CLI's resolveDependencies() will do at install time.
+ *
+ * Fails fast on an invalid graph — a dangling `requires` (no catalog/manifest
+ * entry) or a cycle — by throwing, mirroring the CLI's MissingTemplateError /
+ * CyclicDependencyError. The generator's parity check guards the manifests, so in
+ * practice this only fires during local development if a manifest regresses; we'd
+ * rather surface that immediately than accept a selection that breaks at install.
  */
 export function resolveMissingRequires(
   candidateId: string,
   selectedIds: string[],
 ): CatalogEntry[] {
   const have = new Set(selectedIds);
-  const seen = new Set<string>([candidateId]);
   const out: CatalogEntry[] = [];
-  const queue = [...(CATALOG_BY_ID.get(candidateId)?.requires ?? [])];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
+  const done = new Set<string>();
+  const visiting = new Set<string>();
+
+  // Post-order DFS: a node is appended only after its own requirements, so the
+  // closure is install-ordered (deepest deps first). `visiting` is the active
+  // path — re-entering it means a cycle (distinct from a diamond, where a shared
+  // dep is reached twice via different parents and is correctly deduped by `done`).
+  function visit(id: string, requiredBy: string): void {
+    if (done.has(id)) return;
+    if (visiting.has(id)) {
+      throw new Error(
+        `Cyclic template dependency detected at "${id}" (required by "${requiredBy}")`,
+      );
+    }
     const dep = CATALOG_BY_ID.get(id);
-    if (!dep) continue; // dangling ref — the generator guards against this
+    if (!dep) {
+      throw new Error(
+        `Template "${requiredBy}" requires "${id}", which has no catalog/manifest entry`,
+      );
+    }
+    visiting.add(id);
+    for (const req of dep.requires) visit(req, id);
+    visiting.delete(id);
+    done.add(id);
     // Traverse the whole graph (even through already-selected deps) but only
     // surface the ones that are still missing.
-    queue.push(...dep.requires);
-    if (have.has(id)) continue;
-    out.push(dep);
+    if (!have.has(id)) out.push(dep);
   }
+
+  const root = CATALOG_BY_ID.get(candidateId);
+  if (!root) {
+    throw new Error(`Unknown template "${candidateId}"`);
+  }
+  // Keep the candidate on the active path so a back-edge to it is caught as a cycle.
+  visiting.add(candidateId);
+  for (const req of root.requires) visit(req, candidateId);
+  visiting.delete(candidateId);
   return out;
 }
 

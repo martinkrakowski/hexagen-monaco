@@ -139,6 +139,15 @@ describe("dependency prompting (planSelection / resolveMissingRequires)", () => 
     assert.deepEqual(deps, []);
   });
 
+  it("fails fast on an unknown candidate instead of silently returning []", () => {
+    // Parity with the CLI's resolveDependencies (MissingTemplateError): an invalid
+    // graph must surface immediately, not be masked until install time.
+    assert.throws(
+      () => resolveMissingRequires("definitely-not-a-template", []),
+      /Unknown template/,
+    );
+  });
+
   it("planSelection: missing deps → a deps prompt (candidate is NOT auto-added)", () => {
     // The plan describes intent only — nothing is selected until the user
     // confirms — so cancelling the prompt leaves the selection clean.
