@@ -1659,6 +1659,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/arch-linter@workspace:tools/arch-linter"
   dependencies:
+    "@hexagen/project-configuration": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
@@ -1670,6 +1671,7 @@ __metadata:
     js-yaml: "npm:^4.1.0"
     lodash: "npm:^4.17.21"
     ts-morph: "npm:^27.0.2"
+    tsup: "npm:^8.1.0"
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.5.3"
     yaml-eslint-parser: "npm:^2.0.0"
