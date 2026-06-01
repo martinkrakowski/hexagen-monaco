@@ -27,7 +27,6 @@
   "dependencies": {
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
-    "@hexagen/sync": "workspace:*",
     "chalk": "^5.3.0",
     "js-yaml": "^4.1.0",
     "lodash": "^4.17.21",
@@ -35,6 +34,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@hexagen/sync": "workspace:*",
     "@types/js-yaml": "^4.0.9",
     "@types/lodash": "^4.17.7",
     "@types/node": "^20.12.7",
