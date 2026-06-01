@@ -64,14 +64,26 @@ jobs:
             fi
           done
 
+      # Pick the npm dist-tag from the version: a pre-release (e.g. 0.4.0-rc.1,
+      # any version with a `-` identifier) publishes under `next` so it never
+      # overwrites `latest`; a stable version publishes under `latest`. Both
+      # packages share a version, so one tag covers the co-release.
+      - name: "Resolve npm dist-tag"
+        id: disttag
+        run: |
+          VERSION=$(node -p "require('./packages/sync/package.json').version")
+          if [[ "$VERSION" == *-* ]]; then TAG=next; else TAG=latest; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION under dist-tag '$TAG'"
+
       - name: "Publish @hexagen-monaco/sync"
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
         working-directory: packages/sync/publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: "Publish @hexagen-monaco/arch-linter"
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
         working-directory: tools/arch-linter/publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

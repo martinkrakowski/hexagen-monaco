@@ -31,7 +31,7 @@ export default defineConfig({
 
   // Inline the private workspace graph; keep the published third-party deps out.
   noExternal: [/^@hexagen\//],
-  external: ["ts-morph", "chalk", "lodash", "js-yaml", "zod"],
+  external: ["ts-morph", "js-yaml", "zod"],
 
   esbuildOptions(options) {
     options.charset = "utf8";
