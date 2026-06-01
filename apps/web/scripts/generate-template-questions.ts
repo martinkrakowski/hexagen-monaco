@@ -80,11 +80,25 @@ async function readManifests(): Promise<Manifest[]> {
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith("__")) continue;
     const manifestPath = path.join(TEMPLATES_DIR, entry.name, "manifest.json");
+    let raw: string;
     try {
-      const raw = await fs.readFile(manifestPath, "utf-8");
+      raw = await fs.readFile(manifestPath, "utf-8");
+    } catch (error) {
+      // A directory with no manifest.json is not a template — skip it. Any other
+      // read failure (permissions, etc.) is a real problem, so surface it.
+      if ((error as { code?: string }).code === "ENOENT") continue;
+      throw new Error(
+        `[gen:template-questions] cannot read ${path.relative(REPO_ROOT, manifestPath)}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    try {
       out.push(JSON.parse(raw) as Manifest);
-    } catch {
-      // Skip directories without a valid manifest (no template).
+    } catch (error) {
+      // A present-but-malformed manifest must FAIL — silently skipping it would
+      // drop the template from both generated outputs and defeat the parity guard.
+      throw new Error(
+        `[gen:template-questions] malformed manifest ${path.relative(REPO_ROOT, manifestPath)}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   return out;
@@ -96,6 +110,17 @@ async function readManifests(): Promise<Manifest[]> {
  * unselectable) but usually a typo, so warn.
  */
 function validateReferences(manifests: Manifest[]): void {
+  // Both generated outputs are keyed by id — two manifests sharing an id would
+  // silently collapse to one (a template vanishing from the wizard). Reject it.
+  const counts = new Map<string, number>();
+  for (const m of manifests) counts.set(m.id, (counts.get(m.id) ?? 0) + 1);
+  const dups = [...counts].filter(([, n]) => n > 1).map(([id]) => id);
+  if (dups.length > 0) {
+    throw new Error(
+      `[gen:template-questions] duplicate template ids (would collapse in the id-keyed output): ${dups.join(", ")}`,
+    );
+  }
+
   const ids = new Set(manifests.map((m) => m.id));
   const fatal: string[] = [];
   for (const m of manifests) {
@@ -214,10 +239,11 @@ async function main(): Promise<void> {
   const meta = await renderManifests(metaMap(manifests));
 
   if (checkMode) {
-    const ok =
-      (await checkOne(QUESTIONS_OUT, questions)) &&
-      (await checkOne(MANIFEST_OUT, meta));
-    if (!ok) process.exit(1);
+    // Run BOTH checks (no && short-circuit) so a stale questions file doesn't
+    // mask a stale manifest file — every drifted output is reported in one run.
+    const okQuestions = await checkOne(QUESTIONS_OUT, questions);
+    const okManifest = await checkOne(MANIFEST_OUT, meta);
+    if (!okQuestions || !okManifest) process.exit(1);
     console.log("[gen:template-questions] in sync ✓");
     return;
   }
