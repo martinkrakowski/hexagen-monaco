@@ -74,6 +74,9 @@ export interface RootFilesConfig {
   packageJson?: FileTemplate;
   tsConfig?: FileTemplate;
   turbo?: FileTemplate;
+  gitignore?: FileTemplate;
+  yarnrc?: FileTemplate;
+  setup?: FileTemplate;
 }
 
 export interface ArchInvariantsConfig {

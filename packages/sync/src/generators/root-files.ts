@@ -156,31 +156,40 @@ export async function generateRootFiles(
       result,
     );
 
-    // First-run install scaffolding (Item 2 — CI hardening). Static content
-    // except SETUP.md, which references the project's package manager.
+    // First-run install scaffolding (Item 2 — CI hardening). Threaded through
+    // resolveTemplate like the files above so a manifest can override them, and
+    // through interpolateAndWarn so {scope}/{packageManager} resolve.
+    const gitignoreTemplate = resolveTemplate(
+      rootFiles?.gitignore?.template,
+      BUILTIN_GITIGNORE_TEMPLATE,
+    );
     await writeRootFile(
       path.join(config.workspaceRoot, ".gitignore"),
-      BUILTIN_GITIGNORE_TEMPLATE,
+      interpolateAndWarn(gitignoreTemplate, vars, config, ".gitignore"),
       config,
       report,
       result,
+    );
+
+    const yarnrcTemplate = resolveTemplate(
+      rootFiles?.yarnrc?.template,
+      BUILTIN_YARNRC_TEMPLATE,
     );
     await writeRootFile(
       path.join(config.workspaceRoot, ".yarnrc.yml"),
-      BUILTIN_YARNRC_TEMPLATE,
+      interpolateAndWarn(yarnrcTemplate, vars, config, ".yarnrc.yml"),
       config,
       report,
       result,
     );
-    const setupContent = interpolateAndWarn(
+
+    const setupTemplate = resolveTemplate(
+      rootFiles?.setup?.template,
       BUILTIN_SETUP_MD_TEMPLATE,
-      vars,
-      config,
-      "SETUP.md",
     );
     await writeRootFile(
       path.join(config.workspaceRoot, "SETUP.md"),
-      setupContent,
+      interpolateAndWarn(setupTemplate, vars, config, "SETUP.md"),
       config,
       report,
       result,

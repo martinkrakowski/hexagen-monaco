@@ -447,5 +447,76 @@ describe("root files", () => {
         }
       });
     });
+
+    it("honors a manifest rootFiles override for the new files", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "ovr",
+          monorepo: {
+            rootFiles: {
+              gitignore: { template: "custom-ignore\n" },
+              yarnrc: { template: "nodeLinker: pnp\n" },
+              setup: { template: "Custom setup for {system}\n" },
+            },
+          },
+        };
+        const config = makeConfig(workspaceRoot, manifest, {
+          forceRoot: true,
+        });
+
+        await generateRootFiles(config);
+
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, ".gitignore")),
+          "custom-ignore\n",
+        );
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, ".yarnrc.yml")),
+          "nodeLinker: pnp\n",
+        );
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, "SETUP.md")),
+          "Custom setup for ovr\n",
+          "manifest override is used and still interpolated",
+        );
+      });
+    });
+
+    it("does NOT clobber a user-edited .yarnrc.yml / SETUP.md on re-sync (protected)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "prot" };
+        // First pass creates the files.
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        // User customizes them.
+        const edited = "nodeLinker: node-modules\nnpmScopes:\n  acme: {}\n";
+        await fs.writeFile(
+          path.join(workspaceRoot, ".yarnrc.yml"),
+          edited,
+          "utf8",
+        );
+        await fs.writeFile(
+          path.join(workspaceRoot, "SETUP.md"),
+          "my notes\n",
+          "utf8",
+        );
+
+        // Re-sync WITHOUT forceRoot must not overwrite protected root files.
+        await generateRootFiles(makeConfig(workspaceRoot, manifest));
+
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, ".yarnrc.yml")),
+          edited,
+          ".yarnrc.yml edits must survive a re-sync",
+        );
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, "SETUP.md")),
+          "my notes\n",
+          "SETUP.md edits must survive a re-sync",
+        );
+      });
+    });
   });
 });
