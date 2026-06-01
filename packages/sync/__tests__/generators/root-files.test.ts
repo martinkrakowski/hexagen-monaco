@@ -92,12 +92,12 @@ describe("root files", () => {
       );
       assert.strictEqual(
         result.created.length,
-        3,
-        "should report three created files (package.json, tsconfig.base.json, turbo.json)",
+        6,
+        "should report six created files (package.json, tsconfig.base.json, turbo.json, .gitignore, .yarnrc.yml, SETUP.md)",
       );
       assert.strictEqual(result.updated.length, 0);
       assert.strictEqual(result.skipped.length, 0);
-      assert.strictEqual(result.totalOps, 3);
+      assert.strictEqual(result.totalOps, 6);
 
       for (const name of ["package.json", "tsconfig.base.json", "turbo.json"]) {
         const p = path.join(workspaceRoot, name);
@@ -110,6 +110,14 @@ describe("root files", () => {
         assert.doesNotThrow(
           () => JSON.parse(content),
           `${name} must be valid JSON after interpolation`,
+        );
+      }
+
+      for (const name of [".gitignore", ".yarnrc.yml", "SETUP.md"]) {
+        assert.strictEqual(
+          await fileExists(path.join(workspaceRoot, name)),
+          true,
+          `${name} must exist after generation`,
         );
       }
 
@@ -383,6 +391,161 @@ describe("root files", () => {
         content.includes(`"name":"has-a-system"`),
         "resolved placeholders must still be interpolated alongside unresolved ones",
       );
+    });
+  });
+
+  // Item 2 — CI hardening: the scaffold must carry the first-run install files.
+  describe("first-run install scaffolding", () => {
+    it("emits .gitignore, .yarnrc.yml, and SETUP.md for a bare (zero-context) project", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "bare-app", scope: "bare" };
+        const config = makeConfig(workspaceRoot, manifest, {
+          forceRoot: true,
+        });
+
+        await generateRootFiles(config);
+
+        const gitignore = await readFile(
+          path.join(workspaceRoot, ".gitignore"),
+        );
+        assert.ok(
+          gitignore.includes("node_modules/") &&
+            gitignore.includes(".turbo/") &&
+            gitignore.includes(".env"),
+          ".gitignore must cover node_modules/.turbo/.env",
+        );
+
+        const yarnrc = await readFile(path.join(workspaceRoot, ".yarnrc.yml"));
+        assert.ok(
+          yarnrc.includes("nodeLinker: node-modules"),
+          ".yarnrc.yml must set nodeLinker: node-modules",
+        );
+
+        const setup = await readFile(path.join(workspaceRoot, "SETUP.md"));
+        assert.ok(
+          setup.includes("git add yarn.lock"),
+          "SETUP.md must name the lockfile-commit step",
+        );
+        assert.ok(
+          setup.includes("corepack enable") && setup.includes("yarn install"),
+          "SETUP.md must list the first-push bootstrap steps",
+        );
+        assert.ok(
+          !setup.includes("{packageManager}") && !setup.includes("{system}"),
+          "SETUP.md must not leak uninterpolated tokens",
+        );
+
+        // The bare scaffold's root package.json is still valid and runnable.
+        const pkg = JSON.parse(
+          await readFile(path.join(workspaceRoot, "package.json")),
+        ) as { scripts?: Record<string, string> };
+        for (const s of ["build", "lint", "typecheck", "test"]) {
+          assert.ok(
+            pkg.scripts?.[s],
+            `root package.json must have a ${s} script`,
+          );
+        }
+      });
+    });
+
+    it("honors a manifest rootFiles override for the new files", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "ovr",
+          monorepo: {
+            rootFiles: {
+              gitignore: { template: "custom-ignore\n" },
+              yarnrc: { template: "nodeLinker: pnp\n" },
+              setup: { template: "Custom setup for {system}\n" },
+            },
+          },
+        };
+        const config = makeConfig(workspaceRoot, manifest, {
+          forceRoot: true,
+        });
+
+        await generateRootFiles(config);
+
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, ".gitignore")),
+          "custom-ignore\n",
+        );
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, ".yarnrc.yml")),
+          "nodeLinker: pnp\n",
+        );
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, "SETUP.md")),
+          "Custom setup for ovr\n",
+          "manifest override is used and still interpolated",
+        );
+      });
+    });
+
+    it("does NOT clobber a user-edited .yarnrc.yml / SETUP.md on re-sync (protected)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "prot" };
+        // First pass creates the files.
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        // User customizes them.
+        const edited = "nodeLinker: node-modules\nnpmScopes:\n  acme: {}\n";
+        await fs.writeFile(
+          path.join(workspaceRoot, ".yarnrc.yml"),
+          edited,
+          "utf8",
+        );
+        await fs.writeFile(
+          path.join(workspaceRoot, "SETUP.md"),
+          "my notes\n",
+          "utf8",
+        );
+
+        // Re-sync WITHOUT forceRoot must not overwrite protected root files.
+        await generateRootFiles(makeConfig(workspaceRoot, manifest));
+
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, ".yarnrc.yml")),
+          edited,
+          ".yarnrc.yml edits must survive a re-sync",
+        );
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, "SETUP.md")),
+          "my notes\n",
+          "SETUP.md edits must survive a re-sync",
+        );
+      });
+    });
+
+    it("does NOT recreate a deleted SETUP.md on a normal re-sync", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "del" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        // User follows the "delete after first push" guidance.
+        await fs.rm(path.join(workspaceRoot, "SETUP.md"));
+
+        // A normal sync (no forceRoot) must leave it deleted — protected root
+        // files are only (re)written under --force-root.
+        const result = await generateRootFiles(
+          makeConfig(workspaceRoot, manifest),
+        );
+
+        assert.strictEqual(
+          await fileExists(path.join(workspaceRoot, "SETUP.md")),
+          false,
+          "deleted SETUP.md must stay gone after a normal sync",
+        );
+        assert.strictEqual(
+          result.created.length,
+          0,
+          "a normal re-sync must create nothing (all root files protected)",
+        );
+      });
     });
   });
 });

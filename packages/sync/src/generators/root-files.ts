@@ -8,6 +8,9 @@ import {
   BUILTIN_PACKAGE_JSON_TEMPLATE,
   BUILTIN_TSCONFIG_BASE_TEMPLATE,
   BUILTIN_TURBO_TEMPLATE,
+  BUILTIN_GITIGNORE_TEMPLATE,
+  BUILTIN_YARNRC_TEMPLATE,
+  BUILTIN_SETUP_MD_TEMPLATE,
 } from "./root-file-templates.js";
 import type { ReportRecorder } from "../domain/types.js";
 
@@ -148,6 +151,45 @@ export async function generateRootFiles(
     await writeRootFile(
       path.join(config.workspaceRoot, "turbo.json"),
       turboContent,
+      config,
+      report,
+      result,
+    );
+
+    // First-run install scaffolding (Item 2 — CI hardening). Threaded through
+    // resolveTemplate like the files above so a manifest can override them, and
+    // through interpolateAndWarn so {scope}/{packageManager} resolve.
+    const gitignoreTemplate = resolveTemplate(
+      rootFiles?.gitignore?.template,
+      BUILTIN_GITIGNORE_TEMPLATE,
+    );
+    await writeRootFile(
+      path.join(config.workspaceRoot, ".gitignore"),
+      interpolateAndWarn(gitignoreTemplate, vars, config, ".gitignore"),
+      config,
+      report,
+      result,
+    );
+
+    const yarnrcTemplate = resolveTemplate(
+      rootFiles?.yarnrc?.template,
+      BUILTIN_YARNRC_TEMPLATE,
+    );
+    await writeRootFile(
+      path.join(config.workspaceRoot, ".yarnrc.yml"),
+      interpolateAndWarn(yarnrcTemplate, vars, config, ".yarnrc.yml"),
+      config,
+      report,
+      result,
+    );
+
+    const setupTemplate = resolveTemplate(
+      rootFiles?.setup?.template,
+      BUILTIN_SETUP_MD_TEMPLATE,
+    );
+    await writeRootFile(
+      path.join(config.workspaceRoot, "SETUP.md"),
+      interpolateAndWarn(setupTemplate, vars, config, "SETUP.md"),
       config,
       report,
       result,
