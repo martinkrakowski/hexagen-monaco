@@ -17,12 +17,14 @@ export const noConsoleConfig = [
   },
   {
     // The sanctioned console sites: the logger's own transport, process startup,
-    // CLI scripts, and config files. These legitimately write to the console.
+    // CLI scripts, config files, and smoke-test diagnostics. These legitimately
+    // write to the console.
     files: [
       "**/infrastructure/logging/**",
       "**/server/startup/**",
       "scripts/**",
       "**/*.config.*",
+      "**/smoke-*.{ts,tsx,js,mjs}",
     ],
     rules: {
       "no-console": "off",
