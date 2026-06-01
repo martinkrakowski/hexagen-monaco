@@ -124,13 +124,8 @@ try {
 
   // 5. Install — the core first-run-green proof.
   step("corepack enable + yarn install…");
-  // A freshly generated scaffold has no yarn.lock — its first install MUST create
-  // one. Two independent Yarn CI defaults forbid that (both raise YN0028: "the
-  // lockfile would have been created … explicitly forbidden"):
-  //   - hardened mode, auto-enabled under a public-PR workflow; and
-  //   - immutable installs, auto-enabled whenever CI is detected (the `CI` env).
-  // This is a throwaway temp project we fully control (packed tarballs + public
-  // registry), so both guards are inapplicable here — opt out of each.
+  // Two CI-default Yarn gates both raise YN0028 ("the lockfile would have been
+  // created … explicitly forbidden") on this first install — opt out of both.
   const projSh = (cmd) =>
     execSync(cmd, {
       cwd: proj,
@@ -138,6 +133,11 @@ try {
       encoding: "utf8",
       env: {
         ...process.env,
+        // A freshly generated scaffold has no yarn.lock yet — this is the
+        // documented first-run case (see SETUP.md / plan Item 2). Both gates
+        // must be opted out: hardened mode (public-PR CI) and immutable installs
+        // (Yarn's CI-default). A real user's first push has the same situation;
+        // they commit the lockfile after this step.
         YARN_ENABLE_HARDENED_MODE: "0",
         YARN_ENABLE_IMMUTABLE_INSTALLS: "false",
       },
