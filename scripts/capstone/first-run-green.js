@@ -124,17 +124,23 @@ try {
 
   // 5. Install — the core first-run-green proof.
   step("corepack enable + yarn install…");
-  // Yarn auto-enables "hardened mode" under a public-PR CI workflow, which forbids
-  // CREATING a lockfile (YN0028). A freshly generated scaffold has no yarn.lock —
-  // its first install MUST create one — and this is a throwaway temp project we
-  // fully control (packed tarballs + public registry), so the lockfile-mutation
-  // guard is inapplicable here. Disable it for the scaffold's yarn invocations.
+  // A freshly generated scaffold has no yarn.lock — its first install MUST create
+  // one. Two independent Yarn CI defaults forbid that (both raise YN0028: "the
+  // lockfile would have been created … explicitly forbidden"):
+  //   - hardened mode, auto-enabled under a public-PR workflow; and
+  //   - immutable installs, auto-enabled whenever CI is detected (the `CI` env).
+  // This is a throwaway temp project we fully control (packed tarballs + public
+  // registry), so both guards are inapplicable here — opt out of each.
   const projSh = (cmd) =>
     execSync(cmd, {
       cwd: proj,
       stdio: "pipe",
       encoding: "utf8",
-      env: { ...process.env, YARN_ENABLE_HARDENED_MODE: "0" },
+      env: {
+        ...process.env,
+        YARN_ENABLE_HARDENED_MODE: "0",
+        YARN_ENABLE_IMMUTABLE_INSTALLS: "false",
+      },
     });
   projSh("corepack enable");
   // Use the full `name@version` packageManager string (not a fragile @-split).
