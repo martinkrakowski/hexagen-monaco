@@ -1659,6 +1659,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/arch-linter@workspace:tools/arch-linter"
   dependencies:
+    "@hexagen/project-configuration": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"

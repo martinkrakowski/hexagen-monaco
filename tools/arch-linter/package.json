@@ -25,6 +25,7 @@
     "lint:yaml": "eslint --config eslint.yaml.config.js ../../.architecture/**/*.yaml"
   },
   "dependencies": {
+    "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/sync": "workspace:*",
     "chalk": "^5.3.0",
