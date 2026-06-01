@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { Manifest } from "./types/manifest.js";
 import { ok, err, type Result } from "./domain/result.js";
 import { mergeSplitManifest } from "./loaders/index.js";
+import { archLinterBinPath } from "./arch-linter-bin.js";
 
 export type { Result };
 
@@ -45,7 +46,7 @@ export async function validateManifest(
     // `yarn workspace …`, which only resolves inside this monorepo. In a
     // generated project the bin comes from the @hexagen-monaco/arch-linter
     // devDependency. It walks up from cwd to find .architecture/manifest.yaml.
-    const { stderr } = await execAsync("node_modules/.bin/hexagen-lint", {
+    const { stderr } = await execAsync(archLinterBinPath(), {
       cwd: workspaceRoot,
       timeout: 30_000,
     });

@@ -45,7 +45,7 @@ const LAYER_RULES_DEFAULT = `# HexaGen — Architectural Invariants
 
 ${LAYER_RULES_COMMON}`;
 
-const LINTER_CONFIG_STRICT = `# Rules for @hexagen/arch-linter
+const LINTER_CONFIG_STRICT = `# Rules for @hexagen-monaco/arch-linter
 # Template: {template} (strict mode)
 
 global_whitelist:
@@ -60,7 +60,7 @@ test_double_rules:
   allowed_cross_package_imports: true
 `;
 
-const LINTER_CONFIG_DEFAULT = `# Rules for @hexagen/arch-linter
+const LINTER_CONFIG_DEFAULT = `# Rules for @hexagen-monaco/arch-linter
 # Template: {template} (flexible mode)
 
 global_whitelist:

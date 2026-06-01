@@ -1,6 +1,7 @@
 import { promisify } from "node:util";
 import { exec } from "node:child_process";
 import type { SyncConfig } from "./config.js";
+import { archLinterBinPath } from "./arch-linter-bin.js";
 
 const execPromise = promisify(exec);
 
@@ -22,10 +23,9 @@ export async function runArchLinter(config: SyncConfig): Promise<void> {
     // Installed arch-linter bin (scope-agnostic) — works in this monorepo and
     // in a generated project (via the @hexagen-monaco/arch-linter devDep),
     // unlike `yarn workspace …` which only resolves here.
-    const { stdout, stderr } = await execPromise(
-      "node_modules/.bin/hexagen-lint",
-      { cwd: config.workspaceRoot },
-    );
+    const { stdout, stderr } = await execPromise(archLinterBinPath(), {
+      cwd: config.workspaceRoot,
+    });
 
     if (stdout) logger.info(stdout.trim());
     if (stderr) logger.error(stderr.trim());
