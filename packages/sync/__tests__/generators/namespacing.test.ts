@@ -41,7 +41,10 @@ function makeConfig(workspaceRoot: string, manifest: Manifest): SyncConfig {
 // The only @hexagen/* names allowed in a generated project — the published
 // tooling devDependencies on the *root* package.json. Mirrors the plan's
 // guard-test allowlist (Item 0 route (b) co-releases both).
-const TOOLING_ALLOWLIST = ["@hexagen/sync", "@hexagen/arch-linter"];
+const TOOLING_ALLOWLIST = [
+  "@hexagen-monaco/sync",
+  "@hexagen-monaco/arch-linter",
+];
 
 describe("sanitizeScope", () => {
   it("strips a leading @ and lowercases", () => {
@@ -144,12 +147,14 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
         "tsconfig.base paths must use @acme/*",
       );
       assert.ok(
-        !tsconfigBase.includes("@hexagen/"),
-        "tsconfig.base must not retain @hexagen/*",
+        !tsconfigBase.includes("@hexagen"),
+        "tsconfig.base must not retain the tooling namespace",
       );
 
-      // (1) two-sided: walk every emitted file; @hexagen/ may appear ONLY as an
-      // allowlisted tooling devDep on the root package.json.
+      // (1) two-sided: walk every emitted file. The tooling namespace
+      // (@hexagen-monaco, and never the legacy @hexagen) may appear ONLY as an
+      // allowlisted devDep on the root package.json. The `@hexagen` substring
+      // catches both scopes.
       const files = await walk(workspaceRoot);
       for (const file of files) {
         const content = await fs.readFile(file, "utf8");
@@ -158,26 +163,26 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
             devDependencies?: Record<string, string>;
             [k: string]: unknown;
           };
-          const hexagenDevDeps = Object.keys(pkg.devDependencies ?? {}).filter(
-            (k) => k.startsWith("@hexagen/"),
+          const toolingDevDeps = Object.keys(pkg.devDependencies ?? {}).filter(
+            (k) => k.includes("@hexagen"),
           );
-          for (const dep of hexagenDevDeps) {
+          for (const dep of toolingDevDeps) {
             assert.ok(
               TOOLING_ALLOWLIST.includes(dep),
-              `unexpected @hexagen tooling devDep: ${dep}`,
+              `unexpected tooling devDep: ${dep}`,
             );
           }
-          // @hexagen must appear ONLY inside devDependencies.
+          // The tooling namespace must appear ONLY inside devDependencies.
           const rest = { ...pkg };
           delete rest.devDependencies;
           assert.ok(
-            !JSON.stringify(rest).includes("@hexagen/"),
-            "root package.json must not reference @hexagen outside devDependencies",
+            !JSON.stringify(rest).includes("@hexagen"),
+            "root package.json must not reference the tooling namespace outside devDependencies",
           );
         } else {
           assert.ok(
-            !content.includes("@hexagen/"),
-            `emitted project file leaked @hexagen/: ${path.relative(workspaceRoot, file)}`,
+            !content.includes("@hexagen"),
+            `emitted project file leaked the tooling namespace: ${path.relative(workspaceRoot, file)}`,
           );
         }
       }

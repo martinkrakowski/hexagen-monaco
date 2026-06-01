@@ -41,13 +41,14 @@ export async function validateManifest(
   workspaceRoot: string,
 ): Promise<Result<{ valid: boolean; errors: string[] }, Error>> {
   try {
-    const { stderr } = await execAsync(
-      "yarn workspace @hexagen/arch-linter lint:arch",
-      {
-        cwd: workspaceRoot,
-        timeout: 30_000,
-      },
-    );
+    // Invoke the installed arch-linter bin (scope-agnostic name) rather than
+    // `yarn workspace …`, which only resolves inside this monorepo. In a
+    // generated project the bin comes from the @hexagen-monaco/arch-linter
+    // devDependency. It walks up from cwd to find .architecture/manifest.yaml.
+    const { stderr } = await execAsync("node_modules/.bin/hexagen-lint", {
+      cwd: workspaceRoot,
+      timeout: 30_000,
+    });
 
     void stderr;
     return ok({ valid: true, errors: [] });
