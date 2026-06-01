@@ -333,7 +333,7 @@ Next steps:
 
 ## Template Dependencies
 
-- Required: `env-setup` (for `yarn check:env` step)
+- Soft dependency: `env-setup` (the `check:env` CI step runs only if the script exists, so CI stays green without it; reclassified from Required in Item 2 of the installable-scaffold plan)
 - Integrates with: `docker` (adds `needs: ci` to docker-build.yml)
 - Integrates with: `bullmq` (generates worker service deploy in Railway mode)
 - Soft dependency: `observability` (health check is used in deploy smoke test)

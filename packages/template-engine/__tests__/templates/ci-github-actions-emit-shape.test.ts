@@ -128,8 +128,15 @@ describe("ci-github-actions template — emit shape", () => {
       const ci = await read(projectRoot, `${WORKFLOWS}/ci.yml`);
       // Quoted so the templated scalar is valid YAML before interpolation too.
       assert.ok(ci.includes('node-version: "22"'));
-      assert.ok(ci.includes('cache: "yarn"'));
-      assert.ok(ci.includes('"yarn install --immutable"'));
+      // First-run-green (Item 2): corepack present, install is NOT immutable
+      // (no committed lockfile yet), and no setup-node lockfile-cache.
+      assert.ok(ci.includes("corepack enable"));
+      assert.ok(ci.includes("corepack prepare yarn@4.12.0 --activate"));
+      assert.ok(ci.includes('run: "yarn install"'));
+      // Precise to the executable directive — explanatory comments may still
+      // mention these forms without tripping the negative assertions.
+      assert.ok(!ci.includes('run: "yarn install --immutable"'));
+      assert.ok(!ci.includes('cache: "yarn"'));
       assert.ok(!ci.includes("{node_version}"));
       assert.ok(!ci.includes("{package_manager}"));
       // multiselect + select answers recorded in the config summary comment

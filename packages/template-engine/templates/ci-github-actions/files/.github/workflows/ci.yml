@@ -36,11 +36,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "{node_version}"
-          cache: "yarn"
+          # No package-manager cache here — actions/setup-node's cache requires a
+          # committed lockfile and fails without one. The Turbo cache below covers
+          # task outputs; re-enable the setup-node cache once you commit yarn.lock.
 
-      # npm projects: replace with `npm ci`.
+      # Corepack activates the package manager pinned in package.json
+      # (`packageManager`). Without it, the runner's default Yarn (Classic)
+      # can't honor a Yarn-4 project. See SETUP.md.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Prepare package manager
+        run: "corepack prepare yarn@4.12.0 --activate"
+
+      # First run has no committed lockfile, so install is NOT immutable.
+      # After you commit yarn.lock, switch this to `yarn install --immutable`
+      # (npm: `npm ci`; pnpm: `pnpm install --frozen-lockfile`). See SETUP.md.
       - name: Install dependencies
-        run: "yarn install --immutable"
+        run: "yarn install"
 
       # Turbo caches task outputs keyed by input hash, so unchanged packages are
       # skipped on warm runs (cache_strategy = {cache_strategy}). Set TURBO_TOKEN
@@ -53,10 +66,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
-      # `check:env` is provided by the env-setup template. Delete this step if
-      # you did not install it.
+      # `check:env` is provided by the env-setup template. Resilient by design:
+      # runs only if the script exists, so CI stays green whether or not
+      # env-setup is installed (Item 3 will emit this step conditionally).
       - name: Validate env vars
-        run: "yarn check:env"
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.['check:env']?0:1)"; then
+            yarn check:env
+          else
+            echo "no check:env script — skipping (env-setup not installed)"
+          fi
         env:
           NODE_ENV: test
 

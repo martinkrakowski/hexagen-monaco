@@ -8,6 +8,9 @@ import {
   BUILTIN_PACKAGE_JSON_TEMPLATE,
   BUILTIN_TSCONFIG_BASE_TEMPLATE,
   BUILTIN_TURBO_TEMPLATE,
+  BUILTIN_GITIGNORE_TEMPLATE,
+  BUILTIN_YARNRC_TEMPLATE,
+  BUILTIN_SETUP_MD_TEMPLATE,
 } from "./root-file-templates.js";
 import type { ReportRecorder } from "../domain/types.js";
 
@@ -148,6 +151,36 @@ export async function generateRootFiles(
     await writeRootFile(
       path.join(config.workspaceRoot, "turbo.json"),
       turboContent,
+      config,
+      report,
+      result,
+    );
+
+    // First-run install scaffolding (Item 2 — CI hardening). Static content
+    // except SETUP.md, which references the project's package manager.
+    await writeRootFile(
+      path.join(config.workspaceRoot, ".gitignore"),
+      BUILTIN_GITIGNORE_TEMPLATE,
+      config,
+      report,
+      result,
+    );
+    await writeRootFile(
+      path.join(config.workspaceRoot, ".yarnrc.yml"),
+      BUILTIN_YARNRC_TEMPLATE,
+      config,
+      report,
+      result,
+    );
+    const setupContent = interpolateAndWarn(
+      BUILTIN_SETUP_MD_TEMPLATE,
+      vars,
+      config,
+      "SETUP.md",
+    );
+    await writeRootFile(
+      path.join(config.workspaceRoot, "SETUP.md"),
+      setupContent,
       config,
       report,
       result,

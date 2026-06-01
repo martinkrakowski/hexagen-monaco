@@ -92,12 +92,12 @@ describe("root files", () => {
       );
       assert.strictEqual(
         result.created.length,
-        3,
-        "should report three created files (package.json, tsconfig.base.json, turbo.json)",
+        6,
+        "should report six created files (package.json, tsconfig.base.json, turbo.json, .gitignore, .yarnrc.yml, SETUP.md)",
       );
       assert.strictEqual(result.updated.length, 0);
       assert.strictEqual(result.skipped.length, 0);
-      assert.strictEqual(result.totalOps, 3);
+      assert.strictEqual(result.totalOps, 6);
 
       for (const name of ["package.json", "tsconfig.base.json", "turbo.json"]) {
         const p = path.join(workspaceRoot, name);
@@ -110,6 +110,14 @@ describe("root files", () => {
         assert.doesNotThrow(
           () => JSON.parse(content),
           `${name} must be valid JSON after interpolation`,
+        );
+      }
+
+      for (const name of [".gitignore", ".yarnrc.yml", "SETUP.md"]) {
+        assert.strictEqual(
+          await fileExists(path.join(workspaceRoot, name)),
+          true,
+          `${name} must exist after generation`,
         );
       }
 
@@ -383,6 +391,61 @@ describe("root files", () => {
         content.includes(`"name":"has-a-system"`),
         "resolved placeholders must still be interpolated alongside unresolved ones",
       );
+    });
+  });
+
+  // Item 2 — CI hardening: the scaffold must carry the first-run install files.
+  describe("first-run install scaffolding", () => {
+    it("emits .gitignore, .yarnrc.yml, and SETUP.md for a bare (zero-context) project", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "bare-app", scope: "bare" };
+        const config = makeConfig(workspaceRoot, manifest, {
+          forceRoot: true,
+        });
+
+        await generateRootFiles(config);
+
+        const gitignore = await readFile(
+          path.join(workspaceRoot, ".gitignore"),
+        );
+        assert.ok(
+          gitignore.includes("node_modules/") &&
+            gitignore.includes(".turbo/") &&
+            gitignore.includes(".env"),
+          ".gitignore must cover node_modules/.turbo/.env",
+        );
+
+        const yarnrc = await readFile(path.join(workspaceRoot, ".yarnrc.yml"));
+        assert.ok(
+          yarnrc.includes("nodeLinker: node-modules"),
+          ".yarnrc.yml must set nodeLinker: node-modules",
+        );
+
+        const setup = await readFile(path.join(workspaceRoot, "SETUP.md"));
+        assert.ok(
+          setup.includes("git add yarn.lock"),
+          "SETUP.md must name the lockfile-commit step",
+        );
+        assert.ok(
+          setup.includes("corepack prepare yarn@4.12.0"),
+          "SETUP.md must interpolate the project's package manager version",
+        );
+        assert.ok(
+          !setup.includes("{packageManager}"),
+          "SETUP.md must not leak an uninterpolated {packageManager} token",
+        );
+
+        // The bare scaffold's root package.json is still valid and runnable.
+        const pkg = JSON.parse(
+          await readFile(path.join(workspaceRoot, "package.json")),
+        ) as { scripts?: Record<string, string> };
+        for (const s of ["build", "lint", "typecheck", "test"]) {
+          assert.ok(
+            pkg.scripts?.[s],
+            `root package.json must have a ${s} script`,
+          );
+        }
+      });
     });
   });
 });
