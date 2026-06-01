@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # required for `npm publish --provenance`
+      id-token: write # required for OIDC Trusted Publishing + provenance
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@v5
@@ -40,6 +40,10 @@ jobs:
         with:
           node-version: "22.7"
           registry-url: "https://registry.npmjs.org"
+
+      # OIDC Trusted Publishing requires npm >= 11.5.1; Node 22.7 ships npm 10.x.
+      - name: "Upgrade npm (Trusted Publishing support)"
+        run: npm install -g npm@latest
 
       # Fail fast (before the build) if the tag doesn't match what would be
       # published, and enforce the co-release invariant (both packages share a
@@ -102,17 +106,17 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Publishing $VERSION under dist-tag '$TAG'"
 
+      # No NODE_AUTH_TOKEN: auth is via OIDC Trusted Publishing. npm exchanges the
+      # workflow's id-token for a short-lived publish credential, scoped to the
+      # trusted publisher configured on each package (repo + this workflow). This
+      # also produces provenance. Requires npm >= 11.5.1 (installed above).
       - name: "Publish @hexagen-monaco/sync"
         run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
         working-directory: packages/sync/publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: "Publish @hexagen-monaco/arch-linter"
         run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
         working-directory: tools/arch-linter/publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: "Create GitHub Release"
         uses: softprops/action-gh-release@v2
