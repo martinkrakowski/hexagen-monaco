@@ -70,7 +70,7 @@ export class {name}Adapter {
 }
 `,
   useCase: `// @generated use-case stub — edit freely
-import type { Result } from '@hexagen/shared';
+import type { Result } from '@{scope}/shared';
 
 /**
  * {name}UseCase orchestrates the {name} business operation.

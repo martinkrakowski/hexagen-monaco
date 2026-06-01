@@ -8,6 +8,7 @@
  */
 
 import type { StubTemplates, StubNaming } from "../../types/manifest.js";
+import { resolveScope } from "../../types/manifest.js";
 import type { SyncConfig } from "../../config.js";
 import { interpolate } from "../../template-engine.js";
 import { DEFAULT_TEMPLATES, DEFAULT_NAMING } from "../stub-templates.js";
@@ -38,7 +39,10 @@ export function interpolateWithLog(
   templateId: string,
   config: SyncConfig,
 ): string {
-  const { output, warnings } = interpolate(template, { name });
+  // `scope` lets stub bodies reference the project's own packages
+  // (`@{scope}/shared`) rather than the generator's `@hexagen/*` namespace.
+  const scope = resolveScope(config.manifest);
+  const { output, warnings } = interpolate(template, { name, scope });
   if (warnings.length > 0) {
     for (const missing of warnings) {
       config.logger.warn(`${templateId}: missing variable '${missing}'`);

@@ -93,7 +93,7 @@ const GENERATOR_CONFIG_TEMPLATE = `generator:
       failure: abort-and-cleanup
 
     - name: dependency-consistency
-      description: "Every @hexagen/* import must have a matching entry in package.json."
+      description: "Every @{scope}/* import must have a matching entry in package.json."
       priority: high
       failure: abort
 

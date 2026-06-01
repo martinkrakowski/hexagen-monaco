@@ -5,7 +5,7 @@ import type {
 } from "../types/manifest.js";
 
 const NEXTJS_PACKAGE_JSON_TEMPLATE = `{
-  "name": "@{system}/{appName}",
+  "name": "@{scope}/{appName}",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -50,7 +50,7 @@ export default function HomePage() {
 `;
 
 const FASTIFY_PACKAGE_JSON_TEMPLATE = `{
-  "name": "@{system}/{appName}",
+  "name": "@{scope}/{appName}",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -99,7 +99,7 @@ export default server;
 `;
 
 const PLAIN_TS_PACKAGE_JSON_TEMPLATE = `{
-  "name": "@{system}/{appName}",
+  "name": "@{scope}/{appName}",
   "version": "0.0.0",
   "private": true,
   "type": "module",

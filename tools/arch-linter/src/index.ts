@@ -13,6 +13,7 @@ import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
 import type { LinterConfig } from "./subpath-violation.js";
 import { isSubpathViolation } from "./subpath-violation.js";
+import { resolveLintScope } from "./resolve-scope.js";
 import {
   checkUnexpectedMarker,
   checkMissingMarker,
@@ -152,7 +153,9 @@ try {
 
 // ─── Dynamic Scope and Workspace Path ───────────────────────────────────────
 
-const SCOPE = manifest.scope ? `@${manifest.scope}` : "@hexagen";
+// SCOPE must match what the generator emits — see resolveLintScope (a
+// dependency-free mirror of @hexagen/sync's resolveScope).
+const SCOPE = `@${resolveLintScope(manifest)}`;
 
 let workspacesDir = "packages";
 if (

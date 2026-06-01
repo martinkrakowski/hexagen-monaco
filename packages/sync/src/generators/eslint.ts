@@ -3,7 +3,11 @@ import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
-import type { EslintConfig, Manifest } from "../types/manifest.js";
+import {
+  resolveScope,
+  type EslintConfig,
+  type Manifest,
+} from "../types/manifest.js";
 import type { ReportRecorder } from "../domain/types.js";
 
 /**
@@ -174,10 +178,7 @@ export async function generateEslintConfig(
       return result;
     }
 
-    const scope =
-      typeof config.manifest.scope === "string"
-        ? config.manifest.scope
-        : "hexagen";
+    const scope = resolveScope(config.manifest);
     const { output: interpolated, warnings } = interpolate(template, {
       packageName: moduleName,
       scope,

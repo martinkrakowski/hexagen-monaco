@@ -1,6 +1,7 @@
 export function generateEnhancedTestDouble(
   port: string,
   methods: string[],
+  scope: string,
 ): string {
   const portName = port.replace(/Port$/i, "");
   const fakeClass = `${portName}Fake`;
@@ -18,7 +19,7 @@ export function generateEnhancedTestDouble(
  */
 
 import type { ${port} } from '../../application/ports/out/${port.toLowerCase()}.js';
-import type { Result } from '@hexagen/shared';
+import type { Result } from '@${scope}/shared';
 
 export class ${fakeClass} implements ${port} {
   // Spy tracking

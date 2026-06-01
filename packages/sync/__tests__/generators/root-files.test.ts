@@ -198,6 +198,8 @@ describe("root files", () => {
 }`;
       const manifest: Manifest = {
         system: "my-app",
+        // Deliberately includes a leading "@" to exercise scope sanitization
+        // (npm scopes are stored bare; the leading @ is stripped).
         scope: "@my-scope",
         monorepo: {
           packageManager: "pnpm@9.0.0",
@@ -217,8 +219,8 @@ describe("root files", () => {
         "{system} must be interpolated into the template",
       );
       assert.ok(
-        content.includes(`"scope": "@my-scope"`),
-        "{scope} must be interpolated into the template",
+        content.includes(`"scope": "my-scope"`),
+        "{scope} must be interpolated (sanitized — leading @ stripped)",
       );
       assert.ok(
         content.includes(`"packageManager": "pnpm@9.0.0"`),

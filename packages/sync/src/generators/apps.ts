@@ -4,7 +4,11 @@ import { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
-import type { AppFramework, AppFrameworkConfig } from "../types/manifest.js";
+import {
+  resolveScope,
+  type AppFramework,
+  type AppFrameworkConfig,
+} from "../types/manifest.js";
 import { BUILTIN_FRAMEWORK_TEMPLATES } from "./apps-framework-templates.js";
 import type { ReportRecorder } from "../domain/types.js";
 
@@ -78,6 +82,8 @@ export async function generateApps(
     }
 
     const system = (config.manifest.system as string | undefined) ?? "";
+    // App packages use the project's npm scope (@{scope}/<app>), not @{system}.
+    const scope = resolveScope(config.manifest);
 
     const seen = new Set<string>();
 
@@ -128,6 +134,7 @@ export async function generateApps(
       const vars: Record<string, unknown> = {
         appName: app.name,
         system,
+        scope,
         version: app.version ?? "",
         depends_on: (app.depends_on ?? []).join(", "),
       };
