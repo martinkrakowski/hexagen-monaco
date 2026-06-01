@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /// <reference types='node' />
 import * as fsPromises from "fs/promises";
 import * as fs from "fs";

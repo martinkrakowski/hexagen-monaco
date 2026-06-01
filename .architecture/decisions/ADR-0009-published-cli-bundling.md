@@ -226,6 +226,44 @@ The decision is validated when:
 
 ---
 
+## Amendment (2026-06 — second published package: `arch-linter`)
+
+**Status:** ✅ Accepted · **Context:** installable-scaffold plan, Item 0
+
+The original decision published exactly one artifact (`@hexagen/sync`, tsup-bundled).
+This amendment permits a **second co-released package, `@hexagen-monaco/arch-linter`**.
+
+**Why an exception is warranted.** A generated project's root scripts call
+`hexagen arch validate`, which historically shelled out to
+`yarn workspace @hexagen/arch-linter lint:arch` — impossible outside this
+monorepo. The two clean options were (a) inline arch-linter into `@hexagen/sync`
+or (b) publish it separately. (a) requires relocating the `Manifest` type out of
+`sync` to break a circular import, reconciling `ts-morph` `^22` ↔ `^27`, and
+absorbing `chalk`/`lodash`/`zod` into the sync bundle. (b) avoids all of that at
+the cost of one more published package.
+
+**Decision: (b).** ADR-0009's driver was avoiding _a wide internal workspace
+graph_ published as many separately-versioned packages with coordinated bumps.
+`arch-linter` is different in kind: it is a **devDependency** of generated
+projects, off the runtime path of everyday `hexagen sync`, with its own `bin`
+(`hexagen-lint`) and a narrow, stable purpose. One additional, **co-released**
+package (shared version with `@hexagen-monaco/sync`, published together in
+`publish.yml`) is a bounded exception, not a reversal of the single-graph rule.
+
+**Constraints carried over.** `@hexagen-monaco/arch-linter` is itself
+tsup-bundled (`noExternal: [/^@hexagen\//]`) so its private `@hexagen/*` deps
+(`project-configuration`, `shared`) are inlined; only public third-party deps
+(`ts-morph`, `chalk`, `lodash`, `js-yaml`, `zod`) remain external. Its
+`import type { Manifest } from "@hexagen/sync"` is type-only and erased at build,
+so no `sync` runtime dependency is introduced.
+
+**Scope note.** Published under `@hexagen-monaco` (the `@hexagen` npm org was
+unavailable). Monorepo package names are unchanged (`@hexagen/*`); the
+`@hexagen-monaco` scope is applied only to the published name and the scaffold's
+tooling devDependencies.
+
+---
+
 ## References
 
 - **AGENTS.md:** Section §Module Resolution (Appendix) — dual-resolution policy foundation

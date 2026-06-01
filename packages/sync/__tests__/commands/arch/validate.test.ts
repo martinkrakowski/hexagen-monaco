@@ -5,6 +5,25 @@ import os from "node:os";
 import path from "node:path";
 import { validateCommand } from "../../../src/commands/arch/validate.js";
 
+/**
+ * Install a fake `hexagen-lint` bin so validateManifest can actually invoke it.
+ * `exitCode` 0 = compliant, non-zero = violations.
+ */
+async function installFakeLinter(dir: string, exitCode = 0): Promise<void> {
+  const binDir = path.join(dir, "node_modules", ".bin");
+  await fs.mkdir(binDir, { recursive: true });
+  if (process.platform === "win32") {
+    await fs.writeFile(
+      path.join(binDir, "hexagen-lint.cmd"),
+      `@echo off\r\nexit /b ${exitCode}\r\n`,
+    );
+  } else {
+    const bin = path.join(binDir, "hexagen-lint");
+    await fs.writeFile(bin, `#!/bin/sh\nexit ${exitCode}\n`);
+    await fs.chmod(bin, 0o755);
+  }
+}
+
 const validManifestYaml = `
 system: hexagen-monaco
 scope: hexagen
@@ -28,6 +47,7 @@ describe("validateCommand", () => {
       validManifestYaml,
       "utf8",
     );
+    await installFakeLinter(tempDir, 0);
 
     const originalCwd = process.cwd;
     const originalExit = process.exit;

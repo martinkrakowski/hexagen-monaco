@@ -34,7 +34,7 @@ A project pushed to GitHub today cannot pass CI on first run — it cannot even 
 
 ## Prerequisites (verify before any code)
 
-- **P1 — `@hexagen` npm org ownership.** Hard blocker for Item 1. `@hexagen/security@0.0.0` is already public, suggesting the org is held — **confirm publish rights**. _Fallback if unavailable:_ publish under an alternate scope (e.g. `@hexagen-monaco`) and thread that scope through `BUILTIN_PACKAGE_JSON_TEMPLATE`'s tooling devDep, the `prepare-publish-package.js` staging, and `publish.yml`. The tooling scope is a single constant — make it one.
+- **P1 — npm org: RESOLVED → `@hexagen-monaco`.** `@hexagen` was unavailable on npm, so the published tooling scope is **`@hexagen-monaco`** (`@hexagen-monaco/sync`, `@hexagen-monaco/arch-linter`). The monorepo packages keep their internal `@hexagen/*` names; only the **published** name and the **scaffold's tooling devDeps** use `@hexagen-monaco`. Threaded into `BUILTIN_PACKAGE_JSON_TEMPLATE`'s devDeps and the Item 4 guard allowlist (done in the arch-linter PR); the rename-at-publish (`prepare-publish-package.js` name rewrite + `publish.yml`) lands with the publish/Item 1 work.
 - **P2 — Corepack vs `yarnPath` decision.** Determines `.yarnrc.yml` content and the CI install steps. **Recommend Corepack**: generated `ci.yml` runs `corepack enable` (mirroring the generator's own `sync-integrity.yml:25-28`), `packageManager` in `package.json` pins the version, `.yarnrc.yml` only sets `nodeLinker: node-modules`, and we do **not** commit `.yarn/releases/`. Simpler than pinning `yarnPath` + vendoring the binary.
 - **P3 — ADR compliance.** Any deviation from "publish only `@hexagen/sync`" requires a superseding ADR. Item 0's arch-linter decision is the one place this is in tension — resolve it as an ADR amendment, not silently.
 
@@ -212,11 +212,11 @@ Emit a **`SETUP.md`** at the scaffold root (and a one-line pointer in the genera
 
 ### Guard test (two-sided, precise exception)
 
-For a project generated with scope `acme`: **(1)** no emitted _project_ file contains `@hexagen/` except the **allowlisted tooling devDeps in the root `package.json`** — `["@hexagen/sync", "@hexagen/arch-linter"]` (both co-released tooling packages per Item 0 route (b); keep it a named allowlist constant, not hardcoded strings); `@hexagen/` anywhere in project _source_/packages still fails. **(2)** `@acme/` appears in package names + tsconfig paths + project references. (One-sided would pass a bug that drops all scopes.)
+For a project generated with scope `acme`: **(1)** no emitted _project_ file references a **tooling scope** except the **allowlisted tooling devDeps in the root `package.json`** — `["@hexagen-monaco/sync", "@hexagen-monaco/arch-linter"]` (the published scope; `@hexagen` was unavailable on npm — see P1). Match the tooling scopes **precisely on the `/` boundary** (`@hexagen/` and `@hexagen-monaco/`, so a lookalike project scope like `@hexagenic/` is not a false positive); keep it a named constant, not hardcoded strings. **(2)** `@acme/` appears in package names + tsconfig paths + project references. (One-sided would pass a bug that drops all scopes.) _(As implemented in PR #176.)_
 
 ### Acceptance
 
-- Scope `acme` → `@acme/<m>` package names, `@acme/*` tsconfig alias + project references, internal deps `@acme/*`; `@hexagen/` only as the `@hexagen/sync` and `@hexagen/arch-linter` tooling devDeps.
+- Scope `acme` → `@acme/<m>` package names, `@acme/*` tsconfig alias + project references, internal deps `@acme/*`; a tooling scope appears only as the `@hexagen-monaco/sync` and `@hexagen-monaco/arch-linter` devDeps.
 
 ---
 

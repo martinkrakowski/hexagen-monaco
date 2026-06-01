@@ -176,8 +176,8 @@ describe("root files", () => {
         "built-in package.json must include the turbo build script",
       );
       assert.ok(
-        pkg.includes(`"@hexagen/sync"`),
-        "built-in package.json must include @hexagen/sync in devDependencies",
+        pkg.includes(`"@hexagen-monaco/sync"`),
+        "built-in package.json must include @hexagen-monaco/sync (the published tooling scope) in devDependencies",
       );
 
       const tsconfig = await readFile(

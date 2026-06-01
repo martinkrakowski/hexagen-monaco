@@ -11,6 +11,7 @@ export async function validateCommand(): Promise<void> {
   if (!result.success) {
     console.error(`❌ Validation service failed: ${result.error.message}`);
     process.exit(1);
+    return; // process.exit doesn't return; guard the fall-through if it's mocked
   }
 
   if (!result.value.valid) {
@@ -20,6 +21,7 @@ export async function validateCommand(): Promise<void> {
     });
     console.log("");
     process.exit(1);
+    return;
   }
 
   console.log("✅ Architecture is compliant with manifest.yaml");

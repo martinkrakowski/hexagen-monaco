@@ -28,6 +28,22 @@ apps:
 
 const manifestWithInvalidStructure = "not: a valid yaml structure";
 
+/** Install a fake `hexagen-lint` bin so validateManifest can invoke it. */
+async function installFakeLinter(dir: string, exitCode = 0): Promise<void> {
+  const binDir = path.join(dir, "node_modules", ".bin");
+  await fs.mkdir(binDir, { recursive: true });
+  if (process.platform === "win32") {
+    await fs.writeFile(
+      path.join(binDir, "hexagen-lint.cmd"),
+      `@echo off\r\nexit /b ${exitCode}\r\n`,
+    );
+  } else {
+    const bin = path.join(binDir, "hexagen-lint");
+    await fs.writeFile(bin, `#!/bin/sh\nexit ${exitCode}\n`);
+    await fs.chmod(bin, 0o755);
+  }
+}
+
 async function withTempManifest(
   yamlContent: string | null,
   fn: (workspaceRoot: string, tempDir: string) => Promise<void>,
@@ -119,14 +135,33 @@ describe("manifest service", () => {
     );
   });
 
-  it("should return validation result", async () => {
+  it("should return validation result when the linter is installed", async () => {
     await withTempManifest(
       validManifestYaml,
       async (_workspaceRoot, tempDir) => {
+        await installFakeLinter(tempDir, 0); // compliant
         const result = await validateManifest(tempDir);
         assert.strictEqual(result.success, true, "Should return success");
         assert.ok(result.value, "Should have validation data");
-        assert.strictEqual(typeof result.value.valid, "boolean");
+        assert.strictEqual(result.value.valid, true);
+      },
+    );
+  });
+
+  it("reports a clear error (not 'invalid') when arch-linter is not installed", async () => {
+    await withTempManifest(
+      validManifestYaml,
+      async (_workspaceRoot, tempDir) => {
+        // No fake linter installed → resolveArchLinterBin returns null.
+        const result = await validateManifest(tempDir);
+        assert.strictEqual(
+          result.success,
+          false,
+          "missing linter must surface as err, not a fake 'valid: false'",
+        );
+        if (!result.success) {
+          assert.match(result.error.message, /arch-linter not found/);
+        }
       },
     );
   });
