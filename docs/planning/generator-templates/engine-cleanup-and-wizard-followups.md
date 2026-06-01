@@ -1,7 +1,14 @@
 # Engine Cleanup & Wizard Follow-ups
 
 **Implementation branch:** `feature/engine-cleanup-and-wizard-followups` (proposed)
-**Status:** Proposed (design v2 — revised after architectural review)
+**Status:** Shipped — all three items merged to `main` (verified 2026-06-01).
+
+> **Shipped map:**
+>
+> - **Item 1 (rollback gated conflicts):** `feature/rollback-gated-conflicts`. `ManifestConflict` / `isConflictActive` / `conflictTarget` removed; `conflicts: string[]` validated via `validatedStringArray`; `resolveDependencies` has no `answers` param; `CatalogConflict` / `unconditionalConflicts` gone from `apps/web`. Pattern-of-record note ("split the template — see supabase / supabase-auth") lives in the engine source and `engine-gated-outputs.md`.
+> - **Item 2 (per-template questions step):** `feature/template-questions-step`. `TemplateQuestionsStep.tsx` in the wizard route; `auto` questions filtered from rendering; answers persist into `ProjectConfig.addOnsAnswers` via `react-hook-form` (no parallel context); Summary annotates derived answers with `(derived from …)`; `template-questions.generated.ts` parity enforced by CI (`check:template-questions`).
+> - **Item 3 (companion CTA):** `feature/companion-cta`. `CompanionBanner.tsx` (`@hexagen/ui` primitives, per-row dismiss, `[+N more]` collapse); `CatalogEntry.companions?: string[]` declared on supabase→supabase-auth and three further pairs; routes adds through the existing conflict dialog.
+
 **Relates to:** [auth-stack-restructure.md](./auth-stack-restructure.md), [shared-types-and-derived-answers.md](./shared-types-and-derived-answers.md), [engine-gated-outputs.md](./engine-gated-outputs.md), [05-supabase.md](./05-supabase.md), [15-supabase-auth.md](./15-supabase-auth.md)
 
 ---
