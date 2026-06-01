@@ -1663,13 +1663,10 @@ __metadata:
     "@hexagen/shared": "workspace:*"
     "@hexagen/sync": "workspace:*"
     "@types/js-yaml": "npm:^4.0.9"
-    "@types/lodash": "npm:^4.17.7"
     "@types/node": "npm:^20.12.7"
-    chalk: "npm:^5.3.0"
     eslint: "npm:^9.7.0"
     eslint-plugin-yml: "npm:^3.3.1"
     js-yaml: "npm:^4.1.0"
-    lodash: "npm:^4.17.21"
     ts-morph: "npm:^27.0.2"
     tsup: "npm:^8.1.0"
     tsx: "npm:^4.19.2"
@@ -3933,13 +3930,6 @@ __metadata:
   dependencies:
     jszip: "npm:*"
   checksum: 10c0/c775913cbb754d9ca04f0f2dcbee678255f22ab9658a2a4b02a9655dca85d676d5485cca634b02b39764ac844bce01f767ad045830453f5da116884074c42d37
-  languageName: node
-  linkType: hard
-
-"@types/lodash@npm:^4.17.7":
-  version: 4.17.24
-  resolution: "@types/lodash@npm:4.17.24"
-  checksum: 10c0/b72f60d4daacdad1fa643edb3faba204c02a01eb1ac00a83ff73496a6d236fc55e459c06106e8ced42277dba932d087d8fc090f8de4ef590d3f91e6d6f7ce85a
   languageName: node
   linkType: hard
 
@@ -10858,13 +10848,6 @@ __metadata:
   version: 4.6.2
   resolution: "lodash.merge@npm:4.6.2"
   checksum: 10c0/402fa16a1edd7538de5b5903a90228aa48eb5533986ba7fa26606a49db2572bf414ff73a2c9f5d5fd36b31c46a5d5c7e1527749c07cbcf965ccff5fbdf32c506
-  languageName: node
-  linkType: hard
-
-"lodash@npm:^4.17.21":
-  version: 4.17.23
-  resolution: "lodash@npm:4.17.23"
-  checksum: 10c0/1264a90469f5bb95d4739c43eb6277d15b6d9e186df4ac68c3620443160fc669e2f14c11e7d8b2ccf078b81d06147c01a8ccced9aab9f9f63d50dcf8cace6bf6
   languageName: node
   linkType: hard
 

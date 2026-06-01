@@ -43,6 +43,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..");
 
+// Internal monorepo scope → published npm scope. `@hexagen` was unavailable on
+// npm, so the tooling publishes under `@hexagen-monaco`.
+const SOURCE_SCOPE = "@hexagen";
+const PUBLISH_SCOPE = "@hexagen-monaco";
+
 /**
  * Fields retained verbatim from source package.json (when present).
  * Order is the emission order in the staged manifest.
@@ -165,10 +170,34 @@ function prepare(packageDir) {
     if (srcPkg[field] !== undefined) staged[field] = srcPkg[field];
   }
 
+  // Rewrite the npm scope to the published org. The monorepo packages keep their
+  // internal `@hexagen/*` names; only the PUBLISHED name uses `@hexagen-monaco`
+  // (the `@hexagen` org was unavailable on npm — see the ADR-0009 amendment).
+  // Self-contained bundles, so no dependency reference needs the same rewrite.
+  if (
+    typeof staged.name === "string" &&
+    staged.name.startsWith(`${SOURCE_SCOPE}/`)
+  ) {
+    staged.name = `${PUBLISH_SCOPE}/${staged.name.slice(SOURCE_SCOPE.length + 1)}`;
+  }
+
   const srcDepCount = Object.keys(srcPkg.dependencies || {}).length;
   const cleanedDeps = cleanDependencies(srcPkg.dependencies);
   if (cleanedDeps) staged.dependencies = cleanedDeps;
-  const strippedDepCount = srcDepCount - Object.keys(cleanedDeps || {}).length;
+  let strippedDepCount = srcDepCount - Object.keys(cleanedDeps || {}).length;
+
+  // peerDependencies / optionalDependencies are retained verbatim by the
+  // projection above, so they need the same workspace:* stripping as
+  // dependencies — otherwise the staged manifest can violate the
+  // "no workspace:* references" guarantee and become uninstallable.
+  for (const field of ["peerDependencies", "optionalDependencies"]) {
+    if (!staged[field]) continue;
+    const before = Object.keys(staged[field]).length;
+    const cleaned = cleanDependencies(staged[field]);
+    if (cleaned) staged[field] = cleaned;
+    else delete staged[field];
+    strippedDepCount += before - Object.keys(cleaned || {}).length;
+  }
 
   fs.writeFileSync(
     path.join(publishDir, "package.json"),

@@ -4,6 +4,16 @@
   "description": "HexaGen architecture linter and manifest validation",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinkrakowski/hexagen-monaco.git",
+    "directory": "tools/arch-linter"
+  },
+  "homepage": "https://github.com/martinkrakowski/hexagen-monaco/tree/main/tools/arch-linter#readme",
+  "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
   "main": "dist/index.js",
   "bin": {
     "hexagen-lint": "./dist/index.js"
@@ -27,16 +37,13 @@
   "dependencies": {
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
-    "chalk": "^5.3.0",
     "js-yaml": "^4.1.0",
-    "lodash": "^4.17.21",
     "ts-morph": "^27.0.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@hexagen/sync": "workspace:*",
     "@types/js-yaml": "^4.0.9",
-    "@types/lodash": "^4.17.7",
     "@types/node": "^20.12.7",
     "eslint": "^9.7.0",
     "eslint-plugin-yml": "^3.3.1",

@@ -1,5 +1,12 @@
 name: "Publish to NPM"
 
+# Co-releases the two published tooling packages under @hexagen-monaco at the
+# tag's version (sync and arch-linter share a version). Each is a self-contained
+# tsup bundle (ADR-0009 + amendment): private @hexagen/* deps are inlined, so the
+# published manifests reference only third-party deps. Staged via
+# prepare-publish-package.js, which strips workspace/private/dev fields and
+# rewrites @hexagen/* → @hexagen-monaco/*. No @hexagen/shared publish and no
+# propagation `sleep`s — the packages don't depend on each other at publish time.
 on:
   push:
     tags:
@@ -7,11 +14,11 @@ on:
 
 jobs:
   publish:
-    name: "Build & Publish Packages"
+    name: "Build & Publish @hexagen-monaco packages"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write # required for `npm publish --provenance`
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@v4
@@ -28,6 +35,24 @@ jobs:
       - name: "Prepare Yarn"
         run: corepack prepare yarn@4.12.0 --activate
 
+      # Fail fast (before the build) if the tag doesn't match what would be
+      # published, and enforce the co-release invariant (both packages share a
+      # version). GITHUB_REF_NAME is the tag, e.g. "v0.4.0".
+      - name: "Verify tag matches package versions"
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          SYNC=$(node -p "require('./packages/sync/package.json').version")
+          ARCH=$(node -p "require('./tools/arch-linter/package.json').version")
+          if [[ "$SYNC" != "$ARCH" ]]; then
+            echo "::error::Co-release version mismatch: sync=$SYNC, arch-linter=$ARCH"
+            exit 1
+          fi
+          if [[ "$SYNC" != "$TAG" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME (version $TAG) does not match package version $SYNC"
+            exit 1
+          fi
+          echo "Tag and both package versions agree: $TAG"
+
       - name: "Install Dependencies"
         run: yarn install --immutable
 
@@ -37,41 +62,49 @@ jobs:
       - name: "TypeCheck All Packages"
         run: yarn turbo run typecheck
 
-      - name: "Publish @hexagen/shared"
-        run: npm publish --access public
-        working-directory: packages/shared
+      # Stage self-contained, scope-rewritten manifests. Each `publish/` dir
+      # holds dist/ + a public package.json (name → @hexagen-monaco/*, no
+      # workspace:* deps).
+      - name: "Stage @hexagen-monaco/sync"
+        run: node scripts/prepare-publish-package.js packages/sync
+
+      - name: "Stage @hexagen-monaco/arch-linter"
+        run: node scripts/prepare-publish-package.js tools/arch-linter
+
+      # Guard: a staged manifest must never reference the private monorepo scope
+      # nor any unresolved workspace: protocol spec (which is uninstallable for
+      # npm consumers).
+      - name: "Verify staged manifests are consumer-installable"
+        run: |
+          for dir in packages/sync/publish tools/arch-linter/publish; do
+            if grep -qE '@hexagen/|workspace:' "$dir/package.json"; then
+              echo "::error::$dir/package.json references the private scope or a workspace: spec"
+              cat "$dir/package.json"
+              exit 1
+            fi
+          done
+
+      # Pick the npm dist-tag from the version: a pre-release (e.g. 0.4.0-rc.1,
+      # any version with a `-` identifier) publishes under `next` so it never
+      # overwrites `latest`; a stable version publishes under `latest`. Both
+      # packages share a version, so one tag covers the co-release.
+      - name: "Resolve npm dist-tag"
+        id: disttag
+        run: |
+          VERSION=$(node -p "require('./packages/sync/package.json').version")
+          if [[ "$VERSION" == *-* ]]; then TAG=next; else TAG=latest; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION under dist-tag '$TAG'"
+
+      - name: "Publish @hexagen-monaco/sync"
+        run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
+        working-directory: packages/sync/publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: "Wait for npm propagation"
-        run: sleep 10
-
-      - name: "Update @hexagen/sync dependency to published version"
-        run: |
-          VERSION=$(node -p "require('./packages/shared/package.json').version")
-          cd packages/sync
-          yarn remove @hexagen/shared
-          yarn add @hexagen/shared@^${VERSION}
-
-      - name: "Publish @hexagen/sync"
-        run: npm publish --access public
-        working-directory: packages/sync
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: "Wait for npm propagation"
-        run: sleep 10
-
-      - name: "Update @hexagen/arch-linter dependencies to published versions"
-        run: |
-          VERSION=$(node -p "require('./packages/shared/package.json').version")
-          cd tools/arch-linter
-          yarn remove @hexagen/shared @hexagen/sync
-          yarn add @hexagen/shared@^${VERSION} @hexagen/sync@^${VERSION}
-
-      - name: "Publish @hexagen/arch-linter"
-        run: npm publish --access public
-        working-directory: tools/arch-linter
+      - name: "Publish @hexagen-monaco/arch-linter"
+        run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
+        working-directory: tools/arch-linter/publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

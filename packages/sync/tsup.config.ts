@@ -98,8 +98,13 @@ export default defineConfig({
    *
    * They appear in package.json "dependencies", so `npm install @hexagen/sync`
    * pulls them transitively through standard npm resolution.
+   *
+   * `ts-morph` MUST stay external: it bundles the TypeScript compiler, whose
+   * CommonJS `require("fs")` calls break when inlined into an ESM bundle
+   * ("Dynamic require of fs is not supported"). Listed explicitly so it never
+   * depends on tsup's "dependencies are external by default" behaviour.
    */
-  external: ["commander", "js-yaml"],
+  external: ["commander", "js-yaml", "ts-morph"],
 
   /**
    * esbuild options: Configure resolution

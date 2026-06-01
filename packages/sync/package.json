@@ -4,6 +4,16 @@
   "type": "module",
   "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinkrakowski/hexagen-monaco.git",
+    "directory": "packages/sync"
+  },
+  "homepage": "https://github.com/martinkrakowski/hexagen-monaco/tree/main/packages/sync#readme",
+  "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

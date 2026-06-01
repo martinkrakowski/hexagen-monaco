@@ -24,8 +24,8 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "@hexagen-monaco/sync": "^0.1.0",
-    "@hexagen-monaco/arch-linter": "^0.1.0"
+    "@hexagen-monaco/sync": "^0.4.0",
+    "@hexagen-monaco/arch-linter": "^0.4.0"
   }
 }`;
 
