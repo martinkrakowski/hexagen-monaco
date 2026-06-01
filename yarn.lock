@@ -9181,6 +9181,7 @@ __metadata:
     lint-staged: "npm:^16.4.0"
     lru-cache: "npm:^7.18.3"
     prettier: "npm:^3.2.5"
+    tsx: "npm:^4.21.0"
     turbo: "npm:^1.13.3"
     typescript: "npm:^5.4.5"
     typescript-eslint: "npm:^8.0.0"

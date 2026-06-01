@@ -94,7 +94,7 @@ try {
   const proj = mkdtempSync(path.join(tmpdir(), "capstone-proj-"));
   cleanup.push(() => rmSync(proj, { recursive: true, force: true }));
   try {
-    sh(`npx tsx scripts/capstone/generate-scaffold.ts "${proj}"`);
+    sh(`yarn tsx scripts/capstone/generate-scaffold.ts "${proj}"`);
   } catch (e) {
     fail("scaffold generation failed", String(e.stdout || e.stderr || e));
   }

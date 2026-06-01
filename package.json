@@ -61,6 +61,7 @@
     "lint-staged": "^16.4.0",
     "lru-cache": "^7.18.3",
     "prettier": "^3.2.5",
+    "tsx": "^4.21.0",
     "turbo": "^1.13.3",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.0.0",
