@@ -1,3 +1,8 @@
+import {
+  TEMPLATE_MANIFESTS,
+  type TemplateManifestMeta,
+} from "./template-manifest.generated";
+
 export interface TemplateDetails {
   overview: string;
   includes: string[];
@@ -10,13 +15,21 @@ export interface CatalogNote {
   detail: string;
 }
 
+export type CatalogCategory =
+  | "foundation"
+  | "infrastructure"
+  | "ai"
+  | "auth"
+  | "adobe"
+  | "tooling";
+
 export interface CatalogEntry {
   id: string;
   name: string;
   description: string;
   requires: string[];
   conflicts: string[];
-  category: "foundation" | "infrastructure" | "ai" | "auth" | "tooling";
+  category: CatalogCategory;
   details: TemplateDetails;
   note?: CatalogNote;
   /**
@@ -28,20 +41,31 @@ export interface CatalogEntry {
   companions?: string[];
 }
 
+/**
+ * The hand-curated, UI-only half of a catalog entry. `name`, `description`,
+ * `requires`, and `conflicts` are NOT here — they are generated from the
+ * template manifests (template-manifest.generated.ts) and merged in below, so
+ * they can never drift from the source of truth. Adding a template means adding
+ * its presentation here; the parity test fails the build if a manifest has no
+ * presentation entry (an unselectable template) or vice versa (a ghost card).
+ */
+interface CatalogPresentation {
+  id: string;
+  category: CatalogCategory;
+  details: TemplateDetails;
+  note?: CatalogNote;
+  companions?: string[];
+}
+
 const STANDALONE_NOTE: CatalogNote = {
   badge: "Standalone",
   detail:
     "Standalone framework — replaces the auth layer entirely. Conflicts with all Group A providers and the other Group B frameworks.",
 };
 
-export const TEMPLATE_CATALOG: CatalogEntry[] = [
+const PRESENTATION: CatalogPresentation[] = [
   {
     id: "env-setup",
-    name: "Env Setup",
-    description:
-      "Categorised .env.example, Zod runtime validation, check-env script, and SETUP.md first-day guide",
-    requires: [],
-    conflicts: [],
     category: "foundation",
     details: {
       overview:
@@ -56,11 +80,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "agents-md",
-    name: "AGENTS.md",
-    description:
-      "Rich AGENTS.md with mode system, tech stack reference, commands-after-edits table, and companion .agents/ spec directory",
-    requires: [],
-    conflicts: [],
     category: "foundation",
     details: {
       overview:
@@ -68,18 +87,13 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       includes: [
         "Top-level AGENTS.md with mode system and tech stack reference",
         "commands-after-edits table mapping file patterns to check commands",
+        "A Conventions section directing agents to the structured logger (never console.log)",
         ".agents/ spec directory with per-feature AI prompts",
-        "Companion snippets for common agent workflows",
       ],
     },
   },
   {
     id: "error-handling",
-    name: "Error Handling",
-    description:
-      "3-layer error hierarchy, Result<T,E> type, RFC 7807 HTTP mapping, React error boundary",
-    requires: ["env-setup"],
-    conflicts: [],
     category: "foundation",
     details: {
       overview:
@@ -94,12 +108,8 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "observability",
-    name: "Observability",
-    description:
-      "Structured JSON logging, correlation IDs via AsyncLocalStorage, request logger middleware, /api/health endpoint",
-    requires: [],
-    conflicts: [],
     category: "infrastructure",
+    companions: ["eslint-no-console"],
     details: {
       overview:
         "Adds production-grade structured logging and request tracing without external dependencies. Every log line carries a correlation ID that spans the full request lifecycle.",
@@ -113,11 +123,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "rate-limiting",
-    name: "Rate Limiting",
-    description:
-      "Differentiated middleware (text/image/general), session+IP hybrid identification, configurable limits, debug logging",
-    requires: ["env-setup"],
-    conflicts: [],
     category: "infrastructure",
     details: {
       overview:
@@ -132,11 +137,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "docker",
-    name: "Docker",
-    description:
-      "Multi-stage Dockerfile, docker-compose with peer services, dev override for hot reload, GitHub Actions image push",
-    requires: [],
-    conflicts: [],
     category: "infrastructure",
     details: {
       overview:
@@ -151,11 +151,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "ci-github-actions",
-    name: "CI / GitHub Actions",
-    description:
-      "Build+typecheck+lint+test CI, Vercel/Railway/Fly/VPS deploy workflow, PR preview deploys, Dependabot",
-    requires: ["env-setup"],
-    conflicts: [],
     category: "infrastructure",
     details: {
       overview:
@@ -170,51 +165,74 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "llm-adapter",
-    name: "LLM Adapter",
-    description:
-      "Typed port interface, provider adapters (xAI), model constants, reasoning routing, retry logic, structured output",
-    requires: ["env-setup"],
-    conflicts: [],
     category: "ai",
     details: {
       overview:
-        "Defines a clean port interface for LLM calls so the rest of your application stays provider-agnostic. Ships with an xAI adapter, model constants, reasoning-mode routing, and retry logic.",
+        "Defines a clean port interface for LLM calls so the rest of your application stays provider-agnostic. Ships adapters for xAI, OpenAI, Anthropic, Ollama, and Azure OpenAI, with model constants, reasoning-mode routing, and retry logic.",
       includes: [
-        "Typed LLMPort interface with complete() and stream() methods",
-        "xAI (Grok) adapter with model constants",
-        "Reasoning vs standard routing based on task complexity",
-        "Exponential backoff retry with jitter",
-        "Structured output helpers",
+        "Typed LLMClientPort with provider adapters and a router",
+        "xAI / OpenAI / Anthropic / Ollama / Azure OpenAI adapters",
+        "Reasoning vs fast vs vision model routing",
+        "Exponential backoff retry, timeout, and structured (Zod) output",
+        "Provider-registration seam (extend it with llm-adapter-bedrock)",
+      ],
+    },
+  },
+  {
+    id: "llm-adapter-bedrock",
+    category: "ai",
+    details: {
+      overview:
+        "Adds Amazon Bedrock (Converse API) as a provider to the llm-adapter router via its provider-registration seam — no base files overwritten. Auth uses the AWS credential chain.",
+      includes: [
+        "Bedrock adapter registered via a side-effect import",
+        "Converse API; models addressed by inference-profile id",
+        "AWS credential chain (task role / AWS_*); optional Guardrails",
       ],
     },
   },
   {
     id: "langgraph",
-    name: "LangGraph",
-    description:
-      "AgentGraphPort interface, typed state, node stubs, graph compilation, checkpointing, optional streaming and human-in-the-loop",
-    requires: ["llm-adapter", "env-setup"],
-    conflicts: [],
     category: "ai",
     details: {
       overview:
         "Scaffolds a LangGraph agent with typed state, node stubs, and graph compilation wired to your LLM adapter. Includes optional checkpointing, streaming, and human-in-the-loop pause/resume.",
       includes: [
         "Typed AgentState and AgentGraphPort interface",
-        "Pre-wired graph with planner, executor, and reviewer node stubs",
-        "Graph compilation and invoke / stream entrypoints",
-        "MemorySaver checkpointing for conversation persistence",
-        "Optional human-in-the-loop interrupt_before pause/resume",
+        "A working example graph (simple-chain or research-agent) + node files",
+        "Swap-by-env checkpointers (memory/supabase/redis/postgres)",
+        "Next.js invoke route + optional streaming and human-in-the-loop resume",
+      ],
+    },
+  },
+  {
+    id: "bedrock-agentcore-runtime",
+    category: "ai",
+    details: {
+      overview:
+        "Deploy the Hexagen TypeScript server to Amazon Bedrock AgentCore Runtime as an ARM64 container implementing the HTTP contract (POST /invocations, GET /ping). No Python agent scaffolding.",
+      includes: [
+        "/invocations + /ping handlers and an ARM64 Dockerfile.agentcore",
+        "agentcore.json, an IAM execution policy, optional deploy workflow",
+        "IAM or fail-closed OAuth inbound auth; implement AgentRuntimePort",
+      ],
+    },
+  },
+  {
+    id: "bedrock-agentcore-services",
+    category: "ai",
+    details: {
+      overview:
+        "Hexagonal ports + adapters for Amazon Bedrock AgentCore stateful services — Memory, Gateway (APIs/Lambdas/MCP as tools), and Identity (workload token + IdP claim bridge to UserContext).",
+      includes: [
+        "AgentMemoryPort / ToolGatewayPort / AgentIdentityPort (gated by selection)",
+        "Adapters over @aws-sdk/client-bedrock-agentcore",
+        "Long-term memory strategies, MCP tool mapping, IdP→UserContext bridge",
       ],
     },
   },
   {
     id: "bullmq",
-    name: "BullMQ",
-    description:
-      "Typed BullMQ queues + workers with single-file dispatcher, Redis fallback to in-process sync execution, recurring-job scheduler, optional Bull Board dashboard, and same-process / separate-service deployment modes",
-    requires: ["env-setup"],
-    conflicts: [],
     category: "infrastructure",
     details: {
       overview:
@@ -233,11 +251,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "auth-mock",
-    name: "Auth Mock",
-    description:
-      "UserContext value object, MOCK_USER constant, generic session-cookie helpers, and a dev-only root middleware that injects MOCK_USER when AUTH_MODE=mock",
-    requires: ["env-setup"],
-    conflicts: [],
     category: "auth",
     details: {
       overview:
@@ -251,21 +264,20 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
     },
   },
   {
+    id: "shared-types",
+    category: "auth",
+    details: {
+      overview:
+        "The auth-ecosystem foundation: the UserContext domain type, a runtime-overridable MOCK_USER, and generic AES-256-GCM session-cookie helpers (including the canonical COOKIE_NAME). Carries no opinion about mock vs. real auth.",
+      includes: [
+        "UserContext value object every auth provider speaks",
+        "MOCK_USER with MOCK_USER_* runtime overrides",
+        "AES-256-GCM session-cookie helpers + COOKIE_NAME resolver",
+      ],
+    },
+  },
+  {
     id: "google-oauth",
-    name: "Google OAuth",
-    description:
-      "Server-side OAuth 2.0 (login → callback → AES-256-GCM session), optional hosted-domain restriction, root middleware that protects configured paths",
-    requires: ["shared-types", "auth-mock", "env-setup"],
-    conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
-      "supabase-auth",
-    ],
     category: "auth",
     details: {
       overview:
@@ -281,20 +293,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "github-oauth",
-    name: "GitHub OAuth",
-    description:
-      "GitHub OAuth App flow with primary-email fetch, optional org-membership gate, AES-256-GCM session, and a root middleware that protects configured paths",
-    requires: ["shared-types", "auth-mock", "env-setup"],
-    conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "google-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
-      "supabase-auth",
-    ],
     category: "auth",
     details: {
       overview:
@@ -311,20 +309,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "microsoft-entra",
-    name: "Microsoft Entra",
-    description:
-      "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM session, root middleware",
-    requires: ["shared-types", "auth-mock", "env-setup"],
-    conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "google-oauth",
-      "github-oauth",
-      "magic-link",
-      "adobe-ims-spa",
-      "supabase-auth",
-    ],
     category: "auth",
     details: {
       overview:
@@ -341,20 +325,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "magic-link",
-    name: "Magic Link",
-    description:
-      "Passwordless email flow, HMAC-SHA256 single-use tokens, Resend/Nodemailer transport, replay protection, AES-256-GCM session, root middleware",
-    requires: ["shared-types", "auth-mock", "env-setup"],
-    conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "adobe-ims-spa",
-      "supabase-auth",
-    ],
     category: "auth",
     details: {
       overview:
@@ -371,22 +341,8 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "nextauth",
-    name: "Auth.js (NextAuth v5)",
-    description:
-      "Auth.js v5 with Google, GitHub and Credentials providers, JWT session strategy, middleware route protection",
-    requires: ["env-setup"],
-    conflicts: [
-      "auth-mock",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
-      "clerk",
-      "better-auth",
-      "supabase-auth",
-    ],
     category: "auth",
+    note: STANDALONE_NOTE,
     details: {
       overview:
         "Auth.js v5 (NextAuth) wired with Google, GitHub, and Credentials providers out of the box. Uses JWT session strategy and a middleware file that protects routes based on matcher patterns.",
@@ -398,26 +354,11 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
         "Middleware file with configurable route matcher",
       ],
     },
-    note: STANDALONE_NOTE,
   },
   {
     id: "clerk",
-    name: "Clerk",
-    description:
-      "Clerk SDK, middleware, useUser/useAuth hooks, JWT template for API routes, org-aware role guards",
-    requires: ["env-setup"],
-    conflicts: [
-      "auth-mock",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
-      "nextauth",
-      "better-auth",
-      "supabase-auth",
-    ],
     category: "auth",
+    note: STANDALONE_NOTE,
     details: {
       overview:
         "Full Clerk integration with server and client-side SDK wiring. Includes a JWT template for adding Clerk session tokens to API requests and organisation-aware role guards.",
@@ -428,26 +369,11 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
         "Organisation and role guard wrapper components",
       ],
     },
-    note: STANDALONE_NOTE,
   },
   {
     id: "better-auth",
-    name: "Better Auth",
-    description:
-      "Better Auth server setup, social providers, magic-link plugin, schema migration, typed session client",
-    requires: ["env-setup"],
-    conflicts: [
-      "auth-mock",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
-      "nextauth",
-      "clerk",
-      "supabase-auth",
-    ],
     category: "auth",
+    note: STANDALONE_NOTE,
     details: {
       overview:
         "Better Auth server setup with social providers, the magic-link plugin, and database schema migration helpers. Exports a typed session client for use in React components.",
@@ -458,28 +384,13 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
         "Typed authClient for browser/server use",
       ],
     },
-    note: STANDALONE_NOTE,
   },
   {
     id: "adobe-ims-spa",
-    name: "Adobe IMS SPA (PKCE)",
-    description:
-      "Adobe IMS PKCE flow with encrypted token store, auto-refresh, and a root middleware that validates IMS sessions on configured paths",
-    requires: ["shared-types", "auth-mock", "env-setup"],
-    conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "supabase-auth",
-    ],
     category: "auth",
     details: {
       overview:
-        "Modern Adobe IMS Single Page App authentication using PKCE. Owns the full auth stack: login/callback/logout routes, encrypted IMS tokens cookie, auto-refresh, /api/auth/me, getCurrentUser/requireAuth helpers, and a root middleware that validates the IMS session on protected paths while honouring AUTH_MODE=mock as a dev short-circuit.",
+        "Modern Adobe IMS Single Page App authentication using PKCE — end-user auth, distinct from the Server-to-Server IMS in adobe-firefly-core. Owns the full auth stack: login/callback/logout routes, encrypted IMS tokens cookie, auto-refresh, /api/auth/me, getCurrentUser/requireAuth helpers, and a root middleware that validates the IMS session on protected paths while honouring AUTH_MODE=mock as a dev short-circuit.",
       includes: [
         "PKCE-based IMS OAuth 2.0 login + callback + logout routes",
         "Access + refresh token storage encrypted at rest (AES-256-GCM)",
@@ -492,13 +403,8 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "supabase",
-    name: "Supabase",
-    description:
-      "SSR-safe clients, storage helpers, RLS examples, type generation, optional Drizzle ORM. Pure storage/database layer — add the Supabase Auth template to layer @supabase/ssr-based session middleware on top.",
-    requires: ["env-setup"],
-    conflicts: [],
-    companions: ["supabase-auth"],
     category: "infrastructure",
+    companions: ["supabase-auth"],
     details: {
       overview:
         "SSR-safe Supabase client setup with storage, RLS, optional Drizzle ORM and realtime. No auth code — that's the separate Supabase Auth template, which requires this one. Coexists with any auth provider when used storage-only.",
@@ -513,20 +419,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "supabase-auth",
-    name: "Supabase Auth",
-    description:
-      "Auth provider built on the Supabase template: @supabase/ssr root middleware, getCurrentUser/requireAuth, and /api/auth/me — all honouring AUTH_MODE=mock as a dev short-circuit.",
-    requires: ["supabase", "shared-types", "auth-mock", "env-setup"],
-    conflicts: [
-      "nextauth",
-      "clerk",
-      "better-auth",
-      "google-oauth",
-      "github-oauth",
-      "microsoft-entra",
-      "magic-link",
-      "adobe-ims-spa",
-    ],
     category: "auth",
     details: {
       overview:
@@ -542,11 +434,6 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
   },
   {
     id: "design-system",
-    name: "Design System",
-    description:
-      "Populated DESIGN.md contract, CSS custom property tokens, Tailwind config extension, base component stubs",
-    requires: [],
-    conflicts: [],
     category: "tooling",
     details: {
       overview:
@@ -559,7 +446,279 @@ export const TEMPLATE_CATALOG: CatalogEntry[] = [
       ],
     },
   },
+  {
+    id: "eslint-no-console",
+    category: "tooling",
+    companions: ["observability"],
+    details: {
+      overview:
+        "A drop-in ESLint flat-config fragment that bans console.* so logging goes through the structured logger instead of console.log technical debt. Spread it into your eslint.config.mjs.",
+      includes: [
+        "eslint.no-console.mjs exporting noConsoleConfig (a flat-config array)",
+        "no-console at warn (the non-breaking default) or error",
+        "Exempts the logger transport, server startup, scripts, config, and smoke-* diagnostics",
+      ],
+    },
+  },
+
+  // --- Adobe Firefly Services family (foundation → core generative → creative
+  // automation → storage). Each service requires adobe-firefly-core (machine
+  // Server-to-Server IMS) — handled by dependency resolution, not a conflict
+  // with the end-user auth providers. ---
+  {
+    id: "adobe-firefly-core",
+    category: "adobe",
+    companions: ["adobe-firefly-storage-s3"],
+    details: {
+      overview:
+        "Shared foundation every Adobe Firefly service builds on: IMS OAuth Server-to-Server token provider, a base REST client, the async job port (polling or webhook), a presigned-URL storage seam, and Adobe error classification. This is machine auth for calling Firefly APIs — unrelated to how your app's users sign in.",
+      includes: [
+        "IMS Server-to-Server token provider (cached; not the retired JWT flow)",
+        "Base REST client (x-api-key + bearer, retry, timeout)",
+        "Async FireflyJobPort — polling or webhook, transparently",
+        "Presigned-URL storage seam (passthrough default; swap in an s3/gcs/azure addon)",
+        "Typed FireflyError hierarchy + Result<T, FireflyError>",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-generate",
+    category: "adobe",
+    details: {
+      overview:
+        "The flagship Firefly service: text-to-image plus the image-edit operations (generative fill/expand, image-to-image, style transfer). Async; resolves to candidate output hrefs.",
+      includes: [
+        "ImageGenerationPort: textToImage + generativeFill/Expand/imageToImage/styleTransfer",
+        "Posts the async /v3/images/*-async endpoints, awaits via the job port",
+        "Content Credentials (C2PA) + safety as pass-through options",
+        "Returns one href per requested variation",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-upscale",
+    category: "adobe",
+    details: {
+      overview:
+        "The lightest Firefly service: submit an async upscale job and get one output href. A good end-to-end validation of the foundation.",
+      includes: [
+        "UpscalePort.upscale(req) → single output href",
+        "Posts /v3/images/upscale, awaits via the job port",
+        "Default factor set at install (override per call)",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-composite",
+    category: "adobe",
+    details: {
+      overview:
+        "Composite Operations: blend a product image into a scene (matching tone, lighting, shadow). Returns an array of candidate composites.",
+      includes: [
+        "CompositePort.composite(product, scene) → string[] candidates",
+        "Posts /v3/images/composite-async, awaits via the job port",
+        "Candidate count + model configurable; C2PA/safety pass-through",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-content-tagging",
+    category: "adobe",
+    details: {
+      overview:
+        "The one Firefly service whose result is JSON, not an asset: structured tags/metadata for an image. Presigns the input only.",
+      includes: [
+        "ContentTaggingPort.tag(inputHref) → { tags, raw }",
+        "Handles a sync response or a short async job",
+        "Confidence floor configurable; no output storage needed",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-media",
+    category: "adobe",
+    details: {
+      overview:
+        "Audio/Video generation — the longest-running Firefly jobs (minutes): text-to-video, image-to-video, audio/video translation, speech, and sound effects.",
+      includes: [
+        "MediaGenerationPort: textToVideo / imageToVideo / translateAudioVideo / generateSpeech / soundEffect",
+        "Posts /v3/videos/* + /v3/audio/* async, awaits via the job port (webhook-friendly)",
+        "Partner models (Veo/Runway/Kling/ElevenLabs) as opaque model ids — no partner SDKs",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-custom-models",
+    category: "adobe",
+    details: {
+      overview:
+        "Custom Models lifecycle: train a brand-tuned model from a curated dataset, check status, list models, and generate with a trained model. Training is the longest job in the family.",
+      includes: [
+        "CustomModelPort: train / status / list / generateWith",
+        "train awaits queued→training→completed, returns the trained model id",
+        "generateWith runs inference with a trained model id",
+        "Dataset caption format + base model configurable",
+      ],
+    },
+  },
+  {
+    id: "adobe-photoshop",
+    category: "adobe",
+    details: {
+      overview:
+        "Photoshop automation on image.adobe.io: Smart Object replacement, text-layer edits, action JSON, crop, and PSD rendering. Inputs are named layers in a pre-authored .psd.",
+      includes: [
+        "PhotoshopAutomationPort: smartObject / editTextLayer / applyActionJson / crop / renderPsd",
+        "Posts absolute image.adobe.io/pie/psdService URLs, waits via jobPort.poll",
+        "Targets named Smart Object / text layers by name",
+      ],
+    },
+  },
+  {
+    id: "adobe-lightroom",
+    category: "adobe",
+    details: {
+      overview:
+        "Lightroom automation on image.adobe.io: auto-tone, preset application, and parametric edits. Batch-oriented photo editing / colour grading.",
+      includes: [
+        "LightroomPort: autoTone / applyPreset / edit",
+        "Posts absolute image.adobe.io/lrService URLs, waits via jobPort.poll",
+        "Drive over many assets per call (or fan out with bullmq)",
+      ],
+    },
+  },
+  {
+    id: "adobe-illustrator",
+    category: "adobe",
+    details: {
+      overview:
+        "Illustrator automation on image.adobe.io: artboard rendering, variable-data merge, and vector scaling (vector→raster at arbitrary scale — ads to billboards).",
+      includes: [
+        "IllustratorPort: renderArtboard / dataMerge / scaleVector",
+        "Posts absolute image.adobe.io URLs, waits via jobPort.poll",
+        "png/jpeg/pdf output; scale/width/height per request",
+      ],
+    },
+  },
+  {
+    id: "adobe-indesign",
+    category: "adobe",
+    details: {
+      overview:
+        "InDesign automation on image.adobe.io: data merge (template + data source), layout rendering, and PDF export.",
+      includes: [
+        "InDesignPort: dataMerge / renderLayout / exportPdf",
+        "Posts absolute image.adobe.io URLs, waits via jobPort.poll",
+        "exportPdf always produces PDF regardless of the default format",
+      ],
+    },
+  },
+  {
+    id: "adobe-express",
+    category: "adobe",
+    details: {
+      overview:
+        "Express batch automation on image.adobe.io: render many variants from a published Express template in one async batch job — the localization use case.",
+      includes: [
+        "ExpressAutomationPort.renderBatch(templateId, items[]) → one href per variant",
+        "All-or-nothing batch with 1:1 output↔item alignment",
+        "Singleton exported as expressAutomation (avoids the Express.js name clash)",
+      ],
+    },
+  },
+  {
+    id: "adobe-creative-production",
+    category: "adobe",
+    details: {
+      overview:
+        "Creative Production batch automation on image.adobe.io: map a published workflow over N assets, surfacing per-asset status (partial success rather than failing the whole batch).",
+      includes: [
+        "CreativeProductionPort.runWorkflow(workflowId, assets[]) → AssetResult[]",
+        "Per-asset succeeded/failed reported in-band, in request order",
+        "Soft DB dependency for persisting batch status in your own store",
+      ],
+    },
+  },
+  {
+    id: "adobe-substance-3d",
+    category: "adobe",
+    details: {
+      overview:
+        "Substance 3D automation on image.adobe.io: render a scene to an image, composite over a background, or relight with an HDRI. The longest-running image.adobe.io jobs.",
+      includes: [
+        "Substance3DPort: render / composite / relight",
+        "Posts absolute image.adobe.io URLs, waits via jobPort.poll (no max-wait cap)",
+        "composite / relight take an extra background plate / HDRI input",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-storage-s3",
+    category: "adobe",
+    details: {
+      overview:
+        "Registers an Amazon S3 presigner for the Firefly storage seam: presigns GET URLs for inputs and PUT URLs for outputs. Mutually exclusive with the GCS/Azure presigners.",
+      includes: [
+        "S3PresignStorageAdapter wired via setStoragePresigner (side-effect import)",
+        "GET for inputs, PUT for outputs; an http(s) ref is passed through",
+        "AWS credential chain; bucket/region/prefix read at presign time",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-storage-gcs",
+    category: "adobe",
+    details: {
+      overview:
+        "Registers a Google Cloud Storage presigner for the Firefly storage seam: V4 read/write signed URLs. Mutually exclusive with the S3/Azure presigners.",
+      includes: [
+        "GcsPresignStorageAdapter wired via setStoragePresigner (side-effect import)",
+        "V4 read for inputs, V4 write for outputs; Google ADC credentials",
+        "Keyless signing makes one IAM SignBlob call per URL; a key file signs locally",
+      ],
+    },
+  },
+  {
+    id: "adobe-firefly-storage-azure",
+    category: "adobe",
+    details: {
+      overview:
+        "Registers an Azure Blob Storage presigner for the Firefly storage seam: read/create SAS URLs. Account-key or managed-identity (user-delegation) signing. Mutually exclusive with the S3/GCS presigners.",
+      includes: [
+        "AzureBlobPresignStorageAdapter wired via setStoragePresigner (side-effect import)",
+        "Read SAS for inputs, create/write SAS for outputs",
+        "Account-key or managed-identity user-delegation signing (delegation key cached)",
+      ],
+    },
+  },
 ];
+
+/**
+ * The wizard catalog: each curated presentation merged with its manifest-derived
+ * fields (name/description/requires/conflicts) from template-manifest.generated.ts.
+ * A presentation entry with no manifest is a ghost — a card for a template that
+ * doesn't exist — and is a hard error here. The reverse (a manifest with no
+ * presentation) is caught by the parity test.
+ */
+export const TEMPLATE_CATALOG: CatalogEntry[] = PRESENTATION.map((p) => {
+  const meta: TemplateManifestMeta | undefined = TEMPLATE_MANIFESTS[p.id];
+  if (!meta) {
+    throw new Error(
+      `[template-catalog] presentation entry "${p.id}" has no manifest — ghost catalog entry (remove it or add the template).`,
+    );
+  }
+  return {
+    id: meta.id,
+    name: meta.name,
+    description: meta.description,
+    requires: [...meta.requires],
+    conflicts: [...meta.conflicts],
+    category: p.category,
+    details: p.details,
+    ...(p.note ? { note: p.note } : {}),
+    ...(p.companions ? { companions: p.companions } : {}),
+  };
+});
 
 const CATALOG_BY_ID = new Map(TEMPLATE_CATALOG.map((e) => [e.id, e]));
 
@@ -615,11 +774,12 @@ export function findCompanionSuggestions(
   return out;
 }
 
-export const CATEGORY_LABELS: Record<CatalogEntry["category"], string> = {
+export const CATEGORY_LABELS: Record<CatalogCategory, string> = {
   foundation: "Foundation",
   infrastructure: "Infrastructure",
   ai: "AI / LLM",
   auth: "Auth",
+  adobe: "Adobe Firefly",
   tooling: "Tooling",
 };
 
@@ -628,5 +788,6 @@ export const CATEGORIES = [
   "infrastructure",
   "ai",
   "auth",
+  "adobe",
   "tooling",
-] as const satisfies CatalogEntry["category"][];
+] as const satisfies CatalogCategory[];
