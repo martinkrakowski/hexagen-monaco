@@ -42,9 +42,10 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       # OIDC Trusted Publishing requires npm >= 11.5.1; Node 22.7 ships npm 10.x.
-      # Pinned (not @latest) so the release toolchain is deterministic.
+      # Pinned to a current stable (not @latest) so the release toolchain is
+      # deterministic; bump deliberately rather than drifting on every npm release.
       - name: "Upgrade npm (Trusted Publishing support)"
-        run: npm install -g npm@11.5.1
+        run: npm install -g npm@11.16.0
 
       # Fail fast (before the build) if the tag doesn't match what would be
       # published, and enforce the co-release invariant (both packages share a
