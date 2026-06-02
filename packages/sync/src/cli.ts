@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { Command } from "commander";
 import { SyncEngine } from "./sync-engine.js";
 import { listCommand, validateCommand } from "./commands/arch/index.js";
@@ -40,13 +43,30 @@ function createLogger(): LoggerPort {
 
 const logger = createLogger();
 
+// Read the real version from the package manifest rather than hardcoding it.
+// dist/cli.js (and src/cli.ts in dev) both sit one level under the package
+// root, so ../package.json resolves correctly in the published bundle and the
+// monorepo alike.
+function readVersion(): string {
+  try {
+    const pkgPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "package.json",
+    );
+    return JSON.parse(readFileSync(pkgPath, "utf8")).version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 function buildProgram(): Command {
   const program = new Command();
 
   program
     .name("hexagen")
     .description("HexaGen Monaco — Generate and sync modular monorepos")
-    .version("0.1.0");
+    .version(readVersion());
 
   program
     .command("sync")

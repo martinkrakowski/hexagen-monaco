@@ -16,7 +16,7 @@
   "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
   "main": "dist/index.js",
   "bin": {
-    "hexagen-lint": "./dist/index.js"
+    "hexagen-lint": "dist/index.js"
   },
   "files": [
     "dist"

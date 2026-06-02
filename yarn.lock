@@ -1674,7 +1674,7 @@ __metadata:
     yaml-eslint-parser: "npm:^2.0.0"
     zod: "npm:^3.23.8"
   bin:
-    hexagen-lint: ./dist/index.js
+    hexagen-lint: dist/index.js
   languageName: unknown
   linkType: soft
 
@@ -2060,7 +2060,7 @@ __metadata:
     tsx: "npm:^4.19.2"
     typescript: "npm:^5.9.3"
   bin:
-    hexagen: ./dist/cli.js
+    hexagen: dist/cli.js
   languageName: unknown
   linkType: soft
 
