@@ -204,6 +204,10 @@ describe("GitHubExporterAdapter", () => {
         message: "Repository creation failed.",
         errors: [{ message: "name already exists on this account" }],
       }),
+      // Existing repo: its default branch is read before committing.
+      route("GET", "/repos/octocat/hexagen-app", 200, {
+        default_branch: "main",
+      }),
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
       route("POST", "/git/trees", 201, { sha: "tree1" }),
@@ -317,6 +321,40 @@ describe("GitHubExporterAdapter", () => {
     assert.strictEqual(
       result.destinationUrl,
       "https://github.com/acme/hexagen-app",
+    );
+  });
+
+  it("targets the repo's default branch when it is not main", async () => {
+    const mock = installFetchMock([
+      route("GET", "/user", 200, { login: "octocat" }),
+      // GitHub initialized this repo on "trunk" (account default), not "main".
+      route("POST", "/user/repos", 201, { default_branch: "trunk" }),
+      route("POST", "/git/blobs", 201, { sha: "blob1" }),
+      route("POST", "/git/blobs", 201, { sha: "blob2" }),
+      route("POST", "/git/trees", 201, { sha: "tree1" }),
+      route("GET", "/git/ref/heads/trunk", 200, {
+        ref: "refs/heads/trunk",
+        object: { sha: "trunk-head" },
+      }),
+      route("POST", "/git/commits", 201, { sha: "commit-trunk" }),
+      route("PATCH", "/git/refs/heads/trunk", 200, { ref: "refs/heads/trunk" }),
+    ]);
+    restore = mock.restore;
+
+    const result = await new GitHubExporterAdapter().export(
+      sourceDir,
+      githubConfig(),
+    );
+
+    assert.strictEqual(result.success, true);
+    // The scaffold is committed onto the default branch, not an orphan "main".
+    assert.ok(
+      mock.calls.some((c) => c.path.endsWith("/git/refs/heads/trunk")),
+      "must update the default branch (trunk)",
+    );
+    assert.ok(
+      !mock.calls.some((c) => c.path.includes("/heads/main")),
+      "must not touch a 'main' ref when the default branch is trunk",
     );
   });
 

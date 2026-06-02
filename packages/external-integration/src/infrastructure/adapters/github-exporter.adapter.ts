@@ -38,19 +38,17 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
       const { token, owner, repoName, isPrivate } = config.github;
       const client = new GitHubGitDataClient();
 
-      const createdRepo = await this.createRepo(
+      // createRepo returns the repo's default branch. GitHub initializes an
+      // auto_init repo on the account/org default branch, which is not
+      // guaranteed to be "main"; targeting the wrong branch would push the
+      // scaffold to an orphan "main" while the default branch shows only the
+      // auto-init commit. createRepo throws on a real failure (caught below).
+      const defaultBranch = await this.createRepo(
         token,
         owner,
         repoName,
         isPrivate,
       );
-      if (!createdRepo) {
-        return {
-          success: false,
-          destinationUrl: "",
-          error: "Failed to create repository",
-        };
-      }
 
       const files = await this.readFiles(sourceDirectory);
 
@@ -84,7 +82,7 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         token,
         owner,
         repoName,
-        "main",
+        defaultBranch,
       );
 
       const commitSha = await client.createCommit(
@@ -102,7 +100,7 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         token,
         owner,
         repoName,
-        "main",
+        defaultBranch,
         commitSha,
         parentSha !== null,
       );
@@ -121,60 +119,89 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     }
   }
 
+  /**
+   * Create the target repo (idempotent on "already exists") and return its
+   * default branch. Throws GitHubApiError on a real failure.
+   */
   private async createRepo(
     token: string,
     owner: string,
     repoName: string,
     isPrivate: boolean,
-  ): Promise<boolean> {
-    try {
-      // Inline minimal request to keep test mocks (which spy on global fetch + expect json error shape) happy.
-      const base = "https://api.github.com";
-      // POST /user/repos always creates under the authenticated user and ignores
-      // `owner`. An org-owned export must use POST /orgs/{owner}/repos — otherwise
-      // the repo lands under the user while destinationUrl (built from `owner`)
-      // points at the org, a location that was never created. Resolve the
-      // authenticated login to choose the endpoint.
-      const authedLogin = await this.getAuthenticatedLogin(token);
-      const endpoint =
-        owner && owner.toLowerCase() !== authedLogin.toLowerCase()
-          ? `/orgs/${owner}/repos`
-          : "/user/repos";
-      // auto_init: true creates an initial commit so the repo is non-empty.
-      // A repo created with auto_init:false has no git objects yet, and GitHub's
-      // Git Data API then rejects blob/tree creation with
-      // `409 Git Repository is empty`. With an initial commit present, the
-      // export's getBranchHeadSha("main") returns that commit and the scaffold is
-      // committed on top of it as a fast-forward (see export()).
-      const r = await fetch(`${base}${endpoint}`, {
-        method: "POST",
+  ): Promise<string> {
+    // Inline minimal request to keep test mocks (which spy on global fetch + expect json error shape) happy.
+    const base = "https://api.github.com";
+    // POST /user/repos always creates under the authenticated user and ignores
+    // `owner`. An org-owned export must use POST /orgs/{owner}/repos — otherwise
+    // the repo lands under the user while destinationUrl (built from `owner`)
+    // points at the org, a location that was never created. Resolve the
+    // authenticated login to choose the endpoint.
+    const authedLogin = await this.getAuthenticatedLogin(token);
+    const endpoint =
+      owner && owner.toLowerCase() !== authedLogin.toLowerCase()
+        ? `/orgs/${owner}/repos`
+        : "/user/repos";
+    // auto_init: true creates an initial commit so the repo is non-empty —
+    // otherwise the Git Data API rejects blob/tree creation with
+    // `409 Git Repository is empty`. That commit lands on the account/org
+    // default branch (NOT necessarily "main"), which we return so the caller
+    // commits the scaffold onto it instead of an orphan "main".
+    const r = await fetch(`${base}${endpoint}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({
+        name: repoName,
+        private: isPrivate,
+        auto_init: true,
+      }),
+    });
+    if (r.ok) {
+      const repo = (await r.json()) as { default_branch?: string };
+      return repo.default_branch || "main";
+    }
+    const error = await r.json().catch(() => ({}));
+    const msg = JSON.stringify(error);
+    // Repo already exists (re-publish) — read its current default branch.
+    if (msg.includes("already exists")) {
+      return this.getDefaultBranch(token, owner, repoName);
+    }
+    throw new GitHubApiError(
+      r.status,
+      `GitHub API error (${r.status}): ${msg}`,
+    );
+  }
+
+  /** Read an existing repo's default branch. */
+  private async getDefaultBranch(
+    token: string,
+    owner: string,
+    repoName: string,
+  ): Promise<string> {
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repoName}`,
+      {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
           "X-GitHub-Api-Version": "2022-11-28",
         },
-        body: JSON.stringify({
-          name: repoName,
-          private: isPrivate,
-          auto_init: true,
-        }),
-      });
-      if (!r.ok) {
-        const error = await r.json().catch(() => ({}));
-        const msg = JSON.stringify(error);
-        if (msg.includes("already exists")) return true;
-        throw new GitHubApiError(
-          r.status,
-          `GitHub API error (${r.status}): ${msg}`,
-        );
-      }
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes("already exists")) return true;
-      throw err;
+      },
+    );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new GitHubApiError(
+        res.status,
+        `GitHub API error (${res.status}): ${JSON.stringify(error)}`,
+      );
     }
+    const data = (await res.json()) as { default_branch?: string };
+    return data.default_branch || "main";
   }
 
   /** Resolve the login of the token's owner (to choose user vs. org repo creation). */
