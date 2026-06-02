@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/project-generation",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "main": "dist/index.js",
   "source": "./src/index.ts",
   "types": "dist/index.d.ts",

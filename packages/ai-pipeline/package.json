@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/ai-pipeline",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "NL-to-DomainCommand parser and intent processing for AI-driven architecture modification",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
