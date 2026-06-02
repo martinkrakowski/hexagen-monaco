@@ -22,3 +22,18 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+    # Liveness check used by the deploy (`up -d --wait`) to fail a broken boot
+    # instead of reporting a green deploy over a down site. Next.js standalone
+    # binds to $HOSTNAME (the container id), NOT 0.0.0.0/loopback, so the probe
+    # targets that address. Any HTTP response < 500 means the server is up and
+    # routing; connection refused / timeout = unhealthy.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const http=require('http');const req=http.get('http://'+process.env.HOSTNAME+':3000/api/auth/providers',r=>process.exit(r.statusCode<500?0:1));req.on('error',()=>process.exit(1));req.setTimeout(4000,()=>{req.destroy();process.exit(1)})"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

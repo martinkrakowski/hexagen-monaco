@@ -79,7 +79,14 @@ jobs:
           # the line-count guard catches a secret with an embedded newline corrupting
           # the dotenv; `--force-recreate` guarantees rotated `.env` values reach the
           # container (env_file is read at container-creation time, so an unchanged
-          # image would otherwise keep the old env).
+          # image would otherwise keep the old env); `--wait` fails the deploy if the
+          # new container doesn't become healthy (see the compose healthcheck).
+          #
+          # Cleanup is `docker image prune -f` (dangling images only — reclaims the
+          # old :prod layers `docker load` just orphaned). It is deliberately NOT
+          # `docker system prune -a --volumes`: this VPS is multi-tenant, and the
+          # host-wide form would delete other projects' volumes (e.g. a co-tenant's
+          # Redis data) and images whenever their containers happen to be stopped.
           script: "set -eu\n\
             cd /opt/hexagen-monaco\n\
             umask 077\n\
@@ -94,9 +101,9 @@ jobs:
             LLM_MODEL=\"$LLM_MODEL\"\n\
             EOF\n\
             chmod 600 .env\n\
-            [ \"$(wc -l < .env)\" -eq 8 ] || { echo 'FATAL: .env line count != 8 (embedded newline in a secret?)' >&2; exit 1; }\n\
+            [ \"$(wc -l < .env)\" -eq 8 ] || { echo 'FATAL: .env line count != 8 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
-            docker compose -f docker-compose.prod.yml up -d --force-recreate\n\
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
             rm hexagen-web.tar.gz\n\
-            docker system prune -a -f --volumes"
+            docker image prune -f"
