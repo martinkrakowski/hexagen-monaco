@@ -106,6 +106,16 @@ yarn workspace @hexagen/tui dev       # development
 yarn workspace @hexagen/tui start     # built
 ```
 
+### Publishing to GitHub
+
+A generated project can be **downloaded as a ZIP** or **published directly to a new GitHub repository**. From the wizard's summary step an operator can create the repo and commit the scaffold, and from the Monaco editor **push subsequent edits** straight back to it — no leaving the app.
+
+- **Authentication.** GitHub OAuth via NextAuth (`GitHubProvider`, scope `read:user user:email repo`). The access token is read server-side from the session JWT and **never reaches the browser** — the client only ever sees commit URLs and status. A revoked or expired token is surfaced as a distinct `reauth_required` response so the operator is prompted to re-authenticate rather than shown a generic failure.
+- **Publish — `POST /api/export/github`.** Creates the repository under the authenticated user or an organization (`/user/repos` vs `/orgs/{owner}/repos`), then writes the generated tree through the Git Data API — blobs → tree → commit → fast-forward ref — onto the repository's actual default branch. The new repo's identity (`{ owner, repo, branch, htmlUrl, … }`) is persisted on the saved project (`SavedProject.githubLink`, client-side IndexedDB) so the project remembers where it was published and reconnects on reload.
+- **Editor push — `POST /api/push/github`.** Commits the editor's current file set to the connected repository as an incremental, base-on-HEAD commit and returns the commit URL. The wizard and editor surfaces report progress and the resulting repository link.
+
+The GitHub plumbing lives in the infrastructure plane: a shared `GitHubGitDataClient` backs both the `GitHubExporterAdapter` (publish) and the `GitHubRepositoryWriterAdapter` behind a `RepositoryWriterPort` (editor push), all in `@hexagen/external-integration` and wired at the composition root. `project-generation` stays decoupled from the GitHub implementation — it depends only on `@hexagen/shared` and `@hexagen/sync`.
+
 ## Agentic Governance Layer
 
 AI in Hexagen-Monaco is not a first-class domain actor. It is governed infrastructure modeled behind explicit ports, with quality controls and an escalation strategy that treat LLM output the same way the build treats any other untrusted input.

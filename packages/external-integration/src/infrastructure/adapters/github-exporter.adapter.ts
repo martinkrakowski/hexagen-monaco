@@ -108,6 +108,7 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
       return {
         success: true,
         destinationUrl: `https://github.com/${owner}/${repoName}`,
+        defaultBranch,
       };
     } catch (err) {
       return {

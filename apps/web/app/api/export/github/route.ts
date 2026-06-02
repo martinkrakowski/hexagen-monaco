@@ -32,7 +32,10 @@ export async function POST(request: NextRequest) {
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: "Unauthorized: GitHub session token not found" },
+        {
+          error: "Unauthorized: GitHub session token not found",
+          code: "reauth_required",
+        },
         { status: 401 },
       );
     }
@@ -77,22 +80,33 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.message },
-        { status: 500 },
-      );
+      const message = result.error.message;
+      // Map a downstream GitHub auth failure (revoked/expired token → 401/403)
+      // to reauth_required so the UI prompts a re-login, mirroring
+      // /api/push/github. The "(401)"/"(403)" shape is emitted by
+      // GitHubGitDataClient/GitHubExporterAdapter error messages.
+      if (/\((401|403)\)/.test(message)) {
+        return NextResponse.json(
+          { error: message, code: "reauth_required" },
+          { status: 401 },
+        );
+      }
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     if ("destinationUrl" in result.value) {
       const destinationUrl = result.value.destinationUrl;
       // Return githubLink details so client can persist on SavedProject (client IDB only).
       // lastCommitSha is null post-initial-publish (updated by subsequent /api/push/github).
-      // Branch/defaultBranch hardcoded to match GitHubExporterAdapter ("main").
+      // branch is the repo's ACTUAL default branch (the exporter resolves it and
+      // commits there); editor push commits back to this branch, so it must not
+      // be hardcoded — falling back to "main" only if the exporter didn't report it.
+      const branch = result.value.defaultBranch ?? "main";
       const githubLink = {
         owner,
         repo: body.repoName,
-        branch: "main",
-        defaultBranch: "main",
+        branch,
+        defaultBranch: branch,
         lastCommitSha: null as string | null,
         htmlUrl: destinationUrl,
       };
