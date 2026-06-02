@@ -108,15 +108,6 @@ export function GenerateWithAi({
 
   useEffect(() => {
     if (flowState.state !== "generating") return;
-    if (stagedGen.generationError) {
-      // Don't transition to error state modal.
-      // Keep error inline in welcome form for better UX.
-      // Error will be displayed in the form instead.
-    }
-  }, [stagedGen.generationError, flowState.state, actions]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
     if (stagedGen.generatedManifest) {
       actions.saveGenerationResult(stagedGen.generatedManifest);
     }
@@ -263,7 +254,6 @@ export function GenerateWithAi({
     return (
       <div className="h-full flex flex-col dot-grid bg-ambient p-4">
         <AiGeneratingStep
-          generationError={stagedGen.generationError}
           phase={stagedGen.phase}
           stepDetail={stagedGen.stepDetail}
           stageProgress={stagedGen.stageProgress}

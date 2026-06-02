@@ -89,19 +89,19 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     stageLabels: STAGE_LABELS,
   });
 
-  // While the cloud stream is active, mirror its phase / stepDetail /
-  // stageProgress into this hook's state so the UI updates live instead of
-  // only after cloudStream.generate() resolves. Unlike the spec endpoint
-  // (curated status text at stage -1), the staged endpoint streams raw LLM
-  // tokens at the real stage number, so the verbose log groups each stage's
-  // tokens under a "Stage N" header. Tokens are appended incrementally (only
-  // the newly-arrived chunks per stage) to keep this O(new tokens) per event.
+  // Mirror the cloud stream into this hook's state during generation so the UI
+  // updates live (instead of only after cloudStream.generate() resolves).
+  //
+  // The verbose-log accumulation runs BEFORE the isGenerating guard on purpose:
+  // when the final chunk and the stream's "done"/"failed" event land in the
+  // same React batch, isGenerating is already false on this render, so an early
+  // return would drop those last tokens from the log. Per-stage text is appended
+  // incrementally (only newly-arrived chunks → O(new tokens)); the entries array
+  // is rebuilt only when a chunk actually arrived (≤2 entries/stage, ≤7 stages).
+  // Unlike the spec endpoint (curated status text at stage -1), the staged
+  // endpoint streams raw tokens at the real stage number — hence the per-stage
+  // grouping under a "Stage N" header.
   useEffect(() => {
-    if (!cloudStream.isGenerating) return;
-    setPhase(cloudStream.phase);
-    if (cloudStream.stepDetail) setStepDetail(cloudStream.stepDetail);
-    setStageProgress(cloudStream.stageProgress);
-
     const vlog = verboseLogRef.current;
     let changed = false;
     for (const key of Object.keys(cloudStream.stageProgress)
@@ -128,6 +128,14 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       }
       setVerboseLog(entries);
     }
+
+    // phase / stepDetail / stageProgress only need mirroring while the stream is
+    // active; once it resolves, generateManifest copies the final values from
+    // the result, so guard these to avoid clobbering that final state.
+    if (!cloudStream.isGenerating) return;
+    setPhase(cloudStream.phase);
+    if (cloudStream.stepDetail) setStepDetail(cloudStream.stepDetail);
+    setStageProgress(cloudStream.stageProgress);
   }, [
     cloudStream.isGenerating,
     cloudStream.phase,

@@ -4,7 +4,6 @@ import type { StagedPhase, StageProgress } from "../staged-generation-types";
 import { ThinkingBlock } from "./ThinkingBlock";
 
 interface AiGeneratingStepProps {
-  generationError: string | null;
   phase: StagedPhase;
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
@@ -13,11 +12,12 @@ interface AiGeneratingStepProps {
 
 /**
  * Dedicated full-height generation view for the "Generate with AI" flow.
- * Mirrors `import-project-spec/ManifestGeneratingStep`, but uses ThinkingBlock's
- * built-in AI stage labels (no `stageLabels` override).
+ * Mirrors `import-project-spec/ManifestGeneratingStep` but uses ThinkingBlock's
+ * built-in AI stage labels (no `stageLabels` override). Errors are handled by
+ * the parent form — the generating screen only mounts while there is no error —
+ * so this view intentionally has no error banner.
  */
 export function AiGeneratingStep({
-  generationError,
   phase,
   stepDetail,
   stageProgress,
@@ -28,11 +28,6 @@ export function AiGeneratingStep({
       <h2 className="text-xl font-semibold mb-3 shrink-0">
         Generating Manifest
       </h2>
-      {generationError && (
-        <div className="mb-3 p-4 bg-destructive/10 text-destructive rounded shrink-0">
-          Error: {generationError}
-        </div>
-      )}
       <div className="flex-1 min-h-0">
         <Suspense
           fallback={
