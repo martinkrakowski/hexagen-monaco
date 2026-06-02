@@ -2,7 +2,10 @@
 
 import { useEffect } from "react";
 import { Loader2, CheckCircle2, AlertCircle, X } from "lucide-react";
-import type { ExportState } from "@/contexts/ExportContext";
+import {
+  isGithubExportActive,
+  type ExportState,
+} from "@/contexts/ExportContext";
 
 const SUCCESS_AUTO_DISMISS_MS = 4000;
 
@@ -24,19 +27,23 @@ export function ExportStatusStrip({
   state,
   onDismiss,
 }: ExportStatusStripProps) {
-  // Auto-dismiss success after a few seconds. Errors stay until the
-  // user dismisses them manually.
+  // Auto-dismiss ZIP success after a few seconds. Errors stay until dismissed.
+  // GitHub flows are owned by ExportDialog (see below) — never auto-dismiss
+  // them here, or the success dialog would close itself after 4s.
   useEffect(() => {
-    if (state.kind !== "success") return;
+    if (state.kind !== "success" || isGithubExportActive(state)) return;
     const timer = setTimeout(onDismiss, SUCCESS_AUTO_DISMISS_MS);
     return () => clearTimeout(timer);
   }, [state, onDismiss]);
 
+  // The GitHub publish flow is surfaced by ExportDialog (form → submitting →
+  // result), so the strip handles only the ZIP path — avoids double feedback.
+  if (isGithubExportActive(state)) return null;
   if (state.kind === "idle" || state.kind === "dialog-open") return null;
 
   if (state.kind === "exporting") {
-    const label =
-      state.destination === "zip" ? "Exporting ZIP…" : "Pushing to GitHub…";
+    // Only the ZIP path reaches here — the GitHub flow is gated out above and
+    // owned by ExportDialog.
     return (
       <div
         role="status"
@@ -44,7 +51,7 @@ export function ExportStatusStrip({
         className="flex items-center gap-2 px-6 py-2 bg-muted/60 border-b border-border text-sm text-muted-foreground"
       >
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span>{label}</span>
+        <span>Exporting ZIP…</span>
       </div>
     );
   }

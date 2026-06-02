@@ -6,7 +6,11 @@ import { HeaderMenu } from "./HeaderMenu";
 import { ProjectMenu } from "./ProjectMenu";
 import { ExportStatusStrip } from "./ExportStatusStrip";
 import { ExportDialog } from "../export/ExportDialog";
-import { useProjectExport } from "@/contexts/ExportContext";
+import {
+  useProjectExport,
+  isGithubExportActive,
+} from "@/contexts/ExportContext";
+import type { ExportDialogPhase } from "../export/ExportDialog";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 
 interface HeaderProps {
@@ -29,8 +33,31 @@ export function Header({
   const exportFlow = useProjectExport();
 
   const isExporting = exportFlow.state.kind === "exporting";
+
+  // Derive the GitHub dialog's panel + data from the export state machine.
+  const s = exportFlow.state;
+  const dialogPhase: ExportDialogPhase =
+    s.kind === "exporting" && s.destination === "github"
+      ? "submitting"
+      : s.kind === "success" && s.destination === "github"
+        ? "success"
+        : s.kind === "error" && s.destination === "github"
+          ? "error"
+          : "form";
   const dialogError =
-    exportFlow.state.kind === "error" ? exportFlow.state.message : null;
+    s.kind === "error" && s.destination === "github" ? s.message : null;
+  // Provide a success payload whenever the github flow succeeds — even if the
+  // structured githubLink is absent — so phase="success" never renders a blank
+  // body. owner/repo/url are optional; the dialog falls back to `message`.
+  const dialogSuccess =
+    s.kind === "success" && s.destination === "github"
+      ? {
+          message: s.message,
+          owner: s.githubLink?.owner,
+          repo: s.githubLink?.repo,
+          url: s.githubLink?.htmlUrl ?? s.destinationUrl,
+        }
+      : null;
 
   return (
     <div className="shrink-0">
@@ -105,12 +132,15 @@ export function Header({
 
       <ExportDialog
         key={activeWorkspace?.name ?? ""}
-        open={exportFlow.state.kind === "dialog-open"}
+        open={isGithubExportActive(exportFlow.state)}
+        phase={dialogPhase}
         onClose={exportFlow.closeDialog}
         onSubmit={exportFlow.submitGithubExport}
-        isSubmitting={isExporting}
+        onRetry={() => void exportFlow.retryGithubExport()}
+        onBackToForm={exportFlow.showGithubDialog}
         initialRepoName={activeWorkspace?.name ?? ""}
         error={dialogError}
+        success={dialogSuccess}
       />
     </div>
   );

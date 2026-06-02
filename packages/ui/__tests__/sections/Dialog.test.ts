@@ -102,6 +102,62 @@ describe("Dialog component", () => {
       fireEvent.click(dialog);
       assert.strictEqual(closed, true);
     });
+
+    it("does NOT close on backdrop click when dismissible is false", () => {
+      let closed = false;
+      const { container } = render(
+        React.createElement(
+          Dialog,
+          {
+            open: true,
+            dismissible: false,
+            onClose: () => {
+              closed = true;
+            },
+          },
+          "Content",
+        ),
+      );
+      const dialog = container.querySelector("dialog");
+      fireEvent.click(dialog);
+      assert.strictEqual(closed, false);
+    });
+
+    it("prevents the Escape (cancel) close when dismissible is false", () => {
+      let closed = false;
+      const { container } = render(
+        React.createElement(
+          Dialog,
+          {
+            open: true,
+            dismissible: false,
+            onClose: () => {
+              closed = true;
+            },
+          },
+          "Content",
+        ),
+      );
+      const dialog = container.querySelector("dialog") as HTMLDialogElement;
+      const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+      fireEvent(dialog, cancelEvent);
+      assert.strictEqual(cancelEvent.defaultPrevented, true);
+      assert.strictEqual(closed, false);
+    });
+
+    it("allows the Escape (cancel) close by default", () => {
+      const { container } = render(
+        React.createElement(
+          Dialog,
+          { open: true, onClose: () => {} },
+          "Content",
+        ),
+      );
+      const dialog = container.querySelector("dialog") as HTMLDialogElement;
+      const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+      fireEvent(dialog, cancelEvent);
+      assert.strictEqual(cancelEvent.defaultPrevented, false);
+    });
   });
 
   describe("DialogContent", () => {
