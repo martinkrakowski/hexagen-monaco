@@ -178,4 +178,4 @@ The source `packages/sync/package.json` is never mutated by this process.
 
 ## License
 
-MIT
+Source-Available Evaluation License — proprietary to Krakowski Cloud Solutions, LLC. Free to read, run locally, and evaluate for internal/non-commercial use; **not** licensed for commercial production deployment. See [LICENSE](./LICENSE).

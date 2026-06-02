@@ -3,7 +3,7 @@
   "version": "0.4.1",
   "type": "module",
   "description": "HexaGen shared types and utilities",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "dist/index.js",
   "exports": {
     ".": {

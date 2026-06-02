@@ -2,7 +2,7 @@
   "name": "@hexagen/arch-linter",
   "version": "0.4.1",
   "description": "HexaGen architecture linter and manifest validation",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=20"

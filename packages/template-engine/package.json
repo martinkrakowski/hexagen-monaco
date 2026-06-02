@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Hexagen add-on template system — registry, question engine, file emitter, and dependency resolution",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

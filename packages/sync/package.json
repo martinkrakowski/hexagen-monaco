@@ -3,7 +3,7 @@
   "version": "0.4.1",
   "type": "module",
   "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=20"
   },
