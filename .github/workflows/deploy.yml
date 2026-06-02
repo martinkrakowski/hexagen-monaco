@@ -30,14 +30,20 @@ jobs:
       - name: Save Image to tar.gz
         run: |
           docker save hexagen-monaco-web:prod | gzip > hexagen-web.tar.gz
+          # Stage the compose at the runner root so it lands at
+          # /opt/hexagen-monaco/docker-compose.prod.yml — co-located with the
+          # generated .env, which env_file resolves relative to.
+          cp deploy/docker-compose.prod.yml docker-compose.prod.yml
 
-      - name: Transfer tar.gz to VPS via SCP
+      - name: Transfer artifacts to VPS via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "hexagen-web.tar.gz"
+          source: |
+            hexagen-web.tar.gz
+            docker-compose.prod.yml
           target: "/opt/hexagen-monaco/"
           overwrite: true
 
@@ -64,7 +70,13 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
-          script: "cd /opt/hexagen-monaco\n\
+          # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
+          # so a failed `docker load` aborts instead of silently leaving the old
+          # container up. pipefail is omitted intentionally — the remote /bin/sh
+          # may be dash, where `set -o pipefail` would itself error, and there are
+          # no pipes in this script.
+          script: "set -eu\n\
+            cd /opt/hexagen-monaco\n\
             cat <<EOF > .env\n\
             NEXTAUTH_URL=\"$NEXTAUTH_URL\"\n\
             NEXTAUTH_SECRET=\"$AUTH_SECRET\"\n\
@@ -75,9 +87,8 @@ jobs:
             LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
             LLM_MODEL=\"$LLM_MODEL\"\n\
             EOF\n\
-            docker compose down\n\
-            docker rmi hexagen-monaco-web:prod || true\n\
             docker load < hexagen-web.tar.gz\n\
-            docker compose up -d\n\
+            docker image inspect hexagen-monaco-web:prod >/dev/null\n\
+            docker compose -f docker-compose.prod.yml up -d\n\
             rm hexagen-web.tar.gz\n\
             docker system prune -a -f --volumes"
