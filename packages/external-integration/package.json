@@ -18,8 +18,8 @@
     "test": "node --import tsx/esm --test \"src/__tests__/**/*.test.ts\""
   },
   "dependencies": {
-    "@hexagen/shared": "workspace:*",
     "@hexagen/project-generation": "workspace:*",
+    "@hexagen/shared": "workspace:*",
     "@octokit/rest": "^20.1.0"
   },
   "devDependencies": {

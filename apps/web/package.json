@@ -22,6 +22,7 @@
     "@hexagen/byok": "workspace:*",
     "@hexagen/core-domain": "workspace:*",
     "@hexagen/eslint-plugin-ui": "workspace:*",
+    "@hexagen/external-integration": "workspace:*",
     "@hexagen/governance": "workspace:*",
     "@hexagen/layout-engine": "workspace:*",
     "@hexagen/local-llm": "workspace:*",

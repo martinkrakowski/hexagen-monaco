@@ -1753,7 +1753,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/external-integration@workspace:packages/external-integration":
+"@hexagen/external-integration@workspace:*, @hexagen/external-integration@workspace:packages/external-integration":
   version: 0.0.0-use.local
   resolution: "@hexagen/external-integration@workspace:packages/external-integration"
   dependencies:
@@ -15871,6 +15871,7 @@ __metadata:
     "@hexagen/byok": "workspace:*"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/eslint-plugin-ui": "workspace:*"
+    "@hexagen/external-integration": "workspace:*"
     "@hexagen/governance": "workspace:*"
     "@hexagen/layout-engine": "workspace:*"
     "@hexagen/local-llm": "workspace:*"
