@@ -260,13 +260,6 @@ printenv | grep NEXTAUTH_URL` is present; GitHub sign-in round-trips; no
 3. **Image tagging** — keep `:prod`, or move to `:${GIT_SHA}` for rollback (see
    Phase 3 for the prune conflict).
 
-## Known follow-ups (not blockers)
-
-- `.github/workflows/README.md` still describes `echo "AUTH_SECRET=$AUTH_SECRET" >
-.env`, but `deploy.yml` now writes a full multi-line `.env` heredoc
-  (`NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `GITHUB_ID`, `GITHUB_SECRET`, `LLM_*`). Sync
-  the README when this lands.
-
 ## Out of scope
 
 - Moving to a container registry (the SCP-tarball model is a deliberate choice
