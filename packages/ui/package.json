@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/ui",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Projection layer - UI primitives, controllers, and design tokens",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
