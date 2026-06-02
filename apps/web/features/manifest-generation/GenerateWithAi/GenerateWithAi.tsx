@@ -57,6 +57,22 @@ export function GenerateWithAi({
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
 
+  const engineStatus = llmContext.engineState.status;
+  const isModelLoading =
+    engineStatus === "downloading" ||
+    (engineStatus === "loading_vram" && !llmContext.engineState.autoLoading);
+  const isModelError = engineStatus === "error";
+
+  // Show the dedicated full-height generating screen only while generation is
+  // actively in flight. Fall through to the form on a generation error (its
+  // inline retry / clear UI), and while the local model is still downloading or
+  // loading into VRAM (so the ModelProgressCard modal below stays reachable).
+  const showGeneratingScreen =
+    flowState.state === "generating" &&
+    !stagedGen.generationError &&
+    !isModelLoading &&
+    !isModelError;
+
   const cancelGenerationRef = useRef(() => {});
   cancelGenerationRef.current = () => {
     actions.clearError();
@@ -64,12 +80,12 @@ export function GenerateWithAi({
   };
 
   useEffect(() => {
-    const active =
-      flowState.state === "generating" && !stagedGen.generationError;
     onGeneratingStateChange?.(
-      active ? { onCancel: () => cancelGenerationRef.current() } : null,
+      showGeneratingScreen
+        ? { onCancel: () => cancelGenerationRef.current() }
+        : null,
     );
-  }, [flowState.state, stagedGen.generationError, onGeneratingStateChange]);
+  }, [showGeneratingScreen, onGeneratingStateChange]);
 
   const generateRef = useRef(stagedGen.generateManifest);
   useEffect(() => {
@@ -241,10 +257,9 @@ export function GenerateWithAi({
     );
   }
 
-  // While generation is in flight, replace the form with a dedicated
-  // full-height screen (mirrors the import flow). On error we fall through to
-  // the form below so its inline retry / clear-and-start-over UI stays usable.
-  if (flowState.state === "generating" && !stagedGen.generationError) {
+  // Replace the form with the dedicated full-height generating screen (mirrors
+  // the import flow). See showGeneratingScreen above for exactly when.
+  if (showGeneratingScreen) {
     return (
       <div className="h-full flex flex-col dot-grid bg-ambient p-4">
         <AiGeneratingStep
@@ -257,12 +272,6 @@ export function GenerateWithAi({
       </div>
     );
   }
-
-  const engineStatus = llmContext.engineState.status;
-  const isModelLoading =
-    engineStatus === "downloading" ||
-    (engineStatus === "loading_vram" && !llmContext.engineState.autoLoading);
-  const isModelError = engineStatus === "error";
 
   const isGenerating = flowState.state === "generating";
   const hasError = stagedGen.generationError !== null;

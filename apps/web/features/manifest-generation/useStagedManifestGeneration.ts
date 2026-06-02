@@ -75,6 +75,14 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // Accumulators for the verbose log, appended incrementally per cloud chunk
+  // so building the log stays O(new tokens) instead of re-joining every chunk.
+  const verboseLogRef = useRef<{
+    text: Record<number, string>;
+    label: Record<number, string>;
+    consumed: Record<number, number>;
+  }>({ text: {}, label: {}, consumed: {} });
+
   // Cloud streaming hook
   const cloudStream = useStagedGenerationStream({
     endpoint: "/api/manifest/generate/stage",
@@ -85,26 +93,41 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
   // stageProgress into this hook's state so the UI updates live instead of
   // only after cloudStream.generate() resolves. Unlike the spec endpoint
   // (curated status text at stage -1), the staged endpoint streams raw LLM
-  // tokens at the real stage number, so the verbose log is built by grouping +
-  // joining each stage's chunks in order — tokens read as text, not one
-  // fragment per line.
+  // tokens at the real stage number, so the verbose log groups each stage's
+  // tokens under a "Stage N" header. Tokens are appended incrementally (only
+  // the newly-arrived chunks per stage) to keep this O(new tokens) per event.
   useEffect(() => {
     if (!cloudStream.isGenerating) return;
     setPhase(cloudStream.phase);
     if (cloudStream.stepDetail) setStepDetail(cloudStream.stepDetail);
     setStageProgress(cloudStream.stageProgress);
 
-    const log: string[] = [];
+    const vlog = verboseLogRef.current;
+    let changed = false;
     for (const key of Object.keys(cloudStream.stageProgress)
       .map(Number)
       .filter((n) => n >= 0)
       .sort((a, b) => a - b)) {
-      const sp = cloudStream.stageProgress[key];
-      if (!sp?.chunks?.length) continue;
-      log.push(`Stage ${key}${sp.label ? ` — ${sp.label}` : ""}`);
-      for (const line of sp.chunks.join("").split("\n")) log.push(line);
+      const chunks = cloudStream.stageProgress[key]?.chunks;
+      if (!chunks?.length) continue;
+      const seen = vlog.consumed[key] ?? 0;
+      if (chunks.length <= seen) continue;
+      vlog.text[key] = (vlog.text[key] ?? "") + chunks.slice(seen).join("");
+      vlog.label[key] = cloudStream.stageProgress[key]?.label ?? "";
+      vlog.consumed[key] = chunks.length;
+      changed = true;
     }
-    if (log.length) setVerboseLog(log);
+    if (changed) {
+      const entries: string[] = [];
+      for (const key of Object.keys(vlog.text)
+        .map(Number)
+        .sort((a, b) => a - b)) {
+        const label = vlog.label[key] ? ` — ${vlog.label[key]}` : "";
+        entries.push(`Stage ${key}${label}`);
+        entries.push(vlog.text[key]);
+      }
+      setVerboseLog(entries);
+    }
   }, [
     cloudStream.isGenerating,
     cloudStream.phase,
@@ -130,6 +153,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setStageProgress({});
       setValidationErrors([]);
       setVerboseLog([]);
+      verboseLogRef.current = { text: {}, label: {}, consumed: {} };
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -247,6 +271,11 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setStepDetail(result.stepDetail);
           setStageProgress(result.stageProgress);
           setValidationErrors(result.validationErrors);
+          // Surface in-stream cloud failures as hook state (the stream resolves
+          // rather than throwing, so the catch below never runs for them).
+          if (result.phase === "failed") {
+            setGenerationError(result.stepDetail || "Generation failed");
+          }
 
           return {
             phase: result.phase as StagedPhase,
@@ -291,6 +320,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStageProgress({});
     setValidationErrors([]);
     setVerboseLog([]);
+    verboseLogRef.current = { text: {}, label: {}, consumed: {} };
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
