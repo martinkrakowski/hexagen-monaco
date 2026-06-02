@@ -46,12 +46,16 @@ export function Header({
           : "form";
   const dialogError =
     s.kind === "error" && s.destination === "github" ? s.message : null;
+  // Provide a success payload whenever the github flow succeeds — even if the
+  // structured githubLink is absent — so phase="success" never renders a blank
+  // body. owner/repo/url are optional; the dialog falls back to `message`.
   const dialogSuccess =
-    s.kind === "success" && s.destination === "github" && s.githubLink
+    s.kind === "success" && s.destination === "github"
       ? {
-          owner: s.githubLink.owner,
-          repo: s.githubLink.repo,
-          htmlUrl: s.githubLink.htmlUrl,
+          message: s.message,
+          owner: s.githubLink?.owner,
+          repo: s.githubLink?.repo,
+          url: s.githubLink?.htmlUrl ?? s.destinationUrl,
         }
       : null;
 

@@ -40,7 +40,17 @@ interface ExportDialogProps {
   initialRepoName?: string;
   initialIsPrivate?: boolean;
   error?: string | null;
-  success?: { owner: string; repo: string; htmlUrl: string } | null;
+  /**
+   * Success details. `message` is always present; `owner`/`repo` and `url` are
+   * optional so the panel still renders (message + Done) when the structured
+   * GitHub link is absent — no blank success body.
+   */
+  success?: {
+    message: string;
+    owner?: string;
+    repo?: string;
+    url?: string;
+  } | null;
 }
 
 const VALID_REPO_PATTERN = /^[a-zA-Z0-9._-]+$/;
@@ -88,9 +98,9 @@ export function ExportDialog({
   };
 
   const handleCopy = async () => {
-    if (!success) return;
+    if (!success?.url) return;
     try {
-      await navigator.clipboard.writeText(success.htmlUrl);
+      await navigator.clipboard.writeText(success.url);
       setCopied(true);
       if (copyTimer.current) clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopied(false), 2000);
@@ -149,37 +159,45 @@ export function ExportDialog({
             <div className="flex items-center gap-2 text-sm text-success">
               <CheckCircle2 className="h-5 w-5" />
               <span>
-                Pushed to{" "}
-                <span className="font-medium">
-                  {success.owner}/{success.repo}
-                </span>
+                {success.owner && success.repo ? (
+                  <>
+                    Pushed to{" "}
+                    <span className="font-medium">
+                      {success.owner}/{success.repo}
+                    </span>
+                  </>
+                ) : (
+                  success.message
+                )}
               </span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() =>
-                  window.open(success.htmlUrl, "_blank", "noopener,noreferrer")
-                }
-              >
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                Open repository
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleCopy()}
-              >
-                {copied ? (
-                  <Check className="mr-1.5 h-3.5 w-3.5" />
-                ) : (
-                  <Copy className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {copied ? "Copied" : "Copy URL"}
-              </Button>
-            </div>
+            {success.url ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() =>
+                    window.open(success.url, "_blank", "noopener,noreferrer")
+                  }
+                >
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                  Open repository
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleCopy()}
+                >
+                  {copied ? (
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                  ) : (
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {copied ? "Copied" : "Copy URL"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
