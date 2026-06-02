@@ -22,13 +22,14 @@ All Core Implementation planning artifacts now live under the `core-implementati
 
 ## Relationship to Other Sections
 
-- **Governance** — [Architectural governance debt](../governance/debt.md) and migration work that may cut across phases.
+- **Governance** — architectural governance debt and cross-cutting migration work, tracked in the relevant [ADRs](../../.architecture/decisions/).
 - **Architecture** — The contracts and decisions these plans must respect.
 - `.architecture/` — Machine contracts and historical planning pointers (see `docs/planning/legacy/`)
 
 ## Maintenance
 
 When a phase completes or major risks change:
+
 1. Update the roadmap.
 2. Update status in the execution plan.
 3. Consider whether a new ADR or debt item is required.

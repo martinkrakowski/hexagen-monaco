@@ -83,8 +83,8 @@ It is designed as a high-signal on-ramp for architects and senior contributors.
 
 - Full ADR list and status → [Decisions Index](index.md)
 - Authoritative source → [.architecture/decisions/](../.architecture/decisions/)
-- Current implementation status → [Core Implementation Overview](../planning/core-implementation/overview.md)
-- Governance debt arising from these decisions → [Architectural Governance Debt](../governance/debt.md)
+- Current implementation status → [Core Implementation Overview](planning/core-implementation/overview.md)
+- Governance debt arising from these decisions → tracked in the relevant [ADRs](../.architecture/decisions/)
 
 ---
 
