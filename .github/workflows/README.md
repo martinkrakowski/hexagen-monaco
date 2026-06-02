@@ -32,9 +32,26 @@ This runs _after_ the new container is confirmed up. It is intentional and safe 
 
 If a stateful service (database, cache) is ever added, this line must be updated to use named volume exemptions (`--filter "label!=preserve"`).
 
-**`AUTH_SECRET` handling:**
+**Runtime env / secret handling:**
 
-Written to `.env` on the VPS at deploy time via `echo "AUTH_SECRET=$AUTH_SECRET" > .env`. The value is sourced from GitHub repository secrets (`secrets.AUTH_SECRET`). The `.env` file is consumed by Docker Compose and is not committed to the repository.
+At deploy time the SSH step writes a multi-line `.env` heredoc to `/opt/hexagen-monaco/.env`, consumed by Docker Compose and never committed:
+
+```
+NEXTAUTH_URL=...        # canonical prod URL (hardcoded in the workflow env)
+NEXTAUTH_SECRET=...      # = AUTH_SECRET (NextAuth reads NEXTAUTH_SECRET)
+AUTH_SECRET=...          # kept for back-compat
+GITHUB_ID / GITHUB_SECRET  # GitHub OAuth App client id/secret
+LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+```
+
+Values are sourced from GitHub repository secrets and mapped into the runner via the step's `env:` block, then forwarded to the remote shell through the action's `envs:` list (without that mapping the forwarded values would be empty).
+
+Two naming details worth knowing:
+
+- **`NEXTAUTH_SECRET` vs `AUTH_SECRET`** — the app reads `NEXTAUTH_SECRET` (NextAuth default + `getToken()` in the push/export routes); the heredoc writes it from the existing `AUTH_SECRET` secret.
+- **`GH_OAUTH_ID` / `GH_OAUTH_SECRET`** — GitHub forbids repository secrets with a `GITHUB_` prefix, so the OAuth credentials are stored under these names and rewritten to `GITHUB_ID` / `GITHUB_SECRET` in the `.env`.
+
+> **Container caveat:** the `.env` only reaches the container if the VPS `docker-compose.yml` web service declares `env_file: [.env]` (or an explicit `environment:` block). A project-level `.env` is otherwise used only for `${VAR}` interpolation, not injected as container environment. See [`docs/planning/managed-deploy-compose.md`](../../docs/planning/managed-deploy-compose.md).
 
 ---
 
