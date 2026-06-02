@@ -6,13 +6,12 @@ This `docs/` folder is the home for **narrative, planning, and remediation** con
 
 ## Quick Navigation
 
-| Section                                                 | What You'll Find                                           | Related Machine Source                                  |
-| ------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| [Decisions](index.md)                                   | Human-friendly index into the ADRs                         | [.architecture/decisions/](../.architecture/decisions/) |
-| [Key Decisions](key-decisions.md)                       | Synthesis of the most important decisions + open tensions  | [.architecture/decisions/](../.architecture/decisions/) |
-| [Architecture](planning/three-plane-system-overview.md) | Human-oriented three-plane system overview                 | [.architecture/README.md](../.architecture/README.md)   |
-| [Planning](planning/)                                   | Per-feature plans, incl. generator add-on templates        | [.architecture/](../.architecture/) (contracts)         |
-| [Governance & Remediation](remediation/)                | Architectural boundary/governance debt + remediation plans | [.architecture/](../.architecture/) (contracts)         |
+| Section                                                 | What You'll Find                                          | Related Machine Source                                  |
+| ------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| [Decisions](index.md)                                   | Human-friendly index into the ADRs                        | [.architecture/decisions/](../.architecture/decisions/) |
+| [Key Decisions](key-decisions.md)                       | Synthesis of the most important decisions + open tensions | [.architecture/decisions/](../.architecture/decisions/) |
+| [Architecture](planning/three-plane-system-overview.md) | Human-oriented three-plane system overview                | [.architecture/README.md](../.architecture/README.md)   |
+| [Planning](planning/)                                   | Per-feature plans, incl. generator add-on templates       | [.architecture/](../.architecture/) (contracts)         |
 
 ## Core Principle
 

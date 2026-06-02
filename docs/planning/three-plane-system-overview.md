@@ -31,8 +31,8 @@ The MVK (Minimal Viable Kernel) specification in `.architecture/mvk/spec-v1.md` 
 
 ## Entry Points for Contributors
 
-- New to the architecture? Start with the [Decisions Index](decisions/index.md) and this overview.
+- New to the architecture? Start with the [Decisions Index](../index.md) and this overview.
 - Making structural changes? Read the [`.architecture/README.md`](../../.architecture/README.md) and the relevant ADRs first.
-- Planning or remediation work? See the sibling [Planning](../planning/) and [Remediation](../remediation/) sections in the parent docs folder.
+- Planning work? See the [docs hub](../README.md) for planning artifacts and decision records.
 
 This document is intentionally short. The real detail lives in the contracts and decision records.
