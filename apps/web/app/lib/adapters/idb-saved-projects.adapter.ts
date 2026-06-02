@@ -13,6 +13,9 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
     try {
       const data = await get<SavedProject[]>(SAVED_PROJECTS_KEY);
       if (!data || !Array.isArray(data)) return { success: true, value: [] };
+      // githubLink (v3+) is round-tripped verbatim by idb-keyval structured clone.
+      // Pre-v3 records (no field) are valid (optional in SavedProject); migration
+      // step ensures upgrade for persisted records.
       return { success: true, value: data };
     } catch (e) {
       return {
@@ -30,6 +33,7 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
     try {
+      // githubLink optional field (if present on v3+ records) is persisted as-is.
       await set(SAVED_PROJECTS_KEY, projects);
       return { success: true, value: undefined };
     } catch (e) {

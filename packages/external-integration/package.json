@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@hexagen/shared": "workspace:*",
+    "@hexagen/project-generation": "workspace:*",
     "@octokit/rest": "^20.1.0"
   },
   "devDependencies": {

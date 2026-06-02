@@ -57,18 +57,21 @@ function validateWorkspace(raw: unknown): PersistedEditorWorkspace | null {
     updatedAt: w.updatedAt as number,
     selectedFileId: w.selectedFileId as string | null,
     files,
+    unpushed: typeof w.unpushed === "boolean" ? w.unpushed : false,
   };
 }
 
 export interface EditorWorkspaceState {
   selectedFileId: string | null;
   files: Map<string, PersistedEditorWorkspaceFile>;
+  unpushed: boolean;
 }
 
 export function useEditorWorkspace() {
   const [state, setState] = useState<EditorWorkspaceState>({
     selectedFileId: null,
     files: new Map(),
+    unpushed: false,
   });
   const [isLoaded, setIsLoaded] = useState(false);
   const pendingWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,14 +81,14 @@ export function useEditorWorkspace() {
     const persistence = getEditorWorkspacePersistence();
     const result = await persistence.loadWorkspace(sessionId);
     if (!result.success || result.value === null) {
-      setState({ selectedFileId: null, files: new Map() });
+      setState({ selectedFileId: null, files: new Map(), unpushed: false });
       setIsLoaded(true);
       return;
     }
 
     const validated = validateWorkspace(result.value);
     if (validated === null) {
-      setState({ selectedFileId: null, files: new Map() });
+      setState({ selectedFileId: null, files: new Map(), unpushed: false });
     } else {
       const files = new Map<string, PersistedEditorWorkspaceFile>();
       for (const [fileId, file] of Object.entries(validated.files)) {
@@ -94,6 +97,7 @@ export function useEditorWorkspace() {
       setState({
         selectedFileId: validated.selectedFileId,
         files,
+        unpushed: validated.unpushed ?? false,
       });
     }
     setIsLoaded(true);
@@ -111,6 +115,7 @@ export function useEditorWorkspace() {
         updatedAt: Date.now(),
         selectedFileId: nextState.selectedFileId,
         files,
+        unpushed: nextState.unpushed,
       };
       const persistence = getEditorWorkspacePersistence();
       const result = await persistence.saveWorkspace(sessionId, workspace);
@@ -185,7 +190,7 @@ export function useEditorWorkspace() {
     const persistence = getEditorWorkspacePersistence();
     await persistence.clearWorkspace(sessionId);
     sessionIdRef.current = null;
-    setState({ selectedFileId: null, files: new Map() });
+    setState({ selectedFileId: null, files: new Map(), unpushed: false });
     setIsLoaded(true);
   }, []);
 
@@ -240,13 +245,23 @@ export function useEditorWorkspace() {
           isNew: false,
           updatedAt: Date.now(),
         });
-        const next = { ...prev, files: nextFiles };
+        const next = { ...prev, files: nextFiles, unpushed: true };
         scheduleWrite(sessionId, next);
         return next;
       });
     },
     [scheduleWrite],
   );
+
+  const clearUnpushed = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    setState((prev) => {
+      const next = { ...prev, unpushed: false };
+      scheduleWrite(sessionId, next);
+      return next;
+    });
+  }, [scheduleWrite]);
 
   return {
     state,
@@ -256,5 +271,6 @@ export function useEditorWorkspace() {
     updateFile,
     selectFile,
     markFileSaved,
+    clearUnpushed,
   };
 }

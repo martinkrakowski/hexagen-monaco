@@ -141,6 +141,11 @@ package_rules:
       - '@hexagen/project-configuration'
       - '@hexagen/sync'
 
+  - name: 'external-integration'
+    allowed_imports:
+      - '@hexagen/shared'
+      - '@hexagen/project-generation'
+
   - name: 'model-settings'
     allowed_imports:
       - '@hexagen/shared'

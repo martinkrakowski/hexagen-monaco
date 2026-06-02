@@ -6,8 +6,8 @@ import {
   GenerateProjectUseCase,
   ExternalSyncEngineAdapter,
   ArchiveExporterAdapter,
-  GitHubExporterAdapter,
 } from "@hexagen/project-generation";
+import { GitHubExporterAdapter } from "@hexagen/external-integration";
 import {
   ModifyArchitectureUseCase,
   InMemoryNLParserAdapter,

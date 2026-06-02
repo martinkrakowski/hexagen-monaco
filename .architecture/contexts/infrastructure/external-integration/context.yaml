@@ -21,3 +21,17 @@ layers:
         - OAuthProviderPort
         - SessionReadPort
 plane: infrastructure
+infrastructure:
+  adapters:
+    - GitHubVcsAdapter
+    - GitHubExporterAdapter
+    - GitHubRepositoryWriterAdapter
+    - GitHubGitDataClient
+  # Git Data client logic relocated here from project-generation (see github-exporter.adapter.ts)
+  # for sharing with RepositoryWriterPort / commitFiles (editor push) without violating project-generation import rules.
+ports:
+  out:
+    - RepositoryWriterPort
+    - IVersionControlSystem
+    - OAuthProviderPort
+    - SessionReadPort

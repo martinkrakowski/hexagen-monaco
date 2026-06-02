@@ -84,9 +84,23 @@ export async function POST(request: NextRequest) {
     }
 
     if ("destinationUrl" in result.value) {
+      const destinationUrl = result.value.destinationUrl;
+      // Return githubLink details so client can persist on SavedProject (client IDB only).
+      // lastCommitSha is null post-initial-publish (updated by subsequent /api/push/github).
+      // Branch/defaultBranch hardcoded to match GitHubExporterAdapter ("main").
+      const owner = body.owner ?? tokenOwner;
+      const githubLink = {
+        owner,
+        repo: body.repoName,
+        branch: "main",
+        defaultBranch: "main",
+        lastCommitSha: null as string | null,
+        htmlUrl: destinationUrl,
+      };
       return NextResponse.json({
         success: true,
-        destinationUrl: result.value.destinationUrl,
+        destinationUrl,
+        githubLink,
       });
     }
 

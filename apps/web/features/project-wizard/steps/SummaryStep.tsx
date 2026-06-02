@@ -111,6 +111,7 @@ export function SummaryStep({
               isExporting={isExporting}
               onExportZip={() => void exportZip()}
               onRequestGithubExport={() => void requestGithubExport()}
+              connectedRepo={null}
             />
           )}
         </div>
