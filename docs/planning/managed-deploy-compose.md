@@ -59,8 +59,8 @@ service (the actual fix), and makes the deploy ship the file.
 - **Deploy** (`deploy.yml`, `workflow_dispatch`): build `hexagen-monaco-web:prod`
   on the runner → `docker save | gzip` → SCP `hexagen-web.tar.gz` to
   `/opt/hexagen-monaco/` → SSH: write `.env`, `docker compose down`,
-  `docker load`, `docker compose up -d`, then `docker system prune -a -f
---volumes`.
+  `docker load`, `docker compose up -d`, then
+  `docker system prune -a -f --volumes`.
 - **App is stateless** — no DB/volumes (per `.github/workflows/README.md`); the
   aggressive prune is intentional and safe.
 - **Image:** `hexagen-monaco-web:prod`, listens on `3000`. Loaded from the tar;
@@ -104,8 +104,11 @@ approach (see Risks).
   shipped tar, not built or pulled on the VPS.
 - **Env contract:** `env_file: [.env]` (flow-sequence form — `env_file: - .env`
   on one line is **not** valid YAML; use `[.env]` or a newline block list). The
-  workflow keeps writing `.env`; it stays git-ignored. Optionally vendor a
-  `deploy/.env.example` documenting every expected key.
+  short form is correct here because the deploy **always** writes `.env` before
+  `up -d` — the long form (`- path: .env` with `required: false`) only earns its
+  keep when the file may legitimately be absent, which it never is in this
+  pipeline. The workflow keeps writing `.env`; it stays git-ignored. Optionally
+  vendor a `deploy/.env.example` documenting every expected key.
 - **⚠️ `env_file` path resolution.** Compose resolves a relative `env_file`
   against the **compose file's directory**, so the shipped compose and the
   generated `.env` must end up in the **same** directory. The workflow writes
@@ -172,8 +175,10 @@ container env := .env (via env_file) → NEXTAUTH_URL etc. resolved correctly
   1. `docker load < hexagen-web.tar.gz` — overwrites the `:prod` tag, leaving the
      old image dangling. _(With `set -e` + the ID guard above, a failed load
      aborts here instead of proceeding.)_
-  2. `docker compose -f docker-compose.prod.yml up -d` (optionally `--no-deps web`)
-     — Compose sees the new image ID and recreates only the web container in a
+  2. `docker compose -f docker-compose.prod.yml up -d` (optionally `--no-deps web`
+     — `web` is a placeholder; confirm the real service name when you capture the
+     VPS compose) — Compose sees the new image ID and recreates only that
+     container in a
      fraction of a second, instead of a full stop/start cycle. Run from
      `/opt/hexagen-monaco` so `.env` resolves correctly.
   3. `docker system prune -a -f --volumes` — reaps the now-dangling old image.
@@ -265,7 +270,7 @@ printenv | grep NEXTAUTH_URL` is present; GitHub sign-in round-trips; no
 ## Out of scope
 
 - Moving to a container registry (the SCP-tarball model is a deliberate choice
-  for this scale — see `workflows/README.md`).
+  for this scale — see `.github/workflows/README.md`).
 - Multi-replica / orchestration (the `k8s/` manifests remain unused at single-VPS
   scale).
 - Adding stateful services (would require revisiting the prune step).
