@@ -1757,6 +1757,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hexagen/external-integration@workspace:packages/external-integration"
   dependencies:
+    "@hexagen/project-generation": "workspace:*"
     "@hexagen/shared": "workspace:*"
     "@octokit/rest": "npm:^20.1.0"
     "@types/node": "npm:^20.0.0"

@@ -9,6 +9,8 @@ interface ExportActionsProps {
   isExporting: boolean;
   onExportZip: () => void;
   onRequestGithubExport: () => void;
+  /** Optional connected repo info for Phase 1 indicator (owner/repo). */
+  connectedRepo?: { owner: string; repo: string } | null;
 }
 
 /**
@@ -25,6 +27,7 @@ export function ExportActions({
   isExporting,
   onExportZip,
   onRequestGithubExport,
+  connectedRepo,
 }: ExportActionsProps) {
   return (
     <SummarySection title="Export">
@@ -48,6 +51,14 @@ export function ExportActions({
           {isAuthenticated ? "Push to GitHub" : "Sign in to GitHub"}
         </button>
       </div>
+      {connectedRepo && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <span aria-hidden>↗</span>
+          <span>
+            Connected to {connectedRepo.owner}/{connectedRepo.repo}
+          </span>
+        </div>
+      )}
       {/*
        * Export status + errors surface in the Header's
        * ExportStatusStrip (persistent, outlives this step).

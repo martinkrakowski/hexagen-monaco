@@ -39,6 +39,10 @@ interface EditableMonacoProps {
   language?: string;
   sessionId: string;
   onSave?: (content: string) => void;
+  onPush?: () => void;
+  canPush?: boolean;
+  isPushing?: boolean;
+  connectedRepo?: { owner: string; repo: string } | null;
 }
 
 /**
@@ -54,6 +58,10 @@ export function EditableMonaco({
   language = "yaml",
   sessionId,
   onSave,
+  onPush,
+  canPush,
+  isPushing,
+  connectedRepo,
 }: EditableMonacoProps) {
   const { theme } = useTheme();
   const monacoTheme = theme === "dark" ? "vs-dark" : "vs";
@@ -125,6 +133,10 @@ export function EditableMonaco({
         onEdit={beginEdit}
         onSave={() => void handleSave()}
         onDiscard={requestDiscard}
+        onPush={onPush}
+        canPush={canPush}
+        isPushing={isPushing}
+        connectedRepo={connectedRepo}
       />
 
       <div className="flex-1 overflow-hidden">

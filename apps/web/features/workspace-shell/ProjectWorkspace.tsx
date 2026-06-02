@@ -167,10 +167,12 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
                 viewMode={viewMode}
                 selectedFileId={editor.selectedFileId}
                 editedFiles={editor.editedFiles}
+                unpushed={editor.unpushed}
                 onViewModeChange={onViewModeChange}
                 onFileSelect={editor.selectFile}
                 onFileContentChange={editor.updateFile}
                 onFileSave={editor.markFileSaved}
+                onPushed={editor.clearUnpushed}
               />
             }
             right={

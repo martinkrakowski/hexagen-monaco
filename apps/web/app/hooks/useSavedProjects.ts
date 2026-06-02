@@ -12,7 +12,7 @@ import {
   getMigrationReady,
 } from "../lib/wire.client";
 
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 export interface SavedProject extends BaseSavedProject {
   readonly formState: ProjectConfig;

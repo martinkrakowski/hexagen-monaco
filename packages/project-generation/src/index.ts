@@ -42,7 +42,6 @@ export type {
 export { ExternalSyncEngineAdapter } from "./infrastructure/adapters/external-sync-engine.adapter.js";
 export { JsZipCreatorAdapter } from "./infrastructure/adapters/jszip-creator.adapter.js";
 export { ArchiveExporterAdapter } from "./infrastructure/adapters/archive-exporter.adapter.js";
-export { GitHubExporterAdapter } from "./infrastructure/adapters/github-exporter.adapter.js";
 
 // Factory functions
 import { GenerateProjectUseCase } from "./application/generate-project-use-case.js";

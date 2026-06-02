@@ -12,6 +12,8 @@ export interface UseEditorSessionReturn {
   // Editor workspace state
   selectedFileId: string | null;
   editedFiles: Record<string, string>;
+  /** True when edits have been saved locally but not yet pushed to GitHub. */
+  unpushed: boolean;
 
   // Editor actions
   setSessionId: (id: string) => void;
@@ -19,6 +21,8 @@ export interface UseEditorSessionReturn {
   selectFile: (id: string | null) => void;
   updateFile: (id: string, content: string, isNew?: boolean) => void;
   markFileSaved: (id: string) => void;
+  /** Clears the `unpushed` flag after a successful push. */
+  clearUnpushed: () => void;
 
   // Active workspace
   activeWorkspace: ActiveWorkspace | null;
@@ -41,6 +45,7 @@ export function useEditorSession(): UseEditorSessionReturn {
     selectFile,
     updateFile,
     markFileSaved,
+    clearUnpushed,
   } = useEditorWorkspace();
 
   const { activeWorkspace, setActiveWorkspace, clearActiveWorkspace } =
@@ -71,11 +76,13 @@ export function useEditorSession(): UseEditorSessionReturn {
     () => ({
       selectedFileId: state.selectedFileId,
       editedFiles,
+      unpushed: state.unpushed,
       setSessionId,
       clearSession,
       selectFile,
       updateFile,
       markFileSaved,
+      clearUnpushed,
       activeWorkspace,
       setActiveWorkspace,
       clearActiveWorkspace,
@@ -83,11 +90,13 @@ export function useEditorSession(): UseEditorSessionReturn {
     [
       state.selectedFileId,
       editedFiles,
+      state.unpushed,
       setSessionId,
       clearSession,
       selectFile,
       updateFile,
       markFileSaved,
+      clearUnpushed,
       activeWorkspace,
       setActiveWorkspace,
       clearActiveWorkspace,

@@ -19,4 +19,5 @@ export type PersistedEditorWorkspace = {
   readonly updatedAt: number;
   readonly selectedFileId: string | null;
   readonly files: Record<string, PersistedEditorWorkspaceFile>;
+  readonly unpushed?: boolean;
 };

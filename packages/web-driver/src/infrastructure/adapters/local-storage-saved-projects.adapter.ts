@@ -6,7 +6,7 @@ import type {
 } from "@hexagen/shared";
 
 const STORAGE_KEY = "hexagen-saved-projects";
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 const LEGACY_SCHEMA_VERSION = 1;
 
 function migrateLegacyProject(legacy: {
@@ -49,7 +49,12 @@ export class LocalStorageSavedProjectsAdapter implements SavedProjectsPersistenc
           continue;
         }
 
-        if (p.schemaVersion === LEGACY_SCHEMA_VERSION) {
+        const sv =
+          typeof p.schemaVersion === "number"
+            ? p.schemaVersion
+            : LEGACY_SCHEMA_VERSION;
+
+        if (sv === LEGACY_SCHEMA_VERSION) {
           needsMigration = true;
           migrated.push(
             migrateLegacyProject(
@@ -63,10 +68,18 @@ export class LocalStorageSavedProjectsAdapter implements SavedProjectsPersistenc
               },
             ),
           );
-        } else if (p.schemaVersion === CURRENT_SCHEMA_VERSION) {
-          const project = p as SavedProject;
+        } else if (sv >= 2) {
+          // v2 or v3+: round-trip githubLink (v3+), clean legacy gitHubExport
+          const project = { ...p } as SavedProject;
           if (project.formState) {
             delete (project.formState as Record<string, unknown>).gitHubExport;
+          }
+          if (sv < CURRENT_SCHEMA_VERSION) {
+            needsMigration = true;
+            // githubLink is optional; pre-v3 records simply omit it. Only the
+            // schema version needs bumping on round-trip.
+            (project as { schemaVersion: number }).schemaVersion =
+              CURRENT_SCHEMA_VERSION;
           }
           migrated.push(project);
         }

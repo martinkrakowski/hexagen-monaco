@@ -6,8 +6,12 @@ import {
   GenerateProjectUseCase,
   ExternalSyncEngineAdapter,
   ArchiveExporterAdapter,
-  GitHubExporterAdapter,
 } from "@hexagen/project-generation";
+import {
+  GitHubExporterAdapter,
+  GitHubRepositoryWriterAdapter,
+} from "@hexagen/external-integration";
+import type { RepositoryWriterPort } from "@hexagen/external-integration";
 import {
   ModifyArchitectureUseCase,
   InMemoryNLParserAdapter,
@@ -108,6 +112,20 @@ export const getGenerateProject = (
       ? new GitHubExporterAdapter()
       : new ArchiveExporterAdapter();
   return new GenerateProjectUseCase(externalGenerator, exporter);
+};
+
+let _repositoryWriter: RepositoryWriterPort | null = null;
+
+/**
+ * Composition-root accessor for the repository writer used by the editor-push
+ * route (`/api/push/github`). The adapter is stateless and token-per-call, so a
+ * single instance safely serves requests for different users.
+ */
+export const getRepositoryWriter = (): RepositoryWriterPort => {
+  if (!_repositoryWriter) {
+    _repositoryWriter = new GitHubRepositoryWriterAdapter();
+  }
+  return _repositoryWriter;
 };
 
 // ============================================================================
