@@ -25,6 +25,19 @@ npx hexagen --help
 
 The full CLI reference is in [CLI Reference](#cli-reference).
 
+### Add-on templates
+
+Generated projects opt into **44 production-ready templates** — typed LLM adapters, auth providers, rate limiting, observability, background jobs, Docker/CI, the Adobe Firefly / Creative Cloud family, and more — composable and applied at any time:
+
+```bash
+npx hexagen templates list             # browse available templates
+npx hexagen templates info <id>        # inspect questions, outputs, dependencies
+npx hexagen add llm-adapter docker     # install one or more (dependencies auto-resolved)
+npx hexagen validate-templates         # health-check installed templates
+```
+
+Full catalog and behavior (composable / idempotent / non-destructive / dependency-aware): [Generator Add-On Templates](#generator-add-on-templates).
+
 ## Documentation
 
 For **architectural planning** and **remediation plans**, see the dedicated documentation:
