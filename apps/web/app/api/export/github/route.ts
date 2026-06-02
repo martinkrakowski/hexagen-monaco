@@ -32,7 +32,10 @@ export async function POST(request: NextRequest) {
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: "Unauthorized: GitHub session token not found" },
+        {
+          error: "Unauthorized: GitHub session token not found",
+          code: "reauth_required",
+        },
         { status: 401 },
       );
     }
@@ -77,10 +80,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.message },
-        { status: 500 },
-      );
+      const message = result.error.message;
+      // Map a downstream GitHub auth failure (revoked/expired token → 401/403)
+      // to reauth_required so the UI prompts a re-login, mirroring
+      // /api/push/github. The "(401)"/"(403)" shape is emitted by
+      // GitHubGitDataClient/GitHubExporterAdapter error messages.
+      if (/\((401|403)\)/.test(message)) {
+        return NextResponse.json(
+          { error: message, code: "reauth_required" },
+          { status: 401 },
+        );
+      }
+      return NextResponse.json({ error: message }, { status: 500 });
     }
 
     if ("destinationUrl" in result.value) {
