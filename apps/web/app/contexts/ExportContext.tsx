@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -23,23 +24,52 @@ import type { ExportDialogSubmitPayload } from "../../features/export/ExportDial
  * statusMessage) with a single variant at a time. Illegal combinations
  * (e.g. exporting && error) are not representable.
  */
+export interface GithubLinkData {
+  owner: string;
+  repo: string;
+  branch: string;
+  defaultBranch: string;
+  lastCommitSha: string | null;
+  htmlUrl: string;
+}
+
+export type ExportDestination = "zip" | "github";
+
 export type ExportState =
   | { kind: "idle" }
   | { kind: "dialog-open" }
-  | { kind: "exporting"; destination: "zip" | "github" }
-  | { kind: "success"; message: string }
-  | { kind: "error"; message: string };
+  | { kind: "exporting"; destination: ExportDestination }
+  | {
+      kind: "success";
+      destination: ExportDestination;
+      message: string;
+      destinationUrl?: string;
+      githubLink?: GithubLinkData;
+    }
+  | { kind: "error"; destination: ExportDestination; message: string };
 
 interface GithubExportResponse {
   destinationUrl?: string;
-  githubLink?: {
-    owner: string;
-    repo: string;
-    branch: string;
-    defaultBranch: string;
-    lastCommitSha: string | null;
-    htmlUrl: string;
-  };
+  githubLink?: GithubLinkData;
+}
+
+/**
+ * True while the GitHub publish flow owns the UI (dialog form, or a
+ * github-destined exporting/success/error). Derived in one place so the
+ * Header `open` condition and the status strip can't drift from the state
+ * machine as variants evolve.
+ */
+export function isGithubExportActive(state: ExportState): boolean {
+  switch (state.kind) {
+    case "dialog-open":
+      return true;
+    case "exporting":
+    case "success":
+    case "error":
+      return state.destination === "github";
+    default:
+      return false;
+  }
 }
 
 export interface ProjectExportContextValue {
@@ -53,6 +83,8 @@ export interface ProjectExportContextValue {
   requestGithubExport: () => Promise<void>;
   /** Submit the GitHub dialog form. */
   submitGithubExport: (payload: ExportDialogSubmitPayload) => Promise<void>;
+  /** Re-run the last GitHub publish (after an error) without re-entering the form. */
+  retryGithubExport: () => Promise<void>;
 
   /** Close the GitHub dialog without submitting. */
   closeDialog: () => void;
@@ -82,6 +114,10 @@ export function ExportProvider({ children }: { children: ReactNode }) {
   const activeWizardData = activeWorkspace?.wizardData;
   const { isAuthenticated, signIn } = useExternalIntegration();
   const [state, setState] = useState<ExportState>({ kind: "idle" });
+  // Last submitted GitHub payload, kept in a ref (not state) so error → Retry
+  // can re-run it without re-rendering or threading it through every variant.
+  // Set on submit; cleared when the flow returns to idle.
+  const lastGithubPayload = useRef<ExportDialogSubmitPayload | null>(null);
 
   const canExport = activeWorkspace !== null;
 
@@ -95,18 +131,26 @@ export function ExportProvider({ children }: { children: ReactNode }) {
     });
 
     if (result.kind !== "success") {
-      setState({ kind: "error", message: result.message });
+      setState({ kind: "error", destination: "zip", message: result.message });
       return;
     }
 
     const filename = `${activeProjectName || activeProjectId}.zip`;
     const download = downloadBlob(result.data, filename);
     if (!download.success) {
-      setState({ kind: "error", message: download.error.message });
+      setState({
+        kind: "error",
+        destination: "zip",
+        message: download.error.message,
+      });
       return;
     }
 
-    setState({ kind: "success", message: "ZIP downloaded" });
+    setState({
+      kind: "success",
+      destination: "zip",
+      message: "ZIP downloaded",
+    });
   }, [activeProjectId, activeProjectName, activeWizardData]);
 
   const requestGithubExport = useCallback(async () => {
@@ -121,6 +165,8 @@ export function ExportProvider({ children }: { children: ReactNode }) {
   const submitGithubExport = useCallback(
     async ({ repoName, isPrivate }: ExportDialogSubmitPayload) => {
       if (!activeProjectId) return;
+      // Remember the payload so error → Retry can re-run it as-is.
+      lastGithubPayload.current = { repoName, isPrivate };
       setState({ kind: "exporting", destination: "github" });
 
       const result = await postJson<GithubExportResponse>(
@@ -134,7 +180,11 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       );
 
       if (result.kind !== "success") {
-        setState({ kind: "error", message: result.message });
+        setState({
+          kind: "error",
+          destination: "github",
+          message: result.message,
+        });
         return;
       }
 
@@ -168,21 +218,34 @@ export function ExportProvider({ children }: { children: ReactNode }) {
           );
         }
       }
-      if (destinationUrl) {
-        window.open(destinationUrl, "_blank", "noopener,noreferrer");
-        setState({ kind: "success", message: `Pushed to ${destinationUrl}` });
-      } else {
-        setState({ kind: "success", message: "Pushed to GitHub" });
-      }
+      // No eager window.open — the success panel's "Open repository" button is
+      // the sole navigation affordance. Carry the structured link for the dialog.
+      setState({
+        kind: "success",
+        destination: "github",
+        message: githubLink
+          ? `Pushed to ${githubLink.owner}/${githubLink.repo}`
+          : "Pushed to GitHub",
+        destinationUrl,
+        githubLink,
+      });
     },
     [activeProjectId, activeWizardData],
   );
 
+  const retryGithubExport = useCallback(async () => {
+    const payload = lastGithubPayload.current;
+    if (!payload) return;
+    await submitGithubExport(payload);
+  }, [submitGithubExport]);
+
   const closeDialog = useCallback(() => {
+    lastGithubPayload.current = null;
     setState({ kind: "idle" });
   }, []);
 
   const dismissStatus = useCallback(() => {
+    lastGithubPayload.current = null;
     setState({ kind: "idle" });
   }, []);
 
@@ -196,6 +259,7 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       exportZip,
       requestGithubExport,
       submitGithubExport,
+      retryGithubExport,
       closeDialog,
       dismissStatus,
     }),
@@ -206,6 +270,7 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       exportZip,
       requestGithubExport,
       submitGithubExport,
+      retryGithubExport,
       closeDialog,
       dismissStatus,
     ],
