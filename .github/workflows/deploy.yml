@@ -42,14 +42,34 @@ jobs:
 
       - name: Execute Deployment Commands on VPS
         uses: appleboy/ssh-action@v1.0.3
+        # Map secrets into the runner env so `envs:` can forward real values to
+        # the remote shell. NOTE: GitHub forbids secret names with a GITHUB_
+        # prefix, so the OAuth app credentials are stored as GH_OAUTH_ID /
+        # GH_OAUTH_SECRET and rewritten to GITHUB_ID / GITHUB_SECRET (what
+        # NextAuth reads) when the .env is written below.
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          # Production canonical URL — NextAuth builds the OAuth redirect_uri from
+          # this; must match the GitHub OAuth App's Authorization callback URL
+          # (https://app.hexagen-monaco.cloud/api/auth/callback/github).
+          NEXTAUTH_URL: https://app.hexagen-monaco.cloud
+          GH_OAUTH_ID: ${{ secrets.GH_OAUTH_ID }}
+          GH_OAUTH_SECRET: ${{ secrets.GH_OAUTH_SECRET }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
           script: "cd /opt/hexagen-monaco\n\
             cat <<EOF > .env\n\
+            NEXTAUTH_URL=\"$NEXTAUTH_URL\"\n\
+            NEXTAUTH_SECRET=\"$AUTH_SECRET\"\n\
             AUTH_SECRET=\"$AUTH_SECRET\"\n\
+            GITHUB_ID=\"$GH_OAUTH_ID\"\n\
+            GITHUB_SECRET=\"$GH_OAUTH_SECRET\"\n\
             LLM_API_KEY=\"$LLM_API_KEY\"\n\
             LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
             LLM_MODEL=\"$LLM_MODEL\"\n\
