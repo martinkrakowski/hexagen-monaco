@@ -113,6 +113,7 @@ describe("GitHubExporterAdapter", () => {
 
   it("creates a parentless commit + POST ref when pushing to a fresh repo", async () => {
     const mock = installFetchMock([
+      route("GET", "/user", 200, { login: "octocat" }),
       route("POST", "/user/repos", 201, { name: "hexagen-app" }),
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
@@ -157,6 +158,7 @@ describe("GitHubExporterAdapter", () => {
 
   it("chains the existing head as parent and fast-forwards (force:false) on an existing branch", async () => {
     const mock = installFetchMock([
+      route("GET", "/user", 200, { login: "octocat" }),
       route("POST", "/user/repos", 201, { name: "hexagen-app" }),
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
@@ -197,6 +199,7 @@ describe("GitHubExporterAdapter", () => {
 
   it("pushes non-destructively when the target repo already exists with history", async () => {
     const mock = installFetchMock([
+      route("GET", "/user", 200, { login: "octocat" }),
       route("POST", "/user/repos", 422, {
         message: "Repository creation failed.",
         errors: [{ message: "name already exists on this account" }],
@@ -229,6 +232,7 @@ describe("GitHubExporterAdapter", () => {
 
   it("surfaces a conflict (no force) when the branch is created during a race", async () => {
     const mock = installFetchMock([
+      route("GET", "/user", 200, { login: "octocat" }),
       route("POST", "/user/repos", 201, { name: "hexagen-app" }),
       route("POST", "/git/blobs", 201, { sha: "blob1" }),
       route("POST", "/git/blobs", 201, { sha: "blob2" }),
@@ -258,7 +262,8 @@ describe("GitHubExporterAdapter", () => {
 
   it("fails with the API error when the token is unauthorized", async () => {
     const mock = installFetchMock([
-      route("POST", "/user/repos", 401, { message: "Bad credentials" }),
+      // The owner-resolution probe is the first call and fails on a bad token.
+      route("GET", "/user", 401, { message: "Bad credentials" }),
     ]);
     restore = mock.restore;
 
@@ -270,6 +275,49 @@ describe("GitHubExporterAdapter", () => {
     assert.strictEqual(result.success, false);
     assert.match(result.error ?? "", /401/);
     assert.strictEqual(result.destinationUrl, "");
+  });
+
+  it("creates the repo under an organization when owner is not the authenticated user", async () => {
+    const mock = installFetchMock([
+      route("GET", "/user", 200, { login: "octocat" }),
+      route("POST", "/orgs/acme/repos", 201, { name: "hexagen-app" }),
+      route("POST", "/git/blobs", 201, { sha: "blob1" }),
+      route("POST", "/git/blobs", 201, { sha: "blob2" }),
+      route("POST", "/git/trees", 201, { sha: "tree1" }),
+      route("GET", "/git/ref/heads/main", 200, {
+        ref: "refs/heads/main",
+        object: { sha: "org-head" },
+      }),
+      route("POST", "/git/commits", 201, { sha: "commit-org" }),
+      route("PATCH", "/git/refs/heads/main", 200, { ref: "refs/heads/main" }),
+    ]);
+    restore = mock.restore;
+
+    const result = await new GitHubExporterAdapter().export(sourceDir, {
+      destination: "github",
+      github: {
+        token: "ghp_test",
+        owner: "acme",
+        repoName: "hexagen-app",
+        isPrivate: false,
+      },
+    });
+
+    assert.strictEqual(result.success, true);
+    // Created under the org endpoint, never /user/repos.
+    assert.ok(
+      mock.calls.some((c) => c.path === "/orgs/acme/repos"),
+      "org repo must be created via POST /orgs/{owner}/repos",
+    );
+    assert.ok(
+      !mock.calls.some((c) => c.path === "/user/repos"),
+      "must not fall back to /user/repos for an org owner",
+    );
+    // destinationUrl points at where the repo was actually created.
+    assert.strictEqual(
+      result.destinationUrl,
+      "https://github.com/acme/hexagen-app",
+    );
   });
 
   it("rejects a config without GitHub settings", async () => {

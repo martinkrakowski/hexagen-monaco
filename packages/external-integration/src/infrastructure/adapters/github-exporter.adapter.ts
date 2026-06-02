@@ -130,13 +130,23 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     try {
       // Inline minimal request to keep test mocks (which spy on global fetch + expect json error shape) happy.
       const base = "https://api.github.com";
+      // POST /user/repos always creates under the authenticated user and ignores
+      // `owner`. An org-owned export must use POST /orgs/{owner}/repos — otherwise
+      // the repo lands under the user while destinationUrl (built from `owner`)
+      // points at the org, a location that was never created. Resolve the
+      // authenticated login to choose the endpoint.
+      const authedLogin = await this.getAuthenticatedLogin(token);
+      const endpoint =
+        owner && owner.toLowerCase() !== authedLogin.toLowerCase()
+          ? `/orgs/${owner}/repos`
+          : "/user/repos";
       // auto_init: true creates an initial commit so the repo is non-empty.
       // A repo created with auto_init:false has no git objects yet, and GitHub's
       // Git Data API then rejects blob/tree creation with
       // `409 Git Repository is empty`. With an initial commit present, the
       // export's getBranchHeadSha("main") returns that commit and the scaffold is
       // committed on top of it as a fast-forward (see export()).
-      const r = await fetch(`${base}/user/repos`, {
+      const r = await fetch(`${base}${endpoint}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -165,6 +175,33 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
       if (message.includes("already exists")) return true;
       throw err;
     }
+  }
+
+  /** Resolve the login of the token's owner (to choose user vs. org repo creation). */
+  private async getAuthenticatedLogin(token: string): Promise<string> {
+    const res = await fetch("https://api.github.com/user", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new GitHubApiError(
+        res.status,
+        `GitHub API error (${res.status}): ${JSON.stringify(error)}`,
+      );
+    }
+    const data = (await res.json()) as { login?: string };
+    if (!data.login) {
+      throw new GitHubApiError(
+        502,
+        "Could not resolve the authenticated GitHub user",
+      );
+    }
+    return data.login;
   }
 
   private async readFiles(dirPath: string): Promise<FileEntry[]> {
