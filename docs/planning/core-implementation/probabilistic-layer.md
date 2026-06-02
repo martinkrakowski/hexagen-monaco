@@ -1,7 +1,6 @@
-# Phase 5 — Probabilistic Layer
+# Probabilistic Layer
 
-**Workstream:** Core Implementation  
-**Phase:** 5
+**Workstream:** Core Implementation
 
 ## Goal
 
@@ -9,19 +8,19 @@ Build the probabilistic layer components that sit above the deterministic kernel
 
 ## Major Sub-Areas
 
-### 5.A — Prompt Compiler
+### Prompt Compiler
 
 - RRP-driven system instruction and Zod schema generation.
 - Structured prompt compilation and caching.
 - Migration of legacy prompt logic (`grounded-prompt.ts`, governance question templates, etc.) out of the app layer.
 
-### 5.B — LLM Adapters & ACL Enforcement
+### LLM Adapters & ACL Enforcement
 
 - Strong enforcement that LLM calls go through the Prompt Compiler.
 - Schema validation on every response.
 - Extraction of model catalogs and provider configuration from `apps/web/app/config/`.
 
-### 5.C — Reconciliation Engine
+### Reconciliation Engine
 
 - Verdict comparison and state promotion logic.
 - Conflict resolution that never overrides the deterministic kernel.
@@ -40,4 +39,4 @@ Build the probabilistic layer components that sit above the deterministic kernel
 
 Core packages and ACL boundaries were largely delivered. Some cloud LLM adapter work was deferred.
 
-For the detailed atomic units and migration tables, see the historical combined Phase 3–7 Execution Plan.
+For the detailed atomic units and migration tables, see the original combined execution plan.

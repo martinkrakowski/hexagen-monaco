@@ -1,15 +1,14 @@
-# Phase 3 — Execution DAG
+# Execution DAG
 
-**Workstream:** Core Implementation  
-**Phase:** 3
+**Workstream:** Core Implementation
 
 ## Goal
 
 Deliver the first coordinated vertical slices of the three-plane architecture on top of the frozen MVK v1 contracts.
 
-## Sub-Phases & Key Deliverables
+## Key Deliverables
 
-### 3.A — Intent Compiler DDD Restructuring
+### Intent Compiler DDD Restructuring
 
 - Converted the previously flat `intent-compiler` into a proper hexagonal structure.
 - Introduced core domain entities (Gesture, Rejection, topology/cardinality results).
@@ -17,14 +16,14 @@ Deliver the first coordinated vertical slices of the three-plane architecture on
 - Moved adapters into `infrastructure/adapters` with clear port interfaces.
 - Established test doubles for all ports.
 
-### 3.B — Layout Engine (New Package)
+### Layout Engine (New Package)
 
 - New `@hexagen/layout-engine` package created as a pure geometric constraint solver.
 - No semantic (MVK) types allowed in its public API — only geometric constraints and affordances.
 - Delivered initial port/adapter structure for layout solving, affordance resolution, stability scoring, and violation detection.
 - Began migration of legacy layout logic out of `apps/web/app/lib/`.
 
-### 3.C — UI Projection Compiler (New Package)
+### UI Projection Compiler (New Package)
 
 - New `@hexagen/ui-projection-compiler` package responsible for `DomainAST → NodeVisualSpec` mapping.
 - Responsible for variant resolution, icon mapping, and projection validation.
@@ -45,4 +44,4 @@ Deliver the first coordinated vertical slices of the three-plane architecture on
 - The decision to keep layout and projection concerns purely geometric (no NodeKind leakage) has proven valuable for maintainability.
 - Early creation of test doubles paid off significantly during later integration.
 
-For the complete original list of atomic units (3.A.1 – 3.C.24), detailed entry/exit gates, and migration steps, see the historical combined Phase 3–7 Execution Plan in git history.
+For the complete original list of atomic units, detailed entry/exit gates, and migration steps, see the original combined execution plan in git history.

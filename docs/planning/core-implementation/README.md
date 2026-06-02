@@ -7,15 +7,15 @@ This folder contains the planning documentation for the major implementation eff
 ## Documents
 
 - [Roadmap](roadmap.md) — High-level status and priorities
-- [Overview](overview.md) — Scope, phases, and shared principles
-- [Phase 3 — Execution DAG](execution-dag.md)
-- [Phase 4 — Transaction System](transaction-system.md)
-- [Phase 5 — Probabilistic Layer](probabilistic-layer.md)
-- [Phase 6 — System Verification](system-verification.md)
-- [Phase 7 — Composition-Root Purification](composition-root-purification.md)
+- [Overview](overview.md) — Scope, workstreams, and shared principles
+- [Execution DAG](execution-dag.md)
+- [Transaction System](transaction-system.md)
+- [Probabilistic Layer](probabilistic-layer.md)
+- [System Verification](system-verification.md)
+- [Composition-Root Purification](composition-root-purification.md)
 
 ## Context
 
-This body of work was originally captured in a single large "Phase 3–7 Execution Plan". It has been restructured into focused per-phase documents for better readability and long-term maintainability.
+This body of work was originally captured in a single large combined execution plan. It has been restructured into focused per-topic documents for better readability and long-term maintainability.
 
 The original combined plan (with full atomic unit tables) remains available in git history.

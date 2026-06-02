@@ -1,7 +1,6 @@
-# Phase 6 — System Verification
+# System Verification
 
-**Workstream:** Core Implementation  
-**Phase:** 6
+**Workstream:** Core Implementation
 
 ## Goal
 
@@ -18,7 +17,7 @@ Provide comprehensive, automated verification that the delivered core system mee
 
 ## Status
 
-This phase was still in flight at the time of the original plan. Many of the verification tasks were designed to run in parallel with parts of Phase 7.
+This work was still in flight at the time of the original plan. Many of the verification tasks were designed to run in parallel with parts of the Composition-Root Purification work.
 
 ## Success Criteria (from original plan)
 
@@ -26,4 +25,4 @@ This phase was still in flight at the time of the original plan. Many of the ver
 - Budgets and accessibility targets met.
 - Final verification ADR published.
 
-For the complete original verification task list (6.1–6.10), see the historical combined Phase 3–7 Execution Plan.
+For the complete original verification task list, see the original combined execution plan.

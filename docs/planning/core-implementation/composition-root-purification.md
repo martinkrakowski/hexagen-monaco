@@ -1,7 +1,6 @@
-# Phase 7 — Composition-Root Purification
+# Composition-Root Purification
 
-**Workstream:** Core Implementation  
-**Phase:** 7
+**Workstream:** Core Implementation
 
 ## Goal
 
@@ -17,7 +16,7 @@ This is the final major step to enforce the "app layer contains only browser uti
 - Wizard mapping and composition logic → `wizard-orchestration`
 - Enforcement tooling (scripts + ESLint rules) to prevent regression
 
-## Post-Phase 7 Target State for `app/lib/`
+## Target State for `app/lib/`
 
 Only the following categories are considered legitimate:
 
@@ -33,6 +32,6 @@ Only the following categories are considered legitimate:
 
 ## Status
 
-This phase was designed to run in parallel with Phase 5/6 where dependencies allowed.
+This work was designed to run in parallel with the Probabilistic Layer and System Verification work where dependencies allowed.
 
-For the full original migration table (7.1–7.13) and target state of `app/lib/`, see the historical combined Phase 3–7 Execution Plan.
+For the full original migration table and target state of `app/lib/`, see the original combined execution plan.

@@ -4,17 +4,17 @@
 
 ## High-Level Status
 
-- **Phases 0–2**: Foundational MVK and projection kernel isolation — complete.
-- **Phase 3 (Execution DAG)**: First major vertical slices delivered.
-- **Phase 4 (Transaction System)**: Core semantics and lifecycle delivered.
-- **Phase 5 (Probabilistic Layer)**: Prompt compiler, LLM ACLs, and reconciliation largely in place.
-- **Phase 6 (System Verification)**: In flight — property testing, accessibility, and budget validation.
-- **Phase 7 (Composition-Root Purification)**: In flight — extraction of remaining kernel logic from the app layer.
+- **Foundational MVK and projection kernel isolation** — complete.
+- **Execution DAG**: First major vertical slices delivered.
+- **Transaction System**: Core semantics and lifecycle delivered.
+- **Probabilistic Layer**: Prompt compiler, LLM ACLs, and reconciliation largely in place.
+- **System Verification**: In flight — property testing, accessibility, and budget validation.
+- **Composition-Root Purification**: In flight — extraction of remaining kernel logic from the app layer.
 
 ## Near-Term Priorities (at time of original plan)
 
-1. Finish Phase 6 verification gates at scale.
-2. Complete Phase 7 extractions and put permanent enforcement in place.
-3. Maintain architectural invariants while the final phases land.
+1. Finish the System Verification gates at scale.
+2. Complete the Composition-Root Purification extractions and put permanent enforcement in place.
+3. Maintain architectural invariants while the final workstreams land.
 
-For detailed per-phase focus and links, see the [Core Implementation Overview](overview.md).
+For detailed per-workstream focus and links, see the [Core Implementation Overview](overview.md).

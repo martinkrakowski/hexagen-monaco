@@ -1,7 +1,6 @@
-# Phase 4 — Transaction System
+# Transaction System
 
-**Workstream:** Core Implementation  
-**Phase:** 4
+**Workstream:** Core Implementation
 
 ## Goal
 
@@ -22,7 +21,7 @@ Complete the `transaction-system` package with production-grade semantics for sp
 
 ## Status
 
-Scaffold and core semantics were delivered. Some advanced backpressure and cache behaviors were still being hardened in later phases.
+Scaffold and core semantics were delivered. Some advanced backpressure and cache behaviors were still being hardened later.
 
 ## Important Design Decisions
 
@@ -30,4 +29,4 @@ Scaffold and core semantics were delivered. Some advanced backpressure and cache
 - The system must support speculative work that can be safely discarded without side effects on the manifest.
 - Cache key design was deliberately strict to prevent subtle semantic drift.
 
-For the full original atomic unit breakdown (4.1–4.17), property test expectations, and integration details, refer to the historical combined Phase 3–7 Execution Plan.
+For the full original atomic unit breakdown, property test expectations, and integration details, refer to the original combined execution plan.
