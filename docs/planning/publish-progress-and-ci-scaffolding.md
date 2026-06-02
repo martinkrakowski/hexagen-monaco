@@ -51,7 +51,7 @@ The same pattern improves the **editor Push** flow (`useEditorPush`) — today i
 Today `success` carries only `message: string` and the route's `{ destinationUrl, githubLink }` are discarded after the message is built. The dialog needs structured data:
 
 - `success` carries `destinationUrl`, `githubLink` (incl. `owner`/`repo`) — **from the route, not parsed out of the URL** (fragile). _(Reviews #3, #4.)_
-- The context retains the **last submitted payload** (`repoName`, `isPrivate`) so **error → Retry** re-submits without forcing the user back through the form. Make this explicit in the state/refs. _(Reviews #3, #4.)_
+- The context retains the **last submitted payload** (`repoName`, `isPrivate`) so **error → Retry** re-submits without forcing the user back through the form. **Decided:** hold it in a `useRef<{ repoName; isPrivate } | null>` in `ExportContext` (set at submit, cleared on `idle`) — **not** in the state machine, so it doesn't have to be threaded through the `exporting`/`error` variants. _(Review #5.)_
 
 ### Implementation constraints (DESIGN.md)
 
@@ -110,15 +110,11 @@ Every published project ships a `.github/workflows` CI that **runs green** out o
 
 ### Phases
 
-- **B0 — Discovery.** ✅ Effectively done (above). Residual: copy the exact root `scripts` from `root-file-templates.ts`; decide the **emission site** (see below). _Exit:_ documented decision + the seam to change.
-- **B1 — Floor CI.** Emit a single hardcoded, secret-free `ci.yml` (install → build → typecheck → lint → test via the generator's own root scripts) in base generation; reckon with the dead `WorkflowGenerator`. _Exit:_ **a freshly published repo, cloned with no manual setup and no secrets configured, shows a green Actions run.** (Validate on a clean repo — not one where you've already set secrets. _Review #1._) Floor CI also lands in **ZIP** exports (same generation path) — desirable.
+- **B0 — Discovery.** ✅ Effectively done (above). The **one true prerequisite for B1**: read `generators/root-file-templates.ts` and copy the exact root `scripts` the generator emits, so the floor `ci.yml` calls commands that exist (e.g. `yarn turbo build`, **not** `yarn build`). This is a B1 gating step, **not** parallel work. _(Review #5.)_
+- **B1 — Floor CI.** _First commit:_ **delete** the dead `WorkflowGenerator.ts` + `assets/workflow-template.yml` (verified unwired) so there's one authoritative CI path. _Then:_ emit a single hardcoded, secret-free `ci.yml` (install → build → typecheck → lint → test via the generator's actual root scripts). _Exit:_ **a freshly published repo, cloned with no manual setup and no secrets configured, shows a green Actions run** — validated against the _real emitted scripts_ (the B0 read), on a clean repo (not one where you've already set secrets). _(Reviews #1, #5.)_ Floor CI also lands in **ZIP** exports (same path) — desirable.
 - **B2 — Rich CI add-on (opt-in).** Thread `ci-github-actions` selection/answers through the export → generation path; **default `deploy_target: none`** (never emit a deploy workflow needing unset secrets). _Exit:_ selecting the CI add-on + an explicit deploy target produces matching, runnable workflows.
 
-**Emission-site decision (B0 output) drives arch impact:**
-
-- Extend root-file emission **inside `@hexagen/sync`** → touches the `sync` context.
-- Post-generation emit **inside `ExternalSyncEngineAdapter`** (or a new `project-generation` port) → touches `project-generation` (and maybe `external-integration`).
-- Threading add-ons (B2) → `project-generation` depends on `template-engine` (new port). Any of these: update `.architecture/manifest.yaml` + `context.yaml` and run `yarn lint:arch` **before** the `.ts` changes.
+**Emission site — decided: inside `@hexagen/sync`'s root-file generators.** The floor CI is logically "what every generated project contains" — peer to `turbo.json` and the root `package.json` — and it's _not_ GitHub-specific (it also belongs in ZIP exports). So it lives with the other root files, not in `ExternalSyncEngineAdapter` (the GitHub/export-aware layer). This touches the `sync` context; update `.architecture/manifest.yaml` + `context.yaml` and run `yarn lint:arch` **before** the `.ts` changes. _(Review #5.)_ (B2's add-on threading is the separate case that adds a `project-generation → template-engine` port.)
 
 ### Files likely in scope
 
