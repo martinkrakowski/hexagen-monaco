@@ -153,10 +153,12 @@ const ProjectWorkspaceLayout = React.memo(
                   viewMode={viewMode}
                   selectedFileId={editor.selectedFileId}
                   editedFiles={editor.editedFiles}
+                  unpushed={editor.unpushed}
                   onViewModeChange={onViewModeChange}
                   onFileSelect={editor.selectFile}
                   onFileContentChange={editor.updateFile}
                   onFileSave={editor.markFileSaved}
+                  onPushed={editor.clearUnpushed}
                 />
               }
               right={
@@ -186,6 +188,10 @@ const ProjectWorkspaceLayout = React.memo(
     if (prev.onCloseMiddlePanel !== next.onCloseMiddlePanel) return false;
     if (prev.onCloseRightPanel !== next.onCloseRightPanel) return false;
     if (prev.onNavigateToProjects !== next.onNavigateToProjects) return false;
+    // `editor` is a referentially-stable memo that changes only when editor
+    // state does (selected file, edited files, unpushed flag) — re-render so
+    // the preview pane and Push affordance reflect the latest state.
+    if (prev.editor !== next.editor) return false;
     if (prev.isEditing !== next.isEditing) return false;
     if (prev.ui.dialog.kind !== next.ui.dialog.kind) return false;
     if (prev.children !== next.children) return false;

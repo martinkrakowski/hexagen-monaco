@@ -23,10 +23,15 @@ export class GitHubGitDataClient {
     content: string,
     encoding: "utf-8" | "base64" = "base64",
   ): Promise<string> {
-    const res = (await this.request(token, "POST", `/repos/${owner}/${repo}/git/blobs`, {
-      content,
-      encoding,
-    })) as { sha: string };
+    const res = (await this.request(
+      token,
+      "POST",
+      `/repos/${owner}/${repo}/git/blobs`,
+      {
+        content,
+        encoding,
+      },
+    )) as { sha: string };
     return res.sha;
   }
 
@@ -34,12 +39,23 @@ export class GitHubGitDataClient {
     token: string,
     owner: string,
     repo: string,
-    tree: Array<{ path: string; mode: string; type: string; sha?: string; content?: string }>,
+    tree: Array<{
+      path: string;
+      mode: string;
+      type: string;
+      sha?: string;
+      content?: string;
+    }>,
     baseTree?: string,
   ): Promise<string> {
-    const body: any = { tree };
+    const body: { tree: typeof tree; base_tree?: string } = { tree };
     if (baseTree) body.base_tree = baseTree;
-    const res = (await this.request(token, "POST", `/repos/${owner}/${repo}/git/trees`, body)) as { sha: string };
+    const res = (await this.request(
+      token,
+      "POST",
+      `/repos/${owner}/${repo}/git/trees`,
+      body,
+    )) as { sha: string };
     return res.sha;
   }
 
@@ -51,12 +67,34 @@ export class GitHubGitDataClient {
     message: string,
     parents: string[] = [],
   ): Promise<string> {
-    const res = (await this.request(token, "POST", `/repos/${owner}/${repo}/git/commits`, {
-      message,
-      tree: treeSha,
-      ...(parents.length > 0 ? { parents } : {}),
-    })) as { sha: string };
+    const res = (await this.request(
+      token,
+      "POST",
+      `/repos/${owner}/${repo}/git/commits`,
+      {
+        message,
+        tree: treeSha,
+        ...(parents.length > 0 ? { parents } : {}),
+      },
+    )) as { sha: string };
     return res.sha;
+  }
+
+  /**
+   * Resolve the tree SHA of a commit (used as `base_tree` for incremental commits).
+   */
+  async getCommitTreeSha(
+    token: string,
+    owner: string,
+    repo: string,
+    commitSha: string,
+  ): Promise<string | undefined> {
+    const res = (await this.request(
+      token,
+      "GET",
+      `/repos/${owner}/${repo}/git/commits/${commitSha}`,
+    )) as { tree?: { sha?: string } };
+    return res.tree?.sha;
   }
 
   async getBranchHeadSha(
@@ -115,10 +153,15 @@ export class GitHubGitDataClient {
     branch: string,
     commitSha: string,
   ): Promise<void> {
-    await this.request(token, "PATCH", `/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
-      sha: commitSha,
-      force: false,
-    });
+    await this.request(
+      token,
+      "PATCH",
+      `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
+      {
+        sha: commitSha,
+        force: false,
+      },
+    );
   }
 
   private async request(
@@ -146,10 +189,12 @@ export class GitHubGitDataClient {
       } catch {
         detail = "parse error";
       }
-      throw new GitHubApiError(response.status, `GitHub API error (${response.status}): ${detail}`);
+      throw new GitHubApiError(
+        response.status,
+        `GitHub API error (${response.status}): ${detail}`,
+      );
     }
 
-    // Match original exporter behavior: always .json() on success (mocks provide only json)
     return response.json();
   }
 }

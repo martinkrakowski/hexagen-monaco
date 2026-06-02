@@ -38,6 +38,30 @@ export function EditorToolbar({
   const isSaving = mode.kind === "saving";
   const hasChanges = mode.kind === "editing" && mode.hasChanges;
 
+  // Push is a connected-repo concern, independent of edit mode: it stays
+  // visible after Save (view mode) so the user can push locally-saved edits.
+  // `canPush` already encodes "connected ∧ unpushed ∧ has files".
+  const pushButton = onPush ? (
+    <button
+      type="button"
+      onClick={onPush}
+      disabled={isSaving || isPushing || !canPush}
+      className={`${BUTTON_BASE} border border-input hover:bg-accent disabled:opacity-50 disabled:pointer-events-none`}
+      title={
+        connectedRepo
+          ? `Push to ${connectedRepo.owner}/${connectedRepo.repo}`
+          : "Push (no repo connected)"
+      }
+    >
+      {isPushing ? (
+        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+      ) : (
+        <Upload className="h-3.5 w-3.5 mr-1.5" />
+      )}
+      Push
+    </button>
+  ) : null;
+
   return (
     <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card shrink-0">
       <div className="flex items-center gap-2">
@@ -55,14 +79,17 @@ export function EditorToolbar({
 
       <div className="flex items-center gap-2">
         {!isEditing && !isSaving ? (
-          <button
-            type="button"
-            onClick={onEdit}
-            className={`${BUTTON_BASE} border border-input hover:bg-accent hover:text-accent-foreground`}
-          >
-            <Edit3 className="h-3.5 w-3.5 mr-1.5" />
-            Edit
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onEdit}
+              className={`${BUTTON_BASE} border border-input hover:bg-accent hover:text-accent-foreground`}
+            >
+              <Edit3 className="h-3.5 w-3.5 mr-1.5" />
+              Edit
+            </button>
+            {pushButton}
+          </>
         ) : (
           <>
             <button
@@ -87,22 +114,7 @@ export function EditorToolbar({
               )}
               Save
             </button>
-            {onPush && (
-              <button
-                type="button"
-                onClick={onPush}
-                disabled={isSaving || !canPush}
-                className={`${BUTTON_BASE} border border-input hover:bg-accent disabled:opacity-50 disabled:pointer-events-none`}
-                title={connectedRepo ? `Push to ${connectedRepo.owner}/${connectedRepo.repo}` : "Push (no repo connected)"}
-              >
-                {isPushing ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Upload className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                Push
-              </button>
-            )}
+            {pushButton}
           </>
         )}
       </div>

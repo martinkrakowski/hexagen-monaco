@@ -13,7 +13,7 @@ import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
 import { downloadBlob } from "@/lib/download-blob";
 import { postJson, postForBlob } from "@/lib/fetch-json";
-import { getSavedProjectsPersistence } from "@/lib/wire.client";
+import { getSavedProjectsPersistence, getLogger } from "@/lib/wire.client";
 import type { ExportDialogSubmitPayload } from "../../features/export/ExportDialog";
 
 /**
@@ -140,20 +140,33 @@ export function ExportProvider({ children }: { children: ReactNode }) {
 
       const destinationUrl = result.data.destinationUrl;
       const githubLink = result.data.githubLink;
-      if (githubLink && activeProjectId) {
+      if (githubLink) {
         // Persist link to the SavedProject (client-side IDB). Server route never
-        // sees/persists SavedProject; token stays server-only.
-        const persistence = getSavedProjectsPersistence();
-        persistence.loadProjects().then((loadRes) => {
+        // sees/persists SavedProject; token stays server-only. Awaited so a
+        // failed write surfaces (rather than silently dropping the link); the
+        // GitHub push already succeeded, so we still report success either way.
+        try {
+          const persistence = getSavedProjectsPersistence();
+          const loadRes = await persistence.loadProjects();
           if (loadRes.success) {
             const updated = loadRes.value.map((p) =>
               p.id === activeProjectId
                 ? { ...p, githubLink, updatedAt: Date.now() }
                 : p,
             );
-            void persistence.saveProjects(updated);
+            const saveRes = await persistence.saveProjects(updated);
+            if (!saveRes.success) {
+              getLogger().warn(
+                "Failed to persist GitHub link to saved project",
+              );
+            }
           }
-        });
+        } catch (e) {
+          getLogger().errorWithException(
+            e,
+            "Failed to persist GitHub link to saved project",
+          );
+        }
       }
       if (destinationUrl) {
         window.open(destinationUrl, "_blank", "noopener,noreferrer");

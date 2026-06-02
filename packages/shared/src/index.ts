@@ -12,7 +12,7 @@ export { MonacoSession } from "./domain/monaco-session.js";
 export type { SessionMetadata } from "./domain/session-metadata.js";
 export type { PersistenceError } from "./domain/persistence-error.js";
 export type { PersistenceDomain } from "./domain/persistence-domain.js";
-export type { SavedProject } from "./domain/saved-project.js";
+export type { SavedProject, GitHubLink } from "./domain/saved-project.js";
 export type { GenerationResult } from "./domain/types/generation-result.js";
 // NOTE: ProjectSpecification moved to @hexagen/project-configuration (canonical: ProjectSpec)
 // See: Architectural Remediation Report Phase 1, Item 1.4

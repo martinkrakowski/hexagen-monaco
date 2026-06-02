@@ -88,7 +88,6 @@ export async function POST(request: NextRequest) {
       // Return githubLink details so client can persist on SavedProject (client IDB only).
       // lastCommitSha is null post-initial-publish (updated by subsequent /api/push/github).
       // Branch/defaultBranch hardcoded to match GitHubExporterAdapter ("main").
-      const owner = body.owner ?? tokenOwner;
       const githubLink = {
         owner,
         repo: body.repoName,

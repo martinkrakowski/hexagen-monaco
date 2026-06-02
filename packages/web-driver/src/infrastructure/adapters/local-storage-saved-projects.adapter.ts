@@ -76,14 +76,10 @@ export class LocalStorageSavedProjectsAdapter implements SavedProjectsPersistenc
           }
           if (sv < CURRENT_SCHEMA_VERSION) {
             needsMigration = true;
-            const up = project as SavedProject & {
-              githubLink?: unknown;
-              schemaVersion: number;
-            };
-            up.schemaVersion = CURRENT_SCHEMA_VERSION;
-            if (up.githubLink === undefined) {
-              up.githubLink = undefined;
-            }
+            // githubLink is optional; pre-v3 records simply omit it. Only the
+            // schema version needs bumping on round-trip.
+            (project as { schemaVersion: number }).schemaVersion =
+              CURRENT_SCHEMA_VERSION;
           }
           migrated.push(project);
         }

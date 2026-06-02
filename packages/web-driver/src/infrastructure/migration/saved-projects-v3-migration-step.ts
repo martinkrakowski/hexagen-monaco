@@ -19,7 +19,8 @@ import type {
  */
 export class SavedProjectsV3MigrationStep implements MigrationStep {
   id = "saved-projects-v2-to-v3";
-  description = "Bump saved projects schema v2→v3 (add githubLink for connected repos)";
+  description =
+    "Bump saved projects schema v2→v3 (add githubLink for connected repos)";
 
   private savedProjectsPersistence: SavedProjectsPersistencePort;
 
@@ -48,11 +49,11 @@ export class SavedProjectsV3MigrationStep implements MigrationStep {
       const migrated: SavedProject[] = projects.map((p) => {
         if (typeof p.schemaVersion !== "number" || p.schemaVersion < 3) {
           recordsMigrated += 1;
+          // githubLink is optional and simply absent on pre-v3 records; only the
+          // schema version needs bumping.
           return {
             ...p,
             schemaVersion: 3,
-            // ensure optional field present for round-trip (undefined ok)
-            githubLink: p.githubLink ?? undefined,
           } as SavedProject;
         }
         return p;
@@ -78,8 +79,7 @@ export class SavedProjectsV3MigrationStep implements MigrationStep {
         !loadVerify.success ||
         loadVerify.value.length !== migrated.length ||
         !loadVerify.value.every(
-          (p) =>
-            typeof p.schemaVersion === "number" && p.schemaVersion >= 3,
+          (p) => typeof p.schemaVersion === "number" && p.schemaVersion >= 3,
         )
       ) {
         return {
@@ -114,8 +114,7 @@ export class SavedProjectsV3MigrationStep implements MigrationStep {
     if (!loadResult.success) return false;
 
     return loadResult.value.every(
-      (p) =>
-        typeof p.schemaVersion === "number" && p.schemaVersion >= 3,
+      (p) => typeof p.schemaVersion === "number" && p.schemaVersion >= 3,
     );
   }
 }
