@@ -108,7 +108,7 @@ yarn workspace @hexagen/tui start     # built
 
 ### Publishing to GitHub
 
-A generated project doesn't have to stay in the browser. From the wizard's summary step an operator can **publish the scaffold to a new GitHub repository**, and from the Monaco editor **push subsequent edits** straight back to that repository — no ZIP download, no leaving the app.
+A generated project can be **downloaded as a ZIP** or **published directly to a new GitHub repository**. From the wizard's summary step an operator can create the repo and commit the scaffold, and from the Monaco editor **push subsequent edits** straight back to it — no leaving the app.
 
 - **Authentication.** GitHub OAuth via NextAuth (`GitHubProvider`, scope `read:user user:email repo`). The access token is read server-side from the session JWT and **never reaches the browser** — the client only ever sees commit URLs and status. A revoked or expired token is surfaced as a distinct `reauth_required` response so the operator is prompted to re-authenticate rather than shown a generic failure.
 - **Publish — `POST /api/export/github`.** Creates the repository under the authenticated user or an organization (`/user/repos` vs `/orgs/{owner}/repos`), then writes the generated tree through the Git Data API — blobs → tree → commit → fast-forward ref — onto the repository's actual default branch. The new repo's identity (`{ owner, repo, branch, htmlUrl, … }`) is persisted on the saved project (`SavedProject.githubLink`, client-side IndexedDB) so the project remembers where it was published and reconnects on reload.
