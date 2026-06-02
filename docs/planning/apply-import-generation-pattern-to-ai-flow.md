@@ -28,8 +28,8 @@ So the AI cloud log must be built from `stageProgress[0..6].chunks` (grouped + j
 
 ### 1. `useStagedManifestGeneration.ts` — live cloud mirroring + verboseLog
 
-- Add `verboseLog: string[]` state; clear it both at generation start (alongside the other `setX` resets, ~line 93) **and** in `reset()` (line 250). Add `verboseLog` to `UseStagedManifestGenerationReturn` and the returned object.
-- Add a `useEffect` that mirrors the cloud stream while it runs (pattern from `useStagedSpecGeneration.ts:118-132`), so the dots/detail update live instead of only after `cloudStream.generate()` resolves:
+- Add `verboseLog: string[]` state; clear it both at generation start (alongside the other `setX` resets, ~line 93) **and** in `reset()` (line 250). Expose `verboseLog` on `UseStagedManifestGenerationReturn` and the returned object.
+- Introduce a `useEffect` that mirrors the cloud stream while it runs (pattern from `useStagedSpecGeneration.ts:118-132`), so the dots/detail update live instead of only after `cloudStream.generate()` resolves:
   - `if (!cloudStream.isGenerating) return;`
   - `setPhase(cloudStream.phase)`, `setStepDetail(cloudStream.stepDetail)` (guard empty).
   - For the dots: strip key `-1` (defensive — none expected here) and `setStageProgress(numberedStages)`.
