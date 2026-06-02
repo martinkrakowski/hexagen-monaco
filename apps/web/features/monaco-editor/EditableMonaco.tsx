@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import type * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 
@@ -24,6 +24,7 @@ const Editor = dynamic(
 
 import { useTheme } from "@/hooks/useTheme";
 import { useSharedState } from "@/hooks/useSharedState";
+import { useEditorGuardOptional } from "@/contexts/EditorGuardContext";
 import { useEditableMonacoState } from "./hooks/useEditableMonacoState";
 
 import {
@@ -94,6 +95,19 @@ export function EditableMonaco({
   }, [save, emitCodeChange, sessionId, onSave]);
 
   const isEditing = mode.kind === "editing";
+
+  // Surface unsaved (in-buffer) changes + save/discard to navigation guards
+  // (reload guard + in-app "unsaved changes" dialog).
+  const guard = useEditorGuardOptional();
+  const hasUnsavedChanges = mode.kind === "editing" && mode.hasChanges;
+  useEffect(() => {
+    if (!guard) return;
+    guard.register(hasUnsavedChanges, {
+      save: handleSave,
+      discard: confirmDiscard,
+    });
+    return () => guard.register(false, null);
+  }, [guard, hasUnsavedChanges, handleSave, confirmDiscard]);
 
   // Memoize options — Monaco calls updateOptions() on reference change,
   // so rebuilding this object every render causes avoidable churn. The

@@ -18,6 +18,12 @@ import { SelectedAddOnsProvider } from "../project-wizard/contexts/SelectedAddOn
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
+import { UnsavedEditorChangesDialog } from "./UnsavedEditorChangesDialog";
+import { ReloadGuard } from "./ReloadGuard";
+import {
+  EditorGuardProvider,
+  useEditorGuard,
+} from "@/contexts/EditorGuardContext";
 import type { ViewMode } from "@/types/view-mode";
 
 export interface ProjectWorkspaceProps {
@@ -49,29 +55,31 @@ export function ProjectWorkspace({
   const pendingRoute = useRef<string | null>(null);
 
   return (
-    <WizardLifecycleProvider
-      ui={ui}
-      uiState={ui.state}
-      editor={editor}
-      totalSteps={totalSteps}
-      onGoToStep={onGoToStep}
-    >
-      <ProjectWorkspaceLayout
-        currentStepIndex={currentStepIndex}
-        viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
-        onCloseMiddlePanel={onCloseMiddlePanel}
-        onCloseRightPanel={onCloseRightPanel}
-        onNavigateToProjects={onNavigateToProjects}
+    <EditorGuardProvider>
+      <WizardLifecycleProvider
         ui={ui}
+        uiState={ui.state}
         editor={editor}
-        isEditing={isEditing}
-        pendingRoute={pendingRoute}
-        router={router}
+        totalSteps={totalSteps}
+        onGoToStep={onGoToStep}
       >
-        {children}
-      </ProjectWorkspaceLayout>
-    </WizardLifecycleProvider>
+        <ProjectWorkspaceLayout
+          currentStepIndex={currentStepIndex}
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
+          onCloseMiddlePanel={onCloseMiddlePanel}
+          onCloseRightPanel={onCloseRightPanel}
+          onNavigateToProjects={onNavigateToProjects}
+          ui={ui}
+          editor={editor}
+          isEditing={isEditing}
+          pendingRoute={pendingRoute}
+          router={router}
+        >
+          {children}
+        </ProjectWorkspaceLayout>
+      </WizardLifecycleProvider>
+    </EditorGuardProvider>
   );
 }
 
@@ -104,16 +112,22 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
   router,
   children,
 }: ProjectWorkspaceLayoutProps) {
+  const guard = useEditorGuard();
   const handleNavigate = useCallback(
     (route: string) => {
-      if (isEditing) {
+      // Unsaved editor (in-buffer) changes take priority — prompt to save them
+      // before leaving, since they're the most direct data-loss risk.
+      if (guard.hasUnsavedChanges) {
+        pendingRoute.current = route;
+        ui.openDialog({ kind: "unsaved-editor" });
+      } else if (isEditing) {
         pendingRoute.current = route;
         ui.openDialog({ kind: "new-project" });
       } else {
         router.push(route);
       }
     },
-    [isEditing, ui, router, pendingRoute],
+    [guard.hasUnsavedChanges, isEditing, ui, router, pendingRoute],
   );
 
   return (
@@ -173,6 +187,21 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
           onClose={ui.closeDialog}
           pendingRoute={pendingRoute}
           router={router}
+        />
+
+        <ReloadGuard />
+        <UnsavedEditorChangesDialog
+          isOpen={ui.dialog.kind === "unsaved-editor"}
+          onClose={() => {
+            pendingRoute.current = null;
+            ui.closeDialog();
+          }}
+          onProceed={() => {
+            const route = pendingRoute.current;
+            pendingRoute.current = null;
+            ui.closeDialog();
+            if (route) router.push(route);
+          }}
         />
       </div>
       {children}
