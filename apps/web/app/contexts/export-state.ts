@@ -36,6 +36,8 @@ export type ExportState =
       repo: { owner: string; repo: string };
       defaultMode: PublishMode;
       defaultMessage: string;
+      /** Current remembered state, so the modal's checkbox reflects storage. */
+      defaultRemember: boolean;
       hasEditorEdits: boolean;
     }
   | { kind: "exporting"; destination: ExportDestination }

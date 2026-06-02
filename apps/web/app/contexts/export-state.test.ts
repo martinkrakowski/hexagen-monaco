@@ -14,6 +14,7 @@ describe("isGithubExportActive", () => {
         repo: { owner: "acme", repo: "api" },
         defaultMode: "scaffold",
         defaultMessage: "Update scaffold",
+        defaultRemember: false,
         hasEditorEdits: true,
       },
       true,

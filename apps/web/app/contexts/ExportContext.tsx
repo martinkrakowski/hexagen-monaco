@@ -410,6 +410,7 @@ export function ExportProvider({
       repo: { owner: githubLink.owner, repo: githubLink.repo },
       defaultMode: mode,
       defaultMessage: defaultPublishMessage(mode),
+      defaultRemember: publishPrefs?.remember ?? false,
       hasEditorEdits: Object.keys(files).length > 0,
     });
   }, [activeProjectId, githubLink, publishPrefs]);
@@ -463,7 +464,10 @@ export function ExportProvider({
 
   const submitPublishSettings = useCallback(
     async ({ mode, commitMessage, remember }: PublishSettingsSubmitPayload) => {
-      if (remember) await persistPublishPrefs({ mode, remember: true });
+      // Always persist the chosen `remember` state — otherwise unchecking it
+      // can't clear a previously-stored `remember: true`, locking the user into
+      // auto-publish (the button would keep skipping the modal).
+      await persistPublishPrefs({ mode, remember });
       await runMode(mode, commitMessage);
     },
     [persistPublishPrefs, runMode],

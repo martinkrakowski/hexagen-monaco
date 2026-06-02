@@ -30,6 +30,8 @@ interface PublishSettingsDialogProps {
   repo: { owner: string; repo: string };
   defaultMode: PublishMode;
   defaultMessage: string;
+  /** Current remembered state, so the checkbox reflects storage (re-open via gear). */
+  defaultRemember: boolean;
   /** Whether there are editor edits available — gates the "editor" option. */
   hasEditorEdits: boolean;
   onClose: () => void;
@@ -75,6 +77,7 @@ export function PublishSettingsDialog({
   repo,
   defaultMode,
   defaultMessage,
+  defaultRemember,
   hasEditorEdits,
   onClose,
   onSubmit,
@@ -96,9 +99,9 @@ export function PublishSettingsDialog({
         ? defaultMessage
         : PUBLISH_MODE_MESSAGES[initialMode],
     );
-    setRemember(false);
+    setRemember(defaultRemember);
     setMessageTouched(false);
-  }, [open, defaultMode, defaultMessage, hasEditorEdits]);
+  }, [open, defaultMode, defaultMessage, defaultRemember, hasEditorEdits]);
 
   const selectMode = (next: PublishMode) => {
     setMode(next);
@@ -149,7 +152,7 @@ export function PublishSettingsDialog({
                   onChange={() => selectMode(opt.mode)}
                 />
                 <opt.Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="space-y-0.5">
+                <span className="space-y-1">
                   <span className="block font-medium">{opt.label}</span>
                   <span className="block text-xs text-muted-foreground">
                     {disabled ? "No local edits to push." : opt.description}

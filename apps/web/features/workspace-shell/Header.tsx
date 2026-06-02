@@ -153,6 +153,7 @@ export function Header({
         repo={s.kind === "settings-open" ? s.repo : { owner: "", repo: "" }}
         defaultMode={s.kind === "settings-open" ? s.defaultMode : "scaffold"}
         defaultMessage={s.kind === "settings-open" ? s.defaultMessage : ""}
+        defaultRemember={s.kind === "settings-open" ? s.defaultRemember : false}
         hasEditorEdits={s.kind === "settings-open" ? s.hasEditorEdits : false}
         onClose={exportFlow.closeDialog}
         onSubmit={(p) => void exportFlow.submitPublishSettings(p)}
