@@ -77,7 +77,12 @@ export async function POST(request: NextRequest) {
         owner,
         repoName: body.repoName,
         isPrivate: body.isPrivate,
-        commitMessage: body.commitMessage,
+        // Defensive: ignore non-string commitMessage from untrusted bodies so a
+        // malformed payload can't reach `.trim()` in the exporter.
+        commitMessage:
+          typeof body.commitMessage === "string"
+            ? body.commitMessage
+            : undefined,
       },
     });
 

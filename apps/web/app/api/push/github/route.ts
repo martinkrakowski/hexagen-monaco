@@ -56,11 +56,17 @@ export async function POST(request: NextRequest) {
     // which we surface below as `reauth_required`. The SavedProject (and its
     // githubLink) lives only in the client's IDB, so there is no server-side
     // ownership record to additionally check against.
+    // Defensive: only accept a string message from the untrusted body; fall
+    // back otherwise so a malformed payload can't reach the writer as a non-string.
+    const commitMessage =
+      typeof message === "string" && message.trim()
+        ? message
+        : "Update from HexaGen editor";
     const writer = getRepositoryWriter();
     const result = await writer.commitFiles(
       githubLink,
       files,
-      message || "Update from HexaGen editor",
+      commitMessage,
       accessToken,
     );
 

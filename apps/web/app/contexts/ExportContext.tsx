@@ -240,7 +240,12 @@ export function ExportProvider({
             : p,
         );
         const saveRes = await persistence.saveProjects(updated);
-        if (!saveRes.success) {
+        if (saveRes.success) {
+          // Update local state immediately so the button label + branching are
+          // correct right away; `linkRefresh` stays as a secondary refresh
+          // rather than the source of immediate UI correctness.
+          setGithubLink(link);
+        } else {
           getLogger().warn("Failed to persist GitHub link to saved project");
         }
       } catch (e) {
