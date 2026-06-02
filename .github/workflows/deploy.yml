@@ -24,6 +24,7 @@ jobs:
           docker build \
             --build-arg NEXT_PUBLIC_LLM_AVAILABLE=${{ secrets.LLM_API_KEY != '' }} \
             --build-arg NEXT_PUBLIC_LLM_MODEL=${{ secrets.LLM_MODEL }} \
+            --build-arg NEXT_PUBLIC_FREE_TIER_MODEL=${{ secrets.NEXT_PUBLIC_FREE_TIER_MODEL }} \
             -f apps/web/Dockerfile -t hexagen-monaco-web:prod .
 
       - name: Save Image to tar.gz
