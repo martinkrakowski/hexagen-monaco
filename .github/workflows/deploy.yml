@@ -9,12 +9,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           persist-credentials: false
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main (pinned)
         with:
           tool-cache: false
           docker-images: false
@@ -36,7 +36,7 @@ jobs:
           cp deploy/docker-compose.prod.yml docker-compose.prod.yml
 
       - name: Transfer artifacts to VPS via SCP
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
@@ -48,7 +48,7 @@ jobs:
           overwrite: true
 
       - name: Execute Deployment Commands on VPS
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         # Map secrets into the runner env so `envs:` can forward real values to
         # the remote shell. NOTE: GitHub forbids secret names with a GITHUB_
         # prefix, so the OAuth app credentials are stored as GH_OAUTH_ID /
