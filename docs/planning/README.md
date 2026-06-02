@@ -14,11 +14,11 @@ All Core Implementation planning artifacts now live under the `core-implementati
 
 - [Core Implementation Roadmap](core-implementation/roadmap.md)
 - [Overview](core-implementation/overview.md)
-- [Phase 3 — Execution DAG](core-implementation/phase-3.md)
-- [Phase 4 — Transaction System](core-implementation/phase-4.md)
-- [Phase 5 — Probabilistic Layer](core-implementation/phase-5.md)
-- [Phase 6 — System Verification](core-implementation/phase-6.md)
-- [Phase 7 — Composition-Root Purification](core-implementation/phase-7.md)
+- [Phase 3 — Execution DAG](core-implementation/execution-dag.md)
+- [Phase 4 — Transaction System](core-implementation/transaction-system.md)
+- [Phase 5 — Probabilistic Layer](core-implementation/probabilistic-layer.md)
+- [Phase 6 — System Verification](core-implementation/system-verification.md)
+- [Phase 7 — Composition-Root Purification](core-implementation/composition-root-purification.md)
 
 ## Relationship to Other Sections
 

@@ -17,12 +17,15 @@ Complete the `transaction-system` package with production-grade semantics for sp
 - Integration points with `ReconcileUseCase` and manifest mutation adapters.
 
 ## Associated ADRs
+
 - **ADR-0020**: Transaction Lifecycle Semantics
 
 ## Status
+
 Scaffold and core semantics were delivered. Some advanced backpressure and cache behaviors were still being hardened in later phases.
 
 ## Important Design Decisions
+
 - Transactions are first-class architectural citizens, not just infrastructure concerns.
 - The system must support speculative work that can be safely discarded without side effects on the manifest.
 - Cache key design was deliberately strict to prevent subtle semantic drift.

@@ -17,9 +17,11 @@ Provide comprehensive, automated verification that the delivered core system mee
 - LLM schema-drift regression testing under realistic workloads.
 
 ## Status
+
 This phase was still in flight at the time of the original plan. Many of the verification tasks were designed to run in parallel with parts of Phase 7.
 
 ## Success Criteria (from original plan)
+
 - All property test suites passing at 1000+ scenario scale.
 - Budgets and accessibility targets met.
 - Final verification ADR published.
