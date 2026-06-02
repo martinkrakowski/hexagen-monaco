@@ -31,7 +31,10 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      session.accessToken = token.accessToken;
+      // The GitHub access token is deliberately NOT copied onto the session:
+      // it carries `repo` scope and must never reach the browser. Server routes
+      // read it from the JWT via `getToken()`. Only non-sensitive identity
+      // (login/sub) is exposed to the client.
       if (session.user) {
         session.user.login = token.login;
         session.user.sub = token.sub;

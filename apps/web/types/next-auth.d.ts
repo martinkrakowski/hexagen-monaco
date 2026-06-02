@@ -2,7 +2,9 @@ import type { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
   interface Session {
-    accessToken?: string;
+    // accessToken is intentionally NOT on Session — the GitHub `repo`-scoped
+    // token lives only on the JWT (read server-side via getToken()) and must
+    // not be exposed to the browser.
     user: {
       name?: string;
       /** GitHub username (login), distinct from the display name. */
