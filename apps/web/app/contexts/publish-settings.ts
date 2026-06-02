@@ -6,7 +6,7 @@
  * `export-state.ts`).
  */
 
-import type { PublishMode } from "@hexagen/shared";
+import type { GitHubPublishPrefs, PublishMode } from "@hexagen/shared";
 
 /** Default commit message per mode; mirrors the server-side fallbacks. */
 export const PUBLISH_MODE_MESSAGES: Record<PublishMode, string> = {
@@ -46,7 +46,7 @@ export type PublishAction =
  */
 export function decidePublishAction(
   isLinked: boolean,
-  prefs: { mode: PublishMode; remember: boolean } | null | undefined,
+  prefs: GitHubPublishPrefs | null | undefined,
 ): PublishAction {
   if (!isLinked) return { kind: "create-dialog" };
   if (prefs?.remember) return { kind: "run-remembered", mode: prefs.mode };

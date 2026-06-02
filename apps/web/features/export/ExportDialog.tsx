@@ -85,6 +85,13 @@ export function ExportDialog({
     [],
   );
 
+  // Re-seed the commit message when the dialog (re)opens, so a fresh publish
+  // starts from the default rather than a stale prior entry. (repoName/isPrivate
+  // intentionally persist across reopen; only the commit message resets here.)
+  useEffect(() => {
+    if (open) setCommitMessage(initialCommitMessage);
+  }, [open, initialCommitMessage]);
+
   const handleSubmit = async () => {
     const trimmed = repoName.trim();
     if (!trimmed) {
