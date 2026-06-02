@@ -34,12 +34,16 @@ export async function POST(request: NextRequest) {
     }
 
     const { githubLink, files, message } = body;
+    const hasValidFiles =
+      !!files &&
+      typeof files === "object" &&
+      !Array.isArray(files) &&
+      Object.values(files).every((value) => typeof value === "string");
     if (
       !githubLink ||
       !githubLink.owner ||
       !githubLink.repo ||
-      !files ||
-      typeof files !== "object"
+      !hasValidFiles
     ) {
       return NextResponse.json(
         { error: "Missing githubLink or files (Record<string,string>)" },

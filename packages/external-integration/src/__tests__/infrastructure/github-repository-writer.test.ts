@@ -7,7 +7,7 @@ describe("InMemoryRepositoryWriter (double for commitFiles)", () => {
     const double = new InMemoryRepositoryWriter();
     const link = { owner: "acme", repo: "demo", branch: "main" };
     const files = { "src/hello.ts": 'console.log("hi from push");' };
-    const res = await double.commitFiles(link, files, "test: editor push", "fake-token");
+    const res = await double.commitFiles(link, files, "test: editor push");
 
     assert.strictEqual(res.success, true);
     if (res.success) {
@@ -21,8 +21,16 @@ describe("InMemoryRepositoryWriter (double for commitFiles)", () => {
 
   it("records multiple commits", async () => {
     const double = new InMemoryRepositoryWriter();
-    await double.commitFiles({ owner: "o", repo: "r", branch: "main" }, { "a.txt": "1" }, "c1", "t");
-    await double.commitFiles({ owner: "o", repo: "r", branch: "main" }, { "b.txt": "2" }, "c2", "t");
+    await double.commitFiles(
+      { owner: "o", repo: "r", branch: "main" },
+      { "a.txt": "1" },
+      "c1",
+    );
+    await double.commitFiles(
+      { owner: "o", repo: "r", branch: "main" },
+      { "b.txt": "2" },
+      "c2",
+    );
     assert.strictEqual(double.commits.length, 2);
   });
 });

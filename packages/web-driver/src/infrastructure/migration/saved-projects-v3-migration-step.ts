@@ -47,7 +47,9 @@ export class SavedProjectsV3MigrationStep implements MigrationStep {
       let recordsMigrated = 0;
 
       const migrated: SavedProject[] = projects.map((p) => {
-        if (typeof p.schemaVersion !== "number" || p.schemaVersion < 3) {
+        // Number.isFinite rejects NaN/Infinity (typeof NaN === "number" would
+        // otherwise skip malformed rows and wedge later verification).
+        if (!Number.isFinite(p.schemaVersion) || p.schemaVersion < 3) {
           recordsMigrated += 1;
           // githubLink is optional and simply absent on pre-v3 records; only the
           // schema version needs bumping.
@@ -79,7 +81,7 @@ export class SavedProjectsV3MigrationStep implements MigrationStep {
         !loadVerify.success ||
         loadVerify.value.length !== migrated.length ||
         !loadVerify.value.every(
-          (p) => typeof p.schemaVersion === "number" && p.schemaVersion >= 3,
+          (p) => Number.isFinite(p.schemaVersion) && p.schemaVersion >= 3,
         )
       ) {
         return {
@@ -114,7 +116,7 @@ export class SavedProjectsV3MigrationStep implements MigrationStep {
     if (!loadResult.success) return false;
 
     return loadResult.value.every(
-      (p) => typeof p.schemaVersion === "number" && p.schemaVersion >= 3,
+      (p) => Number.isFinite(p.schemaVersion) && p.schemaVersion >= 3,
     );
   }
 }

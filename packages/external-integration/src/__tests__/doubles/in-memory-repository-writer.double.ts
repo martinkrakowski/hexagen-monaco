@@ -3,7 +3,7 @@ import type {
   RepositoryWriterPort,
   CommitResult,
   RepositoryWriterError,
-} from "../../../application/ports/out/repository-writer.port.js";
+} from "../../application/ports/out/repository-writer.port.js";
 import type { Result } from "@hexagen/shared";
 
 /**
@@ -21,10 +21,12 @@ export class InMemoryRepositoryWriter implements RepositoryWriterPort {
     link: RepositoryLink,
     files: Record<string, string>,
     message: string,
-    _token: string,
   ): Promise<Result<CommitResult, RepositoryWriterError>> {
-    this.commits.push({ link, files, message });
-    const fakeSha = "deadbeef" + this.commits.length.toString().padStart(4, "0");
+    // Snapshot inputs by value so later mutation of the caller's objects can't
+    // retroactively change what we recorded (which would mask wiring bugs).
+    this.commits.push({ link: { ...link }, files: { ...files }, message });
+    const fakeSha =
+      "deadbeef" + this.commits.length.toString().padStart(4, "0");
     return {
       success: true,
       value: {

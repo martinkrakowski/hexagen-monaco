@@ -136,7 +136,14 @@ export class GitHubGitDataClient {
         sha: commitSha,
       });
     } catch (err) {
-      if (err instanceof GitHubApiError && err.status === 422) {
+      // GitHub returns 422 for many validation failures; only the specific
+      // "Reference already exists" case means the branch was created
+      // concurrently. Remap just that to a 409 conflict; rethrow other 422s.
+      if (
+        err instanceof GitHubApiError &&
+        err.status === 422 &&
+        /already exists/i.test(err.message)
+      ) {
         throw new GitHubApiError(
           409,
           `Branch '${branch}' was created concurrently; re-run to build on new history.`,

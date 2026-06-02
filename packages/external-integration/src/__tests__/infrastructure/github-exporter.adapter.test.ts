@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { GitHubExporterAdapter } from "../../infrastructure/adapters/github-exporter.adapter.js";
-import type { ExportConfig } from "../../src/application/ports/out/project-exporter.port.js";
+import type { ExportConfig } from "@hexagen/project-generation";
 
 interface RecordedCall {
   method: string;
