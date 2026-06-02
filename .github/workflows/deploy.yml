@@ -41,9 +41,9 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: |
-            hexagen-web.tar.gz
-            docker-compose.prod.yml
+          # appleboy/scp-action splits `source` on commas, not newlines — a
+          # multi-line block becomes one bogus path ("tar: empty archive").
+          source: "hexagen-web.tar.gz,docker-compose.prod.yml"
           target: "/opt/hexagen-monaco/"
           overwrite: true
 
