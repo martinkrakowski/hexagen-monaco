@@ -75,8 +75,14 @@ jobs:
           # container up. pipefail is omitted intentionally — the remote /bin/sh
           # may be dash, where `set -o pipefail` would itself error, and there are
           # no pipes in this script.
+          # Hardening: `umask 077` + `chmod 600 .env` keep secrets non-world-readable;
+          # the line-count guard catches a secret with an embedded newline corrupting
+          # the dotenv; `--force-recreate` guarantees rotated `.env` values reach the
+          # container (env_file is read at container-creation time, so an unchanged
+          # image would otherwise keep the old env).
           script: "set -eu\n\
             cd /opt/hexagen-monaco\n\
+            umask 077\n\
             cat <<EOF > .env\n\
             NEXTAUTH_URL=\"$NEXTAUTH_URL\"\n\
             NEXTAUTH_SECRET=\"$AUTH_SECRET\"\n\
@@ -87,8 +93,10 @@ jobs:
             LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
             LLM_MODEL=\"$LLM_MODEL\"\n\
             EOF\n\
+            chmod 600 .env\n\
+            [ \"$(wc -l < .env)\" -eq 8 ] || { echo 'FATAL: .env line count != 8 (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
-            docker compose -f docker-compose.prod.yml up -d\n\
+            docker compose -f docker-compose.prod.yml up -d --force-recreate\n\
             rm hexagen-web.tar.gz\n\
             docker system prune -a -f --volumes"
