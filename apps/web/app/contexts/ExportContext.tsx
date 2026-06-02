@@ -17,59 +17,24 @@ import { postJson, postForBlob } from "@/lib/fetch-json";
 import { getSavedProjectsPersistence, getLogger } from "@/lib/wire.client";
 import type { ExportDialogSubmitPayload } from "../../features/export/ExportDialog";
 
-/**
- * Discriminated state machine for the project export flow.
- *
- * Replaces per-consumer flat booleans (dialogOpen, exporting, error,
- * statusMessage) with a single variant at a time. Illegal combinations
- * (e.g. exporting && error) are not representable.
- */
-export interface GithubLinkData {
-  owner: string;
-  repo: string;
-  branch: string;
-  defaultBranch: string;
-  lastCommitSha: string | null;
-  htmlUrl: string;
-}
+import {
+  isGithubExportActive,
+  type ExportState,
+  type GithubLinkData,
+} from "./export-state";
 
-export type ExportDestination = "zip" | "github";
-
-export type ExportState =
-  | { kind: "idle" }
-  | { kind: "dialog-open" }
-  | { kind: "exporting"; destination: ExportDestination }
-  | {
-      kind: "success";
-      destination: ExportDestination;
-      message: string;
-      destinationUrl?: string;
-      githubLink?: GithubLinkData;
-    }
-  | { kind: "error"; destination: ExportDestination; message: string };
+// Re-export the pure state types/selector so existing consumers keep importing
+// them from "@/contexts/ExportContext".
+export {
+  isGithubExportActive,
+  type ExportState,
+  type ExportDestination,
+  type GithubLinkData,
+} from "./export-state";
 
 interface GithubExportResponse {
   destinationUrl?: string;
   githubLink?: GithubLinkData;
-}
-
-/**
- * True while the GitHub publish flow owns the UI (dialog form, or a
- * github-destined exporting/success/error). Derived in one place so the
- * Header `open` condition and the status strip can't drift from the state
- * machine as variants evolve.
- */
-export function isGithubExportActive(state: ExportState): boolean {
-  switch (state.kind) {
-    case "dialog-open":
-      return true;
-    case "exporting":
-    case "success":
-    case "error":
-      return state.destination === "github";
-    default:
-      return false;
-  }
 }
 
 export interface ProjectExportContextValue {
@@ -79,8 +44,14 @@ export interface ProjectExportContextValue {
 
   /** Trigger a ZIP export; fires download on success. */
   exportZip: () => Promise<void>;
-  /** Open the GitHub export dialog (after auth guard). */
+  /** Open the GitHub export dialog (after auth guard) — the entry path. */
   requestGithubExport: () => Promise<void>;
+  /**
+   * Show the dialog form without the auth guard — for "Back to form" after an
+   * error, where the user already authenticated and a lapsed session shouldn't
+   * bounce them to OAuth.
+   */
+  showGithubDialog: () => void;
   /** Submit the GitHub dialog form. */
   submitGithubExport: (payload: ExportDialogSubmitPayload) => Promise<void>;
   /** Re-run the last GitHub publish (after an error) without re-entering the form. */
@@ -161,6 +132,12 @@ export function ExportProvider({ children }: { children: ReactNode }) {
     if (!activeProjectId) return;
     setState({ kind: "dialog-open" });
   }, [isAuthenticated, signIn, activeProjectId]);
+
+  // Return to the editable form (e.g. after an error) without re-running the
+  // auth guard — the user already authenticated to get here.
+  const showGithubDialog = useCallback(() => {
+    setState({ kind: "dialog-open" });
+  }, []);
 
   const submitGithubExport = useCallback(
     async ({ repoName, isPrivate }: ExportDialogSubmitPayload) => {
@@ -258,6 +235,7 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       exportZip,
       requestGithubExport,
+      showGithubDialog,
       submitGithubExport,
       retryGithubExport,
       closeDialog,
@@ -269,6 +247,7 @@ export function ExportProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       exportZip,
       requestGithubExport,
+      showGithubDialog,
       submitGithubExport,
       retryGithubExport,
       closeDialog,

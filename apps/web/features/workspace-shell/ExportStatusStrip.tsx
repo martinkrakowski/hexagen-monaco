@@ -42,8 +42,8 @@ export function ExportStatusStrip({
   if (state.kind === "idle" || state.kind === "dialog-open") return null;
 
   if (state.kind === "exporting") {
-    const label =
-      state.destination === "zip" ? "Exporting ZIP…" : "Pushing to GitHub…";
+    // Only the ZIP path reaches here — the GitHub flow is gated out above and
+    // owned by ExportDialog.
     return (
       <div
         role="status"
@@ -51,7 +51,7 @@ export function ExportStatusStrip({
         className="flex items-center gap-2 px-6 py-2 bg-muted/60 border-b border-border text-sm text-muted-foreground"
       >
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span>{label}</span>
+        <span>Exporting ZIP…</span>
       </div>
     );
   }

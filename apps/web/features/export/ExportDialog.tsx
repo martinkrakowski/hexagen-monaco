@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -61,6 +61,15 @@ export function ExportDialog({
   const [isPrivate, setIsPrivate] = useState(initialIsPrivate);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear the "Copied" reset timer if the dialog unmounts first.
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
 
   const handleSubmit = async () => {
     const trimmed = repoName.trim();
@@ -83,7 +92,8 @@ export function ExportDialog({
     try {
       await navigator.clipboard.writeText(success.htmlUrl);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       /* clipboard may be unavailable; the Open button still works */
     }
@@ -104,7 +114,11 @@ export function ExportDialog({
         : "Push to GitHub";
 
   return (
-    <Dialog open={open} onClose={handleClose}>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      dismissible={phase !== "submitting"}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -249,7 +263,10 @@ export function ExportDialog({
           ) : null}
 
           {phase === "success" ? (
-            <Button type="button" size="sm" onClick={onClose}>
+            // autoFocus fires on mount (i.e. when the panel swaps in), moving
+            // keyboard focus to the primary action instead of stranding it on
+            // the now-unmounted form button.
+            <Button type="button" size="sm" onClick={onClose} autoFocus>
               Done
             </Button>
           ) : null}
@@ -264,7 +281,7 @@ export function ExportDialog({
               >
                 Back to form
               </Button>
-              <Button type="button" size="sm" onClick={onRetry}>
+              <Button type="button" size="sm" onClick={onRetry} autoFocus>
                 Retry
               </Button>
             </>

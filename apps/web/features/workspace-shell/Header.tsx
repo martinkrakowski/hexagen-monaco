@@ -133,7 +133,7 @@ export function Header({
         onClose={exportFlow.closeDialog}
         onSubmit={exportFlow.submitGithubExport}
         onRetry={() => void exportFlow.retryGithubExport()}
-        onBackToForm={() => void exportFlow.requestGithubExport()}
+        onBackToForm={exportFlow.showGithubDialog}
         initialRepoName={activeWorkspace?.name ?? ""}
         error={dialogError}
         success={dialogSuccess}

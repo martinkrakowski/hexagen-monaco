@@ -9,11 +9,21 @@ interface DialogProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  /**
+   * When false, Escape and backdrop clicks do NOT close the dialog (e.g. a
+   * long-running operation that must finish). Default true. Closing it
+   * programmatically via the `open` prop still works.
+   */
+  dismissible?: boolean;
 }
 
-function Dialog({ open, onClose, children }: DialogProps) {
+function Dialog({ open, onClose, children, dismissible = true }: DialogProps) {
   const dialogRef = React.useRef<HTMLDialogElement>(null);
   const titleId = React.useId();
+  // Set while we close the native <dialog> ourselves (from the effect below),
+  // so the resulting `close` event doesn't echo back into the consumer's
+  // onClose — which would double-fire on every programmatic close.
+  const closingRef = React.useRef(false);
 
   React.useEffect(() => {
     const dialog = dialogRef.current;
@@ -22,11 +32,30 @@ function Dialog({ open, onClose, children }: DialogProps) {
     if (open) {
       if (!dialog.open) dialog.showModal();
     } else {
-      if (dialog.open) dialog.close();
+      if (dialog.open) {
+        closingRef.current = true;
+        dialog.close();
+      }
     }
   }, [open]);
 
+  const handleClose = () => {
+    if (closingRef.current) {
+      closingRef.current = false;
+      return;
+    }
+    onClose();
+  };
+
+  const handleCancel = (e: React.SyntheticEvent<HTMLDialogElement>) => {
+    // Escape fires `cancel` (cancelable) before `close`. Preventing it stops
+    // the browser from force-closing a non-dismissible dialog out from under
+    // the controlled `open` prop.
+    if (!dismissible) e.preventDefault();
+  };
+
   const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    if (!dismissible) return;
     if (e.target === dialogRef.current) onClose();
   };
 
@@ -34,7 +63,8 @@ function Dialog({ open, onClose, children }: DialogProps) {
     <DialogIdContext.Provider value={titleId}>
       <dialog
         ref={dialogRef}
-        onClose={onClose}
+        onClose={handleClose}
+        onCancel={handleCancel}
         onClick={handleBackdropClick}
         aria-labelledby={titleId}
         aria-modal="true"
