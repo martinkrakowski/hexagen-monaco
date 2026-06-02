@@ -157,7 +157,9 @@ export function useProjectLifecycle(
       ui.enterEditMode(id);
       onGoToStep(0);
       ui.closeDialog();
-      editor.setSessionId(crypto.randomUUID());
+      // Editor session is keyed on the active project's id by useEditorSession
+      // (see its effect) — setActiveWorkspace below drives it. A random session
+      // here would just be overwritten and wouldn't persist across reloads.
       editor.setActiveWorkspace({
         projectId: saved.id,
         name: saved.name,

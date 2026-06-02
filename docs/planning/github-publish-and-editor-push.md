@@ -15,16 +15,16 @@ Most of the **wizard → GitHub publish** path already exists. The genuinely new
 work is the **editor push** and the **connected-repo link** that ties the two
 together.
 
-| Capability                                   | State                  | Notes                                                                  |
-| -------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
-| GitHub OAuth (token acquisition)             | ✅ Built               | NextAuth `GitHubProvider`, scope `read:user user:email repo`            |
-| Wizard "Sign in / Push to GitHub" button     | ✅ Built               | `features/project-wizard/steps/summary-step/ExportActions.tsx`         |
-| `POST /api/export/github` route              | ✅ Built               | Reads token from session JWT, calls the exporter                       |
-| Create repo + commit scaffold (Git Data API) | ✅ Built               | `GitHubExporterAdapter` (blobs/tree/commit/upsertRef); updates too     |
-| Repo PRs                                      | ⚠️ **Stub**           | `GitHubVcsAdapter.createPullRequest` hardcodes `owner`/`repo` (`TODO`)  |
-| **Persisted project ↔ repo link**            | ❌ Missing             | Nothing stores `{owner, repo, branch, lastCommitSha}` after publish    |
-| **Editor "Push / Update" button**            | ❌ Missing             | `EditorToolbar` has Edit/Save/Discard only                             |
-| **Incremental commit of edited files**       | ❌ Missing             | Exporter pushes a whole `sourceDirectory`, not the in-memory dirty set |
+| Capability                                   | State       | Notes                                                                  |
+| -------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
+| GitHub OAuth (token acquisition)             | ✅ Built    | NextAuth `GitHubProvider`, scope `read:user user:email repo`           |
+| Wizard "Sign in / Push to GitHub" button     | ✅ Built    | `features/project-wizard/steps/summary-step/ExportActions.tsx`         |
+| `POST /api/export/github` route              | ✅ Built    | Reads token from session JWT, calls the exporter                       |
+| Create repo + commit scaffold (Git Data API) | ✅ Built    | `GitHubExporterAdapter` (blobs/tree/commit/upsertRef); updates too     |
+| Repo PRs                                     | ⚠️ **Stub** | `GitHubVcsAdapter.createPullRequest` hardcodes `owner`/`repo` (`TODO`) |
+| **Persisted project ↔ repo link**            | ❌ Missing  | Nothing stores `{owner, repo, branch, lastCommitSha}` after publish    |
+| **Editor "Push / Update" button**            | ❌ Missing  | `EditorToolbar` has Edit/Save/Discard only                             |
+| **Incremental commit of edited files**       | ❌ Missing  | Exporter pushes a whole `sourceDirectory`, not the in-memory dirty set |
 
 So the user's first ask ("connect/publish in the wizard") is ~80% done; this
 plan finishes it (persist the repo link) and builds the editor-push half.
@@ -66,7 +66,7 @@ shape this section: **persistence is client-side** (not the stub
    `schemaVersion`) is stored via `web-driver`'s localStorage adapter, with
    migrations under `web-driver/src/infrastructure/migration/`.
    - Add an optional `githubLink?: { owner; repo; branch; defaultBranch;
-     lastCommitSha; htmlUrl }` to `SavedProject`.
+lastCommitSha; htmlUrl }` to `SavedProject`.
    - **Migration mechanics (verified):** saved-projects already migrated LS→IDB
      via the `saved-projects-ls-to-idb` step, which is ID-tracked and **marked
      complete** in existing users' registries — editing it will _not_ re-run.
@@ -89,7 +89,7 @@ shape this section: **persistence is client-side** (not the stub
      (shared by both the initial export and the new commit path — removes the
      current exporter/VCS duplication).
    - Keep `ProjectExporterPort` where its use case consumes it; `external-
-     integration` provides the implementation, wired in the **composition root**
+integration` provides the implementation, wired in the **composition root**
      (`apps/web/app/lib/wire.server.ts`). Settle exact port placement in
      implementation (a `shared` git-primitive type may be needed so neither
      package imports the other against the rules).
@@ -113,9 +113,13 @@ shape this section: **persistence is client-side** (not the stub
 4. **Editor UI** — a "Push / Update" control + commit-message field in
    `EditorToolbar` / `EditableMonaco`. The editor workspace already tracks
    `files: Map<fileId, { …, dirty }>` (`useEditorWorkspace` /
-   `PersistedEditorWorkspaceFile`), so **push the whole dirty set in one commit**
-   (building a tree from N files is the same Git Data API shape as one). Enable
-   only when (connected ∧ dirty files exist).
+   `PersistedEditorWorkspaceFile`), so **push the whole _unpushed_ set in one
+   commit** (building a tree from N files is the same Git Data API shape as one).
+   - **`dirty` ≠ unpushed.** `dirty` means "unsaved local changes"; after a local
+     save it flips to `false` but the file still hasn't been pushed. Push
+     eligibility needs a **second signal** — add an `unpushed: boolean` (or
+     per-file `lastPushedSha`) to the workspace file model, set on save and
+     cleared on successful push. Enable Push only when (connected ∧ any unpushed).
 
 ### Data flow
 
@@ -134,9 +138,10 @@ Editor push:     EditorToolbar(Push) → /api/push/github
 
 **Phase 1 — Persist the connected repo** _(unblocks everything)_
 
-- Add optional `githubLink` to `SavedProject`; bump `schemaVersion` + migration
-  step (backfill undefined). Update the `web-driver` localStorage saved-projects
-  adapter to round-trip it.
+- Add optional `githubLink` to `SavedProject`; add a **new** `SavedProjectsV3`
+  migration step (new id) registered in the `wire.client.ts` orchestrator array,
+  bump `CURRENT_SCHEMA_VERSION` 2→3. Update the IDB saved-projects adapter to
+  round-trip the field.
 - On successful wizard publish, store the link; show a "Connected to
   `owner/repo`" indicator.
 - _Exit:_ a published project reloads with its repo identity intact (incl. an
@@ -155,9 +160,11 @@ Editor push:     EditorToolbar(Push) → /api/push/github
 
 **Phase 3 — Editor push UI**
 
-- Add "Push / Update" + commit-message UX to `EditorToolbar` / `EditableMonaco`;
-  wire to `POST /api/push/github`. Push the dirty set from the editor workspace.
-- _Exit:_ edit → save → push updates the repo; toast links the commit; dirty
+- Add an `unpushed` signal to the workspace file model (set on save, cleared on
+  successful push). Add "Push / Update" + commit-message UX to `EditorToolbar` /
+  `EditableMonaco`; wire to `POST /api/push/github` (JSON body = `Record` of
+  unpushed files).
+- _Exit:_ edit → save → push updates the repo; toast links the commit; `unpushed`
   flags clear.
 
 **Phase 4 — Robustness & options**
@@ -202,10 +209,12 @@ Editor push:     EditorToolbar(Push) → /api/push/github
 
 ## Files in scope (corrected)
 
-- `packages/shared/src/domain/saved-project.ts` — add optional `githubLink`, bump `schemaVersion`
-- `packages/shared/src/domain/persisted-editor-workspace.ts` — dirty-file model (read-only reference)
-- `packages/web-driver/src/infrastructure/adapters/local-storage-saved-projects.adapter.ts` — round-trip the link
-- `packages/web-driver/src/infrastructure/migration/saved-projects-migration-step.ts` — new migration step
+- `packages/shared/src/domain/saved-project.ts` — add optional `githubLink`
+- `apps/web/app/hooks/useSavedProjects.ts` — `CURRENT_SCHEMA_VERSION` 2→3
+- `packages/shared/src/domain/persisted-editor-workspace.ts` — add `unpushed` to the file model
+- `packages/web-driver/src/infrastructure/adapters/idb-saved-projects.adapter.ts` — round-trip the link (IDB is the live backend)
+- `packages/web-driver/src/infrastructure/migration/` — **new** `saved-projects-v3` step (new id)
+- `apps/web/app/lib/wire.client.ts` — register the new migration step in the orchestrator array
 - `packages/external-integration/` — relocate Git Data client; add `commitFiles` port + adapter + in-memory double + tests
 - `.architecture/contexts/infrastructure/external-integration/context.yaml` + `.architecture/invariants/linter-config.yaml` — declare the new port / cross-package edges, then `yarn lint:arch`
 - `apps/web/app/lib/wire.server.ts` — composition-root wiring
@@ -221,7 +230,22 @@ Editor push:     EditorToolbar(Push) → /api/push/github
 
 ---
 
-## Review dispositions (rev. 1 → rev. 2)
+## Review dispositions
+
+### rev. 2 → rev. 3 (archeology + nit pass)
+
+- **Migration mechanics corrected** — a completed migration step won't re-run on
+  code change; added a **new** `saved-projects-v3` step (new id) + orchestrator
+  registration in `wire.client.ts`, and located `CURRENT_SCHEMA_VERSION` (2→3) in
+  `useSavedProjects.ts`. Backend is IDB.
+- **`unpushed` ≠ `dirty`** — `dirty` clears on local save; added an `unpushed`
+  signal for push eligibility.
+- **Token injection** — relocation favors token-per-call (or factory); shapes the
+  `commitFiles` signature. Noted `wire.server.ts:102` impact.
+- **Files shape** — `commitFiles` takes a `Record`/array, not a `Map` (push body
+  is JSON; Map→Record serialization already exists for IDB).
+
+### rev. 1 → rev. 2
 
 - **Persistence target fixed** — was `packages/persistence/` (a `yarn sync`
   stub); now `SavedProject` (shared) + `web-driver` localStorage adapter +
@@ -235,8 +259,8 @@ Editor push:     EditorToolbar(Push) → /api/push/github
   _(Review #1.)_
 - **Adapter placement corrected** — relocate the Git Data client to
   `external-integration`; `project-generation` may import only `@hexagen/shared`
-  + `@hexagen/sync`, so a core-imports-infra extraction would fail `lint:arch`.
-  Added the `context.yaml` / `linter-config.yaml` / `lint:arch` steps. _(Review #2.)_
+  - `@hexagen/sync`, so a core-imports-infra extraction would fail `lint:arch`.
+    Added the `context.yaml` / `linter-config.yaml` / `lint:arch` steps. _(Review #2.)_
 - **Push scope changed to the dirty set** — `useEditorWorkspace` already holds a
   `Map` of dirty files. _(Review #2.)_
 

@@ -12,11 +12,18 @@ import { WizardStepRouter } from "../project-wizard/WizardStepRouter";
 import { wizardSteps } from "../project-wizard/config";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
 import { useEditorSession } from "./hooks/useEditorSession";
+import { projectWorkspaceLayoutPropsEqual } from "./project-workspace-layout-equality";
 import { ExportProvider } from "@/contexts/ExportContext";
 import { SelectedAddOnsProvider } from "../project-wizard/contexts/SelectedAddOnsContext";
 import { Header } from "./Header";
 import { ArchitecturePreviewPane } from "./ArchitecturePreviewPane";
 import { NewProjectConfirmDialog } from "./NewProjectConfirmDialog";
+import { UnsavedEditorChangesDialog } from "./UnsavedEditorChangesDialog";
+import { ReloadGuard } from "./ReloadGuard";
+import {
+  EditorGuardProvider,
+  useEditorGuard,
+} from "@/contexts/EditorGuardContext";
 import type { ViewMode } from "@/types/view-mode";
 
 export interface ProjectWorkspaceProps {
@@ -48,29 +55,31 @@ export function ProjectWorkspace({
   const pendingRoute = useRef<string | null>(null);
 
   return (
-    <WizardLifecycleProvider
-      ui={ui}
-      uiState={ui.state}
-      editor={editor}
-      totalSteps={totalSteps}
-      onGoToStep={onGoToStep}
-    >
-      <ProjectWorkspaceLayout
-        currentStepIndex={currentStepIndex}
-        viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
-        onCloseMiddlePanel={onCloseMiddlePanel}
-        onCloseRightPanel={onCloseRightPanel}
-        onNavigateToProjects={onNavigateToProjects}
+    <EditorGuardProvider>
+      <WizardLifecycleProvider
         ui={ui}
+        uiState={ui.state}
         editor={editor}
-        isEditing={isEditing}
-        pendingRoute={pendingRoute}
-        router={router}
+        totalSteps={totalSteps}
+        onGoToStep={onGoToStep}
       >
-        {children}
-      </ProjectWorkspaceLayout>
-    </WizardLifecycleProvider>
+        <ProjectWorkspaceLayout
+          currentStepIndex={currentStepIndex}
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
+          onCloseMiddlePanel={onCloseMiddlePanel}
+          onCloseRightPanel={onCloseRightPanel}
+          onNavigateToProjects={onNavigateToProjects}
+          ui={ui}
+          editor={editor}
+          isEditing={isEditing}
+          pendingRoute={pendingRoute}
+          router={router}
+        >
+          {children}
+        </ProjectWorkspaceLayout>
+      </WizardLifecycleProvider>
+    </EditorGuardProvider>
   );
 }
 
@@ -89,112 +98,115 @@ interface ProjectWorkspaceLayoutProps {
   children?: React.ReactNode;
 }
 
-const ProjectWorkspaceLayout = React.memo(
-  function ProjectWorkspaceLayout({
-    currentStepIndex,
-    viewMode,
-    onViewModeChange,
-    onCloseMiddlePanel,
-    onCloseRightPanel,
-    onNavigateToProjects,
-    ui,
-    editor,
-    isEditing,
-    pendingRoute,
-    router,
-    children,
-  }: ProjectWorkspaceLayoutProps) {
-    const handleNavigate = useCallback(
-      (route: string) => {
-        if (isEditing) {
-          pendingRoute.current = route;
-          ui.openDialog({ kind: "new-project" });
-        } else {
-          router.push(route);
-        }
-      },
-      [isEditing, ui, router, pendingRoute],
-    );
+const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
+  currentStepIndex,
+  viewMode,
+  onViewModeChange,
+  onCloseMiddlePanel,
+  onCloseRightPanel,
+  onNavigateToProjects,
+  ui,
+  editor,
+  isEditing,
+  pendingRoute,
+  router,
+  children,
+}: ProjectWorkspaceLayoutProps) {
+  const guard = useEditorGuard();
+  const handleNavigate = useCallback(
+    (route: string) => {
+      // Unsaved editor (in-buffer) changes take priority — prompt to save them
+      // before leaving, since they're the most direct data-loss risk.
+      if (guard.hasUnsavedChanges) {
+        pendingRoute.current = route;
+        ui.openDialog({ kind: "unsaved-editor" });
+      } else if (isEditing) {
+        pendingRoute.current = route;
+        ui.openDialog({ kind: "new-project" });
+      } else {
+        router.push(route);
+      }
+    },
+    [guard.hasUnsavedChanges, isEditing, ui, router, pendingRoute],
+  );
 
-    return (
-      <ExportProvider>
-        <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-          <Header
-            onLoadManifest={() => handleNavigate("/projects/new/import")}
-            isEditing={isEditing}
-            onNewProject={() => handleNavigate("/projects/new")}
-            onOpenWelcomeManifest={() => handleNavigate("/projects/new/ai")}
-            onNavigateToProjects={onNavigateToProjects}
+  return (
+    <ExportProvider>
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
+        <Header
+          onLoadManifest={() => handleNavigate("/projects/new/import")}
+          isEditing={isEditing}
+          onNewProject={() => handleNavigate("/projects/new")}
+          onOpenWelcomeManifest={() => handleNavigate("/projects/new/ai")}
+          onNavigateToProjects={onNavigateToProjects}
+        />
+
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <ResizableLayout
+            leftTitle="HexaGen Project Wizard"
+            rightTitle="AI Governance"
+            onRightPanelClose={onCloseRightPanel}
+            onLeftPanelClose={onCloseMiddlePanel}
+            left={
+              <SelectedAddOnsProvider>
+                <WizardStepFormProvider>
+                  <WizardStepRouter
+                    currentStepIndex={currentStepIndex}
+                    totalSteps={wizardSteps.length}
+                    onViewModeChange={onViewModeChange}
+                    activeContextId={ui.activeContextId ?? ""}
+                    activeMappingId={ui.activeMappingId ?? ""}
+                    onContextSelect={(id) => ui.setContextId(id)}
+                    onMappingSelect={(id) => ui.setMappingId(id)}
+                  />
+                </WizardStepFormProvider>
+              </SelectedAddOnsProvider>
+            }
+            middle={
+              <ArchitecturePreviewPane
+                viewMode={viewMode}
+                selectedFileId={editor.selectedFileId}
+                editedFiles={editor.editedFiles}
+                unpushed={editor.unpushed}
+                onViewModeChange={onViewModeChange}
+                onFileSelect={editor.selectFile}
+                onFileContentChange={editor.updateFile}
+                onFileSave={editor.markFileSaved}
+                onPushed={editor.clearUnpushed}
+              />
+            }
+            right={
+              <GovernancePanelWrapper
+                currentStepIndex={currentStepIndex}
+                enabled={isEditing}
+              />
+            }
           />
+        </main>
 
-          <main className="flex-1 flex flex-col overflow-hidden">
-            <ResizableLayout
-              leftTitle="HexaGen Project Wizard"
-              rightTitle="AI Governance"
-              onRightPanelClose={onCloseRightPanel}
-              onLeftPanelClose={onCloseMiddlePanel}
-              left={
-                <SelectedAddOnsProvider>
-                  <WizardStepFormProvider>
-                    <WizardStepRouter
-                      currentStepIndex={currentStepIndex}
-                      totalSteps={wizardSteps.length}
-                      onViewModeChange={onViewModeChange}
-                      activeContextId={ui.activeContextId ?? ""}
-                      activeMappingId={ui.activeMappingId ?? ""}
-                      onContextSelect={(id) => ui.setContextId(id)}
-                      onMappingSelect={(id) => ui.setMappingId(id)}
-                    />
-                  </WizardStepFormProvider>
-                </SelectedAddOnsProvider>
-              }
-              middle={
-                <ArchitecturePreviewPane
-                  viewMode={viewMode}
-                  selectedFileId={editor.selectedFileId}
-                  editedFiles={editor.editedFiles}
-                  unpushed={editor.unpushed}
-                  onViewModeChange={onViewModeChange}
-                  onFileSelect={editor.selectFile}
-                  onFileContentChange={editor.updateFile}
-                  onFileSave={editor.markFileSaved}
-                  onPushed={editor.clearUnpushed}
-                />
-              }
-              right={
-                <GovernancePanelWrapper
-                  currentStepIndex={currentStepIndex}
-                  enabled={isEditing}
-                />
-              }
-            />
-          </main>
+        <NewProjectConfirmDialog
+          isOpen={ui.dialog.kind === "new-project"}
+          onClose={ui.closeDialog}
+          pendingRoute={pendingRoute}
+          router={router}
+        />
 
-          <NewProjectConfirmDialog
-            isOpen={ui.dialog.kind === "new-project"}
-            onClose={ui.closeDialog}
-            pendingRoute={pendingRoute}
-            router={router}
-          />
-        </div>
-        {children}
-      </ExportProvider>
-    );
-  },
-  (prev, next) => {
-    if (prev.currentStepIndex !== next.currentStepIndex) return false;
-    if (prev.viewMode !== next.viewMode) return false;
-    if (prev.onViewModeChange !== next.onViewModeChange) return false;
-    if (prev.onCloseMiddlePanel !== next.onCloseMiddlePanel) return false;
-    if (prev.onCloseRightPanel !== next.onCloseRightPanel) return false;
-    if (prev.onNavigateToProjects !== next.onNavigateToProjects) return false;
-    // `editor` is a referentially-stable memo that changes only when editor
-    // state does (selected file, edited files, unpushed flag) — re-render so
-    // the preview pane and Push affordance reflect the latest state.
-    if (prev.editor !== next.editor) return false;
-    if (prev.isEditing !== next.isEditing) return false;
-    if (prev.ui.dialog.kind !== next.ui.dialog.kind) return false;
-    if (prev.children !== next.children) return false;
-    return true;
-  },
-);
+        <ReloadGuard />
+        <UnsavedEditorChangesDialog
+          isOpen={ui.dialog.kind === "unsaved-editor"}
+          onClose={() => {
+            pendingRoute.current = null;
+            ui.closeDialog();
+          }}
+          onProceed={() => {
+            const route = pendingRoute.current;
+            pendingRoute.current = null;
+            ui.closeDialog();
+            if (route) router.push(route);
+          }}
+        />
+      </div>
+      {children}
+    </ExportProvider>
+  );
+}, projectWorkspaceLayoutPropsEqual);
