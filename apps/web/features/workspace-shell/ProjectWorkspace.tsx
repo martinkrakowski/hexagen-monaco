@@ -12,6 +12,7 @@ import { WizardStepRouter } from "../project-wizard/WizardStepRouter";
 import { wizardSteps } from "../project-wizard/config";
 import { useWorkspaceShellUi } from "./hooks/useWorkspaceShellUi";
 import { useEditorSession } from "./hooks/useEditorSession";
+import { projectWorkspaceLayoutPropsEqual } from "./project-workspace-layout-equality";
 import { ExportProvider } from "@/contexts/ExportContext";
 import { SelectedAddOnsProvider } from "../project-wizard/contexts/SelectedAddOnsContext";
 import { Header } from "./Header";
@@ -89,112 +90,92 @@ interface ProjectWorkspaceLayoutProps {
   children?: React.ReactNode;
 }
 
-const ProjectWorkspaceLayout = React.memo(
-  function ProjectWorkspaceLayout({
-    currentStepIndex,
-    viewMode,
-    onViewModeChange,
-    onCloseMiddlePanel,
-    onCloseRightPanel,
-    onNavigateToProjects,
-    ui,
-    editor,
-    isEditing,
-    pendingRoute,
-    router,
-    children,
-  }: ProjectWorkspaceLayoutProps) {
-    const handleNavigate = useCallback(
-      (route: string) => {
-        if (isEditing) {
-          pendingRoute.current = route;
-          ui.openDialog({ kind: "new-project" });
-        } else {
-          router.push(route);
-        }
-      },
-      [isEditing, ui, router, pendingRoute],
-    );
+const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
+  currentStepIndex,
+  viewMode,
+  onViewModeChange,
+  onCloseMiddlePanel,
+  onCloseRightPanel,
+  onNavigateToProjects,
+  ui,
+  editor,
+  isEditing,
+  pendingRoute,
+  router,
+  children,
+}: ProjectWorkspaceLayoutProps) {
+  const handleNavigate = useCallback(
+    (route: string) => {
+      if (isEditing) {
+        pendingRoute.current = route;
+        ui.openDialog({ kind: "new-project" });
+      } else {
+        router.push(route);
+      }
+    },
+    [isEditing, ui, router, pendingRoute],
+  );
 
-    return (
-      <ExportProvider>
-        <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-          <Header
-            onLoadManifest={() => handleNavigate("/projects/new/import")}
-            isEditing={isEditing}
-            onNewProject={() => handleNavigate("/projects/new")}
-            onOpenWelcomeManifest={() => handleNavigate("/projects/new/ai")}
-            onNavigateToProjects={onNavigateToProjects}
+  return (
+    <ExportProvider>
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
+        <Header
+          onLoadManifest={() => handleNavigate("/projects/new/import")}
+          isEditing={isEditing}
+          onNewProject={() => handleNavigate("/projects/new")}
+          onOpenWelcomeManifest={() => handleNavigate("/projects/new/ai")}
+          onNavigateToProjects={onNavigateToProjects}
+        />
+
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <ResizableLayout
+            leftTitle="HexaGen Project Wizard"
+            rightTitle="AI Governance"
+            onRightPanelClose={onCloseRightPanel}
+            onLeftPanelClose={onCloseMiddlePanel}
+            left={
+              <SelectedAddOnsProvider>
+                <WizardStepFormProvider>
+                  <WizardStepRouter
+                    currentStepIndex={currentStepIndex}
+                    totalSteps={wizardSteps.length}
+                    onViewModeChange={onViewModeChange}
+                    activeContextId={ui.activeContextId ?? ""}
+                    activeMappingId={ui.activeMappingId ?? ""}
+                    onContextSelect={(id) => ui.setContextId(id)}
+                    onMappingSelect={(id) => ui.setMappingId(id)}
+                  />
+                </WizardStepFormProvider>
+              </SelectedAddOnsProvider>
+            }
+            middle={
+              <ArchitecturePreviewPane
+                viewMode={viewMode}
+                selectedFileId={editor.selectedFileId}
+                editedFiles={editor.editedFiles}
+                onViewModeChange={onViewModeChange}
+                onFileSelect={editor.selectFile}
+                onFileContentChange={editor.updateFile}
+                onFileSave={editor.markFileSaved}
+              />
+            }
+            right={
+              <GovernancePanelWrapper
+                currentStepIndex={currentStepIndex}
+                enabled={isEditing}
+              />
+            }
           />
+        </main>
 
-          <main className="flex-1 flex flex-col overflow-hidden">
-            <ResizableLayout
-              leftTitle="HexaGen Project Wizard"
-              rightTitle="AI Governance"
-              onRightPanelClose={onCloseRightPanel}
-              onLeftPanelClose={onCloseMiddlePanel}
-              left={
-                <SelectedAddOnsProvider>
-                  <WizardStepFormProvider>
-                    <WizardStepRouter
-                      currentStepIndex={currentStepIndex}
-                      totalSteps={wizardSteps.length}
-                      onViewModeChange={onViewModeChange}
-                      activeContextId={ui.activeContextId ?? ""}
-                      activeMappingId={ui.activeMappingId ?? ""}
-                      onContextSelect={(id) => ui.setContextId(id)}
-                      onMappingSelect={(id) => ui.setMappingId(id)}
-                    />
-                  </WizardStepFormProvider>
-                </SelectedAddOnsProvider>
-              }
-              middle={
-                <ArchitecturePreviewPane
-                  viewMode={viewMode}
-                  selectedFileId={editor.selectedFileId}
-                  editedFiles={editor.editedFiles}
-                  onViewModeChange={onViewModeChange}
-                  onFileSelect={editor.selectFile}
-                  onFileContentChange={editor.updateFile}
-                  onFileSave={editor.markFileSaved}
-                />
-              }
-              right={
-                <GovernancePanelWrapper
-                  currentStepIndex={currentStepIndex}
-                  enabled={isEditing}
-                />
-              }
-            />
-          </main>
-
-          <NewProjectConfirmDialog
-            isOpen={ui.dialog.kind === "new-project"}
-            onClose={ui.closeDialog}
-            pendingRoute={pendingRoute}
-            router={router}
-          />
-        </div>
-        {children}
-      </ExportProvider>
-    );
-  },
-  (prev, next) => {
-    if (prev.currentStepIndex !== next.currentStepIndex) return false;
-    if (prev.viewMode !== next.viewMode) return false;
-    if (prev.onViewModeChange !== next.onViewModeChange) return false;
-    if (prev.onCloseMiddlePanel !== next.onCloseMiddlePanel) return false;
-    if (prev.onCloseRightPanel !== next.onCloseRightPanel) return false;
-    if (prev.onNavigateToProjects !== next.onNavigateToProjects) return false;
-    if (prev.isEditing !== next.isEditing) return false;
-    if (prev.ui.dialog.kind !== next.ui.dialog.kind) return false;
-    if (prev.children !== next.children) return false;
-    // The middle panel (code view + editor) reflects the editor session —
-    // file selection and edits. useEditorSession returns a new reference only
-    // when that state changes, so re-render whenever it does. Omitting this
-    // froze the middle panel: clicking a file (or editing) updated the session
-    // but never reached CodeView.
-    if (prev.editor !== next.editor) return false;
-    return true;
-  },
-);
+        <NewProjectConfirmDialog
+          isOpen={ui.dialog.kind === "new-project"}
+          onClose={ui.closeDialog}
+          pendingRoute={pendingRoute}
+          router={router}
+        />
+      </div>
+      {children}
+    </ExportProvider>
+  );
+}, projectWorkspaceLayoutPropsEqual);
