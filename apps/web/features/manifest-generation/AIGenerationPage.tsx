@@ -16,7 +16,11 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
-import type { PreviewFooterActions, ViewTab } from "./GenerateWithAi/types";
+import type {
+  GeneratingFooterActions,
+  PreviewFooterActions,
+  ViewTab,
+} from "./GenerateWithAi/types";
 
 interface AIGenerationPageProps {
   llmContext: LocalLLMContext;
@@ -35,6 +39,8 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [previewActions, setPreviewActions] =
     useState<PreviewFooterActions | null>(null);
+  const [generatingActions, setGeneratingActions] =
+    useState<GeneratingFooterActions | null>(null);
 
   const handleUseManifest = useCallback(
     (yaml: string) => {
@@ -135,6 +141,17 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       );
     }
 
+    if (generatingActions) {
+      return (
+        <>
+          <span />
+          <Button variant="secondary" onClick={generatingActions.onCancel}>
+            Cancel
+          </Button>
+        </>
+      );
+    }
+
     return (
       <>
         <Button
@@ -164,6 +181,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           <GenerateWithAi
             onUseManifest={handleUseManifest}
             llmContext={llmContext}
+            onGeneratingStateChange={setGeneratingActions}
             onPreviewStateChange={setPreviewActions}
           />
         </div>

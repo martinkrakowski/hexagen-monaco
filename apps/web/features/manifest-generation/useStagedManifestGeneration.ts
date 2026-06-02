@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { ClientManifestGenerationUseCase } from "@hexagen/manifest-generation";
 import type {
@@ -34,6 +34,7 @@ export interface UseStagedManifestGenerationReturn {
   phase: StagedPhase;
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
+  verboseLog: string[];
   validationErrors: string[];
   contextCount: number;
   portCount: number;
@@ -67,6 +68,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     Record<number, StageProgress>
   >({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [verboseLog, setVerboseLog] = useState<string[]>([]);
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
   const [adapterCount, setAdapterCount] = useState(0);
@@ -78,6 +80,37 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     endpoint: "/api/manifest/generate/stage",
     stageLabels: STAGE_LABELS,
   });
+
+  // While the cloud stream is active, mirror its phase / stepDetail /
+  // stageProgress into this hook's state so the UI updates live instead of
+  // only after cloudStream.generate() resolves. Unlike the spec endpoint
+  // (curated status text at stage -1), the staged endpoint streams raw LLM
+  // tokens at the real stage number, so the verbose log is built by grouping +
+  // joining each stage's chunks in order — tokens read as text, not one
+  // fragment per line.
+  useEffect(() => {
+    if (!cloudStream.isGenerating) return;
+    setPhase(cloudStream.phase);
+    if (cloudStream.stepDetail) setStepDetail(cloudStream.stepDetail);
+    setStageProgress(cloudStream.stageProgress);
+
+    const log: string[] = [];
+    for (const key of Object.keys(cloudStream.stageProgress)
+      .map(Number)
+      .filter((n) => n >= 0)
+      .sort((a, b) => a - b)) {
+      const sp = cloudStream.stageProgress[key];
+      if (!sp?.chunks?.length) continue;
+      log.push(`Stage ${key}${sp.label ? ` — ${sp.label}` : ""}`);
+      for (const line of sp.chunks.join("").split("\n")) log.push(line);
+    }
+    if (log.length) setVerboseLog(log);
+  }, [
+    cloudStream.isGenerating,
+    cloudStream.phase,
+    cloudStream.stepDetail,
+    cloudStream.stageProgress,
+  ]);
 
   const generateManifest = useCallback(
     async (
@@ -96,6 +129,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setStepDetail("Starting staged generation...");
       setStageProgress({});
       setValidationErrors([]);
+      setVerboseLog([]);
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -256,6 +290,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStepDetail("");
     setStageProgress({});
     setValidationErrors([]);
+    setVerboseLog([]);
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
@@ -270,6 +305,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     phase,
     stepDetail,
     stageProgress,
+    verboseLog,
     validationErrors,
     contextCount,
     portCount,
