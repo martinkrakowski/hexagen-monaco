@@ -151,13 +151,13 @@ export function ExportProvider({
   const [state, setState] = useState<ExportState>({ kind: "idle" });
 
   // The connected repo + remembered publish preference for the active project.
-  // Reloaded after each successful publish/push (via `linkRefresh`) so the
-  // button label and branching reflect a just-completed first publish.
+  // Loaded on mount / project change; the publish and prefs handlers also set
+  // these directly on success, so the UI never depends on an async re-read for
+  // immediate correctness.
   const [githubLink, setGithubLink] = useState<GithubLinkData | null>(null);
   const [publishPrefs, setPublishPrefs] = useState<GitHubPublishPrefs | null>(
     null,
   );
-  const [linkRefresh, setLinkRefresh] = useState(0);
 
   // Replayed by Retry; the latest editor clearUnpushed kept in a ref so the
   // push callbacks stay referentially stable.
@@ -183,7 +183,7 @@ export function ExportProvider({
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, linkRefresh]);
+  }, [activeProjectId]);
 
   const canExport = activeWorkspace !== null;
 
@@ -240,12 +240,7 @@ export function ExportProvider({
             : p,
         );
         const saveRes = await persistence.saveProjects(updated);
-        if (saveRes.success) {
-          // Update local state immediately so the button label + branching are
-          // correct right away; `linkRefresh` stays as a secondary refresh
-          // rather than the source of immediate UI correctness.
-          setGithubLink(link);
-        } else {
+        if (!saveRes.success) {
           getLogger().warn("Failed to persist GitHub link to saved project");
         }
       } catch (e) {
@@ -319,8 +314,14 @@ export function ExportProvider({
 
       const destinationUrl = result.data.destinationUrl;
       const link = result.data.githubLink;
-      if (link) await persistGithubLink(link);
-      setLinkRefresh((n) => n + 1);
+      if (link) {
+        // Set in-memory state immediately from the authoritative server response
+        // — independent of the best-effort IDB write — so connectedRepo and
+        // decidePublishAction can't read stale "not linked" state in the window
+        // before persistence completes.
+        setGithubLink(link);
+        await persistGithubLink(link);
+      }
       setState({
         kind: "success",
         destination: "github",
@@ -367,16 +368,18 @@ export function ExportProvider({
         return;
       }
 
-      // Sync the live editor "unpushed" flag and persist the new commit sha.
+      // Sync the live editor "unpushed" flag, update the in-memory link
+      // immediately, then persist the new commit sha (best-effort IDB).
       onEditorPushedRef.current?.();
+      const nextLink = { ...githubLink, lastCommitSha: result.data.commitSha };
+      setGithubLink(nextLink);
       await persistCommitSha(githubLink, result.data.commitSha);
-      setLinkRefresh((n) => n + 1);
       setState({
         kind: "success",
         destination: "github",
         message: `Pushed edits to ${githubLink.owner}/${githubLink.repo}`,
         destinationUrl: githubLink.htmlUrl,
-        githubLink: { ...githubLink, lastCommitSha: result.data.commitSha },
+        githubLink: nextLink,
       });
     },
     [activeProjectId, githubLink, persistCommitSha],
