@@ -23,6 +23,7 @@ import {
 export interface ExportDialogSubmitPayload {
   repoName: string;
   isPrivate: boolean;
+  commitMessage: string;
 }
 
 /** Which panel the dialog shows; derived from the export state machine. */
@@ -39,6 +40,7 @@ interface ExportDialogProps {
   onBackToForm: () => void;
   initialRepoName?: string;
   initialIsPrivate?: boolean;
+  initialCommitMessage?: string;
   error?: string | null;
   /**
    * Success details. `message` is always present; `owner`/`repo` and `url` are
@@ -64,11 +66,13 @@ export function ExportDialog({
   onBackToForm,
   initialRepoName = "",
   initialIsPrivate = false,
+  initialCommitMessage = "Initial commit",
   error = null,
   success = null,
 }: ExportDialogProps) {
   const [repoName, setRepoName] = useState(initialRepoName);
   const [isPrivate, setIsPrivate] = useState(initialIsPrivate);
+  const [commitMessage, setCommitMessage] = useState(initialCommitMessage);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,7 +98,11 @@ export function ExportDialog({
       return;
     }
     setValidationError(null);
-    await onSubmit({ repoName: trimmed, isPrivate });
+    await onSubmit({
+      repoName: trimmed,
+      isPrivate,
+      commitMessage: commitMessage.trim(),
+    });
   };
 
   const handleCopy = async () => {
@@ -242,6 +250,21 @@ export function ExportDialog({
               >
                 Private repository
               </label>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="export-commit-message"
+                className="text-sm font-medium"
+              >
+                Commit message
+              </label>
+              <Input
+                id="export-commit-message"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                placeholder="Initial commit"
+              />
             </div>
 
             {validationError ? (

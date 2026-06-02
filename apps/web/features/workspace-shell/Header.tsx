@@ -6,6 +6,7 @@ import { HeaderMenu } from "./HeaderMenu";
 import { ProjectMenu } from "./ProjectMenu";
 import { ExportStatusStrip } from "./ExportStatusStrip";
 import { ExportDialog } from "../export/ExportDialog";
+import { PublishSettingsDialog } from "../export/PublishSettingsDialog";
 import {
   useProjectExport,
   isGithubExportActive,
@@ -105,9 +106,13 @@ export function Header({
               onRequestGithubExport={() =>
                 void exportFlow.requestGithubExport()
               }
+              onOpenPublishSettings={() =>
+                void exportFlow.openPublishSettings()
+              }
               canExport={exportFlow.canExport}
               isExporting={isExporting}
               isAuthenticated={exportFlow.isAuthenticated}
+              connectedRepo={exportFlow.connectedRepo}
             />
             <button
               type="button"
@@ -132,7 +137,7 @@ export function Header({
 
       <ExportDialog
         key={activeWorkspace?.name ?? ""}
-        open={isGithubExportActive(exportFlow.state)}
+        open={isGithubExportActive(s) && s.kind !== "settings-open"}
         phase={dialogPhase}
         onClose={exportFlow.closeDialog}
         onSubmit={exportFlow.submitGithubExport}
@@ -141,6 +146,16 @@ export function Header({
         initialRepoName={activeWorkspace?.name ?? ""}
         error={dialogError}
         success={dialogSuccess}
+      />
+
+      <PublishSettingsDialog
+        open={s.kind === "settings-open"}
+        repo={s.kind === "settings-open" ? s.repo : { owner: "", repo: "" }}
+        defaultMode={s.kind === "settings-open" ? s.defaultMode : "scaffold"}
+        defaultMessage={s.kind === "settings-open" ? s.defaultMessage : ""}
+        hasEditorEdits={s.kind === "settings-open" ? s.hasEditorEdits : false}
+        onClose={exportFlow.closeDialog}
+        onSubmit={(p) => void exportFlow.submitPublishSettings(p)}
       />
     </div>
   );

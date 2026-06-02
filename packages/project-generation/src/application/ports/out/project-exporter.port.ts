@@ -5,6 +5,8 @@ export interface GitHubExportConfig {
   owner: string;
   repoName: string;
   isPrivate: boolean;
+  /** Optional custom commit message; the adapter falls back to a default. */
+  commitMessage?: string;
 }
 
 export interface ExportConfig {

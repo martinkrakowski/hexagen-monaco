@@ -13,6 +13,7 @@ interface GitHubExportRequest {
   repoName: string;
   isPrivate: boolean;
   owner?: string;
+  commitMessage?: string;
   manifest?: Manifest;
   wizardData?: Record<string, unknown>;
 }
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
         owner,
         repoName: body.repoName,
         isPrivate: body.isPrivate,
+        commitMessage: body.commitMessage,
       },
     });
 

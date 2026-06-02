@@ -131,7 +131,7 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
   );
 
   return (
-    <ExportProvider>
+    <ExportProvider onEditorPushed={editor.clearUnpushed}>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
         <Header
           onLoadManifest={() => handleNavigate("/projects/new/import")}
