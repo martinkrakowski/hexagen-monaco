@@ -35,7 +35,8 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         };
       }
 
-      const { token, owner, repoName, isPrivate } = config.github;
+      const { token, owner, repoName, isPrivate, commitMessage } =
+        config.github;
       const client = new GitHubGitDataClient();
 
       // createRepo returns the repo's default branch. GitHub initializes an
@@ -90,9 +91,12 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         owner,
         repoName,
         treeSha,
-        parentSha
-          ? "Update project: Hexagonal architecture scaffold"
-          : "Initial commit: Hexagonal architecture scaffold",
+        // Guard at the infra boundary: a non-string commitMessage (e.g. from a
+        // malformed payload that bypassed the route) must not reach `.trim()`.
+        (typeof commitMessage === "string" ? commitMessage.trim() : "") ||
+          (parentSha
+            ? "Update project: Hexagonal architecture scaffold"
+            : "Initial commit: Hexagonal architecture scaffold"),
         parentSha ? [parentSha] : [],
       );
 

@@ -7,6 +7,18 @@ describe("isGithubExportActive", () => {
   const cases: Array<[string, ExportState, boolean]> = [
     ["idle", { kind: "idle" }, false],
     ["dialog-open", { kind: "dialog-open" }, true],
+    [
+      "settings-open",
+      {
+        kind: "settings-open",
+        repo: { owner: "acme", repo: "api" },
+        defaultMode: "scaffold",
+        defaultMessage: "Update scaffold",
+        defaultRemember: false,
+        hasEditorEdits: true,
+      },
+      true,
+    ],
     ["exporting zip", { kind: "exporting", destination: "zip" }, false],
     ["exporting github", { kind: "exporting", destination: "github" }, true],
     [

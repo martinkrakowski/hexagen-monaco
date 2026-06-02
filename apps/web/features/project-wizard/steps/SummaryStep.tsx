@@ -61,6 +61,7 @@ export function SummaryStep({
     isAuthenticated,
     exportZip,
     requestGithubExport,
+    openPublishSettings,
   } = useProjectExport();
 
   const { activeWorkspace } = useActiveWorkspace();
@@ -121,6 +122,7 @@ export function SummaryStep({
               isExporting={isExporting}
               onExportZip={() => void exportZip()}
               onRequestGithubExport={() => void requestGithubExport()}
+              onOpenPublishSettings={() => void openPublishSettings()}
               connectedRepo={connectedRepo}
             />
           )}

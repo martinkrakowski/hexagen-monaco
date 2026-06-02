@@ -39,7 +39,14 @@ export function ExportStatusStrip({
   // The GitHub publish flow is surfaced by ExportDialog (form → submitting →
   // result), so the strip handles only the ZIP path — avoids double feedback.
   if (isGithubExportActive(state)) return null;
-  if (state.kind === "idle" || state.kind === "dialog-open") return null;
+  // settings-open is also covered by isGithubExportActive above; listed here so
+  // the discriminated union narrows to exporting/success/error below.
+  if (
+    state.kind === "idle" ||
+    state.kind === "dialog-open" ||
+    state.kind === "settings-open"
+  )
+    return null;
 
   if (state.kind === "exporting") {
     // Only the ZIP path reaches here — the GitHub flow is gated out above and

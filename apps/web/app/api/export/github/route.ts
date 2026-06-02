@@ -13,6 +13,7 @@ interface GitHubExportRequest {
   repoName: string;
   isPrivate: boolean;
   owner?: string;
+  commitMessage?: string;
   manifest?: Manifest;
   wizardData?: Record<string, unknown>;
 }
@@ -76,6 +77,12 @@ export async function POST(request: NextRequest) {
         owner,
         repoName: body.repoName,
         isPrivate: body.isPrivate,
+        // Defensive: ignore non-string commitMessage from untrusted bodies so a
+        // malformed payload can't reach `.trim()` in the exporter.
+        commitMessage:
+          typeof body.commitMessage === "string"
+            ? body.commitMessage
+            : undefined,
       },
     });
 

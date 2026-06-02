@@ -8,6 +8,7 @@ import {
   ChevronRight,
   FileText,
   PlusCircle,
+  Settings,
 } from "lucide-react";
 
 interface ProjectMenuProps {
@@ -16,10 +17,14 @@ interface ProjectMenuProps {
 
   onExportZip: () => void;
   onRequestGithubExport: () => void;
+  /** Open the publish-settings modal (shown when linked). */
+  onOpenPublishSettings?: () => void;
 
   canExport: boolean;
   isExporting: boolean;
   isAuthenticated: boolean;
+  /** Connected repo for the active project (relabels the publish item). */
+  connectedRepo?: { owner: string; repo: string } | null;
 }
 
 export function ProjectMenu({
@@ -27,9 +32,11 @@ export function ProjectMenu({
   onNavigateToProjects,
   onExportZip,
   onRequestGithubExport,
+  onOpenPublishSettings,
   canExport,
   isExporting,
   isAuthenticated,
+  connectedRepo,
 }: ProjectMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -127,13 +134,37 @@ export function ProjectMenu({
             type="button"
             role="menuitem"
             onClick={handleMenuAction(onRequestGithubExport)}
-            disabled
-            title="Coming soon"
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left opacity-50 cursor-not-allowed"
+            disabled={!canExport || isExporting}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left ${
+              !canExport || isExporting
+                ? "opacity-50 cursor-not-allowed"
+                : "hover:bg-muted"
+            }`}
           >
-            <Upload className="w-4 h-4" />
-            {isAuthenticated ? "Push to GitHub" : "Sign in to GitHub"}
+            <Upload className="w-4 h-4 shrink-0" />
+            <span className="truncate">
+              {!isAuthenticated
+                ? "Sign in to GitHub"
+                : connectedRepo
+                  ? `Update ${connectedRepo.owner}/${connectedRepo.repo}`
+                  : "Push to GitHub"}
+            </span>
           </button>
+
+          {connectedRepo && onOpenPublishSettings ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleMenuAction(onOpenPublishSettings)}
+              disabled={isExporting}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left ${
+                isExporting ? "opacity-50 cursor-not-allowed" : "hover:bg-muted"
+              }`}
+            >
+              <Settings className="w-4 h-4 shrink-0" />
+              <span className="truncate">Publish settings…</span>
+            </button>
+          ) : null}
         </div>
       )}
     </div>
