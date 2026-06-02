@@ -123,7 +123,7 @@ integration` provides the implementation, wired in the **composition root**
 
 ### Data flow
 
-```
+```text
 Wizard publish:  ExportActions → /api/export/github → GitHub export
                  → persist SavedProject.githubLink{owner,repo,branch,lastCommitSha,htmlUrl}
 

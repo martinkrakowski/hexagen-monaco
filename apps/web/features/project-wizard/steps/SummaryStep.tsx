@@ -8,6 +8,8 @@ import type {
 } from "@hexagen/project-configuration";
 
 import { useProjectExport } from "@/contexts/ExportContext";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
+import { useConnectedRepo } from "@/hooks/useConnectedRepo";
 import type { ViewMode } from "@/types/view-mode";
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
@@ -61,6 +63,14 @@ export function SummaryStep({
     requestGithubExport,
   } = useProjectExport();
 
+  const { activeWorkspace } = useActiveWorkspace();
+  // Re-read the connected repo whenever an export succeeds, so the indicator
+  // reflects a just-completed publish without needing a remount.
+  const connectedRepo = useConnectedRepo(
+    activeWorkspace?.projectId,
+    exportState.kind,
+  );
+
   const isExporting = exportState.kind === "exporting";
 
   const governance = watch("governance");
@@ -111,7 +121,7 @@ export function SummaryStep({
               isExporting={isExporting}
               onExportZip={() => void exportZip()}
               onRequestGithubExport={() => void requestGithubExport()}
-              connectedRepo={null}
+              connectedRepo={connectedRepo}
             />
           )}
         </div>
