@@ -20,10 +20,10 @@ Optional, composable templates applied at `hexagen new` time or via `hexagen add
 
 ## Auth
 
-| #   | Template      | Plan                                         | Priority | Key Value                                                               |
-| --- | ------------- | -------------------------------------------- | -------- | ----------------------------------------------------------------------- |
-| 03  | Auth Mock     | [03-auth-mock.md](./03-auth-mock.md)         | P1       | `AUTH_MODE=mock\|real`, UserContext, session cookie, real provider stub |
-| 04  | Adobe IMS SPA | [04-adobe-ims-spa.md](./04-adobe-ims-spa.md) | P1       | PKCE flow, token exchange, auto-refresh, fills auth-mock real stub      |
+| #   | Template      | Plan                                           | Priority | Key Value                                                               |
+| --- | ------------- | ---------------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| 03  | Auth Mock     | [03-auth-mock.md](./03-auth-mock.md)           | P1       | `AUTH_MODE=mock\|real`, UserContext, session cookie, real provider stub |
+| 04  | Adobe IMS SPA | [04-auth-providers.md](./04-auth-providers.md) | P1       | PKCE flow, token exchange, auto-refresh, fills auth-mock real stub      |
 
 ## Persistence & Background Jobs
 

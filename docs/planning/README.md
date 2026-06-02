@@ -24,7 +24,7 @@ All Core Implementation planning artifacts now live under the `core-implementati
 
 - **Governance** — architectural governance debt and cross-cutting migration work, tracked in the relevant [ADRs](../../.architecture/decisions/).
 - **Architecture** — The contracts and decisions these plans must respect.
-- `.architecture/` — Machine contracts and historical planning pointers (see `docs/planning/legacy/`)
+- `.architecture/` — Machine contracts: manifest, invariants, and ADRs as primary records.
 
 ## Maintenance
 

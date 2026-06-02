@@ -36,7 +36,7 @@ The recent double-prompt fix (PR #108) — provider manifests asking `session_co
 
 ### Side observation — PR #108's gated conflicts are dormant
 
-While planning this work, the v2 review surfaced that `add-template.use-case.ts:49` calls `resolveDependencies(templateIds, manifestMap)` **without** an `answers` argument. Answers are collected later, inside the install loop (line 63). Per the engine's conservative default ([`output-gating.ts:matchesCondition`](../../packages/template-engine/src/domain/output-gating.ts)) missing answers → gate inactive — so every gated conflict shipped in PR #108 is currently unenforced. Supabase's eight `{ id, when: features⊇auth }` entries are inert.
+While planning this work, the v2 review surfaced that `add-template.use-case.ts:49` calls `resolveDependencies(templateIds, manifestMap)` **without** an `answers` argument. Answers are collected later, inside the install loop (line 63). Per the engine's conservative default ([`output-gating.ts:matchesCondition`](../../../packages/template-engine/src/domain/output-gating.ts)) missing answers → gate inactive — so every gated conflict shipped in PR #108 is currently unenforced. Supabase's eight `{ id, when: features⊇auth }` entries are inert.
 
 This is **not** introduced by this plan; it is pre-existing dormant code. It does, however, eliminate any symmetry argument for adding a third gated mechanism (gated `requires`): the other two aren't actually enforced either. This plan therefore takes a different shape than the v2 draft — **no schema extension**.
 
