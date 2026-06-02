@@ -1,0 +1,39 @@
+# Production compose for the web app, shipped to the VPS by .github/workflows/deploy.yml.
+#
+# The image is loaded from the transferred tar (`docker load`), never built or
+# pulled here — hence `pull_policy: never`. The reverse proxy / TLS for
+# app.hexagen-monaco.cloud is host-level and forwards to 127.0.0.1:3000, so it
+# is intentionally NOT part of this compose; keep the loopback port binding so
+# that hookup keeps working.
+#
+# Runtime config comes from `.env`, which the deploy writes next to this file at
+# /opt/hexagen-monaco/.env (env_file resolves relative to the compose file's
+# directory — the two MUST be co-located). `.env` is git-ignored; see
+# deploy/.env.example for the expected keys.
+services:
+  web:
+    image: hexagen-monaco-web:prod
+    container_name: hexagen-web
+    restart: unless-stopped
+    pull_policy: never
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    # Liveness check used by the deploy (`up -d --wait`) to fail a broken boot
+    # instead of reporting a green deploy over a down site. Next.js standalone
+    # binds to $HOSTNAME (the container id), NOT 0.0.0.0/loopback, so the probe
+    # targets that address. Any HTTP response < 500 means the server is up and
+    # routing; connection refused / timeout = unhealthy.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const http=require('http');const req=http.get('http://'+process.env.HOSTNAME+':3000/api/auth/providers',r=>process.exit(r.statusCode<500?0:1));req.on('error',()=>process.exit(1));req.setTimeout(4000,()=>{req.destroy();process.exit(1)})"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

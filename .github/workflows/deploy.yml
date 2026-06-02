@@ -9,12 +9,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           persist-credentials: false
 
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main (pinned)
         with:
           tool-cache: false
           docker-images: false
@@ -30,19 +30,25 @@ jobs:
       - name: Save Image to tar.gz
         run: |
           docker save hexagen-monaco-web:prod | gzip > hexagen-web.tar.gz
+          # Stage the compose at the runner root so it lands at
+          # /opt/hexagen-monaco/docker-compose.prod.yml — co-located with the
+          # generated .env, which env_file resolves relative to.
+          cp deploy/docker-compose.prod.yml docker-compose.prod.yml
 
-      - name: Transfer tar.gz to VPS via SCP
-        uses: appleboy/scp-action@v0.1.7
+      - name: Transfer artifacts to VPS via SCP
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "hexagen-web.tar.gz"
+          source: |
+            hexagen-web.tar.gz
+            docker-compose.prod.yml
           target: "/opt/hexagen-monaco/"
           overwrite: true
 
       - name: Execute Deployment Commands on VPS
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         # Map secrets into the runner env so `envs:` can forward real values to
         # the remote shell. NOTE: GitHub forbids secret names with a GITHUB_
         # prefix, so the OAuth app credentials are stored as GH_OAUTH_ID /
@@ -64,7 +70,26 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
-          script: "cd /opt/hexagen-monaco\n\
+          # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
+          # so a failed `docker load` aborts instead of silently leaving the old
+          # container up. pipefail is omitted intentionally — the remote /bin/sh
+          # may be dash, where `set -o pipefail` would itself error, and there are
+          # no pipes in this script.
+          # Hardening: `umask 077` + `chmod 600 .env` keep secrets non-world-readable;
+          # the line-count guard catches a secret with an embedded newline corrupting
+          # the dotenv; `--force-recreate` guarantees rotated `.env` values reach the
+          # container (env_file is read at container-creation time, so an unchanged
+          # image would otherwise keep the old env); `--wait` fails the deploy if the
+          # new container doesn't become healthy (see the compose healthcheck).
+          #
+          # Cleanup is `docker image prune -f` (dangling images only — reclaims the
+          # old :prod layers `docker load` just orphaned). It is deliberately NOT
+          # `docker system prune -a --volumes`: this VPS is multi-tenant, and the
+          # host-wide form would delete other projects' volumes (e.g. a co-tenant's
+          # Redis data) and images whenever their containers happen to be stopped.
+          script: "set -eu\n\
+            cd /opt/hexagen-monaco\n\
+            umask 077\n\
             cat <<EOF > .env\n\
             NEXTAUTH_URL=\"$NEXTAUTH_URL\"\n\
             NEXTAUTH_SECRET=\"$AUTH_SECRET\"\n\
@@ -75,9 +100,10 @@ jobs:
             LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
             LLM_MODEL=\"$LLM_MODEL\"\n\
             EOF\n\
-            docker compose down\n\
-            docker rmi hexagen-monaco-web:prod || true\n\
+            chmod 600 .env\n\
+            [ \"$(wc -l < .env)\" -eq 8 ] || { echo 'FATAL: .env line count != 8 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
-            docker compose up -d\n\
+            docker image inspect hexagen-monaco-web:prod >/dev/null\n\
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
             rm hexagen-web.tar.gz\n\
-            docker system prune -a -f --volumes"
+            docker image prune -f"
