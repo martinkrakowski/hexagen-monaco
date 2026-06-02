@@ -5,7 +5,10 @@ import type {
 } from "@hexagen/project-generation";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { GitHubGitDataClient, GitHubApiError } from "./github-git-data.client.js";
+import {
+  GitHubGitDataClient,
+  GitHubApiError,
+} from "./github-git-data.client.js";
 
 interface FileEntry {
   path: string;
@@ -54,7 +57,13 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
       // create blobs via client (base64 already)
       const fileShas: FileEntry[] = [];
       for (const f of files) {
-        const sha = await client.createBlob(token, owner, repoName, f.content, "base64");
+        const sha = await client.createBlob(
+          token,
+          owner,
+          repoName,
+          f.content,
+          "base64",
+        );
         fileShas.push({ ...f, sha });
       }
 
@@ -64,9 +73,19 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         type: "blob",
         sha: f.sha!,
       }));
-      const treeSha = await client.createTree(token, owner, repoName, treeEntries);
+      const treeSha = await client.createTree(
+        token,
+        owner,
+        repoName,
+        treeEntries,
+      );
 
-      const parentSha = await client.getBranchHeadSha(token, owner, repoName, "main");
+      const parentSha = await client.getBranchHeadSha(
+        token,
+        owner,
+        repoName,
+        "main",
+      );
 
       const commitSha = await client.createCommit(
         token,
@@ -111,6 +130,12 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     try {
       // Inline minimal request to keep test mocks (which spy on global fetch + expect json error shape) happy.
       const base = "https://api.github.com";
+      // auto_init: true creates an initial commit so the repo is non-empty.
+      // A repo created with auto_init:false has no git objects yet, and GitHub's
+      // Git Data API then rejects blob/tree creation with
+      // `409 Git Repository is empty`. With an initial commit present, the
+      // export's getBranchHeadSha("main") returns that commit and the scaffold is
+      // committed on top of it as a fast-forward (see export()).
       const r = await fetch(`${base}/user/repos`, {
         method: "POST",
         headers: {
@@ -119,13 +144,20 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
           "Content-Type": "application/json",
           "X-GitHub-Api-Version": "2022-11-28",
         },
-        body: JSON.stringify({ name: repoName, private: isPrivate, auto_init: false }),
+        body: JSON.stringify({
+          name: repoName,
+          private: isPrivate,
+          auto_init: true,
+        }),
       });
       if (!r.ok) {
         const error = await r.json().catch(() => ({}));
         const msg = JSON.stringify(error);
         if (msg.includes("already exists")) return true;
-        throw new GitHubApiError(r.status, `GitHub API error (${r.status}): ${msg}`);
+        throw new GitHubApiError(
+          r.status,
+          `GitHub API error (${r.status}): ${msg}`,
+        );
       }
       return true;
     } catch (err) {

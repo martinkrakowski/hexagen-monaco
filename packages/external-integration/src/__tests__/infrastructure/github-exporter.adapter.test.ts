@@ -177,6 +177,14 @@ describe("GitHubExporterAdapter", () => {
     );
 
     assert.strictEqual(result.success, true);
+    // Regression: the repo must be created with auto_init:true, otherwise the
+    // first createBlob hits `409 Git Repository is empty` on the brand-new repo.
+    const createRepo = mock.calls.find((c) => c.path === "/user/repos");
+    assert.strictEqual(
+      (createRepo!.body as { auto_init?: boolean }).auto_init,
+      true,
+      "repo must be created with an initial commit (auto_init:true)",
+    );
     // Commit chains the prior head so history is preserved.
     const commit = mock.calls.find((c) => c.path.endsWith("/git/commits"));
     assert.deepStrictEqual((commit!.body as { parents?: string[] }).parents, [
