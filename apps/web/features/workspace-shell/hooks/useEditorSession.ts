@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useEditorWorkspace } from "./useEditorWorkspace";
 import {
@@ -45,6 +45,17 @@ export function useEditorSession(): UseEditorSessionReturn {
 
   const { activeWorkspace, setActiveWorkspace, clearActiveWorkspace } =
     useActiveWorkspace();
+
+  // Key the editor's persistence session on the active project's stable id.
+  // The project id comes from `?project=` in the URL and is re-applied (via
+  // setActiveWorkspace) on every load — including reloads and after generation
+  // — so editor edits and the open file persist and restore. Previously the
+  // session was a random per-load id (or unset), so nothing survived a reload.
+  useEffect(() => {
+    if (activeWorkspace?.projectId) {
+      void setSessionId(activeWorkspace.projectId);
+    }
+  }, [activeWorkspace?.projectId, setSessionId]);
 
   // Memo: flattens the Map<fileId, FileEntry> into Record<fileId, content>
   // for consumers that only need file text (Monaco viewer, diff panels).
