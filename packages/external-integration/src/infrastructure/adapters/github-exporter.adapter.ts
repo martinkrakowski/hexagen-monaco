@@ -91,7 +91,9 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         owner,
         repoName,
         treeSha,
-        commitMessage?.trim() ||
+        // Guard at the infra boundary: a non-string commitMessage (e.g. from a
+        // malformed payload that bypassed the route) must not reach `.trim()`.
+        (typeof commitMessage === "string" ? commitMessage.trim() : "") ||
           (parentSha
             ? "Update project: Hexagonal architecture scaffold"
             : "Initial commit: Hexagonal architecture scaffold"),
