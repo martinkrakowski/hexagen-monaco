@@ -6,11 +6,11 @@ HexaGen Monaco is a **compiled, contract-first semantic execution environment** 
 
 The system is deliberately organized into three non-interacting planes:
 
-| Plane                | Role                                              | Primary Packages |
-|----------------------|---------------------------------------------------|------------------|
-| **Deterministic Kernel** | Semantic truth, rule resolution, execution        | core-domain, intent-compiler, layout-engine, ui-projection-compiler, transaction-system, wizard-orchestration, ... |
-| **Projection**       | Render derived state only (UI framebuffer, layout) | ui, visualization, web-driver |
-| **Probabilistic**    | Observational validation, annotation, LLM outputs | local-llm, agentic-interaction, prompt-compiler, reconciliation-engine, mcp-server |
+| Plane                    | Role                                               | Primary Packages                                                                                                   |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Deterministic Kernel** | Semantic truth, rule resolution, execution         | core-domain, intent-compiler, layout-engine, ui-projection-compiler, transaction-system, wizard-orchestration, ... |
+| **Projection**           | Render derived state only (UI framebuffer, layout) | ui, visualization, web-driver                                                                                      |
+| **Probabilistic**        | Observational validation, annotation, LLM outputs  | local-llm, agentic-interaction, prompt-compiler, reconciliation-engine, mcp-server                                 |
 
 The MVK (Minimal Viable Kernel) specification in `.architecture/mvk/spec-v1.md` defines the stable contract surface between these planes.
 

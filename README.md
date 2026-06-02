@@ -30,10 +30,8 @@ The full CLI reference is in [CLI Reference](#cli-reference).
 For **architectural planning** and **remediation plans**, see the dedicated documentation:
 
 - [Documentation Hub](docs/README.md)
-- [Decisions](docs/decisions/)
+- [Decisions](docs/index.md)
 - [Planning & Core Implementation](docs/planning/)
-- [Governance & Architectural Debt](docs/governance/)
-- [Human Architecture Overviews](docs/architecture/)
 
 The `.architecture/` directory remains the single source of truth for machine-enforced contracts and primary ADRs.
 
@@ -184,6 +182,38 @@ The manifest is versioned and diffable. Three tracking surfaces support change r
 - **Port contract diffs** surface drift in interface signatures before downstream adapters break.
 - **Manifest diffs** (`hexagen arch diff`) compare the working tree against `git HEAD` or any specified revision — the same diff feeds the MCP `DiffManifestToolUseCase` for agentic review.
 
+## Generator Add-On Templates
+
+Beyond scaffolding the architecture, HexaGen ships **44 opt-in add-on templates** — production-ready infrastructure slices a generated project can apply at any time. Each template is self-contained: it declares its own questions, dependencies, output files, required env vars, and post-install checklist, then emits typed, hexagonal-architecture-aligned code into the project.
+
+```bash
+npx hexagen templates list             # list available templates (✅ marks installed)
+npx hexagen templates info <id>        # inspect a template's questions, outputs, deps
+npx hexagen add <id> [<id> ...]        # install one or more (dependencies auto-resolved)
+npx hexagen add <id> --force           # re-apply an installed template
+npx hexagen validate-templates         # verify installed templates are healthy
+```
+
+Templates are:
+
+- **Composable** — any subset applies together; conflicts (e.g. competing auth providers) are declared and enforced at install time.
+- **Dependency-aware** — install order is topologically sorted; missing dependencies and cycles are caught before any file is written.
+- **Non-destructive** — a user-modified generated file is never overwritten; a `.hexagen-update.<ext>` conflict copy is written alongside it.
+- **Idempotent** — re-running `hexagen add` on an unchanged project is a no-op (generated files are SHA-256 tracked).
+
+### Catalog
+
+- **Foundation** — `env-setup` (categorised `.env`, Zod validation, `check-env`, `SETUP.md`) · `shared-types` (`UserContext`, env-overridable mock user, session helpers)
+- **Core infrastructure** — `rate-limiting` · `llm-adapter` (typed port + xAI/OpenAI/Anthropic/Ollama adapters, model routing, retry) · `error-handling` (3-layer hierarchy, RFC 7807, React error boundary) · `observability` (structured logging, correlation IDs, `/api/health`) · `eslint-no-console`
+- **Auth** — `auth-mock`; real providers `google-oauth` · `github-oauth` · `microsoft-entra` · `magic-link` · `adobe-ims-spa` · `supabase-auth`; standalone frameworks `nextauth` · `clerk` · `better-auth` _(providers are mutually exclusive)_
+- **Persistence & jobs** — `supabase` (SSR client, storage, RLS stubs, optional Drizzle) · `bullmq` (typed queues, workers, Redis fallback, optional Bull Board)
+- **AI & agents** — `langgraph` (typed agent graph, checkpointing, streaming, HITL) · `llm-adapter-bedrock` (Bedrock Converse adapter) · `bedrock-agentcore-runtime` (AgentCore deploy target) · `bedrock-agentcore-services` (Memory / Gateway / Identity)
+- **Adobe Firefly & Creative Cloud** (17) — `adobe-firefly-core` foundation + service add-ons `generate` · `upscale` · `composite` · `content-tagging` · `media` · `custom-models`; app automation `adobe-photoshop` · `adobe-lightroom` · `adobe-illustrator` · `adobe-indesign` · `adobe-express` · `adobe-creative-production` · `adobe-substance-3d`; presigned storage `adobe-firefly-storage-s3` · `-gcs` · `-azure`
+- **DevOps** — `docker` (multi-stage Dockerfile, compose + dev override, image-push action) · `ci-github-actions` (build/typecheck/lint/test CI, Vercel/Railway/Fly/VPS deploy, PR previews, Dependabot)
+- **DX & docs** — `design-system` (CSS tokens, Tailwind extension, base components, optional Storybook) · `agents-md` (rich `AGENTS.md` + `.agents/` spec directory)
+
+Per-template design docs and the full dependency graph live in [`docs/planning/generator-templates/`](docs/planning/generator-templates/).
+
 ## CLI Reference
 
 ```bash
@@ -210,6 +240,12 @@ npx hexagen arch edit --validate-only
 hexagen-lint --root /path/to/project
 HEXAGEN_ROOT=/path/to/project hexagen-lint
 yarn lint:arch                         # workspace convenience target
+
+# Add-on templates
+npx hexagen templates list             # list templates (✅ = installed)
+npx hexagen templates info <id>        # inspect a template
+npx hexagen add <id> [<id> ...]        # install (dependencies auto-resolved)
+npx hexagen validate-templates         # health-check installed templates
 
 # Apps
 yarn workspace @hexagen/web dev
@@ -285,14 +321,16 @@ All steps must pass before merging to `main`.
 - **Testing:** `node:test`
 
 ---
+
 ## License
 
 HexaGen Monaco is a source-available, proprietary product owned by Krakowski Cloud Solutions, LLC. It is licensed under the [Source-Available Evaluation License](./LICENSE).
 
 **What this means:**
+
 - You can read the source code, run it locally, and use it freely for internal evaluation and non-commercial academic research.
 - You **cannot** use this software in a commercial production deployment, or offer it as a managed service.
-- This software does **not** transition to an open-source license. 
+- This software does **not** transition to an open-source license.
 
 For commercial licensing, enterprise support, and access to the automated brownfield ingestion engine, please contact Krakowski Cloud Solutions, LLC.
 
