@@ -38,7 +38,8 @@ jobs:
       - name: "Setup Node.js"
         uses: actions/setup-node@v5
         with:
-          node-version: "22.7"
+          # >= 22.9.0: npm 11 (Trusted Publishing) requires node ^20.17 || >=22.9.
+          node-version: "22.12.0"
           registry-url: "https://registry.npmjs.org"
 
       # OIDC Trusted Publishing requires npm >= 11.5.1; Node 22.7 ships npm 10.x.
