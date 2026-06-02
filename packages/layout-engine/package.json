@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/layout-engine",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Geometric constraint solver — hexagonal context map layout, affordance resolution, stability scoring, violation detection",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
