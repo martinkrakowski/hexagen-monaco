@@ -61,14 +61,13 @@ invoking `hexagen-lint` directly is for standalone or CI checks.
 
 Reading your manifest and the optional invariant files, the linter enforces:
 
-| Check                          | Source                                                                          |
-| ------------------------------ | ------------------------------------------------------------------------------- |
-| **Manifest validity**          | `.architecture/manifest.yaml` (schema-validated; split manifests merged)        |
-| **Layer access rules**         | `.architecture/invariants/layer-rules.yaml` — which layers may import which     |
-| **Cross-package import rules** | `cross_package_rules` — forbidden dependencies between contexts                 |
-| **Shared-kernel rules**        | the shared-kernel package is importable everywhere; others can't reach into it  |
-| **Server/client boundaries**   | `server` subpath + marker conventions (no server-only code leaking to a client) |
-| **Subpath conventions**        | import-path conventions declared in `linter-config.yaml`                        |
+| Check                          | Source                                                                                                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Manifest validity**          | `.architecture/manifest.yaml` (schema-validated; split manifests merged)                                                                                                                              |
+| **Layer access rules**         | `layer-rules.yaml` → `layers[*].allowed_imports` — which layers may import which                                                                                                                      |
+| **Cross-package import rules** | `linter-config.yaml` → `package_rules` (`allowed_imports` / `cannot_import` / `restricted_to`)                                                                                                        |
+| **Global whitelist**           | `linter-config.yaml` → `global_whitelist` — packages/subpaths importable from anywhere (default `@{scope}/shared` and `@{scope}/shared/**`, so the shared kernel and its subpaths are always allowed) |
+| **Server/client boundaries**   | `linter-config.yaml` → `subpath_conventions` — `server`/`client` subpath markers + allowed consumers                                                                                                  |
 
 TypeScript analysis resolves sources via `tsconfig.base.json` at the project
 root.
@@ -77,12 +76,12 @@ root.
 
 ## Required project files
 
-| Path                                          | Required | Purpose                                                  |
-| --------------------------------------------- | :------: | -------------------------------------------------------- |
-| `.architecture/manifest.yaml`                 |    ✅    | The architecture definition the linter validates against |
-| `tsconfig.base.json`                          |    ✅    | Resolves TypeScript sources and path aliases             |
-| `.architecture/invariants/layer-rules.yaml`   | optional | Layer access + cross-package rules (defaults if absent)  |
-| `.architecture/invariants/linter-config.yaml` | optional | Subpath + server-marker conventions                      |
+| Path                                          | Required | Purpose                                                                              |
+| --------------------------------------------- | :------: | ------------------------------------------------------------------------------------ |
+| `.architecture/manifest.yaml`                 |    ✅    | The architecture definition the linter validates against                             |
+| `tsconfig.base.json`                          |    ✅    | Resolves TypeScript sources and path aliases                                         |
+| `.architecture/invariants/layer-rules.yaml`   | optional | Per-layer access rules + shared-kernel layer allowance                               |
+| `.architecture/invariants/linter-config.yaml` | optional | Cross-package `package_rules`, `global_whitelist`, subpath/server-marker conventions |
 
 A project scaffolded by `@hexagen-monaco/sync` already ships all of these.
 
