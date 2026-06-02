@@ -1,4 +1,4 @@
-# @hexagen/sync
+# @hexagen-monaco/sync
 
 > The HexaGen Monaco sync engine — a CLI that generates and maintains modular, Hexagonal-architecture monorepos from a single `manifest.yaml`.
 
@@ -7,14 +7,14 @@
 ## Installation
 
 ```bash
-npm install @hexagen/sync
+npm install @hexagen-monaco/sync
 # or
-yarn add @hexagen/sync
+yarn add @hexagen-monaco/sync
 # or
-pnpm add @hexagen/sync
+pnpm add @hexagen-monaco/sync
 ```
 
-`@hexagen/sync` ships as a self-contained ESM package with only two runtime
+`@hexagen-monaco/sync` ships as a self-contained ESM package with only two runtime
 dependencies (`commander`, `js-yaml`). All internal HexaGen packages
 (`@hexagen/governance`, `@hexagen/project-configuration`,
 `@hexagen/shared`, `@hexagen/visualization`) are bundled into the published
@@ -60,7 +60,7 @@ The default export exposes the sync-engine surface used by the CLI. Types
 ship alongside the bundle.
 
 ```ts
-import { runSync } from "@hexagen/sync";
+import { runSync } from "@hexagen-monaco/sync";
 
 await runSync({ mode: "external", workspaceRoot: process.cwd() });
 ```
@@ -100,7 +100,7 @@ How the engine locates the workspace root depends on `mode`:
 
 ## What's Bundled
 
-When `@hexagen/sync` is published, the tarball contains the sync engine
+When `@hexagen-monaco/sync` is published, the tarball contains the sync engine
 plus four inlined workspace packages:
 
 | Bundled package                  | Purpose                                    |
@@ -121,7 +121,7 @@ is codified in [`.architecture/decisions/ADR-0009-published-cli-bundling.md`](..
 | `js-yaml`   | `^4.1.0`  | Manifest parsing; widely-consumed peer |
 
 Both are pulled in transitively through standard `npm install` resolution
-when `@hexagen/sync` is installed.
+when `@hexagen-monaco/sync` is installed.
 
 ---
 
