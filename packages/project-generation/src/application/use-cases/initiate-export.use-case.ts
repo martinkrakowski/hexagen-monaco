@@ -117,6 +117,7 @@ export class InitiateExportUseCase implements InitiateExportPort {
         value: {
           success: true,
           destinationUrl: result.value.destinationUrl,
+          defaultBranch: result.value.defaultBranch,
         },
       };
     } catch (e) {

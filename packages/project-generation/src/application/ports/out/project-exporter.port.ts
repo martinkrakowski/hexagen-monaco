@@ -15,6 +15,8 @@ export interface ExportConfig {
 export interface ExportResult {
   success: boolean;
   destinationUrl: string;
+  /** Branch the project was committed to (GitHub export) — the repo's actual default branch. */
+  defaultBranch?: string;
   error?: string;
 }
 

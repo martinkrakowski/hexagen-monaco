@@ -87,12 +87,15 @@ export async function POST(request: NextRequest) {
       const destinationUrl = result.value.destinationUrl;
       // Return githubLink details so client can persist on SavedProject (client IDB only).
       // lastCommitSha is null post-initial-publish (updated by subsequent /api/push/github).
-      // Branch/defaultBranch hardcoded to match GitHubExporterAdapter ("main").
+      // branch is the repo's ACTUAL default branch (the exporter resolves it and
+      // commits there); editor push commits back to this branch, so it must not
+      // be hardcoded — falling back to "main" only if the exporter didn't report it.
+      const branch = result.value.defaultBranch ?? "main";
       const githubLink = {
         owner,
         repo: body.repoName,
-        branch: "main",
-        defaultBranch: "main",
+        branch,
+        defaultBranch: branch,
         lastCommitSha: null as string | null,
         htmlUrl: destinationUrl,
       };

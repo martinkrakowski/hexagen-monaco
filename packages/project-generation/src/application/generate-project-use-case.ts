@@ -17,6 +17,8 @@ export interface GenerateProjectInput {
 export interface GenerateProjectOutput {
   project: Project;
   destinationUrl: string;
+  /** Branch the project was committed to (GitHub export). */
+  defaultBranch?: string;
   zipBuffer?: Buffer;
 }
 
@@ -77,6 +79,7 @@ export class GenerateProjectUseCase {
         value: {
           project,
           destinationUrl: exportResult.destinationUrl,
+          defaultBranch: exportResult.defaultBranch,
           zipBuffer,
         },
       };

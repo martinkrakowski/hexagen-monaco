@@ -347,6 +347,9 @@ describe("GitHubExporterAdapter", () => {
     );
 
     assert.strictEqual(result.success, true);
+    // The result reports the real default branch so the export route can
+    // persist it on githubLink (editor push targets it).
+    assert.strictEqual(result.defaultBranch, "trunk");
     // The scaffold is committed onto the default branch, not an orphan "main".
     assert.ok(
       mock.calls.some((c) => c.path.endsWith("/git/refs/heads/trunk")),
