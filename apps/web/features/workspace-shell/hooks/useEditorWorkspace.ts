@@ -191,9 +191,6 @@ export function useEditorWorkspace() {
 
   const updateFile = useCallback(
     (fileId: string, content: string, isNew = false) => {
-      const sessionId = sessionIdRef.current;
-      if (!sessionId) return;
-
       setState((prev) => {
         const existing = prev.files.get(fileId);
         const nextFiles = new Map(prev.files);
@@ -204,7 +201,10 @@ export function useEditorWorkspace() {
           updatedAt: Date.now(),
         });
         const next = { ...prev, files: nextFiles };
-        scheduleWrite(sessionId, next);
+        // View state updates unconditionally; persistence is best-effort.
+        // Editing a previewed file must not require a persistence session.
+        const sessionId = sessionIdRef.current;
+        if (sessionId) scheduleWrite(sessionId, next);
         return next;
       });
     },
@@ -213,12 +213,12 @@ export function useEditorWorkspace() {
 
   const selectFile = useCallback(
     (fileId: string | null) => {
-      const sessionId = sessionIdRef.current;
-      if (!sessionId) return;
-
       setState((prev) => {
         const next = { ...prev, selectedFileId: fileId };
-        scheduleWrite(sessionId, next);
+        // File selection is view state — it must work whether or not a
+        // persistence session exists. Persist the selection only if it does.
+        const sessionId = sessionIdRef.current;
+        if (sessionId) scheduleWrite(sessionId, next);
         return next;
       });
     },

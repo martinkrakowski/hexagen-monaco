@@ -189,6 +189,12 @@ const ProjectWorkspaceLayout = React.memo(
     if (prev.isEditing !== next.isEditing) return false;
     if (prev.ui.dialog.kind !== next.ui.dialog.kind) return false;
     if (prev.children !== next.children) return false;
+    // The middle panel (code view + editor) reflects the editor session —
+    // file selection and edits. useEditorSession returns a new reference only
+    // when that state changes, so re-render whenever it does. Omitting this
+    // froze the middle panel: clicking a file (or editing) updated the session
+    // but never reached CodeView.
+    if (prev.editor !== next.editor) return false;
     return true;
   },
 );
