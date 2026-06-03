@@ -165,7 +165,11 @@ function workspaceGlobs(rootPkg) {
  */
 function expandGlob(pattern) {
   const matches = fs.globSync(`${pattern}/package.json`, { cwd: ROOT });
-  return matches.map((m) => path.resolve(ROOT, m));
+  // Defensive: a single-level `*` can't reach these, but a future `**` pattern
+  // could — never bump a dependency's or build output's package.json.
+  return matches
+    .filter((m) => !/(^|[/\\])(node_modules|\.next)[/\\]/.test(m))
+    .map((m) => path.resolve(ROOT, m));
 }
 
 function discoverPackageJsonFiles(rootPkg) {
@@ -302,15 +306,28 @@ async function main() {
     }
   }
 
+  // Phase 1 — rewrite + validate every file in memory before touching the tree,
+  // so a locate/parse/target failure aborts with nothing written (no half-bump).
+  const writes = [];
   for (const p of planned) {
     const content = fs.readFileSync(p.file, "utf8");
     const updated = setTopLevelVersion(content, target);
     if (updated === null) fail(`Could not locate a top-level "version" field in ${p.rel}.`);
+    let parsed;
+    try {
+      parsed = JSON.parse(updated);
+    } catch {
+      fail(`Rewrite produced invalid JSON for ${p.rel}; aborted with no files changed.`);
+    }
     // Structural guarantee: the parsed top-level version must now be the target.
-    if (JSON.parse(updated).version !== target) {
+    if (parsed.version !== target) {
       fail(`Post-write check failed for ${p.rel}: top-level version is not ${target}.`);
     }
-    fs.writeFileSync(p.file, updated);
+    writes.push({ file: p.file, content: updated });
+  }
+  // Phase 2 — every file validated; commit the writes.
+  for (const w of writes) {
+    fs.writeFileSync(w.file, w.content);
   }
 
   console.log("");
