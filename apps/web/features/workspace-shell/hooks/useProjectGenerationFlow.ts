@@ -18,7 +18,7 @@ interface UseProjectGenerationFlowOptions {
     name: string,
     formState: ProjectConfig,
     manifestYaml: string,
-  ) => string;
+  ) => Promise<string | null>;
   setActiveWorkspace: (workspace: {
     projectId: string;
     name: string;
@@ -68,11 +68,20 @@ export function useProjectGenerationFlow(
         }
 
         const manifestYaml = result.files?.["manifest.yaml"] || "";
-        const projectId = options.saveProject(
+        // Await the persistence write before setting the active workspace, so
+        // the workspace never references an uncommitted project.
+        const projectId = await options.saveProject(
           config.governance?.workspaceName || "Untitled",
           config,
           manifestYaml,
         );
+
+        if (!projectId) {
+          return {
+            kind: "network-error",
+            message: "Failed to save the generated project.",
+          };
+        }
 
         options.setActiveWorkspace({
           projectId,

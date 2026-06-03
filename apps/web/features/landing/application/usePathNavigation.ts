@@ -52,15 +52,15 @@ export function usePathNavigation() {
   const { saveProject } = useSavedProjects();
 
   const navigate = useCallback(
-    (pathId: CreationPathId) => {
+    async (pathId: CreationPathId) => {
       switch (pathId) {
         case "blank": {
-          const projectId = saveProject(
+          const projectId = await saveProject(
             "Untitled Project",
             createBlankProjectConfig(),
             "",
           );
-          router.push(`/wizard/1?project=${projectId}`);
+          if (projectId) router.push(`/wizard/1?project=${projectId}`);
           break;
         }
         case "import":

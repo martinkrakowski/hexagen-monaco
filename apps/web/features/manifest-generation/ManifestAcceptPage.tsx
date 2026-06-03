@@ -66,7 +66,7 @@ export function ManifestAcceptPage() {
 
   // Core save logic extracted so every entry point (footer button OR any
   // ManifestPreview internal path) goes through the same guards.
-  const executeSave = useCallback(() => {
+  const executeSave = useCallback(async () => {
     if (!canSave || !canAccept || !viewData) return;
     if (
       !pendingManifest.yaml ||
@@ -79,7 +79,9 @@ export function ManifestAcceptPage() {
     setIsSaving(true);
     setSaveError(null);
 
-    const projectId = saveProject(
+    // Await the (async IndexedDB) write before navigating so the wizard
+    // reliably finds the project; navigating early lost the approved project.
+    const projectId = await saveProject(
       pendingManifest.projectName,
       pendingManifest.formValues as ProjectSpec,
       pendingManifest.yaml,
@@ -93,6 +95,8 @@ export function ManifestAcceptPage() {
 
     isNavigatingAway.current = true;
     pendingManifest.clear();
+    // Clear the import spec so the next new project starts from a blank canvas.
+    sessionStorage.removeItem("import_spec_content");
     router.push(`/wizard/1?project=${projectId}`);
   }, [canSave, canAccept, viewData, pendingManifest, saveProject, router]);
 

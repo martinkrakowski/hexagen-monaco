@@ -52,11 +52,17 @@ export function ImportManifestPage({
         parsedData.governance?.workspaceName ||
         `Imported Project ${new Date().toLocaleTimeString()}`;
 
-      const projectId = saveProject(
+      const projectId = await saveProject(
         projectName,
         parsedData as ProjectConfig,
         manifestYaml,
       );
+
+      if (!projectId) {
+        console.error("Failed to save imported project");
+        setIsSaving(false);
+        return;
+      }
 
       router.push(`/wizard/1?project=${projectId}`);
     } catch (error) {

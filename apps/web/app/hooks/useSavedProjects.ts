@@ -56,7 +56,11 @@ export function useSavedProjects() {
   const clearError = useCallback(() => setPersistError(null), []);
 
   const saveProject = useCallback(
-    (name: string, formState: ProjectConfig, manifestYaml: string): string => {
+    async (
+      name: string,
+      formState: ProjectConfig,
+      manifestYaml: string,
+    ): Promise<string | null> => {
       const id = crypto.randomUUID();
       const now = Date.now();
       const newProject: SavedProject = {
@@ -72,14 +76,20 @@ export function useSavedProjects() {
       const updated = [newProject, ...snapshot];
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
-      setProjects(updated);
-      port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success && mutationSeq.current === seq) {
+      setProjects(updated); // optimistic; reverted below if the write fails
+      // Await the persistence write so callers can navigate only after the
+      // project is durably committed (the IndexedDB adapter is async).
+      // Returning the id before the write resolved caused approved projects to
+      // be "lost" when the next screen read storage before the write landed.
+      const result = await port.saveProjects(updated.map(toBase));
+      if (!result.success) {
+        if (mutationSeq.current === seq) {
           setProjects(snapshot);
           projectsRef.current = snapshot;
           setPersistError(result.error);
         }
-      });
+        return null;
+      }
       return id;
     },
     [port],
@@ -156,7 +166,7 @@ export function useSavedProjects() {
     return {
       isLoading: true,
       projects: [] as SavedProject[],
-      saveProject: () => "",
+      saveProject: async () => null,
       loadProject: () => undefined,
       deleteProject: () => {},
       renameProject: () => {},
