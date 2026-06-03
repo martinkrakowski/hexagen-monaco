@@ -20,6 +20,7 @@
     "typecheck:test": "turbo run typecheck:test",
     "build": "turbo build",
     "build:all": "turbo build",
+    "bump": "node scripts/bump-version.js",
     "sync": "yarn workspace @hexagen/sync cli",
     "sync:dry": "yarn workspace @hexagen/sync cli sync --dry-run",
     "sync:force": "yarn workspace @hexagen/sync cli sync --force",
