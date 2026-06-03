@@ -55,9 +55,10 @@ async function manifestFor(id: string): Promise<TemplateManifest> {
 
 describe("InMemoryAddOnMaterializer", () => {
   it("returns nothing when no add-ons are selected", async () => {
-    const { files, warnings } = await materializer.materialize({});
+    const { files, warnings, errors } = await materializer.materialize({});
     assert.equal(files.size, 0);
     assert.deepStrictEqual(warnings, []);
+    assert.deepStrictEqual(errors, []);
   });
 
   it("materializes a template's outputs with interpolated content", async () => {
@@ -110,6 +111,17 @@ describe("InMemoryAddOnMaterializer", () => {
     assert.ok(
       warnings.some((w) => w.includes("No answer supplied")),
       "expected a defaulting warning for the unanswered questions",
+    );
+  });
+
+  it("surfaces an unknown add-on as an error instead of throwing", async () => {
+    const { files, errors } = await materializer.materialize({
+      "no-such-template": {},
+    });
+    assert.equal(files.size, 0);
+    assert.ok(
+      errors.length > 0,
+      "expected a validation error for the unknown template id",
     );
   });
 });

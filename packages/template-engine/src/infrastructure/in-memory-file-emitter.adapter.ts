@@ -58,6 +58,10 @@ export class InMemoryFileEmitter implements FileEmitterPort {
       const raw = await this.loadFile(manifest.id, rel);
       if (raw === null) continue; // planned output without a source file — skip
 
+      // interpolate() renders each answer via String(): booleans → "true"/"false",
+      // string[] → comma-joined. Fine for current templates (array answers are used
+      // only in `when` gating, never interpolated); authors must not rely on
+      // structured emission of an array answer here.
       const { output, warnings: interpWarnings } = interpolate(raw, answers);
       for (const key of interpWarnings) {
         warnings.push(`Unresolved template variable '{${key}}' in ${rel}`);

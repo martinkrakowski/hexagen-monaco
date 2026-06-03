@@ -32,6 +32,8 @@ export class AddTemplateUseCase {
     private readonly questionEngine: QuestionEnginePort,
     private readonly fileEmitter: FileEmitterPort,
     private readonly configStore: TemplateConfigStorePort,
+    /** Suppress post-install checklist console output (headless/in-memory use). */
+    private readonly quiet: boolean = false,
   ) {}
 
   async execute(input: AddTemplateInput): Promise<AddTemplateResult> {
@@ -83,7 +85,7 @@ export class AddTemplateUseCase {
       config.templates[id] = record;
       applied.push(id);
 
-      this.printChecklist(manifest);
+      if (!this.quiet) this.printChecklist(manifest);
     }
 
     await this.configStore.save(projectRoot, config);

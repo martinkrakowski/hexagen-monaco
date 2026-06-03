@@ -1,4 +1,9 @@
 import { AddTemplateUseCase } from "../application/use-cases/add-template.use-case.js";
+import {
+  CyclicDependencyError,
+  MissingTemplateError,
+  ConflictError,
+} from "../application/resolve-dependencies.js";
 import type { TemplateRegistryPort } from "../application/ports/template-registry.port.js";
 import type { AnswerMap } from "../domain/index.js";
 import { InMemoryFileEmitter } from "./in-memory-file-emitter.adapter.js";
@@ -13,6 +18,13 @@ export interface MaterializeAddOnsResult {
   /** Emitted files: path (relative to the project root) → content. */
   files: Map<string, string>;
   warnings: string[];
+  /**
+   * User-input selection problems — an unknown, conflicting, or cyclic add-on
+   * selection. materialize() **never throws** for these; it returns them here
+   * (with no files) so the caller can surface a validation response rather than
+   * crash the generation. Empty on success.
+   */
+  errors: string[];
 }
 
 /**
@@ -35,7 +47,9 @@ export class InMemoryAddOnMaterializer {
     addOnsAnswers: Record<string, AnswerMap>,
   ): Promise<MaterializeAddOnsResult> {
     const templateIds = Object.keys(addOnsAnswers);
-    if (templateIds.length === 0) return { files: new Map(), warnings: [] };
+    if (templateIds.length === 0) {
+      return { files: new Map(), warnings: [], errors: [] };
+    }
 
     const emitter = new InMemoryFileEmitter(this.loadTemplateFile);
     const questionEngine = new DefaultingQuestionEngine();
@@ -44,18 +58,37 @@ export class InMemoryAddOnMaterializer {
       questionEngine,
       emitter,
       new InMemoryTemplateConfigStore(),
+      true, // quiet: a headless run must not print install checklists to stdout
     );
 
-    const { warnings } = await useCase.execute({
-      templateIds,
-      projectRoot: VIRTUAL_ROOT,
-      overrideAnswers: addOnsAnswers,
-      skipInstalled: false,
-    });
-
-    return {
-      files: new Map(emitter.getFiles()),
-      warnings: [...warnings, ...questionEngine.warnings],
-    };
+    try {
+      const { warnings } = await useCase.execute({
+        templateIds,
+        projectRoot: VIRTUAL_ROOT,
+        overrideAnswers: addOnsAnswers,
+        skipInstalled: false,
+      });
+      return {
+        files: new Map(emitter.getFiles()),
+        warnings: [...warnings, ...questionEngine.warnings],
+        errors: [],
+      };
+    } catch (err) {
+      // Invalid user selections (unknown id / conflict / cycle) are surfaced as
+      // errors, not thrown — the caller turns them into a validation response.
+      // Anything unexpected still propagates.
+      if (
+        err instanceof MissingTemplateError ||
+        err instanceof ConflictError ||
+        err instanceof CyclicDependencyError
+      ) {
+        return {
+          files: new Map(),
+          warnings: [...questionEngine.warnings],
+          errors: [err.message],
+        };
+      }
+      throw err;
+    }
   }
 }
