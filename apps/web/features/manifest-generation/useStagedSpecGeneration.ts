@@ -115,15 +115,21 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   // live instead of waiting for stream.generate() to resolve. The stream
   // sends chunk events with stage = -1 (status text not tied to a stage);
   // we treat those as the verbose log.
+  //
+  // The verbose log is updated BEFORE the isGenerating guard: when the final
+  // status chunk and the stream's done/failed event land in the same React
+  // batch, isGenerating is already false on this render, so an early return
+  // would drop those last lines from the log.
   useEffect(() => {
-    if (!stream.isGenerating) return;
-    setPhase(stream.phase);
-    if (stream.stepDetail) setStepDetail(stream.stepDetail);
     const { [-1]: chunkStage, ...numberedStages } = stream.stageProgress;
-    setStageProgress(numberedStages);
     if (chunkStage?.chunks?.length) {
       setVerboseLog(chunkStage.chunks);
     }
+
+    if (!stream.isGenerating) return;
+    setPhase(stream.phase);
+    if (stream.stepDetail) setStepDetail(stream.stepDetail);
+    setStageProgress(numberedStages);
   }, [
     stream.isGenerating,
     stream.phase,
