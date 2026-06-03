@@ -34,11 +34,16 @@ const COLLISION_PRONE: ReadonlyArray<{
     label: "real .env (non-.example)",
     test: (p) => {
       const base = p.split("/").pop() ?? "";
-      return base.startsWith(".env") && !base.endsWith(".example");
+      // Real .env / .env.local / .env.production — but not the namespaced
+      // .env.*.example, nor unrelated dotfiles like .environment / .envrc.
+      return /^\.env(\..+)?$/.test(base) && !base.endsWith(".example");
     },
   },
   { label: "shared root index", test: (p) => /^(src\/)?index\.ts$/.test(p) },
-  { label: "Next root layout", test: (p) => /^app\/layout\.tsx?$/.test(p) },
+  {
+    label: "Next root layout",
+    test: (p) => /^(src\/)?app\/layout\.tsx?$/.test(p),
+  },
   { label: "next.config", test: (p) => /^next\.config\.[mc]?[jt]s$/.test(p) },
 ];
 
@@ -51,10 +56,15 @@ const HARD_LIMIT_BYTES = 15 * 1024 * 1024;
 
 async function listTemplateIds(): Promise<string[]> {
   const entries = await fs.readdir(TEMPLATES_DIR, { withFileTypes: true });
-  return entries
+  const ids = entries
     .filter((e) => e.isDirectory() && e.name !== "__example__")
     .map((e) => e.name)
     .sort();
+  // A guard that scans nothing must fail loudly, not pass vacuously.
+  if (ids.length === 0) {
+    throw new Error(`No templates discovered under ${TEMPLATES_DIR}`);
+  }
+  return ids;
 }
 
 async function outputsFor(id: string): Promise<string[]> {
