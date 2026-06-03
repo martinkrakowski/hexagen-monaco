@@ -23,6 +23,10 @@ test("coerce-raw-topology: coerceContextType accepts valid types", () => {
   assert.equal(coerceContextType("supporting"), "supporting");
   assert.equal(coerceContextType("generic"), "generic");
   assert.equal(coerceContextType("shared-kernel"), "shared-kernel");
+  // "driver" is part of the canonical set (@hexagen/shared); it must be
+  // preserved, not silently coerced to "core" (the prior 4-value behavior).
+  assert.equal(coerceContextType("driver"), "driver");
+  assert.equal(coerceContextType("Driver"), "driver");
 });
 
 test("coerce-raw-topology: coerceContextType is case-insensitive", () => {

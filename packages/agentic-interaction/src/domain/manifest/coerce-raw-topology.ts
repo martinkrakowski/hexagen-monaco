@@ -1,3 +1,8 @@
+import {
+  BOUNDED_CONTEXT_TYPES,
+  type BoundedContextType,
+} from "@hexagen/shared";
+
 export interface RawPort {
   name: string;
   type: string;
@@ -17,11 +22,10 @@ export interface RawContext {
   adapters?: Array<{ name: string; type: string; implements: string }>;
 }
 
-export type BoundedContextType =
-  | "core"
-  | "supporting"
-  | "generic"
-  | "shared-kernel";
+// Re-exported from the canonical single source (@hexagen/shared) so this
+// coercion path recognizes every bounded-context type — notably "driver",
+// which it previously dropped to "core".
+export type { BoundedContextType };
 
 function toKebabCase(input: string): string {
   return input
@@ -44,15 +48,9 @@ function ensurePortSuffix(name: string): string {
  * Defaults to 'core' if the type is empty or invalid.
  */
 export function coerceContextType(type: string): BoundedContextType {
-  const validTypes: BoundedContextType[] = [
-    "core",
-    "supporting",
-    "generic",
-    "shared-kernel",
-  ];
   const trimmed = (type ?? "").trim().toLowerCase();
 
-  if (validTypes.includes(trimmed as BoundedContextType)) {
+  if ((BOUNDED_CONTEXT_TYPES as readonly string[]).includes(trimmed)) {
     return trimmed as BoundedContextType;
   }
 

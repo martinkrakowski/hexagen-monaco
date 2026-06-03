@@ -1,4 +1,8 @@
 import type { EventBusPort } from "@hexagen/messaging";
+import {
+  BOUNDED_CONTEXT_TYPES,
+  type BoundedContextType,
+} from "@hexagen/shared";
 import type {
   ManifestWritePort,
   RegisterBoundedContextCommand,
@@ -6,7 +10,7 @@ import type {
 
 export interface CreateContextInput {
   name: string;
-  type: "core" | "supporting" | "generic" | "shared-kernel";
+  type: BoundedContextType;
   description?: string;
   dry_run?: boolean;
 }
@@ -17,13 +21,6 @@ export interface CreateContextOutput {
   alreadyExisted: boolean;
   message: string;
 }
-
-const VALID_CONTEXT_TYPES = [
-  "core",
-  "supporting",
-  "generic",
-  "shared-kernel",
-] as const;
 
 function validateContextName(name: string): {
   valid: boolean;
@@ -56,8 +53,13 @@ export class CreateContextToolUseCase {
   ) {}
 
   async execute(input: CreateContextInput): Promise<CreateContextOutput> {
-    if (!input.type || !VALID_CONTEXT_TYPES.includes(input.type)) {
-      throw new Error(`type must be one of: ${VALID_CONTEXT_TYPES.join(", ")}`);
+    if (
+      !input.type ||
+      !(BOUNDED_CONTEXT_TYPES as readonly string[]).includes(input.type)
+    ) {
+      throw new Error(
+        `type must be one of: ${BOUNDED_CONTEXT_TYPES.join(", ")}`,
+      );
     }
 
     const nameValidation = validateContextName(input.name);

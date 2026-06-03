@@ -1,3 +1,7 @@
+import {
+  BOUNDED_CONTEXT_TYPES,
+  type BoundedContextType,
+} from "@hexagen/shared";
 import type { ToolDefinition } from "./tool-definition.js";
 
 export const createContextTool: ToolDefinition = {
@@ -9,7 +13,7 @@ export const createContextTool: ToolDefinition = {
       name: { type: "string" },
       type: {
         type: "string",
-        enum: ["core", "supporting", "generic", "shared-kernel"],
+        enum: [...BOUNDED_CONTEXT_TYPES],
       },
       description: { type: "string" },
       dry_run: { type: "boolean" },
@@ -21,11 +25,7 @@ export const createContextTool: ToolDefinition = {
       const a = args as Record<string, unknown>;
       const result = await deps.createContextToolUseCase.execute({
         name: String(a.name ?? ""),
-        type: String(a.type ?? "core") as
-          | "core"
-          | "supporting"
-          | "generic"
-          | "shared-kernel",
+        type: String(a.type ?? "core") as BoundedContextType,
         description: a.description as string | undefined,
         dry_run: (a.dry_run as boolean | undefined) ?? false,
       });

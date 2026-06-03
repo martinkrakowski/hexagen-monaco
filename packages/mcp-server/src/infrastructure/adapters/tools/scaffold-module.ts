@@ -1,3 +1,7 @@
+import {
+  BOUNDED_CONTEXT_TYPES,
+  type BoundedContextType,
+} from "@hexagen/shared";
 import type { ToolDefinition } from "./tool-definition.js";
 
 export const scaffoldModuleTool: ToolDefinition = {
@@ -13,7 +17,7 @@ export const scaffoldModuleTool: ToolDefinition = {
       },
       context_type: {
         type: "string",
-        enum: ["core", "supporting", "generic", "shared-kernel"],
+        enum: [...BOUNDED_CONTEXT_TYPES],
       },
       dry_run: { type: "boolean" },
     },
@@ -28,12 +32,7 @@ export const scaffoldModuleTool: ToolDefinition = {
           | "domain"
           | "application"
           | "infrastructure",
-        context_type: a.context_type as
-          | "core"
-          | "supporting"
-          | "generic"
-          | "shared-kernel"
-          | undefined,
+        context_type: a.context_type as BoundedContextType | undefined,
         dry_run: (a.dry_run as boolean | undefined) ?? false,
       });
       return {

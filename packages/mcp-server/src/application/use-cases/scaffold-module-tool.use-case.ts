@@ -1,11 +1,12 @@
 import type { EventBusPort } from "@hexagen/messaging";
+import type { BoundedContextType } from "@hexagen/shared";
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
 export interface ScaffoldModuleInput {
   name: string;
   layer: "domain" | "application" | "infrastructure";
-  context_type?: "core" | "supporting" | "generic" | "shared-kernel";
+  context_type?: BoundedContextType;
   dry_run?: boolean;
 }
 
