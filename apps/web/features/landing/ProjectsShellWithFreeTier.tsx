@@ -45,11 +45,15 @@ export function ProjectsShellWithFreeTier({
   const showBadge =
     usingWebLLM || showFreeTierBadge || currentModelName !== null;
 
+  // Presence must be a nullish check, not truthiness: headerContent is a
+  // ReactNode and may legitimately be a falsy primitive (0, "", false).
+  const hasInner = inner !== null && inner !== undefined;
+
   // Always render the model badge trailing the header content. The inner wrapper
   // keeps its own justify-between so multi-element headers (e.g. title + tabs)
   // still spread correctly within the available space, with the badge after.
   const finalHeaderContent =
-    inner || showBadge ? (
+    hasInner || showBadge ? (
       <div className="flex w-full flex-nowrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           {inner}

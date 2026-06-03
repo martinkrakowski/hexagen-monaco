@@ -37,12 +37,16 @@ export function FreeTierProvider({ children }: { children: ReactNode }) {
   const { preferredLocalModel } = usePreferredLLM();
   const usingWebLLM = preferredLocalModel !== null;
 
-  const freeTierModal = (
+  // Only mount the modal while it's open. Otherwise the closed modal keeps
+  // useLocalLLM()/router subscriptions alive on every page that renders the
+  // shell (and re-renders on local-LLM churn). openModal() flips this to true,
+  // mounting it on demand — this works for cloud/free-tier/WebLLM alike.
+  const freeTierModal = freeTierModalOpen ? (
     <FreeTierModelModal
       open={freeTierModalOpen}
       onOpenChange={setFreeTierModalOpen}
     />
-  );
+  ) : null;
 
   const value = {
     showFreeTierBadge,
