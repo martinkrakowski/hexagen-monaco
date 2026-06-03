@@ -9,11 +9,10 @@ import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
-import { Button, Badge } from "@hexagen/ui";
+import { Button } from "@hexagen/ui";
 import { ArrowLeft } from "lucide-react";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
-import { useFreeTier } from "@/lib/free-tier/FreeTierContext";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 
@@ -51,14 +50,6 @@ export default function ImportProjectSpecPage() {
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
-  const {
-    showFreeTierBadge,
-    usingWebLLM,
-    currentModelName,
-    freeTierModal,
-    openModal,
-  } = useFreeTier();
-
   const { needsSetup, isProbing } = useLLMReadiness();
 
   // Hook for spec path (structured config)
@@ -365,86 +356,72 @@ export default function ImportProjectSpecPage() {
     pageState === "GENERATING" || pageState === "PREVIEW";
 
   return (
-    <>
-      <ProjectsShell
-        headerContent={
-          <div className="flex items-center justify-between w-full">
-            <span className="font-semibold text-sm truncate">
-              Import Project Specification
-            </span>
-            {(showFreeTierBadge || usingWebLLM) && (
-              <button onClick={openModal} className="ml-auto">
-                <Badge variant="secondary">
-                  {usingWebLLM
-                    ? `WebLLM: ${currentModelName ?? ""}`
-                    : `Free Tier Model${currentModelName ? `: ${currentModelName}` : ""}`}
-                </Badge>
-              </button>
+    <ProjectsShellWithFreeTier
+      headerContent={
+        <span className="font-semibold text-sm truncate">
+          Import Project Specification
+        </span>
+      }
+      footer={renderFooter()}
+    >
+      {isFullHeightState ? (
+        <div className="h-full flex flex-col dot-grid bg-ambient p-4">
+          {pageState === "GENERATING" && (
+            <ManifestGeneratingStep
+              generationError={generationError}
+              phase={phase}
+              stepDetail={stepDetail}
+              stageProgress={stageProgress}
+              verboseLog={verboseLog}
+            />
+          )}
+
+          {pageState === "PREVIEW" && (
+            <ManifestPreviewStep generatedManifest={generatedManifest} />
+          )}
+        </div>
+      ) : (
+        <div className="h-full overflow-y-auto dot-grid bg-ambient">
+          <div className="max-w-2xl mx-auto py-8 px-4">
+            {(pageState === "SPEC_REVIEW" ||
+              pageState === "DESCRIPTION_FALLBACK") &&
+              needsSetup &&
+              !isProbing && (
+                <div className="mb-6">
+                  <ModelSetupPrompt
+                    onSetupModel={() =>
+                      router.push(
+                        "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
+                      )
+                    }
+                  />
+                </div>
+              )}
+
+            {pageState === "UPLOAD" && (
+              <SpecUploadStep onFileLoaded={handleFileLoaded} />
             )}
-          </div>
-        }
-        footer={renderFooter()}
-      >
-        {isFullHeightState ? (
-          <div className="h-full flex flex-col dot-grid bg-ambient p-4">
-            {pageState === "GENERATING" && (
-              <ManifestGeneratingStep
-                generationError={generationError}
-                phase={phase}
-                stepDetail={stepDetail}
-                stageProgress={stageProgress}
-                verboseLog={verboseLog}
+
+            {pageState === "SPEC_REVIEW" && (
+              <SpecReviewStep
+                specSummary={specSummary}
+                specContent={specContent}
+                cameFromConversion={cameFromConversion}
+                isJsonDisclosed={isJsonDisclosed}
+                onToggleJsonDisclosed={setIsJsonDisclosed}
               />
             )}
 
-            {pageState === "PREVIEW" && (
-              <ManifestPreviewStep generatedManifest={generatedManifest} />
+            {pageState === "CONVERTING_LOOSE_SPEC" && (
+              <SpecConvertingStep conversionError={conversionError} />
+            )}
+
+            {pageState === "DESCRIPTION_FALLBACK" && (
+              <SpecDescriptionFallbackStep />
             )}
           </div>
-        ) : (
-          <div className="h-full overflow-y-auto dot-grid bg-ambient">
-            <div className="max-w-2xl mx-auto py-8 px-4">
-              {(pageState === "SPEC_REVIEW" ||
-                pageState === "DESCRIPTION_FALLBACK") &&
-                needsSetup &&
-                !isProbing && (
-                  <div className="mb-6">
-                    <ModelSetupPrompt
-                      onSetupModel={() =>
-                        router.push(
-                          "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
-                        )
-                      }
-                    />
-                  </div>
-                )}
-
-              {pageState === "UPLOAD" && (
-                <SpecUploadStep onFileLoaded={handleFileLoaded} />
-              )}
-
-              {pageState === "SPEC_REVIEW" && (
-                <SpecReviewStep
-                  specSummary={specSummary}
-                  specContent={specContent}
-                  cameFromConversion={cameFromConversion}
-                  isJsonDisclosed={isJsonDisclosed}
-                  onToggleJsonDisclosed={setIsJsonDisclosed}
-                />
-              )}
-
-              {pageState === "CONVERTING_LOOSE_SPEC" && (
-                <SpecConvertingStep conversionError={conversionError} />
-              )}
-
-              {pageState === "DESCRIPTION_FALLBACK" && (
-                <SpecDescriptionFallbackStep />
-              )}
-            </div>
-          </div>
-        )}
-      </ProjectsShell>
-      {freeTierModal}
-    </>
+        </div>
+      )}
+    </ProjectsShellWithFreeTier>
   );
 }

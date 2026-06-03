@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useModelSelectionIntent } from "./store/useModelSelectionIntent";
 import { usePreferredLLM } from "@/lib/free-tier/store/usePreferredLLM";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
@@ -122,7 +122,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
 
   return (
     <>
-      <ProjectsShell
+      <ProjectsShellWithFreeTier
         headerContent={
           <span className="font-semibold text-sm truncate">Choose Model</span>
         }
@@ -172,7 +172,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
             )}
           </div>
         </div>
-      </ProjectsShell>
+      </ProjectsShellWithFreeTier>
 
       {mounted &&
         (isModelLoading || isModelError) &&

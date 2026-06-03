@@ -7,7 +7,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { ManifestPreview } from "./ManifestPreview";
 import { useManifestParser } from "./useManifestParser";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 interface ImportManifestPageProps {
@@ -157,7 +157,7 @@ export function ImportManifestPage({
   };
 
   return (
-    <ProjectsShell
+    <ProjectsShellWithFreeTier
       title="Import Manifest"
       footer={
         <>
@@ -205,6 +205,6 @@ export function ImportManifestPage({
       }
     >
       {renderContent()}
-    </ProjectsShell>
+    </ProjectsShellWithFreeTier>
   );
 }
