@@ -79,25 +79,32 @@ export function ManifestAcceptPage() {
     setIsSaving(true);
     setSaveError(null);
 
-    // Await the (async IndexedDB) write before navigating so the wizard
-    // reliably finds the project; navigating early lost the approved project.
-    const projectId = await saveProject(
-      pendingManifest.projectName,
-      pendingManifest.formValues as ProjectSpec,
-      pendingManifest.yaml,
-    );
+    try {
+      // Await the (async IndexedDB) write before navigating so the wizard
+      // reliably finds the project; navigating early lost the approved project.
+      const projectId = await saveProject(
+        pendingManifest.projectName,
+        pendingManifest.formValues as ProjectSpec,
+        pendingManifest.yaml,
+      );
 
-    if (!projectId) {
-      setSaveError("Failed to create project. Please try again.");
-      setIsSaving(false);
-      return;
+      if (!projectId) {
+        setSaveError("Failed to create project. Please try again.");
+        return;
+      }
+
+      isNavigatingAway.current = true;
+      pendingManifest.clear();
+      // Clear the import spec so the next new project starts from a blank canvas.
+      sessionStorage.removeItem("import_spec_content");
+      router.push(`/wizard/1?project=${projectId}`);
+    } catch {
+      setSaveError("Unexpected error saving project. Please try again.");
+    } finally {
+      // Keep the "Saving…" screen up while navigating away on success;
+      // otherwise release it so the user can retry.
+      if (!isNavigatingAway.current) setIsSaving(false);
     }
-
-    isNavigatingAway.current = true;
-    pendingManifest.clear();
-    // Clear the import spec so the next new project starts from a blank canvas.
-    sessionStorage.removeItem("import_spec_content");
-    router.push(`/wizard/1?project=${projectId}`);
   }, [canSave, canAccept, viewData, pendingManifest, saveProject, router]);
 
   // Wrapper accepted by ManifestPreview's onApprove (string) and the footer
@@ -107,7 +114,7 @@ export function ManifestAcceptPage() {
   const handleApprove = useCallback(
     (arg: string | React.MouseEvent | undefined) => {
       void arg;
-      executeSave();
+      void executeSave();
     },
     [executeSave],
   );

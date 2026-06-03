@@ -124,4 +124,28 @@ describe("useProjectGenerationFlow", () => {
     assert.strictEqual(outcome?.kind, "network-error");
     assert.strictEqual(setActiveWorkspace.mock.calls.length, 0);
   });
+
+  it("returns an error when persistence throws", async () => {
+    mockGenerateOk();
+    const saveProject = mock.fn(async () => {
+      throw new Error("IDB corrupted");
+    });
+    const setActiveWorkspace = mock.fn();
+
+    const { result } = renderHook(() =>
+      useProjectGenerationFlow({
+        saveProject,
+        setActiveWorkspace,
+        setEditorSessionId: mock.fn(),
+      }),
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.execute>> | undefined;
+    await act(async () => {
+      outcome = await result.current.execute(config);
+    });
+
+    assert.strictEqual(outcome?.kind, "network-error");
+    assert.strictEqual(setActiveWorkspace.mock.calls.length, 0);
+  });
 });
