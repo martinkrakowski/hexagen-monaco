@@ -89,7 +89,7 @@ Return a JSON object matching this shape exactly:
 }
 
 Rules:
-- type must be one of: "core", "supporting", "generic", "shared-kernel"
+- type must be one of: "core", "supporting", "generic", "shared-kernel", "driver"
 - Context names: lowercase kebab-case with hyphens only (e.g. "order-management", not "OrderManagement")
 - Port names: PascalCase ending in "Port" (e.g. "CreateOrderPort")
 - Each context needs at least 1 inbound port

@@ -202,7 +202,7 @@ describe("CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT", () => {
     );
     assert.match(
       CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT,
-      /core.*supporting.*generic.*shared-kernel/s,
+      /core.*supporting.*generic.*shared-kernel.*driver/s,
     );
   });
 });

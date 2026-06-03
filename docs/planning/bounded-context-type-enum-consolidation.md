@@ -29,14 +29,14 @@ touches must add the dependency first. **#201 is merged**, so the canonical is o
 `core|supporting|generic|shared-kernel` prompt variants) surfaces these classes
 of remaining copies:
 
-| PR       | Phase | Surface                                                                  | Severity               | Status                       |
-| -------- | ----- | ------------------------------------------------------------------------ | ---------------------- | ---------------------------- |
-| **PR A** | P2    | MCP tool-param enums + casts + use-cases/port (missing `driver`)         | Low (input surface)    | ✅ done in #201 (`d2bfda62`) |
-| **(A′)** | P1    | `coerceContextType` silently mapped `driver`→`core`                      | **Med (correctness)**  | ✅ done in #201 (`d2bfda62`) |
-| **(A″)** | P2    | 3 more type-position copies (an `as` cast + 2 ports) #201 missed         | Low                    | ✅ done in #203              |
-| **PR B** | P2    | LLM prompts disagree on the type set (internally inconsistent)           | Low–Med (needs a call) | ⬜ open (gated)              |
-| **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)         | ⬜ open                      |
-| **PR D** | P2    | more type-position copies — incl. a `"generic"`-dropping variant         | **Med (latent bug)**   | ⬜ open (newly found)        |
+| PR       | Phase | Surface                                                                  | Severity              | Status                         |
+| -------- | ----- | ------------------------------------------------------------------------ | --------------------- | ------------------------------ |
+| **PR A** | P2    | MCP tool-param enums + casts + use-cases/port (missing `driver`)         | Low (input surface)   | ✅ done in #201 (`d2bfda62`)   |
+| **(A′)** | P1    | `coerceContextType` silently mapped `driver`→`core`                      | **Med (correctness)** | ✅ done in #201 (`d2bfda62`)   |
+| **(A″)** | P2    | 3 more type-position copies (an `as` cast + 2 ports) #201 missed         | Low                   | ✅ done in #203                |
+| **PR B** | P2    | LLM prompts disagree on the type set (internally inconsistent)           | Low–Med               | ✅ decided A + done (ADR-0040) |
+| **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)        | ⬜ open                        |
+| **PR D** | P2    | more type-position copies — incl. a `"generic"`-dropping variant         | **Med (latent bug)**  | ⬜ open (newly found)          |
 
 **Update (post-#201 review):** PR A — plus a previously-missed correctness item,
 `coerceContextType` (`coerce-raw-topology.ts`) defaulting unknown types incl.
@@ -54,6 +54,11 @@ needs a usage audit first.
 ---
 
 ## Prerequisite decision — what is a `"driver"` context, and is it LLM-emittable?
+
+> **DECIDED (2026-06-03): Option A — `driver` IS LLM-emittable.** Recorded in
+> `ADR-0040-driver-context-llm-emittable` (extends ADR-0009). PR B implemented
+> accordingly — all prompts enumerate the 5-value set, the classify prompt gained
+> a `driver` definition, and the two type-position casts use `BoundedContextType`.
 
 `"driver"` is a valid bounded-context type in the final schema (project-config,
 agentic topology draft) but **has no definition anywhere** — the classify system

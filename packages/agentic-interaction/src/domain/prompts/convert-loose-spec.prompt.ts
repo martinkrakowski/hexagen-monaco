@@ -89,7 +89,7 @@ interface StructuredConfigContext {
   value_objects?: StructuredConfigValueObject[];
   events_published?: string[];
   events_consumed?: Array<{ event: string; notify?: string; channels?: string[] }>;
-  type?: "core" | "supporting" | "generic" | "shared-kernel";
+  type?: "core" | "supporting" | "generic" | "shared-kernel" | "driver";
 }
 
 interface StructuredConfig {
