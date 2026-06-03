@@ -1,5 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import {
+  BoundedContextTypeSchema,
+  RelationshipPatternSchema,
+} from "@hexagen/project-configuration";
 import { parseManifestToWizardData } from "../../application/manifest-parser";
 
 describe("parseManifestToWizardData", () => {
@@ -118,5 +122,27 @@ bounded_contexts:
     const result = parseManifestToWizardData(manifestWithSingleAdapter);
     assert.strictEqual(result.boundedContexts[0].persistenceAdapter, "Prisma");
     assert.strictEqual(result.boundedContexts[0].messagingAdapter, "");
+  });
+});
+
+// Schema-boundary contract for the case-insensitive enums (the normalization
+// parseManifestToWizardData relies on). Lives in this gating suite because the
+// @hexagen/project-configuration package's own test harness is non-gating.
+describe("manifest enum casing", () => {
+  it("normalizes lowercase-canonical enums to lower (type: Core -> core)", () => {
+    assert.strictEqual(BoundedContextTypeSchema.parse("Core"), "core");
+    assert.strictEqual(
+      BoundedContextTypeSchema.parse("SHARED-KERNEL"),
+      "shared-kernel",
+    );
+  });
+
+  it("normalizes uppercase-canonical enums to upper (pattern: acl -> ACL)", () => {
+    assert.strictEqual(RelationshipPatternSchema.parse("acl"), "ACL");
+    assert.strictEqual(RelationshipPatternSchema.parse("u/d"), "U/D");
+  });
+
+  it("does not mask non-string enum values", () => {
+    assert.throws(() => BoundedContextTypeSchema.parse(42));
   });
 });
