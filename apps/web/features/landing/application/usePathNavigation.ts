@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CreationPathId } from "../domain/creation-path";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
@@ -50,17 +50,28 @@ function createBlankProjectConfig(): ProjectConfig {
 export function usePathNavigation() {
   const router = useRouter();
   const { saveProject } = useSavedProjects();
+  const [navigationError, setNavigationError] = useState<string | null>(null);
 
   const navigate = useCallback(
-    (pathId: CreationPathId) => {
+    async (pathId: CreationPathId) => {
+      setNavigationError(null);
       switch (pathId) {
         case "blank": {
-          const projectId = saveProject(
+          const projectId = await saveProject(
             "Untitled Project",
             createBlankProjectConfig(),
             "",
           );
-          router.push(`/wizard/1?project=${projectId}`);
+          if (projectId) {
+            router.push(`/wizard/1?project=${projectId}`);
+          } else {
+            // Persistence failed (saveProject returned null) — surface it
+            // instead of silently doing nothing.
+            console.error("Failed to create blank project: persistence failed");
+            setNavigationError(
+              "Couldn't create the project — check your browser storage permissions or available space and try again.",
+            );
+          }
           break;
         }
         case "import":
@@ -78,5 +89,5 @@ export function usePathNavigation() {
     [router, saveProject],
   );
 
-  return { navigate };
+  return { navigate, navigationError };
 }
