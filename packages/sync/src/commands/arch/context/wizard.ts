@@ -29,11 +29,13 @@ const CONTEXT_TYPE_OPTIONS = [
     label: "Shared Kernel - Shared types across contexts",
   },
   { value: "driver", label: "Driver - UI or API adapters" },
-];
+] as const satisfies readonly { value: BoundedContextType; label: string }[];
 
-export async function runContextWizard(
-  manifest: Manifest,
-): Promise<{ name: string; type: string; description?: string } | null> {
+export async function runContextWizard(manifest: Manifest): Promise<{
+  name: string;
+  type: BoundedContextType;
+  description?: string;
+} | null> {
   try {
     console.info("\n🆕 Starting bounded context scaffolding wizard...\n");
 
@@ -77,7 +79,7 @@ export async function runContextWizard(
 
       const num = parseInt(answer, 10);
       if (num >= 1 && num <= CONTEXT_TYPE_OPTIONS.length) {
-        state.type = CONTEXT_TYPE_OPTIONS[num - 1].value as WizardState["type"];
+        state.type = CONTEXT_TYPE_OPTIONS[num - 1].value;
       } else {
         console.warn(
           `⚠️  Invalid selection. Please enter a number 1-${CONTEXT_TYPE_OPTIONS.length}.`,
