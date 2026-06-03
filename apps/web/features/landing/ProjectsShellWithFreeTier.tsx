@@ -27,7 +27,11 @@ export function ProjectsShellWithFreeTier({
 
   const badgeLabel = usingWebLLM
     ? `WebLLM: ${currentModelName ?? ""}`
-    : `Free Tier Model${currentModelName ? `: ${currentModelName}` : ""}`;
+    : showFreeTierBadge
+      ? `Free Tier Model${currentModelName ? `: ${currentModelName}` : ""}`
+      : currentModelName
+        ? `Model: ${currentModelName}`
+        : "";
 
   const inner =
     headerContent ??
@@ -35,19 +39,28 @@ export function ProjectsShellWithFreeTier({
       <span className="font-semibold text-sm truncate">{title}</span>
     ) : null);
 
-  const showBadge = showFreeTierBadge || usingWebLLM;
+  // Show the badge whenever a model is known (cloud, free-tier, or WebLLM) so
+  // every screen using this shell always displays the current model — not only
+  // the free-tier / WebLLM cases.
+  const showBadge =
+    usingWebLLM || showFreeTierBadge || currentModelName !== null;
 
   // Always render the model badge trailing the header content. The inner wrapper
   // keeps its own justify-between so multi-element headers (e.g. title + tabs)
   // still spread correctly within the available space, with the badge after.
   const finalHeaderContent =
     inner || showBadge ? (
-      <div className="flex w-full items-center justify-between gap-4">
+      <div className="flex w-full flex-nowrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           {inner}
         </div>
         {showBadge && (
-          <button type="button" onClick={openModal} className="shrink-0">
+          <button
+            type="button"
+            onClick={openModal}
+            aria-label="Change model"
+            className="shrink-0"
+          >
             <Badge variant="secondary">{badgeLabel}</Badge>
           </button>
         )}
