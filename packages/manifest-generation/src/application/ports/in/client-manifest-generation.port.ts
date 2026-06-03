@@ -108,6 +108,10 @@ export interface ClientManifestGenerationDeps {
     diagnostics: DraftDiagnostic[],
   ) => Promise<{ yaml: string; diagnostics: DraftDiagnostic[] }>;
   coerceRawPorts: (ports: unknown) => PortsList;
+  // Full BoundedContextType. The impl (coerceContextType in
+  // @hexagen/agentic-interaction) has returned all 5 values since #201; this
+  // port previously under-declared it (missing "generic"), so a generic result
+  // would have violated the contract at the boundary — now aligned.
   coerceContextType: (type: string) => BoundedContextType;
   coercePort: (
     port: Record<string, unknown>,
