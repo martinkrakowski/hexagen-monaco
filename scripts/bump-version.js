@@ -54,8 +54,12 @@ import { createInterface } from "node:readline";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-const SEMVER_STRICT = /^(\d+)\.(\d+)\.(\d+)$/;
-const SEMVER_LOOSE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+// Strict X.Y.Z — no leading zeros, no pre-release/build — for patch/minor/major math.
+const SEMVER_STRICT = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+// SemVer 2.0.0 shape — validates --set, so explicit pre-release/build versions are
+// allowed while leading-zero core identifiers (e.g. 01.2.3) are rejected, matching npm.
+const SEMVER_LOOSE =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 // ---------------------------------------------------------------------------
 // CLI
