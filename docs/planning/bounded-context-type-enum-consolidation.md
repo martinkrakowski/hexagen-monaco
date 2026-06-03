@@ -22,17 +22,25 @@ import from it. **All phases here depend on #201 being merged.**
 ## The residual drift
 
 `grep -rn '"core", "supporting", "generic", "shared-kernel"'` (and the
-`core|supporting|generic|shared-kernel` prompt variants) surfaces three classes
-of remaining copies, none reached by #201:
+`core|supporting|generic|shared-kernel` prompt variants) surfaces these classes
+of remaining copies:
 
-| PR       | Phase | Surface                                                                  | Severity               | Blast radius            |
-| -------- | ----- | ------------------------------------------------------------------------ | ---------------------- | ----------------------- |
-| **PR A** | P2    | MCP tool-param enums + handler casts (missing `driver`)                  | Low (input surface)    | mcp-server (2 tools)    |
-| **PR B** | P2    | LLM prompts disagree on the type set (internally inconsistent)           | Low–Med (needs a call) | agentic-interaction     |
-| **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)         | 2 packages, ~12 exports |
+| PR       | Phase | Surface                                                                  | Severity               | Status                       |
+| -------- | ----- | ------------------------------------------------------------------------ | ---------------------- | ---------------------------- |
+| **PR A** | P2    | MCP tool-param enums + casts + use-cases/port (missing `driver`)         | Low (input surface)    | ✅ done in #201 (`d2bfda62`) |
+| **(A′)** | P1    | `coerceContextType` silently mapped `driver`→`core`                      | **Med (correctness)**  | ✅ done in #201 (`d2bfda62`) |
+| **PR B** | P2    | LLM prompts disagree on the type set (internally inconsistent)           | Low–Med (needs a call) | ⬜ open (gated)              |
+| **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)         | ⬜ open                      |
 
-These are independent. PR A is mechanical. PR B is blocked on a product decision
-(below). PR C is a standalone refactor that needs a usage audit first.
+**Update (post-#201 review):** PR A — plus a previously-missed correctness item,
+`coerceContextType` (`coerce-raw-topology.ts`) defaulting unknown types incl.
+`"driver"` to `"core"` and exporting a local 4-value `BoundedContextType` shadow
+from agentic-interaction's public API — were folded into **PR #201** (commit
+`d2bfda62`): the MCP use-cases / port / tool-defs and the coercion path now
+derive from the canonical `@hexagen/shared` set. **PR B and PR C remain.**
+
+PR B is blocked on a product decision (below). PR C is a standalone refactor that
+needs a usage audit first.
 
 ---
 
@@ -62,7 +70,14 @@ This is a DDD/product call. The rest of PR B is mechanical once it's made.
 
 ---
 
-## PR A — MCP tool params accept the full type set (· P2, low risk)
+## PR A — MCP tool params accept the full type set (· P2, low risk) — ✅ DONE in #201 (`d2bfda62`)
+
+> Completed in PR #201 and expanded beyond the original scoping to also cover the
+> MCP **use-cases** (`create-context-tool`, `scaffold-module-tool`) and the
+> `ManifestWritePort` command type, **plus** `coerceContextType`
+> (`coerce-raw-topology.ts`) — a gap not in the original plan that silently mapped
+> `"driver"`→`"core"` and exported a local 4-value `BoundedContextType` shadow.
+> All now derive from `@hexagen/shared`. Original notes retained for reference.
 
 **Root cause.** Two MCP tools hardcode the 4-value set in both their JSON
 `inputSchema` enum and a handler cast, so an MCP client cannot pass `driver`:
