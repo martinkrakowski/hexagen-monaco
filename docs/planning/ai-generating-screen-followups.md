@@ -6,6 +6,8 @@ PR #194 (`feat/ai-flow-generating-screen`) added a dedicated full-height "Genera
 
 This doc captures the items deliberately **deferred** from that PR's code review (findings #4, #5, #7) plus open validation threads. None block the PR; they're the next layer of polish/hardening.
 
+> Related fix: the same final-chunk loss pattern in the import flow's `useStagedSpecGeneration` is fixed separately in **PR #196**.
+
 ## Follow-ups
 
 ### 1. Unify `AiGeneratingStep` and `ManifestGeneratingStep` (review #4 + #7) — High value, low effort
@@ -32,16 +34,14 @@ This doc captures the items deliberately **deferred** from that PR's code review
 
 **Risk:** Decision only.
 
-### 3. Add regression tests for the fixed bugs — Medium/high priority
+### 3. Add regression tests for the fixed bugs — ✅ cloud path done (PR #194); local path remaining
 
-**Problem.** There is no `useStagedManifestGeneration.test.ts`, and the most severe review bug (cloud `phase: "failed"` must set `generationError`) has no coverage. The `showGeneratingScreen` gating is also untested.
+**Done (PR #194).** `__tests__/useStagedManifestGeneration.test.ts` covers the cloud path by mocking `fetch` with a streamed NDJSON `Response` (no module mocking): in-stream `{type:"error"}` → `generationError` (the regression), success state mapping, chunk accumulation (incl. the final batch), and `reset()`.
 
-**Approach.**
+**Remaining.**
 
-- Hook test: `generate()` resolving with `phase: "failed"` sets `generationError` (mirror the existing `__tests__/useStagedSpecGeneration.test.ts`). Cover the local WebLLM throw path too.
-- Optional component test (if the RTL setup allows): `GenerateWithAi` shows the generating screen while in flight and falls back to the form's inline error on a cloud failure.
-
-**Files:** `__tests__/useStagedManifestGeneration.test.ts` (new); optional `GenerateWithAi` render test.
+- Local WebLLM path — needs module mocking of `getClientManifestGenerationUseCase` (the hook calls it directly).
+- `showGeneratingScreen` gating — a `GenerateWithAi` render test (generating screen while in flight; falls back to the form's inline error on a cloud failure).
 
 **Risk:** Low.
 
