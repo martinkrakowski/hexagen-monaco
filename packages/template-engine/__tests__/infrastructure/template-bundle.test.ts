@@ -5,7 +5,9 @@ import {
   TEMPLATE_MANIFESTS,
   TEMPLATE_FILES,
 } from "../../src/infrastructure/generated/template-bundle.generated.js";
-import { createInMemoryMaterializer } from "../../src/infrastructure/create-in-memory-materializer.js";
+// Import through the public subpath entrypoint (not the adapter directly) so the
+// test also guards that `@hexagen/template-engine/in-memory` keeps exporting it.
+import { createInMemoryMaterializer } from "../../src/in-memory.js";
 
 describe("template bundle parity", () => {
   it("the generated bundle matches a fresh read of templates/", async () => {

@@ -12,8 +12,9 @@ export { createFileSystemTemplateFileLoader } from "./file-system-template-file-
 export { InMemoryAddOnMaterializer } from "./in-memory-add-on-materializer.js";
 export type { MaterializeAddOnsResult } from "./in-memory-add-on-materializer.js";
 
-// Generated-bundle factory: the serverless-safe materializer for the web path.
-// `buildTemplateBundle` (imports node:fs) is intentionally NOT re-exported here —
-// it's only used by the generator script + parity test, which import it directly.
-// Keeping it off the public barrel avoids dragging node:fs into a client bundle.
-export { createInMemoryMaterializer } from "./create-in-memory-materializer.js";
+// NOTE: createInMemoryMaterializer is intentionally NOT exported from this barrel.
+// It imports the generated bundle, which parses ~0.7 MB at module init, and
+// `buildTemplateBundle` imports node:fs. Re-exporting either here would pull both
+// into the package root's module graph — so every consumer of `@hexagen/template-engine`
+// (e.g. the sync CLI) would eagerly load them even when unused. The factory lives
+// behind the dedicated subpath `@hexagen/template-engine/in-memory` instead.

@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./in-memory": {
+      "types": "./dist/in-memory.d.ts",
+      "default": "./dist/in-memory.js"
     }
   },
   "files": [
