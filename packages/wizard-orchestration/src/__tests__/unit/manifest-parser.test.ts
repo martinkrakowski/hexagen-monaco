@@ -145,4 +145,9 @@ describe("manifest enum casing", () => {
   it("does not mask non-string enum values", () => {
     assert.throws(() => BoundedContextTypeSchema.parse(42));
   });
+
+  it("trims surrounding whitespace before validating", () => {
+    assert.strictEqual(BoundedContextTypeSchema.parse("  Core  "), "core");
+    assert.strictEqual(RelationshipPatternSchema.parse(" acl "), "ACL");
+  });
 });

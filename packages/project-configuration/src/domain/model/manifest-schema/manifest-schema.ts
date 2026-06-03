@@ -5,7 +5,8 @@ import { z } from "zod";
  * frequently vary the casing of enum values (e.g. `"Core"` instead of `"core"`),
  * which would otherwise fail validation at parse/approval time
  * (`parseManifestToWizardData` → `ManifestSchema.safeParse`). The input string is
- * normalized to the enum's canonical casing before validation. Most enums are
+ * trimmed and normalized to the enum's canonical casing before validation (the
+ * generation-side `coerceContextType` trims too). Most enums are
  * lowercase; pass `"upper"` for enums whose canonical values are uppercase
  * (e.g. `RelationshipPattern`: `"ACL"`, `"OHS"`).
  */
@@ -17,8 +18,8 @@ function caseInsensitiveEnum<T extends z.ZodTypeAny>(
     (value) =>
       typeof value === "string"
         ? dir === "lower"
-          ? value.toLowerCase()
-          : value.toUpperCase()
+          ? value.trim().toLowerCase()
+          : value.trim().toUpperCase()
         : value,
     schema,
   );

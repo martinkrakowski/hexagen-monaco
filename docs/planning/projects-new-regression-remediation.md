@@ -20,8 +20,8 @@ the flexbox/server-component details (PR 3).
 | **PR 4** | P2    | #3 redundant drag-drop on AI screen                    | Low (cleanup)         | AI screen only          |
 
 PR 1 and PR 2 are the priority — both P0, independent, and together they restore
-a working _generate → approve → persist_ path (#4 blocks before approval; #2 +
-#1 lose it after). PR 2 has the widest blast radius.
+a working _generate → approve → persist_ path (`#4` blocks before approval;
+`#2` + `#1` lose it after). PR 2 has the widest blast radius.
 
 ---
 
