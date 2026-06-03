@@ -4,6 +4,8 @@ import { GenerateProjectUseCase } from "../../src/application/generate-project-u
 import { InMemoryProjectGeneratorDouble } from "../doubles/in-memory-project-generator.double.js";
 import { InMemoryGitHubExporterDouble } from "../doubles/in-memory-github-exporter.double.js";
 import { InMemoryZipProjectExporterDouble } from "../doubles/in-memory-project-exporter.double.js";
+import { InMemoryAddOnMaterializerDouble } from "../doubles/in-memory-add-on-materializer.double.js";
+import { RecordingExporterDouble } from "../doubles/recording-exporter.double.js";
 import type { Manifest } from "@hexagen/sync";
 import type { ExportConfig } from "../../src/application/ports/out/project-exporter.port.js";
 
@@ -111,5 +113,132 @@ describe("GenerateProjectUseCase", () => {
     assert.ok(result.value.project.id);
     assert.strictEqual(result.value.project.name, "test-system");
     assert.ok(result.value.project.files.size > 0);
+  });
+});
+
+describe("GenerateProjectUseCase — add-on materialization", () => {
+  let generator: InMemoryProjectGeneratorDouble;
+  let materializer: InMemoryAddOnMaterializerDouble;
+  let recorder: RecordingExporterDouble;
+  const manifest: Manifest = { system: "test-system" };
+  const archive: ExportConfig = { destination: "archive" };
+
+  beforeEach(() => {
+    generator = new InMemoryProjectGeneratorDouble();
+    materializer = new InMemoryAddOnMaterializerDouble();
+    recorder = new RecordingExporterDouble();
+  });
+
+  it("merges add-on files into project.files AND the temp dir (template-overrides-core)", async () => {
+    // The generator double emits README.md; the add-on overrides it + adds a file.
+    materializer.setResult({
+      files: new Map([
+        ["README.md", "# From add-on"],
+        ["src/feature.ts", "export const feature = true;"],
+      ]),
+    });
+
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { "rate-limiting": {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+
+    // Code view (project.files): override won + new file present.
+    assert.strictEqual(
+      result.value.project.files.get("README.md"),
+      "# From add-on",
+    );
+    assert.strictEqual(
+      result.value.project.files.get("src/feature.ts"),
+      "export const feature = true;",
+    );
+
+    // Temp dir (what ZIP/GitHub capture): the same files reached disk pre-export.
+    const onDisk = recorder.getCapturedFiles();
+    assert.strictEqual(onDisk.get("README.md"), "# From add-on");
+    assert.strictEqual(
+      onDisk.get("src/feature.ts"),
+      "export const feature = true;",
+    );
+
+    // The override of a generated file is reported as a warning.
+    assert.ok(
+      result.value.warnings?.some((w) => w.includes("README.md")),
+      "expected an override warning mentioning README.md",
+    );
+    assert.strictEqual(materializer.getCallCount(), 1);
+  });
+
+  it("passes a bad selection through as errors (no throw) and still ships the core project", async () => {
+    materializer.setResult({
+      errors: ["conflict: rate-limiting vs no-rate-limiting"],
+    });
+
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { "rate-limiting": {}, "no-rate-limiting": {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    assert.deepStrictEqual(result.value.errors, [
+      "conflict: rate-limiting vs no-rate-limiting",
+    ]);
+    // No add-on files merged; the core project still generated and exported.
+    assert.strictEqual(result.value.project.files.has("src/feature.ts"), false);
+    assert.strictEqual(
+      result.value.project.files.get("README.md"),
+      "# Test Project",
+    );
+    assert.strictEqual(recorder.getCallCount(), 1);
+  });
+
+  it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: {},
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    assert.strictEqual(materializer.getCallCount(), 0);
+    assert.strictEqual(result.value.warnings, undefined);
+    assert.strictEqual(result.value.errors, undefined);
+  });
+
+  it("behaves as before when no materializer is injected", async () => {
+    const useCase = new GenerateProjectUseCase(generator, recorder); // 2-arg
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { "rate-limiting": {} }, // present, but nothing wired
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    assert.strictEqual(materializer.getCallCount(), 0);
+    assert.strictEqual(result.value.warnings, undefined);
+    assert.strictEqual(result.value.errors, undefined);
   });
 });

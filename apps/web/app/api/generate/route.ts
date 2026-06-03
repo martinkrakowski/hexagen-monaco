@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createWebLogger } from "@/lib/wire.shared";
 import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
-import type { ExportConfig } from "@hexagen/project-generation";
+import type { ExportConfig, AddOnAnswers } from "@hexagen/project-generation";
 import { getToken } from "next-auth/jwt";
 
 interface GenerateRequestBody {
@@ -83,10 +83,15 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    // The wizard gathers per-template answers under `addOnsAnswers`; feed them
+    // through so the selected add-on templates are merged into the project.
+    const addOnsAnswers = (wizardData?.addOnsAnswers ?? {}) as AddOnAnswers;
+
     const useCase = getGenerateProject(destination);
     const result = await useCase.execute({
       manifest: finalManifest,
       exportConfig,
+      addOnsAnswers,
     });
 
     if (!result.success) {
@@ -96,7 +101,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { project, zipBuffer } = result.value;
+    const { project, zipBuffer, warnings, errors } = result.value;
+
+    // Telemetry: record add-on materialization issues once per run (deduped).
+    // A bad add-on selection surfaces as `errors` here, not as a failed result —
+    // the core project still generated, so the response stays 200 with the
+    // issues attached (UI surfacing is deferred to a later PR).
+    if (warnings?.length || errors?.length) {
+      const dedupe = (xs: string[]) => [...new Set(xs)];
+      createWebLogger().warn(
+        `[api/generate] add-on materialization — warnings: ${JSON.stringify(
+          dedupe(warnings ?? []),
+        )}; errors: ${JSON.stringify(dedupe(errors ?? []))}`,
+      );
+    }
 
     // ZIP output format — return binary response
     if (outputFormat === "zip" && zipBuffer) {
@@ -115,13 +133,18 @@ export async function POST(request: NextRequest) {
       filesObj[path] = content;
     });
 
-    return NextResponse.json({
+    const responseBody: Record<string, unknown> = {
       success: true,
       message: "Project generated successfully",
       projectName: project.name,
       fileCount: project.files.size,
       files: filesObj,
-    });
+    };
+    // Only attach when present, so a no-add-on generation is byte-identical to before.
+    if (warnings?.length) responseBody.warnings = warnings;
+    if (errors?.length) responseBody.errors = errors;
+
+    return NextResponse.json(responseBody);
   } catch (err) {
     const logger = createWebLogger();
     logger.errorWithException(err, "[api/generate] Failed to generate project");

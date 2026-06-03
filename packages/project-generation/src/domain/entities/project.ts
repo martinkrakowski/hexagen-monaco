@@ -47,6 +47,27 @@ export class Project {
     );
   }
 
+  /**
+   * Return a new Project with `extra` files merged over the existing ones — an
+   * existing path is **replaced** (template-overrides-core precedence). Immutable,
+   * like `withUpdate`; returns `this` unchanged when there is nothing to add.
+   */
+  withAdditionalFiles(extra: ReadonlyMap<string, string>): Project {
+    if (extra.size === 0) return this;
+    const merged = new Map(this._files);
+    for (const [filePath, content] of extra) {
+      merged.set(filePath, content);
+    }
+    return new Project(
+      this.id,
+      this.name,
+      this.rootName,
+      merged,
+      this.createdAt,
+      new Date(),
+    );
+  }
+
   equals(other: Project): boolean {
     return this.id === other.id;
   }

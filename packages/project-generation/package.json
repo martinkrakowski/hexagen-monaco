@@ -14,8 +14,8 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test __tests__/**/*.test.ts __tests__/**/*.spec.ts || true",
-    "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts",
+    "test": "tsx --test \"__tests__/**/*.test.ts\"",
+    "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\"",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
