@@ -13,50 +13,16 @@ describe("useGenerateWithAiForm", () => {
     assert.strictEqual(typeof useGenerateWithAiForm, "function");
   });
 
-  it("loadFromFile sets description and filename atomically", () => {
+  it("setValue updates a field", () => {
     const { result } = renderHook(() => useGenerateWithAiForm());
-    const content = "x".repeat(1000);
-    const filename = "spec.yaml";
 
     act(() => {
       const [, handlers] = result.current;
-      handlers.loadFromFile(content, filename);
+      handlers.setValue("description", "hello world");
     });
 
     const [formState] = result.current;
-    assert.strictEqual(formState.description, content);
-    assert.strictEqual(formState.loadedFileName, filename);
-    assert.strictEqual(formState.selectedExample, null);
-  });
-
-  it("loadFromFile truncates exceeding MAX (50000 chars)", () => {
-    const { result } = renderHook(() => useGenerateWithAiForm());
-    const longContent = "x".repeat(51000);
-    const filename = "large-spec.yaml";
-
-    act(() => {
-      const [, handlers] = result.current;
-      handlers.loadFromFile(longContent, filename);
-    });
-
-    const [formState] = result.current;
-    assert.strictEqual(formState.description.length, 50000);
-  });
-
-  it("clearFile resets description and filename", () => {
-    const { result } = renderHook(() => useGenerateWithAiForm());
-    const content = "x".repeat(1000);
-    const filename = "spec.yaml";
-
-    act(() => {
-      const [, handlers] = result.current;
-      handlers.loadFromFile(content, filename);
-      handlers.clearFile();
-    });
-
-    const [formState] = result.current;
-    assert.strictEqual(formState.description, "");
-    assert.strictEqual(formState.loadedFileName, null);
+    assert.strictEqual(formState.description, "hello world");
   });
 
   it("isValid returns true at exactly 50000 chars", () => {
@@ -65,10 +31,27 @@ describe("useGenerateWithAiForm", () => {
 
     act(() => {
       const [, handlers] = result.current;
-      handlers.loadFromFile(exactContent, "exact-spec.yaml");
+      handlers.setValue("description", exactContent);
     });
 
     const [, handlers] = result.current;
     assert.strictEqual(handlers.isValid, true);
+  });
+
+  it("reset restores the initial state", () => {
+    const { result } = renderHook(() => useGenerateWithAiForm());
+
+    act(() => {
+      const [, handlers] = result.current;
+      handlers.setValue("description", "something");
+    });
+    act(() => {
+      const [, handlers] = result.current;
+      handlers.reset();
+    });
+
+    const [formState] = result.current;
+    assert.strictEqual(formState.description, "");
+    assert.strictEqual(formState.selectedExample, null);
   });
 });

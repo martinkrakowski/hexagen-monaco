@@ -278,14 +278,10 @@ export function GenerateWithAi({
         onChange={(value) => {
           formHandlers.setValue("description", value);
           formHandlers.setValue("selectedExample", null);
-          formHandlers.setValue("loadedFileName", null);
         }}
         charCount={formHandlers.charCount}
         disabled={isGenerating}
         isAiReady={hasAnyProvider}
-        loadedFileName={formState.loadedFileName}
-        onFileLoaded={formHandlers.loadFromFile}
-        onClearFile={formHandlers.clearFile}
       />
 
       {needsSetup && !isProbing && (
@@ -350,7 +346,6 @@ export function GenerateWithAi({
         onUseExample={(example, index) => {
           formHandlers.setValue("description", example);
           formHandlers.setValue("selectedExample", index);
-          formHandlers.setValue("loadedFileName", null);
         }}
         isDisabled={isGenerating}
       />

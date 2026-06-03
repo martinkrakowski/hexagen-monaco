@@ -20,9 +20,6 @@ describe("DescriptionInput", () => {
     charCount: 0,
     disabled: false,
     isAiReady: true,
-    loadedFileName: null,
-    onLoadFromFile: () => {},
-    onClearFile: () => {},
   };
 
   it('has aria-live="polite" on counter span', () => {

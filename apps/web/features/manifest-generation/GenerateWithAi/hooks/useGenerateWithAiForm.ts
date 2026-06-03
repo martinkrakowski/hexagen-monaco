@@ -10,14 +10,11 @@ export interface FormState {
   deployment: string;
   maxContexts: number;
   selectedExample: number | null;
-  loadedFileName: string | null;
 }
 
 export interface FormHandlers {
   setValue: (key: keyof FormState, value: string | number | null) => void;
   reset: () => void;
-  loadFromFile: (content: string, filename: string) => void;
-  clearFile: () => void;
   charCount: number;
   isValid: boolean;
   isTooShort: boolean;
@@ -29,7 +26,6 @@ const initialState: FormState = {
   deployment: "",
   maxContexts: DEFAULT_MAX_BOUNDED_CONTEXTS,
   selectedExample: null,
-  loadedFileName: null,
 };
 
 export function useGenerateWithAiForm(): [FormState, FormHandlers] {
@@ -46,23 +42,6 @@ export function useGenerateWithAiForm(): [FormState, FormHandlers] {
     setFormState(initialState);
   };
 
-  const loadFromFile = (content: string, filename: string) => {
-    setFormState((prev) => ({
-      ...prev,
-      description: content.slice(0, DESCRIPTION_MAX_LENGTH),
-      loadedFileName: filename,
-      selectedExample: null,
-    }));
-  };
-
-  const clearFile = () => {
-    setFormState((prev) => ({
-      ...prev,
-      description: "",
-      loadedFileName: null,
-    }));
-  };
-
   const charCount = formState.description.length;
   const isValid =
     charCount >= DESCRIPTION_MIN_LENGTH && charCount <= DESCRIPTION_MAX_LENGTH;
@@ -74,8 +53,6 @@ export function useGenerateWithAiForm(): [FormState, FormHandlers] {
     {
       setValue,
       reset,
-      loadFromFile,
-      clearFile,
       charCount,
       isValid,
       isTooShort,
