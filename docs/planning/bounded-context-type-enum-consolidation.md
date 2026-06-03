@@ -16,8 +16,12 @@ References use durable locators (file + symbol / search hint), not line numbers.
 - `BoundedContextType` — the union type
 - `boundedContextTypeSchema` — case-insensitive (trim + lowercase) Zod schema
 
-Every package already depends on `@hexagen/shared`, so all the surfaces below can
-import from it. **All phases here depend on #201 being merged.**
+The packages in this plan (`@hexagen/mcp-server`, `@hexagen/agentic-interaction`,
+`@hexagen/project-configuration`) already depend on `@hexagen/shared`, so those
+surfaces can import the canonical directly. Some packages do **not** depend on it
+(e.g. `@hexagen/layout-engine`, `core-domain`, `ui`); any other package the audit
+touches must add the dependency first. **#201 is merged**, so the canonical is on
+`main`.
 
 ## The residual drift
 
@@ -35,9 +39,12 @@ of remaining copies:
 **Update (post-#201 review):** PR A — plus a previously-missed correctness item,
 `coerceContextType` (`coerce-raw-topology.ts`) defaulting unknown types incl.
 `"driver"` to `"core"` and exporting a local 4-value `BoundedContextType` shadow
-from agentic-interaction's public API — were folded into **PR #201** (commit
-`d2bfda62`): the MCP use-cases / port / tool-defs and the coercion path now
-derive from the canonical `@hexagen/shared` set. **PR B and PR C remain.**
+from agentic-interaction's public API — were folded into **PR #201**. A follow-up
+review then caught **3 more copies #201 missed** (an `as` cast + two plain port
+interfaces, which typecheck can't flag): `execute-staged-generation.use-case.ts`,
+mcp-server `manifest-generation.port.ts`, and `manifest-io.ts` — fixed in
+**PR #203**. The MCP surface and all coercion/port paths now derive from the
+canonical `@hexagen/shared` set. **PR B and PR C remain.**
 
 PR B is blocked on a product decision (below). PR C is a standalone refactor that
 needs a usage audit first.
@@ -66,18 +73,30 @@ So before PR B, decide:
   we document `driver` as non-LLM. (Note: #201 already made the classify
   _schema_ accept `driver`; that stays harmless either way — schema ⊇ prompt.)
 
-This is a DDD/product call. The rest of PR B is mechanical once it's made.
+This is a DDD/product call. **Record it explicitly** (in `docs/key-decisions.md`
+— the repo has no `ADR-*` files) rather than resolving it implicitly in the
+implementation. If `driver` is chosen **config-only**, add a follow-on: audit the
+`@hexagen/project-configuration` validation and any `/projects/new` form UI so
+`driver` isn't simultaneously "config-only" yet offered as a user-selectable
+option. The rest of PR B is mechanical once the call is made.
 
 ---
 
 ## PR A — MCP tool params accept the full type set (· P2, low risk) — ✅ DONE in #201 (`d2bfda62`)
 
-> Completed in PR #201 and expanded beyond the original scoping to also cover the
-> MCP **use-cases** (`create-context-tool`, `scaffold-module-tool`) and the
-> `ManifestWritePort` command type, **plus** `coerceContextType`
-> (`coerce-raw-topology.ts`) — a gap not in the original plan that silently mapped
-> `"driver"`→`"core"` and exported a local 4-value `BoundedContextType` shadow.
-> All now derive from `@hexagen/shared`. Original notes retained for reference.
+> Completed across **#201 + #203** (the latter caught 3 copies #201 missed — an
+> `as` cast and two port interfaces typecheck couldn't flag). Scope grew beyond
+> the original MCP tool-defs to the MCP **use-cases** (`create-context-tool`,
+> `scaffold-module-tool`), the `ManifestWritePort` / `ManifestGenerationPort`
+> types, `manifest-io.ts`, the staged-generation cast, and `coerceContextType`
+> (`coerce-raw-topology.ts`, which silently mapped `"driver"`→`"core"`). All
+> derive from `@hexagen/shared`; verified ripple-free via typecheck across the
+> touched packages + web.
+>
+> **Follow-up not yet done:** add the non-optional regression test asserting each
+> MCP tool's `enum` is _derived from_ `BOUNDED_CONTEXT_TYPES` (only the coerce
+> path got a `driver` test). The original drift happened because the enum was
+> hand-written, so a derivation test is the real guard. Original notes below.
 
 **Root cause.** Two MCP tools hardcode the 4-value set in both their JSON
 `inputSchema` enum and a handler cast, so an MCP client cannot pass `driver`:
@@ -124,18 +143,23 @@ strings that have drifted from each other and from the schema:
   and `compilePortsPrompt` casts `contextType as "core"|…|"shared-kernel"`
   (missing `driver` — use `BoundedContextType`).
 
-**Fix.** Per the decision: make every prompt mention list the same set, and add
-the `driver` definition if we keep it LLM-emittable. Prompts are string
-literals, so they can't import the enum directly; to keep them honest, derive
-the human-readable list from `BOUNDED_CONTEXT_TYPES` (e.g. a small
-`BOUNDED_CONTEXT_TYPES.join(", ")` helper interpolated into the templates)
-rather than re-typing it. Fix the `compilePortsPrompt` cast to `BoundedContextType`.
+**Fix.** Per the decision. **The primary deliverable is the `driver` definition
+prose** — not the mechanical list sync. The classify prompt's `Definitions:`
+block is prose, not a bare enum; if `driver` stays LLM-emittable it needs a
+hand-written one-line entry describing what distinguishes a driver context —
+interpolating the array just teaches the model a word with no meaning. Separately,
+the bare _option lists_ can derive from `BOUNDED_CONTEXT_TYPES` (e.g.
+`BOUNDED_CONTEXT_TYPES.join(", ")`) so they can't re-drift, but that only guards
+the list; the definition prose stays hand-owned. Also fix the `compilePortsPrompt`
+cast to `BoundedContextType`.
 
 **Files.** `packages/agentic-interaction/src/domain/prompts/classify-context-type.prompt.ts`,
 `generate-topology.prompt.ts`, `generate-manifest.prompt.ts`.
 
-**Tests.** Assert each compiled prompt mentions every `BOUNDED_CONTEXT_TYPES`
-value (guards against re-drift). Update existing prompt-generation tests
+**Tests.** Assert each `BOUNDED_CONTEXT_TYPES` value appears in the prompt's
+_enumeration context_ (the options list / `Definitions:` block) — not merely
+anywhere in the string, which a stray word or comment would satisfy. Update the
+existing prompt-generation tests
 (`packages/agentic-interaction/__tests__/prompt-generation.test.ts`) for the new
 wording.
 
@@ -167,10 +191,13 @@ schema. #201 unified only the `type` field across both (via
 
 **Fix (audit first).**
 
-1. **Usage audit.** `grep` importers of each file's exports. Determine whether
-   anyone imports the _shared_ copy at all (the main `@hexagen/shared` index does
-   **not** currently re-export `domain/manifest/*` — see the sync note below), or
-   whether agentic-interaction's copy is the only one in real use.
+1. **Usage audit — track import _paths_, not just symbol names.** The same symbol
+   names exist in both packages, so a symbol-name grep gives false confidence;
+   record which import path each consumer uses (`@hexagen/shared` vs
+   `@hexagen/agentic-interaction` vs deep file paths). Note the main
+   `@hexagen/shared` index does **not** re-export `domain/manifest/*`, so unifying
+   there means hand-adding barrel exports (sync caveat) **and** updating every
+   consumer that imports agentic-interaction's copy.
 2. Then either:
    - **Unify** into `@hexagen/shared`, parameterizing the differences (max count;
      optional `contextMappings`/`apps`/mapping schema), and have
@@ -178,6 +205,13 @@ schema. #201 unified only the `type` field across both (via
    - **Delete the dead copy** if the audit shows one is unused; **or**
    - **Document the intentional divergence** (different draft shapes per stage)
      with a comment cross-linking the two, if both are genuinely needed as-is.
+
+⚠️ **The `MAX_BOUNDED_CONTEXTS_DRAFT` divergence (10 vs 5) is the riskiest part**
+— these caps gate LLM-output validation mid-pipeline and agentic's `5` may be
+deliberate. If parameterized into a shared schema, **state who passes the value at
+each call site**; a shared default of `10` would silently lift
+agentic-interaction's cap from `5` (a silent regression). Confirm both values are
+intentional before merging.
 
 **Files.** the two `manifest-draft.schema.ts` files (+ importers found in the audit).
 
@@ -203,9 +237,11 @@ reason for two — and no third copy of the type field.
   the export line** in the existing style rather than running `yarn sync`, and
   note it in the PR body. Sync is not in the turbo pipeline or pre-commit, so it
   does not gate CI.
-- **Sequencing.** PR A first (mechanical, independent). PR B after the `driver`
-  decision. PR C is a standalone refactor — schedule after the audit. None block
-  each other.
+- **Sequencing.** PR A is **done (#201 + #203)** — and correctly landed before
+  PR B, which matters: PR B's prompt changes could make classify emit `driver`,
+  and the MCP handler had to accept it first. PR B is next (after the `driver`
+  decision); PR C is a standalone refactor, after the audit.
 - **Out of scope.** Test fixtures that cycle context types (e.g.
   `web-driver/__tests__/fixtures/load-testing.ts`) — they're sample data, not a
-  validation surface.
+  validation surface. If any such fixture is used as _golden_ test input, it
+  should eventually gain a `driver` entry so coverage spans the full type set.
