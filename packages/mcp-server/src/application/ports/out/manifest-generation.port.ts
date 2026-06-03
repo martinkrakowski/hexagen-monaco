@@ -1,3 +1,5 @@
+import type { BoundedContextType } from "@hexagen/shared";
+
 export interface TopologyGenerationRequest {
   description: string;
   maxRetries?: number;
@@ -21,7 +23,7 @@ export interface TopologyGenerationResponse {
     workspace: { name: string; description: string };
     boundedContexts: Array<{
       name: string;
-      type: "core" | "supporting" | "generic" | "shared-kernel";
+      type: BoundedContextType;
       description: string;
       ports: {
         in: Array<{ name: string; type: string; description: string }>;

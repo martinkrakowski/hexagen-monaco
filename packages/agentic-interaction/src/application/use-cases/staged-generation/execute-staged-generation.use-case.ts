@@ -1,4 +1,5 @@
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import type { BoundedContextType } from "@hexagen/shared";
 import type {
   PipelineState,
   ValidationReport,
@@ -107,7 +108,7 @@ export class ExecuteStagedGenerationUseCase {
       state.stage2 = {
         accepted: contextData.map((ctx) => ({
           name: ctx.name,
-          type: ctx.type as "core" | "supporting" | "generic" | "shared-kernel",
+          type: ctx.type as BoundedContextType,
           reasoning: ctx.description,
         })),
         rejected: [],

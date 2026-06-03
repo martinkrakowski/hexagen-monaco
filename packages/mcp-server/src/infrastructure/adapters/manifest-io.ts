@@ -1,13 +1,14 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import yaml from "js-yaml";
+import type { BoundedContextType } from "@hexagen/shared";
 import { isIndexManifest } from "@hexagen/project-configuration";
 import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 
 export interface ManifestDocument {
   bounded_contexts?: Array<{
     name: string;
-    type?: "core" | "supporting" | "generic" | "shared-kernel";
+    type?: BoundedContextType;
     depends_on?: string[];
     [key: string]: unknown;
   }>;
