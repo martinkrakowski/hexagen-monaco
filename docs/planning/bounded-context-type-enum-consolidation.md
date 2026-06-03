@@ -35,8 +35,8 @@ of remaining copies:
 | **(A′)** | P1    | `coerceContextType` silently mapped `driver`→`core`                      | **Med (correctness)** | ✅ done in #201 (`d2bfda62`)   |
 | **(A″)** | P2    | 3 more type-position copies (an `as` cast + 2 ports) #201 missed         | Low                   | ✅ done in #203                |
 | **PR B** | P2    | LLM prompts disagree on the type set (internally inconsistent)           | Low–Med               | ✅ decided A + done (ADR-0040) |
-| **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)        | ⬜ open                        |
-| **PR D** | P2    | more type-position copies — incl. a `"generic"`-dropping variant         | **Med (latent bug)**  | ⬜ open (newly found)          |
+| **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)        | ✅ done in #206 (`b3d86d28`)   |
+| **PR D** | P2    | more type-position copies — incl. a `"generic"`-dropping variant         | **Med (latent bug)**  | ✅ done in #205 (`4019ade1`)   |
 
 **Update (post-#201 review):** PR A — plus a previously-missed correctness item,
 `coerceContextType` (`coerce-raw-topology.ts`) defaulting unknown types incl.
@@ -46,10 +46,10 @@ review then caught **3 more copies #201 missed** (an `as` cast + two plain port
 interfaces, which typecheck can't flag): `execute-staged-generation.use-case.ts`,
 mcp-server `manifest-generation.port.ts`, and `manifest-io.ts` — fixed in
 **PR #203**. The MCP surface and all coercion/port paths now derive from the
-canonical `@hexagen/shared` set. **PR B and PR C remain.**
+canonical `@hexagen/shared` set. **PR C landed in #206 and PR D in #205; PR B is implemented here — completing the plan.**
 
-PR B is blocked on a product decision (below). PR C is a standalone refactor that
-needs a usage audit first.
+PR B was blocked on a product decision (resolved below as ADR-0040). PR C was a
+standalone refactor, landed in #206 after its usage audit.
 
 ---
 
