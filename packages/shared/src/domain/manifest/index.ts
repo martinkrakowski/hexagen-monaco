@@ -3,5 +3,3 @@
 export * from "./extract-json.js";
 export * from "./json-balancer.js";
 export * from "./json-repair.js";
-export * from "./manifest-draft.schema.js";
-export * from "./manifest-draft.types.js";

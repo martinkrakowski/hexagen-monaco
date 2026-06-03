@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { boundedContextTypeSchema } from "@hexagen/shared";
 
+// 5 = conservative default cap for 3B-model reliability; overridable via the
+// wizard's advanced options (set in d302592a, made configurable in e889a243).
 export const MAX_BOUNDED_CONTEXTS_DRAFT = 5;
 export const DEFAULT_MAX_BOUNDED_CONTEXTS = MAX_BOUNDED_CONTEXTS_DRAFT;
 
