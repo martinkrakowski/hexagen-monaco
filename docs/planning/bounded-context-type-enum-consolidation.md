@@ -95,10 +95,11 @@ option. The rest of PR B is mechanical once the call is made.
 > derive from `@hexagen/shared`; verified ripple-free via typecheck across the
 > touched packages + web.
 >
-> **Follow-up not yet done:** add the non-optional regression test asserting each
-> MCP tool's `enum` is _derived from_ `BOUNDED_CONTEXT_TYPES` (only the coerce
-> path got a `driver` test). The original drift happened because the enum was
-> hand-written, so a derivation test is the real guard. Original notes below.
+> **Scheduled into PR D (below), not deferred:** the non-optional regression test
+> asserting each MCP tool's `enum` is _derived from_ `BOUNDED_CONTEXT_TYPES` (only
+> the coerce path got a `driver` test). The original drift happened because the
+> enum was hand-written, so a derivation test is the real guard — it ships with
+> PR D. Original notes below.
 
 **Root cause.** Two MCP tools hardcode the 4-value set in both their JSON
 `inputSchema` enum and a handler cast, so an MCP client cannot pass `driver`:
@@ -213,11 +214,14 @@ schema. #201 unified only the `type` field across both (via
      with a comment cross-linking the two, if both are genuinely needed as-is.
 
 ⚠️ **The `MAX_BOUNDED_CONTEXTS_DRAFT` divergence (10 vs 5) is the riskiest part**
-— these caps gate LLM-output validation mid-pipeline and agentic's `5` may be
-deliberate. If parameterized into a shared schema, **state who passes the value at
-each call site**; a shared default of `10` would silently lift
-agentic-interaction's cap from `5` (a silent regression). Confirm both values are
-intentional before merging.
+— these caps gate LLM-output validation mid-pipeline. The audit must **find the
+rationale for agentic's `5`** in git history / an ADR (e.g. LLM output quality
+degrading past 5 contexts). If it's documented, parameterize and **state who
+passes the value at each call site** (a shared default of `10` would silently
+lift agentic's cap from `5` — a regression). If the `5` is **undocumented**,
+treat it as an _unknown_, not an assumed-intentional divergence: capture the
+rationale (an ADR or a code comment) **before** unifying, so the cap isn't a
+merge-time guess.
 
 **Files.** the two `manifest-draft.schema.ts` files (+ importers found in the audit).
 
@@ -237,6 +241,11 @@ and a second drift _variant_ that **drops `"generic"`** (a latent bug: a generic
 context is unrepresentable there). All are plain interface fields / `as` casts,
 so typecheck can't flag them.
 
+The sharpest case is `client-manifest-generation.port.ts`: an implementation that
+returns `"generic"` typechecks against the impl but **violates the port
+contract**, so a `generic` context is **silently invisible at the port
+boundary** — more alarming than "missing `generic`" sounds.
+
 | File                                                                  | Variant                                           | Note                                                                                     |
 | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `manifest-generation/.../ports/in/client-manifest-generation.port.ts` | `core\|supporting\|driver\|shared-kernel`         | **missing `generic`** — `coerceContextType` port return type under-declares its own impl |
@@ -249,20 +258,39 @@ packages already depend on it). Type-only, decision-independent. The
 `"generic"`-dropping copies are genuine latent bugs, so this is **P2, not
 cosmetic**.
 
-**Out of scope here — `@hexagen/sync`.** sync keeps its **own** manifest type
-system (`sync/src/types/manifest/{manifest,bounded-context}.ts` +
+**Tests (ship with this PR — not a deferred follow-up).** Add the guard that
+makes PR A + PR D durable: a non-optional test asserting each MCP tool
+definition's `enum` is **derived from** `BOUNDED_CONTEXT_TYPES` (not a
+hand-written list), plus a positive check that no widened type position excludes
+a canonical value. The original drift happened because these lists were
+hand-written — this is the regression guard that was missing.
+
+**Out of scope here — `@hexagen/sync` (but track as a correctness issue).** sync
+keeps its **own** manifest type system
+(`sync/src/types/manifest/{manifest,bounded-context}.ts` +
 `commands/arch/context/*` — several `core|supporting|driver|shared-kernel`
-copies, also missing `generic`). sync is the standalone generator; whether it
-should import the shared canonical or keep an independent contract is a separate
-call — track it, don't fold it in.
+copies, **also missing `generic`**). Whether sync adopts the shared canonical or
+keeps an independent contract is a design call to defer — **but the dropped
+`generic` isn't symmetrical with that call**: sync is the standalone generator
+whose manifests feed the rest of the pipeline, so a `generic` context it cannot
+represent is a **known correctness gap to track**, not merely a deferred
+preference.
 
 **Risk.** Low–Med — widening interface fields is safe, but `web-driver`'s entity
 and the manifest-generation port are more public; run typecheck across their
 consumers (an `as` cast or exhaustive `switch` won't be auto-flagged).
 
-**Acceptance.** No bounded-context-type literal union remains in a `src` type
-position outside the canonical (verified by the `"shared-kernel"` sweep); the
-`"generic"`-dropping copies are gone.
+**Acceptance** (the `"shared-kernel"` sweep is only a _negative_ check and would
+miss a copy that drops both `generic` and `shared-kernel`, so verify both
+directions):
+
+- **Negative:** no bounded-context-type literal union remains in a `src` type
+  position outside the canonical.
+- **Positive:** for **every** value of `BoundedContextType`
+  (`core`/`supporting`/`generic`/`shared-kernel`/`driver`), no type position
+  _excludes_ it — each surviving annotation accepts the full set.
+
+The `"generic"`-dropping copies are gone.
 
 ---
 
@@ -279,7 +307,10 @@ position outside the canonical (verified by the `"shared-kernel"` sweep); the
   public export from `@hexagen/shared` (e.g. PR C unifying schemas), **hand-add
   the export line** in the existing style rather than running `yarn sync`, and
   note it in the PR body. Sync is not in the turbo pipeline or pre-commit, so it
-  does not gate CI.
+  does not gate CI. Per **ADR-0007** + **ADR-0026** this is safe and self-healing:
+  `--force` _preserves_ hand-written files, and `@generated` barrels are
+  re-derived by a directory walk — so the hand-added export is reconciled (the new
+  source file is picked up) on the next `yarn sync`.
 - **Sequencing.** PR A is **done (#201 + #203)** — and correctly landed before
   PR B, which matters: PR B's prompt changes could make classify emit `driver`,
   and the MCP handler had to accept it first. PR B is next (after the `driver`
