@@ -13,6 +13,7 @@ export { InMemoryAddOnMaterializer } from "./in-memory-add-on-materializer.js";
 export type { MaterializeAddOnsResult } from "./in-memory-add-on-materializer.js";
 
 // Generated-bundle factory: the serverless-safe materializer for the web path.
+// `buildTemplateBundle` (imports node:fs) is intentionally NOT re-exported here —
+// it's only used by the generator script + parity test, which import it directly.
+// Keeping it off the public barrel avoids dragging node:fs into a client bundle.
 export { createInMemoryMaterializer } from "./create-in-memory-materializer.js";
-export { buildTemplateBundle } from "./build-template-bundle.js";
-export type { TemplateBundle } from "./build-template-bundle.js";
