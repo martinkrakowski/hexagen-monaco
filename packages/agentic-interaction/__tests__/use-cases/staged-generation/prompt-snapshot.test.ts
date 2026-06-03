@@ -9,8 +9,12 @@ import {
   compileStage6Prompt,
   buildStageRetryPrompt,
 } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
-import { compileTopologyUserPrompt } from "../../../src/domain/prompts/generate-topology.prompt.ts";
+import {
+  compileTopologyUserPrompt,
+  TOPOLOGY_SYSTEM_PROMPT,
+} from "../../../src/domain/prompts/generate-topology.prompt.ts";
 import { compileAdapterUserPrompt } from "../../../src/domain/prompts/generate-adapters.prompt.ts";
+import { LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT } from "../../../src/domain/prompts/convert-loose-spec.prompt.ts";
 
 // Minimal valid state for each stage — matches PipelineState interface
 
@@ -349,6 +353,20 @@ test("compileTopologyUserPrompt includes validationErrors when provided", () => 
   });
   assert.match(prompt, /Invalid JSON format/);
   assert.match(prompt, /<validation_errors>/);
+});
+
+test("TOPOLOGY_SYSTEM_PROMPT enumerates all five context types (incl. driver)", () => {
+  assert.match(
+    TOPOLOGY_SYSTEM_PROMPT,
+    /core.*supporting.*generic.*shared-kernel.*driver/s,
+  );
+});
+
+test("LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT enumerates all five context types (incl. driver)", () => {
+  assert.match(
+    LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT,
+    /core.*supporting.*generic.*shared-kernel.*driver/s,
+  );
 });
 
 test("buildStageRetryPrompt (stage 0) includes error detail", () => {

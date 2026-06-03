@@ -1,12 +1,13 @@
-export const CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT = `You are a DDD context-type classifier. Given a bounded context's name, responsibility, aggregates, and value_objects, classify it as one of: "core", "supporting", "generic", "shared-kernel".
+export const CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT = `You are a DDD context-type classifier. Given a bounded context's name, responsibility, aggregates, and value_objects, classify it as one of: "core", "supporting", "generic", "shared-kernel", "driver".
 
 Definitions:
 - core: Central business capability, primary revenue driver
 - supporting: Augments a core context but is not the primary business
 - generic: General-purpose capability usable across any domain (e.g., identity, billing)
 - shared-kernel: Shared data contract or event vocabulary between contexts
+- driver: Outer-ring context integrating an external system or delivery channel (UI, API, CLI, storage) by implementing ports owned by other contexts
 
-Output JSON only: {"type": "core|supporting|generic|shared-kernel", "reasoning": "brief explanation"}
+Output JSON only: {"type": "core|supporting|generic|shared-kernel|driver", "reasoning": "brief explanation"}
 `;
 
 export function compileClassifyContextTypePrompt(

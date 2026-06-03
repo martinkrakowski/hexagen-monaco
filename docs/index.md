@@ -28,6 +28,7 @@ This page provides a human-friendly index into the Architecture Decision Records
 | 0021      | Prompt Compilation & LLM ACL              | Accepted | —       | RRP-driven prompt contracts + schema enforcement                                                                                            | [0021](../.architecture/decisions/ADR-0021-prompt-compilation-llm-acl.md)              |
 | 0022      | Server LLM ACL                            | Accepted | —       | Server-only enforcement patterns                                                                                                            | [0022](../.architecture/decisions/ADR-0022-server-llm-acl.md)                          |
 | 0023–0039 | Later ADRs (2026-05)                      | Accepted | 2026-05 | Sync unification, state machines, subpath conventions, local-llm, server markers, template interpolation / GitHub Actions passthrough, etc. | Browse [.architecture/decisions/](../.architecture/decisions/)                         |
+| 0040      | Driver Context is LLM-emittable           | Accepted | 2026-06 | LLM may classify a context as "driver"; extends ADR-0009                                                                                    | [0040](../.architecture/decisions/ADR-0040-driver-context-llm-emittable.md)            |
 
 > **Note:** This index is intentionally curated for human readers. For the complete raw list, see the `.architecture/decisions/` directory.
 
