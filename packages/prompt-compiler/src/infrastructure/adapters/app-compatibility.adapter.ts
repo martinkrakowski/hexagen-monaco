@@ -1,10 +1,12 @@
+import type { BoundedContextType } from "@hexagen/shared";
+
 export interface GovernancePayload {
   system: string;
   scope: string;
   architecture: string;
   boundedContexts: Array<{
     name: string;
-    type: "core" | "supporting" | "shared-kernel" | "driver";
+    type: BoundedContextType;
   }>;
   ports: Record<string, string>;
   invariants: Array<{

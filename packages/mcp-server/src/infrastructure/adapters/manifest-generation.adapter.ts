@@ -9,6 +9,7 @@ import type {
 } from "../../application/ports/out/manifest-generation.port.js";
 import type { ManifestWritePort } from "../../application/ports/out/manifest-write.port.js";
 import type { EventBusPort } from "@hexagen/messaging";
+import type { BoundedContextType } from "@hexagen/shared";
 import {
   ManifestTopologyDraftSchema,
   normalizeDraft,
@@ -233,12 +234,7 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
         normalized.boundedContexts.map((ctx) =>
           this.manifestWritePort!.registerBoundedContext({
             name: ctx.name,
-type: ctx.type as
-          | "core"
-          | "supporting"
-          | "generic"
-          | "shared-kernel"
-          | undefined,
+            type: ctx.type as BoundedContextType | undefined,
           }),
         ),
       );
