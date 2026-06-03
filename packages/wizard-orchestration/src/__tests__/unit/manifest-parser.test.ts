@@ -56,6 +56,31 @@ bounded_contexts:
     assert.strictEqual(result.boundedContexts[0].name, "UserContext");
   });
 
+  it("accepts a lowercase relationship pattern (e.g. pattern: acl)", () => {
+    // Relationship patterns are uppercase-canonical ("ACL", "U/D"), so a
+    // lowercase `pattern: "acl"` must be normalized through the full
+    // ManifestSchema -> BoundedContextSchema -> relationships parse path
+    // (not just the isolated enum).
+    const yamlWithRelationship = `
+system: rel-test
+scope: "@hexagen/test"
+architecture: "modular-monolith"
+bounded_contexts:
+  - name: "OrdersContext"
+    type: "core"
+    description: "Orders"
+    relationships:
+      - context: "Catalog"
+        pattern: "acl"
+    layers:
+      domain:
+        entities: ["Order"]
+`;
+    const result = parseManifestToWizardData(yamlWithRelationship);
+    assert.strictEqual(result.boundedContexts.length, 1);
+    assert.strictEqual(result.boundedContexts[0].name, "OrdersContext");
+  });
+
   it("should throw an error for empty YAML string", () => {
     assert.throws(
       () => parseManifestToWizardData(""),
