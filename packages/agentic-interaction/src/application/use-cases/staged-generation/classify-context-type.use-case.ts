@@ -2,12 +2,16 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
 import {
+  boundedContextTypeSchema,
+  type BoundedContextType,
+} from "@hexagen/shared";
+import {
   CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT,
   compileClassifyContextTypePrompt,
 } from "../../../domain/prompts/classify-context-type.prompt";
 
 const ClassifyResponseSchema = z.object({
-  type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+  type: boundedContextTypeSchema,
   reasoning: z.string(),
 });
 
@@ -28,7 +32,7 @@ export class ClassifyContextTypeUseCase {
   ): Promise<
     | {
         success: true;
-        type: "core" | "supporting" | "generic" | "shared-kernel";
+        type: BoundedContextType;
         reasoning: string;
       }
     | { success: false; error: unknown }

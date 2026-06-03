@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boundedContextTypeSchema } from "../bounded-context-type.js";
 
 export const MAX_BOUNDED_CONTEXTS_DRAFT = 10;
 export const DEFAULT_MAX_BOUNDED_CONTEXTS = MAX_BOUNDED_CONTEXTS_DRAFT;
@@ -32,7 +33,7 @@ export const ManifestDraftAdapterSchema = z
 export const ManifestDraftContextSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+    type: boundedContextTypeSchema,
     description: z.string().min(1),
     ports: z.object({
       in: z.array(ManifestDraftPortSchema),
@@ -46,7 +47,7 @@ export const ManifestDraftContextSchema = z
 export const ManifestTopologyDraftContextSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+    type: boundedContextTypeSchema,
     description: z.string().min(1),
     ports: z.object({
       in: z.array(ManifestDraftPortSchema),
@@ -94,7 +95,7 @@ export function createContextListSchema(
     .array(
       z.object({
         name: z.string().min(1),
-        type: z.enum(["core", "supporting", "generic", "shared-kernel"]),
+        type: boundedContextTypeSchema,
         description: z.string().min(1),
       }),
     )

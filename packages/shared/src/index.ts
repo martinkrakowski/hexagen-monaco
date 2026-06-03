@@ -2,6 +2,11 @@
 
 // Domain exports
 export type { AssembledManifest } from "./domain/assembled-manifest.js";
+export {
+  BOUNDED_CONTEXT_TYPES,
+  boundedContextTypeSchema,
+} from "./domain/bounded-context-type.js";
+export type { BoundedContextType } from "./domain/bounded-context-type.js";
 export type { Identifier } from "./domain/identifier.js";
 export { CustomError } from "./domain/custom-error.js";
 export { LogLevel } from "./domain/log-level.js";
