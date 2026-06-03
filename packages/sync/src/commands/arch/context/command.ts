@@ -37,7 +37,7 @@ export async function contextCommand(): Promise<void> {
   const updatedManifest = addContextToManifest(
     manifest,
     contextDef.name,
-    contextDef.type as "core" | "supporting" | "shared-kernel" | "driver",
+    contextDef.type,
     contextDef.description,
   );
 

@@ -151,12 +151,13 @@ describe("addContextToManifest", () => {
     );
   });
 
-  it("accepts all four declared context types", () => {
+  it("accepts all five declared context types", () => {
     let manifest = makeEmptyManifest();
 
     for (const t of [
       "core",
       "supporting",
+      "generic",
       "shared-kernel",
       "driver",
     ] as const) {
@@ -165,7 +166,7 @@ describe("addContextToManifest", () => {
 
     assert.deepEqual(
       manifest.bounded_contexts?.map((c) => c.type),
-      ["core", "supporting", "shared-kernel", "driver"],
+      ["core", "supporting", "generic", "shared-kernel", "driver"],
     );
   });
 
@@ -524,6 +525,7 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
     manifest = addContextToManifest(manifest, "ctx-a", "core");
     manifest = addContextToManifest(manifest, "ctx-b", "supporting");
     manifest = addContextToManifest(manifest, "ctx-c", "shared-kernel");
+    manifest = addContextToManifest(manifest, "ctx-d", "generic");
 
     assert.equal(saveManifest(tmpDir, manifest).success, true);
 
@@ -533,11 +535,11 @@ describe("saveManifest / loadManifest (atomic file I/O)", () => {
 
     assert.deepEqual(
       loaded.data.bounded_contexts?.map((c) => c.name),
-      ["ctx-a", "ctx-b", "ctx-c"],
+      ["ctx-a", "ctx-b", "ctx-c", "ctx-d"],
     );
     assert.deepEqual(
       loaded.data.bounded_contexts?.map((c) => c.type),
-      ["core", "supporting", "shared-kernel"],
+      ["core", "supporting", "shared-kernel", "generic"],
     );
   });
 

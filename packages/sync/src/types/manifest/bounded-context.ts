@@ -2,6 +2,7 @@ export type BoundedContextType =
   | "shared-kernel"
   | "core"
   | "supporting"
+  | "generic"
   | "driver";
 
 export type RelationshipPattern = "U/D" | "ACL" | "SK" | "P" | "OHS";

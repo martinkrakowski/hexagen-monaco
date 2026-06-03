@@ -265,16 +265,19 @@ hand-written list), plus a positive check that no widened type position excludes
 a canonical value. The original drift happened because these lists were
 hand-written — this is the regression guard that was missing.
 
-**Out of scope here — `@hexagen/sync` (but track as a correctness issue).** sync
-keeps its **own** manifest type system
-(`sync/src/types/manifest/{manifest,bounded-context}.ts` +
-`commands/arch/context/*` — several `core|supporting|driver|shared-kernel`
-copies, **also missing `generic`**). Whether sync adopts the shared canonical or
-keeps an independent contract is a design call to defer — **but the dropped
-`generic` isn't symmetrical with that call**: sync is the standalone generator
-whose manifests feed the rest of the pipeline, so a `generic` context it cannot
-represent is a **known correctness gap to track**, not merely a deferred
-preference.
+**`@hexagen/sync` — corrected severity (NOT a data-loss defect); fixed in this PR.**
+sync keeps its **own** manifest type system
+(`sync/src/types/manifest/bounded-context.ts` + `commands/arch/context/*`), whose
+`BoundedContextType` omitted `generic`. This is **not** a round-trip/data-loss
+defect: sync validates incoming manifests with `@hexagen/project-configuration`'s
+`ManifestSchema` (whose `BoundedContextTypeSchema` accepts `generic`), and its
+command/runtime paths have **no `switch`/`z.enum` on context type** — values flow
+as plain strings, so existing `generic` contexts round-trip untouched. The real
+gaps were **type hygiene** (sync's own 4-value `BoundedContextType`) and a
+**wizard feature gap** (the interactive `arch context` wizard offered only 4
+types, so you couldn't _create_ a generic context via the CLI). Both fixed here.
+(Whether sync should fully adopt the shared canonical vs keep its own contract
+remains a separate, deferred design call.)
 
 **Risk.** Low–Med — widening interface fields is safe, but `web-driver`'s entity
 and the manifest-generation port are more public; run typecheck across their
