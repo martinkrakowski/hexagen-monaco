@@ -33,8 +33,10 @@ of remaining copies:
 | -------- | ----- | ------------------------------------------------------------------------ | ---------------------- | ---------------------------- |
 | **PR A** | P2    | MCP tool-param enums + casts + use-cases/port (missing `driver`)         | Low (input surface)    | ✅ done in #201 (`d2bfda62`) |
 | **(A′)** | P1    | `coerceContextType` silently mapped `driver`→`core`                      | **Med (correctness)**  | ✅ done in #201 (`d2bfda62`) |
+| **(A″)** | P2    | 3 more type-position copies (an `as` cast + 2 ports) #201 missed         | Low                    | ✅ done in #203              |
 | **PR B** | P2    | LLM prompts disagree on the type set (internally inconsistent)           | Low–Med (needs a call) | ⬜ open (gated)              |
 | **PR C** | P3    | `shared` vs `agentic-interaction` `manifest-draft.schema.ts` duplication | Med (refactor)         | ⬜ open                      |
+| **PR D** | P2    | more type-position copies — incl. a `"generic"`-dropping variant         | **Med (latent bug)**   | ⬜ open (newly found)        |
 
 **Update (post-#201 review):** PR A — plus a previously-missed correctness item,
 `coerceContextType` (`coerce-raw-topology.ts`) defaulting unknown types incl.
@@ -73,9 +75,9 @@ So before PR B, decide:
   we document `driver` as non-LLM. (Note: #201 already made the classify
   _schema_ accept `driver`; that stays harmless either way — schema ⊇ prompt.)
 
-This is a DDD/product call. **Record it explicitly** (in `docs/key-decisions.md`
-— the repo has no `ADR-*` files) rather than resolving it implicitly in the
-implementation. If `driver` is chosen **config-only**, add a follow-on: audit the
+This is a DDD/product call. **Record it as an ADR** in `.architecture/decisions/`
+(extending `ADR-0009-driver-context-wiring-strategy`, which already sanctions the
+driver concept) rather than resolving it implicitly in the implementation. If `driver` is chosen **config-only**, add a follow-on: audit the
 `@hexagen/project-configuration` validation and any `/projects/new` form UI so
 `driver` isn't simultaneously "config-only" yet offered as a user-selectable
 option. The rest of PR B is mechanical once the call is made.
@@ -142,6 +144,9 @@ strings that have drifted from each other and from the schema:
   the compact stage-2 instruction string **omits** it (internal contradiction);
   and `compilePortsPrompt` casts `contextType as "core"|…|"shared-kernel"`
   (missing `driver` — use `BoundedContextType`).
+- `convert-loose-spec.prompt.ts` — a TypeScript-interface snippet inside the
+  prompt (`type?: "core" | … | "shared-kernel"`) teaching the LLM the shape; 4
+  values (surfaced by a later review — the standard grep missed it).
 
 **Fix.** Per the decision. **The primary deliverable is the `driver` definition
 prose** — not the mechanical list sync. The classify prompt's `Definitions:`
@@ -154,7 +159,8 @@ the list; the definition prose stays hand-owned. Also fix the `compilePortsPromp
 cast to `BoundedContextType`.
 
 **Files.** `packages/agentic-interaction/src/domain/prompts/classify-context-type.prompt.ts`,
-`generate-topology.prompt.ts`, `generate-manifest.prompt.ts`.
+`generate-topology.prompt.ts`, `generate-manifest.prompt.ts`,
+`convert-loose-spec.prompt.ts`.
 
 **Tests.** Assert each `BOUNDED_CONTEXT_TYPES` value appears in the prompt's
 _enumeration context_ (the options list / `Definitions:` block) — not merely
@@ -220,6 +226,43 @@ differences (`.strict()`, extra fields, max) matter. Do not unify blindly.
 
 **Acceptance.** One source for the draft schemas, or an explicit, documented
 reason for two — and no third copy of the type field.
+
+---
+
+## PR D — Remaining bounded-context-type _type positions_ (· P2) — newly found
+
+**Root cause.** A post-#203 sweep on the distinctive `"shared-kernel"` token (not
+just the standard 4-tuple) found type-position copies the whole series missed —
+and a second drift _variant_ that **drops `"generic"`** (a latent bug: a generic
+context is unrepresentable there). All are plain interface fields / `as` casts,
+so typecheck can't flag them.
+
+| File                                                                  | Variant                                           | Note                                                                                     |
+| --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `manifest-generation/.../ports/in/client-manifest-generation.port.ts` | `core\|supporting\|driver\|shared-kernel`         | **missing `generic`** — `coerceContextType` port return type under-declares its own impl |
+| `prompt-compiler/.../adapters/app-compatibility.adapter.ts`           | `core\|supporting\|shared-kernel\|driver`         | **missing `generic`** — `GovernancePayload.boundedContexts[].type`                       |
+| `web-driver/.../domain/project.entity.ts`                             | `core\|supporting\|driver\|shared-kernel`         | **missing `generic`**                                                                    |
+| `mcp-server/.../adapters/manifest-generation.adapter.ts`              | `core\|supporting\|generic\|shared-kernel` (`as`) | missing `driver` (same family as #203)                                                   |
+
+**Fix.** Widen each to `BoundedContextType` from `@hexagen/shared` (all four
+packages already depend on it). Type-only, decision-independent. The
+`"generic"`-dropping copies are genuine latent bugs, so this is **P2, not
+cosmetic**.
+
+**Out of scope here — `@hexagen/sync`.** sync keeps its **own** manifest type
+system (`sync/src/types/manifest/{manifest,bounded-context}.ts` +
+`commands/arch/context/*` — several `core|supporting|driver|shared-kernel`
+copies, also missing `generic`). sync is the standalone generator; whether it
+should import the shared canonical or keep an independent contract is a separate
+call — track it, don't fold it in.
+
+**Risk.** Low–Med — widening interface fields is safe, but `web-driver`'s entity
+and the manifest-generation port are more public; run typecheck across their
+consumers (an `as` cast or exhaustive `switch` won't be auto-flagged).
+
+**Acceptance.** No bounded-context-type literal union remains in a `src` type
+position outside the canonical (verified by the `"shared-kernel"` sweep); the
+`"generic"`-dropping copies are gone.
 
 ---
 

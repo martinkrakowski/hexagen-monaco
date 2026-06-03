@@ -36,6 +36,6 @@ This page provides a human-friendly index into the Architecture Decision Records
 1. Create the next numbered file in `.architecture/decisions/`.
 2. Follow the standard ADR template (see [.architecture/README.md](../.architecture/README.md)).
 3. Update this index with a one-line summary and status.
-4. Link the ADR from relevant pages in `planning/` or from [`key-decisions.md`](key-decisions.md).
+4. Link the ADR from relevant pages in `planning/`.
 
 **Full raw list:** Browse [.architecture/decisions/](../.architecture/decisions/)
