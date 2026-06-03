@@ -78,8 +78,11 @@ export async function buildTemplateBundle(
     );
   }
 
+  // Code-unit comparison (not localeCompare, which depends on the runtime's
+  // locale/ICU data) so the committed bundle's key order is reproducible across
+  // machines — matches the `ids.sort()` above.
   const sortedFiles = Object.fromEntries(
-    Object.entries(files).sort(([a], [b]) => a.localeCompare(b)),
+    Object.entries(files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
   );
   return { manifests, files: sortedFiles };
 }
