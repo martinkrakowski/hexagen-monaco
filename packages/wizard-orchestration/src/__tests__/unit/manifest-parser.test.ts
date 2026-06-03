@@ -32,6 +32,26 @@ bounded_contexts:
     assert.strictEqual(result.governance.workspaceName, "test-system");
   });
 
+  it("accepts mixed-case enum values (e.g. type: Core)", () => {
+    // Regression: LLM output such as `type: "Core"` previously threw
+    // "Manifest validation failed: Invalid enum value... received 'Core'".
+    const mixedCaseYaml = `
+system: case-test
+scope: "@hexagen/test"
+architecture: "modular-monolith"
+bounded_contexts:
+  - name: "UserContext"
+    type: "Core"
+    description: "Handles user management"
+    layers:
+      domain:
+        entities: ["User"]
+`;
+    const result = parseManifestToWizardData(mixedCaseYaml);
+    assert.strictEqual(result.boundedContexts.length, 1);
+    assert.strictEqual(result.boundedContexts[0].name, "UserContext");
+  });
+
   it("should throw an error for empty YAML string", () => {
     assert.throws(
       () => parseManifestToWizardData(""),
