@@ -9,6 +9,10 @@ import {
 // Historically the copies in shared/agentic-interaction were missing "driver"
 // and were case-sensitive; these assert the canonical schema is complete and
 // normalizes casing.
+//
+// Lives here (not in @hexagen/shared) because shared has no test runner of its
+// own; agentic-interaction is a primary consumer and imports only the public
+// @hexagen/shared API, so the guard travels with a package that exercises it.
 describe("boundedContextTypeSchema (shared canonical)", () => {
   it("includes 'driver' among the canonical values", () => {
     assert.ok(BOUNDED_CONTEXT_TYPES.includes("driver"));

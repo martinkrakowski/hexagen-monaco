@@ -27,8 +27,10 @@ function caseInsensitiveEnum<T extends z.ZodTypeAny>(
 }
 
 // Bounded-context type is the one enum shared across packages; source the
-// canonical case-insensitive schema from @hexagen/shared so the value list
-// (notably "driver") can't drift between packages.
+// canonical case-insensitive schema from @hexagen/shared so neither the value
+// list (notably "driver") nor its normalization can drift between packages.
+// Intentionally NOT wrapped in the local caseInsensitiveEnum helper (used by the
+// other enums below): normalization for this type is owned by @hexagen/shared.
 export const BoundedContextTypeSchema = boundedContextTypeSchema;
 
 export const PlaneTypeSchema = caseInsensitiveEnum(

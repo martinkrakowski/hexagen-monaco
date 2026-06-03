@@ -96,6 +96,30 @@ describe("ClassifyContextTypeUseCase", () => {
     }
   });
 
+  it("returns type 'driver' for valid LLM response (the widened value)", async () => {
+    const port = makeStubPort(
+      makeLLMResponse('{"type":"driver","reasoning":"Driving/actor context"}'),
+    );
+    const useCase = new ClassifyContextTypeUseCase(port);
+    const result = await useCase.execute({ name: "GatewayDriver" });
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.type, "driver");
+    }
+  });
+
+  it("normalizes a mixed-case type from the LLM", async () => {
+    const port = makeStubPort(
+      makeLLMResponse('{"type":"Core","reasoning":"Primary business"}'),
+    );
+    const useCase = new ClassifyContextTypeUseCase(port);
+    const result = await useCase.execute({ name: "OrderManagement" });
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.type, "core");
+    }
+  });
+
   it("returns success: false for malformed JSON", async () => {
     const port = makeStubPort(makeLLMResponse("not json at all"));
     const useCase = new ClassifyContextTypeUseCase(port);
