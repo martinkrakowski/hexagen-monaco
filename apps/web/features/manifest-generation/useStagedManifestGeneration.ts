@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { ClientManifestGenerationUseCase } from "@hexagen/manifest-generation";
 import type {
@@ -34,6 +34,7 @@ export interface UseStagedManifestGenerationReturn {
   phase: StagedPhase;
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
+  verboseLog: string[];
   validationErrors: string[];
   contextCount: number;
   portCount: number;
@@ -67,17 +68,80 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     Record<number, StageProgress>
   >({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [verboseLog, setVerboseLog] = useState<string[]>([]);
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
   const [adapterCount, setAdapterCount] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // Accumulators for the verbose log, appended incrementally per cloud chunk
+  // so building the log stays O(new tokens) instead of re-joining every chunk.
+  const verboseLogRef = useRef<{
+    text: Record<number, string>;
+    label: Record<number, string>;
+    consumed: Record<number, number>;
+  }>({ text: {}, label: {}, consumed: {} });
+
   // Cloud streaming hook
   const cloudStream = useStagedGenerationStream({
     endpoint: "/api/manifest/generate/stage",
     stageLabels: STAGE_LABELS,
   });
+
+  // Mirror the cloud stream into this hook's state during generation so the UI
+  // updates live (instead of only after cloudStream.generate() resolves).
+  //
+  // The verbose-log accumulation runs BEFORE the isGenerating guard on purpose:
+  // when the final chunk and the stream's "done"/"failed" event land in the
+  // same React batch, isGenerating is already false on this render, so an early
+  // return would drop those last tokens from the log. Per-stage text is appended
+  // incrementally (only newly-arrived chunks → O(new tokens)); the entries array
+  // is rebuilt only when a chunk actually arrived (≤2 entries/stage, ≤7 stages).
+  // Unlike the spec endpoint (curated status text at stage -1), the staged
+  // endpoint streams raw tokens at the real stage number — hence the per-stage
+  // grouping under a "Stage N" header.
+  useEffect(() => {
+    const vlog = verboseLogRef.current;
+    let changed = false;
+    for (const key of Object.keys(cloudStream.stageProgress)
+      .map(Number)
+      .filter((n) => n >= 0)
+      .sort((a, b) => a - b)) {
+      const chunks = cloudStream.stageProgress[key]?.chunks;
+      if (!chunks?.length) continue;
+      const seen = vlog.consumed[key] ?? 0;
+      if (chunks.length <= seen) continue;
+      vlog.text[key] = (vlog.text[key] ?? "") + chunks.slice(seen).join("");
+      vlog.label[key] = cloudStream.stageProgress[key]?.label ?? "";
+      vlog.consumed[key] = chunks.length;
+      changed = true;
+    }
+    if (changed) {
+      const entries: string[] = [];
+      for (const key of Object.keys(vlog.text)
+        .map(Number)
+        .sort((a, b) => a - b)) {
+        const label = vlog.label[key] ? ` — ${vlog.label[key]}` : "";
+        entries.push(`Stage ${key}${label}`);
+        entries.push(vlog.text[key]);
+      }
+      setVerboseLog(entries);
+    }
+
+    // phase / stepDetail / stageProgress only need mirroring while the stream is
+    // active; once it resolves, generateManifest copies the final values from
+    // the result, so guard these to avoid clobbering that final state.
+    if (!cloudStream.isGenerating) return;
+    setPhase(cloudStream.phase);
+    if (cloudStream.stepDetail) setStepDetail(cloudStream.stepDetail);
+    setStageProgress(cloudStream.stageProgress);
+  }, [
+    cloudStream.isGenerating,
+    cloudStream.phase,
+    cloudStream.stepDetail,
+    cloudStream.stageProgress,
+  ]);
 
   const generateManifest = useCallback(
     async (
@@ -96,6 +160,8 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setStepDetail("Starting staged generation...");
       setStageProgress({});
       setValidationErrors([]);
+      setVerboseLog([]);
+      verboseLogRef.current = { text: {}, label: {}, consumed: {} };
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -213,6 +279,11 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setStepDetail(result.stepDetail);
           setStageProgress(result.stageProgress);
           setValidationErrors(result.validationErrors);
+          // Surface in-stream cloud failures as hook state (the stream resolves
+          // rather than throwing, so the catch below never runs for them).
+          if (result.phase === "failed") {
+            setGenerationError(result.stepDetail || "Generation failed");
+          }
 
           return {
             phase: result.phase as StagedPhase,
@@ -256,6 +327,8 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStepDetail("");
     setStageProgress({});
     setValidationErrors([]);
+    setVerboseLog([]);
+    verboseLogRef.current = { text: {}, label: {}, consumed: {} };
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
@@ -270,6 +343,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     phase,
     stepDetail,
     stageProgress,
+    verboseLog,
     validationErrors,
     contextCount,
     portCount,

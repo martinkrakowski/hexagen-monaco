@@ -11,8 +11,12 @@ export type { ViewTab };
 export interface GenerateWithAiProps {
   onUseManifest?: (manifest: string) => void;
   llmContext: LocalLLMContext;
-  onGeneratingStateChange?: (isGenerating: boolean) => void;
+  onGeneratingStateChange?: (actions: GeneratingFooterActions | null) => void;
   onPreviewStateChange?: (actions: PreviewFooterActions | null) => void;
+}
+
+export interface GeneratingFooterActions {
+  onCancel: () => void;
 }
 
 export interface PreviewFooterActions {

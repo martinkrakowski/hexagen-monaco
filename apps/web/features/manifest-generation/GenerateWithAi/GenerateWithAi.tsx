@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
@@ -13,7 +13,7 @@ import {
 import { DESCRIPTION_MIN_LENGTH } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
-import { Button, Skeleton } from "@hexagen/ui";
+import { Button } from "@hexagen/ui";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import { ActionBar } from "./ActionBar";
 import { DescriptionInput } from "./DescriptionInput";
@@ -22,7 +22,7 @@ import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
 import { HeaderSection } from "./HeaderSection";
 import { ModelSetupPrompt } from "./ModelSetupPrompt";
 import { StateView } from "./StateView";
-import { ThinkingBlock } from "./ThinkingBlock";
+import { AiGeneratingStep } from "./AiGeneratingStep";
 import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
 import type { GenerateWithAiProps, ViewTab } from "./types";
@@ -57,9 +57,35 @@ export function GenerateWithAi({
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
 
+  const engineStatus = llmContext.engineState.status;
+  const isModelLoading =
+    engineStatus === "downloading" ||
+    (engineStatus === "loading_vram" && !llmContext.engineState.autoLoading);
+  const isModelError = engineStatus === "error";
+
+  // Show the dedicated full-height generating screen only while generation is
+  // actively in flight. Fall through to the form on a generation error (its
+  // inline retry / clear UI), and while the local model is still downloading or
+  // loading into VRAM (so the ModelProgressCard modal below stays reachable).
+  const showGeneratingScreen =
+    flowState.state === "generating" &&
+    !stagedGen.generationError &&
+    !isModelLoading &&
+    !isModelError;
+
+  const cancelGenerationRef = useRef(() => {});
+  cancelGenerationRef.current = () => {
+    actions.clearError();
+    stagedGen.reset();
+  };
+
   useEffect(() => {
-    onGeneratingStateChange?.(flowState.state === "generating");
-  }, [flowState.state, onGeneratingStateChange]);
+    onGeneratingStateChange?.(
+      showGeneratingScreen
+        ? { onCancel: () => cancelGenerationRef.current() }
+        : null,
+    );
+  }, [showGeneratingScreen, onGeneratingStateChange]);
 
   const generateRef = useRef(stagedGen.generateManifest);
   useEffect(() => {
@@ -79,15 +105,6 @@ export function GenerateWithAi({
     formState.deployment,
     preferLocal,
   ]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
-    if (stagedGen.generationError) {
-      // Don't transition to error state modal.
-      // Keep error inline in welcome form for better UX.
-      // Error will be displayed in the form instead.
-    }
-  }, [stagedGen.generationError, flowState.state, actions]);
 
   useEffect(() => {
     if (flowState.state !== "generating") return;
@@ -231,11 +248,20 @@ export function GenerateWithAi({
     );
   }
 
-  const engineStatus = llmContext.engineState.status;
-  const isModelLoading =
-    engineStatus === "downloading" ||
-    (engineStatus === "loading_vram" && !llmContext.engineState.autoLoading);
-  const isModelError = engineStatus === "error";
+  // Replace the form with the dedicated full-height generating screen (mirrors
+  // the import flow). See showGeneratingScreen above for exactly when.
+  if (showGeneratingScreen) {
+    return (
+      <div className="h-full flex flex-col dot-grid bg-ambient p-4">
+        <AiGeneratingStep
+          phase={stagedGen.phase}
+          stepDetail={stagedGen.stepDetail}
+          stageProgress={stagedGen.stageProgress}
+          verboseLog={stagedGen.verboseLog}
+        />
+      </div>
+    );
+  }
 
   const isGenerating = flowState.state === "generating";
   const hasError = stagedGen.generationError !== null;
@@ -398,24 +424,6 @@ export function GenerateWithAi({
           </div>,
           document.body,
         )}
-
-      {isGenerating && (
-        <Suspense
-          fallback={
-            <div className="space-y-4">
-              <Skeleton className="h-64 w-full" />
-              <Skeleton className="h-32 w-48" />
-              <Skeleton className="h-96 w-full" />
-            </div>
-          }
-        >
-          <ThinkingBlock
-            phase={stagedGen.phase}
-            stepDetail={stagedGen.stepDetail}
-            stageProgress={stagedGen.stageProgress}
-          />
-        </Suspense>
-      )}
 
       <ActionBar
         canGenerate={canGenerate && !hasError}
