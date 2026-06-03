@@ -1,4 +1,5 @@
 import type { ZodSchema } from "zod";
+import type { BoundedContextType } from "@hexagen/shared";
 import type {
   ManifestTopologyDraft,
   ManifestDraft,
@@ -76,9 +77,7 @@ export interface ClientManifestGenerationDeps {
   portsListSchema: ZodSchema<PortsList>;
   prompts: {
     contextListSystemPrompt: string;
-    compileContextListPrompt: (input: {
-      userDescription: string;
-    }) => string;
+    compileContextListPrompt: (input: { userDescription: string }) => string;
     portsListSystemPrompt: string;
     compilePortsPrompt: (
       contextName: string,
@@ -109,19 +108,16 @@ export interface ClientManifestGenerationDeps {
     diagnostics: DraftDiagnostic[],
   ) => Promise<{ yaml: string; diagnostics: DraftDiagnostic[] }>;
   coerceRawPorts: (ports: unknown) => PortsList;
-  coerceContextType: (
-    type: string,
-  ) => "core" | "supporting" | "driver" | "shared-kernel";
+  coerceContextType: (type: string) => BoundedContextType;
   coercePort: (
     port: Record<string, unknown>,
     direction: "in" | "out",
   ) => { name: string; type: string; description: string };
   normalizePortName: (name: string) => string;
-  parseJSON: <T>(content: string) => { ok: true; data: T } | { ok: false; error: string };
-  extractArrayFromWrapper: <T>(
-    data: unknown,
-    wrapperKeys: string[],
-  ) => T[];
+  parseJSON: <T>(
+    content: string,
+  ) => { ok: true; data: T } | { ok: false; error: string };
+  extractArrayFromWrapper: <T>(data: unknown, wrapperKeys: string[]) => T[];
   extractObjectFromWrapper: <T>(
     data: unknown,
     wrapperKeys: string[],

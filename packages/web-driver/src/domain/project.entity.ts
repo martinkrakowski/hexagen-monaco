@@ -1,3 +1,5 @@
+import type { BoundedContextType } from "@hexagen/shared";
+
 /**
  * Core entity representing a HexaGen-generated project.
  * Lives in domain — pure, no infrastructure/framework dependencies.
@@ -31,7 +33,7 @@ export interface Project {
    */
   boundedContexts: Array<{
     name: string;
-    type: "core" | "supporting" | "driver" | "shared-kernel";
+    type: BoundedContextType;
     description?: string;
   }>;
   /**
