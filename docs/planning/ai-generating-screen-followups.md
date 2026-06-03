@@ -12,7 +12,7 @@ This doc captures the items deliberately **deferred** from that PR's code review
 
 ### 1. Unify `AiGeneratingStep` and `ManifestGeneratingStep` (review #4 + #7) — High value, low effort
 
-**Problem.** `GenerateWithAi/AiGeneratingStep.tsx` is a near-verbatim copy of `import-project-spec/ManifestGeneratingStep.tsx`; they differ only in whether they forward `stageLabels` to `ThinkingBlock`. `ThinkingBlock` already treats `stageLabels` as an optional override (`GenerateWithAi/ThinkingBlock.tsx:316` — `stageLabels?.[phase] ?? STAGE_LABELS[phase]`), so a single component covers both flows. The duplicated `generationError` prop/banner is review finding #7 — dead for the AI flow (which now falls back to the form on error) but live for the import flow, so it belongs on the shared component.
+**Problem.** `GenerateWithAi/AiGeneratingStep.tsx` is a near-verbatim copy of `import-project-spec/ManifestGeneratingStep.tsx`; they differ only in whether they forward `stageLabels` to `ThinkingBlock`. `ThinkingBlock` already treats `stageLabels` as an optional override (search for `stageLabels?.[phase] ?? STAGE_LABELS[phase]` in `GenerateWithAi/ThinkingBlock.tsx`), so a single component covers both flows. The duplicated `generationError` prop/banner is review finding #7 — dead for the AI flow (which now falls back to the form on error) but live for the import flow, so it belongs on the shared component.
 
 **Approach.**
 
@@ -47,7 +47,7 @@ This doc captures the items deliberately **deferred** from that PR's code review
 
 ### 4. Share the generating-screen scaffold + Cancel-footer across flows (review #5) — Medium priority, larger refactor
 
-**Problem.** Both flows independently implement (a) a `dot-grid bg-ambient p-4` full-height wrapper around a generating step and (b) a shell footer whose only generating-state action is Cancel. AI: `GenerateWithAi.tsx` early return + `AIGenerationPage.tsx` Cancel branch. Import: `ImportProjectSpecPage.tsx` (wrapper ~388–398, footer ~323–336). They already differ slightly (import footer has a left-aligned label; AI uses a bare `<span/>` spacer) and will keep drifting.
+**Problem.** Both flows independently implement (a) a `dot-grid bg-ambient p-4` full-height wrapper around a generating step and (b) a shell footer whose only generating-state action is Cancel. AI: `GenerateWithAi.tsx` early return + `AIGenerationPage.tsx` Cancel branch. Import: `ImportProjectSpecPage.tsx` — the `dot-grid bg-ambient p-4` wrapper around `ManifestGeneratingStep`, and the `GENERATING`-state branch of its `renderFooter`. They already differ slightly (import footer has a left-aligned label; AI uses a bare `<span/>` spacer) and will keep drifting.
 
 **Approach.** Extract a shared `GeneratingScreen` layout (the wrapper) and a small footer-actions contract (Cancel / Go-Back) used by both pages. Touches `ProjectsShell` footer composition in both pages — scope carefully and verify both flows manually.
 
