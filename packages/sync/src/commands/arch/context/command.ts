@@ -7,6 +7,7 @@ import {
 } from "./persistence.js";
 import { runContextWizard } from "./wizard.js";
 import { getProjectRoot } from "../../shared/project-root.js";
+import type { BoundedContextType } from "../../../types/manifest.js";
 
 export const contextCommander = new Command("context").description(
   "Add a new bounded context interactively",
@@ -37,7 +38,7 @@ export async function contextCommand(): Promise<void> {
   const updatedManifest = addContextToManifest(
     manifest,
     contextDef.name,
-    contextDef.type as "core" | "supporting" | "shared-kernel" | "driver",
+    contextDef.type as BoundedContextType,
     contextDef.description,
   );
 

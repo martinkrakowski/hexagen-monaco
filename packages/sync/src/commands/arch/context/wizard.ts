@@ -1,10 +1,11 @@
 import type { Manifest } from "@hexagen/sync";
-import { validateContextName, checkContextUniqueness } from "./persistence.js";
+import type { BoundedContextType } from "../../../types/manifest.js";
+import { checkContextUniqueness } from "./persistence.js";
 import { promptService, isValidContextName } from "../../shared/index.js";
 
 interface WizardState {
   name: string | null;
-  type: "core" | "supporting" | "shared-kernel" | "driver" | null;
+  type: BoundedContextType | null;
   description: string | null;
 }
 
@@ -19,6 +20,10 @@ function createWizardState(): WizardState {
 const CONTEXT_TYPE_OPTIONS = [
   { value: "core", label: "Core - Domain logic and business rules" },
   { value: "supporting", label: "Supporting - Helper utilities and services" },
+  {
+    value: "generic",
+    label: "Generic - General-purpose capability (e.g. identity, billing)",
+  },
   {
     value: "shared-kernel",
     label: "Shared Kernel - Shared types across contexts",
@@ -66,13 +71,17 @@ export async function runContextWizard(
     });
 
     while (!state.type) {
-      const answer = await promptService.ask("Enter number (1-4): ");
+      const answer = await promptService.ask(
+        `Enter number (1-${CONTEXT_TYPE_OPTIONS.length}): `,
+      );
 
       const num = parseInt(answer, 10);
       if (num >= 1 && num <= CONTEXT_TYPE_OPTIONS.length) {
         state.type = CONTEXT_TYPE_OPTIONS[num - 1].value as WizardState["type"];
       } else {
-        console.warn("⚠️  Invalid selection. Please enter a number 1-4.");
+        console.warn(
+          `⚠️  Invalid selection. Please enter a number 1-${CONTEXT_TYPE_OPTIONS.length}.`,
+        );
       }
     }
 

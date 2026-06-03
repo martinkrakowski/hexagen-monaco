@@ -1,7 +1,10 @@
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import type { Manifest } from "@hexagen/sync";
-import type { BoundedContext } from "../../../types/manifest.js";
+import type {
+  BoundedContext,
+  BoundedContextType,
+} from "../../../types/manifest.js";
 import { yamlService } from "../../shared/yaml-service.js";
 
 export interface SaveResult {
@@ -52,7 +55,7 @@ export async function loadManifest(
 export function addContextToManifest(
   manifest: Manifest,
   name: string,
-  type: "core" | "supporting" | "shared-kernel" | "driver" = "core",
+  type: BoundedContextType = "core",
   description?: string,
 ): Manifest {
   const newContext: BoundedContext = {
