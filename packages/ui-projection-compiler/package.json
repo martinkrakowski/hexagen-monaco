@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/ui-projection-compiler",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Projection compiler — maps domain node types to visual variants, icons, and affordance projections. Zero runtime or projection-framework imports.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

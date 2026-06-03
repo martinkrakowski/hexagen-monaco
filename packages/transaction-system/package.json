@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/transaction-system",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Transaction orchestration — speculative state machine, backpressure control, semantic caching",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
