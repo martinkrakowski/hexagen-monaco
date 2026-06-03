@@ -1,4 +1,5 @@
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import { coerceContextType } from "../../../domain/manifest/coerce-raw-topology";
 import type {
   PipelineState,
   ValidationReport,
@@ -107,7 +108,9 @@ export class ExecuteStagedGenerationUseCase {
       state.stage2 = {
         accepted: contextData.map((ctx) => ({
           name: ctx.name,
-          type: ctx.type as "core" | "supporting" | "generic" | "shared-kernel",
+          // Normalize/validate untrusted LLM output (trims, lowercases, maps
+          // unknown → "core", recognizes "driver") rather than a blind cast.
+          type: coerceContextType(ctx.type),
           reasoning: ctx.description,
         })),
         rejected: [],
