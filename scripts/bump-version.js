@@ -157,22 +157,15 @@ function workspaceGlobs(rootPkg) {
   return [];
 }
 
-/** Expand a `dir/*` (or exact `dir`) workspace pattern to package.json paths. */
+/**
+ * Expand a workspace pattern to its package.json paths. Truly glob-based via
+ * fs.globSync, so any pattern shape works (`apps/*`, `packages/**`, an exact
+ * dir, ...) — not just `dir/*`. Patterns use posix separators, per the
+ * package.json `workspaces` convention.
+ */
 function expandGlob(pattern) {
-  const results = [];
-  if (pattern.endsWith("/*")) {
-    const base = path.join(ROOT, pattern.slice(0, -2));
-    if (!fs.existsSync(base)) return results;
-    for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const pkg = path.join(base, entry.name, "package.json");
-      if (fs.existsSync(pkg)) results.push(pkg);
-    }
-  } else {
-    const pkg = path.join(ROOT, pattern, "package.json");
-    if (fs.existsSync(pkg)) results.push(pkg);
-  }
-  return results;
+  const matches = fs.globSync(`${pattern}/package.json`, { cwd: ROOT });
+  return matches.map((m) => path.resolve(ROOT, m));
 }
 
 function discoverPackageJsonFiles(rootPkg) {
@@ -187,22 +180,43 @@ function discoverPackageJsonFiles(rootPkg) {
 // Rewrite
 // ---------------------------------------------------------------------------
 
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Replace the first (top-level) `"version"` field, preserving formatting. */
-function setVersionField(content, oldVersion, newVersion) {
-  const needle = `"version": "${oldVersion}"`;
-  const idx = content.indexOf(needle);
-  if (idx !== -1) {
-    return (
-      content.slice(0, idx) + `"version": "${newVersion}"` + content.slice(idx + needle.length)
-    );
+/**
+ * Replace the value of the TOP-LEVEL `"version"` field, preserving all other
+ * formatting (indentation, key order, trailing newline). Structurally aware:
+ * scans the text tracking object/array depth and string state, matching the
+ * `"version"` key only at depth 1 — so a nested `"version"` (e.g. inside a
+ * config block) is never touched. Returns the updated text, or null if there
+ * is no top-level `"version"` field.
+ */
+function setTopLevelVersion(content, newVersion) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      if (depth === 1) {
+        const m = /^"version"(\s*:\s*)"(?:[^"\\]|\\.)*"/.exec(content.slice(i));
+        if (m) {
+          return (
+            content.slice(0, i) + `"version"${m[1]}"${newVersion}"` + content.slice(i + m[0].length)
+          );
+        }
+      }
+      inString = true;
+    } else if (ch === "{" || ch === "[") {
+      depth += 1;
+    } else if (ch === "}" || ch === "]") {
+      depth -= 1;
+    }
   }
-  // Fallback: tolerate arbitrary whitespace after the colon.
-  const re = new RegExp(`"version":\\s*"${escapeRegex(oldVersion)}"`);
-  return content.replace(re, `"version": "${newVersion}"`);
+  return null;
 }
 
 function confirm(message) {
@@ -223,6 +237,9 @@ async function main() {
   const opts = parseArgs();
   const rootPkg = readJson(path.join(ROOT, "package.json"));
   const current = rootPkg.version;
+  if (typeof current !== "string" || current.length === 0) {
+    fail('Root package.json has no valid "version" field.');
+  }
   const target = computeTarget(current, opts);
 
   console.log("");
@@ -240,6 +257,9 @@ async function main() {
   for (const file of files) {
     const pkg = readJson(file);
     const rel = path.relative(ROOT, file) || "package.json";
+    if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+      fail(`Invalid or missing "version" in ${rel}; cannot bump.`);
+    }
     (pkg.version === current ? cohort : offVersion).push({ file, rel, from: pkg.version });
   }
 
@@ -284,8 +304,12 @@ async function main() {
 
   for (const p of planned) {
     const content = fs.readFileSync(p.file, "utf8");
-    const updated = setVersionField(content, p.from, target);
-    if (updated === content) fail(`Could not locate the "version" field in ${p.rel}.`);
+    const updated = setTopLevelVersion(content, target);
+    if (updated === null) fail(`Could not locate a top-level "version" field in ${p.rel}.`);
+    // Structural guarantee: the parsed top-level version must now be the target.
+    if (JSON.parse(updated).version !== target) {
+      fail(`Post-write check failed for ${p.rel}: top-level version is not ${target}.`);
+    }
     fs.writeFileSync(p.file, updated);
   }
 
