@@ -45,24 +45,24 @@ template-engine: createInMemoryMaterializer()  ── generated bundle (manifest
 
 ### Step B — Port + merge (`@hexagen/project-generation`)
 
-- New out-port `AddOnMaterializerPort { materialize(addOnsAnswers): Promise<{ files: Map<string,string>; warnings: string[] }> }`.
+- New out-port `AddOnMaterializerPort { materialize(addOnsAnswers): Promise<{ files: Map<string,string>; warnings: string[]; errors: string[] }> }` — it mirrors the engine's **non-throwing** contract (PR 1's `MaterializeAddOnsResult`): invalid / conflicting / cyclic selections come back as `errors`, never thrown.
 - Extend `GenerateProjectInput` with `addOnsAnswers?: Record<string, AnswerMap>`; constructor gains an optional `materializer?: AddOnMaterializerPort`.
 - After `generateAt`, before `export`: if `addOnsAnswers` non-empty and a materializer is present, materialize, then for each `(rel, content)`:
   - **write to `path.join(tempDir, rel)`** (mkdir -p) → ZIP/GitHub pick it up,
   - **`project.files.set(rel, content)`** → code view shows it,
   - **precedence:** template overrides core (overwrite), pushing a warning per overridden path. (Structured-file collisions are impossible — Phase 0 guard.)
-- Add `warnings?: string[]` to `GenerateProjectOutput`.
+- Add `warnings?: string[]` **and `errors?: string[]`** to `GenerateProjectOutput`. On non-empty `errors` the materializer returned no files, so the merge is a no-op — the **core project still generates** and the errors are passed through, not thrown.
 
 ### Step C — Thread answers + wire + surface (`apps/web`)
 
 - `/api/generate`: extract `addOnsAnswers` from `wizardData` and pass into `GenerateProjectInput` (today `wizardToManifest` zeroes it — read it straight off `wizardData`).
 - `wire.server.ts`: build the `AddOnMaterializerPort` adapter from `template-engine`'s `createInMemoryMaterializer()`; inject into `getGenerateProject`. Add `@hexagen/template-engine` to `apps/web` deps.
-- Return `warnings` in the API response; **log to telemetry, deduplicated per generation run** (per the overall plan).
+- Return **both `warnings` and `errors`** in the API response — `errors` drives a 400/validation response for a bad add-on selection (the core project may still be offered), while a real failure stays a 500. **Log both to telemetry, deduplicated per generation run** (per the overall plan).
 
 ### Step D — Tests
 
 - **Unit (project-generation):** merge precedence — a template file overwrites a core file at the same path in **both** `project.files` and the temp dir, with a warning; empty `addOnsAnswers` → use case behaves exactly as today (no-op).
-- **Integration (apps/web):** `POST /api/generate` with `addOnsAnswers` → response `files` include add-on outputs; a `zip` request's archive contains them; **empty `addOnsAnswers` → byte-identical to today** (no-regression).
+- **Integration (apps/web):** `POST /api/generate` with `addOnsAnswers` → response `files` include add-on outputs; a `zip` request's archive contains them; an **invalid add-on selection → response carries `errors` (not a 500) and the core project still generates**; **empty `addOnsAnswers` → byte-identical to today** (no-regression).
 
 ## Decisions
 

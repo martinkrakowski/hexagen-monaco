@@ -42,9 +42,9 @@ export class InMemoryFileEmitter implements FileEmitterPort {
 
   constructor(private readonly loadFile: TemplateFileLoader) {}
 
-  /** The files accumulated across every emit() in this run. */
+  /** A snapshot copy of the files accumulated across every emit() in this run. */
   getFiles(): ReadonlyMap<string, string> {
-    return this.files;
+    return new Map(this.files);
   }
 
   // The port also passes projectRoot/config; both are irrelevant in-memory, so

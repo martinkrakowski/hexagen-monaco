@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { FileSystemTemplateRegistry } from "../../src/infrastructure/template-registry.adapter.js";
 import { createFileSystemTemplateFileLoader } from "../../src/infrastructure/file-system-template-file-loader.js";
 import { InMemoryAddOnMaterializer } from "../../src/infrastructure/in-memory-add-on-materializer.js";
+import { DefaultingQuestionEngine } from "../../src/infrastructure/defaulting-question-engine.adapter.js";
 import { isOutputEnabled, outputPath } from "../../src/domain/index.js";
 import type {
   TemplateManifest,
@@ -25,15 +26,20 @@ const materializer = new InMemoryAddOnMaterializer(
   createFileSystemTemplateFileLoader(TEMPLATES_DIR),
 );
 
-/** The answers a manifest would resolve to under its declared defaults. */
-function defaultAnswers(questions: TemplateQuestion[]): AnswerMap {
+/**
+ * The answers a manifest resolves to under its declared defaults — derived from
+ * the production DefaultingQuestionEngine so this test can't drift from the
+ * engine's actual defaulting rules. ("auto" questions are resolved by the use
+ * case, not asked, so they're omitted here.)
+ */
+async function defaultAnswers(
+  questions: TemplateQuestion[],
+): Promise<AnswerMap> {
+  const engine = new DefaultingQuestionEngine();
   const map: AnswerMap = {};
   for (const q of questions) {
-    if (q.type === "multiselect") map[q.id] = q.default ?? [];
-    else if (q.type === "boolean") map[q.id] = q.default ?? false;
-    else if (q.type === "select") map[q.id] = q.default ?? q.options[0] ?? "";
-    else if (q.type === "text") map[q.id] = q.default ?? "";
-    // "auto" questions are derived by the use case — no answer supplied here.
+    if (q.type === "auto") continue;
+    map[q.id] = await engine.ask(q);
   }
   return map;
 }
@@ -63,7 +69,7 @@ describe("InMemoryAddOnMaterializer", () => {
 
   it("materializes a template's outputs with interpolated content", async () => {
     const manifest = await manifestFor("rate-limiting");
-    const answers = defaultAnswers(manifest.questions);
+    const answers = await defaultAnswers(manifest.questions);
 
     const { files, warnings } = await materializer.materialize({
       "rate-limiting": answers,
@@ -85,7 +91,7 @@ describe("InMemoryAddOnMaterializer", () => {
 
   it("co-emits the files of required templates", async () => {
     const manifest = await manifestFor("llm-adapter"); // requires env-setup, error-handling
-    const answers = defaultAnswers(manifest.questions);
+    const answers = await defaultAnswers(manifest.questions);
 
     const { files } = await materializer.materialize({
       "llm-adapter": answers,
