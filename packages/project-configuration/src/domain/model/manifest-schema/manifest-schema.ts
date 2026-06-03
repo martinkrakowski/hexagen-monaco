@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boundedContextTypeSchema } from "@hexagen/shared";
 
 /**
  * Wraps a Zod enum so validation is case-insensitive. LLM-generated manifests
@@ -25,9 +26,12 @@ function caseInsensitiveEnum<T extends z.ZodTypeAny>(
   );
 }
 
-export const BoundedContextTypeSchema = caseInsensitiveEnum(
-  z.enum(["core", "supporting", "generic", "shared-kernel", "driver"]),
-);
+// Bounded-context type is the one enum shared across packages; source the
+// canonical case-insensitive schema from @hexagen/shared so neither the value
+// list (notably "driver") nor its normalization can drift between packages.
+// Intentionally NOT wrapped in the local caseInsensitiveEnum helper (used by the
+// other enums below): normalization for this type is owned by @hexagen/shared.
+export const BoundedContextTypeSchema = boundedContextTypeSchema;
 
 export const PlaneTypeSchema = caseInsensitiveEnum(
   z.enum([

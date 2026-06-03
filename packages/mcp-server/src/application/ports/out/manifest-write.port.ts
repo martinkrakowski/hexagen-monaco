@@ -1,4 +1,4 @@
-import type { Result } from "@hexagen/shared";
+import type { BoundedContextType, Result } from "@hexagen/shared";
 
 export interface AddDependencyCommand {
   sourceModule: string;
@@ -7,7 +7,7 @@ export interface AddDependencyCommand {
 
 export interface RegisterBoundedContextCommand {
   name: string;
-  type?: "core" | "supporting" | "generic" | "shared-kernel";
+  type?: BoundedContextType;
   description?: string;
 }
 

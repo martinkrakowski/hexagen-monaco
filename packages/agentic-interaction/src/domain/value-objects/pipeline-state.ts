@@ -1,3 +1,5 @@
+import type { BoundedContextType } from "@hexagen/shared";
+
 export interface NormalizedPrompt {
   intent: string;
   explicitTechnologies: string[];
@@ -50,7 +52,7 @@ export interface DomainAnalysis {
 
 export interface ClassifiedContext {
   name: string;
-  type: "core" | "supporting" | "generic" | "shared-kernel";
+  type: BoundedContextType;
   reasoning: string;
   responsibility?: string;
   aggregateRoots?: string[];
