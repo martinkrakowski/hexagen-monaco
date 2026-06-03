@@ -13,7 +13,7 @@ import { CREATION_STEPS } from "@/landing/domain/creation-path";
 export function NewProjectPage() {
   const router = useRouter();
   const options = useCreationPaths();
-  const { navigate } = usePathNavigation();
+  const { navigate, navigationError } = usePathNavigation();
 
   return (
     <ProjectsShellWithFreeTier
@@ -43,6 +43,15 @@ export function NewProjectPage() {
             </div>
 
             <CreationPathGrid options={options} onSelectPath={navigate} />
+
+            {navigationError && (
+              <div
+                role="alert"
+                className="mt-6 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive text-center"
+              >
+                {navigationError}
+              </div>
+            )}
 
             <div className="text-center mt-8 text-xs text-muted-foreground">
               All paths produce an editable, standards-compliant manifest
