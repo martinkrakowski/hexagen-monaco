@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { GenerateWithAi } from "./GenerateWithAi";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { Button } from "@hexagen/ui";
 import {
   ArrowLeft,
@@ -167,7 +167,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   };
 
   return (
-    <ProjectsShell
+    <ProjectsShellWithFreeTier
       headerContent={renderHeaderContent()}
       footer={renderFooter()}
     >
@@ -186,6 +186,6 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           />
         </div>
       </div>
-    </ProjectsShell>
+    </ProjectsShellWithFreeTier>
   );
 }

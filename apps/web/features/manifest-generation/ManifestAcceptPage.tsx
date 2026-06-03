@@ -15,7 +15,7 @@ import { ManifestPreview } from "./ManifestPreview";
 import type { ViewTab } from "./ManifestPreview";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import { parseYamlToViewData } from "@hexagen/manifest-generation";
 
@@ -184,7 +184,7 @@ export function ManifestAcceptPage() {
 
   if (redirecting) {
     return (
-      <ProjectsShell title="Approve Generated Manifest">
+      <ProjectsShellWithFreeTier title="Approve Generated Manifest">
         <div className="flex items-center justify-center h-full">
           <div className="text-center space-y-2">
             <h2 className="text-lg font-semibold text-foreground">
@@ -195,13 +195,13 @@ export function ManifestAcceptPage() {
             </p>
           </div>
         </div>
-      </ProjectsShell>
+      </ProjectsShellWithFreeTier>
     );
   }
 
   if (isSaving) {
     return (
-      <ProjectsShell title="Approve Generated Manifest">
+      <ProjectsShellWithFreeTier title="Approve Generated Manifest">
         <div className="flex items-center justify-center h-full">
           <div className="text-center space-y-2">
             <h2 className="text-lg font-semibold text-foreground">
@@ -215,7 +215,7 @@ export function ManifestAcceptPage() {
             </div>
           </div>
         </div>
-      </ProjectsShell>
+      </ProjectsShellWithFreeTier>
     );
   }
 
@@ -226,7 +226,7 @@ export function ManifestAcceptPage() {
   const isFooterDisabled = !canSave || !canAccept || !viewData;
 
   return (
-    <ProjectsShell
+    <ProjectsShellWithFreeTier
       headerContent={renderHeaderContent()}
       footer={
         <>
@@ -276,6 +276,6 @@ export function ManifestAcceptPage() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
-    </ProjectsShell>
+    </ProjectsShellWithFreeTier>
   );
 }
