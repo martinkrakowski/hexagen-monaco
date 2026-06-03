@@ -1,42 +1,57 @@
 import { z } from "zod";
 
-export const BoundedContextTypeSchema = z.enum([
-  "core",
-  "supporting",
-  "generic",
-  "shared-kernel",
-  "driver",
-]);
+/**
+ * Wraps a Zod enum so validation is case-insensitive. LLM-generated manifests
+ * frequently vary the casing of enum values (e.g. `"Core"` instead of `"core"`),
+ * which would otherwise fail validation at parse/approval time
+ * (`parseManifestToWizardData` → `ManifestSchema.safeParse`). The input string is
+ * trimmed and normalized to the enum's canonical casing before validation (the
+ * generation-side `coerceContextType` trims too). Most enums are
+ * lowercase; pass `"upper"` for enums whose canonical values are uppercase
+ * (e.g. `RelationshipPattern`: `"ACL"`, `"OHS"`).
+ */
+function caseInsensitiveEnum<T extends z.ZodTypeAny>(
+  schema: T,
+  dir: "lower" | "upper" = "lower",
+) {
+  return z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? dir === "lower"
+          ? value.trim().toLowerCase()
+          : value.trim().toUpperCase()
+        : value,
+    schema,
+  );
+}
 
-export const PlaneTypeSchema = z.enum([
-  "projection",
-  "probabilistic",
-  "infrastructure",
-  "shared-kernel",
-  "core",
-  "supporting",
-]);
+export const BoundedContextTypeSchema = caseInsensitiveEnum(
+  z.enum(["core", "supporting", "generic", "shared-kernel", "driver"]),
+);
 
-export const StatusTypeSchema = z.enum([
-  "active",
-  "frozen",
-  "deprecated",
-  "experimental",
-]);
+export const PlaneTypeSchema = caseInsensitiveEnum(
+  z.enum([
+    "projection",
+    "probabilistic",
+    "infrastructure",
+    "shared-kernel",
+    "core",
+    "supporting",
+  ]),
+);
 
-export const RelationshipPatternSchema = z.enum([
-  "U/D",
-  "ACL",
-  "SK",
-  "P",
-  "OHS",
-]);
+export const StatusTypeSchema = caseInsensitiveEnum(
+  z.enum(["active", "frozen", "deprecated", "experimental"]),
+);
 
-export const RelationshipRoleSchema = z.enum([
-  "upstream",
-  "downstream",
-  "peer",
-]);
+export const RelationshipPatternSchema = caseInsensitiveEnum(
+  z.enum(["U/D", "ACL", "SK", "P", "OHS"]),
+  "upper",
+);
+
+export const RelationshipRoleSchema = caseInsensitiveEnum(
+  z.enum(["upstream", "downstream", "peer"]),
+);
 
 export const RelationshipSchema = z.object({
   context: z.string(),
@@ -62,11 +77,9 @@ export const LegacyOrNewPortSchema = z.union([
   PortDefinitionSchema,
 ]);
 
-export const LayerTypeSchema = z.enum([
-  "domain",
-  "application",
-  "infrastructure",
-]);
+export const LayerTypeSchema = caseInsensitiveEnum(
+  z.enum(["domain", "application", "infrastructure"]),
+);
 
 export const BoundedContextSchema = z.object({
   name: z.string(),
