@@ -76,16 +76,34 @@ async function outputsFor(id: string): Promise<string[]> {
   return manifest.outputs.map(outputPath);
 }
 
+/**
+ * Normalize a manifest output path before matching. Manifest paths are not
+ * format-validated (the schema only requires a non-empty string), so collapse
+ * backslashes to "/" and drop a leading "./" — otherwise a path variation like
+ * "./package.json" would slip past the `^`-anchored matchers and later be
+ * clobbered by the planned "template overrides core" precedence.
+ */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
 async function dirSizeBytes(dir: string): Promise<number> {
+  // A template legitimately may have no files/ dir → size 0. Any other IO error
+  // (permissions, transient) must surface rather than be read as an empty payload
+  // — otherwise the budget could pass without measuring the full content.
   const entries = await fs
     .readdir(dir, { withFileTypes: true })
-    .catch(() => []);
+    .catch((err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return [];
+      throw err;
+    });
   let total = 0;
   for (const e of entries) {
     const full = path.join(dir, e.name);
+    // lstat, not stat: measure symlinks themselves rather than following them.
     total += e.isDirectory()
       ? await dirSizeBytes(full)
-      : (await fs.stat(full)).size;
+      : (await fs.lstat(full)).size;
   }
   return total;
 }
@@ -95,9 +113,10 @@ describe("template guard — collision-prone outputs", () => {
     const ids = await listTemplateIds();
     const offenders: string[] = [];
     for (const id of ids) {
-      for (const p of await outputsFor(id)) {
+      for (const raw of await outputsFor(id)) {
+        const p = normalizePath(raw);
         const hit = COLLISION_PRONE.find((c) => c.test(p));
-        if (hit) offenders.push(`${id} → ${p} (${hit.label})`);
+        if (hit) offenders.push(`${id} → ${raw} (${hit.label})`);
       }
     }
     assert.deepStrictEqual(
@@ -107,6 +126,20 @@ describe("template guard — collision-prone outputs", () => {
         `precedence would clobber. Register a merge strategy (deep-merge for JSON/.env, ` +
         `append/AST for shared singletons) before shipping:\n  ${offenders.join("\n  ")}`,
     );
+  });
+
+  it("normalizes path variations so they cannot bypass the matchers", () => {
+    for (const variant of [
+      "./package.json",
+      "src\\index.ts",
+      "./app/layout.tsx",
+    ]) {
+      const p = normalizePath(variant);
+      assert.ok(
+        COLLISION_PRONE.some((c) => c.test(p)),
+        `${variant} (→ ${p}) should be flagged collision-prone after normalization`,
+      );
+    }
   });
 });
 
