@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./in-memory": {
+      "types": "./dist/in-memory.d.ts",
+      "default": "./dist/in-memory.js"
     }
   },
   "files": [
@@ -21,7 +25,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"__tests__/**/*.test.ts\"",
     "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\"",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "gen:bundle": "tsx scripts/generate-template-bundle.ts"
   },
   "dependencies": {
     "@hexagen/shared": "workspace:*"
