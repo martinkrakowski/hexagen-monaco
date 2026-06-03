@@ -9,7 +9,11 @@ import type {
   AnswerMap,
   GeneratedFileRecord,
 } from "../domain/index.js";
-import { isOutputEnabled, outputPath } from "../domain/index.js";
+import {
+  isOutputEnabled,
+  outputPath,
+  isContainedRelativePath,
+} from "../domain/index.js";
 
 /**
  * Loads a template source file's raw content by template id + path relative to
@@ -55,6 +59,14 @@ export class InMemoryFileEmitter implements FileEmitterPort {
     for (const out of manifest.outputs) {
       if (!isOutputEnabled(out, answers)) continue;
       const rel = outputPath(out);
+      // Manifest paths aren't validated against traversal; the Map key is later
+      // written to disk/ZIP/GitHub, so reject an escaping path (as the FS emitter
+      // does) rather than emit outside the project root.
+      if (!isContainedRelativePath(rel)) {
+        throw new Error(
+          `Template '${manifest.id}' output path '${rel}' escapes the project root`,
+        );
+      }
       const raw = await this.loadFile(manifest.id, rel);
       if (raw === null) continue; // planned output without a source file — skip
 

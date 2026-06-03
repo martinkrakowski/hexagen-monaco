@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isContainedRelativePath } from "../domain/index.js";
 import type { TemplateFileLoader } from "./in-memory-file-emitter.adapter.js";
 
 /**
@@ -11,6 +12,13 @@ export function createFileSystemTemplateFileLoader(
   templatesDir: string,
 ): TemplateFileLoader {
   return async (templateId, relPath) => {
+    // Reject a relPath that would escape templates/<id>/files (../ or absolute)
+    // before touching the filesystem.
+    if (!isContainedRelativePath(relPath)) {
+      throw new Error(
+        `Template '${templateId}' source path '${relPath}' escapes the template directory`,
+      );
+    }
     const file = path.join(templatesDir, templateId, "files", relPath);
     try {
       return await fs.readFile(file, "utf-8");

@@ -33,3 +33,4 @@ export {
 } from "./template-config.js";
 
 export { conflictFilePath } from "./conflict-path.js";
+export { isContainedRelativePath } from "./output-path-safety.js";
