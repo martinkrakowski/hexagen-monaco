@@ -11,3 +11,8 @@ export { DefaultingQuestionEngine } from "./defaulting-question-engine.adapter.j
 export { createFileSystemTemplateFileLoader } from "./file-system-template-file-loader.js";
 export { InMemoryAddOnMaterializer } from "./in-memory-add-on-materializer.js";
 export type { MaterializeAddOnsResult } from "./in-memory-add-on-materializer.js";
+
+// Generated-bundle factory: the serverless-safe materializer for the web path.
+export { createInMemoryMaterializer } from "./create-in-memory-materializer.js";
+export { buildTemplateBundle } from "./build-template-bundle.js";
+export type { TemplateBundle } from "./build-template-bundle.js";
