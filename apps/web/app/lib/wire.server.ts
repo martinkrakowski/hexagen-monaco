@@ -118,7 +118,7 @@ let _materializerLoad: Promise<AddOnMaterializerPort> | null = null;
  * later call with the same rejected promise.
  */
 const addOnMaterializer: AddOnMaterializerPort = {
-  async materialize(addOnsAnswers) {
+  async materialize(addOnsAnswers, options) {
     _materializerLoad ??= import("@hexagen/template-engine/in-memory")
       .then(({ createInMemoryMaterializer }) => createInMemoryMaterializer())
       .catch((error: unknown) => {
@@ -126,7 +126,7 @@ const addOnMaterializer: AddOnMaterializerPort = {
         throw error;
       });
     const materializer = await _materializerLoad;
-    return materializer.materialize(addOnsAnswers);
+    return materializer.materialize(addOnsAnswers, options);
   },
 };
 
