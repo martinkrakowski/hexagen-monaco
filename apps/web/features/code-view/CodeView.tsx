@@ -16,7 +16,7 @@ import { GenerationNoticesBar } from "./GenerationNoticesBar";
 import { useProjectGeneration } from "./hooks/useProjectGeneration";
 import { useArchitectureDownload } from "./hooks/useArchitectureDownload";
 import type { WizardData } from "@hexagen/project-configuration";
-import type { ViewFileNode } from "./types";
+import { type ViewFileNode, ADDON_NOTICES_FILENAME } from "./types";
 
 interface CodeViewProps {
   wizardData: WizardData;
@@ -141,7 +141,14 @@ export const CodeView: React.FC<CodeViewProps> = ({
           </div>
         )}
 
-        <GenerationNoticesBar notices={notices} />
+        <GenerationNoticesBar
+          notices={notices}
+          onOpenNoticesFile={
+            files.has(ADDON_NOTICES_FILENAME)
+              ? () => onFileSelect(ADDON_NOTICES_FILENAME)
+              : undefined
+          }
+        />
 
         {selectedFile ? (
           <div className="flex flex-col h-full">

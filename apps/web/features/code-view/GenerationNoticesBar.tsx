@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Info, X } from "lucide-react";
-
-export interface GenerationNotices {
-  /** Generated files an add-on overrode — informational. */
-  warnings: string[];
-  /** Add-on selections that were omitted (bad selection) — see the sidecar. */
-  errors: string[];
-}
+import { type GenerationNotices, ADDON_NOTICES_FILENAME } from "./types";
 
 /**
  * Surfaces add-on materialization notices from the last generation, at the top
@@ -25,8 +19,11 @@ export interface GenerationNotices {
  */
 export function GenerationNoticesBar({
   notices,
+  onOpenNoticesFile,
 }: {
   notices: GenerationNotices;
+  /** When provided, the sidecar reference renders as a button that opens it. */
+  onOpenNoticesFile?: () => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const errorCount = notices.errors.length;
@@ -39,6 +36,20 @@ export function GenerationNoticesBar({
   if (dismissed || (errorCount === 0 && warningCount === 0)) return null;
 
   const hasErrors = errorCount > 0;
+
+  // The sidecar reference is a button when the host wires an open handler (deep-
+  // links to the generated file in the tree), else inert inline code.
+  const noticesFileRef = onOpenNoticesFile ? (
+    <button
+      type="button"
+      onClick={onOpenNoticesFile}
+      className="font-mono underline underline-offset-2 hover:no-underline"
+    >
+      {ADDON_NOTICES_FILENAME}
+    </button>
+  ) : (
+    <code className="font-mono">{ADDON_NOTICES_FILENAME}</code>
+  );
 
   return (
     <div
@@ -61,9 +72,7 @@ export function GenerationNoticesBar({
         {hasErrors && (
           <p>
             {errorCount} add-on{errorCount === 1 ? " was" : "s were"} not
-            applied — see{" "}
-            <code className="font-mono">HEXAGEN-ADDON-NOTICES.md</code> in the
-            project.
+            applied — see {noticesFileRef} in the project.
           </p>
         )}
         {warningCount > 0 && (
