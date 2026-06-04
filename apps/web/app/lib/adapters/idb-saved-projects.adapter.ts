@@ -1,5 +1,6 @@
 import { get, set } from "idb-keyval";
 import { projectConfigSchema } from "@hexagen/project-configuration";
+import { withFormStateDefaults } from "../form-state-defaults";
 import type {
   SavedProject,
   SavedProjectsPersistencePort,
@@ -9,45 +10,6 @@ import type {
 } from "@hexagen/shared";
 
 const SAVED_PROJECTS_KEY = "hexagen:saved-projects";
-
-/**
- * Canonical all-defaults `formState`, derived from the schema itself — every
- * top-level field of `projectConfigSchema` is `.default(...)`, so parsing `{}`
- * yields them. Used as the merge base for records that fail strict validation.
- *
- * Derived via `safeParse` (not `parse`): if a future schema change makes `{}`
- * un-defaultable, this degrades to a minimal floor instead of throwing at module
- * load and white-screening the whole app.
- */
-function deriveDefaultFormState(): Record<string, unknown> {
-  const parsed = projectConfigSchema.safeParse({});
-  return parsed.success
-    ? (parsed.data as Record<string, unknown>)
-    : { addOnsAnswers: {} };
-}
-const DEFAULT_FORM_STATE = deriveDefaultFormState();
-
-/**
- * Fill missing top-level defaults onto a drifted formState while preserving
- * every present (incl. drifted) field. `structuredClone`s the defaults per call
- * so no two records share the module-level default's nested `{}`/`[]` references
- * (a later in-place mutation would otherwise poison sibling records).
- *
- * `addOnsAnswers` is the one field we sanitize rather than preserve: it has a
- * strict downstream contract (`readAddOnAnswers` → route 400) when present-but-
- * malformed, so a preserved record would fail to generate/export. A malformed
- * value carries no renderable user intent, so we reset it to `{}`.
- */
-function preserveWithDefaults(
-  rawFormState: Record<string, unknown>,
-): Record<string, unknown> {
-  const merged = { ...structuredClone(DEFAULT_FORM_STATE), ...rawFormState };
-  const addOns = merged.addOnsAnswers;
-  if (typeof addOns !== "object" || addOns === null || Array.isArray(addOns)) {
-    merged.addOnsAnswers = {};
-  }
-  return merged;
-}
 
 /**
  * Normalize the raw IDB value into `SavedProject[]` at the load perimeter, so
@@ -66,7 +28,7 @@ function preserveWithDefaults(
  *   silently drop them (symmetry with the preserve path — never drop).
  * - **present but schema-invalid `formState`** (e.g. a nested enum tightened/
  *   renamed since it was saved — this repo has had such drift) → **preserved**
- *   via `preserveWithDefaults` + logged. Never dropped: the app already renders
+ *   via `withFormStateDefaults` + logged. Never dropped: the app already renders
  *   this "drifted" data today, so dropping it would be a silent regression.
  *
  * One bad record never fails the whole load (per-record isolation) — that would
@@ -84,6 +46,7 @@ export function normalizeLoadedProjects(
       entry && typeof entry === "object" && !Array.isArray(entry)
         ? (entry as Record<string, unknown>)
         : {};
+
     // No usable string id → the record can't be keyed/opened/deleted; drop it.
     if (typeof record.id !== "string") {
       logger?.warn("[saved-projects] dropping a record — missing/invalid id");
@@ -130,8 +93,10 @@ export function normalizeLoadedProjects(
     }
 
     // Preserve-with-defaults: keep every present field (incl. drifted ones the
-    // app still renders) and fill only missing top-level defaults. Log the
-    // failing paths so we can tell known enum drift from a new corruption vector.
+    // app still renders) and fill only missing top-level defaults via the shared
+    // helper (schema defaults + structuredClone isolation + addOnsAnswers
+    // sanitization). Log the failing paths so we can tell known enum drift from
+    // a new corruption vector.
     const issues =
       parsed.error.issues.map((i) => i.path.join(".")).join(", ") || "(root)";
     logger?.warn(
@@ -140,8 +105,8 @@ export function normalizeLoadedProjects(
     out.push({
       ...(record as unknown as SavedProject),
       name,
-      formState: preserveWithDefaults(
-        rawFormState as Record<string, unknown>,
+      formState: withFormStateDefaults(
+        rawFormState,
       ) as SavedProject["formState"],
     });
   }
