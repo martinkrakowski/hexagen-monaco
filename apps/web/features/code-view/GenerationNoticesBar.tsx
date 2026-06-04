@@ -42,7 +42,9 @@ export function GenerationNoticesBar({
 
   return (
     <div
-      role={hasErrors ? "alert" : "status"}
+      // Always a non-failure advisory (generation succeeded; add-ons were just
+      // omitted/overridden) — so `status` + polite, never an assertive `alert`.
+      role="status"
       aria-live="polite"
       className={
         hasErrors
