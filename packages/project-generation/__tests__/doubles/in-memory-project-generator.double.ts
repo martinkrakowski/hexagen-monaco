@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type {
   ExternalProjectGeneratorPort,
   GeneratorError,
@@ -42,11 +44,22 @@ export class InMemoryProjectGeneratorDouble implements ExternalProjectGeneratorP
       return { success: false, error: this.failureError };
     }
 
+    const files = new Map([["README.md", "# Test Project"]]);
+
+    // Write the core files to targetRoot like the real adapter, so use-case
+    // tests exercise the genuine on-disk overwrite path (an add-on file
+    // replacing a core file that already exists on disk).
+    for (const [rel, content] of files) {
+      const dest = path.join(targetRoot, rel);
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.writeFile(dest, content, "utf-8");
+    }
+
     const project = Project.create({
       id: `test-${this.callCount}`,
       name: manifest.system ?? "test-project",
       rootName: manifest.system ?? "test-project",
-      files: new Map([["README.md", "# Test Project"]]),
+      files,
     });
 
     this.generatedProjects.push(project);

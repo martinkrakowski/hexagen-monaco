@@ -75,7 +75,12 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
     const entries = await fs.readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
-      const relativePath = path.join(base, entry.name);
+      // Normalize to forward slashes so keys match the materializer's posix
+      // paths (and stay stable on Windows) — the bundle generator does the same.
+      const relativePath = path
+        .join(base, entry.name)
+        .split(path.sep)
+        .join("/");
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {

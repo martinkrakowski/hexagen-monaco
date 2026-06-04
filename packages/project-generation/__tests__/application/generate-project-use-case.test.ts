@@ -162,7 +162,9 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       "export const feature = true;",
     );
 
-    // Temp dir (what ZIP/GitHub capture): the same files reached disk pre-export.
+    // Temp dir (what ZIP/GitHub capture): the add-on README OVERWROTE the core
+    // README the generator wrote to disk ("# Test Project"), and the new file
+    // reached disk too — proving template-overrides-core on disk, not just in-mem.
     const onDisk = recorder.getCapturedFiles();
     assert.strictEqual(onDisk.get("README.md"), "# From add-on");
     assert.strictEqual(

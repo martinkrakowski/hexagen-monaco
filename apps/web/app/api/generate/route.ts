@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createWebLogger } from "@/lib/wire.shared";
 import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
-import type { ExportConfig, AddOnAnswers } from "@hexagen/project-generation";
+import type { ExportConfig } from "@hexagen/project-generation";
+import { readAddOnAnswers } from "@/lib/add-on-answers";
 import { getToken } from "next-auth/jwt";
 
 interface GenerateRequestBody {
@@ -83,37 +84,16 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // The wizard gathers per-template answers under `addOnsAnswers`. This is
-    // untrusted JSON from a public route, so validate the shape before trusting
-    // the cast: a malformed *payload* is a 400, distinct from a valid-but-bad
+    // Validate the untrusted addOnsAnswers shape (shared with the export
+    // routes): a malformed *payload* is a 400, distinct from a valid-but-bad
     // add-on *selection* (which the materializer reports as `errors`, not here).
-    const isAddOnAnswers = (value: unknown): value is AddOnAnswers =>
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      Object.values(value).every(
-        (answers) =>
-          typeof answers === "object" &&
-          answers !== null &&
-          !Array.isArray(answers) &&
-          Object.values(answers).every(
-            (v) =>
-              typeof v === "string" ||
-              typeof v === "boolean" ||
-              (Array.isArray(v) && v.every((item) => typeof item === "string")),
-          ),
-      );
-
-    const rawAddOnsAnswers = wizardData?.addOnsAnswers;
-    if (rawAddOnsAnswers !== undefined && !isAddOnAnswers(rawAddOnsAnswers)) {
+    const addOnsAnswers = readAddOnAnswers(wizardData);
+    if (addOnsAnswers === null) {
       return NextResponse.json(
         { error: "Invalid addOnsAnswers payload" },
         { status: 400 },
       );
     }
-    const addOnsAnswers: AddOnAnswers = isAddOnAnswers(rawAddOnsAnswers)
-      ? rawAddOnsAnswers
-      : {};
 
     const useCase = getGenerateProject(destination);
     const result = await useCase.execute({
