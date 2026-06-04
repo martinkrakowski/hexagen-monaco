@@ -16,6 +16,22 @@ describe("normalizeLoadedProjects", () => {
     assert.deepStrictEqual(fs(result[0]).addOnsAnswers, {});
   });
 
+  it("preserves unknown/future top-level keys on the VALID path (no silent drop)", () => {
+    // projectConfigSchema strips unknown keys on parse; without re-layering, a
+    // schema-valid record would lose extra keys — asymmetric with the preserve
+    // path and a Path 4 violation (never silently drop user data).
+    const result = normalizeLoadedProjects([
+      {
+        id: "fwd",
+        name: "Forward-compat",
+        formState: { addOnsAnswers: {}, futureField: "keep me" },
+      },
+    ]);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(fs(result[0]).futureField, "keep me");
+    assert.deepStrictEqual(fs(result[0]).addOnsAnswers, {});
+  });
+
   it("preserves a present addOnsAnswers", () => {
     const result = normalizeLoadedProjects([
       {

@@ -61,7 +61,9 @@ function preserveWithDefaults(
  *   display-only (sorted via `.toLowerCase()`), so a valid project with a bad
  *   name is preserved — and the UI no longer crashes on it.
  * - **`formState` not an object** → dropped + logged (genuine corruption).
- * - **valid `formState`** → strict-parsed (defaults filled).
+ * - **valid `formState`** → strict-parsed (defaults filled); unknown/future
+ *   top-level keys are re-layered from the raw record so the valid path doesn't
+ *   silently drop them (symmetry with the preserve path — never drop).
  * - **present but schema-invalid `formState`** (e.g. a nested enum tightened/
  *   renamed since it was saved — this repo has had such drift) → **preserved**
  *   via `preserveWithDefaults` + logged. Never dropped: the app already renders
@@ -111,7 +113,13 @@ export function normalizeLoadedProjects(
       out.push({
         ...(record as unknown as SavedProject),
         name,
-        formState: parsed.data,
+        // Re-layer raw under parsed.data: projectConfigSchema strips unknown
+        // top-level keys, and Path 4 must not silently drop them (symmetry with
+        // the preserve path). parsed.data wins for every known/defaulted key.
+        formState: {
+          ...(rawFormState as Record<string, unknown>),
+          ...parsed.data,
+        } as SavedProject["formState"],
       });
       continue;
     }
