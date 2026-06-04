@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import type { IncomingMessage } from "node:http";
-import { authenticate } from "./bearer.js";
+import { authenticate, assertConfigured } from "./bearer.js";
 
 function reqWith(authorization?: string): IncomingMessage {
   return {
@@ -31,5 +31,23 @@ describe("bearer authenticate", () => {
   it("allows the correct bearer token", async () => {
     process.env.MCP_BEARER_TOKEN = "s3cret";
     assert.equal(await authenticate(reqWith("Bearer s3cret")), true);
+  });
+});
+
+describe("bearer assertConfigured", () => {
+  const original = process.env.MCP_BEARER_TOKEN;
+  afterEach(() => {
+    if (original === undefined) delete process.env.MCP_BEARER_TOKEN;
+    else process.env.MCP_BEARER_TOKEN = original;
+  });
+
+  it("throws at startup when MCP_BEARER_TOKEN is unset", () => {
+    delete process.env.MCP_BEARER_TOKEN;
+    assert.throws(() => assertConfigured(), /MCP_BEARER_TOKEN/);
+  });
+
+  it("passes when MCP_BEARER_TOKEN is set", () => {
+    process.env.MCP_BEARER_TOKEN = "s3cret";
+    assert.doesNotThrow(() => assertConfigured());
   });
 });

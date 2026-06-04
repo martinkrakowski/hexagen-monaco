@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import type { IncomingMessage } from "node:http";
-import { authenticate } from "./oauth.js";
+import { authenticate, assertConfigured } from "./oauth.js";
 
 function reqWith(authorization?: string): IncomingMessage {
   return {
@@ -28,5 +28,23 @@ describe("oauth authenticate (scaffold — fail closed)", () => {
     process.env.MCP_OAUTH_ISSUER_URL = "https://issuer.example.com";
     assert.equal(await authenticate(reqWith("Bearer token")), false);
     assert.equal(await authenticate(reqWith(undefined)), false);
+  });
+});
+
+describe("oauth assertConfigured", () => {
+  const original = process.env.MCP_OAUTH_ISSUER_URL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.MCP_OAUTH_ISSUER_URL;
+    else process.env.MCP_OAUTH_ISSUER_URL = original;
+  });
+
+  it("throws at startup when MCP_OAUTH_ISSUER_URL is unset", () => {
+    delete process.env.MCP_OAUTH_ISSUER_URL;
+    assert.throws(() => assertConfigured(), /MCP_OAUTH_ISSUER_URL/);
+  });
+
+  it("passes when MCP_OAUTH_ISSUER_URL is set", () => {
+    process.env.MCP_OAUTH_ISSUER_URL = "https://issuer.example.com";
+    assert.doesNotThrow(() => assertConfigured());
   });
 });

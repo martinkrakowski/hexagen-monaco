@@ -36,3 +36,17 @@ export async function authenticate(req: IncomingMessage): Promise<boolean> {
   //       and return true only for a valid token carrying the required scopes.
   return false; // <- replace with real verification; fail-closed until then
 }
+
+/**
+ * Startup configuration check (called once from the HTTP transport factory):
+ * OAuth verification needs the issuer URL. Throw at startup so a missing issuer
+ * is a loud error rather than a silent deny-all. (Even when configured, this
+ * scaffold denies until you implement verification above.)
+ */
+export function assertConfigured(): void {
+  if (!process.env.MCP_OAUTH_ISSUER_URL) {
+    throw new Error(
+      "Refusing to start: MCP_AUTH_MODE=oauth requires MCP_OAUTH_ISSUER_URL to be set.",
+    );
+  }
+}

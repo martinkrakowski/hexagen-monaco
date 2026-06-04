@@ -51,6 +51,15 @@ is a **fail-closed scaffold**: it denies all requests until you wire JWKS
 verification (the `jose` snippet is in the file). A scaffold that returned `true`
 would be dangerously misleading, so the default is deny.
 
+Each module also exports **`assertConfigured()`**, called once at startup from the
+HTTP factory (`http.ts`), which throws if the chosen mode's secret
+(`MCP_BEARER_TOKEN` / `MCP_OAUTH_ISSUER_URL`) is unset — turning a silent
+deny-all into a loud startup error. (The manifest's `envVars` intentionally lists
+only the always-required `MCP_TRANSPORT`/`MCP_HTTP_PORT`/`MCP_AUTH_MODE`; the
+secrets are conditional on `auth`, so listing both would make
+`validate-templates` flag the unused mode's secret. A schema for conditional env
+vars would be the proper static fix — an engine follow-up, not this addon.)
+
 ## Deliberate deviations from the planning doc
 
 - **`server.ts` is not re-emitted** (seam, above).

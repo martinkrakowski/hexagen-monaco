@@ -7,7 +7,7 @@ import {
 } from "node:http";
 import type { TransportFactory } from "../server.js";
 import { assertSafeTransport } from "../guard.js";
-import { authenticate } from "../auth/{auth}.js";
+import { authenticate, assertConfigured } from "../auth/{auth}.js";
 
 /**
  * Streamable-HTTP transport factory. Unlike stdio (a one-shot subprocess pipe),
@@ -25,9 +25,12 @@ import { authenticate } from "../auth/{auth}.js";
  * instead of `undefined` (see the SDK docs).
  */
 export const createHttpTransport: TransportFactory = async () => {
-  // Defense-in-depth: refuse to expose the server over the network without auth,
-  // even if MCP_AUTH_MODE was cleared in a hand-edited .env.
+  // Defense-in-depth: refuse to expose the server over the network without auth
+  // (even if MCP_AUTH_MODE was cleared in a hand-edited .env), and fail fast when
+  // the chosen auth's secret is unset — otherwise the server would start and
+  // silently deny every request.
   assertSafeTransport(process.env);
+  assertConfigured();
 
   const { StreamableHTTPServerTransport } = await import(
     "@modelcontextprotocol/sdk/server/streamableHttp.js"

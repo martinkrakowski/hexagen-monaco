@@ -21,6 +21,21 @@ export async function authenticate(req: IncomingMessage): Promise<boolean> {
 }
 
 /**
+ * Startup configuration check (called once from the HTTP transport factory): the
+ * bearer transport is unusable without a token — an unset token fail-closes and
+ * silently denies every request. Throw at startup so a missing secret is a loud,
+ * immediate error rather than a confusing wall of 401s.
+ */
+export function assertConfigured(): void {
+  if (!process.env.MCP_BEARER_TOKEN) {
+    throw new Error(
+      "Refusing to start: MCP_AUTH_MODE=bearer requires MCP_BEARER_TOKEN to be set " +
+        "(an unset token denies every request).",
+    );
+  }
+}
+
+/**
  * Length-checked constant-time string compare. `timingSafeEqual` throws on a
  * length mismatch, so the length guard runs first (token length is not
  * meaningfully secret); equal-length tokens are then compared without an

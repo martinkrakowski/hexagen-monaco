@@ -48,8 +48,8 @@
   "checklist": [
     "Set MCP_TRANSPORT=streamable-http, MCP_HTTP_PORT, and MCP_AUTH_MODE in .env (see .env.mcp-http.example).",
     "Never run streamable-http with MCP_AUTH_MODE unset or 'none' — the server refuses to start (guard.ts).",
-    "bearer: set MCP_BEARER_TOKEN to the shared secret clients send as 'Authorization: Bearer <token>'.",
-    "oauth: set MCP_OAUTH_ISSUER_URL and implement token verification in src/infrastructure/mcp/auth/oauth.ts — it fail-closes (denies all) until you do; install `jose` for JWKS verification.",
+    "bearer: set MCP_BEARER_TOKEN to the shared secret clients send as 'Authorization: Bearer <token>' — the server refuses to start if it is unset.",
+    "oauth: set MCP_OAUTH_ISSUER_URL (the server refuses to start without it) and implement token verification in src/infrastructure/mcp/auth/oauth.ts — it fail-closes (denies all) until you do; install `jose` for JWKS verification.",
     "Verify: start the server (npx tsx bin/cli.ts) and POST an MCP initialize to http://localhost:<port> with a valid Authorization header.",
     "For remote deploy, containerize with the `docker` template."
   ]
