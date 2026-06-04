@@ -73,9 +73,33 @@ export function wizardToManifest(
   const packageManager =
     packageManagerVersions[packageManagerId] ?? packageManagerId;
 
-  const boundedContexts = wizardData.boundedContexts
-    ? [...wizardData.boundedContexts]
-    : [];
+  // Defensive: a drifted/corrupt saved project (Path 4 preserves these verbatim
+  // at the IDB load perimeter) can carry a non-array `boundedContexts`, or entries
+  // without a string `name`. A manifest can't be built from those, and
+  // `bc.name.toLowerCase()` below would throw → a 500 export. Coerce to a clean
+  // array of named contexts; the raw data stays in formState for the form to
+  // surface/fix — we just don't crash generation/export.
+  const rawBoundedContexts = (wizardData as { boundedContexts?: unknown })
+    .boundedContexts;
+  const boundedContexts: BoundedContext[] = (
+    Array.isArray(rawBoundedContexts) ? rawBoundedContexts : []
+  ).filter(
+    (bc): bc is BoundedContext =>
+      !!bc &&
+      typeof bc === "object" &&
+      typeof (bc as { name?: unknown }).name === "string",
+  );
+
+  // Same defensive coercion for peerMappings (wired into depends_on below): a
+  // non-array value would throw on `.filter`, a non-object entry on member access.
+  const rawPeerMappings = (wizardData as { peerMappings?: unknown })
+    .peerMappings;
+  const peerMappings = (
+    Array.isArray(rawPeerMappings) ? rawPeerMappings : []
+  ).filter(
+    (m): m is NonNullable<WizardData["peerMappings"]>[number] =>
+      !!m && typeof m === "object",
+  );
 
   // Enforce Shared Context
   const hasShared = boundedContexts.some(
@@ -229,9 +253,9 @@ export function wizardToManifest(
       // dependencies are NOT added to depends_on. Cross-context communication
       // must go through event-bus or network boundaries, not direct imports.
       if (!isStrictTemplate) {
-        wizardData.peerMappings
-          ?.filter((m) => m.consumerContext === bc.id)
-          ?.forEach((m) => {
+        peerMappings
+          .filter((m) => m.consumerContext === bc.id)
+          .forEach((m) => {
             const provider = boundedContexts.find(
               (p) => p.id === m.providerContext,
             );
