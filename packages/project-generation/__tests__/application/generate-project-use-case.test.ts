@@ -227,6 +227,64 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     );
   });
 
+  it("sanitizes untrusted error text in the notices sidecar (no Markdown injection)", async () => {
+    // Error text can embed template ids from untrusted request keys.
+    materializer.setResult({
+      errors: ["Unknown template: [pwn](http://evil)\nsecond line `code`"],
+    });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { "[pwn](http://evil)": {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    // Collapsed to one line, backticks neutralized, wrapped in inline code so
+    // the link stays literal (won't render as a clickable link / break the list).
+    assert.ok(
+      notice.includes(
+        "- `Unknown template: [pwn](http://evil) second line 'code'`",
+      ),
+      "error should be one-lined, backtick-neutralized, and inline-code-wrapped",
+    );
+    assert.ok(
+      !notice.includes("\nsecond line"),
+      "a newline in the error must not break the list structure",
+    );
+  });
+
+  it("caps a very long error to keep the notices artifact from bloating", async () => {
+    materializer.setResult({ errors: ["x".repeat(5000)] });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { bad: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    assert.ok(notice.includes("…"), "an over-long error should be truncated");
+    assert.ok(
+      !notice.includes("x".repeat(400)),
+      "the raw 5000-char error must not be embedded verbatim",
+    );
+  });
+
   it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {
     const useCase = new GenerateProjectUseCase(
       generator,

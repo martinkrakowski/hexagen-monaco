@@ -20,6 +20,19 @@ import path from "node:path";
  */
 const ADD_ON_NOTICES_FILE = "HEXAGEN-ADDON-NOTICES.md";
 
+/**
+ * Render an error as a single, Markdown-safe list item. The error text can embed
+ * template ids derived from untrusted request keys, so: collapse whitespace /
+ * newlines (can't break the list structure), cap the length (can't bloat the
+ * artifact), neutralize backticks, and wrap in inline code so any links or
+ * emphasis stay literal in the rendered HEXAGEN-ADDON-NOTICES.md.
+ */
+function toNoticeItem(error: string): string {
+  const oneLine = error.replace(/\s+/g, " ").trim();
+  const capped = oneLine.length > 300 ? `${oneLine.slice(0, 300)}…` : oneLine;
+  return `- \`${capped.replace(/`/g, "'")}\``;
+}
+
 function renderAddOnNotices(errors: string[]): string {
   return [
     "# Add-on templates were not applied",
@@ -28,7 +41,7 @@ function renderAddOnNotices(errors: string[]): string {
     "only the core scaffold. **This file is safe to delete.**",
     "",
     "## Problems",
-    ...errors.map((e) => `- ${e}`),
+    ...errors.map(toNoticeItem),
     "",
   ].join("\n");
 }
@@ -117,8 +130,10 @@ export class GenerateProjectUseCase {
         // Bad selection (errors, no files): write a notices file into the
         // artifact so a ZIP / GitHub consumer learns why their add-ons are
         // absent — the binary download can't carry the errors payload. Warnings
-        // get no sidecar (they surface in the UI).
-        if (errors.length > 0) {
+        // get no sidecar (they surface in the UI). The `files.size === 0` guard
+        // keeps a future partial-output contract from writing a misleading
+        // "not applied" notice into an export that does contain add-on files.
+        if (errors.length > 0 && materialized.files.size === 0) {
           const notice = new Map([
             [ADD_ON_NOTICES_FILE, renderAddOnNotices(errors)],
           ]);
