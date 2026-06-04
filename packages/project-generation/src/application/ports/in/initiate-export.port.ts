@@ -4,6 +4,7 @@ import type {
   GitHubExportConfig,
   ExportResult,
 } from "../out/project-exporter.port.js";
+import type { AddOnAnswers } from "../out/add-on-materializer.port.js";
 
 export type ExportTarget = "zip" | "github";
 
@@ -16,6 +17,12 @@ export interface ExportIntent {
   target: ExportTarget;
   workspaceRef: WorkspaceRef;
   repoConfig?: GitHubExportConfig;
+  /**
+   * Per-template wizard answers, threaded into generation so the exported ZIP /
+   * GitHub repo include the selected add-on templates (matching the code-view
+   * path in `/api/generate`). Omitted/empty → core project only.
+   */
+  addOnsAnswers?: AddOnAnswers;
 }
 
 export type ZipExportValue = { zip: Buffer; filename: string };

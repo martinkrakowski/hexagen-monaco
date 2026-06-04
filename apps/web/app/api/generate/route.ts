@@ -6,6 +6,7 @@ import { createWebLogger } from "@/lib/wire.shared";
 import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import type { ExportConfig } from "@hexagen/project-generation";
+import { readAddOnAnswers } from "@/lib/add-on-answers";
 import { getToken } from "next-auth/jwt";
 
 interface GenerateRequestBody {
@@ -83,10 +84,22 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    // Validate the untrusted addOnsAnswers shape (shared with the export
+    // routes): a malformed *payload* is a 400, distinct from a valid-but-bad
+    // add-on *selection* (which the materializer reports as `errors`, not here).
+    const addOnsAnswers = readAddOnAnswers(wizardData);
+    if (addOnsAnswers === null) {
+      return NextResponse.json(
+        { error: "Invalid addOnsAnswers payload" },
+        { status: 400 },
+      );
+    }
+
     const useCase = getGenerateProject(destination);
     const result = await useCase.execute({
       manifest: finalManifest,
       exportConfig,
+      addOnsAnswers,
     });
 
     if (!result.success) {
@@ -96,7 +109,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { project, zipBuffer } = result.value;
+    const { project, zipBuffer, warnings, errors } = result.value;
+
+    // Telemetry: record add-on materialization issues once per run (deduped).
+    // A bad add-on selection surfaces as `errors` here, not as a failed result —
+    // the core project still generated, so the response stays 200 with the
+    // issues attached (UI surfacing is deferred to a later PR).
+    if (warnings?.length || errors?.length) {
+      // Bounded summary — counts + a small sample — so a template that overrides
+      // many files can't inflate this single log line unboundedly.
+      const SAMPLE = 5;
+      const summarize = (label: string, xs: string[]): string => {
+        const unique = [...new Set(xs)];
+        const extra = unique.length - SAMPLE;
+        const suffix = extra > 0 ? ` (+${extra} more)` : "";
+        return `${label}=${unique.length} ${JSON.stringify(
+          unique.slice(0, SAMPLE),
+        )}${suffix}`;
+      };
+      createWebLogger().warn(
+        `[api/generate] add-on materialization — ${summarize(
+          "warnings",
+          warnings ?? [],
+        )}; ${summarize("errors", errors ?? [])}`,
+      );
+    }
 
     // ZIP output format — return binary response
     if (outputFormat === "zip" && zipBuffer) {
@@ -115,13 +152,18 @@ export async function POST(request: NextRequest) {
       filesObj[path] = content;
     });
 
-    return NextResponse.json({
+    const responseBody: Record<string, unknown> = {
       success: true,
       message: "Project generated successfully",
       projectName: project.name,
       fileCount: project.files.size,
       files: filesObj,
-    });
+    };
+    // Only attach when present, so a no-add-on generation is byte-identical to before.
+    if (warnings?.length) responseBody.warnings = warnings;
+    if (errors?.length) responseBody.errors = errors;
+
+    return NextResponse.json(responseBody);
   } catch (err) {
     const logger = createWebLogger();
     logger.errorWithException(err, "[api/generate] Failed to generate project");

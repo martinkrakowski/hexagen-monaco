@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { InitiateExportUseCase } from "@hexagen/project-generation";
 import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
+import { readAddOnAnswers } from "@/lib/add-on-answers";
 import type { Manifest } from "@hexagen/sync";
 
 export const runtime = "nodejs";
@@ -34,6 +35,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const addOnsAnswers = readAddOnAnswers(body.wizardData);
+    if (addOnsAnswers === null) {
+      return NextResponse.json(
+        { error: "Invalid addOnsAnswers payload" },
+        { status: 400 },
+      );
+    }
+
     const useCase = new InitiateExportUseCase(getGenerateProject);
     const result = await useCase.initiateExport({
       target: "zip",
@@ -41,6 +50,7 @@ export async function POST(request: NextRequest) {
         projectId: body.projectId,
         manifest,
       },
+      addOnsAnswers,
     });
 
     if (!result.success) {

@@ -7,6 +7,8 @@ import {
   ExternalSyncEngineAdapter,
   ArchiveExporterAdapter,
 } from "@hexagen/project-generation";
+import type { AddOnMaterializerPort } from "@hexagen/project-generation";
+import { createInMemoryMaterializer } from "@hexagen/template-engine/in-memory";
 import {
   GitHubExporterAdapter,
   GitHubRepositoryWriterAdapter,
@@ -103,6 +105,22 @@ const emptyLinterReport: LinterReportLike = {
 // Project Generation Wiring
 // ============================================================================
 
+let _addOnMaterializer: AddOnMaterializerPort | null = null;
+
+/**
+ * Composition-root accessor for the add-on template materializer. The instance
+ * is stateless across calls (a fresh emitter/config store per `materialize`),
+ * so one memoized instance safely serves every generation request. Imported
+ * from the `/in-memory` subpath so the ~0.7 MB generated bundle is pulled into
+ * this server-only wiring alone, never into other consumers of the package.
+ */
+const getAddOnMaterializer = (): AddOnMaterializerPort => {
+  if (!_addOnMaterializer) {
+    _addOnMaterializer = createInMemoryMaterializer();
+  }
+  return _addOnMaterializer;
+};
+
 export const getGenerateProject = (
   destination: "archive" | "github" = "archive",
 ): GenerateProjectUseCase => {
@@ -111,7 +129,11 @@ export const getGenerateProject = (
     destination === "github"
       ? new GitHubExporterAdapter()
       : new ArchiveExporterAdapter();
-  return new GenerateProjectUseCase(externalGenerator, exporter);
+  return new GenerateProjectUseCase(
+    externalGenerator,
+    exporter,
+    getAddOnMaterializer(),
+  );
 };
 
 let _repositoryWriter: RepositoryWriterPort | null = null;

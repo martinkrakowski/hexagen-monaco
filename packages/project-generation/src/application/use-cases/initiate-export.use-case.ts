@@ -90,6 +90,7 @@ export class InitiateExportUseCase implements InitiateExportPort {
       const result = await useCase.execute({
         manifest: intent.workspaceRef.manifest,
         exportConfig,
+        addOnsAnswers: intent.addOnsAnswers,
       });
 
       if (!result.success) {

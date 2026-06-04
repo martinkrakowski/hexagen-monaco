@@ -37,6 +37,12 @@ export type {
   GitHubExportConfig,
   ProjectExporterPort,
 } from "./application/ports/out/project-exporter.port.js";
+export type {
+  AddOnMaterializerPort,
+  AddOnAnswers,
+  AddOnAnswerValue,
+  MaterializeResult,
+} from "./application/ports/out/add-on-materializer.port.js";
 
 // Infrastructure exports (implementations)
 export { ExternalSyncEngineAdapter } from "./infrastructure/adapters/external-sync-engine.adapter.js";
