@@ -19,6 +19,16 @@ describe("withFormStateDefaults", () => {
     });
   });
 
+  it("sanitizes a malformed present addOnsAnswers to {} (strict downstream contract)", () => {
+    // null / array / primitive would make readAddOnAnswers return null → route 400.
+    for (const bad of [null, [1], "x", 42]) {
+      assert.deepEqual(
+        withFormStateDefaults({ addOnsAnswers: bad }).addOnsAnswers,
+        {},
+      );
+    }
+  });
+
   it("keeps present (drifted) data verbatim while still padding addOnsAnswers", () => {
     const out = withFormStateDefaults({ boundedContexts: "not-an-array" });
     assert.equal(out.boundedContexts, "not-an-array");
