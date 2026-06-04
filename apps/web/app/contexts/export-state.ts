@@ -47,6 +47,9 @@ export type ExportState =
       message: string;
       destinationUrl?: string;
       githubLink?: GithubLinkData;
+      /** Add-on materialization notice counts; the strip flips to amber when
+       * `errors > 0` (full detail in the project's HEXAGEN-ADDON-NOTICES.md). */
+      notices?: { warnings: number; errors: number };
     }
   | { kind: "error"; destination: ExportDestination; message: string };
 

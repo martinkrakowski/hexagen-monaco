@@ -61,12 +61,25 @@ export async function POST(request: NextRequest) {
     }
 
     if ("zip" in result.value) {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${result.value.filename}"`,
+      };
+      // The binary body can't carry a notices payload, so surface the COUNTS as
+      // sideband headers — the full detail lives in the project's
+      // HEXAGEN-ADDON-NOTICES.md (PR 3a sidecar). The client uses these to flip
+      // the success strip to amber and point at that file.
+      if (result.value.warnings?.length) {
+        headers["X-Hexagen-Addon-Warnings"] = String(
+          result.value.warnings.length,
+        );
+      }
+      if (result.value.errors?.length) {
+        headers["X-Hexagen-Addon-Errors"] = String(result.value.errors.length);
+      }
       return new NextResponse(new Uint8Array(result.value.zip), {
         status: 200,
-        headers: {
-          "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename="${result.value.filename}"`,
-        },
+        headers,
       });
     }
 

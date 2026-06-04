@@ -8,14 +8,41 @@
  * produced by the previous `.catch(() => ({}))` idiom.
  */
 
+/** Add-on materialization notice COUNTS, surfaced from sideband response
+ * headers on a binary download (the full detail lives in the project's
+ * HEXAGEN-ADDON-NOTICES.md). */
+export interface AddOnNoticeCounts {
+  warnings: number;
+  errors: number;
+}
+
 export type FetchJsonResult<T> =
-  | { kind: "success"; data: T }
+  | { kind: "success"; data: T; notices?: AddOnNoticeCounts }
   | { kind: "http-error"; status: number; message: string }
   | { kind: "network-error"; message: string }
   | { kind: "parse-error"; message: string };
 
 interface PostJsonOptions {
   signal?: AbortSignal;
+}
+
+/**
+ * Read add-on notice COUNTS from sideband response headers on a binary
+ * download. Defensive: a missing or non-numeric header (e.g. stripped by a
+ * proxy) reads as 0, and an all-zero result returns `undefined` so callers can
+ * treat it as "no notices".
+ */
+export function parseNoticeCountHeaders(
+  headers: Headers,
+): AddOnNoticeCounts | undefined {
+  const toCount = (raw: string | null): number => {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  };
+  const warnings = toCount(headers.get("x-hexagen-addon-warnings"));
+  const errors = toCount(headers.get("x-hexagen-addon-errors"));
+  if (warnings === 0 && errors === 0) return undefined;
+  return { warnings, errors };
 }
 
 /**
@@ -120,7 +147,11 @@ export async function postForBlob(
 
   try {
     const blob = await response.blob();
-    return { kind: "success", data: blob };
+    return {
+      kind: "success",
+      data: blob,
+      notices: parseNoticeCountHeaders(response.headers),
+    };
   } catch (err) {
     return {
       kind: "parse-error",
