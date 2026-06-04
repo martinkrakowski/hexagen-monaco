@@ -112,14 +112,19 @@ let _materializerLoad: Promise<AddOnMaterializerPort> | null = null;
  * use case only calls that when `addOnsAnswers` is non-empty. So a generation /
  * export request that selects no add-ons never imports or parses the bundle, and
  * it stays out of `wire.server`'s static module graph entirely (only the
- * `/in-memory` subpath carries it). The load promise is memoized, so concurrent
- * first-uses share a single import.
+ * `/in-memory` subpath carries it). A successful load is memoized so concurrent
+ * first-uses share a single import; a failed load is cleared so a transient
+ * import/parse error (e.g. a blip during a rolling restart) doesn't poison every
+ * later call with the same rejected promise.
  */
 const addOnMaterializer: AddOnMaterializerPort = {
   async materialize(addOnsAnswers) {
-    _materializerLoad ??= import("@hexagen/template-engine/in-memory").then(
-      ({ createInMemoryMaterializer }) => createInMemoryMaterializer(),
-    );
+    _materializerLoad ??= import("@hexagen/template-engine/in-memory")
+      .then(({ createInMemoryMaterializer }) => createInMemoryMaterializer())
+      .catch((error: unknown) => {
+        _materializerLoad = null;
+        throw error;
+      });
     const materializer = await _materializerLoad;
     return materializer.materialize(addOnsAnswers);
   },
