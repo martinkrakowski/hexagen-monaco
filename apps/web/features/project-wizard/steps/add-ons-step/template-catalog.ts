@@ -247,6 +247,21 @@ const PRESENTATION: CatalogPresentation[] = [
     companions: ["error-handling", "observability"],
   },
   {
+    id: "mcp-server-http",
+    category: "ai",
+    details: {
+      overview:
+        "Adds a network-exposed Streamable-HTTP transport to the mcp-server base, always authenticated (bearer token or OAuth resource-server). A transport-factory addon — it plugs into the base's registerTransport seam without rewriting server.ts.",
+      includes: [
+        "Streamable-HTTP transport (SDK StreamableHTTPServerTransport, dynamically imported) on a Node http listener",
+        "Per-request auth: bearer (constant-time token check) or OAuth (JWKS-verification scaffold), chosen at install",
+        "Defense-in-depth startup guard: refuses streamable-http without an auth mode",
+        "node:test scaffolds (guard + auth) under --with-tests",
+      ],
+    },
+    companions: ["docker", "observability"],
+  },
+  {
     id: "bullmq",
     category: "infrastructure",
     details: {

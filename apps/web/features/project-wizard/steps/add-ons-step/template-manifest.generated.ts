@@ -371,6 +371,14 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
     requires: ["env-setup"],
     conflicts: [],
   },
+  "mcp-server-http": {
+    id: "mcp-server-http",
+    name: "MCP Server — HTTP transport + auth",
+    description:
+      "Adds a network-exposed Streamable-HTTP transport with always-on auth (bearer or OAuth) to the mcp-server base. A transport-factory addon: it plugs into the base's registerTransport seam (no server.ts rewrite) and ships a defense-in-depth startup guard.",
+    requires: ["mcp-server"],
+    conflicts: [],
+  },
   "microsoft-entra": {
     id: "microsoft-entra",
     name: "Microsoft Entra ID (Azure AD)",

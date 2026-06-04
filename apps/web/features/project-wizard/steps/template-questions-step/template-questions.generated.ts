@@ -892,6 +892,21 @@ export const TEMPLATE_QUESTIONS: Record<
       default: false,
     },
   ],
+  "mcp-server-http": [
+    {
+      id: "auth",
+      type: "select",
+      prompt: "Auth for the HTTP transport?",
+      options: ["bearer", "oauth"],
+      default: "bearer",
+    },
+    {
+      id: "http_port",
+      type: "text",
+      prompt: "HTTP port?",
+      default: "3333",
+    },
+  ],
   "microsoft-entra": [
     {
       id: "redirect_uri",

@@ -1,0 +1,56 @@
+{
+  "id": "mcp-server-http",
+  "name": "MCP Server — HTTP transport + auth",
+  "description": "Adds a network-exposed Streamable-HTTP transport with always-on auth (bearer or OAuth) to the mcp-server base. A transport-factory addon: it plugs into the base's registerTransport seam (no server.ts rewrite) and ships a defense-in-depth startup guard.",
+  "version": "1.0.0",
+  "requires": ["mcp-server"],
+  "conflicts": [],
+  "branch": "feature/generator-template-mcp-server-http",
+  "questions": [
+    {
+      "id": "auth",
+      "type": "select",
+      "prompt": "Auth for the HTTP transport?",
+      "options": ["bearer", "oauth"],
+      "default": "bearer"
+    },
+    {
+      "id": "http_port",
+      "type": "text",
+      "prompt": "HTTP port?",
+      "default": "3333"
+    }
+  ],
+  "envVars": ["MCP_TRANSPORT", "MCP_HTTP_PORT", "MCP_AUTH_MODE"],
+  "outputs": [
+    "src/infrastructure/mcp/transport/http.ts",
+    "src/infrastructure/mcp/transport/register-transports.ts",
+    "src/infrastructure/mcp/guard.ts",
+    "src/infrastructure/mcp/guard.test.ts",
+    ".env.mcp-http.example",
+    {
+      "path": "src/infrastructure/mcp/auth/bearer.ts",
+      "when": { "answer": "auth", "equals": "bearer" }
+    },
+    {
+      "path": "src/infrastructure/mcp/auth/bearer.test.ts",
+      "when": { "answer": "auth", "equals": "bearer" }
+    },
+    {
+      "path": "src/infrastructure/mcp/auth/oauth.ts",
+      "when": { "answer": "auth", "equals": "oauth" }
+    },
+    {
+      "path": "src/infrastructure/mcp/auth/oauth.test.ts",
+      "when": { "answer": "auth", "equals": "oauth" }
+    }
+  ],
+  "checklist": [
+    "Set MCP_TRANSPORT=streamable-http, MCP_HTTP_PORT, and MCP_AUTH_MODE in .env (see .env.mcp-http.example).",
+    "Never run streamable-http with MCP_AUTH_MODE unset or 'none' — the server refuses to start (guard.ts).",
+    "bearer: set MCP_BEARER_TOKEN to the shared secret clients send as 'Authorization: Bearer <token>'.",
+    "oauth: set MCP_OAUTH_ISSUER_URL and implement token verification in src/infrastructure/mcp/auth/oauth.ts — it fail-closes (denies all) until you do; install `jose` for JWKS verification.",
+    "Verify: start the server (npx tsx bin/cli.ts) and POST an MCP initialize to http://localhost:<port> with a valid Authorization header.",
+    "For remote deploy, containerize with the `docker` template."
+  ]
+}
