@@ -12,6 +12,7 @@ import {
 import { mapToFolderTree } from "@/lib/tree-utils";
 import { FileTree } from "./FileTree";
 import { ExplorerToolbar } from "./ExplorerToolbar";
+import { GenerationNoticesBar } from "./GenerationNoticesBar";
 import { useProjectGeneration } from "./hooks/useProjectGeneration";
 import { useArchitectureDownload } from "./hooks/useArchitectureDownload";
 import type { WizardData } from "@hexagen/project-configuration";
@@ -43,6 +44,7 @@ export const CodeView: React.FC<CodeViewProps> = ({
 }) => {
   const {
     files,
+    notices,
     loading,
     isDownloading,
     error,
@@ -138,6 +140,8 @@ export const CodeView: React.FC<CodeViewProps> = ({
             <div className="h-full bg-primary w-1/3 animate-slide" />
           </div>
         )}
+
+        <GenerationNoticesBar notices={notices} />
 
         {selectedFile ? (
           <div className="flex flex-col h-full">
