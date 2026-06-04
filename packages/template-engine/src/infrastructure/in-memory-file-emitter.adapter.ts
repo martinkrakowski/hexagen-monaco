@@ -11,6 +11,7 @@ import type {
 } from "../domain/index.js";
 import {
   isOutputEnabled,
+  isTestOutput,
   outputPath,
   isContainedRelativePath,
 } from "../domain/index.js";
@@ -37,10 +38,27 @@ export type TemplateFileLoader = (
  * against core-generated files is the caller's concern at merge time — this
  * emitter does not write conflict copies.
  */
+/** Run-level options shared across every template emitted in one materialization. */
+export interface InMemoryFileEmitterOptions {
+  /**
+   * Reserved interpolation variables available to every template's file content,
+   * overriding same-named answers — e.g. `{ projectName }`.
+   */
+  reservedVars?: Record<string, string>;
+  /**
+   * When false (default), `*.test.*` / `*.spec.*` outputs are skipped — the
+   * pattern-based `--with-tests` gate (99-gap-analysis.md).
+   */
+  withTests?: boolean;
+}
+
 export class InMemoryFileEmitter implements FileEmitterPort {
   private readonly files = new Map<string, string>();
 
-  constructor(private readonly loadFile: TemplateFileLoader) {}
+  constructor(
+    private readonly loadFile: TemplateFileLoader,
+    private readonly options: InMemoryFileEmitterOptions = {},
+  ) {}
 
   /** A snapshot copy of the files accumulated across every emit() in this run. */
   getFiles(): ReadonlyMap<string, string> {
@@ -59,6 +77,10 @@ export class InMemoryFileEmitter implements FileEmitterPort {
     for (const out of manifest.outputs) {
       if (!isOutputEnabled(out, answers)) continue;
       const rel = outputPath(out);
+      // Pattern-based --with-tests gate: skip test scaffolds unless requested.
+      // Evaluated at emit time, so the full output list still reaches the
+      // upstream dependency/conflict/checklist logic.
+      if (!this.options.withTests && isTestOutput(rel)) continue;
       // Manifest paths aren't validated against traversal; the Map key is later
       // written to disk/ZIP/GitHub, so reject an escaping path (as the FS emitter
       // does) rather than emit outside the project root.
@@ -74,7 +96,10 @@ export class InMemoryFileEmitter implements FileEmitterPort {
       // string[] → comma-joined. Fine for current templates (array answers are used
       // only in `when` gating, never interpolated); authors must not rely on
       // structured emission of an array answer here.
-      const { output, warnings: interpWarnings } = interpolate(raw, answers);
+      // Reserved vars (e.g. projectName) are layered over the template's answers
+      // and win on collision, so a template can't shadow a reserved name.
+      const vars = { ...answers, ...this.options.reservedVars };
+      const { output, warnings: interpWarnings } = interpolate(raw, vars);
       for (const key of interpWarnings) {
         warnings.push(`Unresolved template variable '{${key}}' in ${rel}`);
       }

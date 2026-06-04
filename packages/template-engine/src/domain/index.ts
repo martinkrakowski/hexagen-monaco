@@ -15,6 +15,7 @@ export type {
 export {
   outputPath,
   isOutputEnabled,
+  isTestOutput,
   matchesCondition,
 } from "./output-gating.js";
 
