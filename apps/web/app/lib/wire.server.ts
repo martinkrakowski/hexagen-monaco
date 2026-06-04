@@ -8,7 +8,6 @@ import {
   ArchiveExporterAdapter,
 } from "@hexagen/project-generation";
 import type { AddOnMaterializerPort } from "@hexagen/project-generation";
-import { createInMemoryMaterializer } from "@hexagen/template-engine/in-memory";
 import {
   GitHubExporterAdapter,
   GitHubRepositoryWriterAdapter,
@@ -105,20 +104,30 @@ const emptyLinterReport: LinterReportLike = {
 // Project Generation Wiring
 // ============================================================================
 
-let _addOnMaterializer: AddOnMaterializerPort | null = null;
+let _materializerLoad: Promise<AddOnMaterializerPort> | null = null;
 
 /**
- * Composition-root accessor for the add-on template materializer. The instance
- * is stateless across calls (a fresh emitter/config store per `materialize`),
- * so one memoized instance safely serves every generation request. Imported
- * from the `/in-memory` subpath so the ~0.7 MB generated bundle is pulled into
- * this server-only wiring alone, never into other consumers of the package.
+ * Add-on template materializer, loaded lazily. The ~0.7 MB generated bundle is
+ * pulled in via a dynamic `import()` on the first `materialize()` call — and the
+ * use case only calls that when `addOnsAnswers` is non-empty. So a generation /
+ * export request that selects no add-ons never imports or parses the bundle, and
+ * it stays out of `wire.server`'s static module graph entirely (only the
+ * `/in-memory` subpath carries it). A successful load is memoized so concurrent
+ * first-uses share a single import; a failed load is cleared so a transient
+ * import/parse error (e.g. a blip during a rolling restart) doesn't poison every
+ * later call with the same rejected promise.
  */
-const getAddOnMaterializer = (): AddOnMaterializerPort => {
-  if (!_addOnMaterializer) {
-    _addOnMaterializer = createInMemoryMaterializer();
-  }
-  return _addOnMaterializer;
+const addOnMaterializer: AddOnMaterializerPort = {
+  async materialize(addOnsAnswers) {
+    _materializerLoad ??= import("@hexagen/template-engine/in-memory")
+      .then(({ createInMemoryMaterializer }) => createInMemoryMaterializer())
+      .catch((error: unknown) => {
+        _materializerLoad = null;
+        throw error;
+      });
+    const materializer = await _materializerLoad;
+    return materializer.materialize(addOnsAnswers);
+  },
 };
 
 export const getGenerateProject = (
@@ -132,7 +141,7 @@ export const getGenerateProject = (
   return new GenerateProjectUseCase(
     externalGenerator,
     exporter,
-    getAddOnMaterializer(),
+    addOnMaterializer,
   );
 };
 
