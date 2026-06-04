@@ -11,6 +11,10 @@ export function useProjectGeneration(wizardData: WizardData) {
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isStale, setIsStale] = useState<boolean>(false);
+  const [notices, setNotices] = useState<{
+    warnings: string[];
+    errors: string[];
+  }>({ warnings: [], errors: [] });
 
   const lastGeneratedRef = useRef<string | null>(null);
   const hasAttemptedRef = useRef(false);
@@ -55,6 +59,12 @@ export function useProjectGeneration(wizardData: WizardData) {
         lastGeneratedRef.current = currentDataStr;
         setIsStale(false);
         retryCountRef.current = 0;
+        // Add-on materialization notices (warnings = overrides; errors = a bad
+        // selection whose add-ons were omitted — detail in HEXAGEN-ADDON-NOTICES.md).
+        setNotices({
+          warnings: Array.isArray(data.warnings) ? data.warnings : [],
+          errors: Array.isArray(data.errors) ? data.errors : [],
+        });
 
         try {
           const persistence = getGenerationResultPersistence();
@@ -148,6 +158,7 @@ export function useProjectGeneration(wizardData: WizardData) {
 
   return {
     files,
+    notices,
     loading,
     isDownloading,
     error,
