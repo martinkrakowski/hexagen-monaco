@@ -222,6 +222,7 @@ export function ExportProvider({
       kind: "success",
       destination: "zip",
       message: "ZIP downloaded",
+      notices: result.notices,
     });
   }, [activeProjectId, activeProjectName, activeWizardData]);
 
