@@ -1,22 +1,128 @@
 import { get, set } from "idb-keyval";
+import { projectConfigSchema } from "@hexagen/project-configuration";
+import { withFormStateDefaults } from "../form-state-defaults";
 import type {
   SavedProject,
   SavedProjectsPersistencePort,
   PersistenceError,
   Result,
+  LoggerPort,
 } from "@hexagen/shared";
 
 const SAVED_PROJECTS_KEY = "hexagen:saved-projects";
 
+/**
+ * Normalize the raw IDB value into `SavedProject[]` at the load perimeter, so
+ * the React tree + downstream use cases never see missing keys — notably
+ * `addOnsAnswers`, which the schema defaults to `{}`.
+ *
+ * Per record:
+ * - **no string `id`** → dropped + logged. A record with no usable id can't be
+ *   keyed/opened/deleted — unusable, not recoverable.
+ * - **non-string `name`** → defaulted to `"Untitled"` (not dropped). `name` is
+ *   display-only (sorted via `.toLowerCase()`), so a valid project with a bad
+ *   name is preserved — and the UI no longer crashes on it.
+ * - **`formState` not an object** → dropped + logged (genuine corruption).
+ * - **valid `formState`** → strict-parsed (defaults filled); unknown/future
+ *   top-level keys are re-layered from the raw record so the valid path doesn't
+ *   silently drop them (symmetry with the preserve path — never drop).
+ * - **present but schema-invalid `formState`** (e.g. a nested enum tightened/
+ *   renamed since it was saved — this repo has had such drift) → **preserved**
+ *   via `withFormStateDefaults` + logged. Never dropped: the app already renders
+ *   this "drifted" data today, so dropping it would be a silent regression.
+ *
+ * One bad record never fails the whole load (per-record isolation) — that would
+ * hide every saved project.
+ */
+export function normalizeLoadedProjects(
+  raw: unknown,
+  logger?: LoggerPort,
+): SavedProject[] {
+  if (!Array.isArray(raw)) return [];
+
+  const out: SavedProject[] = [];
+  for (const entry of raw as unknown[]) {
+    const record: Record<string, unknown> =
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : {};
+
+    // No usable string id → the record can't be keyed/opened/deleted; drop it.
+    if (typeof record.id !== "string") {
+      logger?.warn("[saved-projects] dropping a record — missing/invalid id");
+      continue;
+    }
+    const id = record.id;
+    // Display-only (sorted via `.toLowerCase()`); default rather than drop so a
+    // valid project survives a bad name and the project list doesn't crash.
+    const name = typeof record.name === "string" ? record.name : "Untitled";
+
+    const rawFormState = record.formState;
+
+    // True garbage: formState isn't even an object. This drop does NOT desync the
+    // localStorage→IDB migration's read-back count: that step admits only
+    // string-id rows and copies formState via `{ ...formState }` (null/array →
+    // plain object) before writing, so a migrated record is always an object here
+    // and survives. (Don't "fix" it by skipping such rows in the migration — that
+    // would destroy their id/name/manifestYaml once localStorage is cleared.)
+    if (
+      typeof rawFormState !== "object" ||
+      rawFormState === null ||
+      Array.isArray(rawFormState)
+    ) {
+      logger?.warn(
+        `[saved-projects] dropping record ${id} — formState is not an object`,
+      );
+      continue;
+    }
+
+    const parsed = projectConfigSchema.safeParse(rawFormState);
+    if (parsed.success) {
+      out.push({
+        ...(record as unknown as SavedProject),
+        name,
+        // Re-layer raw under parsed.data: projectConfigSchema strips unknown
+        // top-level keys, and Path 4 must not silently drop them (symmetry with
+        // the preserve path). parsed.data wins for every known/defaulted key.
+        formState: {
+          ...(rawFormState as Record<string, unknown>),
+          ...parsed.data,
+        } as SavedProject["formState"],
+      });
+      continue;
+    }
+
+    // Preserve-with-defaults: keep every present field (incl. drifted ones the
+    // app still renders) and fill only missing top-level defaults via the shared
+    // helper (schema defaults + structuredClone isolation + addOnsAnswers
+    // sanitization). Log the failing paths so we can tell known enum drift from
+    // a new corruption vector.
+    const issues =
+      parsed.error.issues.map((i) => i.path.join(".")).join(", ") || "(root)";
+    logger?.warn(
+      `[saved-projects] formState failed schema validation for ${id}; preserved with defaults. issues: ${issues}`,
+    );
+    out.push({
+      ...(record as unknown as SavedProject),
+      name,
+      formState: withFormStateDefaults(
+        rawFormState,
+      ) as SavedProject["formState"],
+    });
+  }
+  return out;
+}
+
 export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
+  constructor(private readonly logger?: LoggerPort) {}
+
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     try {
-      const data = await get<SavedProject[]>(SAVED_PROJECTS_KEY);
-      if (!data || !Array.isArray(data)) return { success: true, value: [] };
-      // githubLink (v3+) is round-tripped verbatim by idb-keyval structured clone.
-      // Pre-v3 records (no field) are valid (optional in SavedProject); migration
-      // step ensures upgrade for persisted records.
-      return { success: true, value: data };
+      const data = await get(SAVED_PROJECTS_KEY);
+      return {
+        success: true,
+        value: normalizeLoadedProjects(data, this.logger),
+      };
     } catch (e) {
       return {
         success: false,
@@ -33,7 +139,6 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
     try {
-      // githubLink optional field (if present on v3+ records) is persisted as-is.
       await set(SAVED_PROJECTS_KEY, projects);
       return { success: true, value: undefined };
     } catch (e) {

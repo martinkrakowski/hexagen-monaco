@@ -17,6 +17,7 @@ import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
 import { downloadBlob } from "@/lib/download-blob";
 import { postJson, postForBlob } from "@/lib/fetch-json";
+import { withFormStateDefaults } from "@/lib/form-state-defaults";
 import {
   getSavedProjectsPersistence,
   getEditorWorkspacePersistence,
@@ -160,6 +161,12 @@ export function ExportProvider({
   const [publishPrefs, setPublishPrefs] = useState<GitHubPublishPrefs | null>(
     null,
   );
+  // Persisted (IDB, #221-normalized) formState — the fallback source for the
+  // export payload when the live workspace snapshot is somehow absent.
+  const [savedFormState, setSavedFormState] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   // Replayed by Retry; the latest editor clearUnpushed kept in a ref so the
   // push callbacks stay referentially stable.
@@ -172,6 +179,7 @@ export function ExportProvider({
     if (!activeProjectId) {
       setGithubLink(null);
       setPublishPrefs(null);
+      setSavedFormState(null);
       return;
     }
     void (async () => {
@@ -181,6 +189,7 @@ export function ExportProvider({
       const project = res.value.find((p) => p.id === activeProjectId);
       setGithubLink(project?.githubLink ?? null);
       setPublishPrefs(project?.githubPublishPrefs ?? null);
+      setSavedFormState(project?.formState ?? null);
     })();
     return () => {
       cancelled = true;
@@ -201,7 +210,9 @@ export function ExportProvider({
 
     const result = await postForBlob("/api/export/zip", {
       projectId: activeProjectId,
-      wizardData: activeWizardData,
+      // Live workspace state primary (matches the code view); IDB formState as a
+      // fallback; normalized so a legacy snapshot still carries addOnsAnswers.
+      wizardData: withFormStateDefaults(activeWizardData ?? savedFormState),
     });
 
     if (result.kind !== "success") {
@@ -226,7 +237,7 @@ export function ExportProvider({
       message: "ZIP downloaded",
       notices: result.notices,
     });
-  }, [activeProjectId, activeProjectName, activeWizardData]);
+  }, [activeProjectId, activeProjectName, activeWizardData, savedFormState]);
 
   // --- persistence helpers (client IDB only; token stays server-side) ---
 
@@ -302,7 +313,8 @@ export function ExportProvider({
           repoName: args.repoName,
           isPrivate: args.isPrivate,
           commitMessage: args.commitMessage,
-          wizardData: activeWizardData,
+          // Same precedence as the ZIP path: live primary, IDB fallback, normalized.
+          wizardData: withFormStateDefaults(activeWizardData ?? savedFormState),
         },
       );
 
@@ -344,7 +356,7 @@ export function ExportProvider({
             : undefined,
       });
     },
-    [activeProjectId, activeWizardData, persistGithubLink],
+    [activeProjectId, activeWizardData, savedFormState, persistGithubLink],
   );
 
   // Push the current editor (user/LLM) edits to the linked repo, incrementally.
