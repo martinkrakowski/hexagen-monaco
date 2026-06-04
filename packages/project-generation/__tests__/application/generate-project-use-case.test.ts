@@ -285,6 +285,31 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     );
   });
 
+  it("caps the NUMBER of rendered notices so many bad keys can't bloat the artifact", async () => {
+    materializer.setResult({
+      errors: Array.from({ length: 120 }, (_, i) => `Unknown template: t${i}`),
+    });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { bad: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    // 50 rendered bullets + a single overflow summary line — not 120.
+    const bulletCount = (notice.match(/^- /gm) ?? []).length;
+    assert.strictEqual(bulletCount, 51);
+    assert.ok(notice.includes("…and 70 more"));
+  });
+
   it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {
     const useCase = new GenerateProjectUseCase(
       generator,

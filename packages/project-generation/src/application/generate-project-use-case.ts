@@ -19,6 +19,9 @@ import path from "node:path";
  * absent without opening the app. Errors only; warnings surface in the UI.
  */
 const ADD_ON_NOTICES_FILE = "HEXAGEN-ADDON-NOTICES.md";
+/** Cap rendered notices so a request with very many bad add-on keys can't bloat
+ * the artifact (per-error length is also capped in `toNoticeItem`). */
+const MAX_RENDERED_NOTICES = 50;
 
 /**
  * Render an error as a single, Markdown-safe list item. The error text can embed
@@ -34,6 +37,8 @@ function toNoticeItem(error: string): string {
 }
 
 function renderAddOnNotices(errors: string[]): string {
+  const shown = errors.slice(0, MAX_RENDERED_NOTICES);
+  const overflow = errors.length - shown.length;
   return [
     "# Add-on templates were not applied",
     "",
@@ -41,7 +46,8 @@ function renderAddOnNotices(errors: string[]): string {
     "only the core scaffold. **This file is safe to delete.**",
     "",
     "## Problems",
-    ...errors.map(toNoticeItem),
+    ...shown.map(toNoticeItem),
+    ...(overflow > 0 ? [`- …and ${overflow} more`] : []),
     "",
   ].join("\n");
 }
