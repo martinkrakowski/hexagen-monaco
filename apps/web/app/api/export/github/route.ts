@@ -127,11 +127,18 @@ export async function POST(request: NextRequest) {
         lastCommitSha: null as string | null,
         htmlUrl: destinationUrl,
       };
-      return NextResponse.json({
+      const responseBody: Record<string, unknown> = {
         success: true,
         destinationUrl,
         githubLink,
-      });
+      };
+      // Surface add-on materialization notices, only when present: warnings →
+      // UI; errors are also explained in the repo's HEXAGEN-ADDON-NOTICES.md.
+      if (result.value.warnings?.length)
+        responseBody.warnings = result.value.warnings;
+      if (result.value.errors?.length)
+        responseBody.errors = result.value.errors;
+      return NextResponse.json(responseBody);
     }
 
     return NextResponse.json(

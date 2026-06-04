@@ -13,6 +13,26 @@ import type { Result } from "@hexagen/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+/**
+ * Filename of the in-artifact notice written when an add-on selection fails
+ * (Decision A1) — so a ZIP / GitHub consumer learns why their add-ons are
+ * absent without opening the app. Errors only; warnings surface in the UI.
+ */
+const ADD_ON_NOTICES_FILE = "HEXAGEN-ADDON-NOTICES.md";
+
+function renderAddOnNotices(errors: string[]): string {
+  return [
+    "# Add-on templates were not applied",
+    "",
+    "Some add-on selections could not be materialized, so this project contains",
+    "only the core scaffold. **This file is safe to delete.**",
+    "",
+    "## Problems",
+    ...errors.map((e) => `- ${e}`),
+    "",
+  ].join("\n");
+}
+
 export interface GenerateProjectInput {
   manifest: Manifest;
   exportConfig: ExportConfig;
@@ -92,6 +112,23 @@ export class GenerateProjectUseCase {
           );
           // Mirror the on-disk merge into the in-memory map the code view reads.
           project = project.withAdditionalFiles(materialized.files);
+        }
+
+        // Bad selection (errors, no files): write a notices file into the
+        // artifact so a ZIP / GitHub consumer learns why their add-ons are
+        // absent — the binary download can't carry the errors payload. Warnings
+        // get no sidecar (they surface in the UI).
+        if (errors.length > 0) {
+          const notice = new Map([
+            [ADD_ON_NOTICES_FILE, renderAddOnNotices(errors)],
+          ]);
+          await this.mergeAddOnFilesIntoTempDir(
+            tempDir,
+            project,
+            notice,
+            warnings,
+          );
+          project = project.withAdditionalFiles(notice);
         }
       }
 

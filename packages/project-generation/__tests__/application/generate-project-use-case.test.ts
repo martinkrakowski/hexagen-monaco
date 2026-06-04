@@ -178,6 +178,11 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       "expected an override warning mentioning README.md",
     );
     assert.strictEqual(materializer.getCallCount(), 1);
+    // Warnings (overrides) get no sidecar — that's reserved for errors.
+    assert.strictEqual(
+      result.value.project.files.has("HEXAGEN-ADDON-NOTICES.md"),
+      false,
+    );
   });
 
   it("passes a bad selection through as errors (no throw) and still ships the core project", async () => {
@@ -208,6 +213,18 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       "# Test Project",
     );
     assert.strictEqual(recorder.getCallCount(), 1);
+    // A1: the failure is explained in an in-artifact notices file — present in
+    // project.files (code view) AND on disk (what ZIP/GitHub capture).
+    assert.ok(
+      result.value.project.files
+        .get("HEXAGEN-ADDON-NOTICES.md")
+        ?.includes("conflict: rate-limiting vs no-rate-limiting"),
+      "notices file should explain the failed selection",
+    );
+    assert.ok(
+      recorder.getCapturedFiles().has("HEXAGEN-ADDON-NOTICES.md"),
+      "notices file should reach the temp dir before export",
+    );
   });
 
   it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {

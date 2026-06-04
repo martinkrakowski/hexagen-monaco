@@ -109,6 +109,8 @@ export class InitiateExportUseCase implements InitiateExportPort {
           value: {
             zip: result.value.zipBuffer,
             filename: `${result.value.project.rootName}.zip`,
+            warnings: result.value.warnings,
+            errors: result.value.errors,
           },
         };
       }
@@ -119,6 +121,8 @@ export class InitiateExportUseCase implements InitiateExportPort {
           success: true,
           destinationUrl: result.value.destinationUrl,
           defaultBranch: result.value.defaultBranch,
+          warnings: result.value.warnings,
+          errors: result.value.errors,
         },
       };
     } catch (e) {

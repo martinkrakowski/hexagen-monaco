@@ -48,6 +48,28 @@ describe("InitiateExportUseCase — add-on threading", () => {
     );
   });
 
+  it("threads materialization errors out through the export result (+ sidecar on disk)", async () => {
+    materializer.setResult({ errors: ["conflict: a vs b"] });
+    const factory = () =>
+      new GenerateProjectUseCase(generator, recorder, materializer);
+    const useCase = new InitiateExportUseCase(factory);
+
+    const result = await useCase.initiateExport({
+      target: "github",
+      workspaceRef: { projectId: "p1", manifest },
+      repoConfig: { token: "t", owner: "o", repoName: "r", isPrivate: false },
+      addOnsAnswers: { a: {}, b: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    // Data-flow gap closed: errors reach the export result, so
+    // /api/export/github can surface them...
+    assert.deepStrictEqual(result.value.errors, ["conflict: a vs b"]);
+    // ...and the A1 sidecar reached the exported tree.
+    assert.ok(recorder.getCapturedFiles().has("HEXAGEN-ADDON-NOTICES.md"));
+  });
+
   it("omits add-ons when the intent carries none (materializer not called)", async () => {
     const factory = () =>
       new GenerateProjectUseCase(generator, recorder, materializer);
