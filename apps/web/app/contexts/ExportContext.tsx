@@ -40,6 +40,8 @@ export {
 interface GithubExportResponse {
   destinationUrl?: string;
   githubLink?: GithubLinkData;
+  warnings?: string[];
+  errors?: string[];
 }
 
 interface PushGithubResponse {
@@ -331,6 +333,15 @@ export function ExportProvider({
           : "Pushed to GitHub",
         destinationUrl,
         githubLink: link ?? undefined,
+        // Surface add-on materialization notices (counts) on the publish result
+        // — detail is committed to the repo's HEXAGEN-ADDON-NOTICES.md (PR 3a).
+        notices:
+          result.data.warnings?.length || result.data.errors?.length
+            ? {
+                warnings: result.data.warnings?.length ?? 0,
+                errors: result.data.errors?.length ?? 0,
+              }
+            : undefined,
       });
     },
     [activeProjectId, activeWizardData, persistGithubLink],

@@ -57,6 +57,7 @@ export function Header({
           owner: s.githubLink?.owner,
           repo: s.githubLink?.repo,
           url: s.githubLink?.htmlUrl ?? s.destinationUrl,
+          notices: s.notices,
         }
       : null;
 
