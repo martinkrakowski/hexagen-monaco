@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Copy,
   Check,
@@ -52,6 +53,9 @@ interface ExportDialogProps {
     owner?: string;
     repo?: string;
     url?: string;
+    /** Add-on materialization notice counts (full detail is committed to the
+     * repo's HEXAGEN-ADDON-NOTICES.md). */
+    notices?: { warnings: number; errors: number };
   } | null;
 }
 
@@ -186,6 +190,25 @@ export function ExportDialog({
                 )}
               </span>
             </div>
+            {success.notices && success.notices.errors > 0 && (
+              <div className="flex items-start gap-2 text-sm text-warning">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  {success.notices.errors} add-on
+                  {success.notices.errors === 1 ? " was" : "s were"} not applied
+                  — see{" "}
+                  <code className="font-mono">HEXAGEN-ADDON-NOTICES.md</code> in
+                  the repository.
+                </span>
+              </div>
+            )}
+            {success.notices && success.notices.warnings > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {success.notices.warnings} generated file
+                {success.notices.warnings === 1 ? "" : "s"} overridden by
+                add-ons.
+              </p>
+            )}
             {success.url ? (
               <div className="flex flex-wrap gap-2">
                 <Button
