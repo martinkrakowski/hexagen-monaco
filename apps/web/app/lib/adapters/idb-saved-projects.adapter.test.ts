@@ -75,4 +75,54 @@ describe("normalizeLoadedProjects", () => {
     assert.deepStrictEqual(normalizeLoadedProjects("nope"), []);
     assert.deepStrictEqual(normalizeLoadedProjects(undefined), []);
   });
+
+  it("drops a record with a missing/non-string id (unusable — can't be keyed)", () => {
+    const result = normalizeLoadedProjects([
+      { name: "no id", formState: {} },
+      { id: 42, name: "numeric id", formState: {} },
+      { id: "ok", formState: {} },
+    ]);
+    assert.deepStrictEqual(
+      result.map((p) => p.id),
+      ["ok"],
+    );
+  });
+
+  it("defaults a missing/non-string name to 'Untitled' — preserves the record", () => {
+    const result = normalizeLoadedProjects([
+      { id: "noname", formState: {} },
+      { id: "badname", name: 123, formState: {} },
+      { id: "named", name: "Keep me", formState: {} },
+    ]);
+    assert.deepStrictEqual(
+      result.map((p) => p.name),
+      ["Untitled", "Untitled", "Keep me"],
+    );
+  });
+
+  it("sanitizes a malformed addOnsAnswers to {} on the preserve path (would otherwise 400 export)", () => {
+    // addOnsAnswers: null fails strict parse → preserve path; null must not
+    // survive, since readAddOnAnswers would return null → the route 400s.
+    const result = normalizeLoadedProjects([
+      { id: "bad-addons", formState: { addOnsAnswers: null } },
+    ]);
+    assert.strictEqual(result.length, 1, "record is preserved, not dropped");
+    assert.deepStrictEqual(fs(result[0]).addOnsAnswers, {});
+  });
+
+  it("does not share mutable nested references between preserved records (no aliasing)", () => {
+    const result = normalizeLoadedProjects([
+      { id: "a", formState: { boundedContexts: "drift-a" } },
+      { id: "b", formState: { boundedContexts: "drift-b" } },
+    ]);
+    assert.strictEqual(result.length, 2);
+    // Both fell through the preserve path and got the default addOnsAnswers {}.
+    // Mutating one must not affect the other (structuredClone per record).
+    (fs(result[0]).addOnsAnswers as Record<string, unknown>)["x"] = 1;
+    assert.deepStrictEqual(
+      fs(result[1]).addOnsAnswers,
+      {},
+      "sibling record's default must be untouched",
+    );
+  });
 });
