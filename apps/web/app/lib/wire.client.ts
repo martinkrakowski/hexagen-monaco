@@ -131,8 +131,9 @@ export const wireDependencies = () => {
     canvasLayoutAdapter satisfies CanvasLayoutPersistencePort,
   );
 
-  // Saved projects persistence port → IDB-backed adapter
-  const savedProjectsAdapter = new IDBSavedProjectsAdapter();
+  // Saved projects persistence port → IDB-backed adapter. The logger surfaces
+  // load-time normalization notices (schema-drift fallbacks / dropped garbage).
+  const savedProjectsAdapter = new IDBSavedProjectsAdapter(createWebLogger());
   registry.set(
     PORT_NAMES.SAVED_PROJECTS_PERSISTENCE,
     savedProjectsAdapter satisfies SavedProjectsPersistencePort,
