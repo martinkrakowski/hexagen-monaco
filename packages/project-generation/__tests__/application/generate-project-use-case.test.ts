@@ -241,4 +241,24 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     assert.strictEqual(result.value.warnings, undefined);
     assert.strictEqual(result.value.errors, undefined);
   });
+
+  it("rejects an add-on file whose path escapes the project root", async () => {
+    materializer.setResult({
+      files: new Map([["../escape.ts", "export const x = 1;"]]),
+    });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    await assert.rejects(
+      () =>
+        useCase.execute({
+          manifest,
+          exportConfig: archive,
+          addOnsAnswers: { "rate-limiting": {} },
+        }),
+      /escapes project root/,
+    );
+  });
 });

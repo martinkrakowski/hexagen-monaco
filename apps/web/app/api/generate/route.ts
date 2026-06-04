@@ -83,9 +83,37 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // The wizard gathers per-template answers under `addOnsAnswers`; feed them
-    // through so the selected add-on templates are merged into the project.
-    const addOnsAnswers = (wizardData?.addOnsAnswers ?? {}) as AddOnAnswers;
+    // The wizard gathers per-template answers under `addOnsAnswers`. This is
+    // untrusted JSON from a public route, so validate the shape before trusting
+    // the cast: a malformed *payload* is a 400, distinct from a valid-but-bad
+    // add-on *selection* (which the materializer reports as `errors`, not here).
+    const isAddOnAnswers = (value: unknown): value is AddOnAnswers =>
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      Object.values(value).every(
+        (answers) =>
+          typeof answers === "object" &&
+          answers !== null &&
+          !Array.isArray(answers) &&
+          Object.values(answers).every(
+            (v) =>
+              typeof v === "string" ||
+              typeof v === "boolean" ||
+              (Array.isArray(v) && v.every((item) => typeof item === "string")),
+          ),
+      );
+
+    const rawAddOnsAnswers = wizardData?.addOnsAnswers;
+    if (rawAddOnsAnswers !== undefined && !isAddOnAnswers(rawAddOnsAnswers)) {
+      return NextResponse.json(
+        { error: "Invalid addOnsAnswers payload" },
+        { status: 400 },
+      );
+    }
+    const addOnsAnswers: AddOnAnswers = isAddOnAnswers(rawAddOnsAnswers)
+      ? rawAddOnsAnswers
+      : {};
 
     const useCase = getGenerateProject(destination);
     const result = await useCase.execute({
@@ -108,11 +136,22 @@ export async function POST(request: NextRequest) {
     // the core project still generated, so the response stays 200 with the
     // issues attached (UI surfacing is deferred to a later PR).
     if (warnings?.length || errors?.length) {
-      const dedupe = (xs: string[]) => [...new Set(xs)];
+      // Bounded summary — counts + a small sample — so a template that overrides
+      // many files can't inflate this single log line unboundedly.
+      const SAMPLE = 5;
+      const summarize = (label: string, xs: string[]): string => {
+        const unique = [...new Set(xs)];
+        const extra = unique.length - SAMPLE;
+        const suffix = extra > 0 ? ` (+${extra} more)` : "";
+        return `${label}=${unique.length} ${JSON.stringify(
+          unique.slice(0, SAMPLE),
+        )}${suffix}`;
+      };
       createWebLogger().warn(
-        `[api/generate] add-on materialization — warnings: ${JSON.stringify(
-          dedupe(warnings ?? []),
-        )}; errors: ${JSON.stringify(dedupe(errors ?? []))}`,
+        `[api/generate] add-on materialization — ${summarize(
+          "warnings",
+          warnings ?? [],
+        )}; ${summarize("errors", errors ?? [])}`,
       );
     }
 

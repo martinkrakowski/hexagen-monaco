@@ -152,6 +152,11 @@ export class GenerateProjectUseCase {
     files: ReadonlyMap<string, string>,
     warnings: string[],
   ): Promise<void> {
+    // Resolve the real project root once (`generateAt` created tempDir; the
+    // mkdir is defensive and makes realpath safe if a caller skipped it).
+    await fs.mkdir(tempDir, { recursive: true });
+    const realRoot = await fs.realpath(tempDir);
+
     for (const [rel, content] of files) {
       const dest = path.join(tempDir, rel);
       const within = path.relative(tempDir, dest);
@@ -160,14 +165,32 @@ export class GenerateProjectUseCase {
         within.startsWith(".." + path.sep) ||
         path.isAbsolute(within)
       ) {
-        // The emitter already enforces relative containment; this is
-        // defense-in-depth for a disk write — never escape the temp dir.
+        // Lexical guard: reject `..`/absolute keys. The emitter already enforces
+        // this, so reaching here is a should-never-happen bug, not user input.
         throw new Error(`Add-on file path escapes project root: ${rel}`);
       }
       if (project.files.has(rel)) {
         warnings.push(`Add-on template overrides generated file: ${rel}`);
       }
       await fs.mkdir(path.dirname(dest), { recursive: true });
+
+      // Symlink guard: a lexical check can't see symlinks. Verify the real
+      // parent stays under the project root, and never write through a
+      // symlinked target — so a symlink under tempDir can't redirect the write.
+      const realParent = await fs.realpath(path.dirname(dest));
+      if (
+        realParent !== realRoot &&
+        !realParent.startsWith(realRoot + path.sep)
+      ) {
+        throw new Error(
+          `Add-on file path escapes project root via symlink: ${rel}`,
+        );
+      }
+      const existing = await fs.lstat(dest).catch(() => null);
+      if (existing?.isSymbolicLink()) {
+        throw new Error(`Add-on file target is a symlink: ${rel}`);
+      }
+
       await fs.writeFile(dest, content, "utf-8");
     }
   }
