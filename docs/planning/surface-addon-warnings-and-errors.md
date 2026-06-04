@@ -20,7 +20,7 @@ Make the add-on materialization **`warnings`** (a template overrode a generated 
 
 So there are **two distinct gaps**: a **data-flow** gap (the export use case discards the channel) and a **transport** gap (the ZIP response is binary). The code-view path has neither — it just lacks UI.
 
-Client state lives in `apps/web/app/contexts/ExportContext.tsx` — an `ExportState` discriminated union (`idle | exporting | success | error | dialog-open`) with a dismissible status strip (`dismissStatus`). There is no "succeeded **with notices**" state today.
+**Client surfaces (corrected after tracing the consumers).** The notices-bearing `/api/generate` JSON is consumed by `features/code-view/hooks/useProjectGeneration.ts` (the code view) — which reads `data.files` and currently **discards `data.warnings`/`data.errors`**. `ExportContext`'s status strip (`ExportStatusStrip`) handles **only** the ZIP path (GitHub is owned by `ExportDialog`), and the ZIP response is **binary** — so the strip never receives notices in its payload. The real surfaces are therefore: the **code view** (primary), the **GitHub `ExportDialog`**, and a **header-bridged cue** on the ZIP strip (not the strip-as-primary the first draft assumed).
 
 ## Decision A — how to surface on the binary ZIP path _(resolved: A1)_
 
@@ -45,10 +45,14 @@ This is the product call flagged during the #214 review. `errors`/`warnings` can
 
 ### PR 3b — render them (`apps/web`) — **UI**
 
-5. **State model.** Add a notices channel to `ExportState` — e.g. a `notices?: { warnings: string[]; errors: string[] }` carried on the `success` variant (and read from the `/api/generate` + `/api/export/github` JSON; the ZIP path stays a plain success since its notices live in the sidecar).
-6. **Status strip.** Extend the existing strip: success **with** notices renders "Generated with N notice(s)" → expandable list (errors styled distinctly from warnings). Dismissible via the existing `dismissStatus`.
-7. **Code view (optional, low cost).** Badge template-overridden files (the `warnings` already name each `rel`) and the `HEXAGEN-ADDON-NOTICES.md` entry, so an override is visible at the file level.
-8. **Tests:** state transitions for success-with-notices; the strip renders errors vs warnings distinctly; no notices → strip unchanged from today.
+Surfaces corrected to where the notices actually arrive (not the ZIP-only strip):
+
+5. **Code view (primary).** `useProjectGeneration.ts` reads `warnings`/`errors` off the `/api/generate` JSON and exposes a `notices` value (today they're dropped after `data.files`). The code-view component renders a **notices bar** with the severity design below.
+6. **Severity design (all existing, Tailwind-mapped tokens).** 🟢 `success` (`CheckCircle2`) = clean; 🟡 `warning` (amber, `AlertTriangle`) = generated **with add-on errors** (project shipped, add-ons omitted → "see `HEXAGEN-ADDON-NOTICES.md`") — amber, _not_ red, since generation succeeded; 🔴 `destructive` (`AlertCircle`) = generation/export **failed**. Warnings (overrides) are a **muted count**, never escalated; errors drive the amber tone. Explicit `X` dismiss; **auto-dismiss suppressed when notices are present**.
+7. **GitHub `ExportDialog`.** The github result carries notices (PR 3a) → render them on the publish-result view (parity for the push-to-repo path).
+8. **ZIP strip cue (header bridge).** `/api/export/zip` has the notices on `ZipExportValue` (3a) but returns a **binary** body, so it emits the notice **counts in a response header**; `postForBlob` surfaces the header; `exportZip` sets an amber `success` state ("ZIP downloaded — notices written to `HEXAGEN-ADDON-NOTICES.md`"). The header is the _correct_ source — the ZIP export is its own server generation, not the code view's, so bridging from the code-view hook's state could show stale notices. `ExportState.success` gains a `notices` field.
+9. **Optional — Monaco badges.** A subtle amber dot on overridden files (the `warnings` name each `rel`); kept low-noise. Deferrable to a fast-follow.
+10. **Tests:** `useProjectGeneration` surfaces notices; the bar distinguishes errors vs warnings; the ZIP header round-trips to the amber strip; no notices → every surface unchanged from today.
 
 ## Decisions
 
@@ -62,7 +66,7 @@ New for PR 3:
 
 ## Risks
 
-- **Scope creep into the editor.** File badges (step 7) touch the Monaco/code-view layer; keep them optional and behind PR 3b so 3a can land independently.
+- **Scope creep into the editor.** The optional Monaco badges (step 9) touch the editor layer; keep them deferrable so the core surfacing (code-view bar + dialog + ZIP cue) lands first.
 - **Sidecar surprise.** A file appearing in the project could confuse a user; mitigate with a clear, self-describing filename + a one-line "safe to delete" header. Only on `errors`, never on warnings.
 - **Notices duplication.** The same dedup already applied for telemetry (per-run, by message) should apply to what the UI renders — reuse it, don't re-collect.
 
@@ -75,4 +79,4 @@ New for PR 3:
 ## Suggested split
 
 - **PR 3a** — data-flow + sidecar + route surfacing + tests (backend; no UI). Self-contained and shippable.
-- **PR 3b** — `ExportState` notices + status strip + optional file badges + tests (UI). Depends on 3a.
+- **PR 3b** — code-view notices bar (primary) + GitHub `ExportDialog` notices + ZIP strip header-cue + `ExportState` notices + tests (UI); optional Monaco badges. Depends on 3a (#217).
