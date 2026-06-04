@@ -25,8 +25,22 @@ export interface ExportIntent {
   addOnsAnswers?: AddOnAnswers;
 }
 
-export type ZipExportValue = { zip: Buffer; filename: string };
-export type GitHubExportValue = ExportResult;
+/**
+ * Add-on materialization notices, threaded out so the export routes can surface
+ * them: `warnings` (a template overrode a generated file) feed the UI; `errors`
+ * (a bad selection — add-ons omitted) are *also* explained inside the artifact
+ * via the HEXAGEN-ADDON-NOTICES.md the generation use case writes.
+ */
+export interface ExportNotices {
+  warnings?: string[];
+  errors?: string[];
+}
+
+export type ZipExportValue = {
+  zip: Buffer;
+  filename: string;
+} & ExportNotices;
+export type GitHubExportValue = ExportResult & ExportNotices;
 export type ExportValue = ZipExportValue | GitHubExportValue;
 
 export interface InitiateExportPort {

@@ -178,6 +178,11 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       "expected an override warning mentioning README.md",
     );
     assert.strictEqual(materializer.getCallCount(), 1);
+    // Warnings (overrides) get no sidecar — that's reserved for errors.
+    assert.strictEqual(
+      result.value.project.files.has("HEXAGEN-ADDON-NOTICES.md"),
+      false,
+    );
   });
 
   it("passes a bad selection through as errors (no throw) and still ships the core project", async () => {
@@ -208,6 +213,126 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       "# Test Project",
     );
     assert.strictEqual(recorder.getCallCount(), 1);
+    // A1: the failure is explained in an in-artifact notices file — present in
+    // project.files (code view) AND on disk (what ZIP/GitHub capture).
+    assert.ok(
+      result.value.project.files
+        .get("HEXAGEN-ADDON-NOTICES.md")
+        ?.includes("conflict: rate-limiting vs no-rate-limiting"),
+      "notices file should explain the failed selection",
+    );
+    assert.ok(
+      recorder.getCapturedFiles().has("HEXAGEN-ADDON-NOTICES.md"),
+      "notices file should reach the temp dir before export",
+    );
+  });
+
+  it("sanitizes untrusted error text in the notices sidecar (no Markdown injection)", async () => {
+    // Error text can embed template ids from untrusted request keys.
+    materializer.setResult({
+      errors: ["Unknown template: [pwn](http://evil)\nsecond line `code`"],
+    });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { "[pwn](http://evil)": {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    // Collapsed to one line, backticks neutralized, wrapped in inline code so
+    // the link stays literal (won't render as a clickable link / break the list).
+    assert.ok(
+      notice.includes(
+        "- `Unknown template: [pwn](http://evil) second line 'code'`",
+      ),
+      "error should be one-lined, backtick-neutralized, and inline-code-wrapped",
+    );
+    assert.ok(
+      !notice.includes("\nsecond line"),
+      "a newline in the error must not break the list structure",
+    );
+  });
+
+  it("caps a very long error to keep the notices artifact from bloating", async () => {
+    materializer.setResult({ errors: ["x".repeat(5000)] });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { bad: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    assert.ok(notice.includes("…"), "an over-long error should be truncated");
+    assert.ok(
+      !notice.includes("x".repeat(400)),
+      "the raw 5000-char error must not be embedded verbatim",
+    );
+  });
+
+  it("caps the NUMBER of rendered notices so many bad keys can't bloat the artifact", async () => {
+    materializer.setResult({
+      errors: Array.from({ length: 120 }, (_, i) => `Unknown template: t${i}`),
+    });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { bad: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    // 50 rendered bullets + a single overflow summary line — not 120.
+    const bulletCount = (notice.match(/^- /gm) ?? []).length;
+    assert.strictEqual(bulletCount, 51);
+    assert.ok(notice.includes("…and 70 more"));
+  });
+
+  it("coerces a non-string error defensively instead of crashing", async () => {
+    // The materializer is an injected port; a non-string crossing it (type-system
+    // violation / future adapter) must not crash the request on `.replace`.
+    materializer.setResult({ errors: [null as unknown as string] });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { bad: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    assert.ok(
+      notice.includes("`null`"),
+      "non-string error should be String()-coerced, not crash",
+    );
   });
 
   it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {
