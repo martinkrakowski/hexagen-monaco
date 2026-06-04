@@ -1,0 +1,60 @@
+{
+  "id": "mcp-server",
+  "name": "MCP Server (stdio)",
+  "description": "Expose the project's application use-cases as MCP tools over stdio — an inbound adapter with a static tool registry, a transport-factory seam, and a dynamic SDK import (ADR-0010).",
+  "version": "1.0.0",
+  "requires": ["env-setup"],
+  "conflicts": [],
+  "branch": "feature/generator-template-mcp-server",
+  "questions": [
+    {
+      "id": "server_name",
+      "type": "text",
+      "prompt": "MCP server name advertised to clients?",
+      "default": "{projectName}"
+    },
+    {
+      "id": "resources",
+      "type": "boolean",
+      "prompt": "Scaffold MCP resources (read-only)?",
+      "default": false
+    },
+    {
+      "id": "prompts",
+      "type": "boolean",
+      "prompt": "Scaffold reusable MCP prompts?",
+      "default": false
+    }
+  ],
+  "envVars": ["MCP_SERVER_NAME", "MCP_TRANSPORT"],
+  "outputs": [
+    "src/infrastructure/mcp/sdk.ts",
+    "src/infrastructure/mcp/server.ts",
+    "src/infrastructure/mcp/transport/stdio.ts",
+    "src/infrastructure/mcp/transport/register-transports.ts",
+    "src/infrastructure/mcp/registry/tool-registry.ts",
+    "src/infrastructure/mcp/registry/register-all.ts",
+    "src/infrastructure/mcp/tools/example.tool.ts",
+    "src/infrastructure/mcp/tools/example.tool.test.ts",
+    "src/infrastructure/mcp/registry/tool-registry.test.ts",
+    "bin/cli.ts",
+    ".mcp.json.example",
+    ".env.mcp.example",
+    {
+      "path": "src/infrastructure/mcp/resources/example.resource.ts",
+      "when": { "answer": "resources", "equals": true }
+    },
+    {
+      "path": "src/infrastructure/mcp/prompts/example.prompt.ts",
+      "when": { "answer": "prompts", "equals": true }
+    }
+  ],
+  "checklist": [
+    "Install the SDK (there is no manifest deps field — this is the only channel): npm install @modelcontextprotocol/sdk",
+    "Set MCP_SERVER_NAME in .env (defaults to the project name).",
+    "Add a tool: copy src/infrastructure/mcp/tools/example.tool.ts, wrap your use-case, then add one import + registerTool(...) line in registry/register-all.ts.",
+    "Point your MCP client at the server using .mcp.json.example — it runs: npx tsx bin/cli.ts (.ts isn't executable by node directly; use tsx, or build and run node dist/bin/cli.js).",
+    "Verify with the inspector: npx @modelcontextprotocol/inspector npx tsx bin/cli.ts",
+    "For remote/HTTP access, install the mcp-server-http addon (always authenticated)."
+  ]
+}

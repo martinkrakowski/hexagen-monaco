@@ -872,6 +872,26 @@ export const TEMPLATE_QUESTIONS: Record<
       default: "/dashboard,/api/protected",
     },
   ],
+  "mcp-server": [
+    {
+      id: "server_name",
+      type: "text",
+      prompt: "MCP server name advertised to clients?",
+      default: "{projectName}",
+    },
+    {
+      id: "resources",
+      type: "boolean",
+      prompt: "Scaffold MCP resources (read-only)?",
+      default: false,
+    },
+    {
+      id: "prompts",
+      type: "boolean",
+      prompt: "Scaffold reusable MCP prompts?",
+      default: false,
+    },
+  ],
   "microsoft-entra": [
     {
       id: "redirect_uri",

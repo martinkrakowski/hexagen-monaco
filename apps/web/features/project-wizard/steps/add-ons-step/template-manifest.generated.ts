@@ -363,6 +363,14 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "supabase-auth",
     ],
   },
+  "mcp-server": {
+    id: "mcp-server",
+    name: "MCP Server (stdio)",
+    description:
+      "Expose the project's application use-cases as MCP tools over stdio — an inbound adapter with a static tool registry, a transport-factory seam, and a dynamic SDK import (ADR-0010).",
+    requires: ["env-setup"],
+    conflicts: [],
+  },
   "microsoft-entra": {
     id: "microsoft-entra",
     name: "Microsoft Entra ID (Azure AD)",
