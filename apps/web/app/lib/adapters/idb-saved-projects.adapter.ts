@@ -96,7 +96,12 @@ export function normalizeLoadedProjects(
 
     const rawFormState = record.formState;
 
-    // True garbage: formState isn't even an object.
+    // True garbage: formState isn't even an object. This drop does NOT desync the
+    // localStorage→IDB migration's read-back count: that step admits only
+    // string-id rows and copies formState via `{ ...formState }` (null/array →
+    // plain object) before writing, so a migrated record is always an object here
+    // and survives. (Don't "fix" it by skipping such rows in the migration — that
+    // would destroy their id/name/manifestYaml once localStorage is cleared.)
     if (
       typeof rawFormState !== "object" ||
       rawFormState === null ||
