@@ -110,6 +110,22 @@ describe("mcp-server template — emit shape", () => {
     );
   });
 
+  it("resolves {projectName} when server_name is supplied as an override answer", async () => {
+    // Beyond the unanswered-default path: a caller that submits the raw
+    // placeholder as the answer must still resolve (the emitter pre-resolves
+    // string answers, since interpolate is single-pass).
+    const { files } = await materializer.materialize(
+      { "mcp-server": { server_name: "{projectName}" } },
+      { projectName: "acme" },
+    );
+    const server = files.get("src/infrastructure/mcp/server.ts") ?? "";
+    assert.match(server, /"acme"/);
+    assert.ok(
+      !server.includes("{projectName}") && !server.includes("{server_name}"),
+      "no placeholder leaks through an override answer",
+    );
+  });
+
   it("emits gated resources/prompts when their booleans are set", async () => {
     const { files } = await materializer.materialize(
       { "mcp-server": { resources: true, prompts: true } },

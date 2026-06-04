@@ -47,7 +47,11 @@ export interface InMemoryFileEmitterOptions {
   reservedVars?: Record<string, string>;
   /**
    * When false (default), `*.test.*` / `*.spec.*` outputs are skipped — the
-   * pattern-based `--with-tests` gate (99-gap-analysis.md).
+   * pattern-based `--with-tests` gate (99-gap-analysis.md). NOTE: this gate is
+   * specific to the in-memory (web) emit path; `FileSystemFileEmitter` (the CLI
+   * `hexagen add` path) does not gate, so it emits declared test outputs
+   * unconditionally — web (default) and CLI differ for the same template until a
+   * CLI `--with-tests` flow is wired.
    */
   withTests?: boolean;
 }
@@ -74,6 +78,21 @@ export class InMemoryFileEmitter implements FileEmitterPort {
     const warnings: string[] = [];
     const generatedFiles: GeneratedFileRecord[] = [];
 
+    // Interpolation variables for this run: the template's answers with the
+    // reserved vars (e.g. projectName) layered on top — reserved wins, so a
+    // template can't shadow one. Reserved-var placeholders inside *string answer
+    // values* are resolved up front too: interpolate() is single-pass, so a
+    // `{projectName}` arriving as an answer value (rather than via a question
+    // default, which DefaultingQuestionEngine already resolves) would otherwise
+    // survive unexpanded when a file's `{server_name}` is replaced by it.
+    const reserved = this.options.reservedVars ?? {};
+    const resolvedAnswers: AnswerMap = {};
+    for (const [key, value] of Object.entries(answers)) {
+      resolvedAnswers[key] =
+        typeof value === "string" ? interpolate(value, reserved).output : value;
+    }
+    const vars = { ...resolvedAnswers, ...reserved };
+
     for (const out of manifest.outputs) {
       if (!isOutputEnabled(out, answers)) continue;
       const rel = outputPath(out);
@@ -95,10 +114,8 @@ export class InMemoryFileEmitter implements FileEmitterPort {
       // interpolate() renders each answer via String(): booleans → "true"/"false",
       // string[] → comma-joined. Fine for current templates (array answers are used
       // only in `when` gating, never interpolated); authors must not rely on
-      // structured emission of an array answer here.
-      // Reserved vars (e.g. projectName) are layered over the template's answers
-      // and win on collision, so a template can't shadow a reserved name.
-      const vars = { ...answers, ...this.options.reservedVars };
+      // structured emission of an array answer here. `vars` (reserved vars +
+      // resolved answers) is computed once above.
       const { output, warnings: interpWarnings } = interpolate(raw, vars);
       for (const key of interpWarnings) {
         warnings.push(`Unresolved template variable '{${key}}' in ${rel}`);

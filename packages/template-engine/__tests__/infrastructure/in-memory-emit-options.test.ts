@@ -90,6 +90,17 @@ describe("InMemoryFileEmitter — reserved interpolation vars", () => {
     await e.emit(manifest(["x.ts"]), { projectName: "fromAnswer" });
     assert.equal(e.getFiles().get("x.ts"), "reserved");
   });
+
+  it("resolves reserved-var placeholders inside string answer values", async () => {
+    // A {projectName} arriving as an answer value (not via a question default)
+    // still resolves — interpolate is single-pass, so the emitter pre-resolves
+    // string answers before substituting them into files.
+    const e = new InMemoryFileEmitter(loader({ "x.ts": "{name}" }), {
+      reservedVars: { projectName: "acme" },
+    });
+    await e.emit(manifest(["x.ts"]), { name: "{projectName}" });
+    assert.equal(e.getFiles().get("x.ts"), "acme");
+  });
 });
 
 describe("DefaultingQuestionEngine — default interpolation", () => {
