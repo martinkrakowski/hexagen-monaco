@@ -19,8 +19,29 @@ import path from "node:path";
  * absent without opening the app. Errors only; warnings surface in the UI.
  */
 const ADD_ON_NOTICES_FILE = "HEXAGEN-ADDON-NOTICES.md";
+/** Cap rendered notices so a request with very many bad add-on keys can't bloat
+ * the artifact (per-error length is also capped in `toNoticeItem`). */
+const MAX_RENDERED_NOTICES = 50;
+
+/**
+ * Render an error as a single, Markdown-safe list item. The error text can embed
+ * template ids derived from untrusted request keys, so: collapse whitespace /
+ * newlines (can't break the list structure), cap the length (can't bloat the
+ * artifact), neutralize backticks, and wrap in inline code so any links or
+ * emphasis stay literal in the rendered HEXAGEN-ADDON-NOTICES.md.
+ */
+function toNoticeItem(error: unknown): string {
+  // The materializer is an injected port, so coerce defensively: a non-string
+  // crossing the boundary must not crash the request on `.replace`.
+  const text = typeof error === "string" ? error : String(error);
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  const capped = oneLine.length > 300 ? `${oneLine.slice(0, 300)}…` : oneLine;
+  return `- \`${capped.replace(/`/g, "'")}\``;
+}
 
 function renderAddOnNotices(errors: string[]): string {
+  const shown = errors.slice(0, MAX_RENDERED_NOTICES);
+  const overflow = errors.length - shown.length;
   return [
     "# Add-on templates were not applied",
     "",
@@ -28,7 +49,8 @@ function renderAddOnNotices(errors: string[]): string {
     "only the core scaffold. **This file is safe to delete.**",
     "",
     "## Problems",
-    ...errors.map((e) => `- ${e}`),
+    ...shown.map(toNoticeItem),
+    ...(overflow > 0 ? [`- …and ${overflow} more`] : []),
     "",
   ].join("\n");
 }
@@ -117,8 +139,10 @@ export class GenerateProjectUseCase {
         // Bad selection (errors, no files): write a notices file into the
         // artifact so a ZIP / GitHub consumer learns why their add-ons are
         // absent — the binary download can't carry the errors payload. Warnings
-        // get no sidecar (they surface in the UI).
-        if (errors.length > 0) {
+        // get no sidecar (they surface in the UI). The `files.size === 0` guard
+        // keeps a future partial-output contract from writing a misleading
+        // "not applied" notice into an export that does contain add-on files.
+        if (errors.length > 0 && materialized.files.size === 0) {
           const notice = new Map([
             [ADD_ON_NOTICES_FILE, renderAddOnNotices(errors)],
           ]);
