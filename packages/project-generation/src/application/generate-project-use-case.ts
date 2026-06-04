@@ -64,6 +64,12 @@ export interface GenerateProjectInput {
    * generated project (template-overrides-core).
    */
   addOnsAnswers?: AddOnAnswers;
+  /**
+   * Emit add-on test scaffolds (`*.test.*` / `*.spec.*`) — the `--with-tests`
+   * gate. Off by default; threaded to the materializer. (No web toggle wired yet;
+   * the mechanism is in place for a CLI flag / generation toggle to set it.)
+   */
+  withTests?: boolean;
 }
 
 export interface GenerateProjectOutput {
@@ -119,7 +125,15 @@ export class GenerateProjectUseCase {
         addOnsAnswers &&
         Object.keys(addOnsAnswers).length > 0
       ) {
-        const materialized = await this.materializer.materialize(addOnsAnswers);
+        const materialized = await this.materializer.materialize(
+          addOnsAnswers,
+          {
+            // The resolved project name (set during manifest assembly), so a
+            // template default like "{projectName}" matches generated file content.
+            projectName: input.manifest.system,
+            withTests: input.withTests,
+          },
+        );
         warnings.push(...materialized.warnings);
         errors = materialized.errors;
 

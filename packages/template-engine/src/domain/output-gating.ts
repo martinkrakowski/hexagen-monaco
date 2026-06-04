@@ -52,3 +52,15 @@ export function isOutputEnabled(
   if (typeof output === "string") return true;
   return matchesCondition(output.when, answers);
 }
+
+/**
+ * Whether an output path is a test scaffold (`*.test.*` / `*.spec.*`). Test
+ * scaffolding is gated **pattern-based** behind the `--with-tests` materialization
+ * flag (see `docs/planning/generator-templates/99-gap-analysis.md`): templates
+ * declare test files as ordinary outputs, and the emitter skips them unless tests
+ * are requested. The gate is evaluated at emit time (alongside `isOutputEnabled`),
+ * so the full output list still reaches dependency/conflict/checklist logic.
+ */
+export function isTestOutput(path: string): boolean {
+  return /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
+}

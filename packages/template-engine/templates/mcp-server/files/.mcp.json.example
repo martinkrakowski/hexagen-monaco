@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "{server_name}": {
+      "command": "npx",
+      "args": ["tsx", "bin/cli.ts"]
+    }
+  }
+}

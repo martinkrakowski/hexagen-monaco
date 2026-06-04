@@ -232,6 +232,21 @@ const PRESENTATION: CatalogPresentation[] = [
     },
   },
   {
+    id: "mcp-server",
+    category: "ai",
+    details: {
+      overview:
+        "Exposes your application's use-cases as MCP tools over stdio, so any MCP client (Claude Desktop/Code, IDE agents, an AgentCore Gateway, a LangGraph tool node) can call them. A tool is an inbound adapter over a use-case you already have — no business logic moves into it.",
+      includes: [
+        "McpServer composition root with a registerTransport(factory) seam",
+        "Static tool registry + a worked example tool (input validation, explicit Result→MCP mapping, dry_run)",
+        "Dynamic SDK import (ADR-0010) and @hexagen-server-only isolation (ADR-0037)",
+        "stdio transport (secure local default); opt-in resources/prompts; node:test scaffolds under --with-tests",
+      ],
+    },
+    companions: ["error-handling", "observability"],
+  },
+  {
     id: "bullmq",
     category: "infrastructure",
     details: {

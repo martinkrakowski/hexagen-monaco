@@ -27,6 +27,14 @@ export interface MaterializeAddOnsResult {
   errors: string[];
 }
 
+/** Run-level materialization options: reserved vars + the test-scaffolding gate. */
+export interface MaterializeAddOnsOptions {
+  /** Project name, exposed to every template as the reserved `{projectName}` var. */
+  projectName?: string;
+  /** Emit `*.test.*` / `*.spec.*` scaffolds (the `--with-tests` gate). Default false. */
+  withTests?: boolean;
+}
+
 /**
  * Materializes selected add-on templates into an in-memory file map — the
  * headless counterpart to the CLI's on-disk install. Resolves `requires` /
@@ -45,14 +53,23 @@ export class InMemoryAddOnMaterializer {
 
   async materialize(
     addOnsAnswers: Record<string, AnswerMap>,
+    options: MaterializeAddOnsOptions = {},
   ): Promise<MaterializeAddOnsResult> {
     const templateIds = Object.keys(addOnsAnswers);
     if (templateIds.length === 0) {
       return { files: new Map(), warnings: [], errors: [] };
     }
 
-    const emitter = new InMemoryFileEmitter(this.loadTemplateFile);
-    const questionEngine = new DefaultingQuestionEngine();
+    // Reserved interpolation vars available to every template (file content +
+    // string question defaults), e.g. {projectName}.
+    const reservedVars: Record<string, string> = {};
+    if (options.projectName) reservedVars.projectName = options.projectName;
+
+    const emitter = new InMemoryFileEmitter(this.loadTemplateFile, {
+      reservedVars,
+      withTests: options.withTests ?? false,
+    });
+    const questionEngine = new DefaultingQuestionEngine(reservedVars);
     const useCase = new AddTemplateUseCase(
       this.registry,
       questionEngine,

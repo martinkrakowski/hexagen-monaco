@@ -30,6 +30,21 @@ export interface MaterializeResult {
  * port; `GenerateProjectUseCase` merges the result into the generated project
  * (template-overrides-core precedence).
  */
+/** Run-level options threaded from the generation context into materialization. */
+export interface MaterializeOptions {
+  /**
+   * The resolved project name (post-manifest-assembly), exposed to every template
+   * as the reserved `{projectName}` interpolation var so a default like
+   * `"{projectName}"` resolves to the same string used in generated file content.
+   */
+  projectName?: string;
+  /** Emit `*.test.*` / `*.spec.*` scaffolds (the `--with-tests` gate). Default false. */
+  withTests?: boolean;
+}
+
 export interface AddOnMaterializerPort {
-  materialize(addOnsAnswers: AddOnAnswers): Promise<MaterializeResult>;
+  materialize(
+    addOnsAnswers: AddOnAnswers,
+    options?: MaterializeOptions,
+  ): Promise<MaterializeResult>;
 }
