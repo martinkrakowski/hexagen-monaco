@@ -30,8 +30,11 @@ const MAX_RENDERED_NOTICES = 50;
  * artifact), neutralize backticks, and wrap in inline code so any links or
  * emphasis stay literal in the rendered HEXAGEN-ADDON-NOTICES.md.
  */
-function toNoticeItem(error: string): string {
-  const oneLine = error.replace(/\s+/g, " ").trim();
+function toNoticeItem(error: unknown): string {
+  // The materializer is an injected port, so coerce defensively: a non-string
+  // crossing the boundary must not crash the request on `.replace`.
+  const text = typeof error === "string" ? error : String(error);
+  const oneLine = text.replace(/\s+/g, " ").trim();
   const capped = oneLine.length > 300 ? `${oneLine.slice(0, 300)}…` : oneLine;
   return `- \`${capped.replace(/`/g, "'")}\``;
 }

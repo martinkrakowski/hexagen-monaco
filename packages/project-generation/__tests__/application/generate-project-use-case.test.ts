@@ -310,6 +310,31 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     assert.ok(notice.includes("…and 70 more"));
   });
 
+  it("coerces a non-string error defensively instead of crashing", async () => {
+    // The materializer is an injected port; a non-string crossing it (type-system
+    // violation / future adapter) must not crash the request on `.replace`.
+    materializer.setResult({ errors: [null as unknown as string] });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest,
+      exportConfig: archive,
+      addOnsAnswers: { bad: {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    const notice =
+      result.value.project.files.get("HEXAGEN-ADDON-NOTICES.md") ?? "";
+    assert.ok(
+      notice.includes("`null`"),
+      "non-string error should be String()-coerced, not crash",
+    );
+  });
+
   it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {
     const useCase = new GenerateProjectUseCase(
       generator,
