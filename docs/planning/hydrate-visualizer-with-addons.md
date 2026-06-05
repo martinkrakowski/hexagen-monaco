@@ -19,6 +19,7 @@ The canvas **already renders adapter nodes** in a per-context **compass** layout
 2. **Cross-cutting split — two buckets, not one.**
    - Shared **domain** primitives (value objects, events, shared ports) → the auto **shared-kernel** context (`scope: "shared"`).
    - Infra cross-cutting (docker, error-handling, telemetry, observability) → a project-level **"platform zone"** (`scope: "project"`): a thin strip / chip **outside** the context hexagons. Explicitly **not** a sixth context type — must not be mistaken for one.
+   - **Reconciliation note — `error-handling` (deliberate, not an open question).** It's scoped `project` here (its dominant role is infra cross-cutting: RFC 7807 mapping, root middleware, React error boundary), but the JOB-INDEX context/plane table buckets it `shared-kernel` (its `Result`/`AppError` hierarchy is a shared domain primitive). A template that genuinely spans both is assigned by its **dominant** role, and the canvas rendering must pick **one** visual treatment — here, the platform zone. Flagged so the canvas PR treats this as a settled call, not an oversight to "fix."
 3. **Mapping is authoritative data, never path-inference.** Each add-on template declares `provides: "<capability>"` (e.g. `"messaging.out-adapter"`) + `scope: "context" | "shared" | "project"`. The canvas **resolves** context-scoped add-ons against the **same manifest adapter fields the compass already uses** (`messagingAdapter` / `persistenceAdapter` / `telemetryProvider`) — no parsing of `src/infrastructure/...` directory conventions. Authoritative on both sides of the join.
 
 ## Resolution — the three open questions (settled)
@@ -44,11 +45,12 @@ Each add-on declares `provides` + `scope` on its template manifest (hand-authore
 | `bullmq`            | `messaging.out-adapter`   | `context` | `messagingAdapter` (South)                                         |
 | `supabase`          | `persistence.out-adapter` | `context` | `persistenceAdapter` (East)                                        |
 | `llm-adapter`       | `llm.out-adapter`         | `context` | external-integration / badge fallback (no dedicated compass field) |
+| `shared-types`      | `kernel.user-context`     | `shared`  | shared-kernel context (UserContext + session primitives)           |
 | `docker`            | `platform.container`      | `project` | platform zone                                                      |
 | `error-handling`    | `platform.error-handling` | `project` | platform zone                                                      |
 | `eslint-no-console` | `platform.lint`           | `project` | platform zone                                                      |
 
-Adobe family + auth providers follow.
+`shared-types` is the confirmed `scope: "shared"` exemplar (added post-#228 review): UserContext + MOCK_USER + session helpers, the auth-ecosystem prerequisite — so the shared-kernel branch **is** exercised and the canvas must build it. The rest of the Adobe family + auth providers follow (batch 2).
 
 ## Sequencing
 
