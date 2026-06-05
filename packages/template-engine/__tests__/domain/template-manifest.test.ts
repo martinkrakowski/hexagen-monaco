@@ -43,6 +43,54 @@ describe("validateManifest", () => {
     assert.deepEqual(m.checklist, []);
   });
 
+  it("accepts a provides/scope visualizer mapping pair", () => {
+    const m = validateManifest({
+      id: "x",
+      name: "X",
+      description: "X",
+      version: "1",
+      provides: "messaging.out-adapter",
+      scope: "context",
+    });
+    assert.equal(m.provides, "messaging.out-adapter");
+    assert.equal(m.scope, "context");
+  });
+
+  it("leaves provides/scope undefined when absent", () => {
+    const m = validateManifest({
+      id: "x",
+      name: "X",
+      description: "X",
+      version: "1",
+    });
+    assert.equal(m.provides, undefined);
+    assert.equal(m.scope, undefined);
+  });
+
+  it("throws when provides and scope are not set together", () => {
+    const partial = { id: "x", name: "X", description: "X", version: "1" };
+    assert.throws(
+      () => validateManifest({ ...partial, provides: "messaging.out-adapter" }),
+      /set together/,
+    );
+    assert.throws(
+      () => validateManifest({ ...partial, scope: "context" }),
+      /set together/,
+    );
+  });
+
+  it("throws on an invalid scope or empty provides", () => {
+    const base2 = { id: "x", name: "X", description: "X", version: "1" };
+    assert.throws(
+      () => validateManifest({ ...base2, provides: "x", scope: "platform" }),
+      /must be one of/,
+    );
+    assert.throws(
+      () => validateManifest({ ...base2, provides: "", scope: "project" }),
+      /non-empty string/,
+    );
+  });
+
   const base = {
     id: "x",
     name: "X",

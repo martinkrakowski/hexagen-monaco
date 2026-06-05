@@ -3,6 +3,8 @@
   "name": "Docker",
   "description": "Multi-stage Dockerfile, docker-compose with peer services, dev override for hot reload, GitHub Actions image push",
   "version": "1.0.0",
+  "provides": "platform.container",
+  "scope": "project",
   "requires": [],
   "conflicts": [],
   "questions": [

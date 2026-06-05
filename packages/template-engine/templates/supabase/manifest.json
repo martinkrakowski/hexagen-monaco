@@ -3,6 +3,8 @@
   "name": "Supabase",
   "description": "SSR-safe browser/server/admin clients, Result-based storage helpers, RLS examples, type generation, optional Drizzle ORM and realtime. Pure storage/database layer — no auth code. Add the supabase-auth template to layer @supabase/ssr-based session middleware on top.",
   "version": "3.0.0",
+  "provides": "persistence.out-adapter",
+  "scope": "context",
   "requires": ["env-setup"],
   "conflicts": [],
   "questions": [

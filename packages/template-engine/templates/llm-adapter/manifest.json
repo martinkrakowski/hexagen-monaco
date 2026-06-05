@@ -3,6 +3,8 @@
   "name": "LLM Adapter",
   "description": "Typed port interface, provider adapters (xAI, OpenAI, Anthropic, Ollama, Azure OpenAI), model constants, reasoning routing, retry logic, structured output",
   "version": "1.0.0",
+  "provides": "llm.out-adapter",
+  "scope": "context",
   "requires": ["env-setup", "error-handling"],
   "conflicts": [],
   "questions": [

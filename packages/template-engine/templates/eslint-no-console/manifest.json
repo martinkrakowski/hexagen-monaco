@@ -3,6 +3,8 @@
   "name": "ESLint — no-console (logger enforcement)",
   "description": "A drop-in ESLint flat-config fragment that bans console.* (no-console) so logging goes through the structured logger instead of console.log technical debt — with the logger transport, server startup, CLI scripts, and config files exempted. Spread it into your eslint.config.mjs.",
   "version": "1.0.0",
+  "provides": "platform.lint",
+  "scope": "project",
   "requires": [],
   "conflicts": [],
   "questions": [

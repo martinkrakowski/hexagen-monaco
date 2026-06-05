@@ -3,6 +3,8 @@
   "name": "Error Handling",
   "description": "3-layer error hierarchy, Result<T,E> type, RFC 7807 HTTP mapping, React error boundary",
   "version": "1.0.0",
+  "provides": "platform.error-handling",
+  "scope": "project",
   "requires": ["env-setup"],
   "conflicts": [],
   "questions": [

@@ -4,6 +4,15 @@ import type {
   OutputCondition,
 } from "./question.js";
 
+/**
+ * Architectural scope an add-on attaches to in the visualizer
+ * (see docs/planning/hydrate-visualizer-with-addons.md):
+ * - `context` — a context-level adapter (joins a compass adapter slot)
+ * - `shared`  — a shared-kernel domain primitive
+ * - `project` — an infra cross-cutting concern (rendered in the platform zone)
+ */
+export type AddOnScope = "context" | "shared" | "project";
+
 export interface TemplateManifest {
   /** Unique kebab-case identifier, e.g. "rate-limiting" */
   id: string;
@@ -32,6 +41,14 @@ export interface TemplateManifest {
   checklist: string[];
   /** Suggested git branch for implementation work */
   branch?: string;
+  /**
+   * Visualizer mapping (docs/planning/hydrate-visualizer-with-addons.md): the
+   * capability this add-on provides (e.g. "messaging.out-adapter") and the
+   * architectural scope it attaches to. Authoritative join data for the canvas —
+   * never path-inferred. Optional, but set together (the join needs both).
+   */
+  provides?: string;
+  scope?: AddOnScope;
 }
 
 export function validateManifest(raw: unknown): TemplateManifest {
@@ -64,6 +81,43 @@ export function validateManifest(raw: unknown): TemplateManifest {
     outputs: validatedOutputs(m.outputs, questionTypes),
     checklist: validatedStringArray(m.checklist, "checklist"),
     branch: typeof m.branch === "string" ? m.branch : undefined,
+    ...validatedMapping(m),
+  };
+}
+
+/**
+ * Optional visualizer mapping (`provides` + `scope`). The two are a pair — the
+ * canvas join needs both — so a half-specified manifest fails fast rather than
+ * silently half-annotating. Absent on most templates (no visualizer mapping).
+ */
+function validatedMapping(m: Record<string, unknown>): {
+  provides?: string;
+  scope?: AddOnScope;
+} {
+  const { provides, scope } = m;
+  if (provides !== undefined && (typeof provides !== "string" || !provides)) {
+    throw new Error(
+      "Template manifest field 'provides' must be a non-empty string",
+    );
+  }
+  const scopes: readonly AddOnScope[] = ["context", "shared", "project"];
+  if (
+    scope !== undefined &&
+    !(typeof scope === "string" && scopes.includes(scope as AddOnScope))
+  ) {
+    throw new Error(
+      "Template manifest field 'scope' must be one of: context, shared, project",
+    );
+  }
+  // `provides` and `scope` are a pair — the visualizer join needs both.
+  if ((provides === undefined) !== (scope === undefined)) {
+    throw new Error(
+      "Template manifest fields 'provides' and 'scope' must be set together",
+    );
+  }
+  return {
+    provides: provides as string | undefined,
+    scope: scope as AddOnScope | undefined,
   };
 }
 
