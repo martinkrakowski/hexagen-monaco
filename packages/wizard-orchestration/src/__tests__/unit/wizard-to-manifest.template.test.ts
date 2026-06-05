@@ -81,4 +81,41 @@ describe("wizardToManifest — architectural template drives cross-context wirin
       "unknown id falls back to in-process semantics (peer dep kept)",
     );
   });
+
+  it("a missing governance block defaults to modular-monolith (keeps peer deps) without throwing", () => {
+    // Exercises the `governance?.workspaceTemplate || "modular-monolith"` default
+    // path — distinct from an unknown id, which exercises the `?? FALLBACK_RULES`
+    // branch after a successful (empty) lookup.
+    let out: Record<string, unknown> | undefined;
+    assert.doesNotThrow(() => {
+      out = wizardToManifest(
+        asWizard({
+          boundedContexts: [
+            { id: "orders-id", name: "orders" },
+            { id: "billing-id", name: "billing" },
+          ],
+          peerMappings: [
+            { consumerContext: "orders-id", providerContext: "billing-id" },
+          ],
+        }),
+      );
+    });
+    assert.ok(out, "manifest produced without a governance block");
+    assert.equal(out.workspaceTemplate, "modular-monolith");
+    assert.ok(
+      dependsOnFor(out, "orders").includes("billing"),
+      "absent governance defaults to modular-monolith (peer dep kept)",
+    );
+  });
+
+  it("an undefined workspaceTemplate defaults to modular-monolith", () => {
+    const out = wizardToManifest(
+      asWizard({
+        governance: { workspaceName: "demo", namespacePrefix: "@demo" },
+        boundedContexts: [{ id: "orders-id", name: "orders" }],
+      }),
+    );
+    assert.equal(out.workspaceTemplate, "modular-monolith");
+    assert.equal(out.architecture, "modular-monolith");
+  });
 });

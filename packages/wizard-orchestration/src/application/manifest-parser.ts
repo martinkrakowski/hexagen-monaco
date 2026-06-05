@@ -2,6 +2,7 @@ import type { WizardData } from "@hexagen/project-configuration";
 import {
   ManifestSchema,
   BoundedContextSchema,
+  getWorkspaceTemplate,
 } from "@hexagen/project-configuration";
 import yaml from "js-yaml";
 
@@ -165,12 +166,16 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
     peerMappings: [], // Not represented in current manifest schema
     governance: {
       workspaceName: manifest.system ?? "hexagen-project",
+      // Resolve against the workspace-template catalog (single source of truth)
+      // rather than a hardcoded id list, so a new template is recognised here
+      // automatically. An unknown/absent architecture falls back to the flexible
+      // default; `?.id` yields the catalog's typed WorkspaceTemplateId.
       workspaceTemplate:
-        manifest.architecture === "modular-monolith" ||
-        manifest.architecture === "strict-enterprise" ||
-        manifest.architecture === "micro-frontend"
-          ? manifest.architecture
-          : "modular-monolith",
+        getWorkspaceTemplate(
+          typeof manifest.architecture === "string"
+            ? manifest.architecture
+            : "",
+        )?.id ?? "modular-monolith",
       workspaceDescription:
         typeof manifest.description === "string"
           ? manifest.description

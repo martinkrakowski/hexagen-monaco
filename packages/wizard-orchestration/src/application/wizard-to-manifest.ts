@@ -262,9 +262,10 @@ export function wizardToManifest(
       const dependsOn = new Set<string>();
       if (!isShared) dependsOn.add("shared");
 
-      // For strict templates (strict-enterprise, micro-frontend), peer context
-      // dependencies are NOT added to depends_on. Cross-context communication
-      // must go through event-bus or network boundaries, not direct imports.
+      // For strict templates (those whose cross-context calls route through a
+      // boundary rather than direct imports), peer context dependencies are NOT
+      // added to depends_on — cross-context communication goes through the
+      // event-bus or network boundary instead.
       if (!isStrictTemplate) {
         peerMappings
           .filter((m) => m.consumerContext === bc.id)

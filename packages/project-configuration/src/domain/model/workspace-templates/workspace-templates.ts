@@ -25,13 +25,16 @@ export interface WorkspaceTemplate {
  * defaults, so an unresolved template degrades to the safest, least-restrictive
  * behaviour rather than throwing. Shared by the catalog entry below and by
  * downstream consumers (e.g. wizard → manifest), so they all degrade
- * identically. See docs/planning/wire-architectural-template-into-generation.md.
+ * identically. Frozen (and `Readonly`-typed) because `modular-monolith.rules`
+ * aliases this same object — freezing removes any chance a future mutation of
+ * one corrupts the other. See
+ * docs/planning/wire-architectural-template-into-generation.md.
  */
-export const FALLBACK_RULES: WorkspaceTemplateRule = {
+export const FALLBACK_RULES: Readonly<WorkspaceTemplateRule> = Object.freeze({
   allowSharedUi: true,
   crossContextCalls: "in-process",
   strictness: "flexible",
-};
+});
 
 export const workspaceTemplates: WorkspaceTemplate[] = [
   {
@@ -45,7 +48,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     id: "strict-enterprise",
     title: "Strict Enterprise",
     description:
-      "Zero-trust boundaries. Contexts may not depend on each other directly — the generated architectural invariants deny cross-context imports, so contexts integrate via an event bus.",
+      "Zero-trust boundaries. Contexts may not depend on each other directly — the generated architectural invariants deny cross-context imports, preparing them to integrate via an event bus.",
     rules: {
       allowSharedUi: false,
       crossContextCalls: "event-bus",
@@ -56,7 +59,7 @@ export const workspaceTemplates: WorkspaceTemplate[] = [
     id: "micro-frontend",
     title: "Micro-Frontend Ready",
     description:
-      "Strict isolation for future UI deployment autonomy. The generated invariants deny direct cross-context imports, so contexts integrate over the network.",
+      "Strict isolation for future UI deployment autonomy. The generated invariants deny direct cross-context imports, preparing contexts to integrate over the network.",
     rules: {
       allowSharedUi: false,
       crossContextCalls: "network",
