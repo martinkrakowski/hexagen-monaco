@@ -66,6 +66,20 @@ describe("validateManifest", () => {
     assert.equal(padded.provides, "messaging.out-adapter");
   });
 
+  it("accepts all three valid scope values", () => {
+    for (const scope of ["context", "shared", "project"] as const) {
+      const m = validateManifest({
+        id: "x",
+        name: "X",
+        description: "X",
+        version: "1",
+        provides: "test.capability",
+        scope,
+      });
+      assert.equal(m.scope, scope);
+    }
+  });
+
   it("leaves provides/scope undefined when absent", () => {
     const m = validateManifest({
       id: "x",
