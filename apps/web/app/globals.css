@@ -96,6 +96,7 @@
   --info-foreground: 0 0% 100%;
 
   --shared-kernel-edge: 263 70% 72%;
+  --addon-accent: 190 80% 38%;
 
   /* Popover */
   --popover: 0 0% 100%;
@@ -200,6 +201,7 @@
   --info-foreground: 0 0% 100%;
 
   --shared-kernel-edge: 263 60% 65%;
+  --addon-accent: 190 65% 55%;
 
   --popover: 35 12% 12%;
   --popover-foreground: 35 10% 92%;

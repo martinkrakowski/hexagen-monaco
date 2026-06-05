@@ -1,6 +1,12 @@
 "use client";
 
 import { PortAdapterHandles } from "./PortAdapterHandles";
+import { AddOnBadge } from "../AddOnBadge";
+import {
+  addOnHoverText,
+  ADDON_RING_STYLE,
+} from "../addon-overlay-presentation";
+import type { AddOnNodeMeta } from "../addon-overlay-nodes";
 import type { BoundedContextData, NodeVariant } from "./types";
 
 interface PortAdapterCardProps {
@@ -14,11 +20,21 @@ export function PortAdapterCard({
   variant,
   selected,
 }: PortAdapterCardProps) {
+  const addOn = (data as { addOn?: AddOnNodeMeta }).addOn;
+
   return (
     <div
-      style={{ width: 140, height: 72 }}
+      style={
+        addOn
+          ? { width: 140, height: 72, ...ADDON_RING_STYLE }
+          : { width: 140, height: 72 }
+      }
+      title={addOn ? addOnHoverText(addOn) : undefined}
       className={`relative rounded-lg border overflow-hidden transition-colors select-none ${variant.bodyBg} ${variant.border} ${selected ? "ring-2 ring-ring ring-offset-1 ring-offset-background" : ""}`}
     >
+      {addOn ? (
+        <AddOnBadge className="absolute right-1 top-1 z-20 shadow-sm" />
+      ) : null}
       <div
         className={`h-7 ${variant.headerBg} flex items-center justify-center ${variant.headerText} text-xs font-semibold truncate px-2`}
       >

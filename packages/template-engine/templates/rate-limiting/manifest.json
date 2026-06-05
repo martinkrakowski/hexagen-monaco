@@ -2,6 +2,8 @@
   "id": "rate-limiting",
   "name": "Rate Limiting",
   "description": "Differentiated middleware (text/image/general), session+IP hybrid identification, configurable limits, debug logging",
+  "provides": "platform.rate-limiting",
+  "scope": "project",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],

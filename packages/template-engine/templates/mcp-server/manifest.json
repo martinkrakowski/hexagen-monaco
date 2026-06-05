@@ -2,6 +2,8 @@
   "id": "mcp-server",
   "name": "MCP Server (stdio)",
   "description": "Expose the project's application use-cases as MCP tools over stdio — an inbound adapter with a static tool registry, a transport-factory seam, and a dynamic SDK import (ADR-0010).",
+  "provides": "platform.mcp",
+  "scope": "project",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
@@ -42,11 +44,17 @@
     ".env.mcp.example",
     {
       "path": "src/infrastructure/mcp/resources/example.resource.ts",
-      "when": { "answer": "resources", "equals": true }
+      "when": {
+        "answer": "resources",
+        "equals": true
+      }
     },
     {
       "path": "src/infrastructure/mcp/prompts/example.prompt.ts",
-      "when": { "answer": "prompts", "equals": true }
+      "when": {
+        "answer": "prompts",
+        "equals": true
+      }
     }
   ],
   "checklist": [

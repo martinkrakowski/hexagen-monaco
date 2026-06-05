@@ -148,8 +148,8 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
             onRightPanelClose={onCloseRightPanel}
             onLeftPanelClose={onCloseMiddlePanel}
             left={
-              <SelectedAddOnsProvider>
-                <WizardStepFormProvider>
+              <WizardStepFormProvider>
+                <SelectedAddOnsProvider>
                   <WizardStepRouter
                     currentStepIndex={currentStepIndex}
                     totalSteps={wizardSteps.length}
@@ -159,8 +159,8 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
                     onContextSelect={(id) => ui.setContextId(id)}
                     onMappingSelect={(id) => ui.setMappingId(id)}
                   />
-                </WizardStepFormProvider>
-              </SelectedAddOnsProvider>
+                </SelectedAddOnsProvider>
+              </WizardStepFormProvider>
             }
             middle={
               <ArchitecturePreviewPane

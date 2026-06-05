@@ -2,6 +2,8 @@
   "id": "langgraph",
   "name": "LangGraph",
   "description": "Hexagonal LangGraph integration: typed AgentGraphPort, shared GraphState, node files, conditional edge routing, swap-by-env checkpointers (memory/supabase/redis/postgres), and Next.js routes for invoke / optional streaming / optional human-in-the-loop resume. Comes with one of two working example graphs (simple-chain or research-agent) so the wiring is end-to-end out of the box.",
+  "provides": "agent.out-adapter",
+  "scope": "context",
   "version": "1.0.0",
   "requires": ["env-setup", "llm-adapter"],
   "conflicts": [],
@@ -59,63 +61,108 @@
     ".env.langgraph.example",
     {
       "path": "src/infrastructure/langgraph/nodes/input-processor.node.ts",
-      "when": { "answer": "graph_type", "equals": "simple-chain" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "simple-chain"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/nodes/llm-call.node.ts",
-      "when": { "answer": "graph_type", "equals": "simple-chain" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "simple-chain"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/nodes/output-formatter.node.ts",
-      "when": { "answer": "graph_type", "equals": "simple-chain" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "simple-chain"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/graphs/simple-chain.graph.ts",
-      "when": { "answer": "graph_type", "equals": "simple-chain" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "simple-chain"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/nodes/planner.node.ts",
-      "when": { "answer": "graph_type", "equals": "research-agent" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "research-agent"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/nodes/researcher.node.ts",
-      "when": { "answer": "graph_type", "equals": "research-agent" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "research-agent"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/nodes/synthesiser.node.ts",
-      "when": { "answer": "graph_type", "equals": "research-agent" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "research-agent"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/graphs/research-agent.graph.ts",
-      "when": { "answer": "graph_type", "equals": "research-agent" }
+      "when": {
+        "answer": "graph_type",
+        "equals": "research-agent"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/checkpointers/supabase-checkpointer.ts",
-      "when": { "answer": "checkpointing", "equals": "supabase" }
+      "when": {
+        "answer": "checkpointing",
+        "equals": "supabase"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/checkpointers/redis-checkpointer.ts",
-      "when": { "answer": "checkpointing", "equals": "redis" }
+      "when": {
+        "answer": "checkpointing",
+        "equals": "redis"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/checkpointers/postgres-checkpointer.ts",
-      "when": { "answer": "checkpointing", "equals": "postgres" }
+      "when": {
+        "answer": "checkpointing",
+        "equals": "postgres"
+      }
     },
     {
       "path": "src/infrastructure/langgraph/streaming/token-stream.ts",
-      "when": { "answer": "streaming", "equals": true }
+      "when": {
+        "answer": "streaming",
+        "equals": true
+      }
     },
     {
       "path": "app/api/agent/stream/route.ts",
-      "when": { "answer": "streaming", "equals": true }
+      "when": {
+        "answer": "streaming",
+        "equals": true
+      }
     },
     {
       "path": "src/infrastructure/langgraph/nodes/human-review.node.ts",
-      "when": { "answer": "human_in_loop", "equals": true }
+      "when": {
+        "answer": "human_in_loop",
+        "equals": true
+      }
     },
     {
       "path": "app/api/agent/resume/route.ts",
-      "when": { "answer": "human_in_loop", "equals": true }
+      "when": {
+        "answer": "human_in_loop",
+        "equals": true
+      }
     }
   ],
   "checklist": [

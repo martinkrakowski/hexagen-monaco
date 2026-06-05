@@ -17,6 +17,7 @@ import {
   compassNodeIdFor,
   overlayContextsFrom,
   ADDON_CHIP_TYPE,
+  ADDON_STRIP_LABEL_TYPE,
   type AddOnChipNode,
   type WithAddOn,
 } from "./addon-overlay-nodes";
@@ -123,7 +124,7 @@ describe("addon-overlay-nodes", () => {
     );
   });
 
-  it("places chips below the laid-out bbox, left-aligned to the leftmost node", () => {
+  it("places chips below the laid-out bbox, left-aligned, with the strip label above", () => {
     const laidOut = [
       {
         id: "a",
@@ -152,8 +153,49 @@ describe("addon-overlay-nodes", () => {
     // left edge aligns to min x; y sits below the lowest bottom
     //   bc bottom = 100 + 500 = 600; adapter bottom = 800 + 120 = 920 → max 920
     //   strip y = 920 + 140 clearance = 1060
-    assert.equal(placed[0].position.x, 300);
-    assert.equal(placed[0].position.y, 1060);
+    // [0] = "Platform add-ons" label, just above the first chip (1060 - 36)
+    assert.equal(placed[0].type, ADDON_STRIP_LABEL_TYPE);
+    assert.deepEqual(placed[0].position, { x: 300, y: 1024 });
+    // [1] = the first chip
+    assert.equal(placed[1].position.x, 300);
+    assert.equal(placed[1].position.y, 1060);
+  });
+
+  it("widens a chip's slot for a longer label so it cannot overlap the next chip", () => {
+    const laidOut = [
+      {
+        id: "a",
+        type: "bounded-context",
+        label: "A",
+        position: { x: 0, y: 0 },
+      },
+    ] as unknown as HexagonNode[];
+    const mkChip = (id: string, label: string): AddOnChipNode => ({
+      id: `addon-chip-${id}`,
+      type: ADDON_CHIP_TYPE,
+      label,
+      position: { x: 0, y: 0 },
+      addOn: {
+        addOnId: id,
+        capability: "platform.container",
+        kind: "platform-zone",
+        reason: "project",
+      },
+    });
+
+    // Long label FIRST, so its widened slot must push the following chip.
+    const placed = placeStripChips(laidOut, [
+      mkChip("adobe", "Adobe Firefly — Content Tagging"),
+      mkChip("docker", "Docker"),
+    ]).filter((n) => n.type === ADDON_CHIP_TYPE) as AddOnChipNode[];
+
+    const [longChip, nextChip] = placed;
+    const longWidth = longChip.style?.width ?? 0;
+    // longer label → wider reserved slot than a short one
+    assert.ok(longWidth > (nextChip.style?.width ?? 0));
+    // the chip AFTER the long one starts at/after its right edge — the widened
+    // slot actually advances the cursor (a fixed-width regression would fail here)
+    assert.ok(nextChip.position.x >= longChip.position.x + longWidth);
   });
 
   it("returns nothing for an empty selection", () => {

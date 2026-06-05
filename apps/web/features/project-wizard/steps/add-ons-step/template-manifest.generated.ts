@@ -227,6 +227,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Deploy the Hexagen TypeScript server to Amazon Bedrock AgentCore Runtime as an ARM64 container implementing the HTTP contract (POST /invocations, GET /ping). Generates agentcore.json, an IAM execution policy, and an optional deploy GitHub Action — no Python agent scaffolding.",
     requires: ["docker", "env-setup"],
     conflicts: [],
+    provides: "platform.runtime",
+    scope: "project",
   },
   "bedrock-agentcore-services": {
     id: "bedrock-agentcore-services",
@@ -235,6 +237,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Hexagonal ports + adapters for Amazon Bedrock AgentCore stateful services — Memory (multi-turn + long-term recall), Gateway (APIs/Lambdas/MCP as MCP tools), and Identity (workload token + IdP claim bridge to UserContext). The application layer depends only on the ports; install @aws-sdk/client-bedrock-agentcore.",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "agent.out-adapter",
+    scope: "context",
   },
   "better-auth": {
     id: "better-auth",
@@ -273,6 +277,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "GitHub Actions CI (build/typecheck/lint/test) with Turbo cache, a per-target deploy workflow (Vercel/Railway/Fly.io/VPS), optional PR preview deploys, and Dependabot",
     requires: [],
     conflicts: [],
+    provides: "platform.ci",
+    scope: "project",
   },
   clerk: {
     id: "clerk",
@@ -301,6 +307,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Populated DESIGN.md contract, CSS custom property tokens, Tailwind config extension, base component stubs",
     requires: [],
     conflicts: [],
+    provides: "platform.design-system",
+    scope: "project",
   },
   docker: {
     id: "docker",
@@ -385,6 +393,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Hexagonal LangGraph integration: typed AgentGraphPort, shared GraphState, node files, conditional edge routing, swap-by-env checkpointers (memory/supabase/redis/postgres), and Next.js routes for invoke / optional streaming / optional human-in-the-loop resume. Comes with one of two working example graphs (simple-chain or research-agent) so the wiring is end-to-end out of the box.",
     requires: ["env-setup", "llm-adapter"],
     conflicts: [],
+    provides: "agent.out-adapter",
+    scope: "context",
   },
   "llm-adapter": {
     id: "llm-adapter",
@@ -430,6 +440,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Expose the project's application use-cases as MCP tools over stdio — an inbound adapter with a static tool registry, a transport-factory seam, and a dynamic SDK import (ADR-0010).",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "platform.mcp",
+    scope: "project",
   },
   "mcp-server-http": {
     id: "mcp-server-http",
@@ -485,6 +497,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Structured JSON logging, correlation IDs via AsyncLocalStorage, request logger middleware, /api/health endpoint",
     requires: [],
     conflicts: [],
+    provides: "platform.observability",
+    scope: "project",
   },
   "rate-limiting": {
     id: "rate-limiting",
@@ -493,6 +507,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Differentiated middleware (text/image/general), session+IP hybrid identification, configurable limits, debug logging",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "platform.rate-limiting",
+    scope: "project",
   },
   "shared-types": {
     id: "shared-types",

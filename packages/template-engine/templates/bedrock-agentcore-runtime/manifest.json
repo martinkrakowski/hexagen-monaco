@@ -2,6 +2,8 @@
   "id": "bedrock-agentcore-runtime",
   "name": "Bedrock AgentCore Runtime",
   "description": "Deploy the Hexagen TypeScript server to Amazon Bedrock AgentCore Runtime as an ARM64 container implementing the HTTP contract (POST /invocations, GET /ping). Generates agentcore.json, an IAM execution policy, and an optional deploy GitHub Action — no Python agent scaffolding.",
+  "provides": "platform.runtime",
+  "scope": "project",
   "version": "1.0.0",
   "requires": ["docker", "env-setup"],
   "conflicts": [],
@@ -68,11 +70,17 @@
     ".env.agentcore.example",
     {
       "path": ".github/workflows/deploy-agentcore.yml",
-      "when": { "answer": "deploy_ci", "equals": true }
+      "when": {
+        "answer": "deploy_ci",
+        "equals": true
+      }
     },
     {
       "path": "infra/agentcore-stack.ts",
-      "when": { "answer": "provision", "equals": "cdk" }
+      "when": {
+        "answer": "provision",
+        "equals": "cdk"
+      }
     }
   ],
   "checklist": [

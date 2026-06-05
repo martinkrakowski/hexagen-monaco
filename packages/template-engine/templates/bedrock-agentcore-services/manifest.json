@@ -2,6 +2,8 @@
   "id": "bedrock-agentcore-services",
   "name": "Bedrock AgentCore Services",
   "description": "Hexagonal ports + adapters for Amazon Bedrock AgentCore stateful services — Memory (multi-turn + long-term recall), Gateway (APIs/Lambdas/MCP as MCP tools), and Identity (workload token + IdP claim bridge to UserContext). The application layer depends only on the ports; install @aws-sdk/client-bedrock-agentcore.",
+  "provides": "agent.out-adapter",
+  "scope": "context",
   "version": "1.0.0",
   "requires": ["env-setup"],
   "conflicts": [],
@@ -46,39 +48,66 @@
   "outputs": [
     {
       "path": "src/domain/ports/out/agent-memory.port.ts",
-      "when": { "answer": "services", "includes": "memory" }
+      "when": {
+        "answer": "services",
+        "includes": "memory"
+      }
     },
     {
       "path": "src/infrastructure/agentcore/memory/agentcore-memory.adapter.ts",
-      "when": { "answer": "services", "includes": "memory" }
+      "when": {
+        "answer": "services",
+        "includes": "memory"
+      }
     },
     {
       "path": "src/infrastructure/agentcore/memory/memory-config.ts",
-      "when": { "answer": "services", "includes": "memory" }
+      "when": {
+        "answer": "services",
+        "includes": "memory"
+      }
     },
     {
       "path": "src/domain/ports/out/tool-gateway.port.ts",
-      "when": { "answer": "services", "includes": "gateway" }
+      "when": {
+        "answer": "services",
+        "includes": "gateway"
+      }
     },
     {
       "path": "src/infrastructure/agentcore/gateway/agentcore-gateway.adapter.ts",
-      "when": { "answer": "services", "includes": "gateway" }
+      "when": {
+        "answer": "services",
+        "includes": "gateway"
+      }
     },
     {
       "path": "src/infrastructure/agentcore/gateway/mcp-tool-mapper.ts",
-      "when": { "answer": "services", "includes": "gateway" }
+      "when": {
+        "answer": "services",
+        "includes": "gateway"
+      }
     },
     {
       "path": "src/domain/ports/out/agent-identity.port.ts",
-      "when": { "answer": "services", "includes": "identity" }
+      "when": {
+        "answer": "services",
+        "includes": "identity"
+      }
     },
     {
       "path": "src/infrastructure/agentcore/identity/agentcore-identity.adapter.ts",
-      "when": { "answer": "services", "includes": "identity" }
+      "when": {
+        "answer": "services",
+        "includes": "identity"
+      }
     },
     {
       "path": "src/infrastructure/agentcore/identity/idp-bridge.ts",
-      "when": { "answer": "services", "includes": "identity" }
+      "when": {
+        "answer": "services",
+        "includes": "identity"
+      }
     },
     "agentcore/agentcore-services.json",
     ".env.agentcore-services.example"
