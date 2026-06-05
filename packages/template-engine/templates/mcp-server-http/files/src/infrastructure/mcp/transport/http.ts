@@ -12,17 +12,21 @@ import { authenticate, assertConfigured } from "../auth/{auth}.js";
 /**
  * Streamable-HTTP transport factory. Unlike stdio (a one-shot subprocess pipe),
  * the HTTP transport is request-driven: it needs a Node http server to feed it
- * requests via `transport.handleRequest(req, res)`. This factory builds the
- * transport in stateless mode, stands up that listener on MCP_HTTP_PORT
- * (authenticating every request first), and returns the transport so the
- * composition root can `server.connect()` it. The SDK is dynamically imported
- * (ADR-0010).
+ * requests via `transport.handleRequest(req, res)`. This factory builds a
+ * stateless transport plus a Node http listener (authenticating every request
+ * first), then ties the listener into the transport's own lifecycle:
  *
- * The listener's port opens asynchronously, after this factory returns, so the
- * composition root's `await server.connect(transport)` (run immediately after)
- * wires the protocol before the first request can arrive — no connect/listen
- * race. For stateful multi-client deployments pass a `sessionIdGenerator`
- * instead of `undefined` (see the SDK docs).
+ *  - The port opens in `transport.start()`, which `server.connect()` invokes
+ *    only AFTER it has wired `onmessage`/`onclose`/`onerror` — so no request can
+ *    reach `handleRequest` before the transport is connected to the McpServer.
+ *  - `transport.close()` shuts the listener down, so stopping the MCP server
+ *    frees the port and lets the process exit (no dangling listener, no
+ *    EADDRINUSE on restart).
+ *  - A bind failure (e.g. EADDRINUSE) rejects `start()` with a clear error
+ *    rather than crashing the process with an unhandled `'error'` event.
+ *
+ * The SDK is dynamically imported (ADR-0010). For stateful multi-client
+ * deployments, pass a `sessionIdGenerator` instead of `undefined` (see SDK docs).
  */
 export const createHttpTransport: TransportFactory = async () => {
   // Defense-in-depth: refuse to expose the server over the network without auth
@@ -59,9 +63,32 @@ export const createHttpTransport: TransportFactory = async () => {
     },
   );
 
-  httpServer.listen(port, () => {
-    console.error(`[mcp-http] listening on :${port}`);
-  });
+  // Open the port in start() (run by server.connect() after the message handlers
+  // are wired) and surface a bind error there instead of as an unhandled event.
+  const baseStart = transport.start.bind(transport);
+  transport.start = async () => {
+    await baseStart();
+    await new Promise<void>((resolve, reject) => {
+      const onBindError = (err: Error) => reject(err);
+      httpServer.once("error", onBindError);
+      httpServer.listen(port, () => {
+        httpServer.removeListener("error", onBindError);
+        httpServer.on("error", (err) =>
+          console.error("[mcp-http] server error:", err),
+        );
+        console.error(`[mcp-http] listening on :${port}`);
+        resolve();
+      });
+    });
+  };
+
+  // Free the listener when the MCP server shuts down, so the port is released
+  // and the event loop can exit.
+  const baseClose = transport.close.bind(transport);
+  transport.close = async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    await baseClose();
+  };
 
   return transport;
 };

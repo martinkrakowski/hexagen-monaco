@@ -28,9 +28,10 @@ describe("bearer authenticate", () => {
     assert.equal(await authenticate(reqWith("Bearer wrong")), false);
   });
 
-  it("allows the correct bearer token", async () => {
+  it("allows the correct token (scheme is case-insensitive, RFC 7235)", async () => {
     process.env.MCP_BEARER_TOKEN = "s3cret";
     assert.equal(await authenticate(reqWith("Bearer s3cret")), true);
+    assert.equal(await authenticate(reqWith("bearer s3cret")), true);
   });
 });
 

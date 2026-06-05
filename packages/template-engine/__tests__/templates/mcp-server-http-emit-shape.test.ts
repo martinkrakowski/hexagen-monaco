@@ -140,4 +140,23 @@ describe("mcp-server-http template — emit shape", () => {
       "test scaffolds target the generated core's runner (node:test)",
     );
   });
+
+  it("emits the oauth test scaffold under --with-tests when auth=oauth", async () => {
+    const { files } = await materializer.materialize(
+      { "mcp-server-http": { auth: "oauth" } },
+      { projectName: "acme", withTests: true },
+    );
+    assert.ok(
+      files.has("src/infrastructure/mcp/auth/oauth.test.ts"),
+      "oauth.test emitted under --with-tests when auth=oauth",
+    );
+    assert.ok(
+      !files.has("src/infrastructure/mcp/auth/bearer.test.ts"),
+      "bearer.test gated off by the auth=oauth answer",
+    );
+    assert.ok(
+      files.has("src/infrastructure/mcp/guard.test.ts"),
+      "guard.test (ungated by auth) still emitted",
+    );
+  });
 });

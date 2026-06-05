@@ -29,9 +29,10 @@ export async function authenticate(req: IncomingMessage): Promise<boolean> {
 
   const header = req.headers.authorization;
   const value = Array.isArray(header) ? header[0] : header;
-  if (!value || !value.startsWith("Bearer ")) return false;
+  // RFC 7235 §2.1: the auth-scheme name is case-insensitive.
+  if (!value || !/^Bearer /i.test(value)) return false;
 
-  // const token = value.slice("Bearer ".length).trim();
+  // const token = value.slice(7).trim(); // "Bearer ".length === 7
   // TODO: verify `token` against the issuer JWKS (see the jose snippet above)
   //       and return true only for a valid token carrying the required scopes.
   return false; // <- replace with real verification; fail-closed until then

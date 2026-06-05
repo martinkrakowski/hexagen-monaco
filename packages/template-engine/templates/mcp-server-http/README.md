@@ -39,11 +39,12 @@ import { authenticate } from "../auth/{auth}.js";
 
 interpolates to `../auth/bearer.js` or `../auth/oauth.js`. This is
 install-time-fixed by design: only the selected strategy ships, so the unused
-one is never a bundle/attack surface. (`MCP_AUTH_MODE` in `.env` is documentation
-of the install choice, not a live runtime switch — switching auth means
-re-installing. If runtime switching is ever required, promote to a runtime auth
-registry mirroring the transport seam; the gated-file structure does not block
-that.)
+one is never a bundle/attack surface. `MCP_AUTH_MODE` does not switch the auth
+_implementation_ (that is fixed at install via the gated file) — but it IS read
+at startup by `guard.ts` (unset/`none` over HTTP → refuse to start). Changing the
+actual mechanism means re-installing; if a runtime switch is ever required,
+promote to a runtime auth registry mirroring the transport seam (the gated-file
+structure does not block that).
 
 Both `bearer.ts` and `oauth.ts` export `authenticate(req): Promise<boolean>`.
 `bearer` does a constant-time token compare against `MCP_BEARER_TOKEN`. `oauth`

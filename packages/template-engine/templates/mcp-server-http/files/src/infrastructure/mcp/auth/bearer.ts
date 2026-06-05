@@ -14,9 +14,10 @@ export async function authenticate(req: IncomingMessage): Promise<boolean> {
 
   const header = req.headers.authorization;
   const value = Array.isArray(header) ? header[0] : header;
-  if (!value || !value.startsWith("Bearer ")) return false;
+  // RFC 7235 §2.1: the auth-scheme name is case-insensitive ("Bearer"/"bearer"/…).
+  if (!value || !/^Bearer /i.test(value)) return false;
 
-  const provided = value.slice("Bearer ".length).trim();
+  const provided = value.slice(7).trim(); // "Bearer ".length === 7
   return constantTimeEqual(provided, expected);
 }
 
