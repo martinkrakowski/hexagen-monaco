@@ -21,6 +21,12 @@ export const CAPABILITY_LABEL: Record<string, string> = {
   "platform.auth": "auth",
   "platform.error-handling": "error handling",
   "platform.lint": "lint / format",
+  "platform.runtime": "runtime platform",
+  "platform.mcp": "MCP server",
+  "platform.observability": "observability",
+  "platform.rate-limiting": "rate limiting",
+  "platform.design-system": "design system",
+  "platform.ci": "CI/CD pipeline",
 };
 
 /** The add-on's display name from the bundle (e.g. "BullMQ"), id as fallback. */
@@ -46,7 +52,10 @@ export function addOnHoverText(addOn: AddOnNodeMeta): string {
     case "no-compass-field":
       return `Provided by ${name} — no dedicated compass slot (${cap})`;
     default:
-      return `Provided by ${name} — project-level platform concern`;
+      // Surface the human-readable capability (from CAPABILITY_LABEL), so a
+      // project chip reads e.g. "Provided by Clerk — auth · project-level" —
+      // the role, not just the vendor name.
+      return `Provided by ${name} — ${cap} · project-level`;
   }
 }
 

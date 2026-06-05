@@ -36,7 +36,7 @@ describe("addon-overlay-presentation", () => {
         kind: "platform-zone",
         reason: "project",
       }),
-      `Provided by ${addOnName("docker")} — project-level platform concern`,
+      `Provided by ${addOnName("docker")} — container · project-level`,
     );
   });
 
@@ -101,6 +101,29 @@ describe("addon-overlay-presentation", () => {
         reason: "no-compass-field",
       }),
       `Provided by ${addOnName("langgraph")} — no dedicated compass slot (agent orchestration adapter)`,
+    );
+  });
+
+  it("surfaces the human-readable capability label (not the raw string) in the project hover", () => {
+    // platform.ci must read "CI/CD pipeline", not "ci" / "platform.ci"
+    assert.equal(
+      addOnHoverText({
+        addOnId: "ci-github-actions",
+        capability: "platform.ci",
+        kind: "platform-zone",
+        reason: "project",
+      }),
+      `Provided by ${addOnName("ci-github-actions")} — CI/CD pipeline · project-level`,
+    );
+    // the compelling case: an auth provider's role, not just its vendor name
+    assert.equal(
+      addOnHoverText({
+        addOnId: "clerk",
+        capability: "platform.auth",
+        kind: "platform-zone",
+        reason: "project",
+      }),
+      `Provided by ${addOnName("clerk")} — auth · project-level`,
     );
   });
 });
