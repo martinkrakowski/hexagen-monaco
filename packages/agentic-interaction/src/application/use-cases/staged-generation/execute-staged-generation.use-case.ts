@@ -8,7 +8,6 @@ import type { PromptVariables } from "../../../domain/prompts/generate-manifest.
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import {
   parseJSON,
-  extractArrayFromWrapper,
   extractObjectFromWrapper,
 } from "../../../domain/manifest/extract-json";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
@@ -42,29 +41,63 @@ Each item uses exactly this shape:
 
 /** Shape of a single bounded-context entry as returned by the context-list phase. */
 type RawContext = { name: string; type: string; description?: string };
+/** Shape of a single adapter entry as returned by the adapters phase. */
+type RawAdapter = { name: string; type: string; implements: string };
 
 /**
- * Normalize the context-list phase output into an array of bounded contexts.
- *
- * Real models don't always honor "return a bare array": they wrap it as
- * `{ "contexts": [...] }`, or (for a one-context project) return a single bare
- * object. extractArrayFromWrapper handles the wrapper shapes; the bare-object
- * fallback handles the single-context case. Anything else yields `[]`, which the
- * caller treats as a retryable empty result rather than crashing on `.map`.
+ * A context needs both `name` and `type` strings. Requiring `type` (not just
+ * `name`) is what stops the workspace object `{ name, description }` — and any
+ * other name-bearing object — from being mistaken for a single context.
  */
-function coerceContextArray(data: unknown): RawContext[] {
-  const arr = extractArrayFromWrapper<RawContext>(data);
-  if (arr.length > 0) return arr;
-  if (
-    data !== null &&
-    typeof data === "object" &&
-    !Array.isArray(data) &&
-    typeof (data as RawContext).name === "string"
-  ) {
-    return [data as RawContext];
+function isContextLike(v: unknown): v is RawContext {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof (v as RawContext).name === "string" &&
+    typeof (v as RawContext).type === "string"
+  );
+}
+
+function isAdapterLike(v: unknown): v is RawAdapter {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof (v as RawAdapter).name === "string"
+  );
+}
+
+/**
+ * Coerce an LLM phase response into an array of items that pass `isItem`.
+ *
+ * Handles a bare array, a `{ <wrapperKey>: [...] }` wrapper, and a single bare
+ * item object — filtering by `isItem` at every step. It deliberately does NOT
+ * reuse extractArrayFromWrapper, whose scan over arbitrary array *values* will
+ * return a nested array (e.g. a single context's `ports`/`responsibilities`, or
+ * an adapter's `deps`) in place of the real list. The single-object branch runs
+ * only after the wrapper keys are checked and is gated on the item shape, so the
+ * common non-array shapes are recovered while unrelated arrays are not.
+ */
+function coerceItemArray<T>(
+  data: unknown,
+  wrapperKeys: string[],
+  isItem: (v: unknown) => v is T,
+): T[] {
+  if (Array.isArray(data)) return data.filter(isItem);
+  if (data === null || typeof data !== "object") return [];
+  const obj = data as Record<string, unknown>;
+  for (const key of wrapperKeys) {
+    const val = obj[key];
+    if (Array.isArray(val)) return val.filter(isItem);
   }
+  if (isItem(data)) return [data];
   return [];
 }
+
+const CONTEXT_WRAPPER_KEYS = [
+  "contexts",
+  "boundedContexts",
+  "bounded_contexts",
+];
 
 export interface StagedGenerationCallbacks {
   onStageStart?: (stage: number, label: string) => void;
@@ -138,8 +171,9 @@ export class ExecuteStagedGenerationUseCase {
       // JSON *array*, and that's exactly the shape models most often wrap in an
       // object, prefix with prose, or return empty — none of which parseJSON can
       // recover. So we retry once (the second attempt restates the format), and
-      // coerceContextArray unwraps the common non-array shapes before we give up.
+      // coerceItemArray unwraps the common non-array shapes before we give up.
       callbacks?.onStageStart?.(1, "Context Classification");
+      const contextStart = Date.now();
       let contextData: RawContext[] | null = null;
       let contextError = "unable to parse a JSON array of bounded contexts";
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -147,20 +181,33 @@ export class ExecuteStagedGenerationUseCase {
           attempt === 0
             ? JSON.stringify(workspaceData)
             : `${JSON.stringify(workspaceData)}\n\nReminder: respond with ONLY a raw JSON array of bounded-context objects. No prose, no markdown fences, no wrapper object.`;
+        // Suppress runPhase's per-attempt onStageComplete: a first attempt that
+        // parses but coerces to empty would otherwise emit a completion event and
+        // then run again, so the UI/telemetry would see two completes for one
+        // start. We emit exactly one ourselves below, when a result is accepted.
         const contextResult = await this.runPhase(
           CONTEXT_LIST_SYSTEM_PROMPT,
           contextUserPrompt,
           1,
-          callbacks,
+          { ...callbacks, onStageComplete: undefined },
           { maxTokens: 2000 },
         );
         if (!contextResult.success) {
           contextError = contextResult.error;
           continue;
         }
-        const coerced = coerceContextArray(contextResult.data);
+        const coerced = coerceItemArray(
+          contextResult.data,
+          CONTEXT_WRAPPER_KEYS,
+          isContextLike,
+        );
         if (coerced.length > 0) {
           contextData = coerced;
+          callbacks?.onStageComplete?.(
+            1,
+            CONTEXT_LIST_SYSTEM_PROMPT,
+            Date.now() - contextStart,
+          );
           break;
         }
         contextError =
@@ -216,13 +263,15 @@ export class ExecuteStagedGenerationUseCase {
         // No need to add another warning, already added per attempt
       }
       // Map ports response to stage3 (PortMap). extractObjectFromWrapper unwraps
-      // a `{ "ports": { in, out } }` shape; the Array.isArray guards tolerate a
+      // the common wrapper shapes via its default keys ("ports", "data",
+      // "result") — narrowing to just ["ports"] would silently drop a
+      // `{ "data": { in, out } }` response. The Array.isArray guards tolerate a
       // response missing one of the arrays instead of throwing on `.map`.
-      type RawPort = { name: string; type: string; description: string };
+      type RawPort = { name: string; type: string; description?: string };
       const portsObj = extractObjectFromWrapper<{
         in?: RawPort[];
         out?: RawPort[];
-      }>(portsData, ["ports"]);
+      }>(portsData);
       const inPorts = Array.isArray(portsObj?.in) ? portsObj.in : [];
       const outPorts = Array.isArray(portsObj?.out) ? portsObj.out : [];
       state.stage3 = {
@@ -231,7 +280,7 @@ export class ExecuteStagedGenerationUseCase {
           in: inPorts.map((p) => ({
             name: p.name,
             type: p.type as "command" | "query" | "event",
-            description: p.description,
+            description: p.description ?? "",
           })),
           out: outPorts.map((p) => ({
             name: p.name,
@@ -240,7 +289,7 @@ export class ExecuteStagedGenerationUseCase {
               | "publisher"
               | "external-client"
               | "notifier",
-            description: p.description,
+            description: p.description ?? "",
           })),
         })),
       };
@@ -254,15 +303,12 @@ export class ExecuteStagedGenerationUseCase {
         callbacks,
         { maxTokens: 2000 },
       );
-      // extractArrayFromWrapper recovers a `{ "adapters": [...] }` shape; an
-      // empty result degrades to "no adapters" (a soft miss) rather than failing
-      // the whole generation, matching the prior Array.isArray fallback.
-      const adaptersData = adaptersResult.success
-        ? extractArrayFromWrapper<{
-            name: string;
-            type: string;
-            implements: string;
-          }>(adaptersResult.data)
+      // coerceItemArray recovers a bare array, a `{ "adapters": [...] }` wrapper,
+      // or a single bare adapter object (and, like the context phase, won't grab
+      // a nested array by mistake). An empty result degrades to "no adapters" (a
+      // soft miss) rather than failing the whole generation.
+      const adaptersData: RawAdapter[] = adaptersResult.success
+        ? coerceItemArray(adaptersResult.data, ["adapters"], isAdapterLike)
         : [];
       if (adaptersData.length === 0) {
         state.stage4 = { contexts: [] };
