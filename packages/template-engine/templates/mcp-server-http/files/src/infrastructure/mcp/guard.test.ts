@@ -43,4 +43,33 @@ describe("assertSafeTransport", () => {
     assert.doesNotThrow(() => assertSafeTransport({ MCP_TRANSPORT: "stdio" }));
     assert.doesNotThrow(() => assertSafeTransport({}));
   });
+
+  it("throws for empty, whitespace, or otherwise invalid auth modes", () => {
+    for (const MCP_AUTH_MODE of ["", "   ", "disabled", "basic"]) {
+      assert.throws(
+        () =>
+          assertSafeTransport({
+            MCP_TRANSPORT: "streamable-http",
+            MCP_AUTH_MODE,
+          }),
+        /requires MCP_AUTH_MODE/,
+        `MCP_AUTH_MODE=${JSON.stringify(MCP_AUTH_MODE)} must be rejected`,
+      );
+    }
+  });
+
+  it("accepts bearer/oauth case-insensitively and trims whitespace", () => {
+    assert.doesNotThrow(() =>
+      assertSafeTransport({
+        MCP_TRANSPORT: "streamable-http",
+        MCP_AUTH_MODE: " Bearer ",
+      }),
+    );
+    assert.doesNotThrow(() =>
+      assertSafeTransport({
+        MCP_TRANSPORT: "streamable-http",
+        MCP_AUTH_MODE: "OAUTH",
+      }),
+    );
+  });
 });
