@@ -48,6 +48,8 @@ export interface AddOnChipNode {
   type: typeof ADDON_CHIP_TYPE;
   label: string;
   position: { x: number; y: number };
+  /** Reserved slot width (px), sized to the label so chips never overlap. */
+  style?: { width: number };
   addOn: AddOnNodeMeta;
 }
 
@@ -126,6 +128,7 @@ export function annotateCompassNodes(
  */
 export function buildStripChips(
   overlay: readonly AddOnOverlay[],
+  displayNameOf: (id: string) => string = (id) => id,
 ): AddOnChipNode[] {
   const chips: AddOnChipNode[] = [];
   for (const o of overlay) {
@@ -133,7 +136,7 @@ export function buildStripChips(
     chips.push({
       id: `addon-chip-${o.addOnId}`,
       type: ADDON_CHIP_TYPE,
-      label: o.addOnId,
+      label: displayNameOf(o.addOnId),
       position: { x: 0, y: 0 },
       addOn: {
         addOnId: o.addOnId,
@@ -149,12 +152,22 @@ export function buildStripChips(
 const STRIP = {
   CLEARANCE_Y: 140, // gap below the laid-out diagram's bottom
   LABEL_OFFSET_Y: 36, // gap above the first chip for the strip label
-  CHIP_WIDTH: 200,
-  CHIP_HEIGHT: 60,
-  GAP_X: 20,
-  GAP_Y: 16,
-  PER_ROW: 6,
+  CHIP_MIN_WIDTH: 96,
+  ROW_STEP_Y: 44, // vertical step when chips wrap to a new row
+  GAP_X: 16,
+  MAX_ROW_WIDTH: 1200, // wrap to a new row once it would exceed this
 } as const;
+
+/**
+ * Estimate a chip's rendered width from its label: the ⊕ badge + gap + padding
+ * (~56px) plus a slightly generous per-character width (text-xs ≈ 7.5px/char).
+ * The over-estimate guarantees the reserved slot is never narrower than the
+ * rendered pill, so a long label (e.g. "Adobe Firefly — Content Tagging") gets a
+ * wider slot instead of overlapping the next chip.
+ */
+function estimateChipWidth(label: string): number {
+  return Math.max(STRIP.CHIP_MIN_WIDTH, Math.round(56 + label.length * 7.5));
+}
 
 /** Rough rendered height per node type, for the post-layout bounding box. */
 function estimatedHeight(type: HexagonNode["type"]): number {
@@ -190,17 +203,21 @@ export function placeStripChips(
   const startX = minX;
   const startY = maxBottom + STRIP.CLEARANCE_Y;
 
-  const placedChips: AddOnChipNode[] = chips.map((chip, i) => {
-    const row = Math.floor(i / STRIP.PER_ROW);
-    const col = i % STRIP.PER_ROW;
-    return {
-      ...chip,
-      position: {
-        x: startX + col * (STRIP.CHIP_WIDTH + STRIP.GAP_X),
-        y: startY + row * (STRIP.CHIP_HEIGHT + STRIP.GAP_Y),
-      },
-    };
-  });
+  // Lay chips out left-to-right; each reserves a slot sized to its label (so a
+  // long label widens its slot rather than overlapping the next chip), wrapping
+  // to a new row once the row would exceed MAX_ROW_WIDTH.
+  const placedChips: AddOnChipNode[] = [];
+  let x = startX;
+  let y = startY;
+  for (const chip of chips) {
+    const width = estimateChipWidth(chip.label);
+    if (x > startX && x + width > startX + STRIP.MAX_ROW_WIDTH) {
+      x = startX;
+      y += STRIP.ROW_STEP_Y;
+    }
+    placedChips.push({ ...chip, position: { x, y }, style: { width } });
+    x += width + STRIP.GAP_X;
+  }
 
   // "Platform add-ons" label, left-aligned just above the first chip.
   const label: AddOnStripLabelNode = {

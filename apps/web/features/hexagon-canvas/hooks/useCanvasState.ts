@@ -25,6 +25,7 @@ import {
 import { useElkLayout } from "./useElkLayout";
 import { canvasRedrawKey } from "../canvas-redraw-key";
 import { computeAddOnOverlay } from "../addon-overlay";
+import { addOnName } from "../addon-overlay-presentation";
 import {
   annotateCompassNodes,
   buildStripChips,
@@ -260,7 +261,7 @@ export function useCanvasState(
       overlayContexts,
     );
     annotateCompassNodes(compiledNodes, overlay, overlayContexts);
-    const chips = buildStripChips(overlay);
+    const chips = buildStripChips(overlay, addOnName);
 
     return { nodes: compiledNodes, edges, chips };
   }, []);

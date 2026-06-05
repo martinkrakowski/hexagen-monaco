@@ -161,6 +161,41 @@ describe("addon-overlay-nodes", () => {
     assert.equal(placed[1].position.y, 1060);
   });
 
+  it("widens a chip's slot for a longer label so it cannot overlap the next chip", () => {
+    const laidOut = [
+      {
+        id: "a",
+        type: "bounded-context",
+        label: "A",
+        position: { x: 0, y: 0 },
+      },
+    ] as unknown as HexagonNode[];
+    const mkChip = (id: string, label: string): AddOnChipNode => ({
+      id: `addon-chip-${id}`,
+      type: ADDON_CHIP_TYPE,
+      label,
+      position: { x: 0, y: 0 },
+      addOn: {
+        addOnId: id,
+        capability: "platform.container",
+        kind: "platform-zone",
+        reason: "project",
+      },
+    });
+
+    const placed = placeStripChips(laidOut, [
+      mkChip("docker", "Docker"),
+      mkChip("adobe", "Adobe Firefly — Content Tagging"),
+    ]).filter((n) => n.type === ADDON_CHIP_TYPE) as AddOnChipNode[];
+
+    const [first, second] = placed;
+    const firstWidth = first.style?.width ?? 0;
+    // longer label → wider reserved slot
+    assert.ok((second.style?.width ?? 0) > firstWidth);
+    // next chip starts at/after the first chip's right edge → no overlap
+    assert.ok(second.position.x >= first.position.x + firstWidth);
+  });
+
   it("returns nothing for an empty selection", () => {
     assert.deepEqual(buildStripChips([]), []);
     assert.deepEqual(placeStripChips([], []), []);
