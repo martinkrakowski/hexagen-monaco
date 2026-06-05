@@ -3,6 +3,8 @@
   "name": "Adobe Lightroom API",
   "description": "Lightroom automation for Adobe Firefly Services (image.adobe.io/lrService): a LightroomPort + adapter for auto-tone, preset application, and parametric edits over the adobe-firefly-core foundation. Async, batch-oriented photo editing / color grading.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

@@ -3,6 +3,8 @@
   "name": "Better Auth",
   "description": "Standalone Better Auth server: email/password + Google/GitHub social providers, magic-link plugin, built-in rate limiting, typed auth client, and core DB schema + migration",
   "version": "1.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["env-setup"],
   "conflicts": [
     "auth-mock",

@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Audio/Video (Media)",
   "description": "Audio/Video (Media) generation for Adobe Firefly Services (firefly-api.adobe.io): a MediaGenerationPort + adapter for text-to-video, image-to-video, audio/video translation, speech, and sound effects over the adobe-firefly-core foundation. Async and LONG (minutes) via FireflyJobPort; webhook job_mode strongly recommended. Partner models (Veo/Runway/Kling/ElevenLabs) are opaque model ids where entitled — no partner SDKs.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

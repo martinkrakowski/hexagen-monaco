@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Custom Models",
   "description": "Custom Models (training + inference) for Adobe Firefly Services (firefly-api.adobe.io): a CustomModelPort + adapter to train a brand-tuned model from a curated dataset, check status, list models, and generate with a trained model, over the adobe-firefly-core foundation. Async, long-running, webhook-friendly via FireflyJobPort.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

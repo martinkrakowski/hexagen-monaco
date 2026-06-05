@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — GCS Presigned Storage",
   "description": "Registers a Google Cloud Storage presigner for the adobe-firefly-core storage seam: signs V4 read URLs for Firefly inputs and V4 write URLs for outputs (storage: \"external\"). Mutually exclusive with the S3/Azure presigners. Install @google-cloud/storage.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": ["adobe-firefly-storage-s3", "adobe-firefly-storage-azure"],
   "questions": [

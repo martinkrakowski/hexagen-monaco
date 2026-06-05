@@ -3,6 +3,8 @@
   "name": "Adobe Creative Production API",
   "description": "Creative Production batch automation for Adobe Firefly Services (image.adobe.io): a CreativeProductionPort + adapter that maps a published workflow over N assets in one async batch job and surfaces per-asset status (partial success) over the adobe-firefly-core foundation. Async batch.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [],

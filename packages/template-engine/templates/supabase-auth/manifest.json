@@ -3,6 +3,8 @@
   "name": "Supabase Auth",
   "description": "Authentication provider built on Supabase: @supabase/ssr root middleware that refreshes the session and protects configured paths, getCurrentUser/requireAuth helpers, and /api/auth/me — all honouring AUTH_MODE=mock as a dev short-circuit. Layer on top of the supabase template.",
   "version": "1.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["supabase", "shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",

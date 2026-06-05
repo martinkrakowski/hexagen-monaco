@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Upscale",
   "description": "Image Upscale service for Adobe Firefly. Adds an UpscalePort + adapter that submits an async upscale job through the adobe-firefly-core foundation (IMS auth, REST client, job port, presigned storage). The lightest service — a good end-to-end validation of the foundation.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

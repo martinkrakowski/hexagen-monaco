@@ -3,6 +3,8 @@
   "name": "Google OAuth 2.0",
   "description": "Server-side Google OAuth 2.0: authorization code flow, userinfo fetch, AES-256-GCM session cookie, optional hosted-domain restriction, and a root middleware that protects configured paths while still honouring AUTH_MODE=mock as a dev short-circuit.",
   "version": "2.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",

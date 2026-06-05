@@ -3,6 +3,8 @@
   "name": "Shared Types",
   "description": "Foundation library shared by every auth template: UserContext domain type, a runtime-overridable MOCK_USER for development, and generic AES-256-GCM session-cookie helpers (including the canonical COOKIE_NAME resolver). Carries no opinion about mock vs. real auth.",
   "version": "1.0.0",
+  "provides": "kernel.user-context",
+  "scope": "shared",
   "requires": ["env-setup"],
   "conflicts": [],
   "questions": [

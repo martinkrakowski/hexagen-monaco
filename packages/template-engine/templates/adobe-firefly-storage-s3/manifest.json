@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — S3 Presigned Storage",
   "description": "Registers an Amazon S3 presigner for the adobe-firefly-core storage seam: presigns GET URLs for Firefly inputs and PUT URLs for outputs (storage: \"external\"). Mutually exclusive with the GCS/Azure presigners. Install @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": ["adobe-firefly-storage-gcs", "adobe-firefly-storage-azure"],
   "questions": [
