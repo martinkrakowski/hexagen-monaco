@@ -153,4 +153,33 @@ describe("computeAddOnOverlay", () => {
       [],
     );
   });
+
+  it("composes a mixed selection across kinds, processing each add-on independently", () => {
+    const overlay = computeAddOnOverlay(
+      { bullmq: {}, docker: {}, "shared-types": {}, "agents-md": {} },
+      lookup,
+      [ctx("a", { messagingAdapter: "BullMQ" })],
+    );
+    assert.deepEqual(overlay, [
+      {
+        kind: "context-adapter",
+        addOnId: "bullmq",
+        capability: "messaging.out-adapter",
+        contextId: "a",
+        field: "messagingAdapter",
+      },
+      {
+        kind: "platform-zone",
+        addOnId: "docker",
+        capability: "platform.container",
+        reason: "project",
+      },
+      {
+        kind: "shared-kernel",
+        addOnId: "shared-types",
+        capability: "kernel.user-context",
+      },
+      // "agents-md" is unmapped → skipped
+    ]);
+  });
 });
