@@ -361,15 +361,27 @@ function deriveApps(
 
   if (!allowSharedUi) {
     // Isolated: one web app per UI-bearing context, each depending only on its
-    // own context. Headless contexts (no `uiFramework`) get no web app. Sorted
-    // by name so the output stays deterministic.
+    // own context. Headless contexts (no `uiFramework`) get no web app.
+    //
+    // Distinct context names can slugify to the same value ("Orders!" / "Orders?"
+    // -> "orders"; any name without [a-z0-9] -> "app"), so disambiguate with a
+    // deterministic numeric suffix. The generator first-wins-dedupes by app name
+    // and would otherwise silently drop a colliding context's app. Suffixes are
+    // assigned in context order, then sorted by name for deterministic output.
+    const usedNames = new Set<string>();
     const webApps = nonShared
       .filter((bc) => Boolean(bc.uiFramework))
-      .map((bc) => ({
-        name: `web-${slugifyContextName(bc.name)}`,
-        framework: mapUiFramework(bc.uiFramework),
-        depends_on: [bc.name],
-      }))
+      .map((bc) => {
+        const base = `web-${slugifyContextName(bc.name)}`;
+        let name = base;
+        for (let n = 2; usedNames.has(name); n++) name = `${base}-${n}`;
+        usedNames.add(name);
+        return {
+          name,
+          framework: mapUiFramework(bc.uiFramework),
+          depends_on: [bc.name],
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
     return [...webApps, apiApp];
   }

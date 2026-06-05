@@ -129,4 +129,25 @@ describe("wizardToManifest — allowSharedUi shapes apps[]", () => {
       );
     }
   });
+
+  it("disambiguates app names that slugify to the same value (no context dropped)", () => {
+    // "Orders!" and "Orders?" both slugify to "orders"; without disambiguation
+    // the generator's first-wins dedup would silently drop the second's app.
+    const manifest = wizardToManifest(
+      wizard("strict-enterprise", [{ name: "Orders!" }, { name: "Orders?" }]),
+    );
+    const apps = appsOf(manifest).filter((a) => a.name.startsWith("web"));
+    assert.deepEqual(
+      apps.map((a) => a.name).sort(),
+      ["web-orders", "web-orders-2"],
+      "colliding slugs get a deterministic numeric suffix",
+    );
+    // Both contexts keep an app, each depending on its own (raw) context name.
+    assert.deepEqual(apps.find((a) => a.name === "web-orders")?.depends_on, [
+      "Orders!",
+    ]);
+    assert.deepEqual(apps.find((a) => a.name === "web-orders-2")?.depends_on, [
+      "Orders?",
+    ]);
+  });
 });
