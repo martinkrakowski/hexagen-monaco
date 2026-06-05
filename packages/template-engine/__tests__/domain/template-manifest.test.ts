@@ -54,6 +54,16 @@ describe("validateManifest", () => {
     });
     assert.equal(m.provides, "messaging.out-adapter");
     assert.equal(m.scope, "context");
+    // surrounding whitespace on the capability key is trimmed
+    const padded = validateManifest({
+      id: "x",
+      name: "X",
+      description: "X",
+      version: "1",
+      provides: "  messaging.out-adapter  ",
+      scope: "context",
+    });
+    assert.equal(padded.provides, "messaging.out-adapter");
   });
 
   it("leaves provides/scope undefined when absent", () => {
@@ -87,6 +97,10 @@ describe("validateManifest", () => {
     );
     assert.throws(
       () => validateManifest({ ...base2, provides: "", scope: "project" }),
+      /non-empty string/,
+    );
+    assert.throws(
+      () => validateManifest({ ...base2, provides: "   ", scope: "project" }),
       /non-empty string/,
     );
   });

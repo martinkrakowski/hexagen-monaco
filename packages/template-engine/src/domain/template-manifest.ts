@@ -95,7 +95,10 @@ function validatedMapping(m: Record<string, unknown>): {
   scope?: AddOnScope;
 } {
   const { provides, scope } = m;
-  if (provides !== undefined && (typeof provides !== "string" || !provides)) {
+  if (
+    provides !== undefined &&
+    (typeof provides !== "string" || !provides.trim())
+  ) {
     throw new Error(
       "Template manifest field 'provides' must be a non-empty string",
     );
@@ -116,7 +119,8 @@ function validatedMapping(m: Record<string, unknown>): {
     );
   }
   return {
-    provides: provides as string | undefined,
+    // Trimmed so a padded capability key can't silently miss the canvas join.
+    provides: provides === undefined ? undefined : (provides as string).trim(),
     scope: scope as AddOnScope | undefined,
   };
 }
