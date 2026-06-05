@@ -150,4 +150,23 @@ describe("wizardToManifest — allowSharedUi shapes apps[]", () => {
       "Orders?",
     ]);
   });
+
+  it("micro-frontend also emits per-context web apps (same allowSharedUi rule)", () => {
+    const manifest = wizardToManifest(
+      wizard("micro-frontend", [{ name: "orders" }, { name: "billing" }]),
+    );
+    assert.deepEqual(appNames(manifest), ["api", "web-billing", "web-orders"]);
+  });
+
+  it("falls back to web-app when a context name slugifies to empty", () => {
+    // Names with no [a-z0-9] (punctuation-only, or non-ASCII) slug to "" → "app",
+    // so the app directory is still valid.
+    const manifest = wizardToManifest(
+      wizard("strict-enterprise", [{ name: "!!!" }]),
+    );
+    const webNames = appsOf(manifest)
+      .map((a) => a.name)
+      .filter((n) => n.startsWith("web"));
+    assert.deepEqual(webNames, ["web-app"]);
+  });
 });

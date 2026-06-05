@@ -382,7 +382,10 @@ function deriveApps(
           depends_on: [bc.name],
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      // Codepoint comparison (not locale-sensitive `localeCompare`) keeps the
+      // ordering deterministic across environments, matching the default `.sort()`
+      // used for `depends_on`.
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     return [...webApps, apiApp];
   }
 
