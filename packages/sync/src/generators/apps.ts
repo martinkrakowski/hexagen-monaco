@@ -228,6 +228,28 @@ export async function generateApps(
           config,
         );
         const entryPath = path.join(appDir, entry.path);
+        // Containment: entryPoint.path is manifest-overridable (via
+        // generator.sync.apps.frameworks.<fw>.entryPoint), so a "/" or ".." in it
+        // could escape apps/<name>/ even though app.name is guarded above. Skip
+        // any entry whose resolved path leaves the app directory.
+        const resolvedAppDir = path.resolve(appDir);
+        const resolvedEntry = path.resolve(entryPath);
+        if (
+          resolvedEntry !== resolvedAppDir &&
+          !resolvedEntry.startsWith(resolvedAppDir + path.sep)
+        ) {
+          config.logger.warn(
+            `[apps] skipping entry file with unsafe path (escapes apps/${app.name}): ${entry.path}`,
+          );
+          if (report) {
+            report.record(
+              "blocked",
+              app.name,
+              `Unsafe entryPoint path (potential path traversal): ${entry.path}`,
+            );
+          }
+          continue;
+        }
         try {
           await fs.mkdir(path.dirname(entryPath), { recursive: true });
         } catch (err) {

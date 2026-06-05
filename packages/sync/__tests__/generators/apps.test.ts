@@ -356,6 +356,76 @@ describe("apps", () => {
     });
   });
 
+  it("should skip an entryPoint whose path escapes the app dir, keeping package.json", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const logger = createSpyLogger();
+      const report = makeReport();
+      // entryPoint is manifest-overridable; "../../escaped-entry.ts" resolves to
+      // <workspaceRoot>/escaped-entry.ts — outside apps/. It must be skipped even
+      // though the app name ("web") itself is safe.
+      const manifest: Manifest = {
+        system: "myorg",
+        generator: {
+          sync: {
+            apps: {
+              frameworks: {
+                "plain-ts": {
+                  packageJson: {
+                    template: '{\n  "name": "@{system}/{appName}"\n}\n',
+                  },
+                  entryPoint: {
+                    path: "../../escaped-entry.ts",
+                    template: "// escaped\n",
+                  },
+                },
+              },
+            },
+          },
+        },
+        apps: [{ name: "web", framework: "plain-ts" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger,
+        enableApps: true,
+      });
+
+      const result = await generateApps(config, report);
+      assert.strictEqual(
+        result.error,
+        undefined,
+        "an unsafe entryPoint must be skipped, not abort sync",
+      );
+
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, "escaped-entry.ts")),
+        false,
+        "entryPoint path with '..' must not write outside apps/",
+      );
+      assert.strictEqual(
+        await pathExists(
+          path.join(workspaceRoot, "apps", "web", "package.json"),
+        ),
+        true,
+        "package.json (fixed, safe path) is still written; only the unsafe entry is skipped",
+      );
+
+      const warns = messagesAt(logger, "warn");
+      assert.ok(
+        warns.some(
+          (m) => m.includes("entry") && m.includes("escaped-entry.ts"),
+        ),
+        `expected an unsafe-entryPoint warning — got: ${JSON.stringify(warns)}`,
+      );
+      const blocked = report.calls.find(
+        (c) => c.type === "blocked" && c.target === "web",
+      );
+      assert.ok(
+        blocked,
+        "report recorder must receive a 'blocked' entry for the unsafe entryPoint",
+      );
+    });
+  });
+
   it("should apply first-wins dedup for duplicate app names", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const logger = createSpyLogger();
