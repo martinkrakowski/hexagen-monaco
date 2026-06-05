@@ -3,6 +3,8 @@
   "name": "BullMQ",
   "description": "Typed BullMQ job queues with workers, scheduler, Redis fallback to in-process sync execution, optional Bull Board dashboard, and per-queue routing. Designed for background processing (image generation, email, webhooks, exports) where tasks are too slow for request/response cycles.",
   "version": "1.0.0",
+  "provides": "messaging.out-adapter",
+  "scope": "context",
   "requires": ["env-setup"],
   "conflicts": [],
   "questions": [
