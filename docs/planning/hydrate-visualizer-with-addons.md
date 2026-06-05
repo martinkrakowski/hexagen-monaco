@@ -53,7 +53,7 @@ Each add-on declares `provides` + `scope` on its template manifest (hand-authore
 
 `shared-types` is the confirmed `scope: "shared"` exemplar: UserContext + MOCK_USER + session helpers, the auth-ecosystem prerequisite — so the shared-kernel branch **is** exercised and the canvas must build it.
 
-**Batch 2** maps the rest (grouped — the authoritative per-template values live in the manifests):
+**Batch 2** maps `shared-types` + the Adobe family + auth providers (grouped — the authoritative per-template values live in the manifests):
 
 | Group                    | Templates                                                                                                                      | `provides`                         | `scope`   |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | --------- |
@@ -64,6 +64,7 @@ Each add-on declares `provides` + `scope` on its template manifest (hand-authore
 - **Adobe is flat:** all 17 share one `external-integration.out-adapter` — none has a dedicated compass field, so each renders as an external-integration badge labelled by add-on id (AC-1). Storage presigners use the same (Firefly-asset IO, **not** the app's domain persistence — a `persistence.out-adapter` here would misleadingly annotate the project's storage slot).
 - **`adobe-ims-spa` is in the auth group (`project`), not an Adobe service** — the `adobe-` prefix is a namespace artifact, not an architectural classification.
 - Auth providers are mutually exclusive, so the platform zone shows a single auth chip. See the auth reconciliation note in Decision 2.
+- **Still unmapped (a later batch, NOT this PR):** the AI/agent contexts (`langgraph`, `bedrock-agentcore-runtime`/`-services`, `mcp-server`/`mcp-server-http`), cross-cutting infra (`observability`, `rate-limiting`, `ci-github-actions`, `env-setup`), `design-system`, and `llm-adapter-bedrock`. (`agents-md` is docs-only and `__example__` is a fixture — neither gets a mapping.) After this, 34/47 manifests carry `provides`/`scope`.
 
 ## Sequencing
 
