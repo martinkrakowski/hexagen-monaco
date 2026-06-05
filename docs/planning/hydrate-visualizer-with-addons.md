@@ -66,9 +66,19 @@ Each add-on declares `provides` + `scope` on its template manifest (hand-authore
 - Auth providers are mutually exclusive, so the platform zone shows a single auth chip. See the auth reconciliation note in Decision 2.
 - **Still unmapped (a later batch, NOT this PR):** the AI/agent contexts (`langgraph`, `bedrock-agentcore-runtime`/`-services`, `mcp-server`/`mcp-server-http`), cross-cutting infra (`observability`, `rate-limiting`, `ci-github-actions`, `env-setup`), `design-system`, and `llm-adapter-bedrock`. (`agents-md` is docs-only and `__example__` is a fixture — neither gets a mapping.) After this, 34/47 manifests carry `provides`/`scope`.
 
+## Canvas wiring (verified before build)
+
+Traced end-to-end before writing any canvas code:
+
+- **The canvas already receives `wizardData`** (`ArchitecturePreviewPane` → `<GraphCanvasWrapper wizardData={wizardData} />` → `useCanvasState(projectId, wizardData)`), and `WizardData` (= `ProjectSpec`) includes `addOnsAnswers`. **No new provider/context/state-lift needed.**
+- **`SelectedAddOnsProvider` is a red herring — don't chase it.** It wraps only the _left_ (wizard) panel in `ProjectWorkspace`, so the canvas (middle panel) can't reach it; and it holds live `selectedIds`, not the persisted `addOnsAnswers`. The canvas reads `wizardData.addOnsAnswers` (consistent with the Q3 two-layer source of truth).
+- **The one real gap (fixed in step 1):** `wizardData.addOnsAnswers` was always `{}`. `useWizardForm` builds `wizardData` via `buildWizardData(boundedContexts, externalContexts, peerMappings, governance)` — omitting the optional 5th `addOnsAnswers` arg (which defaults `{}`). `buildWizardData` already accepts + returns it; the fix is the call site: `useWatch({ name: "addOnsAnswers" })` → pass as the 5th arg.
+- **`canvasHash` granularity (deliberate):** the `wizardData`-rebuild trigger hashes only the **selected id set** (`Object.keys(addOnsAnswers).sort()`), NOT the full answer map. A change in _which_ add-ons are selected redraws the canvas; changing a per-add-on question answer (e.g. a BullMQ queue name) does not — it doesn't affect the overlay, and a full compass regeneration is expensive.
+- **Empty/hydration:** `useWizardData` is synchronous (no loading flag); `useWatch` is reactive (not stale on reload); `addOnsAnswers` is `{}` until hydrated → the overlay shows nothing (graceful; the base canvas already renders "No Architecture Data" during hydration). The standalone `/architecture-viewer` route passes no `wizardData` → no overlay (no work there).
+
 ## Sequencing
 
 1. ~~Template content~~ — **done** (#226, #227).
-2. **Mapping data** (schema + per-template `provides`/`scope`) — **in progress** (this PR: schema + the priority context-scoped + project-scoped templates above; Adobe/auth follow).
-3. Thread `addOnsAnswers` into the visualizer (the canvas builds purely from the manifest today; the code-view path is the model to follow). Also extend the **web** manifest bundle to carry `provides`/`scope` — `apps/web/scripts/generate-template-questions.ts` currently picks only `id/name/description/requires/conflicts`.
-4. Compass join + rendering per the Decisions and Acceptance criteria above.
+2. ~~Mapping data~~ — **done** (#228 first pass + #229 Adobe/auth/shared-types; 34/47 manifests mapped, 13 deferred).
+3. **Thread `addOnsAnswers` into the canvas + extend the web manifest bundle** with `provides`/`scope` — **THIS PR, step 1** (see Canvas wiring; `generate-template-questions.ts` picked only `id/name/description/requires/conflicts`).
+4. Compass join + rendering per the Decisions and Acceptance criteria above — the feature logic, after step 1 is green.

@@ -63,6 +63,8 @@ interface Manifest {
   description?: string;
   requires?: string[];
   conflicts?: string[];
+  provides?: string;
+  scope?: string;
   questions?: RawQuestion[];
 }
 
@@ -72,6 +74,9 @@ interface ManifestMeta {
   description: string;
   requires: string[];
   conflicts: string[];
+  // Visualizer add-on→context mapping (optional; present only on mapped add-ons).
+  provides?: string;
+  scope?: string;
 }
 
 async function readManifests(): Promise<Manifest[]> {
@@ -162,6 +167,9 @@ function metaMap(manifests: Manifest[]): Record<string, ManifestMeta> {
       description: m.description ?? "",
       requires: m.requires ?? [],
       conflicts: m.conflicts ?? [],
+      // undefined → omitted by JSON.stringify, so unmapped templates stay clean.
+      provides: m.provides,
+      scope: m.scope,
     };
   }
   return out;
@@ -200,6 +208,8 @@ async function renderManifests(
     "  description: string;",
     "  requires: readonly string[];",
     "  conflicts: readonly string[];",
+    "  provides?: string;",
+    '  scope?: "context" | "shared" | "project";',
     "}",
     "",
     "export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = ",

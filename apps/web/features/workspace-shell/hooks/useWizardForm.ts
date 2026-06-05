@@ -56,34 +56,42 @@ export function useWizardForm(): UseWizardFormReturn {
     name: "peerMappings",
   });
   const governance = useWatch({ control: form.control, name: "governance" });
+  const addOnsAnswers = useWatch({
+    control: form.control,
+    name: "addOnsAnswers",
+  });
 
-  // Canvas-relevant hash: only rebuild wizardData when bounded contexts,
-  // external contexts, or peer mappings change. Governance field changes
-  // (like workspaceName) do NOT trigger wizardData rebuild →
-  // ArchitecturePreviewPane receives stable reference → React.memo bails out.
-  const canvasHash = JSON.stringify(
-    form.getValues(["boundedContexts", "externalContexts", "peerMappings"]),
-  );
-
-  // Full content hash for global lifecycle needs (saving/loading)
+  // Full content hash: every field a consumer (canvas, code view, generation,
+  // export, save/load) reads — including add-on answer VALUES and governance.
+  // wizardData is rebuilt whenever this changes, so it never goes stale for any
+  // consumer. The canvas-only "ignore answer-only changes" optimization lives in
+  // useCanvasState (canvasRedrawKey), NOT here: gating the SHARED wizardData on a
+  // canvas-relevant subset froze it for non-canvas consumers, shipping stale
+  // add-on answers to generation/export.
   const contentHash = JSON.stringify({
     boundedContexts,
     externalContexts,
     peerMappings,
     governance,
+    addOnsAnswers,
   });
 
   const wizardDataRef = useRef<WizardData | null>(null);
-  const prevCanvasHashRef = useRef<string>(canvasHash);
+  const prevContentHashRef = useRef<string>(contentHash);
 
-  // ONLY rebuild wizardData if canvas-relevant fields mutated
-  if (wizardDataRef.current === null || canvasHash !== prevCanvasHashRef.current) {
-    prevCanvasHashRef.current = canvasHash;
+  // Rebuild wizardData only when its content actually changes (the reference
+  // stays stable otherwise, so memoized consumers bail out).
+  if (
+    wizardDataRef.current === null ||
+    contentHash !== prevContentHashRef.current
+  ) {
+    prevContentHashRef.current = contentHash;
     wizardDataRef.current = buildWizardData(
       boundedContexts,
       externalContexts,
       peerMappings,
       governance,
+      addOnsAnswers,
     );
   }
   const wizardData = wizardDataRef.current!;

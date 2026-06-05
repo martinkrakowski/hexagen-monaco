@@ -23,6 +23,16 @@ import {
   generateManifestHash,
 } from "../stores/useCanvasGraphStore";
 import { useElkLayout } from "./useElkLayout";
+import { canvasRedrawKey } from "../canvas-redraw-key";
+import { computeAddOnOverlay } from "../addon-overlay";
+import {
+  annotateCompassNodes,
+  buildStripChips,
+  placeStripChips,
+  overlayContextsFrom,
+  type AddOnChipNode,
+} from "../addon-overlay-nodes";
+import { TEMPLATE_MANIFESTS } from "@/project-wizard/steps/add-ons-step/template-manifest.generated";
 
 interface GraphState {
   viewport: CanvasViewport;
@@ -65,11 +75,15 @@ export function useCanvasState(
   const wizardDataRef = useRef(wizardData);
   wizardDataRef.current = wizardData;
 
-  // Content-derived signal: only fires loadGraph when wizardData's
-  // serialized content actually changes, not on every identity churn
-  // from useWatch in the wizard form.
+  // Redraw the canvas only when the diagram-relevant slice changes — the
+  // contexts/peer mappings (compass) + the SELECTED add-on id-set (the overlay
+  // keys on ids). A per-add-on answer-value change (e.g. a queue name) or a
+  // governance edit leaves this stable, so the expensive compass regeneration is
+  // skipped — while wizardData itself stays fresh for other consumers (the
+  // answer-only optimization belongs here, not in the shared useWizardForm).
   const wizardDataHash = useMemo(
-    () => (wizardData ? generateManifestHash(wizardData) : null),
+    () =>
+      wizardData ? generateManifestHash(canvasRedrawKey(wizardData)) : null,
     [wizardData],
   );
 
@@ -201,6 +215,7 @@ export function useCanvasState(
   const regenerateGraphFromWizard = useCallback((): {
     nodes: HexagonNode[];
     edges: HexagonEdge[];
+    chips: AddOnChipNode[];
   } | null => {
     const wd = wizardDataRef.current;
     if (!wd?.boundedContexts?.length) {
@@ -235,7 +250,19 @@ export function useCanvasState(
       return node;
     });
 
-    return { nodes: compiledNodes, edges };
+    // Add-on overlay (web-only; @hexagen/visualization stays add-on-agnostic):
+    // annotate declared compass adapters in place, and build strip chips for
+    // platform-zone / shared-kernel add-ons (positioned post-layout).
+    const overlayContexts = overlayContextsFrom(wd.boundedContexts ?? []);
+    const overlay = computeAddOnOverlay(
+      wd.addOnsAnswers ?? {},
+      (id) => TEMPLATE_MANIFESTS[id],
+      overlayContexts,
+    );
+    annotateCompassNodes(compiledNodes, overlay, overlayContexts);
+    const chips = buildStripChips(overlay);
+
+    return { nodes: compiledNodes, edges, chips };
   }, []);
 
   /**
@@ -250,7 +277,7 @@ export function useCanvasState(
 
     const wd = wizardDataRef.current;
     if (wd?.boundedContexts?.length) {
-      const newHash = generateManifestHash(wd);
+      const newHash = generateManifestHash(canvasRedrawKey(wd));
 
       // Early exit: content unchanged — skip regeneration, store writes,
       // and viewport reset. This prevents per-keystroke cascades when
@@ -261,7 +288,7 @@ export function useCanvasState(
 
       const regenerated = regenerateGraphFromWizard();
       if (!regenerated) return;
-      const { nodes: compiledNodes, edges } = regenerated;
+      const { nodes: compiledNodes, edges, chips } = regenerated;
 
       const manifestChanged = manifestHash !== null && manifestHash !== newHash;
 
@@ -270,6 +297,17 @@ export function useCanvasState(
         finalNodes = await calculateElkLayout(compiledNodes, edges);
       } else {
         finalNodes = applySavedPositions(compiledNodes);
+      }
+
+      // Position add-on strip chips AFTER layout, from the laid-out bounding box
+      // (so they always clear the lowest context). Chips use a web-only node
+      // type the store + React Flow render structurally.
+      const placedChips = placeStripChips(finalNodes, chips);
+      if (placedChips.length > 0) {
+        finalNodes = [
+          ...finalNodes,
+          ...(placedChips as unknown as HexagonNode[]),
+        ];
       }
 
       setManifestHash(newHash);
