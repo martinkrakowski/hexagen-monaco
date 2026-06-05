@@ -191,18 +191,22 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     [configValue, streamingValue],
   );
 
-  if (!mounted) {
-    return (
-      <div className="contents" suppressHydrationWarning>
-        {children}
-      </div>
-    );
-  }
-
+  // Render the same provider tree regardless of `mounted`; only the context
+  // *values* change once mounted. Previously this swapped the element wrapping
+  // {children} from a host <div> (pre-mount) to the context providers
+  // (post-mount). Changing the element type at that position forces React to
+  // unmount and remount the entire subtree, double-mounting every page on first
+  // load. Keeping the structure stable makes the mount→mounted transition a
+  // plain re-render. Pre-mount we hand out the inert fallbacks so the server and
+  // first client render produce identical output (no hydration mismatch).
   return (
-    <LocalLLMConfigContext.Provider value={configValue}>
-      <LocalLLMStreamingContext.Provider value={streamingValue}>
-        <LocalLLMContext.Provider value={fullValue}>
+    <LocalLLMConfigContext.Provider
+      value={mounted ? configValue : CONFIG_FALLBACK}
+    >
+      <LocalLLMStreamingContext.Provider
+        value={mounted ? streamingValue : STREAMING_FALLBACK}
+      >
+        <LocalLLMContext.Provider value={mounted ? fullValue : FULL_FALLBACK}>
           {children}
         </LocalLLMContext.Provider>
       </LocalLLMStreamingContext.Provider>
@@ -233,6 +237,11 @@ const STREAMING_FALLBACK: LocalLLMStreamingValue = {
   sendStructuredPrompt: async () => {
     throw new Error("Not mounted");
   },
+};
+
+const FULL_FALLBACK: LocalLLMContextValue = {
+  ...CONFIG_FALLBACK,
+  ...STREAMING_FALLBACK,
 };
 
 export function useLocalLLMConfig(): LocalLLMConfigValue {

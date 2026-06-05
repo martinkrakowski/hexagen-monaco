@@ -3,6 +3,7 @@ import noKernelImports from "./rules/no-kernel-imports.js";
 import noFeatureSliceImports from "./rules/no-feature-slice-imports.js";
 import noArbitraryTailwindValues from "./rules/no-arbitrary-tailwind-values.js";
 import rhfStableArrayKeys from "./rules/rhf-stable-array-keys.js";
+import noChildrenWrapperTypeSwap from "./rules/no-children-wrapper-type-swap.js";
 
 export const rules = {
   "no-information-state": noInformationState,
@@ -10,6 +11,7 @@ export const rules = {
   "no-feature-slice-imports": noFeatureSliceImports,
   "no-arbitrary-tailwind-values": noArbitraryTailwindValues,
   "rhf-stable-array-keys": rhfStableArrayKeys,
+  "no-children-wrapper-type-swap": noChildrenWrapperTypeSwap,
 };
 
 export default { rules };
