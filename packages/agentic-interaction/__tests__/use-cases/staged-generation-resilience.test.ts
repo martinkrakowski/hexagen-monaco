@@ -97,6 +97,8 @@ describe("ExecuteStagedGenerationUseCase — LLM-shape resilience", () => {
         res.state.stage2?.accepted.map((c) => c.name),
         ["orders", "payments"],
       );
+      // Clean input must not produce spurious warnings.
+      assert.deepEqual(res.validation.warnings, []);
     }
   });
 
@@ -225,7 +227,7 @@ describe("ExecuteStagedGenerationUseCase — LLM-shape resilience", () => {
     assert.ok(completeLabels.includes("Context Classification"));
   });
 
-  it("keeps complete adapters and drops incomplete ones (no undefined fields in stage4)", async () => {
+  it("keeps complete adapters, drops incomplete ones (no undefined fields), and warns about the drop", async () => {
     const mixed = JSON.stringify([
       {
         name: "PgOrders",
@@ -252,6 +254,13 @@ describe("ExecuteStagedGenerationUseCase — LLM-shape resilience", () => {
       assert.ok(
         !adapters.some((a) => a.name === "orphan"),
         "the incomplete adapter should be dropped",
+      );
+      // The drop is surfaced, not silent.
+      assert.ok(
+        res.validation.warnings.some((w) =>
+          /dropped 1 malformed adapter/i.test(w),
+        ),
+        "a warning should report the dropped adapter",
       );
     }
   });

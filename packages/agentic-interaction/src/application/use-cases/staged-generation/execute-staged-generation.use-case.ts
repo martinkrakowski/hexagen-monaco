@@ -81,21 +81,31 @@ function isAdapterLike(v: unknown): v is RawAdapter {
  * an adapter's `deps`) in place of the real list. The single-object branch runs
  * only after the wrapper keys are checked and is gated on the item shape, so the
  * common non-array shapes are recovered while unrelated arrays are not.
+ *
+ * Returns the kept `items` plus `rejected`, the number of *array* entries that
+ * failed `isItem`, so a caller can surface a warning instead of dropping
+ * malformed entries silently.
  */
 function coerceItemArray<T>(
   data: unknown,
   wrapperKeys: string[],
   isItem: (v: unknown) => v is T,
-): T[] {
-  if (Array.isArray(data)) return data.filter(isItem);
-  if (data === null || typeof data !== "object") return [];
+): { items: T[]; rejected: number } {
+  const fromArray = (arr: unknown[]) => {
+    const items = arr.filter(isItem);
+    return { items, rejected: arr.length - items.length };
+  };
+  if (Array.isArray(data)) return fromArray(data);
+  if (data === null || typeof data !== "object") {
+    return { items: [], rejected: 0 };
+  }
   const obj = data as Record<string, unknown>;
   for (const key of wrapperKeys) {
     const val = obj[key];
-    if (Array.isArray(val)) return val.filter(isItem);
+    if (Array.isArray(val)) return fromArray(val);
   }
-  if (isItem(data)) return [data];
-  return [];
+  if (isItem(data)) return { items: [data], rejected: 0 };
+  return { items: [], rejected: 0 };
 }
 
 const CONTEXT_WRAPPER_KEYS = [
@@ -213,7 +223,7 @@ export class ExecuteStagedGenerationUseCase {
           contextError = contextResult.error;
           continue;
         }
-        const coerced = coerceItemArray(
+        const { items: coerced } = coerceItemArray(
           contextResult.data,
           CONTEXT_WRAPPER_KEYS,
           isContextLike,
@@ -324,9 +334,18 @@ export class ExecuteStagedGenerationUseCase {
       // or a single bare adapter object (and, like the context phase, won't grab
       // a nested array by mistake). An empty result degrades to "no adapters" (a
       // soft miss) rather than failing the whole generation.
-      const adaptersData: RawAdapter[] = adaptersResult.success
-        ? coerceItemArray(adaptersResult.data, ["adapters"], isAdapterLike)
-        : [];
+      const { items: adaptersData, rejected: rejectedAdapters } =
+        adaptersResult.success
+          ? coerceItemArray(adaptersResult.data, ["adapters"], isAdapterLike)
+          : { items: [] as RawAdapter[], rejected: 0 };
+      // Surface dropped adapters rather than discarding them silently: each was
+      // missing one of name/type/implements and would otherwise leave undefined
+      // fields in the manifest.
+      if (rejectedAdapters > 0) {
+        warnings.push(
+          `Adapters phase: dropped ${rejectedAdapters} malformed adapter(s) missing name/type/implements`,
+        );
+      }
       if (adaptersData.length === 0) {
         state.stage4 = { contexts: [] };
       } else {
