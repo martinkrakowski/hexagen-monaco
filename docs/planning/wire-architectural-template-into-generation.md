@@ -1,6 +1,6 @@
 # Wire the Architectural Template Into Generation
 
-**Status:** Phase 1 implemented locally (pending commit/PR). Phase 2 awaits Decision B; Phase 3 awaits Decision A.
+**Status:** Phase 1 shipped (PR #235). Decision B resolved → **B1**; Phase 2 implemented (per-context web apps for isolated templates). Phase 3 awaits Decision A.
 **Date:** 2026-06-05
 **Parent:** Standalone. Originates from a verification of the step‑1 "Architectural Template" selector (`WorkspaceGovernanceStep` → `TemplateSelector`).
 
@@ -62,7 +62,7 @@ They are indistinguishable in everything that ships except ~2 words in `layer-ru
 | **B1 (recommended)** — per‑context web apps          | When `allowSharedUi` is false, `deriveApps` emits one `web-<context>` app per UI‑bearing context instead of a single aggregated `web` | Visible, truthful structural difference; reuses the existing per‑name apps generator; matches "UI isolated per context" | More directories in the output for isolated templates                                 |
 | **B2** — single app, isolation enforced only by lint | Keep one `web` app; rely on `linter-config.yaml` to forbid shared‑UI imports                                                          | Smallest change                                                                                                         | Output looks identical to shared‑UI mode; reproduces today's "does nothing" complaint |
 
-**Recommendation: B1** — it's the smallest change that makes the rule _observable_ in the artifact, which is the whole point.
+**Resolved: B1** (per-context web apps) — the smallest change that makes the rule _observable_ in the artifact, which is the whole point. Implemented in Phase 2.
 
 ## Steps
 
@@ -76,6 +76,8 @@ They are indistinguishable in everything that ships except ~2 words in `layer-ru
 4. **Tests:** `wizardToManifest` snapshot per template is unchanged by the refactor; an unknown template id falls back to `in-process` semantics (deps kept) rather than throwing; the card copy reflects the advisory wording.
 
 ### Phase 2 — make `allowSharedUi` observable (`deriveApps`) — medium (Decision B1)
+
+> **Implemented 2026-06-05** (branch `feat/architectural-template-phase-2`, stacked on #235) — `deriveApps` now honours `allowSharedUi`: flexible templates keep the single shared `web` app (output unchanged), while strict templates emit one isolated `web-<context>` app per UI-bearing context plus the aggregated `api`. The card's UI line returns truthfully ("Single shared UI app" vs "Separate UI app per context"). This is **behaviour-changing for the two strict templates** — intended; it's the first real differentiator — while modular-monolith output stays byte-identical. New `wizard-to-manifest.apps.test.ts` covers shared vs isolated, headless-context omission, and the always-single `api`.
 
 1. **Per‑context web apps.** Extend `deriveApps` (`wizard-to-manifest.ts:305`) to read `rules.allowSharedUi`. When `false`, emit one `web-<contextName>` app per UI‑bearing context (`uiFramework !== ""`), each `depends_on` only its own context (+ `shared`); when `true`, keep today's single aggregated `web`. The `api` app derivation is unchanged. Output stays deterministic (sorted, fixed order).
 2. **Guard the no‑UI case.** If no context declares a `uiFramework`, emit no web app (today's `deriveApps` already returns `[]` when there are no non‑shared contexts — preserve that).
