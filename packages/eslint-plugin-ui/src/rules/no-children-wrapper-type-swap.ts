@@ -27,6 +27,38 @@ function wrapperName(node: TSESTree.JSXElement | TSESTree.JSXFragment): string {
   return jsxNameToString(node.openingElement.name);
 }
 
+const COMPONENT_NAME = /^[A-Z]/;
+
+/**
+ * Heuristic (the same PascalCase convention eslint-plugin-react uses): treat a
+ * function as a component if it is named in PascalCase — a `function Foo`
+ * declaration, a `const Foo = …` assignment, a default export, or a
+ * `const Foo = memo(…)` / `forwardRef(…)` wrapper. This lets us attribute a
+ * `{children}` rendered inside a nested callback or render-prop arrow to the
+ * *component* that owns it rather than to the callback; otherwise a wrapper
+ * swap split across a direct return and a callback path would slip through.
+ */
+function isComponentFn(fn: FnNode): boolean {
+  if (fn.type === "FunctionDeclaration") {
+    return fn.id != null && COMPONENT_NAME.test(fn.id.name);
+  }
+  const parent = fn.parent;
+  if (!parent) return false;
+  if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
+    return COMPONENT_NAME.test(parent.id.name);
+  }
+  if (parent.type === "ExportDefaultDeclaration") return true;
+  // const Foo = memo(() => …) / forwardRef((props, ref) => …)
+  if (
+    parent.type === "CallExpression" &&
+    parent.parent?.type === "VariableDeclarator" &&
+    parent.parent.id.type === "Identifier"
+  ) {
+    return COMPONENT_NAME.test(parent.parent.id.name);
+  }
+  return false;
+}
+
 /**
  * Disallow wrapping `{children}` in different element *types* across a
  * component's render paths.
@@ -38,6 +70,16 @@ function wrapperName(node: TSESTree.JSXElement | TSESTree.JSXFragment): string {
  * React tears down and rebuilds the entire subtree instead of re-using it. That
  * double-mounts every descendant on first load (re-running effects, replaying
  * entrance animations). Keep one stable wrapper and vary props/values instead.
+ *
+ * Known limitations (intentional scope):
+ * - Only a bare `{children}` identifier is tracked — not `props.children` or a
+ *   renamed alias.
+ * - A direct `return children` (no JSX wrapper) is not compared against wrapped
+ *   returns.
+ * - A component that renders `{children}` more than once *simultaneously* in
+ *   different element types (e.g. coexisting responsive desktop/mobile copies)
+ *   is still flagged, even though coexisting copies don't remount. Disable the
+ *   rule on that line if the duplication is intentional.
  */
 const rule: TSESLint.RuleModule<MessageIds> = {
   defaultOptions: [],
@@ -54,13 +96,20 @@ const rule: TSESLint.RuleModule<MessageIds> = {
     schema: [],
   },
   create(context) {
-    // One scope per component function; tracks the distinct wrapper types seen
-    // directly around a `{children}` expression (deduped by type name).
-    const stack: Array<{ fn: FnNode; wrappers: Map<string, TSESTree.Node> }> =
-      [];
+    // One scope per function; tracks the distinct wrapper types seen directly
+    // around a `{children}` expression (deduped by type name).
+    const stack: Array<{
+      fn: FnNode;
+      isComponent: boolean;
+      wrappers: Map<string, TSESTree.Node>;
+    }> = [];
 
     function enterFn(node: FnNode) {
-      stack.push({ fn: node, wrappers: new Map() });
+      stack.push({
+        fn: node,
+        isComponent: isComponentFn(node),
+        wrappers: new Map(),
+      });
     }
 
     function exitFn() {
@@ -71,6 +120,16 @@ const rule: TSESLint.RuleModule<MessageIds> = {
         messageId: "wrapperTypeSwap",
         data: { types: Array.from(scope.wrappers.keys()).join(" / ") },
       });
+    }
+
+    // Attribute a `{children}` to the nearest enclosing *component*, not to an
+    // intervening callback/render-prop. Fall back to the innermost function when
+    // no component is on the stack.
+    function targetScope() {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].isComponent) return stack[i];
+      }
+      return stack[stack.length - 1];
     }
 
     return {
@@ -96,7 +155,7 @@ const rule: TSESLint.RuleModule<MessageIds> = {
         ) {
           return;
         }
-        const scope = stack[stack.length - 1];
+        const scope = targetScope();
         if (!scope) return;
         const name = wrapperName(parent);
         if (!scope.wrappers.has(name)) scope.wrappers.set(name, parent);

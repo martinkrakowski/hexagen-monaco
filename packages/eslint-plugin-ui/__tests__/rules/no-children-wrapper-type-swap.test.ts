@@ -107,4 +107,54 @@ describe("no-children-wrapper-type-swap", () => {
     assert.strictEqual(reported.length, 1);
     assert.strictEqual(reported[0].messageId, "wrapperTypeSwap");
   });
+
+  it("attributes {children} in a nested callback to the enclosing component", () => {
+    const { reported, visitor } = makeVisitor();
+    const comp = {
+      type: "FunctionDeclaration",
+      id: { type: "Identifier", name: "Comp" },
+    } as never;
+    // A non-component arrow (e.g. a render-prop / map callback).
+    const callback = {
+      type: "ArrowFunctionExpression",
+      parent: { type: "CallExpression" },
+    } as never;
+
+    visitor.FunctionDeclaration(comp);
+    visitor.JSXExpressionContainer(childrenIn(providerTag)); // direct return path
+    visitor.ArrowFunctionExpression(callback);
+    visitor.JSXExpressionContainer(childrenIn(divTag)); // wrapped inside the callback
+    visitor["ArrowFunctionExpression:exit"](callback);
+    visitor["FunctionDeclaration:exit"](comp);
+
+    // The callback's <div> must be attributed to Comp, exposing the swap.
+    assert.strictEqual(reported.length, 1);
+    assert.strictEqual(reported[0].messageId, "wrapperTypeSwap");
+    assert.strictEqual(
+      reported[0].data?.types,
+      "LocalLLMContext.Provider / div",
+    );
+  });
+
+  it("does not flag a nested component that reuses the parent's children", () => {
+    const { reported, visitor } = makeVisitor();
+    const outer = {
+      type: "FunctionDeclaration",
+      id: { type: "Identifier", name: "Outer" },
+    } as never;
+    const inner = {
+      type: "FunctionDeclaration",
+      id: { type: "Identifier", name: "Inner" },
+    } as never;
+
+    visitor.FunctionDeclaration(outer);
+    visitor.JSXExpressionContainer(childrenIn(divTag)); // Outer wraps in <div>
+    visitor.FunctionDeclaration(inner);
+    visitor.JSXExpressionContainer(childrenIn(providerTag)); // Inner wraps in <Provider>
+    visitor["FunctionDeclaration:exit"](inner);
+    visitor["FunctionDeclaration:exit"](outer);
+
+    // Each component has a single wrapper type → no swap.
+    assert.strictEqual(reported.length, 0);
+  });
 });
