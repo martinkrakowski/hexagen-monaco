@@ -3,11 +3,7 @@
 import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { AddOnBadge } from "./AddOnBadge";
-import {
-  addOnChipVisual,
-  addOnHoverText,
-  addOnName,
-} from "./addon-overlay-presentation";
+import { addOnChipVisual, addOnHoverText } from "./addon-overlay-presentation";
 import type { AddOnNodeMeta } from "./addon-overlay-nodes";
 
 /**
@@ -16,7 +12,9 @@ import type { AddOnNodeMeta } from "./addon-overlay-nodes";
  * ⊕ marker and hover attribution are shared with the compass annotation.
  */
 function AddOnChipNodeImpl({ data }: NodeProps) {
-  const addOn = (data as { addOn?: AddOnNodeMeta }).addOn;
+  // `label` is the canonical display text — the same field placeStripChips sized
+  // the slot from — so width and rendered text can't drift (no overlap regression).
+  const { label, addOn } = data as { label?: string; addOn?: AddOnNodeMeta };
   if (!addOn) return null;
   const visual = addOnChipVisual(addOn);
   return (
@@ -26,9 +24,9 @@ function AddOnChipNodeImpl({ data }: NodeProps) {
       style={visual.style}
     >
       <AddOnBadge />
-      <span className="truncate text-foreground">
-        {addOnName(addOn.addOnId)}
-      </span>
+      {/* No text-colour here: it's inherited from visual.className (variant-aware),
+          so the muted "no host" treatment isn't overridden. */}
+      <span className="truncate">{label}</span>
     </div>
   );
 }

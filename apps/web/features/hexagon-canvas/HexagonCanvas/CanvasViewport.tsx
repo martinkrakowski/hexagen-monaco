@@ -10,6 +10,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { CanvasViewportProps } from "./types";
 import { AddOnLegend } from "../AddOnLegend";
+import { ADDON_CHIP_TYPE } from "../addon-overlay-nodes";
 import { useMemo } from "react";
 
 /** Static proOptions — never changes, hoisted to module scope to avoid per-render allocation. */
@@ -45,7 +46,7 @@ export function CanvasViewport({
     () =>
       nodes.some(
         (n) =>
-          n.type === "addon-chip" ||
+          n.type === ADDON_CHIP_TYPE ||
           Boolean((n.data as { addOn?: unknown } | undefined)?.addOn),
       ),
     [nodes],

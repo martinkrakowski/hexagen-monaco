@@ -183,17 +183,19 @@ describe("addon-overlay-nodes", () => {
       },
     });
 
+    // Long label FIRST, so its widened slot must push the following chip.
     const placed = placeStripChips(laidOut, [
-      mkChip("docker", "Docker"),
       mkChip("adobe", "Adobe Firefly — Content Tagging"),
+      mkChip("docker", "Docker"),
     ]).filter((n) => n.type === ADDON_CHIP_TYPE) as AddOnChipNode[];
 
-    const [first, second] = placed;
-    const firstWidth = first.style?.width ?? 0;
-    // longer label → wider reserved slot
-    assert.ok((second.style?.width ?? 0) > firstWidth);
-    // next chip starts at/after the first chip's right edge → no overlap
-    assert.ok(second.position.x >= first.position.x + firstWidth);
+    const [longChip, nextChip] = placed;
+    const longWidth = longChip.style?.width ?? 0;
+    // longer label → wider reserved slot than a short one
+    assert.ok(longWidth > (nextChip.style?.width ?? 0));
+    // the chip AFTER the long one starts at/after its right edge — the widened
+    // slot actually advances the cursor (a fixed-width regression would fail here)
+    assert.ok(nextChip.position.x >= longChip.position.x + longWidth);
   });
 
   it("returns nothing for an empty selection", () => {

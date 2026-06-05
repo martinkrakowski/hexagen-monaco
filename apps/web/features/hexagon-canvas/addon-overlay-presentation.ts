@@ -81,7 +81,7 @@ export function addOnChipVisual(
 } {
   if (addOn.kind === "shared-kernel") {
     return {
-      className: "border",
+      className: "border text-foreground",
       style: {
         borderColor: "hsl(var(--shared-kernel-edge))",
         background: "hsl(var(--shared-kernel-edge) / 0.12)",
@@ -98,7 +98,7 @@ export function addOnChipVisual(
     };
   }
   return {
-    className: "border",
+    className: "border text-foreground",
     style: {
       borderColor: "hsl(var(--addon-accent))",
       background: "hsl(var(--addon-accent) / 0.12)",

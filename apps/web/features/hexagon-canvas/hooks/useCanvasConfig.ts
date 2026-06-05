@@ -12,6 +12,10 @@ import { GroupBoundaryNode } from "../GroupBoundaryNode";
 import { PeerContextNode } from "../PeerContextNode";
 import { AddOnChipNode } from "../AddOnChipNode";
 import { AddOnStripLabel } from "../AddOnStripLabel";
+import {
+  ADDON_CHIP_TYPE,
+  ADDON_STRIP_LABEL_TYPE,
+} from "../addon-overlay-nodes";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
@@ -29,8 +33,8 @@ export const nodeTypes: NodeTypes = {
   inner: UnifiedBoundedContext,
   peer: PeerContextNode,
   group: GroupBoundaryNode,
-  "addon-chip": AddOnChipNode,
-  "addon-strip-label": AddOnStripLabel,
+  [ADDON_CHIP_TYPE]: AddOnChipNode,
+  [ADDON_STRIP_LABEL_TYPE]: AddOnStripLabel,
 } as unknown as NodeTypes;
 
 function toFlowNode(node: HexagonNodeData): HexagonFlowNode {
@@ -41,10 +45,10 @@ function toFlowNode(node: HexagonNodeData): HexagonFlowNode {
     | "inner"
     | "peer"
     | "group"
-    | "addon-chip"
-    | "addon-strip-label";
+    | typeof ADDON_CHIP_TYPE
+    | typeof ADDON_STRIP_LABEL_TYPE;
 
-  if (rawType === "addon-chip" || rawType === "addon-strip-label") {
+  if (rawType === ADDON_CHIP_TYPE || rawType === ADDON_STRIP_LABEL_TYPE) {
     nodeType = rawType;
   } else if (n.id === "monorepo-boundary" || n.type === "group") {
     nodeType = "group";
@@ -69,7 +73,7 @@ function toFlowNode(node: HexagonNodeData): HexagonFlowNode {
 
   // Add-on overlay nodes are system-positioned (post-layout); not draggable.
   const isAddOnNode =
-    nodeType === "addon-chip" || nodeType === "addon-strip-label";
+    nodeType === ADDON_CHIP_TYPE || nodeType === ADDON_STRIP_LABEL_TYPE;
   flowNode.draggable = !(n.id === "monorepo-boundary" || isAddOnNode);
 
   const satelliteTypes = ["entity", "use-case", "adapter", "port"];

@@ -85,6 +85,11 @@ describe("addon-overlay-presentation", () => {
     assert.match(String(project.style.borderColor), /--addon-accent/);
     assert.match(String(shared.style.borderColor), /--shared-kernel-edge/);
     assert.match(noHost.className, /dashed/);
+    // text colour is part of the variant contract (so the chip span must not
+    // hard-code its own): no-host is muted, the others normal foreground.
+    assert.match(noHost.className, /text-muted-foreground/);
+    assert.match(project.className, /text-foreground/);
+    assert.match(shared.className, /text-foreground/);
     assert.notEqual(project.style.borderColor, shared.style.borderColor);
   });
 
