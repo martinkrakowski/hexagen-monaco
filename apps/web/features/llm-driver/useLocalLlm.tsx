@@ -69,10 +69,6 @@ const LocalLLMStreamingContext = createContext<
   LocalLLMStreamingValue | undefined
 >(undefined);
 
-const LocalLLMContext = createContext<LocalLLMContextValue | undefined>(
-  undefined,
-);
-
 interface LocalLLMProviderProps {
   children: ReactNode;
 }
@@ -183,14 +179,6 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
     ],
   );
 
-  const fullValue = useMemo<LocalLLMContextValue>(
-    () => ({
-      ...configValue,
-      ...streamingValue,
-    }),
-    [configValue, streamingValue],
-  );
-
   // Render the same provider tree regardless of `mounted`; only the context
   // *values* change once mounted. Previously this swapped the element wrapping
   // {children} from a host <div> (pre-mount) to the context providers
@@ -206,9 +194,7 @@ export function LocalLLMProvider({ children }: LocalLLMProviderProps) {
       <LocalLLMStreamingContext.Provider
         value={mounted ? streamingValue : STREAMING_FALLBACK}
       >
-        <LocalLLMContext.Provider value={mounted ? fullValue : FULL_FALLBACK}>
-          {children}
-        </LocalLLMContext.Provider>
+        {children}
       </LocalLLMStreamingContext.Provider>
     </LocalLLMConfigContext.Provider>
   );
@@ -237,11 +223,6 @@ const STREAMING_FALLBACK: LocalLLMStreamingValue = {
   sendStructuredPrompt: async () => {
     throw new Error("Not mounted");
   },
-};
-
-const FULL_FALLBACK: LocalLLMContextValue = {
-  ...CONFIG_FALLBACK,
-  ...STREAMING_FALLBACK,
 };
 
 export function useLocalLLMConfig(): LocalLLMConfigValue {
