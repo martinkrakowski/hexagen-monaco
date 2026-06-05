@@ -58,11 +58,16 @@ function isContextLike(v: unknown): v is RawContext {
   );
 }
 
+// name, type and implements are all required on RawAdapter, so the guard checks
+// all three: an adapter missing `implements` (the port it binds to) is dropped
+// as a soft-degrade rather than mapped into stage4 with undefined fields.
 function isAdapterLike(v: unknown): v is RawAdapter {
   return (
     v !== null &&
     typeof v === "object" &&
-    typeof (v as RawAdapter).name === "string"
+    typeof (v as RawAdapter).name === "string" &&
+    typeof (v as RawAdapter).type === "string" &&
+    typeof (v as RawAdapter).implements === "string"
   );
 }
 

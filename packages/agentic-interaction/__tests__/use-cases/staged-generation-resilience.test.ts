@@ -38,6 +38,7 @@ const ADAPTERS = JSON.stringify([
 function makeLLM(opts: {
   context?: string[];
   ports?: string[];
+  adapters?: string[];
 }): SendStructuredRequestPort {
   const counts: Record<string, number> = {};
   return {
@@ -53,7 +54,7 @@ function makeLLM(opts: {
       else if (phase === "context-list")
         content = pick(opts.context, GOOD_CONTEXTS);
       else if (phase === "ports") content = pick(opts.ports, PORTS);
-      else if (phase === "adapters") content = ADAPTERS;
+      else if (phase === "adapters") content = pick(opts.adapters, ADAPTERS);
       return {
         success: true,
         value: {
@@ -65,6 +66,13 @@ function makeLLM(opts: {
           timestamp: Date.now(),
         },
       };
+    },
+    // The use case only calls sendRequest; this stub satisfies the port's
+    // streaming method so an accidental future call fails loudly rather than
+    // throwing "streamStructuredRequest is not a function". (Not a generator, so
+    // it throws on call — no eslint require-yield workaround needed.)
+    streamStructuredRequest(): AsyncGenerator<Result<string>> {
+      throw new Error("streamStructuredRequest is not used in these tests");
     },
   } as unknown as SendStructuredRequestPort;
 }
@@ -215,5 +223,36 @@ describe("ExecuteStagedGenerationUseCase — LLM-shape resilience", () => {
     // Completed phases report their concise human label.
     assert.ok(completeLabels.includes("Workspace Definition"));
     assert.ok(completeLabels.includes("Context Classification"));
+  });
+
+  it("keeps complete adapters and drops incomplete ones (no undefined fields in stage4)", async () => {
+    const mixed = JSON.stringify([
+      {
+        name: "PgOrders",
+        type: "repository",
+        implements: "OrderRepositoryPort",
+      },
+      { name: "orphan" }, // missing type + implements
+    ]);
+    const res = await run(makeLLM({ adapters: [mixed] }));
+    assert.equal(res.success, true);
+    if (res.success) {
+      const adapters =
+        res.state.stage4?.contexts.flatMap((c) => c.adapters) ?? [];
+      assert.ok(adapters.length > 0, "the complete adapter should be kept");
+      assert.ok(
+        adapters.every(
+          (a) =>
+            typeof a.name === "string" &&
+            typeof a.type === "string" &&
+            typeof a.implements === "string",
+        ),
+        "no adapter should carry undefined fields",
+      );
+      assert.ok(
+        !adapters.some((a) => a.name === "orphan"),
+        "the incomplete adapter should be dropped",
+      );
+    }
   });
 });
