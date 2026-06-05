@@ -195,4 +195,25 @@ describe("ExecuteStagedGenerationUseCase — LLM-shape resilience", () => {
       "stage 1 should complete exactly once",
     );
   });
+
+  it("streams concise stage labels — never the system prompt — on start and complete", async () => {
+    const startLabels: string[] = [];
+    const completeLabels: string[] = [];
+    const res = await run(makeLLM({}), {
+      onStageStart: (_s: number, label: string) => startLabels.push(label),
+      onStageComplete: (_s: number, label: string) =>
+        completeLabels.push(label),
+    });
+    assert.equal(res.success, true);
+    for (const label of [...startLabels, ...completeLabels]) {
+      assert.ok(
+        !/Respond with ONLY|raw JSON|markdown code fences/.test(label),
+        `label leaked system-prompt text: ${JSON.stringify(label)}`,
+      );
+      assert.ok(label.length < 40, `label too long: ${JSON.stringify(label)}`);
+    }
+    // Completed phases report their concise human label.
+    assert.ok(completeLabels.includes("Workspace Definition"));
+    assert.ok(completeLabels.includes("Context Classification"));
+  });
 });

@@ -99,6 +99,18 @@ const CONTEXT_WRAPPER_KEYS = [
   "bounded_contexts",
 ];
 
+// Concise, human-readable stage labels — the single source for both
+// onStageStart and onStageComplete. The web stage route streams this `label` to
+// NDJSON clients, so it must stay short and must NOT be the system prompt (which
+// would leak internal prompt text and bloat every stage event).
+const STAGE_LABELS: Record<number, string> = {
+  0: "Workspace Definition",
+  1: "Context Classification",
+  2: "Port Mapping",
+  3: "Adapter Assignment",
+  4: "Manifest Assembly",
+};
+
 export interface StagedGenerationCallbacks {
   onStageStart?: (stage: number, label: string) => void;
   onStageComplete?: (stage: number, label: string, durationMs: number) => void;
@@ -139,7 +151,7 @@ export class ExecuteStagedGenerationUseCase {
 
     try {
       // Phase 1: Workspace
-      callbacks?.onStageStart?.(0, "Workspace Definition");
+      callbacks?.onStageStart?.(0, STAGE_LABELS[0]);
       const workspaceResult = await this.runPhase(
         WORKSPACE_SYSTEM_PROMPT,
         userDescription,
@@ -172,7 +184,7 @@ export class ExecuteStagedGenerationUseCase {
       // object, prefix with prose, or return empty — none of which parseJSON can
       // recover. So we retry once (the second attempt restates the format), and
       // coerceItemArray unwraps the common non-array shapes before we give up.
-      callbacks?.onStageStart?.(1, "Context Classification");
+      callbacks?.onStageStart?.(1, STAGE_LABELS[1]);
       const contextStart = Date.now();
       let contextData: RawContext[] | null = null;
       let contextError = "unable to parse a JSON array of bounded contexts";
@@ -205,7 +217,7 @@ export class ExecuteStagedGenerationUseCase {
           contextData = coerced;
           callbacks?.onStageComplete?.(
             1,
-            CONTEXT_LIST_SYSTEM_PROMPT,
+            STAGE_LABELS[1],
             Date.now() - contextStart,
           );
           break;
@@ -234,7 +246,7 @@ export class ExecuteStagedGenerationUseCase {
       };
 
       // Phase 3: Ports (with retries, return success with warnings on failure)
-      callbacks?.onStageStart?.(2, "Port Mapping");
+      callbacks?.onStageStart?.(2, STAGE_LABELS[2]);
       let portsSuccess = false;
       let portsData: unknown = { in: [], out: [] };
       // Test expects 2 warnings, so retry 2 times
@@ -295,7 +307,7 @@ export class ExecuteStagedGenerationUseCase {
       };
 
       // Phase 4: Adapters
-      callbacks?.onStageStart?.(3, "Adapter Assignment");
+      callbacks?.onStageStart?.(3, STAGE_LABELS[3]);
       const adaptersResult = await this.runPhase(
         ADAPTERS_SYSTEM_PROMPT,
         JSON.stringify({ ports: state.stage3 }),
@@ -327,7 +339,7 @@ export class ExecuteStagedGenerationUseCase {
       }
 
       // Assemble manifest
-      callbacks?.onStageStart?.(4, "Manifest Assembly");
+      callbacks?.onStageStart?.(4, STAGE_LABELS[4]);
       try {
         const assembler = new ExecuteManifestAssemblyUseCase();
         state.stage5 = assembler.execute({
@@ -426,7 +438,11 @@ export class ExecuteStagedGenerationUseCase {
         return { success: false, error: parseResult.error };
       }
 
-      callbacks?.onStageComplete?.(phaseNum, systemPrompt, Date.now() - start);
+      callbacks?.onStageComplete?.(
+        phaseNum,
+        STAGE_LABELS[phaseNum] ?? `Stage ${phaseNum}`,
+        Date.now() - start,
+      );
       return { success: true, data: parseResult.data };
     } catch (error) {
       return {
