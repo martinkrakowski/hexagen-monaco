@@ -75,4 +75,5 @@ export type {
 export {
   workspaceTemplates,
   getWorkspaceTemplate,
+  FALLBACK_RULES,
 } from "./domain/model/workspace-templates/workspace-templates";

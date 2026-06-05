@@ -36,6 +36,46 @@ bounded_contexts:
     assert.strictEqual(result.governance.workspaceName, "test-system");
   });
 
+  it("preserves a recognised non-default architecture (strict-enterprise)", () => {
+    const strictYaml = `
+system: strict-test
+scope: "@hexagen/test"
+architecture: "strict-enterprise"
+bounded_contexts:
+  - name: "UserContext"
+    type: "core"
+    description: "Users"
+    layers:
+      domain:
+        entities: ["User"]
+`;
+    const result = parseManifestToWizardData(strictYaml);
+    assert.strictEqual(
+      result.governance.workspaceTemplate,
+      "strict-enterprise",
+    );
+  });
+
+  it("falls back to modular-monolith for an architecture not in the catalog", () => {
+    // `architecture` is a loose string in ManifestSchema, so an unrecognised
+    // value reaches the mapping (rather than failing validation) and must
+    // resolve to the flexible default via the catalog lookup.
+    const unknownArchYaml = `
+system: unknown-arch-test
+scope: "@hexagen/test"
+architecture: "totally-made-up"
+bounded_contexts:
+  - name: "UserContext"
+    type: "core"
+    description: "Users"
+    layers:
+      domain:
+        entities: ["User"]
+`;
+    const result = parseManifestToWizardData(unknownArchYaml);
+    assert.strictEqual(result.governance.workspaceTemplate, "modular-monolith");
+  });
+
   it("accepts mixed-case enum values (e.g. type: Core)", () => {
     // Regression: LLM output such as `type: "Core"` previously threw
     // "Manifest validation failed: Invalid enum value... received 'Core'".
