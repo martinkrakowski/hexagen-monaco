@@ -56,14 +56,31 @@ export function useWizardForm(): UseWizardFormReturn {
     name: "peerMappings",
   });
   const governance = useWatch({ control: form.control, name: "governance" });
+  const addOnsAnswers = useWatch({
+    control: form.control,
+    name: "addOnsAnswers",
+  });
 
   // Canvas-relevant hash: only rebuild wizardData when bounded contexts,
   // external contexts, or peer mappings change. Governance field changes
   // (like workspaceName) do NOT trigger wizardData rebuild →
   // ArchitecturePreviewPane receives stable reference → React.memo bails out.
-  const canvasHash = JSON.stringify(
-    form.getValues(["boundedContexts", "externalContexts", "peerMappings"]),
-  );
+  // The add-on overlay depends only on WHICH add-ons are selected (the key set),
+  // not on per-add-on question answers (e.g. a BullMQ queue name) — so hash the
+  // selected id set, not the full answer map. A selection change redraws the
+  // canvas; an answer-only change does not (and full compass regeneration is
+  // expensive).
+  const selectedAddOnIds = addOnsAnswers
+    ? Object.keys(addOnsAnswers).sort()
+    : [];
+  const canvasHash = JSON.stringify({
+    config: form.getValues([
+      "boundedContexts",
+      "externalContexts",
+      "peerMappings",
+    ]),
+    addOnIds: selectedAddOnIds,
+  });
 
   // Full content hash for global lifecycle needs (saving/loading)
   const contentHash = JSON.stringify({
@@ -77,13 +94,17 @@ export function useWizardForm(): UseWizardFormReturn {
   const prevCanvasHashRef = useRef<string>(canvasHash);
 
   // ONLY rebuild wizardData if canvas-relevant fields mutated
-  if (wizardDataRef.current === null || canvasHash !== prevCanvasHashRef.current) {
+  if (
+    wizardDataRef.current === null ||
+    canvasHash !== prevCanvasHashRef.current
+  ) {
     prevCanvasHashRef.current = canvasHash;
     wizardDataRef.current = buildWizardData(
       boundedContexts,
       externalContexts,
       peerMappings,
       governance,
+      addOnsAnswers,
     );
   }
   const wizardData = wizardDataRef.current!;

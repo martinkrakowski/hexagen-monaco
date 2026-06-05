@@ -8,6 +8,8 @@ export interface TemplateManifestMeta {
   description: string;
   requires: readonly string[];
   conflicts: readonly string[];
+  provides?: string;
+  scope?: "context" | "shared" | "project";
 }
 
 export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
@@ -18,6 +20,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Creative Production batch automation for Adobe Firefly Services (image.adobe.io): a CreativeProductionPort + adapter that maps a published workflow over N assets in one async batch job and surfaces per-asset status (partial success) over the adobe-firefly-core foundation. Async batch.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-express": {
     id: "adobe-express",
@@ -26,6 +30,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Express batch automation for Adobe Firefly Services (image.adobe.io): an ExpressAutomationPort + adapter that renders many variants from a published Express template in one async batch job — the localization use case (translated copy + regional imagery per locale) over the adobe-firefly-core foundation. Async.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-composite": {
     id: "adobe-firefly-composite",
@@ -34,6 +40,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Composite Operations service for Adobe Firefly: a CompositePort + adapter that blends a product image into a scene (matching tone/lighting/shadow) over the adobe-firefly-core foundation. Async; returns multiple candidate outputs (the port returns an array of hrefs).",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-content-tagging": {
     id: "adobe-firefly-content-tagging",
@@ -42,6 +50,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Content Tagging service for Adobe Firefly: a ContentTaggingPort + adapter that returns structured tags/metadata for an image (the one service whose result is JSON, not an asset — exercises the foundation's non-asset path). Sync or short async; presigns the input only.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-core": {
     id: "adobe-firefly-core",
@@ -50,6 +60,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Shared foundation for Adobe Firefly Services: IMS OAuth Server-to-Server token provider (cached), a base REST client (x-api-key + bearer, retry, timeout), the async job port (polling or webhook), a presigned-URL storage seam (passthrough default), and Adobe error classification. Service addons require this and add one port + adapter each.",
     requires: ["env-setup", "error-handling"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-custom-models": {
     id: "adobe-firefly-custom-models",
@@ -58,6 +70,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Custom Models (training + inference) for Adobe Firefly Services (firefly-api.adobe.io): a CustomModelPort + adapter to train a brand-tuned model from a curated dataset, check status, list models, and generate with a trained model, over the adobe-firefly-core foundation. Async, long-running, webhook-friendly via FireflyJobPort.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-generate": {
     id: "adobe-firefly-generate",
@@ -66,6 +80,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Firefly Generate API (the flagship service): an ImageGenerationPort + adapter for text-to-image and the image-edit operations (generative fill/expand, image-to-image, style transfer) over the adobe-firefly-core foundation. Async via FireflyJobPort; presigned IO; content-credentials and safety flags pass through as port options.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-media": {
     id: "adobe-firefly-media",
@@ -74,6 +90,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Audio/Video (Media) generation for Adobe Firefly Services (firefly-api.adobe.io): a MediaGenerationPort + adapter for text-to-video, image-to-video, audio/video translation, speech, and sound effects over the adobe-firefly-core foundation. Async and LONG (minutes) via FireflyJobPort; webhook job_mode strongly recommended. Partner models (Veo/Runway/Kling/ElevenLabs) are opaque model ids where entitled — no partner SDKs.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-storage-azure": {
     id: "adobe-firefly-storage-azure",
@@ -82,6 +100,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       'Registers an Azure Blob Storage presigner for the adobe-firefly-core storage seam: mints read SAS URLs for Firefly inputs and create/write SAS URLs for outputs (storage: "external"). Signs with an account key, or a managed-identity user-delegation key when no key is set. Mutually exclusive with the S3/GCS presigners. Install @azure/storage-blob + @azure/identity.',
     requires: ["adobe-firefly-core"],
     conflicts: ["adobe-firefly-storage-s3", "adobe-firefly-storage-gcs"],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-storage-gcs": {
     id: "adobe-firefly-storage-gcs",
@@ -90,6 +110,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       'Registers a Google Cloud Storage presigner for the adobe-firefly-core storage seam: signs V4 read URLs for Firefly inputs and V4 write URLs for outputs (storage: "external"). Mutually exclusive with the S3/Azure presigners. Install @google-cloud/storage.',
     requires: ["adobe-firefly-core"],
     conflicts: ["adobe-firefly-storage-s3", "adobe-firefly-storage-azure"],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-storage-s3": {
     id: "adobe-firefly-storage-s3",
@@ -98,6 +120,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       'Registers an Amazon S3 presigner for the adobe-firefly-core storage seam: presigns GET URLs for Firefly inputs and PUT URLs for outputs (storage: "external"). Mutually exclusive with the GCS/Azure presigners. Install @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner.',
     requires: ["adobe-firefly-core"],
     conflicts: ["adobe-firefly-storage-gcs", "adobe-firefly-storage-azure"],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-firefly-upscale": {
     id: "adobe-firefly-upscale",
@@ -106,6 +130,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Image Upscale service for Adobe Firefly. Adds an UpscalePort + adapter that submits an async upscale job through the adobe-firefly-core foundation (IMS auth, REST client, job port, presigned storage). The lightest service — a good end-to-end validation of the foundation.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-illustrator": {
     id: "adobe-illustrator",
@@ -114,6 +140,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Illustrator automation for Adobe Firefly Services (image.adobe.io): an IllustratorPort + adapter for artboard rendering, variable-data merge, and vector scaling (vector→raster at arbitrary scale — ads to billboards) over the adobe-firefly-core foundation. Async.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-ims-spa": {
     id: "adobe-ims-spa",
@@ -131,6 +159,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "magic-link",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   "adobe-indesign": {
     id: "adobe-indesign",
@@ -139,6 +169,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "InDesign automation for Adobe Firefly Services (image.adobe.io): an InDesignPort + adapter for data merge (template + data source), layout rendering, and PDF export over the adobe-firefly-core foundation. Async.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-lightroom": {
     id: "adobe-lightroom",
@@ -147,6 +179,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Lightroom automation for Adobe Firefly Services (image.adobe.io/lrService): a LightroomPort + adapter for auto-tone, preset application, and parametric edits over the adobe-firefly-core foundation. Async, batch-oriented photo editing / color grading.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-photoshop": {
     id: "adobe-photoshop",
@@ -155,6 +189,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Photoshop automation for Adobe Firefly Services (image.adobe.io/pie/psdService): a PhotoshopAutomationPort + adapter for Smart Object replacement, text-layer edits, action JSON, crop, and PSD rendering over the adobe-firefly-core foundation. Async; inputs are named layers in a pre-authored .psd.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "adobe-substance-3d": {
     id: "adobe-substance-3d",
@@ -163,6 +199,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Substance 3D automation for Adobe Firefly Services (image.adobe.io): a Substance3DPort + adapter for scene render, composite, and relight over the adobe-firefly-core foundation. Async, compute-heavy — the longest-running Firefly jobs; polled by status URL (image.adobe.io services don't deliver Firefly webhooks) and the poll has no max-wait cap, so long renders aren't cut off.",
     requires: ["adobe-firefly-core"],
     conflicts: [],
+    provides: "external-integration.out-adapter",
+    scope: "context",
   },
   "agents-md": {
     id: "agents-md",
@@ -179,6 +217,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Dev-only root middleware that injects shared-types' MOCK_USER as x-user-context when AUTH_MODE=mock. Real auth providers ship their own middleware that overwrites this one and still honours AUTH_MODE=mock as a dev short-circuit.",
     requires: ["shared-types", "env-setup"],
     conflicts: [],
+    provides: "platform.auth",
+    scope: "project",
   },
   "bedrock-agentcore-runtime": {
     id: "bedrock-agentcore-runtime",
@@ -213,6 +253,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "clerk",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   bullmq: {
     id: "bullmq",
@@ -221,6 +263,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Typed BullMQ job queues with workers, scheduler, Redis fallback to in-process sync execution, optional Bull Board dashboard, and per-queue routing. Designed for background processing (image generation, email, webhooks, exports) where tasks are too slow for request/response cycles.",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "messaging.out-adapter",
+    scope: "context",
   },
   "ci-github-actions": {
     id: "ci-github-actions",
@@ -247,6 +291,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "better-auth",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   "design-system": {
     id: "design-system",
@@ -263,6 +309,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Multi-stage Dockerfile, docker-compose with peer services, dev override for hot reload, GitHub Actions image push",
     requires: [],
     conflicts: [],
+    provides: "platform.container",
+    scope: "project",
   },
   "env-setup": {
     id: "env-setup",
@@ -279,6 +327,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "3-layer error hierarchy, Result<T,E> type, RFC 7807 HTTP mapping, React error boundary",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "platform.error-handling",
+    scope: "project",
   },
   "eslint-no-console": {
     id: "eslint-no-console",
@@ -287,6 +337,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "A drop-in ESLint flat-config fragment that bans console.* (no-console) so logging goes through the structured logger instead of console.log technical debt — with the logger transport, server startup, CLI scripts, and config files exempted. Spread it into your eslint.config.mjs.",
     requires: [],
     conflicts: [],
+    provides: "platform.lint",
+    scope: "project",
   },
   "github-oauth": {
     id: "github-oauth",
@@ -304,6 +356,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "adobe-ims-spa",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   "google-oauth": {
     id: "google-oauth",
@@ -321,6 +375,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "adobe-ims-spa",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   langgraph: {
     id: "langgraph",
@@ -337,6 +393,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Typed port interface, provider adapters (xAI, OpenAI, Anthropic, Ollama, Azure OpenAI), model constants, reasoning routing, retry logic, structured output",
     requires: ["env-setup", "error-handling"],
     conflicts: [],
+    provides: "llm.out-adapter",
+    scope: "context",
   },
   "llm-adapter-bedrock": {
     id: "llm-adapter-bedrock",
@@ -362,6 +420,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "adobe-ims-spa",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   "mcp-server": {
     id: "mcp-server",
@@ -395,6 +455,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "adobe-ims-spa",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   nextauth: {
     id: "nextauth",
@@ -413,6 +475,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "better-auth",
       "supabase-auth",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
   observability: {
     id: "observability",
@@ -437,6 +501,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "Foundation library shared by every auth template: UserContext domain type, a runtime-overridable MOCK_USER for development, and generic AES-256-GCM session-cookie helpers (including the canonical COOKIE_NAME resolver). Carries no opinion about mock vs. real auth.",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "kernel.user-context",
+    scope: "shared",
   },
   supabase: {
     id: "supabase",
@@ -445,6 +511,8 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "SSR-safe browser/server/admin clients, Result-based storage helpers, RLS examples, type generation, optional Drizzle ORM and realtime. Pure storage/database layer — no auth code. Add the supabase-auth template to layer @supabase/ssr-based session middleware on top.",
     requires: ["env-setup"],
     conflicts: [],
+    provides: "persistence.out-adapter",
+    scope: "context",
   },
   "supabase-auth": {
     id: "supabase-auth",
@@ -462,5 +530,7 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
       "magic-link",
       "adobe-ims-spa",
     ],
+    provides: "platform.auth",
+    scope: "project",
   },
 };
