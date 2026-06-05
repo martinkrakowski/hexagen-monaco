@@ -8,7 +8,7 @@ global.document = dom.window.document as unknown as Document;
 global.localStorage = dom.window.localStorage;
 
 import { describe, it, afterEach } from "node:test";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { useWizardForm } from "../useWizardForm";
 
@@ -34,38 +34,28 @@ describe("useWizardForm — addOnsAnswers → wizardData (canvas overlay source)
     );
   });
 
-  it("rebuilds wizardData on id-set change, not on answer-only change (canvasHash granularity)", () => {
+  it("keeps wizardData.addOnsAnswers fresh on an answer-value change (no staleness for generation/export)", () => {
     const { result } = renderHook(() => useWizardForm());
     act(() => {
       result.current.form.setValue("addOnsAnswers", {
         bullmq: { queueName: "a" },
       });
     });
-    const afterSelect = result.current.wizardData;
+    assert.deepEqual(result.current.wizardData.addOnsAnswers, {
+      bullmq: { queueName: "a" },
+    });
 
-    // Same id-set, different answer value → stable reference (no canvas redraw).
+    // Same id-set, new answer value → wizardData MUST reflect it. The canvas-only
+    // "don't redraw on answer-only changes" optimization lives in
+    // useCanvasState/canvasRedrawKey, NOT in this shared provider — so the value
+    // can never go stale for generation/export.
     act(() => {
       result.current.form.setValue("addOnsAnswers", {
         bullmq: { queueName: "b" },
       });
     });
-    assert.equal(
-      result.current.wizardData,
-      afterSelect,
-      "answer-only change must NOT rebuild wizardData",
-    );
-
-    // New id added → rebuild (new reference).
-    act(() => {
-      result.current.form.setValue("addOnsAnswers", {
-        bullmq: { queueName: "b" },
-        supabase: {},
-      });
+    assert.deepEqual(result.current.wizardData.addOnsAnswers, {
+      bullmq: { queueName: "b" },
     });
-    assert.notEqual(
-      result.current.wizardData,
-      afterSelect,
-      "id-set change MUST rebuild wizardData",
-    );
   });
 });

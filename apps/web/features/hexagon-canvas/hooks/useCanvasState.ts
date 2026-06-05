@@ -23,6 +23,7 @@ import {
   generateManifestHash,
 } from "../stores/useCanvasGraphStore";
 import { useElkLayout } from "./useElkLayout";
+import { canvasRedrawKey } from "../canvas-redraw-key";
 
 interface GraphState {
   viewport: CanvasViewport;
@@ -65,11 +66,15 @@ export function useCanvasState(
   const wizardDataRef = useRef(wizardData);
   wizardDataRef.current = wizardData;
 
-  // Content-derived signal: only fires loadGraph when wizardData's
-  // serialized content actually changes, not on every identity churn
-  // from useWatch in the wizard form.
+  // Redraw the canvas only when the diagram-relevant slice changes — the
+  // contexts/peer mappings (compass) + the SELECTED add-on id-set (the overlay
+  // keys on ids). A per-add-on answer-value change (e.g. a queue name) or a
+  // governance edit leaves this stable, so the expensive compass regeneration is
+  // skipped — while wizardData itself stays fresh for other consumers (the
+  // answer-only optimization belongs here, not in the shared useWizardForm).
   const wizardDataHash = useMemo(
-    () => (wizardData ? generateManifestHash(wizardData) : null),
+    () =>
+      wizardData ? generateManifestHash(canvasRedrawKey(wizardData)) : null,
     [wizardData],
   );
 
