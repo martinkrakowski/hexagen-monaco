@@ -24,6 +24,15 @@ import {
 } from "../stores/useCanvasGraphStore";
 import { useElkLayout } from "./useElkLayout";
 import { canvasRedrawKey } from "../canvas-redraw-key";
+import { computeAddOnOverlay } from "../addon-overlay";
+import {
+  annotateCompassNodes,
+  buildStripChips,
+  placeStripChips,
+  overlayContextsFrom,
+  type AddOnChipNode,
+} from "../addon-overlay-nodes";
+import { TEMPLATE_MANIFESTS } from "@/project-wizard/steps/add-ons-step/template-manifest.generated";
 
 interface GraphState {
   viewport: CanvasViewport;
@@ -206,6 +215,7 @@ export function useCanvasState(
   const regenerateGraphFromWizard = useCallback((): {
     nodes: HexagonNode[];
     edges: HexagonEdge[];
+    chips: AddOnChipNode[];
   } | null => {
     const wd = wizardDataRef.current;
     if (!wd?.boundedContexts?.length) {
@@ -240,7 +250,19 @@ export function useCanvasState(
       return node;
     });
 
-    return { nodes: compiledNodes, edges };
+    // Add-on overlay (web-only; @hexagen/visualization stays add-on-agnostic):
+    // annotate declared compass adapters in place, and build strip chips for
+    // platform-zone / shared-kernel add-ons (positioned post-layout).
+    const overlayContexts = overlayContextsFrom(wd.boundedContexts ?? []);
+    const overlay = computeAddOnOverlay(
+      wd.addOnsAnswers ?? {},
+      (id) => TEMPLATE_MANIFESTS[id],
+      overlayContexts,
+    );
+    annotateCompassNodes(compiledNodes, overlay, overlayContexts);
+    const chips = buildStripChips(overlay);
+
+    return { nodes: compiledNodes, edges, chips };
   }, []);
 
   /**
@@ -255,7 +277,7 @@ export function useCanvasState(
 
     const wd = wizardDataRef.current;
     if (wd?.boundedContexts?.length) {
-      const newHash = generateManifestHash(wd);
+      const newHash = generateManifestHash(canvasRedrawKey(wd));
 
       // Early exit: content unchanged — skip regeneration, store writes,
       // and viewport reset. This prevents per-keystroke cascades when
@@ -266,7 +288,7 @@ export function useCanvasState(
 
       const regenerated = regenerateGraphFromWizard();
       if (!regenerated) return;
-      const { nodes: compiledNodes, edges } = regenerated;
+      const { nodes: compiledNodes, edges, chips } = regenerated;
 
       const manifestChanged = manifestHash !== null && manifestHash !== newHash;
 
@@ -275,6 +297,17 @@ export function useCanvasState(
         finalNodes = await calculateElkLayout(compiledNodes, edges);
       } else {
         finalNodes = applySavedPositions(compiledNodes);
+      }
+
+      // Position add-on strip chips AFTER layout, from the laid-out bounding box
+      // (so they always clear the lowest context). Chips use a web-only node
+      // type the store + React Flow render structurally.
+      const placedChips = placeStripChips(finalNodes, chips);
+      if (placedChips.length > 0) {
+        finalNodes = [
+          ...finalNodes,
+          ...(placedChips as unknown as HexagonNode[]),
+        ];
       }
 
       setManifestHash(newHash);
