@@ -27,11 +27,6 @@ const CROSS_CONTEXT_DETAILS: Record<string, string> = {
     "Cross-context imports denied; integrate via network (enforced by lint invariants)",
 };
 
-// NOTE: `allowSharedUi` is intentionally not surfaced here yet — it drives no
-// generation today (display-only). Phase 2 (deriveApps → per-context web apps)
-// makes it structural, at which point a truthful "UI: shared app / isolated per
-// context" line returns. See
-// docs/planning/wire-architectural-template-into-generation.md.
 function TemplateDetails({ template }: TemplateDetailsProps) {
   const crossContextDetail =
     CROSS_CONTEXT_DETAILS[template.rules.crossContextCalls];
@@ -42,6 +37,11 @@ function TemplateDetails({ template }: TemplateDetailsProps) {
         {template.title}
       </div>
       <div className="text-xs text-muted-foreground space-y-1">
+        <div>
+          {template.rules.allowSharedUi
+            ? "Single shared UI app across contexts"
+            : "Separate UI app generated per context"}
+        </div>
         {crossContextDetail && <div>{crossContextDetail}</div>}
       </div>
     </div>

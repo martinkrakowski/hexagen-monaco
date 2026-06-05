@@ -242,7 +242,7 @@ export function wizardToManifest(
         apps: { enabled: true },
       },
     },
-    apps: deriveApps(boundedContexts),
+    apps: deriveApps(boundedContexts, templateRules.allowSharedUi),
     bounded_contexts: boundedContexts.map((bc) => {
       const isShared = bc.name.toLowerCase().includes("shared");
 
@@ -305,19 +305,27 @@ export function wizardToManifest(
 
 /**
  * Derive the manifest `apps[]` array from the wizard's per-BC framework
- * choices. Produces at most two apps — a `web` and an `api` — aggregating
- * every non-shared bounded context as a dependency, so the generator knows
- * which packages each app may import.
+ * choices, honouring the template's `allowSharedUi` rule.
  *
- * Returns `[]` when there are no non-shared bounded contexts; callers should
- * keep the key present (not absent) so downstream schema validation sees an
- * explicit empty list.
+ * - `allowSharedUi: true` (flexible templates): a single shared `web` app plus
+ *   one `api`, each aggregating every non-shared bounded context as a
+ *   dependency — the historical behaviour.
+ * - `allowSharedUi: false` (strict templates): one isolated `web-<context>` app
+ *   per UI-bearing context (each depending only on its own context), plus the
+ *   single aggregated `api`. This makes "UI isolated per context" a real,
+ *   visible difference in the generated workspace. See
+ *   docs/planning/wire-architectural-template-into-generation.md (Phase 2).
  *
- * Output is deterministic: `depends_on` is sorted, and apps appear in a
- * fixed `web`-then-`api` order.
+ * Returns `[]` when there are no non-shared bounded contexts; callers keep the
+ * key present (not absent) so downstream schema validation sees an explicit
+ * empty list.
+ *
+ * Output is deterministic: `depends_on` is sorted and apps appear in a fixed
+ * order (`web`/`web-*` first, then `api`).
  */
 function deriveApps(
   boundedContexts: readonly BoundedContext[],
+  allowSharedUi: boolean,
 ): NonNullable<Manifest["apps"]> {
   const nonShared = boundedContexts.filter(
     (bc) => !bc.name.toLowerCase().includes("shared"),
@@ -325,25 +333,41 @@ function deriveApps(
   if (nonShared.length === 0) return [];
 
   const dependsOn = [...new Set(nonShared.map((bc) => bc.name))].sort();
-
-  const uiFrameworks = nonShared.map((bc) => mapUiFramework(bc.uiFramework));
   const apiFrameworks = nonShared.map((bc) => mapApiFramework(bc.apiFramework));
+  // A single aggregated `api` app is emitted under both rules — Phase 2 isolates
+  // only the UI surface, not the API.
+  const apiApp = {
+    name: "api",
+    framework: pickPreferredFramework(apiFrameworks, ["fastify", "plain-ts"]),
+    depends_on: dependsOn,
+  };
 
-  // Preference order places frameworks with built-in generator templates
-  // ahead of `plain-ts`, so a project mixing Next.js and Remix contexts
-  // still emits a Next.js web app (template available) rather than
-  // degrading to plain-ts.
-  const webFramework = pickPreferredFramework(uiFrameworks, [
-    "next.js",
-    "plain-ts",
-  ]);
-  const apiFramework = pickPreferredFramework(apiFrameworks, [
-    "fastify",
-    "plain-ts",
-  ]);
+  if (!allowSharedUi) {
+    // Isolated: one web app per UI-bearing context, each depending only on its
+    // own context. Headless contexts (no `uiFramework`) get no web app. Sorted
+    // by name so the output stays deterministic.
+    const webApps = nonShared
+      .filter((bc) => Boolean(bc.uiFramework))
+      .map((bc) => ({
+        name: `web-${bc.name}`,
+        framework: mapUiFramework(bc.uiFramework),
+        depends_on: [bc.name],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return [...webApps, apiApp];
+  }
 
+  // Shared: a single `web` app aggregating every non-shared context. Preference
+  // order places frameworks with built-in generator templates ahead of
+  // `plain-ts`, so a project mixing Next.js and Remix contexts still emits a
+  // Next.js web app rather than degrading to plain-ts.
+  const uiFrameworks = nonShared.map((bc) => mapUiFramework(bc.uiFramework));
   return [
-    { name: "web", framework: webFramework, depends_on: dependsOn },
-    { name: "api", framework: apiFramework, depends_on: dependsOn },
+    {
+      name: "web",
+      framework: pickPreferredFramework(uiFrameworks, ["next.js", "plain-ts"]),
+      depends_on: dependsOn,
+    },
+    apiApp,
   ];
 }
