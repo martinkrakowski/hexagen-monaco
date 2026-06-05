@@ -1,6 +1,8 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo } from "react";
+import { useFormContext, useWatch } from "react-hook-form";
+import type { ProjectConfig } from "@hexagen/project-configuration";
 
 interface SelectedAddOnsContextValue {
   selectedIds: string[];
@@ -20,50 +22,76 @@ const SelectedAddOnsContext = createContext<SelectedAddOnsContextValue | null>(
   null,
 );
 
+/**
+ * Add-on selection backed by the wizard form's `addOnsAnswers` — the single
+ * source of truth. A selected add-on is exactly a key in `addOnsAnswers`, so
+ * selection is:
+ *   - **visible to the canvas** (the overlay reads `wizardData.addOnsAnswers`), and
+ *   - **persisted across reloads** (`addOnsAnswers` is saved/loaded with the project).
+ *
+ * Selecting an add-on adds an (initially empty) answers entry; the
+ * template-questions step fills it in. Deselecting removes the entry (and its
+ * answers). Must be rendered inside the wizard FormProvider.
+ */
 export function SelectedAddOnsProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const { control, getValues, setValue } = useFormContext<ProjectConfig>();
 
-  const toggle = useCallback((id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }, []);
+  // Reactive: re-derive selection whenever addOnsAnswers changes (incl. on load,
+  // so a persisted selection survives a refresh).
+  const answers = useWatch({ control, name: "addOnsAnswers" });
+  const selectedIds = useMemo(() => Object.keys(answers ?? {}), [answers]);
+
+  const commit = useCallback(
+    (next: Record<string, unknown>) =>
+      setValue("addOnsAnswers", next as ProjectConfig["addOnsAnswers"], {
+        shouldDirty: true,
+        shouldTouch: true,
+      }),
+    [setValue],
+  );
+
+  const toggle = useCallback(
+    (id: string) => {
+      const current: Record<string, unknown> = {
+        ...(getValues("addOnsAnswers") ?? {}),
+      };
+      if (id in current) {
+        delete current[id];
+      } else {
+        current[id] = current[id] ?? {};
+      }
+      commit(current);
+    },
+    [getValues, commit],
+  );
 
   const isSelected = useCallback(
-    (id: string) => selectedIds.includes(id),
-    [selectedIds],
+    (id: string) => id in (answers ?? {}),
+    [answers],
   );
 
   const resolveSelection = useCallback(
     (addIds: string[], removeIds: string[]) => {
       const remove = new Set(removeIds);
-      setSelectedIds((prev) => {
-        const next = prev.filter((x) => !remove.has(x));
-        const present = new Set(next);
-        for (const id of addIds) {
-          if (!remove.has(id) && !present.has(id)) {
-            next.push(id);
-            present.add(id);
-          }
-        }
-        return next;
-      });
+      const current: Record<string, unknown> = {
+        ...(getValues("addOnsAnswers") ?? {}),
+      };
+      for (const id of removeIds) delete current[id];
+      for (const id of addIds) {
+        if (!remove.has(id) && !(id in current)) current[id] = {};
+      }
+      commit(current);
     },
-    [],
+    [getValues, commit],
   );
 
   return (
     <SelectedAddOnsContext.Provider
-      value={{
-        selectedIds,
-        toggle,
-        isSelected,
-        resolveSelection,
-      }}
+      value={{ selectedIds, toggle, isSelected, resolveSelection }}
     >
       {children}
     </SelectedAddOnsContext.Provider>
