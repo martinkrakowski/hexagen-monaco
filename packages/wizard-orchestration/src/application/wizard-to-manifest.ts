@@ -2,6 +2,10 @@ import type {
   WizardData,
   BoundedContext,
 } from "@hexagen/project-configuration";
+import {
+  getWorkspaceTemplate,
+  FALLBACK_RULES,
+} from "@hexagen/project-configuration";
 import type { Manifest } from "@hexagen/sync";
 
 const getInboundPortName = (type: string) => `${type}.in-port.ts`;
@@ -61,8 +65,17 @@ export function wizardToManifest(
   const namespace = governance?.namespacePrefix || "@hexagen";
   const template = governance?.workspaceTemplate || "modular-monolith";
   const packageManagerId = governance?.packageManager || "yarn";
-  const isStrictTemplate =
-    template === "strict-enterprise" || template === "micro-frontend";
+  // Drive behaviour off the template's *rules*, not a hardcoded id list, so the
+  // catalog (@hexagen/project-configuration) stays the single source of truth and
+  // a new template needs no edit here. An unknown id — a drifted/legacy saved
+  // project, preserved verbatim at the IDB load perimeter — degrades to the
+  // flexible fallback rather than throwing. See
+  // docs/planning/wire-architectural-template-into-generation.md (Phase 1).
+  const templateRules = getWorkspaceTemplate(template)?.rules ?? FALLBACK_RULES;
+  // Strict modes route cross-context calls through a boundary (event-bus or
+  // network) instead of direct imports, so peer dependencies are omitted from
+  // depends_on below.
+  const isStrictTemplate = templateRules.crossContextCalls !== "in-process";
 
   // Each package manager has its own versioning — do not append yarn's version
   const packageManagerVersions: Record<string, string> = {

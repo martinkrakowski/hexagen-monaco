@@ -20,11 +20,18 @@ interface TemplateDetailsProps {
 }
 
 const CROSS_CONTEXT_DETAILS: Record<string, string> = {
-  "in-process": "Direct TypeScript imports between contexts",
-  "event-bus": "All cross-context calls via event bus",
-  network: "All cross-context calls via network RPC",
+  "in-process": "Contexts may import each other directly",
+  "event-bus":
+    "Cross-context imports denied; integrate via event bus (enforced by lint invariants)",
+  network:
+    "Cross-context imports denied; integrate via network (enforced by lint invariants)",
 };
 
+// NOTE: `allowSharedUi` is intentionally not surfaced here yet — it drives no
+// generation today (display-only). Phase 2 (deriveApps → per-context web apps)
+// makes it structural, at which point a truthful "UI: shared app / isolated per
+// context" line returns. See
+// docs/planning/wire-architectural-template-into-generation.md.
 function TemplateDetails({ template }: TemplateDetailsProps) {
   const crossContextDetail =
     CROSS_CONTEXT_DETAILS[template.rules.crossContextCalls];
@@ -35,11 +42,6 @@ function TemplateDetails({ template }: TemplateDetailsProps) {
         {template.title}
       </div>
       <div className="text-xs text-muted-foreground space-y-1">
-        <div>
-          {template.rules.allowSharedUi
-            ? "Shared UI app allowed"
-            : "UI isolated per context"}
-        </div>
         {crossContextDetail && <div>{crossContextDetail}</div>}
       </div>
     </div>
@@ -64,8 +66,8 @@ export const TemplateSelector = React.memo(function TemplateSelector({
           Architectural Template
         </span>
         <p className="text-xs text-muted-foreground mt-1">
-          This determines cross-context communication rules and isolation
-          boundaries for the generated project.
+          This sets the cross-context dependency rules and the architectural
+          invariants generated into the project.
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
