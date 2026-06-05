@@ -106,4 +106,27 @@ describe("wizardToManifest — allowSharedUi shapes apps[]", () => {
       assert.ok(apis[0].depends_on?.includes("billing"));
     }
   });
+
+  it("slugifies per-context app names to a filesystem-safe form", () => {
+    // Strict template → per-context web apps; their directory names must be
+    // path-safe regardless of the raw context name. (The sync generator also
+    // guards against traversal — this just keeps wizard output clean.)
+    const manifest = wizardToManifest(
+      wizard("strict-enterprise", [
+        { name: "Billing & Invoices" },
+        { name: "../../etc" },
+      ]),
+    );
+    const webNames = appsOf(manifest)
+      .map((a) => a.name)
+      .filter((n) => n.startsWith("web"))
+      .sort();
+    assert.deepEqual(webNames, ["web-billing-invoices", "web-etc"]);
+    for (const n of webNames) {
+      assert.ok(
+        !n.includes("/") && !n.includes("..") && !n.includes(" "),
+        `app name must be path-safe, got: ${n}`,
+      );
+    }
+  });
 });

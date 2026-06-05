@@ -304,6 +304,23 @@ export function wizardToManifest(
 }
 
 /**
+ * Slugify a bounded-context name into a filesystem-safe app-directory suffix
+ * (`[a-z0-9-]`, collapsing other runs to `-` and trimming). Per-context UI apps
+ * live at `apps/web-<slug>`, so the suffix must be path-safe and deterministic —
+ * a context name with spaces, separators, or `..` can't produce an unsafe app
+ * directory. `@hexagen/sync`'s `generateApps` independently guards against
+ * traversal (defense-in-depth); slugifying here keeps the wizard's own output
+ * clean. `depends_on` still references the real context/package name, not the slug.
+ */
+function slugifyContextName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "app";
+}
+
+/**
  * Derive the manifest `apps[]` array from the wizard's per-BC framework
  * choices, honouring the template's `allowSharedUi` rule.
  *
@@ -349,7 +366,7 @@ function deriveApps(
     const webApps = nonShared
       .filter((bc) => Boolean(bc.uiFramework))
       .map((bc) => ({
-        name: `web-${bc.name}`,
+        name: `web-${slugifyContextName(bc.name)}`,
         framework: mapUiFramework(bc.uiFramework),
         depends_on: [bc.name],
       }))
