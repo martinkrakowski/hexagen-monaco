@@ -27,6 +27,9 @@ import {
  */
 export const ADDON_CHIP_TYPE = "addon-chip";
 
+/** Web-only React Flow node type for the strip's "Platform add-ons" label. */
+export const ADDON_STRIP_LABEL_TYPE = "addon-strip-label";
+
 /** Provenance marker the renderer reads for AC-1 (distinct styling + hover). */
 export interface AddOnNodeMeta {
   addOnId: string;
@@ -47,6 +50,17 @@ export interface AddOnChipNode {
   position: { x: number; y: number };
   addOn: AddOnNodeMeta;
 }
+
+/** The strip's section label node (no add-on payload). */
+export interface AddOnStripLabelNode {
+  id: string;
+  type: typeof ADDON_STRIP_LABEL_TYPE;
+  label: string;
+  position: { x: number; y: number };
+}
+
+/** Any node the overlay appends below the diagram (chips + the strip label). */
+export type AddOnOverlayNode = AddOnChipNode | AddOnStripLabelNode;
 
 /** Map wizard bounded contexts to the join's structural view, mirroring the
  *  generator's `ctx.id || \`context-${i}\`` id derivation so annotation ids match. */
@@ -134,6 +148,7 @@ export function buildStripChips(
 
 const STRIP = {
   CLEARANCE_Y: 140, // gap below the laid-out diagram's bottom
+  LABEL_OFFSET_Y: 36, // gap above the first chip for the strip label
   CHIP_WIDTH: 200,
   CHIP_HEIGHT: 60,
   GAP_X: 20,
@@ -158,7 +173,7 @@ function estimatedHeight(type: HexagonNode["type"]): number {
 export function placeStripChips(
   laidOutNodes: readonly HexagonNode[],
   chips: readonly AddOnChipNode[],
-): AddOnChipNode[] {
+): AddOnOverlayNode[] {
   if (chips.length === 0) return [];
 
   let minX = Infinity;
@@ -175,7 +190,7 @@ export function placeStripChips(
   const startX = minX;
   const startY = maxBottom + STRIP.CLEARANCE_Y;
 
-  return chips.map((chip, i) => {
+  const placedChips: AddOnChipNode[] = chips.map((chip, i) => {
     const row = Math.floor(i / STRIP.PER_ROW);
     const col = i % STRIP.PER_ROW;
     return {
@@ -186,4 +201,14 @@ export function placeStripChips(
       },
     };
   });
+
+  // "Platform add-ons" label, left-aligned just above the first chip.
+  const label: AddOnStripLabelNode = {
+    id: "addon-strip-label",
+    type: ADDON_STRIP_LABEL_TYPE,
+    label: "Platform add-ons",
+    position: { x: startX, y: startY - STRIP.LABEL_OFFSET_Y },
+  };
+
+  return [label, ...placedChips];
 }

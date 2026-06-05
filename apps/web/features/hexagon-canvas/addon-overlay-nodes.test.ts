@@ -17,6 +17,7 @@ import {
   compassNodeIdFor,
   overlayContextsFrom,
   ADDON_CHIP_TYPE,
+  ADDON_STRIP_LABEL_TYPE,
   type AddOnChipNode,
   type WithAddOn,
 } from "./addon-overlay-nodes";
@@ -123,7 +124,7 @@ describe("addon-overlay-nodes", () => {
     );
   });
 
-  it("places chips below the laid-out bbox, left-aligned to the leftmost node", () => {
+  it("places chips below the laid-out bbox, left-aligned, with the strip label above", () => {
     const laidOut = [
       {
         id: "a",
@@ -152,8 +153,12 @@ describe("addon-overlay-nodes", () => {
     // left edge aligns to min x; y sits below the lowest bottom
     //   bc bottom = 100 + 500 = 600; adapter bottom = 800 + 120 = 920 → max 920
     //   strip y = 920 + 140 clearance = 1060
-    assert.equal(placed[0].position.x, 300);
-    assert.equal(placed[0].position.y, 1060);
+    // [0] = "Platform add-ons" label, just above the first chip (1060 - 36)
+    assert.equal(placed[0].type, ADDON_STRIP_LABEL_TYPE);
+    assert.deepEqual(placed[0].position, { x: 300, y: 1024 });
+    // [1] = the first chip
+    assert.equal(placed[1].position.x, 300);
+    assert.equal(placed[1].position.y, 1060);
   });
 
   it("returns nothing for an empty selection", () => {

@@ -10,6 +10,8 @@ import {
 import { UnifiedBoundedContext } from "../BoundedContext";
 import { GroupBoundaryNode } from "../GroupBoundaryNode";
 import { PeerContextNode } from "../PeerContextNode";
+import { AddOnChipNode } from "../AddOnChipNode";
+import { AddOnStripLabel } from "../AddOnStripLabel";
 import type {
   HexagonNode as HexagonNodeData,
   HexagonEdge,
@@ -27,13 +29,24 @@ export const nodeTypes: NodeTypes = {
   inner: UnifiedBoundedContext,
   peer: PeerContextNode,
   group: GroupBoundaryNode,
+  "addon-chip": AddOnChipNode,
+  "addon-strip-label": AddOnStripLabel,
 } as unknown as NodeTypes;
 
 function toFlowNode(node: HexagonNodeData): HexagonFlowNode {
   const n = node as HexagonNodeWithLayout;
-  let nodeType: "hexagon" | "inner" | "peer" | "group";
+  const rawType = node.type as string;
+  let nodeType:
+    | "hexagon"
+    | "inner"
+    | "peer"
+    | "group"
+    | "addon-chip"
+    | "addon-strip-label";
 
-  if (n.id === "monorepo-boundary" || n.type === "group") {
+  if (rawType === "addon-chip" || rawType === "addon-strip-label") {
+    nodeType = rawType;
+  } else if (n.id === "monorepo-boundary" || n.type === "group") {
     nodeType = "group";
   } else if (n.isPeer || n.type === "peer") {
     nodeType = "peer";
@@ -54,7 +67,10 @@ function toFlowNode(node: HexagonNodeData): HexagonFlowNode {
   if (n.extent) flowNode.extent = n.extent;
   if (n.style) flowNode.style = n.style;
 
-  flowNode.draggable = n.id === "monorepo-boundary" ? false : true;
+  // Add-on overlay nodes are system-positioned (post-layout); not draggable.
+  const isAddOnNode =
+    nodeType === "addon-chip" || nodeType === "addon-strip-label";
+  flowNode.draggable = !(n.id === "monorepo-boundary" || isAddOnNode);
 
   const satelliteTypes = ["entity", "use-case", "adapter", "port"];
   if (n.type && satelliteTypes.includes(n.type)) {
@@ -151,13 +167,34 @@ function mapToFlowEdge(
 function mapToFlowEdges(
   edges: HexagonEdge[],
   nodes: HexagonNodeData[],
-  cache: Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>,
+  cache: Map<
+    string,
+    {
+      source: HexagonEdge;
+      sourceNode: HexagonNodeData | undefined;
+      flow: FlowEdge;
+    }
+  >,
 ): {
   flowEdges: FlowEdge[];
-  nextCache: Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>;
+  nextCache: Map<
+    string,
+    {
+      source: HexagonEdge;
+      sourceNode: HexagonNodeData | undefined;
+      flow: FlowEdge;
+    }
+  >;
 } {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const nextCache = new Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>();
+  const nextCache = new Map<
+    string,
+    {
+      source: HexagonEdge;
+      sourceNode: HexagonNodeData | undefined;
+      flow: FlowEdge;
+    }
+  >();
   const flowEdges: FlowEdge[] = [];
 
   for (const edge of edges) {
@@ -190,7 +227,14 @@ export function useCanvasConfig(
     Map<string, { source: HexagonNodeData; flow: HexagonFlowNode }>
   >(new Map());
   const edgeCacheRef = useRef<
-    Map<string, { source: HexagonEdge; sourceNode: HexagonNodeData | undefined; flow: FlowEdge }>
+    Map<
+      string,
+      {
+        source: HexagonEdge;
+        sourceNode: HexagonNodeData | undefined;
+        flow: FlowEdge;
+      }
+    >
   >(new Map());
 
   const flowNodes = useMemo(() => {
