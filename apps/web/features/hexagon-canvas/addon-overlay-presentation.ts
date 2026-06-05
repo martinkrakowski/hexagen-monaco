@@ -15,6 +15,7 @@ export const CAPABILITY_LABEL: Record<string, string> = {
   "persistence.out-adapter": "persistence adapter",
   "external-integration.out-adapter": "external integration",
   "llm.out-adapter": "LLM adapter",
+  "agent.out-adapter": "agent orchestration adapter",
   "kernel.user-context": "shared user context",
   "platform.container": "container",
   "platform.auth": "auth",

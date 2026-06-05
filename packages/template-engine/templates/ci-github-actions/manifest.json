@@ -2,6 +2,8 @@
   "id": "ci-github-actions",
   "name": "CI / GitHub Actions",
   "description": "GitHub Actions CI (build/typecheck/lint/test) with Turbo cache, a per-target deploy workflow (Vercel/Railway/Fly.io/VPS), optional PR preview deploys, and Dependabot",
+  "provides": "platform.ci",
+  "scope": "project",
   "version": "1.0.0",
   "requires": [],
   "conflicts": [],
@@ -64,27 +66,45 @@
     ".github/dependabot.yml",
     {
       "path": ".github/workflows/deploy-vercel.yml",
-      "when": { "answer": "deploy_target", "equals": "vercel" }
+      "when": {
+        "answer": "deploy_target",
+        "equals": "vercel"
+      }
     },
     {
       "path": ".github/workflows/deploy-railway.yml",
-      "when": { "answer": "deploy_target", "equals": "railway" }
+      "when": {
+        "answer": "deploy_target",
+        "equals": "railway"
+      }
     },
     {
       "path": ".github/workflows/deploy-fly.yml",
-      "when": { "answer": "deploy_target", "equals": "fly-io" }
+      "when": {
+        "answer": "deploy_target",
+        "equals": "fly-io"
+      }
     },
     {
       "path": "fly.toml",
-      "when": { "answer": "deploy_target", "equals": "fly-io" }
+      "when": {
+        "answer": "deploy_target",
+        "equals": "fly-io"
+      }
     },
     {
       "path": ".github/workflows/deploy-vps.yml",
-      "when": { "answer": "deploy_target", "equals": "vps-ssh" }
+      "when": {
+        "answer": "deploy_target",
+        "equals": "vps-ssh"
+      }
     },
     {
       "path": ".github/workflows/preview.yml",
-      "when": { "answer": "preview_deploys", "equals": true }
+      "when": {
+        "answer": "preview_deploys",
+        "equals": true
+      }
     }
   ],
   "checklist": [

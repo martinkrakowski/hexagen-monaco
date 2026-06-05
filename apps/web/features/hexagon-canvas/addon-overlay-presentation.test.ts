@@ -87,4 +87,20 @@ describe("addon-overlay-presentation", () => {
     assert.match(noHost.className, /dashed/);
     assert.notEqual(project.style.borderColor, shared.style.borderColor);
   });
+
+  it("labels the new agent capability for its no-compass-field hover (batch 3)", () => {
+    assert.equal(
+      capabilityLabel("agent.out-adapter"),
+      "agent orchestration adapter",
+    );
+    assert.equal(
+      addOnHoverText({
+        addOnId: "langgraph",
+        capability: "agent.out-adapter",
+        kind: "platform-zone",
+        reason: "no-compass-field",
+      }),
+      `Provided by ${addOnName("langgraph")} — no dedicated compass slot (agent orchestration adapter)`,
+    );
+  });
 });

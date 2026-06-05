@@ -2,6 +2,8 @@
   "id": "observability",
   "name": "Observability",
   "description": "Structured JSON logging, correlation IDs via AsyncLocalStorage, request logger middleware, /api/health endpoint",
+  "provides": "platform.observability",
+  "scope": "project",
   "version": "1.0.0",
   "requires": [],
   "conflicts": [],
@@ -39,11 +41,17 @@
     ".env.observability.example",
     {
       "path": "instrumentation.ts",
-      "when": { "answer": "otel", "equals": true }
+      "when": {
+        "answer": "otel",
+        "equals": true
+      }
     },
     {
       "path": ".env.otel.example",
-      "when": { "answer": "otel", "equals": true }
+      "when": {
+        "answer": "otel",
+        "equals": true
+      }
     }
   ],
   "checklist": [

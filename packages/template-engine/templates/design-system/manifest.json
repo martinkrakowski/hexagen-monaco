@@ -2,6 +2,8 @@
   "id": "design-system",
   "name": "Design System",
   "description": "Populated DESIGN.md contract, CSS custom property tokens, Tailwind config extension, base component stubs",
+  "provides": "platform.design-system",
+  "scope": "project",
   "version": "1.0.0",
   "requires": [],
   "conflicts": [],
@@ -58,15 +60,24 @@
     "tailwind.config.ts",
     {
       "path": ".storybook/main.ts",
-      "when": { "answer": "storybook", "equals": true }
+      "when": {
+        "answer": "storybook",
+        "equals": true
+      }
     },
     {
       "path": ".storybook/preview.ts",
-      "when": { "answer": "storybook", "equals": true }
+      "when": {
+        "answer": "storybook",
+        "equals": true
+      }
     },
     {
       "path": "src/components/ui/button.stories.tsx",
-      "when": { "answer": "storybook", "equals": true }
+      "when": {
+        "answer": "storybook",
+        "equals": true
+      }
     }
   ],
   "checklist": [
