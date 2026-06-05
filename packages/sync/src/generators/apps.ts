@@ -93,6 +93,32 @@ export async function generateApps(
         continue;
       }
 
+      // Path safety: app.name becomes a directory under apps/ via path.join
+      // below, so a name containing a path separator or a ".." segment could
+      // escape apps/ (or the workspace root entirely). Mirror the module-name
+      // guard in SyncEngine and skip such entries. Defense-in-depth: this
+      // protects every manifest source — a hand-written or API-supplied manifest
+      // may carry an unsafe name that never went through the wizard's slugified
+      // app-name derivation.
+      if (
+        app.name.includes("..") ||
+        app.name.includes("/") ||
+        app.name.includes("\\") ||
+        app.name.startsWith(".")
+      ) {
+        config.logger.warn(
+          `[apps] skipping app with unsafe name (potential path traversal): ${app.name}`,
+        );
+        if (report) {
+          report.record(
+            "blocked",
+            app.name,
+            "Unsafe app name (potential path traversal)",
+          );
+        }
+        continue;
+      }
+
       if (seen.has(app.name)) {
         config.logger.warn(
           `[apps] duplicate app name "${app.name}" — keeping first occurrence, skipping this duplicate`,

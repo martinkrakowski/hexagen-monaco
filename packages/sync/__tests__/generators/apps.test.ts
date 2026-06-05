@@ -298,6 +298,64 @@ describe("apps", () => {
     });
   });
 
+  it("should skip an app whose name escapes apps/ (path traversal) and continue for siblings", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const logger = createSpyLogger();
+      const report = makeReport();
+      // `../escaped` would resolve to `<workspaceRoot>/escaped` (a sibling of
+      // apps/) via path.join(root, "apps", "../escaped"); a name with more `..`
+      // segments would leave the workspace entirely. The generator must skip it.
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [
+          { name: "../escaped", framework: "next.js" },
+          { name: "web", framework: "next.js" },
+        ],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger,
+        enableApps: true,
+      });
+
+      const result = await generateApps(config, report);
+
+      assert.strictEqual(
+        result.error,
+        undefined,
+        "an unsafe app name must be skipped, not abort sync",
+      );
+
+      // Nothing may be created outside apps/.
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, "escaped")),
+        false,
+        "app name with '..' must not create a directory outside apps/",
+      );
+
+      // The valid sibling is still generated.
+      assert.strictEqual(
+        await pathExists(
+          path.join(workspaceRoot, "apps", "web", "package.json"),
+        ),
+        true,
+        "sibling app is still generated after the unsafe name is skipped",
+      );
+
+      const warns = messagesAt(logger, "warn");
+      assert.ok(
+        warns.some((m) => m.includes("traversal") && m.includes("../escaped")),
+        `expected a path-traversal warning naming the app — got: ${JSON.stringify(warns)}`,
+      );
+      const blocked = report.calls.find(
+        (c) => c.type === "blocked" && c.target === "../escaped",
+      );
+      assert.ok(
+        blocked,
+        "report recorder must receive a 'blocked' entry for the unsafe app name",
+      );
+    });
+  });
+
   it("should apply first-wins dedup for duplicate app names", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const logger = createSpyLogger();
