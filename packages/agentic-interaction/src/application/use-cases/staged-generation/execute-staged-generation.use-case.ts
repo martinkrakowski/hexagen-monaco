@@ -6,16 +6,125 @@ import type {
 } from "../../../domain/value-objects/pipeline-state";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
-import { parseJSON } from "../../../domain/manifest/extract-json";
+import {
+  parseJSON,
+  extractObjectFromWrapper,
+} from "../../../domain/manifest/extract-json";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
 
-// Phase system prompts matching test's detectPhase logic
-const WORKSPACE_SYSTEM_PROMPT = `You are a workspace architect. Define the overall project workspace. Return JSON with "name" and "description".`;
-const CONTEXT_LIST_SYSTEM_PROMPT = `Return a JSON array of objects representing bounded context. Each object needs "name", "type", "description".`;
-const PORTS_SYSTEM_PROMPT = `Define ports for the project. Return JSON with "in" and "out" arrays. Each port has "name", "type", "description".`;
-const ADAPTERS_SYSTEM_PROMPT = `Define infrastructure adapters. Return a JSON array of adapter objects with "name", "type", "implements".`;
+// Phase system prompts. Each demands a *raw* JSON value with no markdown fences
+// or prose: the only post-processing we have is parseJSON's repair pass, which
+// recovers truncated/garbage JSON but cannot recover a conversational answer or
+// an array buried inside explanatory text (those are what made the context-list
+// phase hard-fail with "unable to parse or repair LLM output"). The phrases the
+// mock LLMs key on — "overall project workspace", "JSON array of objects" +
+// "bounded context", `"in"`/`"out"`, "infrastructure adapters" — are preserved.
+const WORKSPACE_SYSTEM_PROMPT = `You are a workspace architect. Define the overall project workspace from the user's description.
+Respond with ONLY a single raw JSON object — no markdown code fences, no comments, and no prose before or after the JSON.
+Use exactly this shape: {"name": "kebab-case-project-name", "description": "one or two sentence summary of the project"}`;
+const CONTEXT_LIST_SYSTEM_PROMPT = `You are a domain-driven-design modeler. Break the project down into its bounded contexts.
+Respond with ONLY a raw JSON array of objects — no markdown code fences, no comments, and no prose before or after. Do NOT wrap the array inside another object.
+Each item describes one bounded context using exactly this shape:
+{"name": "kebab-case-name", "type": "core", "description": "what this context is responsible for"}
+The "type" field must be one of: "core", "supporting", "generic", "driver".
+Example of a valid response: [{"name":"order-management","type":"core","description":"Handles the order lifecycle"},{"name":"notifications","type":"supporting","description":"Sends customer notifications"}]`;
+const PORTS_SYSTEM_PROMPT = `You are a hexagonal-architecture designer. Define the inbound and outbound ports for the project.
+Respond with ONLY a single raw JSON object — no markdown code fences, no comments, and no prose before or after.
+Use exactly this shape, with "in" and "out" arrays of port objects:
+{"in": [{"name": "PlaceOrderPort", "type": "command", "description": "..."}], "out": [{"name": "OrderRepositoryPort", "type": "repository", "description": "..."}]}`;
+const ADAPTERS_SYSTEM_PROMPT = `You are an infrastructure engineer. Define the infrastructure adapters that implement the project's outbound ports.
+Respond with ONLY a raw JSON array — no markdown code fences, no comments, and no prose before or after.
+Each item uses exactly this shape:
+{"name": "PostgresOrderRepository", "type": "repository", "implements": "OrderRepositoryPort"}`;
+
+/** Shape of a single bounded-context entry as returned by the context-list phase. */
+type RawContext = { name: string; type: string; description?: string };
+/** Shape of a single adapter entry as returned by the adapters phase. */
+type RawAdapter = { name: string; type: string; implements: string };
+
+/**
+ * A context needs both `name` and `type` strings. Requiring `type` (not just
+ * `name`) is what stops the workspace object `{ name, description }` — and any
+ * other name-bearing object — from being mistaken for a single context.
+ */
+function isContextLike(v: unknown): v is RawContext {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof (v as RawContext).name === "string" &&
+    typeof (v as RawContext).type === "string"
+  );
+}
+
+// name, type and implements are all required on RawAdapter, so the guard checks
+// all three: an adapter missing `implements` (the port it binds to) is dropped
+// as a soft-degrade rather than mapped into stage4 with undefined fields.
+function isAdapterLike(v: unknown): v is RawAdapter {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof (v as RawAdapter).name === "string" &&
+    typeof (v as RawAdapter).type === "string" &&
+    typeof (v as RawAdapter).implements === "string"
+  );
+}
+
+/**
+ * Coerce an LLM phase response into an array of items that pass `isItem`.
+ *
+ * Handles a bare array, a `{ <wrapperKey>: [...] }` wrapper, and a single bare
+ * item object — filtering by `isItem` at every step. It deliberately does NOT
+ * reuse extractArrayFromWrapper, whose scan over arbitrary array *values* will
+ * return a nested array (e.g. a single context's `ports`/`responsibilities`, or
+ * an adapter's `deps`) in place of the real list. The single-object branch runs
+ * only after the wrapper keys are checked and is gated on the item shape, so the
+ * common non-array shapes are recovered while unrelated arrays are not.
+ *
+ * Returns the kept `items` plus `rejected`, the number of *array* entries that
+ * failed `isItem`, so a caller can surface a warning instead of dropping
+ * malformed entries silently.
+ */
+function coerceItemArray<T>(
+  data: unknown,
+  wrapperKeys: string[],
+  isItem: (v: unknown) => v is T,
+): { items: T[]; rejected: number } {
+  const fromArray = (arr: unknown[]) => {
+    const items = arr.filter(isItem);
+    return { items, rejected: arr.length - items.length };
+  };
+  if (Array.isArray(data)) return fromArray(data);
+  if (data === null || typeof data !== "object") {
+    return { items: [], rejected: 0 };
+  }
+  const obj = data as Record<string, unknown>;
+  for (const key of wrapperKeys) {
+    const val = obj[key];
+    if (Array.isArray(val)) return fromArray(val);
+  }
+  if (isItem(data)) return { items: [data], rejected: 0 };
+  return { items: [], rejected: 0 };
+}
+
+const CONTEXT_WRAPPER_KEYS = [
+  "contexts",
+  "boundedContexts",
+  "bounded_contexts",
+];
+
+// Concise, human-readable stage labels — the single source for both
+// onStageStart and onStageComplete. The web stage route streams this `label` to
+// NDJSON clients, so it must stay short and must NOT be the system prompt (which
+// would leak internal prompt text and bloat every stage event).
+const STAGE_LABELS: Record<number, string> = {
+  0: "Workspace Definition",
+  1: "Context Classification",
+  2: "Port Mapping",
+  3: "Adapter Assignment",
+  4: "Manifest Assembly",
+};
 
 export interface StagedGenerationCallbacks {
   onStageStart?: (stage: number, label: string) => void;
@@ -57,7 +166,7 @@ export class ExecuteStagedGenerationUseCase {
 
     try {
       // Phase 1: Workspace
-      callbacks?.onStageStart?.(0, "Workspace Definition");
+      callbacks?.onStageStart?.(0, STAGE_LABELS[0]);
       const workspaceResult = await this.runPhase(
         WORKSPACE_SYSTEM_PROMPT,
         userDescription,
@@ -84,41 +193,75 @@ export class ExecuteStagedGenerationUseCase {
         ambiguities: [],
       };
 
-      // Phase 2: Context List
-      callbacks?.onStageStart?.(1, "Context Classification");
-      const contextResult = await this.runPhase(
-        CONTEXT_LIST_SYSTEM_PROMPT,
-        JSON.stringify(workspaceData),
-        1,
-        callbacks,
-      );
-      if (!contextResult.success) {
+      // Phase 2: Context List.
+      // This is the most failure-prone stage: it's the only one that asks for a
+      // JSON *array*, and that's exactly the shape models most often wrap in an
+      // object, prefix with prose, or return empty — none of which parseJSON can
+      // recover. So we retry once (the second attempt restates the format), and
+      // coerceItemArray unwraps the common non-array shapes before we give up.
+      callbacks?.onStageStart?.(1, STAGE_LABELS[1]);
+      const contextStart = Date.now();
+      let contextData: RawContext[] | null = null;
+      let contextError = "unable to parse a JSON array of bounded contexts";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const contextUserPrompt =
+          attempt === 0
+            ? JSON.stringify(workspaceData)
+            : `${JSON.stringify(workspaceData)}\n\nReminder: respond with ONLY a raw JSON array of bounded-context objects. No prose, no markdown fences, no wrapper object.`;
+        // Suppress runPhase's per-attempt onStageComplete: a first attempt that
+        // parses but coerces to empty would otherwise emit a completion event and
+        // then run again, so the UI/telemetry would see two completes for one
+        // start. We emit exactly one ourselves below, when a result is accepted.
+        const contextResult = await this.runPhase(
+          CONTEXT_LIST_SYSTEM_PROMPT,
+          contextUserPrompt,
+          1,
+          { ...callbacks, onStageComplete: undefined },
+          { maxTokens: 2000 },
+        );
+        if (!contextResult.success) {
+          contextError = contextResult.error;
+          continue;
+        }
+        const { items: coerced } = coerceItemArray(
+          contextResult.data,
+          CONTEXT_WRAPPER_KEYS,
+          isContextLike,
+        );
+        if (coerced.length > 0) {
+          contextData = coerced;
+          callbacks?.onStageComplete?.(
+            1,
+            STAGE_LABELS[1],
+            Date.now() - contextStart,
+          );
+          break;
+        }
+        contextError =
+          "response did not contain a non-empty JSON array of bounded contexts";
+      }
+      if (!contextData) {
         return {
           success: false,
-          error: `context-list phase failed: ${contextResult.error}`,
+          error: `context-list phase failed: ${contextError}`,
           state,
         };
       }
       // Map context list to stage2 (ClassificationResult)
-      const contextData = contextResult.data as Array<{
-        name: string;
-        type: string;
-        description: string;
-      }>;
       state.stage2 = {
         accepted: contextData.map((ctx) => ({
           name: ctx.name,
           // Normalize/validate untrusted LLM output (trims, lowercases, maps
           // unknown → "core", recognizes "driver") rather than a blind cast.
           type: coerceContextType(ctx.type),
-          reasoning: ctx.description,
+          reasoning: ctx.description ?? "",
         })),
         rejected: [],
         uncertain: [],
       };
 
       // Phase 3: Ports (with retries, return success with warnings on failure)
-      callbacks?.onStageStart?.(2, "Port Mapping");
+      callbacks?.onStageStart?.(2, STAGE_LABELS[2]);
       let portsSuccess = false;
       let portsData: unknown = { in: [], out: [] };
       // Test expects 2 warnings, so retry 2 times
@@ -131,6 +274,7 @@ export class ExecuteStagedGenerationUseCase {
           }),
           2,
           callbacks,
+          { maxTokens: 2000 },
         );
         if (portsResult.success) {
           portsSuccess = true;
@@ -145,48 +289,67 @@ export class ExecuteStagedGenerationUseCase {
       if (!portsSuccess) {
         // No need to add another warning, already added per attempt
       }
-      // Map ports response to stage3 (PortMap)
-      const portsObj = portsData as {
-        in: Array<{ name: string; type: string; description: string }>;
-        out: Array<{ name: string; type: string; description: string }>;
-      };
+      // Map ports response to stage3 (PortMap). extractObjectFromWrapper unwraps
+      // the common wrapper shapes via its default keys ("ports", "data",
+      // "result") — narrowing to just ["ports"] would silently drop a
+      // `{ "data": { in, out } }` response. The Array.isArray guards tolerate a
+      // response missing one of the arrays instead of throwing on `.map`.
+      type RawPort = { name: string; type: string; description?: string };
+      const portsObj = extractObjectFromWrapper<{
+        in?: RawPort[];
+        out?: RawPort[];
+      }>(portsData);
+      const inPorts = Array.isArray(portsObj?.in) ? portsObj.in : [];
+      const outPorts = Array.isArray(portsObj?.out) ? portsObj.out : [];
       state.stage3 = {
         contexts: state.stage2.accepted.map((ctx) => ({
           contextName: ctx.name,
-          in: portsObj.in.map((p) => ({
+          in: inPorts.map((p) => ({
             name: p.name,
             type: p.type as "command" | "query" | "event",
-            description: p.description,
+            description: p.description ?? "",
           })),
-          out: portsObj.out.map((p) => ({
+          out: outPorts.map((p) => ({
             name: p.name,
             type: p.type as
               | "repository"
               | "publisher"
               | "external-client"
               | "notifier",
-            description: p.description,
+            description: p.description ?? "",
           })),
         })),
       };
 
       // Phase 4: Adapters
-      callbacks?.onStageStart?.(3, "Adapter Assignment");
+      callbacks?.onStageStart?.(3, STAGE_LABELS[3]);
       const adaptersResult = await this.runPhase(
         ADAPTERS_SYSTEM_PROMPT,
         JSON.stringify({ ports: state.stage3 }),
         3,
         callbacks,
+        { maxTokens: 2000 },
       );
-      if (!adaptersResult.success || !Array.isArray(adaptersResult.data)) {
+      // coerceItemArray recovers a bare array, a `{ "adapters": [...] }` wrapper,
+      // or a single bare adapter object (and, like the context phase, won't grab
+      // a nested array by mistake). An empty result degrades to "no adapters" (a
+      // soft miss) rather than failing the whole generation.
+      const { items: adaptersData, rejected: rejectedAdapters } =
+        adaptersResult.success
+          ? coerceItemArray(adaptersResult.data, ["adapters"], isAdapterLike)
+          : { items: [] as RawAdapter[], rejected: 0 };
+      // Surface dropped adapters rather than discarding them silently: each was
+      // missing one of name/type/implements and would otherwise leave undefined
+      // fields in the manifest.
+      if (rejectedAdapters > 0) {
+        warnings.push(
+          `Adapters phase: dropped ${rejectedAdapters} malformed adapter(s) missing name/type/implements`,
+        );
+      }
+      if (adaptersData.length === 0) {
         state.stage4 = { contexts: [] };
       } else {
         // Map adapters response to stage4 (AdapterBindings)
-        const adaptersData = adaptersResult.data as Array<{
-          name: string;
-          type: string;
-          implements: string;
-        }>;
         state.stage4 = {
           contexts: state.stage2.accepted.map((ctx) => ({
             contextName: ctx.name,
@@ -200,7 +363,7 @@ export class ExecuteStagedGenerationUseCase {
       }
 
       // Assemble manifest
-      callbacks?.onStageStart?.(4, "Manifest Assembly");
+      callbacks?.onStageStart?.(4, STAGE_LABELS[4]);
       try {
         const assembler = new ExecuteManifestAssemblyUseCase();
         state.stage5 = assembler.execute({
@@ -258,6 +421,7 @@ export class ExecuteStagedGenerationUseCase {
     userPrompt: string,
     phaseNum: number,
     callbacks?: StagedGenerationCallbacks,
+    options?: { maxTokens?: number },
   ): Promise<
     { success: true; data: unknown } | { success: false; error: string }
   > {
@@ -270,7 +434,7 @@ export class ExecuteStagedGenerationUseCase {
           { role: "user", content: userPrompt },
         ],
         z.string(),
-        { temperature: 0.1, maxTokens: 800 },
+        { temperature: 0.1, maxTokens: options?.maxTokens ?? 800 },
       );
 
       const response = await this.llmPort.sendRequest(request);
@@ -286,12 +450,23 @@ export class ExecuteStagedGenerationUseCase {
       const content = response.value.content;
       callbacks?.onChunk?.(phaseNum, content);
 
+      // Distinguish an empty response (model emitted nothing — e.g. a refusal or
+      // a content filter) from genuinely malformed JSON, so the surfaced error
+      // isn't the misleading "unable to parse or repair LLM output".
+      if (!content || content.trim().length === 0) {
+        return { success: false, error: "LLM returned an empty response" };
+      }
+
       const parseResult = parseJSON(content);
       if (!parseResult.ok) {
         return { success: false, error: parseResult.error };
       }
 
-      callbacks?.onStageComplete?.(phaseNum, systemPrompt, Date.now() - start);
+      callbacks?.onStageComplete?.(
+        phaseNum,
+        STAGE_LABELS[phaseNum] ?? `Stage ${phaseNum}`,
+        Date.now() - start,
+      );
       return { success: true, data: parseResult.data };
     } catch (error) {
       return {
