@@ -48,10 +48,25 @@ export class FileSystemTemplateRegistry implements TemplateRegistryPort {
   private async readManifest(
     manifestPath: string,
   ): Promise<TemplateManifest | null> {
+    let raw: string;
     try {
-      const raw = await fs.readFile(manifestPath, "utf-8");
-      return validateManifest(JSON.parse(raw));
+      raw = await fs.readFile(manifestPath, "utf-8");
     } catch {
+      return null; // no manifest.json here — not a template dir, skip silently
+    }
+    try {
+      return validateManifest(JSON.parse(raw));
+    } catch (err) {
+      // A present-but-invalid manifest is a real error, not an absent template.
+      // Surface it with file context instead of a silent null — otherwise it
+      // resurfaces downstream as a confusing MissingTemplateError in dependency
+      // resolution. Still returns null so one bad manifest doesn't abort listing
+      // the rest.
+      console.warn(
+        `[template-registry] skipping invalid manifest ${manifestPath}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
       return null;
     }
   }
