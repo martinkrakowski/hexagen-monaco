@@ -19,11 +19,13 @@ export default [
     files: ["app/**/*.ts", "app/**/*.tsx", "*.config.mjs"],
     plugins: {
       "@next": next,
+      "hexagen-ui": hexagenUi,
     },
     rules: {
       "@next/next/no-html-link-for-pages": "off",
       "no-console": "warn",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: '^_' }],
+      "hexagen-ui/no-children-wrapper-type-swap": "error",
     },
     settings: {
       next: {
@@ -40,6 +42,7 @@ export default [
       "hexagen-ui/no-feature-slice-imports": "error",
       "hexagen-ui/no-arbitrary-tailwind-values": "error",
       "hexagen-ui/rhf-stable-array-keys": "error",
+      "hexagen-ui/no-children-wrapper-type-swap": "error",
       "no-restricted-imports": [
         "error",
         {
