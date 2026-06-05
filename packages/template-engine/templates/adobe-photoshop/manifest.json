@@ -3,6 +3,8 @@
   "name": "Adobe Photoshop API",
   "description": "Photoshop automation for Adobe Firefly Services (image.adobe.io/pie/psdService): a PhotoshopAutomationPort + adapter for Smart Object replacement, text-layer edits, action JSON, crop, and PSD rendering over the adobe-firefly-core foundation. Async; inputs are named layers in a pre-authored .psd.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

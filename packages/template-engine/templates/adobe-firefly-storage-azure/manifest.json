@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Azure Blob Presigned Storage",
   "description": "Registers an Azure Blob Storage presigner for the adobe-firefly-core storage seam: mints read SAS URLs for Firefly inputs and create/write SAS URLs for outputs (storage: \"external\"). Signs with an account key, or a managed-identity user-delegation key when no key is set. Mutually exclusive with the S3/GCS presigners. Install @azure/storage-blob + @azure/identity.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": ["adobe-firefly-storage-s3", "adobe-firefly-storage-gcs"],
   "questions": [

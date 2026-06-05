@@ -19,6 +19,8 @@ The canvas **already renders adapter nodes** in a per-context **compass** layout
 2. **Cross-cutting split — two buckets, not one.**
    - Shared **domain** primitives (value objects, events, shared ports) → the auto **shared-kernel** context (`scope: "shared"`).
    - Infra cross-cutting (docker, error-handling, telemetry, observability) → a project-level **"platform zone"** (`scope: "project"`): a thin strip / chip **outside** the context hexagons. Explicitly **not** a sixth context type — must not be mistaken for one.
+   - **Reconciliation note — `error-handling` (deliberate, not an open question).** It's scoped `project` here (its dominant role is infra cross-cutting: RFC 7807 mapping, root middleware, React error boundary), but the JOB-INDEX context/plane table buckets it `shared-kernel` (its `Result`/`AppError` hierarchy is a shared domain primitive). A template that genuinely spans both is assigned by its **dominant** role, and the canvas rendering must pick **one** visual treatment — here, the platform zone. Flagged so the canvas PR treats this as a settled call, not an oversight to "fix."
+   - **Reconciliation note — auth providers (deliberate).** The 10 auth providers (clerk/nextauth/better-auth/google-oauth/github-oauth/microsoft-entra/magic-link/adobe-ims-spa/supabase-auth/auth-mock) are scoped `project`: they're app-wide **root middleware** with no compass adapter slot. The JOB-INDEX buckets them as `identity`-context adapters (the pure-hexagonal framing), but in practice they wire session middleware at the app root, not into one context's port — so the platform zone is the honest rendering. The shared identity primitive (`UserContext`) is split to `shared-types` (`scope: "shared"`). Same deliberate-departure pattern as `error-handling`.
 3. **Mapping is authoritative data, never path-inference.** Each add-on template declares `provides: "<capability>"` (e.g. `"messaging.out-adapter"`) + `scope: "context" | "shared" | "project"`. The canvas **resolves** context-scoped add-ons against the **same manifest adapter fields the compass already uses** (`messagingAdapter` / `persistenceAdapter` / `telemetryProvider`) — no parsing of `src/infrastructure/...` directory conventions. Authoritative on both sides of the join.
 
 ## Resolution — the three open questions (settled)
@@ -44,11 +46,25 @@ Each add-on declares `provides` + `scope` on its template manifest (hand-authore
 | `bullmq`            | `messaging.out-adapter`   | `context` | `messagingAdapter` (South)                                         |
 | `supabase`          | `persistence.out-adapter` | `context` | `persistenceAdapter` (East)                                        |
 | `llm-adapter`       | `llm.out-adapter`         | `context` | external-integration / badge fallback (no dedicated compass field) |
+| `shared-types`      | `kernel.user-context`     | `shared`  | shared-kernel context (UserContext + session primitives)           |
 | `docker`            | `platform.container`      | `project` | platform zone                                                      |
 | `error-handling`    | `platform.error-handling` | `project` | platform zone                                                      |
 | `eslint-no-console` | `platform.lint`           | `project` | platform zone                                                      |
 
-Adobe family + auth providers follow.
+`shared-types` is the confirmed `scope: "shared"` exemplar: UserContext + MOCK_USER + session helpers, the auth-ecosystem prerequisite — so the shared-kernel branch **is** exercised and the canvas must build it.
+
+**Batch 2** maps `shared-types` + the Adobe family + auth providers (grouped — the authoritative per-template values live in the manifests):
+
+| Group                    | Templates                                                                                                                      | `provides`                         | `scope`   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | --------- |
+| Adobe API services       | `adobe-firefly-core` + 13 Firefly/Creative service add-ons                                                                     | `external-integration.out-adapter` | `context` |
+| Adobe storage presigners | `adobe-firefly-storage-{s3,gcs,azure}`                                                                                         | `external-integration.out-adapter` | `context` |
+| Auth providers           | clerk, nextauth, better-auth, google-oauth, github-oauth, microsoft-entra, magic-link, adobe-ims-spa, supabase-auth, auth-mock | `platform.auth`                    | `project` |
+
+- **Adobe is flat:** all 17 share one `external-integration.out-adapter` — none has a dedicated compass field, so each renders as an external-integration badge labelled by add-on id (AC-1). Storage presigners use the same (Firefly-asset IO, **not** the app's domain persistence — a `persistence.out-adapter` here would misleadingly annotate the project's storage slot).
+- **`adobe-ims-spa` is in the auth group (`project`), not an Adobe service** — the `adobe-` prefix is a namespace artifact, not an architectural classification.
+- Auth providers are mutually exclusive, so the platform zone shows a single auth chip. See the auth reconciliation note in Decision 2.
+- **Still unmapped (a later batch, NOT this PR):** the AI/agent contexts (`langgraph`, `bedrock-agentcore-runtime`/`-services`, `mcp-server`/`mcp-server-http`), cross-cutting infra (`observability`, `rate-limiting`, `ci-github-actions`, `env-setup`), `design-system`, and `llm-adapter-bedrock`. (`agents-md` is docs-only and `__example__` is a fixture — neither gets a mapping.) After this, 34/47 manifests carry `provides`/`scope`.
 
 ## Sequencing
 

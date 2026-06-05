@@ -3,6 +3,8 @@
   "name": "Adobe InDesign API",
   "description": "InDesign automation for Adobe Firefly Services (image.adobe.io): an InDesignPort + adapter for data merge (template + data source), layout rendering, and PDF export over the adobe-firefly-core foundation. Async.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

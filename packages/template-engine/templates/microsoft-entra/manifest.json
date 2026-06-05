@@ -3,6 +3,8 @@
   "name": "Microsoft Entra ID (Azure AD)",
   "description": "Entra ID confidential-client PKCE flow, Microsoft Graph profile + group fetch, AAD group-to-role mapping, AES-256-GCM stateless session cookie, and a root middleware that protects configured paths while still honouring AUTH_MODE=mock as a dev short-circuit.",
   "version": "2.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",

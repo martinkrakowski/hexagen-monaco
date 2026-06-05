@@ -3,6 +3,8 @@
   "name": "Adobe Firefly Services — Core",
   "description": "Shared foundation for Adobe Firefly Services: IMS OAuth Server-to-Server token provider (cached), a base REST client (x-api-key + bearer, retry, timeout), the async job port (polling or webhook), a presigned-URL storage seam (passthrough default), and Adobe error classification. Service addons require this and add one port + adapter each.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["env-setup", "error-handling"],
   "conflicts": [],
   "questions": [

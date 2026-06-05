@@ -3,6 +3,8 @@
   "name": "Clerk",
   "description": "Standalone Clerk integration: clerkMiddleware route protection, server-side auth helpers, org/app-level RoleGuard component, protected route group, and a JWT-template API example",
   "version": "1.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["env-setup"],
   "conflicts": [
     "auth-mock",

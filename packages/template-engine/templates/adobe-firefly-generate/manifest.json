@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Generate",
   "description": "Firefly Generate API (the flagship service): an ImageGenerationPort + adapter for text-to-image and the image-edit operations (generative fill/expand, image-to-image, style transfer) over the adobe-firefly-core foundation. Async via FireflyJobPort; presigned IO; content-credentials and safety flags pass through as port options.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

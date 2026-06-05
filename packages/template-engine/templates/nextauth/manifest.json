@@ -3,6 +3,8 @@
   "name": "Auth.js (NextAuth v5)",
   "description": "Standalone Auth.js v5 setup: Google/GitHub/Credentials providers, Edge-safe config split, JWT session strategy, typed session.user, and matcher-based route protection middleware",
   "version": "1.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["env-setup"],
   "conflicts": [
     "auth-mock",

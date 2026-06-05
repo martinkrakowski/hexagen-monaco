@@ -3,6 +3,8 @@
   "name": "Magic Link (Passwordless)",
   "description": "HMAC-SHA256 signed single-use tokens, Resend/Nodemailer transport, 10k-entry LRU replay store, AES-256-GCM stateless session cookie, and a root middleware that protects configured paths while still honouring AUTH_MODE=mock as a dev short-circuit.",
   "version": "2.0.0",
+  "provides": "platform.auth",
+  "scope": "project",
   "requires": ["shared-types", "auth-mock", "env-setup"],
   "conflicts": [
     "nextauth",

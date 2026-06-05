@@ -3,6 +3,8 @@
   "name": "Adobe Substance 3D API",
   "description": "Substance 3D automation for Adobe Firefly Services (image.adobe.io): a Substance3DPort + adapter for scene render, composite, and relight over the adobe-firefly-core foundation. Async, compute-heavy — the longest-running Firefly jobs; polled by status URL (image.adobe.io services don't deliver Firefly webhooks) and the poll has no max-wait cap, so long renders aren't cut off.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Content Tagging",
   "description": "Content Tagging service for Adobe Firefly: a ContentTaggingPort + adapter that returns structured tags/metadata for an image (the one service whose result is JSON, not an asset — exercises the foundation's non-asset path). Sync or short async; presigns the input only.",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [

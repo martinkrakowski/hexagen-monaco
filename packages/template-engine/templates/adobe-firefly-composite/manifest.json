@@ -3,6 +3,8 @@
   "name": "Adobe Firefly — Composite",
   "description": "Composite Operations service for Adobe Firefly: a CompositePort + adapter that blends a product image into a scene (matching tone/lighting/shadow) over the adobe-firefly-core foundation. Async; returns multiple candidate outputs (the port returns an array of hrefs).",
   "version": "1.0.0",
+  "provides": "external-integration.out-adapter",
+  "scope": "context",
   "requires": ["adobe-firefly-core"],
   "conflicts": [],
   "questions": [
