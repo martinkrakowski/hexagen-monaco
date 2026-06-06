@@ -163,3 +163,273 @@ describe("cross-context (event-bus transport emitter)", () => {
     });
   });
 });
+
+const networkManifest = (): Manifest =>
+  ({
+    system: "myorg",
+    scope: "myorg",
+    bounded_contexts: [
+      { name: "orders" },
+      { name: "billing" },
+      { name: "shared" },
+    ],
+    cross_context: [
+      {
+        consumer: "orders",
+        provider: "billing",
+        transport: "network",
+        operations: ["GetInvoice", "IssueRefund"],
+        integrationPattern: "acl",
+      },
+    ],
+  }) as unknown as Manifest;
+
+describe("cross-context (network transport emitter)", () => {
+  it("emits shared DTOs + controller (provider) & client (consumer) ports with REAL multi-method signatures + adapters", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(workspaceRoot, networkManifest(), {
+        logger: createSpyLogger(),
+      });
+
+      const result = await generateCrossContext(config);
+      assert.strictEqual(result.error, undefined, "emitter must not error");
+
+      // 1. Shared DTOs — one file per operation, each exporting a Request + Response.
+      const dto = path.join(
+        workspaceRoot,
+        "packages/shared/src/domain/dtos/GetInvoice.dto.ts",
+      );
+      assert.strictEqual(await pathExists(dto), true, "DTO file emitted");
+      const dtoText = await readText(dto);
+      assert.ok(dtoText.includes("export interface GetInvoiceRequest"));
+      assert.ok(dtoText.includes("export interface GetInvoiceResponse"));
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/shared/src/domain/dtos/IssueRefund.dto.ts",
+          ),
+        ),
+        true,
+        "a DTO file per operation",
+      );
+
+      // 2. Provider (billing) controller IN-port — one real method per operation,
+      //    NOT the generic stub.
+      const ctrlPort = path.join(
+        workspaceRoot,
+        "packages/billing/src/application/ports/in/rest-controller.in-port.ts",
+      );
+      assert.strictEqual(
+        await pathExists(ctrlPort),
+        true,
+        "controller port on the provider",
+      );
+      const ctrl = await readText(ctrlPort);
+      assert.ok(ctrl.includes("export interface RestControllerPort"));
+      assert.match(
+        ctrl,
+        /getInvoice\(request: GetInvoiceRequest\): Promise<GetInvoiceResponse>/,
+        "controller has a real getInvoice(request): Promise<response> method",
+      );
+      assert.match(
+        ctrl,
+        /issueRefund\(request: IssueRefundRequest\): Promise<IssueRefundResponse>/,
+        "controller has one method per operation",
+      );
+      assert.ok(
+        !ctrl.includes("Define your port methods"),
+        "must NOT be the generic inPort stub",
+      );
+
+      // 3. Consumer (orders) client OUT-port — the mirror methods.
+      const clientPort = path.join(
+        workspaceRoot,
+        "packages/orders/src/application/ports/out/external-service-client.out-port.ts",
+      );
+      assert.strictEqual(
+        await pathExists(clientPort),
+        true,
+        "client port on the consumer",
+      );
+      const client = await readText(clientPort);
+      assert.ok(client.includes("export interface ExternalServiceClientPort"));
+      assert.match(
+        client,
+        /getInvoice\(request: GetInvoiceRequest\): Promise<GetInvoiceResponse>/,
+        "client mirrors the provider's operations",
+      );
+
+      // 4. Adapters — valid PascalCase class names; and because each network param
+      //    is a SINGLE imported type (not a union), the analyzer preserves the real
+      //    typed signature in the adapter (the event-bus union → `any` case doesn't
+      //    apply here).
+      const ctrlAdapter = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/infrastructure/adapters/rest-controller.adapter.ts",
+        ),
+      );
+      assert.match(
+        ctrlAdapter,
+        /export class RestControllerAdapter implements RestControllerPort/,
+      );
+      assert.match(
+        ctrlAdapter,
+        /getInvoice\(request: GetInvoiceRequest\): Promise<GetInvoiceResponse>/,
+        "network adapter preserves the real typed signature",
+      );
+      const clientAdapter = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/orders/src/infrastructure/adapters/external-service-client.adapter.ts",
+        ),
+      );
+      assert.match(
+        clientAdapter,
+        /export class ExternalServiceClientAdapter implements ExternalServiceClientPort/,
+      );
+
+      // 5. No event-bus transport leaks into a network template.
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/billing/src/application/ports/out/message-publisher.out-port.ts",
+          ),
+        ),
+        false,
+        "no event-bus publisher for a network edge",
+      );
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/orders/src/application/ports/in/event-listener.in-port.ts",
+          ),
+        ),
+        false,
+        "no event-bus subscriber for a network edge",
+      );
+    });
+  });
+
+  it("camelCases a single-segment operation base (the useCases fallback shape)", async () => {
+    // The wizard's E1 fallback resolves an undeclared-useCases provider to a single
+    // provider-named operation (`Billing`); the emitter turns that into a `billing`
+    // method + Billing{Request,Response} DTOs.
+    const m = {
+      system: "myorg",
+      scope: "myorg",
+      bounded_contexts: [{ name: "orders" }, { name: "billing" }],
+      cross_context: [
+        {
+          consumer: "orders",
+          provider: "billing",
+          transport: "network",
+          operations: ["Billing"],
+          integrationPattern: "open-host",
+        },
+      ],
+    } as unknown as Manifest;
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(workspaceRoot, m, {
+        logger: createSpyLogger(),
+      });
+      await generateCrossContext(config);
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/shared/src/domain/dtos/Billing.dto.ts",
+          ),
+        ),
+        true,
+      );
+      const ctrl = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/in/rest-controller.in-port.ts",
+        ),
+      );
+      assert.match(
+        ctrl,
+        /billing\(request: BillingRequest\): Promise<BillingResponse>/,
+      );
+    });
+  });
+});
+
+describe("cross-context — transport divergence (Decision A1 payoff)", () => {
+  const contexts = [
+    { name: "orders" },
+    { name: "billing" },
+    { name: "shared" },
+  ];
+  const edge = (transport: "event-bus" | "network") =>
+    transport === "event-bus"
+      ? {
+          consumer: "orders",
+          provider: "billing",
+          transport,
+          events: ["InvoiceIssued"],
+          integrationPattern: "open-host",
+        }
+      : {
+          consumer: "orders",
+          provider: "billing",
+          transport,
+          operations: ["GetInvoice"],
+          integrationPattern: "open-host",
+        };
+  const manifestFor = (transport: "event-bus" | "network"): Manifest =>
+    ({
+      system: "x",
+      scope: "x",
+      bounded_contexts: contexts,
+      cross_context: [edge(transport)],
+    }) as unknown as Manifest;
+
+  const pub =
+    "packages/billing/src/application/ports/out/message-publisher.out-port.ts";
+  const ctrl =
+    "packages/billing/src/application/ports/in/rest-controller.in-port.ts";
+
+  it("event-bus emits a publisher and NO controller", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(workspaceRoot, manifestFor("event-bus"), {
+        logger: createSpyLogger(),
+      });
+      await generateCrossContext(config);
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, pub)),
+        true,
+        "event-bus emits a publisher",
+      );
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, ctrl)),
+        false,
+        "event-bus emits no network controller",
+      );
+    });
+  });
+
+  it("network emits a controller and NO publisher", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(workspaceRoot, manifestFor("network"), {
+        logger: createSpyLogger(),
+      });
+      await generateCrossContext(config);
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, ctrl)),
+        true,
+        "network emits a controller",
+      );
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, pub)),
+        false,
+        "network emits no event-bus publisher",
+      );
+    });
+  });
+});
