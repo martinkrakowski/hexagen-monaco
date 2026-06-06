@@ -171,10 +171,16 @@ const NITRO_PACKAGE_JSON_TEMPLATE = `{
 }
 `;
 
-// Standalone, Nitro-managed tsconfig — only `extends`. The generated config
-// carries compilerOptions, includes, and the auto-import declarations.
+// Standalone, Nitro-managed tsconfig: extends the Nitro-generated config (which
+// carries `include` + the auto-import declarations) and pins `moduleResolution:
+// "bundler"` explicitly. Nitro's generated config already uses Bundler, but
+// pinning it keeps the generated app compliant with the repo's bundler-resolution
+// standard without relying on a file that only exists after `nitro prepare`
+// (qodo rule 798530). Re-verified: `nitro prepare` + `tsc` still pass with the
+// override merged onto the inherited config.
 const NITRO_TSCONFIG: TsConfigTemplate = {
   extends: "./.nitro/types/tsconfig.json",
+  compilerOptions: { moduleResolution: "bundler" },
 };
 
 const NITRO_CONFIG_TEMPLATE = `import { defineNitroConfig } from "nitropack/config";

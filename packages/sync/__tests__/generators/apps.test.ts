@@ -290,13 +290,15 @@ describe("apps", () => {
         "typecheck runs nitro prepare first so tsc never fails on missing .nitro types",
       );
 
-      // Standalone, Nitro-managed tsconfig — extends the generated config, not base.
+      // Standalone, Nitro-managed tsconfig — extends the generated config, not base,
+      // but pins bundler resolution explicitly for repo compliance (qodo rule 798530).
       const ts = await readJson(tsPath);
       assert.strictEqual(ts.extends, "./.nitro/types/tsconfig.json");
       assert.strictEqual(
-        ts.compilerOptions,
-        undefined,
-        "no local compilerOptions — the generated config provides them",
+        (ts.compilerOptions as Record<string, unknown> | undefined)
+          ?.moduleResolution,
+        "bundler",
+        "pins bundler resolution explicitly, beyond the inherited Nitro config",
       );
 
       const nitroConfig = await readText(nitroConfigPath);
