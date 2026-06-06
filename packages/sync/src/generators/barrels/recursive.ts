@@ -104,14 +104,26 @@ export async function generateRecursiveBarrels(
     if (layerExports.length > 0) layersWithContent.push(layer);
   }
 
-  // Package-root barrel (`src/index.ts`). Without it, `@{scope}/<pkg>` — which the
-  // base tsconfig `paths` map to `<pkg>/src/index.ts` and which package.json's
-  // `main`/`exports` build from — does not resolve, so every cross-package import in
-  // a generated project fails (TS2307). Re-export only layers that produced
-  // exportable content (mirrors the dangling-export guard in walkDirectory). A
-  // hand-written `src/index.ts` is preserved via shouldGenerateBarrel (self-regen
-  // safety); a generated one regenerates idempotently.
-  if (layersWithContent.length > 0) {
+  // Package-root barrel (`src/index.ts`) — EXTERNAL (API-driven) generation only.
+  // Without it, `@{scope}/<pkg>` — which the base tsconfig `paths` map to
+  // `<pkg>/src/index.ts` and which package.json's `main`/`exports` build from —
+  // does not resolve, so every cross-package import in a generated project fails
+  // (TS2307, #249).
+  //
+  // Gated to `mode === "external"` on purpose. In `self-regen` (this monorepo) the
+  // package-root indexes are hand-maintained rich barrels: NAMED re-exports that
+  // span non-layer directories (e.g. `errors/` → `Result`, `types/` → `Branded`)
+  // and carry the `@generated` marker. A layer-only wildcard barrel would treat the
+  // marker as "safe to regenerate" and clobber them, dropping every non-layer
+  // export and breaking the build (caught by sync-integrity: `cli sync --force`
+  // then `turbo run build`). Internal self-regen never emitted a package-root
+  // barrel before, so scoping this to external preserves that behavior exactly.
+  //
+  // Re-export only layers that produced exportable content (mirrors the
+  // dangling-export guard in walkDirectory). A hand-written `src/index.ts` is still
+  // preserved via shouldGenerateBarrel; a previously-generated one regenerates
+  // idempotently.
+  if (config.mode === "external" && layersWithContent.length > 0) {
     const rootBarrelPath = path.join(srcDir, "index.ts");
     if (await shouldGenerateBarrel(rootBarrelPath, preserved, config.logger)) {
       const content = generateBarrelContent(
