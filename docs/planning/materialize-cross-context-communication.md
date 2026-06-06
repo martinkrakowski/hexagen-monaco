@@ -1,6 +1,6 @@
 # Materialize Cross-Context Communication (Phase 3)
 
-**Status:** Proposed — Decision C resolved → **C1** (interface-complete, body-stubbed). Decision D (event/DTO contract source) open.
+**Status:** Proposed — Decision C → **C1** (interface-complete, body-stubbed); Decision D → **D1** (provider `domainEvents`; context-name-only fallback). Ready for 3a.
 **Date:** 2026-06-06
 **Parent:** [`wire-architectural-template-into-generation.md`](./wire-architectural-template-into-generation.md) (Phase 3). Phases 1 (#235) + 2 (#236) shipped; the `generateApps` traversal guard shipped (#237). Decision A resolved → **A1** (keep all three templates, differentiate now).
 
@@ -44,12 +44,19 @@ modular-monolith (`in-process`) — unchanged (direct `depends_on` imports, as t
 
 **C1 (chosen):** interface-complete, body-stubbed. Generate ports + port-derived adapters + event/DTO contracts, wired into package deps; the boundary compiles and satisfies the arch-linter's `required_communication`; the concrete broker/HTTP call is a marked `TODO`. Delivers the differentiator (each template emits structurally distinct, compiling, lint-valid code) at a tractable size. **C2** (runnable in-memory bus / local HTTP) is a deliberate follow-up — it bakes in runtime choices and is out of scope here.
 
-## Decision D — event/DTO contract source _(open)_
+## Decision D — event/DTO contract source _(resolved: D1)_
 
-The manifest's `bounded_contexts` don't carry event/DTO names today (`wizardToManifest` maps entities / VOs / use-cases / ports / adapters, **not** `domainEvents`). Event-bus/network contracts need names:
+The manifest's `bounded_contexts` don't carry event/DTO names today (`wizardToManifest` maps entities / VOs / use-cases / ports / adapters, **not** `domainEvents`). **D1:** map the **provider's** `domainEvents` (already a wizard field) into the manifest BC (one new array — small, additive) and name the generated contract(s) from them.
 
-- **D1 (recommended):** map the provider's `domainEvents` (already a wizard field) into the manifest and name the contract(s) from them; fall back to a single generic `<Provider>Event` / `<Provider>Request` when none are declared. Small, additive (one array on the manifest BC + the mapping).
-- **D2:** scaffold a single generic contract per edge regardless of `domainEvents` (no manifest change); enrich later.
+**Contract naming — locked (so fixtures can't drift from code):**
+
+- **Declared `domainEvents`:** one contract per event, named `toPascalCase(domainEvent)` **verbatim** (no suffix) — e.g. `InvoiceIssued`, `PaymentReceived`.
+- **Fallback (no `domainEvents` declared):** a single generic contract derived from the **provider context name only — _not_ the use-case name**: `${ProviderPascal}Event` (event-bus); `${ProviderPascal}Request` + `${ProviderPascal}Response` (network). One contract **per provider**, deduped across multiple edges into the same provider.
+- **`ProviderPascal`** = the provider context name PascalCased to a valid TS identifier (split on non-alphanumerics, capitalize each segment), reusing the `toPascalCase` helper in `packages/sync/src/generators/architecture-files.ts`. e.g. `billing → Billing`, `order-management → OrderManagement`.
+
+Rationale for the context-name-only fallback: it's a deterministic _placeholder_ the user refines by declaring real `domainEvents`. Folding in use-case names would need use-cases to exist (a second fallback layer), multiply the contract into N-per-use-case ports, and make fixtures depend on use-case config — the exact drift this locks out. Granularity comes from `domainEvents`, not the fallback.
+
+(D2 — generic-per-edge with no manifest change — rejected: it can't name real events even when the user declared them.)
 
 ## Steps
 
