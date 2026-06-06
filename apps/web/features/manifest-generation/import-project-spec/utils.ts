@@ -58,7 +58,13 @@ export function extractSpecSummary(
   const effectiveUseCases: Record<string, unknown[]> = {};
   for (const ctx of contexts) {
     const name = typeof ctx.name === "string" ? ctx.name : undefined;
-    if (name && Array.isArray(ctx.primary_use_cases)) {
+    const short = typeof ctx.short === "string" ? ctx.short : undefined;
+    // Canonical use_cases win (matching normalizeDialect), including when keyed by
+    // a context alias (name vs short). Exact-key match here; the pipeline uses a
+    // normalized match — close enough for an advisory count.
+    const coveredByCanonical =
+      (!!name && name in useCasesMap) || (!!short && short in useCasesMap);
+    if (name && !coveredByCanonical && Array.isArray(ctx.primary_use_cases)) {
       effectiveUseCases[name] = ctx.primary_use_cases as unknown[];
     }
   }

@@ -145,6 +145,28 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
   });
 
+  it("canonical use_cases win over the dialect even when keyed by a context alias (short)", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: OrderManagement",
+        "    short: orders",
+        "    primary_use_cases:",
+        "      - name: DialectPlaceOrder",
+        "use_cases:",
+        "  orders:", // canonical keyed by the alias `short`, not `name`
+        "    - name: CanonicalPlaceOrder",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      analysis.useCases.map((u) => u.name),
+      ["CanonicalPlaceOrder"],
+      "canonical (alias-keyed) wins; the dialect entry must not also survive",
+    );
+  });
+
   it("leaves a canonical-shape config untouched (idempotent)", () => {
     const config = parseStructuredConfig(
       [

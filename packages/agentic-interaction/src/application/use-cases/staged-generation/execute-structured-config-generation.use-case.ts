@@ -336,6 +336,12 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   if (!Array.isArray(config.bounded_contexts)) return config;
 
   const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
+  // Canonical top-level `use_cases` win over the dialect even when keyed by a
+  // context alias (`name` vs `short`) — `lookupUseCases` resolves both — so compare
+  // on the normalized form, not exact keys, before taking dialect use cases.
+  const canonicalUseCaseKeys = new Set(
+    Object.keys(config.use_cases ?? {}).map((k) => normalizeContextName(k)),
+  );
 
   for (const ctx of config.bounded_contexts) {
     const dm = ctx.domain_models;
@@ -416,7 +422,15 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
     // are dropped; skip when the context name itself isn't usable as a key.
     const ucs = withName(ctx.primary_use_cases);
     if (ucs.length > 0 && ctx.name) {
-      useCasesFromDialect[ctx.name] = ucs.map((uc) => ({ name: uc.name }));
+      // Skip when canonical use_cases already cover this context under any of its
+      // aliases — canonical wins, and we must not leave a duplicate dialect entry
+      // keyed by a different alias that downstream analysis would also pick up.
+      const coveredByCanonical = [ctx.name, ctx.short]
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .some((v) => canonicalUseCaseKeys.has(normalizeContextName(v)));
+      if (!coveredByCanonical) {
+        useCasesFromDialect[ctx.name] = ucs.map((uc) => ({ name: uc.name }));
+      }
     }
   }
 

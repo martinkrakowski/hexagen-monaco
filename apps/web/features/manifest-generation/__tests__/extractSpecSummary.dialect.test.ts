@@ -88,7 +88,7 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
     assert.equal(s.useCaseCount, 1);
   });
 
-  it("does not double-count a context carrying both use_cases and primary_use_cases", () => {
+  it("prefers canonical use_cases over primary_use_cases for the same context (no double-count)", () => {
     const parsed = yaml.load(
       [
         "bounded_contexts:",
@@ -98,7 +98,7 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
         "      - name: CancelOrder",
         "use_cases:",
         "  Orders:",
-        "    - name: PlaceOrder",
+        "    - name: CanonicalOrderFlow",
         "",
       ].join("\n"),
     ) as Record<string, unknown>;
@@ -106,7 +106,29 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
     assert.equal(
       s.useCaseCount,
       1,
-      "canonical use_cases[Orders] wins over dialect (matches normalizeDialect), not summed",
+      "canonical Orders (1) wins over dialect (2) — matches normalizeDialect, not summed",
+    );
+  });
+
+  it("canonical use_cases keyed by a context alias (short) still win in the count", () => {
+    const parsed = yaml.load(
+      [
+        "bounded_contexts:",
+        "  - name: OrderManagement",
+        "    short: orders",
+        "    primary_use_cases:",
+        "      - name: DialectPlaceOrder",
+        "use_cases:",
+        "  orders:",
+        "    - name: CanonicalPlaceOrder",
+        "",
+      ].join("\n"),
+    ) as Record<string, unknown>;
+    const s = extractSpecSummary(parsed);
+    assert.equal(
+      s.useCaseCount,
+      1,
+      "alias-keyed canonical wins; dialect not added",
     );
   });
 });
