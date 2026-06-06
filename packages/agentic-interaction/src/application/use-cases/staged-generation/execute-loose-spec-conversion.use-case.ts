@@ -15,6 +15,10 @@ import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import { jsonrepair } from "jsonrepair";
 import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
 import type { EscalationConfig } from "./retry-with-escalation";
+import {
+  LARGE_OUTPUT_STAGE_TIMEOUT_MS,
+  stageTimeoutError,
+} from "./stage-timeout";
 
 export const MAX_LOOSE_SPEC_INPUT_CHARS = 200_000;
 
@@ -22,8 +26,6 @@ export const MAX_LOOSE_SPEC_INPUT_CHARS = 200_000;
 // Telemetry filtering by stage number must be able to distinguish conversion
 // failures from prompt-normalization (Stage 0) failures.
 const LOOSE_SPEC_CONVERSION_STAGE = -1;
-
-const ATTEMPT_TIMEOUT_MS = 1_800_000; // 30 minutes per attempt
 
 const LOG_PREFIX = "[loose-spec-convert]";
 
@@ -71,13 +73,16 @@ export class ExecuteLooseSpecConversionUseCase {
       );
       callbacks?.onProgress?.(`Converting (attempt ${attempt})...`);
 
-      // Compose external + internal abort. The internal controller fires on
-      // 30-min timeout; the external signal lets callers cancel mid-flight.
+      // Compose external + internal abort. The internal controller fires on the
+      // large-output ceiling (this stage emits up to 8000 tokens); the external
+      // signal lets callers cancel mid-flight. `isTimedOut` distinguishes a
+      // deadline abort (fail fast — see below) from a user cancel.
+      let isTimedOut = false;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(
-        () => abortController.abort(),
-        ATTEMPT_TIMEOUT_MS,
-      );
+      const timeoutHandle = setTimeout(() => {
+        isTimedOut = true;
+        abortController.abort();
+      }, LARGE_OUTPUT_STAGE_TIMEOUT_MS);
       const externalSignal = callbacks?.signal;
       const onExternalAbort = () => abortController.abort();
       if (externalSignal) {
@@ -112,9 +117,19 @@ export class ExecuteLooseSpecConversionUseCase {
           thrownError instanceof Error && thrownError.name === "AbortError";
         if (isAbort) {
           console.log(
-            `${LOG_PREFIX} phase=conversion, attempt=${attempt}, aborted=true`,
+            `${LOG_PREFIX} phase=conversion, attempt=${attempt}, aborted=true, timedOut=${isTimedOut}`,
           );
-          return err(thrownError);
+          // Fail fast on either cause: a deadline timeout would just repeat the
+          // wait on retry, and a user cancel must not retry. Differentiate only
+          // the surfaced message.
+          return err(
+            isTimedOut
+              ? stageTimeoutError(
+                  "Loose-spec conversion",
+                  LARGE_OUTPUT_STAGE_TIMEOUT_MS,
+                )
+              : thrownError,
+          );
         }
         console.log(
           `${LOG_PREFIX} phase=conversion, attempt=${attempt}, llmFailed=true`,
@@ -154,6 +169,19 @@ export class ExecuteLooseSpecConversionUseCase {
       }
 
       if (streamError) {
+        // Adapters report a deadline abort as a returned failure (not a throw),
+        // so catch the timeout here too and fail fast rather than retrying it.
+        if (isTimedOut) {
+          console.log(
+            `${LOG_PREFIX} phase=conversion, attempt=${attempt}, timedOut=true`,
+          );
+          return err(
+            stageTimeoutError(
+              "Loose-spec conversion",
+              LARGE_OUTPUT_STAGE_TIMEOUT_MS,
+            ),
+          );
+        }
         const errorMsg = `Request error: ${streamError}`;
         console.log(
           `${LOG_PREFIX} phase=conversion, attempt=${attempt}, streamError=true`,
