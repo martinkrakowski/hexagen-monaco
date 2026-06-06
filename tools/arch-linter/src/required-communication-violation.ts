@@ -104,13 +104,31 @@ export function checkRequiredCommunication(
 ): RequiredCommunicationViolation[] {
   if (!Array.isArray(edges)) return [];
 
+  // Context names come from an unvalidated manifest and are joined into paths, so a
+  // crafted `..`/separator name could make the check probe arbitrary filesystem
+  // locations. Resolve each candidate and confirm it stays within packages/ before
+  // touching the filesystem (defense-in-depth; the emitter applies the same guard
+  // when writing).
+  const root = path.resolve(pkgRootPath);
   const violations: RequiredCommunicationViolation[] = [];
   for (const edge of edges) {
     const { consumer, provider, transport } = edge;
     if (!consumer || !provider || !transport) continue;
 
     for (const port of expectedPorts(consumer, provider, transport)) {
-      const absPath = path.join(pkgRootPath, port.context, port.relPath);
+      const absPath = path.resolve(pkgRootPath, port.context, port.relPath);
+      if (absPath !== root && !absPath.startsWith(root + path.sep)) {
+        violations.push({
+          type: "missing-transport",
+          enforcement: "error",
+          consumer,
+          provider,
+          transport,
+          missingPort: `packages/${port.context}/${port.relPath}`,
+          message: `required_communication violation: '${consumer}' -> '${provider}' uses an unsafe context name '${port.context}' that resolves outside packages/ — refusing to probe the filesystem`,
+        });
+        continue;
+      }
       if (!fileExists(absPath)) {
         violations.push({
           type: "missing-transport",

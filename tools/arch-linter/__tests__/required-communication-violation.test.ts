@@ -152,4 +152,27 @@ describe("checkRequiredCommunication — positive cross-context enforcement", ()
     assert.equal(v.length, 1);
     assert.equal(v[0].provider, "shipping");
   });
+
+  it("flags an unsafe context name and never probes outside packages/ (manifest path traversal)", () => {
+    const root = path.resolve(PKG);
+    let probedOutside = false;
+    const fe = (p: string): boolean => {
+      if (p !== root && !p.startsWith(root + path.sep)) probedOutside = true;
+      return true; // pretend everything exists, to prove we never even ask outside
+    };
+    const v = checkRequiredCommunication(
+      [{ consumer: "orders", provider: "../../evil", transport: "event-bus" }],
+      PKG,
+      fe,
+    );
+    assert.ok(
+      v.some((x) => /unsafe context name|outside packages/.test(x.message)),
+      "the traversing context name is flagged",
+    );
+    assert.strictEqual(
+      probedOutside,
+      false,
+      "the check never stats a path resolved outside packages/",
+    );
+  });
 });
