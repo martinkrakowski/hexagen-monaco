@@ -115,9 +115,33 @@ describe("cross-context (event-bus transport emitter)", () => {
         "publisher adapter derived",
       );
       const adapter = await readText(pubAdapter);
+      // Adapter class name must be a VALID TS identifier (PascalCase + `Adapter`),
+      // not the kebab port base — `export class message-publisher` would be a
+      // compile error in the generated project. Pin both the valid form and the
+      // absence of the kebab regression.
+      assert.match(
+        adapter,
+        /export class MessagePublisherAdapter implements MessagePublisherPort/,
+        "adapter has a valid PascalCase class name implementing the port",
+      );
       assert.ok(
-        adapter.includes("MessagePublisherPort"),
-        "adapter references the bespoke port it implements",
+        !adapter.includes("class message-publisher"),
+        "adapter class name must not be the kebab portBase (invalid identifier)",
+      );
+      // The adapter is a throwing stub implementing the typed port. Its `publish`
+      // param resolves to `any` (ts-morph can't resolve the cross-package event
+      // import, and the `InvoiceIssued | PaymentReceived` union of unresolved
+      // types collapses to `any`); the PORT carries the real union and `any` still
+      // satisfies it, so the boundary compiles. Pin the method + stub body, not the
+      // param type, so this stays robust if analyzer fidelity improves later.
+      assert.match(
+        adapter,
+        /async publish\(event: [^)]*\): Promise<void>/,
+        "adapter implements the publish method against the port",
+      );
+      assert.ok(
+        adapter.includes("throw new Error"),
+        "adapter body is a fill-in TODO stub (C1)",
       );
     });
   });

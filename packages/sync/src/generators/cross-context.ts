@@ -56,6 +56,19 @@ function addAll(
   map.set(key, set);
 }
 
+/**
+ * PascalCase a kebab/dot stem into a valid TS identifier (e.g.
+ * `message-publisher` → `MessagePublisher`). Kept local — a 5-line pure helper —
+ * rather than coupling this emitter to `architecture-files.ts`'s private copy.
+ */
+function toPascalCase(stem: string): string {
+  return stem
+    .split(/[-.]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
 function eventContractContent(name: string): string {
   return `// @generated cross-context event contract — edit freely
 /**
@@ -155,12 +168,19 @@ async function emitPortAndAdapter(
   const adapterDir = path.join(moduleRoot, "src", "infrastructure", "adapters");
   await fs.mkdir(adapterDir, { recursive: true });
   const adapterPath = path.join(adapterDir, `${spec.portBase}.adapter.ts`);
+  // The adapter CLASS name must be a valid TS identifier — `generateAdapterFromPort`
+  // emits it verbatim as `export class <name>`. The file base stays kebab
+  // (`message-publisher.adapter.ts`) but the class is PascalCased with the `Adapter`
+  // suffix (`MessagePublisherAdapter`), matching the generic stub template's
+  // `{name}Adapter` convention. Passing the kebab `portBase` here produced an
+  // invalid `export class message-publisher` — a compile error in generated output.
+  const adapterClassName = `${toPascalCase(spec.portBase)}Adapter`;
   recordStatus(
     result,
     adapterPath,
     await safeWriteFileAtomic(
       adapterPath,
-      generateAdapterFromPort(analysis, spec.portBase),
+      generateAdapterFromPort(analysis, adapterClassName),
       config,
       report,
     ),
