@@ -62,6 +62,7 @@ export default function ImportProjectSpecPage() {
   const {
     convert,
     error: conversionError,
+    progressMessage: conversionProgressMessage,
     reset: resetConversion,
   } = useLooseSpecConversion();
 
@@ -413,7 +414,10 @@ export default function ImportProjectSpecPage() {
             )}
 
             {pageState === "CONVERTING_LOOSE_SPEC" && (
-              <SpecConvertingStep conversionError={conversionError} />
+              <SpecConvertingStep
+                conversionError={conversionError}
+                progressMessage={conversionProgressMessage}
+              />
             )}
 
             {pageState === "DESCRIPTION_FALLBACK" && (

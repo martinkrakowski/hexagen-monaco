@@ -14,8 +14,15 @@ interface ConvertRequestBody {
 
 type NDJSONEvent =
   | { type: "chunk"; data: string }
+  | { type: "progress"; message: string; elapsedMs: number }
   | { type: "done"; configJson: string; config: unknown }
   | { type: "error"; message: string };
+
+// How often to emit a liveness heartbeat while the model is working. The
+// conversion can run for minutes; without periodic bytes the NDJSON stream is
+// silent (reads as a crash to the user, and idle-connection proxies may drop
+// it). Each tick also logs elapsed time for server-side telemetry.
+const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export async function POST(request: NextRequest) {
   // Rate limiting
@@ -86,6 +93,25 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       };
 
+      const startedAt = Date.now();
+      const heartbeat = setInterval(() => {
+        try {
+          const elapsedMs = Date.now() - startedAt;
+          logger.info("Loose spec conversion in progress", {
+            elapsedMs,
+            elapsedSeconds: Math.round(elapsedMs / 1000),
+          });
+          send({
+            type: "progress",
+            message: "Model is processing your specification…",
+            elapsedMs,
+          });
+        } catch {
+          // Best-effort: if the client disconnected, the stream is already
+          // closing and `enqueue` throws — the finally below clears us shortly.
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+
       try {
         const llmAdapter = createLLMProviderSelector({
           preferLocal: false,
@@ -124,6 +150,7 @@ export async function POST(request: NextRequest) {
           message: error instanceof Error ? error.message : "Unknown error",
         });
       } finally {
+        clearInterval(heartbeat);
         controller.close();
       }
     },
