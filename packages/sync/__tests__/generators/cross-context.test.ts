@@ -535,3 +535,111 @@ describe("cross-context — integration-pattern shaping (ACL / OHS)", () => {
     });
   });
 });
+
+describe("cross-context — input validation (path safety + identifiers)", () => {
+  it("skips an edge whose context name would traverse outside packages/ (no files escape)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(
+        workspaceRoot,
+        {
+          system: "myorg",
+          scope: "myorg",
+          bounded_contexts: [{ name: "orders" }, { name: "shared" }],
+          cross_context: [
+            {
+              consumer: "orders",
+              provider: "../evil",
+              transport: "event-bus",
+              events: ["InvoiceIssued"],
+              integrationPattern: "open-host",
+            },
+          ],
+        } as unknown as Manifest,
+        { logger: createSpyLogger() },
+      );
+      const result = await generateCrossContext(config);
+      // The whole edge is skipped — nothing emitted, nothing written.
+      assert.strictEqual(result.totalOps, 0, "unsafe edge emits nothing");
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/../evil/src/application/ports/out/message-publisher.out-port.ts",
+          ),
+        ),
+        false,
+        "no traversal outside packages/",
+      );
+      // The consumer also gets no subscriber, since the edge was skipped entirely.
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/orders/src/application/ports/in/event-listener.in-port.ts",
+          ),
+        ),
+        false,
+      );
+    });
+  });
+
+  it("drops event names that aren't valid TS identifiers (keeps the valid ones)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(
+        workspaceRoot,
+        {
+          system: "myorg",
+          scope: "myorg",
+          bounded_contexts: [
+            { name: "orders" },
+            { name: "billing" },
+            { name: "shared" },
+          ],
+          cross_context: [
+            {
+              consumer: "orders",
+              provider: "billing",
+              transport: "event-bus",
+              events: ["3pl", "InvoiceIssued"], // "3pl" is not a valid TS identifier
+              integrationPattern: "open-host",
+            },
+          ],
+        } as unknown as Manifest,
+        { logger: createSpyLogger() },
+      );
+      await generateCrossContext(config);
+
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/shared/src/domain/events/InvoiceIssued.event.ts",
+          ),
+        ),
+        true,
+        "valid event contract is emitted",
+      );
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/shared/src/domain/events/3pl.event.ts",
+          ),
+        ),
+        false,
+        "invalid-identifier event is dropped, not emitted as a broken declaration",
+      );
+      const pub = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/out/message-publisher.out-port.ts",
+        ),
+      );
+      assert.ok(pub.includes("InvoiceIssued"));
+      assert.ok(
+        !pub.includes("3pl"),
+        "the invalid name never reaches the port's symbol union",
+      );
+    });
+  });
+});
