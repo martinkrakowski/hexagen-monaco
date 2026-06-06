@@ -128,6 +128,14 @@ describe("cross-context (event-bus transport emitter)", () => {
         !adapter.includes("class message-publisher"),
         "adapter class name must not be the kebab portBase (invalid identifier)",
       );
+      // The adapter must IMPORT the port interface it implements (relative path),
+      // otherwise `MessagePublisherPort` is an undefined name and the adapter
+      // does not typecheck — "the boundary compiles" is C1's core promise.
+      assert.match(
+        adapter,
+        /import type \{ MessagePublisherPort \} from '\.\.\/\.\.\/application\/ports\/out\/message-publisher\.out-port\.js'/,
+        "adapter imports its port interface so it typechecks",
+      );
       // The adapter is a throwing stub implementing the typed port. Its `publish`
       // param resolves to `any` (ts-morph can't resolve the cross-package event
       // import, and the `InvoiceIssued | PaymentReceived` union of unresolved
@@ -273,6 +281,11 @@ describe("cross-context (network transport emitter)", () => {
       assert.match(
         ctrlAdapter,
         /export class RestControllerAdapter implements RestControllerPort/,
+      );
+      assert.match(
+        ctrlAdapter,
+        /import type \{ RestControllerPort \} from '\.\.\/\.\.\/application\/ports\/in\/rest-controller\.in-port\.js'/,
+        "controller adapter imports its port interface so it typechecks",
       );
       assert.match(
         ctrlAdapter,

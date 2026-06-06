@@ -4,7 +4,11 @@ import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { resolveScope } from "../types/manifest.js";
-import { analyzePortFile, generateAdapterFromPort } from "./port-analyzer.js";
+import {
+  analyzePortFile,
+  generateAdapterFromPort,
+  relativeImportSpecifier,
+} from "./port-analyzer.js";
 import type { ReportRecorder } from "../domain/types.js";
 
 /**
@@ -231,12 +235,14 @@ async function emitPortAndAdapter(
   // `{name}Adapter` convention. Passing the kebab `portBase` here produced an
   // invalid `export class message-publisher` — a compile error in generated output.
   const adapterClassName = `${toPascalCase(spec.portBase)}Adapter`;
+  // The adapter must import the port interface it implements (relative to itself).
+  const portSpecifier = relativeImportSpecifier(adapterPath, portPath);
   recordStatus(
     result,
     adapterPath,
     await safeWriteFileAtomic(
       adapterPath,
-      generateAdapterFromPort(analysis, adapterClassName),
+      generateAdapterFromPort(analysis, adapterClassName, portSpecifier),
       config,
       report,
     ),

@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { ManifestSchema } from "@hexagen/project-configuration";
 import { wizardToManifest } from "../../application/wizard-to-manifest";
 
 // Phase 3: for a strict template, wizardToManifest derives cross-context
@@ -289,5 +290,60 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
     assert.equal(edges(micro)[0].transport, "network");
     assert.deepEqual(edges(micro)[0].operations, ["GetInvoice"]);
     assert.equal(edges(micro)[0].events, undefined);
+  });
+});
+
+// The arch-linter loads .architecture/manifest.yaml through the manifest schema.
+// Before Phase 3c that schema (.strict()) rejected `workspaceTemplate` (leaked
+// since Phase 1) and `cross_context` (Phase 3a) as unrecognized keys, so the
+// linter FATALed on every wizard-generated project. Pin that the wizard's own
+// output is schema-valid so this can't regress.
+describe("wizardToManifest — output is valid against the manifest schema", () => {
+  it("a strict-enterprise manifest (workspaceTemplate + event-bus cross_context) passes ManifestSchema", () => {
+    const m = wizardToManifest(
+      wizard(
+        "strict-enterprise",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", domainEvents: ["InvoiceIssued"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    const result = ManifestSchema.safeParse(m);
+    assert.ok(
+      result.success,
+      `manifest must satisfy ManifestSchema (the arch-linter's loader); issues: ${
+        result.success ? "" : JSON.stringify(result.error.issues)
+      }`,
+    );
+  });
+
+  it("a micro-frontend manifest (network cross_context) passes ManifestSchema", () => {
+    const m = wizardToManifest(
+      wizard(
+        "micro-frontend",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", useCases: ["GetInvoice"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.ok(ManifestSchema.safeParse(m).success);
+  });
+
+  it("a modular-monolith manifest (no cross_context) passes ManifestSchema", () => {
+    const m = wizardToManifest(
+      wizard(
+        "modular-monolith",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing" },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.ok(ManifestSchema.safeParse(m).success);
   });
 });

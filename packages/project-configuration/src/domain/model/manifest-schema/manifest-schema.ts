@@ -211,6 +211,22 @@ export const IndexManifestSchema = z
     },
   );
 
+/**
+ * A cross-context transport edge (Phase 3). The wizard's `deriveCrossContextEdges`
+ * emits these into the manifest; the `generateCrossContext` emitter consumes them;
+ * and the arch-linter enforces `required_communication` against them (each edge's
+ * transport ports must exist). Discriminated on `transport`: event-bus carries the
+ * provider's `events`, network the provider's `operations`.
+ */
+export const CrossContextEdgeSchema = z.object({
+  consumer: z.string(),
+  provider: z.string(),
+  transport: z.enum(["event-bus", "network"]),
+  events: z.array(z.string()).optional(),
+  operations: z.array(z.string()).optional(),
+  integrationPattern: z.enum(["open-host", "acl"]).optional(),
+});
+
 export const ManifestSchema = z
   .object({
     version: z.string().optional(),
@@ -218,6 +234,9 @@ export const ManifestSchema = z
     system: z.string().optional(),
     scope: z.string().optional(),
     architecture: z.string().optional(),
+    // The wizard records the chosen workspace template (e.g. "strict-enterprise")
+    // alongside `architecture`; persisted into .architecture/manifest.yaml.
+    workspaceTemplate: z.string().optional(),
     planes: z.record(z.array(z.string())).optional(),
     monorepo: z.record(z.unknown()).optional(),
     generator: z.record(z.unknown()).optional(),
@@ -238,6 +257,7 @@ export const ManifestSchema = z
       .optional(),
     bounded_contexts: z.array(BoundedContextSchema),
     apps: z.array(AppSchema).optional(),
+    cross_context: z.array(CrossContextEdgeSchema).optional(),
     context_mappings: z
       .array(
         z.object({
