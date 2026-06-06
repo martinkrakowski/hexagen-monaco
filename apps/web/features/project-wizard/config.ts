@@ -26,6 +26,7 @@ export const apiFrameworkOptions = [
   { value: "nestjs", label: "NestJS" },
   { value: "express", label: "Express" },
   { value: "serverless", label: "Serverless" },
+  { value: "nitro", label: "Nitro" },
   { value: "plain-ts", label: "Plain TypeScript" },
 ] as const;
 

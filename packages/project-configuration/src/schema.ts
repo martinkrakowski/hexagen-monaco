@@ -76,7 +76,7 @@ export const BoundedContextSchema = z.object({
     ),
   description: z.string().optional(),
   infrastructureTarget: z
-    .enum(["nestjs", "express", "serverless", "plain-ts"])
+    .enum(["nestjs", "express", "serverless", "plain-ts", "nitro"])
     .optional(),
   coreDomainEntities: z.array(z.string()).default([]),
   valueObjects: z.array(z.string()).default([]),
