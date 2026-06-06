@@ -446,3 +446,92 @@ describe("cross-context — transport divergence (Decision A1 payoff)", () => {
     });
   });
 });
+
+describe("cross-context — integration-pattern shaping (ACL / OHS)", () => {
+  const manifest = (
+    transport: "event-bus" | "network",
+    integrationPattern: "open-host" | "acl",
+  ): Manifest =>
+    ({
+      system: "x",
+      scope: "x",
+      bounded_contexts: [{ name: "orders" }, { name: "billing" }],
+      cross_context: [
+        transport === "event-bus"
+          ? {
+              consumer: "orders",
+              provider: "billing",
+              transport,
+              events: ["InvoiceIssued"],
+              integrationPattern,
+            }
+          : {
+              consumer: "orders",
+              provider: "billing",
+              transport,
+              operations: ["GetInvoice"],
+              integrationPattern,
+            },
+      ],
+    }) as unknown as Manifest;
+
+  it("open-host marks the PROVIDER port as an Open Host Service (and adds no ACL note to the consumer)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(
+        workspaceRoot,
+        manifest("event-bus", "open-host"),
+        { logger: createSpyLogger() },
+      );
+      await generateCrossContext(config);
+      const pub = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/out/message-publisher.out-port.ts",
+        ),
+      );
+      const sub = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/orders/src/application/ports/in/event-listener.in-port.ts",
+        ),
+      );
+      assert.ok(
+        pub.includes("Open Host Service"),
+        "provider port carries the OHS published-language note",
+      );
+      assert.ok(
+        !sub.includes("Anti-Corruption Layer"),
+        "an open-host edge adds no ACL note to the consumer",
+      );
+    });
+  });
+
+  it("acl marks the CONSUMER port as an Anti-Corruption Layer (and adds no OHS note to the provider)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(workspaceRoot, manifest("network", "acl"), {
+        logger: createSpyLogger(),
+      });
+      await generateCrossContext(config);
+      const client = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/orders/src/application/ports/out/external-service-client.out-port.ts",
+        ),
+      );
+      const ctrl = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/in/rest-controller.in-port.ts",
+        ),
+      );
+      assert.ok(
+        client.includes("Anti-Corruption Layer"),
+        "consumer client port carries the ACL note",
+      );
+      assert.ok(
+        !ctrl.includes("Open Host Service"),
+        "an acl edge adds no OHS note to the provider",
+      );
+    });
+  });
+});

@@ -44,7 +44,20 @@ interface CrossContextEdge {
   transport?: string;
   events?: string[];
   operations?: string[];
+  integrationPattern?: string;
 }
+
+// DDD integration-pattern annotations (Phase 3c). A single per-edge value maps to
+// one end: `open-host` marks the PROVIDER's port as a published-language Open Host
+// Service; `acl` marks the CONSUMER's port as an Anti-Corruption Layer. Appended
+// to the port doc so the pattern is visible in the generated contract (the runtime
+// translation is the user's to fill — C1).
+const OHS_NOTE =
+  "\n *\n * Open Host Service (open-host): this is this context's published language " +
+  "for consuming contexts — keep it stable.";
+const ACL_NOTE =
+  "\n *\n * Anti-Corruption Layer (acl): translate the upstream contract into this " +
+  "context's own domain model; do not leak provider types inward.";
 
 function recordStatus(
   result: GeneratorResult,
@@ -308,8 +321,17 @@ export async function generateCrossContext(
   const allOperations = new Set<string>();
   const controllerOps = new Map<string, Set<string>>();
   const clientOps = new Map<string, Set<string>>();
+  // Integration-pattern shaping (Phase 3c): a provider with any `open-host` edge
+  // exposes an Open Host Service; a consumer with any `acl` edge wraps the upstream
+  // contract in an Anti-Corruption Layer.
+  const ohsProviders = new Set<string>();
+  const aclConsumers = new Set<string>();
 
   for (const edge of edges) {
+    if (edge.integrationPattern === "open-host" && edge.provider)
+      ohsProviders.add(edge.provider);
+    if (edge.integrationPattern === "acl" && edge.consumer)
+      aclConsumers.add(edge.consumer);
     if (edge.transport === "network") {
       const operations = (edge.operations ?? []).filter(
         (o): o is string => typeof o === "string" && o.length > 0,
@@ -357,7 +379,9 @@ export async function generateCrossContext(
         },
       ],
       importedTypes: events,
-      doc: "Publishes this context's domain events across the event-bus boundary.",
+      doc:
+        "Publishes this context's domain events across the event-bus boundary." +
+        (ohsProviders.has(provider) ? OHS_NOTE : ""),
     });
   }
 
@@ -378,7 +402,9 @@ export async function generateCrossContext(
         },
       ],
       importedTypes: events,
-      doc: "Handles cross-context events this context subscribes to.",
+      doc:
+        "Handles cross-context events this context subscribes to." +
+        (aclConsumers.has(consumer) ? ACL_NOTE : ""),
     });
   }
 
@@ -404,7 +430,9 @@ export async function generateCrossContext(
       interfaceName: "RestControllerPort",
       methods: operationMethods(ops),
       importedTypes: operationImports(ops),
-      doc: "Serves this context's operations over the network boundary.",
+      doc:
+        "Serves this context's operations over the network boundary." +
+        (ohsProviders.has(provider) ? OHS_NOTE : ""),
     });
   }
 
@@ -418,7 +446,9 @@ export async function generateCrossContext(
       interfaceName: "ExternalServiceClientPort",
       methods: operationMethods(ops),
       importedTypes: operationImports(ops),
-      doc: "Calls operations on the contexts this context depends on over the network.",
+      doc:
+        "Calls operations on the contexts this context depends on over the network." +
+        (aclConsumers.has(consumer) ? ACL_NOTE : ""),
     });
   }
 
