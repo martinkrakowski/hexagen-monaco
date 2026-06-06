@@ -1,4 +1,5 @@
 import yaml from "js-yaml";
+import { sanitizePseudoYaml } from "@hexagen/agentic-interaction";
 
 export type InputMode = "description" | "structured-config" | "semi-structured";
 
@@ -6,10 +7,20 @@ export function detectInputMode(content: string): InputMode {
   if (!content.trim()) return "description";
 
   try {
-    const parsed =
+    let parsed =
       maybeParseJson(content) ??
       parseLeanYaml(content) ??
       parseMultiDocYaml(content);
+    if (!parsed) {
+      // Recovery: "pseudo-YAML" specs (TypeScript method signatures, quoted
+      // union types) fail a strict parse. Quote those scalars and retry so a
+      // well-structured spec still routes to the deterministic structured-config
+      // path instead of the lossy LLM conversion fallback.
+      const sanitized = sanitizePseudoYaml(content);
+      if (sanitized !== content) {
+        parsed = parseLeanYaml(sanitized) ?? parseMultiDocYaml(sanitized);
+      }
+    }
     if (parsed && typeof parsed === "object") {
       const obj = parsed as Record<string, unknown>;
       const hasContexts =

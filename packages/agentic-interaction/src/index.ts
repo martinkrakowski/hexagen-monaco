@@ -127,6 +127,8 @@ export {
   buildClassificationFromConfig,
   buildNormalizedPromptFromConfig,
   inferContextTypeWithConfidence,
+  parseStructuredConfig,
+  sanitizePseudoYaml,
 } from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 export {
   serializeProjectContext,
