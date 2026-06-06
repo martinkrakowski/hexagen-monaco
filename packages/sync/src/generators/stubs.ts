@@ -75,6 +75,7 @@ async function tryAnalyzeRelatedPort(
   name: string,
   kind: "adapter" | "useCase",
   context: BoundedContext,
+  relatedPortNamingTemplate: string,
 ): Promise<ReturnType<typeof analyzePortFile>> {
   const portType = kind === "adapter" ? "out" : "in";
   const portSubdir = `application/ports/${portType}`;
@@ -86,7 +87,19 @@ async function tryAnalyzeRelatedPort(
       ? context.layers?.application?.ports?.in || []
       : context.layers?.application?.ports?.out || [];
 
-  if (!declaredPorts.some((p) => portName(p) === derivedPortName)) {
+  // Compare on the NORMALIZED port name (its file stem), not the raw manifest
+  // value. Declared ports may be kebab/extensioned (`user-repo.out-port.ts`) while
+  // `derivedPortName` is derived from the already-normalized stub `name`, so a raw
+  // `===` would miss a port that genuinely correlates — leaving the adapter/use-case
+  // a generic stub instead of implementing its port (#245). Both sides now go
+  // through normalizeStubName, so the comparison is symmetric.
+  if (
+    !declaredPorts.some(
+      (p) =>
+        normalizeStubName(portName(p), relatedPortNamingTemplate) ===
+        derivedPortName,
+    )
+  ) {
     return null;
   }
 
@@ -199,11 +212,20 @@ export async function generateStubs(
       let content: string;
 
       if (kind === "adapter" || kind === "useCase") {
+        // The related port is an out-port for adapters, an in-port for use-cases;
+        // resolve its naming template so its declared names can be normalized the
+        // same way its files are (see tryAnalyzeRelatedPort).
+        const relatedPortNaming = resolveNaming(
+          kind === "adapter" ? "outPort" : "inPort",
+          contextNaming,
+          manifestNaming,
+        );
         const portAnalysis = await tryAnalyzeRelatedPort(
           moduleDir,
           name,
           kind,
           context,
+          relatedPortNaming,
         );
 
         if (portAnalysis) {
