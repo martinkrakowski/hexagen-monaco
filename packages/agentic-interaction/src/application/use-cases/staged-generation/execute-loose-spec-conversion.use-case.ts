@@ -15,6 +15,7 @@ import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import { jsonrepair } from "jsonrepair";
 import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
 import type { EscalationConfig } from "./retry-with-escalation";
+import { STAGE_ATTEMPT_TIMEOUT_MS } from "./stage-timeout";
 
 export const MAX_LOOSE_SPEC_INPUT_CHARS = 200_000;
 
@@ -23,7 +24,7 @@ export const MAX_LOOSE_SPEC_INPUT_CHARS = 200_000;
 // failures from prompt-normalization (Stage 0) failures.
 const LOOSE_SPEC_CONVERSION_STAGE = -1;
 
-const ATTEMPT_TIMEOUT_MS = 1_800_000; // 30 minutes per attempt
+const ATTEMPT_TIMEOUT_MS = STAGE_ATTEMPT_TIMEOUT_MS;
 
 const LOG_PREFIX = "[loose-spec-convert]";
 
