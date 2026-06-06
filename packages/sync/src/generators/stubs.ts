@@ -107,6 +107,34 @@ async function tryAnalyzeRelatedPort(
   return null;
 }
 
+/**
+ * Normalize a manifest layer name into a clean base used as BOTH the stub's file
+ * stem and its TS identifier (#242). Manifest producers vary: some emit a bare
+ * name (`OrderRepository`), some already append the kind extension
+ * (`rest-controller.in-port.ts`, from the wizard's getInboundPortName), and the
+ * port-type vocabulary is kebab-case (`relational-db`). Strip the kind's own
+ * extension if the value already carries it (so the naming template adds it
+ * exactly once instead of `…in-port.ts.in-port.ts`), then PascalCase — so the
+ * content template's `{name}Port`/`{name}Adapter` is a valid identifier rather
+ * than `interface rest-controller.in-port.tsPort`. A no-op for names that are
+ * already clean PascalCase. Mirrors what `architecture-files.ts` already does.
+ */
+function normalizeStubName(rawName: string, namingTemplate: string): string {
+  const ext = namingTemplate.includes("{name}")
+    ? namingTemplate.replace("{name}", "")
+    : "";
+  const base =
+    ext && rawName.endsWith(ext) ? rawName.slice(0, -ext.length) : rawName;
+  const pascal = base
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+  if (pascal.length === 0) return "Stub";
+  // Guarantee a valid identifier start (a digit-leading name like "3d-renderer").
+  return /^[0-9]/.test(pascal) ? `Stub${pascal}` : pascal;
+}
+
 export async function generateStubs(
   moduleDir: string,
   moduleName: string,
@@ -147,7 +175,11 @@ export async function generateStubs(
     const contentTemplate = resolveTemplate(kind, manifestTemplates);
     const namingTemplate = resolveNaming(kind, contextNaming, manifestNaming);
 
-    for (const name of names) {
+    for (const rawName of names) {
+      // Normalize once (the single point where a name becomes a file stem AND an
+      // identifier) — see normalizeStubName. Fixes doubled extensions and invalid
+      // identifiers for kebab/extensioned manifest names (#242).
+      const name = normalizeStubName(rawName, namingTemplate);
       const filename = interpolateWithLog(
         namingTemplate,
         name,
