@@ -4,8 +4,12 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SyncEngine } from "../../src/sync-engine.js";
+import { generateStubs } from "../../src/generators/stubs.js";
 import type { SyncFlags, LoggerPort } from "../../src/config.js";
 import type { Manifest } from "../../src/types/manifest.js";
+import { withTempWorkspace } from "../helpers/fs-helpers.js";
+import { makeConfig } from "../helpers/test-config.js";
+import { createSpyLogger } from "../helpers/spy-logger.js";
 
 /**
  * #245: tryAnalyzeRelatedPort decides whether an adapter/use-case stub is derived
@@ -69,11 +73,12 @@ const manifest: Manifest = {
       type: "core",
       layers: {
         application: {
-          // A shared-base use-case + in-port: the guard now matches, but use-cases
-          // are emitted BEFORE application in-ports (emission-plan-builder), so the
-          // in-port file doesn't exist when the use-case is processed — it stays
-          // generic. This keeps the (currently broken) generateUseCaseFromPort path
-          // unreachable; see the assertion below.
+          // A shared-base use-case + in-port. On this single fresh pass the use-case
+          // is emitted BEFORE its application in-port (emission-plan-builder), so the
+          // in-port file doesn't exist at probe time → generic. (On a re-sync the file
+          // WOULD exist — but use-cases use the RAW guard, since #245's normalization
+          // is adapter-only until #248 fixes the use-case emitter — so they still stay
+          // generic; pinned directly in the second test below.)
           use_cases: ["place-order.use-case.ts"],
           ports: {
             in: ["place-order.in-port.ts"],
@@ -167,6 +172,81 @@ describe("related-port resolution (#245)", () => {
       placeOrder,
       /export class \w+ implements /,
       "use-case stays a generic stub (in-port not yet emitted at probe time)",
+    );
+  });
+});
+
+describe("use-case related-port resolution stays raw/adapter-only (#245 scope, #248)", () => {
+  it("a shared-base use-case stays generic even when its in-port file already exists (re-sync)", async () => {
+    await withTempWorkspace(
+      async ({ workspaceRoot }: { workspaceRoot: string }) => {
+        const moduleDir = path.join(workspaceRoot, "packages", "demo");
+        // Pre-create the in-port file so it EXISTS at probe time — the re-sync /
+        // hand-authored-port case that emission ordering hides on a fresh pass.
+        const inDir = path.join(moduleDir, "src", "application", "ports", "in");
+        await fs.mkdir(inDir, { recursive: true });
+        await fs.writeFile(
+          path.join(inDir, "PlaceOrder.in-port.ts"),
+          "export interface PlaceOrderPort {\n  execute(): Promise<void>;\n}\n",
+        );
+
+        const manifest2 = {
+          system: "acme",
+          scope: "acme",
+          architecture: "modular-monolith",
+          generator: {
+            sync: {
+              layers: {
+                application: {
+                  folder: "src/application",
+                  subfolders: ["ports/in", "ports/out", "use-cases"],
+                },
+              },
+              stubs: { enabled: true },
+            },
+          },
+          bounded_contexts: [
+            {
+              name: "demo",
+              type: "core",
+              layers: {
+                application: {
+                  use_cases: ["place-order.use-case.ts"],
+                  ports: {
+                    in: ["place-order.in-port.ts"],
+                    out: ["account-repo.out-port.ts"],
+                  },
+                },
+              },
+            },
+          ],
+        } as unknown as Manifest;
+
+        await generateStubs(
+          moduleDir,
+          "demo",
+          makeConfig(workspaceRoot, manifest2, { logger: createSpyLogger() }),
+        );
+
+        const uc = await fs.readFile(
+          path.join(
+            moduleDir,
+            "src/application/use-cases/PlaceOrder.use-case.ts",
+          ),
+          "utf8",
+        );
+        // Use-cases are NOT normalized in the guard (#245 is adapter-only until #248).
+        // So even with the in-port present, a kebab use-case+in-port doesn't match →
+        // generic stub (which compiles). If a future change normalizes the use-case
+        // guard without first fixing generateUseCaseFromPort (#248), this resolves into
+        // the broken output (`implements <Port>` + raw out-port constructor types) and
+        // this assertion fails — exactly the regression we want flagged.
+        assert.doesNotMatch(
+          uc,
+          /export class \w+ implements /,
+          "use-case stays generic even when the in-port exists (raw guard, adapter-only normalization)",
+        );
+      },
     );
   });
 });

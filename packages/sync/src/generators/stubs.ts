@@ -87,18 +87,26 @@ async function tryAnalyzeRelatedPort(
       ? context.layers?.application?.ports?.in || []
       : context.layers?.application?.ports?.out || [];
 
-  // Compare on the NORMALIZED port name (its file stem), not the raw manifest
-  // value. Declared ports may be kebab/extensioned (`user-repo.out-port.ts`) while
-  // `derivedPortName` is derived from the already-normalized stub `name`, so a raw
-  // `===` would miss a port that genuinely correlates — leaving the adapter/use-case
-  // a generic stub instead of implementing its port (#245). Both sides now go
-  // through normalizeStubName, so the comparison is symmetric.
+  // #245: ADAPTERS compare on the NORMALIZED port stem. Declared ports may be
+  // kebab/extensioned (`user-repo.out-port.ts`) while `derivedPortName` is derived
+  // from the already-normalized stub `name`, so a raw `===` would miss a port that
+  // genuinely correlates — leaving the adapter a generic stub instead of implementing
+  // its port. generateAdapterFromPort emits valid, self-importing output, so resolving
+  // is safe.
+  //
+  // USE-CASES keep the RAW comparison on purpose: generateUseCaseFromPort still emits
+  // an unimported interface + RAW out-port names as constructor param types, so a
+  // resolved use-case doesn't compile (#248). Normalizing here would only WIDEN that
+  // broken path from clean names to kebab/extensioned ones. Adapter-scoped until #248
+  // fixes the use-case emitter; then this branch can drop the `kind` check.
   if (
-    !declaredPorts.some(
-      (p) =>
-        normalizeStubName(portName(p), relatedPortNamingTemplate) ===
-        derivedPortName,
-    )
+    !declaredPorts.some((p) => {
+      const declared =
+        kind === "adapter"
+          ? normalizeStubName(portName(p), relatedPortNamingTemplate)
+          : portName(p);
+      return declared === derivedPortName;
+    })
   ) {
     return null;
   }
