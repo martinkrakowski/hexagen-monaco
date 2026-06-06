@@ -128,6 +128,14 @@ describe("cross-context (event-bus transport emitter)", () => {
         !adapter.includes("class message-publisher"),
         "adapter class name must not be the kebab portBase (invalid identifier)",
       );
+      // The adapter must IMPORT the port interface it implements (relative path),
+      // otherwise `MessagePublisherPort` is an undefined name and the adapter
+      // does not typecheck — "the boundary compiles" is C1's core promise.
+      assert.match(
+        adapter,
+        /import type \{ MessagePublisherPort \} from '\.\.\/\.\.\/application\/ports\/out\/message-publisher\.out-port\.js'/,
+        "adapter imports its port interface so it typechecks",
+      );
       // The adapter is a throwing stub implementing the typed port. Its `publish`
       // param resolves to `any` (ts-morph can't resolve the cross-package event
       // import, and the `InvoiceIssued | PaymentReceived` union of unresolved
@@ -273,6 +281,11 @@ describe("cross-context (network transport emitter)", () => {
       assert.match(
         ctrlAdapter,
         /export class RestControllerAdapter implements RestControllerPort/,
+      );
+      assert.match(
+        ctrlAdapter,
+        /import type \{ RestControllerPort \} from '\.\.\/\.\.\/application\/ports\/in\/rest-controller\.in-port\.js'/,
+        "controller adapter imports its port interface so it typechecks",
       );
       assert.match(
         ctrlAdapter,
@@ -429,6 +442,203 @@ describe("cross-context — transport divergence (Decision A1 payoff)", () => {
         await pathExists(path.join(workspaceRoot, pub)),
         false,
         "network emits no event-bus publisher",
+      );
+    });
+  });
+});
+
+describe("cross-context — integration-pattern shaping (ACL / OHS)", () => {
+  const manifest = (
+    transport: "event-bus" | "network",
+    integrationPattern: "open-host" | "acl",
+  ): Manifest =>
+    ({
+      system: "x",
+      scope: "x",
+      bounded_contexts: [{ name: "orders" }, { name: "billing" }],
+      cross_context: [
+        transport === "event-bus"
+          ? {
+              consumer: "orders",
+              provider: "billing",
+              transport,
+              events: ["InvoiceIssued"],
+              integrationPattern,
+            }
+          : {
+              consumer: "orders",
+              provider: "billing",
+              transport,
+              operations: ["GetInvoice"],
+              integrationPattern,
+            },
+      ],
+    }) as unknown as Manifest;
+
+  it("open-host marks the PROVIDER port as an Open Host Service (and adds no ACL note to the consumer)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(
+        workspaceRoot,
+        manifest("event-bus", "open-host"),
+        { logger: createSpyLogger() },
+      );
+      await generateCrossContext(config);
+      const pub = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/out/message-publisher.out-port.ts",
+        ),
+      );
+      const sub = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/orders/src/application/ports/in/event-listener.in-port.ts",
+        ),
+      );
+      assert.ok(
+        pub.includes("Open Host Service"),
+        "provider port carries the OHS published-language note",
+      );
+      assert.ok(
+        !sub.includes("Anti-Corruption Layer"),
+        "an open-host edge adds no ACL note to the consumer",
+      );
+    });
+  });
+
+  it("acl marks the CONSUMER port as an Anti-Corruption Layer (and adds no OHS note to the provider)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(workspaceRoot, manifest("network", "acl"), {
+        logger: createSpyLogger(),
+      });
+      await generateCrossContext(config);
+      const client = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/orders/src/application/ports/out/external-service-client.out-port.ts",
+        ),
+      );
+      const ctrl = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/in/rest-controller.in-port.ts",
+        ),
+      );
+      assert.ok(
+        client.includes("Anti-Corruption Layer"),
+        "consumer client port carries the ACL note",
+      );
+      assert.ok(
+        !ctrl.includes("Open Host Service"),
+        "an acl edge adds no OHS note to the provider",
+      );
+    });
+  });
+});
+
+describe("cross-context — input validation (path safety + identifiers)", () => {
+  it("skips an edge whose context name would traverse outside packages/ (no files escape)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(
+        workspaceRoot,
+        {
+          system: "myorg",
+          scope: "myorg",
+          bounded_contexts: [{ name: "orders" }, { name: "shared" }],
+          cross_context: [
+            {
+              consumer: "orders",
+              provider: "../evil",
+              transport: "event-bus",
+              events: ["InvoiceIssued"],
+              integrationPattern: "open-host",
+            },
+          ],
+        } as unknown as Manifest,
+        { logger: createSpyLogger() },
+      );
+      const result = await generateCrossContext(config);
+      // The whole edge is skipped — nothing emitted, nothing written.
+      assert.strictEqual(result.totalOps, 0, "unsafe edge emits nothing");
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/../evil/src/application/ports/out/message-publisher.out-port.ts",
+          ),
+        ),
+        false,
+        "no traversal outside packages/",
+      );
+      // The consumer also gets no subscriber, since the edge was skipped entirely.
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/orders/src/application/ports/in/event-listener.in-port.ts",
+          ),
+        ),
+        false,
+      );
+    });
+  });
+
+  it("drops event names that aren't valid TS identifiers (keeps the valid ones)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const config = makeConfig(
+        workspaceRoot,
+        {
+          system: "myorg",
+          scope: "myorg",
+          bounded_contexts: [
+            { name: "orders" },
+            { name: "billing" },
+            { name: "shared" },
+          ],
+          cross_context: [
+            {
+              consumer: "orders",
+              provider: "billing",
+              transport: "event-bus",
+              events: ["3pl", "InvoiceIssued"], // "3pl" is not a valid TS identifier
+              integrationPattern: "open-host",
+            },
+          ],
+        } as unknown as Manifest,
+        { logger: createSpyLogger() },
+      );
+      await generateCrossContext(config);
+
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/shared/src/domain/events/InvoiceIssued.event.ts",
+          ),
+        ),
+        true,
+        "valid event contract is emitted",
+      );
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "packages/shared/src/domain/events/3pl.event.ts",
+          ),
+        ),
+        false,
+        "invalid-identifier event is dropped, not emitted as a broken declaration",
+      );
+      const pub = await readText(
+        path.join(
+          workspaceRoot,
+          "packages/billing/src/application/ports/out/message-publisher.out-port.ts",
+        ),
+      );
+      assert.ok(pub.includes("InvoiceIssued"));
+      assert.ok(
+        !pub.includes("3pl"),
+        "the invalid name never reaches the port's symbol union",
       );
     });
   });

@@ -1,6 +1,6 @@
 # Materialize Cross-Context Communication (Phase 3)
 
-**Status:** 3a (event-bus) shipped in #239. Decision C → **C1** (interface-complete, body-stubbed); Decision D → **D1** (provider `domainEvents`; context-name-only fallback); Decision E → **E1** (provider `useCases`; context-name-only fallback). Implementing 3b (network).
+**Status:** Phase 3 complete — 3a (event-bus, #239) + 3b (network, #240) + 3c (foundation → enforcement → ACL/OHS). Decision C → **C1** (interface-complete, body-stubbed); Decision D → **D1** (provider `domainEvents`; context-name-only fallback); Decision E → **E1** (provider `useCases`; context-name-only fallback). 3c scope was reshaped by the arch-linter baseline (see 3c).
 **Date:** 2026-06-06
 **Parent:** [`wire-architectural-template-into-generation.md`](./wire-architectural-template-into-generation.md) (Phase 3). Phases 1 (#235) + 2 (#236) shipped; the `generateApps` traversal guard shipped (#237). Decision A resolved → **A1** (keep all three templates, differentiate now).
 
@@ -89,10 +89,21 @@ The network analog of Decision D: what names the request/response DTOs (and the 
      The port-content builder is generalized to multi-method / typed-return; 3a's single-method `publish`/`handle` becomes one case of it.
 6. Tests: (a) wizard enrichment — network edges carry `operations` (useCases-derived + the `${Provider}` fallback); micro-frontend is no longer empty. (b) emitter — DTOs + controller/client ports with real multi-method signatures + derived adapters (single-typed params preserved, per the analyzer finding). (c) **divergence** — the same bounded contexts under event-bus vs network emit structurally different transport (publisher/subscriber vs client/controller), with neither leaking into the other (the Decision A1 payoff).
 
-### 3c — integrationPattern (ACL / OHS) + invariant honesty
+### 3c — invariant honesty (baseline-driven: foundation → enforcement → ACL/OHS)
 
-7. Map `integrationPattern`: `acl` → ACL adapter shape on the consumer; `open-host` → published-language port on the provider.
-8. Run the arch-linter on a generated strict project in tests and assert it passes — no `deny_direct_imports` violation, communication present — so the `required_communication` invariant Phase 1 emits now guards real code.
+**Baseline first** (running the arch-linter against a generated strict-enterprise project _before_ writing toward an assumed gap). It showed the original step-8 assumption ("assert it passes → `required_communication` guards real code") did not hold:
+
+1. **The linter couldn't load the manifest at all.** The manifest schema (`@hexagen/project-configuration`, `.strict()`) rejected `workspaceTemplate` (leaked since Phase 1 #235) and `cross_context` (3a) as unrecognized keys → FATAL. The linter had effectively never run against a wizard-generated project.
+2. **Once loadable, a clean strict project passes — and the check is live** (an injected sibling-context import in a domain file is caught). 3a/3b transport routes through the whitelisted `shared`, so it adds no `deny_direct_imports` violation.
+3. **But `required_communication` is advisory** — the linter's `LayerRules` type never reads `cross_context`/`required_communication`. "Passes" means _no illegal imports_, **not** _communication present_; a transport-less strict project passes identically.
+4. **The cross-context adapters didn't import the port they implement** (`generateAdapterFromPort` copied the port's type imports but not the port interface), so they didn't typecheck — undercutting C1's "the boundary compiles."
+5. **Out of scope (flagged, not fixed here):** the generic stub pipeline produces broken files for wizard inputs — doubled extensions when a layer name already carries one, and invalid TS identifiers for hyphenated port-type names (`rest-controller` → `interface rest-controllerPort`). These break the _generic_ port/adapter stubs, not the cross-context boundary, and are independent of templates. Tracked separately.
+
+**Reshaped scope:**
+
+7. **Foundation** _(done — same PR, first)._ (a) Teach the manifest schema `workspaceTemplate` + a `cross_context` edge array (`CrossContextEdgeSchema`), so the persisted manifest validates and the linter loads — regression-pinned by a "wizard output is schema-valid" test. (b) Make `generateAdapterFromPort` import the interface it implements (relative specifier supplied by the caller), so generated adapters typecheck — _the boundary compiles_ before anything is tested against it (verified with `tsc`).
+8. **Enforcement** _(done)._ The arch-linter gained a **positive** `required_communication` check (`required-communication-violation.ts`): when a `cross_context` edge declares a transport, the transport ports must exist (event-bus → provider `message-publisher` out-port + consumer `event-listener` in-port; network → provider `rest-controller` in-port + consumer `external-service-client` out-port). A strict project missing its transport now **fails** — so the invariant guards real code. Verified end-to-end: a generated strict project passes; stripping the publisher port fails.
+9. **ACL/OHS** _(done)._ `integrationPattern` shapes the generated contract (C1, annotation-level): `open-host` marks the **provider's** transport port as a published-language Open Host Service; `acl` marks the **consumer's** transport port as an Anti-Corruption Layer. A single per-edge value maps to one end; runtime translation is the user's to fill (a C2 concern).
 
 ## Risks
 

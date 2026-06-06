@@ -74,11 +74,18 @@ type CrossContextEdge =
 
 /** PascalCase a string into a valid TS identifier (split on non-alphanumerics). */
 function toPascalCase(value: string): string {
-  return value
+  const pascal = value
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join("");
+  // These names become generated contract/symbol names, so they must be valid TS
+  // identifiers. PascalCasing can still start with a digit ("123-billing" ->
+  // "123Billing"); prefix so the emitted declaration compiles. Return "" for no
+  // tokens so the caller's `|| "Context"` fallback still applies. (The emitter
+  // also validates identifiers as defense-in-depth for hand-crafted manifests.)
+  if (pascal.length === 0) return "";
+  return /^[A-Za-z_$]/.test(pascal) ? pascal : `Context${pascal}`;
 }
 
 /**

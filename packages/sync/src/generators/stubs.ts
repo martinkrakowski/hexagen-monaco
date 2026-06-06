@@ -14,6 +14,7 @@ import {
   analyzePortFile,
   generateAdapterFromPort,
   generateUseCaseFromPort,
+  relativeImportSpecifier,
 } from "./port-analyzer.js";
 import { DEFAULT_TEMPLATES, DEFAULT_NAMING } from "./stubs/stub-templates.js";
 import type { StubKind } from "./stubs/stub-templates.js";
@@ -154,6 +155,7 @@ export async function generateStubs(
         config,
       );
 
+      const filePath = path.join(moduleDir, "src", subdir, filename);
       let content: string;
 
       if (kind === "adapter" || kind === "useCase") {
@@ -166,7 +168,11 @@ export async function generateStubs(
 
         if (portAnalysis) {
           if (kind === "adapter") {
-            content = generateAdapterFromPort(portAnalysis, name);
+            content = generateAdapterFromPort(
+              portAnalysis,
+              name,
+              relativeImportSpecifier(filePath, portAnalysis.filePath),
+            );
           } else {
             const outPorts =
               context.layers?.application?.ports?.out?.map(portName) || [];
@@ -190,7 +196,6 @@ export async function generateStubs(
         );
       }
 
-      const filePath = path.join(moduleDir, "src", subdir, filename);
       const status = await writeStubFile(filePath, content, config, report);
 
       if (status === "created") result.created.push(filePath);

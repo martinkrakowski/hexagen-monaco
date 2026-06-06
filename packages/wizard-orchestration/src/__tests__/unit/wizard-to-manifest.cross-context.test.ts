@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { ManifestSchema } from "@hexagen/project-configuration";
 import { wizardToManifest } from "../../application/wizard-to-manifest";
 
 // Phase 3: for a strict template, wizardToManifest derives cross-context
@@ -289,5 +290,114 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
     assert.equal(edges(micro)[0].transport, "network");
     assert.deepEqual(edges(micro)[0].operations, ["GetInvoice"]);
     assert.equal(edges(micro)[0].events, undefined);
+  });
+});
+
+// The arch-linter loads .architecture/manifest.yaml through the manifest schema.
+// Before Phase 3c that schema (.strict()) rejected `workspaceTemplate` (leaked
+// since Phase 1) and `cross_context` (Phase 3a) as unrecognized keys, so the
+// linter FATALed on every wizard-generated project. Pin that the wizard's own
+// output is schema-valid so this can't regress.
+describe("wizardToManifest — output is valid against the manifest schema", () => {
+  it("a strict-enterprise manifest (workspaceTemplate + event-bus cross_context) passes ManifestSchema", () => {
+    const m = wizardToManifest(
+      wizard(
+        "strict-enterprise",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", domainEvents: ["InvoiceIssued"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    const result = ManifestSchema.safeParse(m);
+    assert.ok(
+      result.success,
+      `manifest must satisfy ManifestSchema (the arch-linter's loader); issues: ${
+        result.success ? "" : JSON.stringify(result.error.issues)
+      }`,
+    );
+  });
+
+  it("a micro-frontend manifest (network cross_context) passes ManifestSchema", () => {
+    const m = wizardToManifest(
+      wizard(
+        "micro-frontend",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", useCases: ["GetInvoice"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.ok(ManifestSchema.safeParse(m).success);
+  });
+
+  it("a modular-monolith manifest (no cross_context) passes ManifestSchema", () => {
+    const m = wizardToManifest(
+      wizard(
+        "modular-monolith",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing" },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.ok(ManifestSchema.safeParse(m).success);
+  });
+});
+
+// toPascalCase feeds generated contract/symbol names; bounded-context names and
+// domainEvents/useCases are unconstrained strings, so a digit-leading value would
+// otherwise become an invalid TS identifier (e.g. "123-billing" -> "123Billing").
+// The function prefixes such names so the emitted declarations compile.
+const isValidTsIdentifier = (s: string) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
+
+describe("wizardToManifest — contract names are valid TS identifiers", () => {
+  it("prefixes a digit-leading domainEvent so the event contract compiles", () => {
+    const m = wizardToManifest(
+      wizard(
+        "strict-enterprise",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", domainEvents: ["123-billing"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.deepEqual(edges(m)[0].events, ["Context123Billing"]);
+    assert.ok(edges(m)[0].events!.every(isValidTsIdentifier));
+  });
+
+  it("keeps the <Provider>Event fallback a valid identifier for a digit-leading context name", () => {
+    const m = wizardToManifest(
+      wizard(
+        "strict-enterprise",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "3pl" }, // digit-leading context, no domainEvents
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    // "3pl" -> "Context3pl" -> fallback "Context3plEvent" (valid), not "3plEvent".
+    assert.deepEqual(edges(m)[0].events, ["Context3plEvent"]);
+    assert.ok(edges(m)[0].events!.every(isValidTsIdentifier));
+  });
+
+  it("prefixes a digit-leading useCase so the network operation/DTO names compile", () => {
+    const m = wizardToManifest(
+      wizard(
+        "micro-frontend",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", useCases: ["123-process"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.deepEqual(edges(m)[0].operations, ["Context123Process"]);
+    assert.ok(edges(m)[0].operations!.every(isValidTsIdentifier));
   });
 });

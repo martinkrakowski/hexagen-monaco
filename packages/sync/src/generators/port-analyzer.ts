@@ -7,12 +7,33 @@
 // 3. Extract import statements for type dependencies
 // 4. Generate implementation scaffolds with proper signatures
 
+import path from "node:path";
 import {
   Project,
   InterfaceDeclaration,
   MethodSignature,
   ImportDeclaration,
 } from "ts-morph";
+
+/**
+ * Module specifier for importing `toFile` from `fromFile`, as an ESM-style
+ * relative path with a `.js` extension (e.g. an adapter in
+ * `infrastructure/adapters/` importing its port in `application/ports/out/`
+ * yields `../../application/ports/out/x.out-port.js`). Used so a generated
+ * adapter/use-case can import the port interface it implements.
+ */
+export function relativeImportSpecifier(
+  fromFile: string,
+  toFile: string,
+): string {
+  let rel = path
+    .relative(path.dirname(fromFile), toFile)
+    .split(path.sep)
+    .join("/")
+    .replace(/\.tsx?$/, ".js");
+  if (!rel.startsWith(".")) rel = `./${rel}`;
+  return rel;
+}
 
 /**
  * Represents a method signature extracted from a port interface
@@ -181,16 +202,28 @@ function extractImports(importDecls: ImportDeclaration[]): TypeImport[] {
 export function generateAdapterFromPort(
   analysis: PortAnalysisResult,
   adapterName: string,
+  portImportSpecifier?: string,
 ): string {
   const { interfaceName, methods, imports } = analysis;
 
-  // Generate import statements
-  const importStatements = imports
-    .map((imp) => {
+  // The adapter `implements ${interfaceName}`, so it must import that interface.
+  // The caller passes the port's module specifier as seen from the adapter file
+  // (this function doesn't know where the adapter will be written). Without it the
+  // generated adapter references an undefined name and fails to typecheck.
+  const portImport = portImportSpecifier
+    ? `import type { ${interfaceName} } from '${portImportSpecifier}';`
+    : "";
+
+  // Generate import statements (port interface first, then the port's own type imports)
+  const importStatements = [
+    portImport,
+    ...imports.map((imp) => {
       const typeOnly = imp.isTypeOnly ? "type " : "";
       const names = imp.namedImports.join(", ");
       return `import ${typeOnly}{ ${names} } from '${imp.moduleSpecifier}';`;
-    })
+    }),
+  ]
+    .filter(Boolean)
     .join("\n");
 
   // Generate method implementations

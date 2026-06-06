@@ -4,7 +4,11 @@ import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { resolveScope } from "../types/manifest.js";
-import { analyzePortFile, generateAdapterFromPort } from "./port-analyzer.js";
+import {
+  analyzePortFile,
+  generateAdapterFromPort,
+  relativeImportSpecifier,
+} from "./port-analyzer.js";
 import type { ReportRecorder } from "../domain/types.js";
 
 /**
@@ -40,7 +44,20 @@ interface CrossContextEdge {
   transport?: string;
   events?: string[];
   operations?: string[];
+  integrationPattern?: string;
 }
+
+// DDD integration-pattern annotations (Phase 3c). A single per-edge value maps to
+// one end: `open-host` marks the PROVIDER's port as a published-language Open Host
+// Service; `acl` marks the CONSUMER's port as an Anti-Corruption Layer. Appended
+// to the port doc so the pattern is visible in the generated contract (the runtime
+// translation is the user's to fill — C1).
+const OHS_NOTE =
+  "\n *\n * Open Host Service (open-host): this is this context's published language " +
+  "for consuming contexts — keep it stable.";
+const ACL_NOTE =
+  "\n *\n * Anti-Corruption Layer (acl): translate the upstream contract into this " +
+  "context's own domain model; do not leak provider types inward.";
 
 function recordStatus(
   result: GeneratorResult,
@@ -85,6 +102,34 @@ function toCamelCase(pascal: string): string {
   return pascal.length > 0
     ? pascal.charAt(0).toLowerCase() + pascal.slice(1)
     : pascal;
+}
+
+/**
+ * A name safe to use as a package directory segment. The emitter builds
+ * `packages/<context>/...` paths from edge provider/consumer names, bypassing the
+ * SyncEngine per-module guard — so it must reject traversal itself (mirrors that
+ * guard and the generateApps hardening in #237) for unvalidated `/api/generate`
+ * manifests.
+ */
+function isSafePathSegment(name: string): boolean {
+  return (
+    name.length > 0 &&
+    !name.includes("..") &&
+    !name.includes("/") &&
+    !name.includes("\\") &&
+    !name.startsWith(".")
+  );
+}
+
+/**
+ * Whether `name` is a valid TypeScript identifier — event/operation names become
+ * interface names and method param/return types, so an invalid one (leading
+ * digit, hyphen, empty) would emit uncompilable declarations. Names arrive already
+ * PascalCased from the wizard; this is the emitter's single choke point that drops
+ * any residual pathological value rather than generating broken code.
+ */
+function isValidTsIdentifier(name: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name);
 }
 
 function eventContractContent(name: string): string {
@@ -231,12 +276,14 @@ async function emitPortAndAdapter(
   // `{name}Adapter` convention. Passing the kebab `portBase` here produced an
   // invalid `export class message-publisher` — a compile error in generated output.
   const adapterClassName = `${toPascalCase(spec.portBase)}Adapter`;
+  // The adapter must import the port interface it implements (relative to itself).
+  const portSpecifier = relativeImportSpecifier(adapterPath, portPath);
   recordStatus(
     result,
     adapterPath,
     await safeWriteFileAtomic(
       adapterPath,
-      generateAdapterFromPort(analysis, adapterClassName),
+      generateAdapterFromPort(analysis, adapterClassName, portSpecifier),
       config,
       report,
     ),
@@ -302,11 +349,34 @@ export async function generateCrossContext(
   const allOperations = new Set<string>();
   const controllerOps = new Map<string, Set<string>>();
   const clientOps = new Map<string, Set<string>>();
+  // Integration-pattern shaping (Phase 3c): a provider with any `open-host` edge
+  // exposes an Open Host Service; a consumer with any `acl` edge wraps the upstream
+  // contract in an Anti-Corruption Layer.
+  const ohsProviders = new Set<string>();
+  const aclConsumers = new Set<string>();
 
   for (const edge of edges) {
+    // Path-safety: provider/consumer become `packages/<context>/` segments.
+    // Reject traversal from an unvalidated manifest (the emitter bypasses the
+    // SyncEngine per-module guard; same posture as generateApps #237).
+    if (
+      (edge.provider && !isSafePathSegment(edge.provider)) ||
+      (edge.consumer && !isSafePathSegment(edge.consumer))
+    ) {
+      config.logger.warn(
+        `[cross-context] skipping edge with unsafe context name: ${edge.consumer} -> ${edge.provider}`,
+      );
+      continue;
+    }
+    if (edge.integrationPattern === "open-host" && edge.provider)
+      ohsProviders.add(edge.provider);
+    if (edge.integrationPattern === "acl" && edge.consumer)
+      aclConsumers.add(edge.consumer);
     if (edge.transport === "network") {
+      // Operation names become interface names + method param/return types — drop
+      // any that aren't valid TS identifiers rather than emit broken declarations.
       const operations = (edge.operations ?? []).filter(
-        (o): o is string => typeof o === "string" && o.length > 0,
+        (o): o is string => typeof o === "string" && isValidTsIdentifier(o),
       );
       operations.forEach((o) => allOperations.add(o));
       if (edge.provider) addAll(controllerOps, edge.provider, operations);
@@ -314,7 +384,7 @@ export async function generateCrossContext(
     } else {
       // Unspecified / "event-bus" transport is treated as event-bus.
       const events = (edge.events ?? []).filter(
-        (e): e is string => typeof e === "string" && e.length > 0,
+        (e): e is string => typeof e === "string" && isValidTsIdentifier(e),
       );
       events.forEach((e) => allEvents.add(e));
       if (edge.provider) addAll(publisherEvents, edge.provider, events);
@@ -351,7 +421,9 @@ export async function generateCrossContext(
         },
       ],
       importedTypes: events,
-      doc: "Publishes this context's domain events across the event-bus boundary.",
+      doc:
+        "Publishes this context's domain events across the event-bus boundary." +
+        (ohsProviders.has(provider) ? OHS_NOTE : ""),
     });
   }
 
@@ -372,7 +444,9 @@ export async function generateCrossContext(
         },
       ],
       importedTypes: events,
-      doc: "Handles cross-context events this context subscribes to.",
+      doc:
+        "Handles cross-context events this context subscribes to." +
+        (aclConsumers.has(consumer) ? ACL_NOTE : ""),
     });
   }
 
@@ -398,7 +472,9 @@ export async function generateCrossContext(
       interfaceName: "RestControllerPort",
       methods: operationMethods(ops),
       importedTypes: operationImports(ops),
-      doc: "Serves this context's operations over the network boundary.",
+      doc:
+        "Serves this context's operations over the network boundary." +
+        (ohsProviders.has(provider) ? OHS_NOTE : ""),
     });
   }
 
@@ -412,7 +488,9 @@ export async function generateCrossContext(
       interfaceName: "ExternalServiceClientPort",
       methods: operationMethods(ops),
       importedTypes: operationImports(ops),
-      doc: "Calls operations on the contexts this context depends on over the network.",
+      doc:
+        "Calls operations on the contexts this context depends on over the network." +
+        (aclConsumers.has(consumer) ? ACL_NOTE : ""),
     });
   }
 
