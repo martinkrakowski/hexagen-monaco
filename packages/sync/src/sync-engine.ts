@@ -375,6 +375,9 @@ export class SyncEngine {
         `• CrossContext : ${crossContextResult.created.length} created, ${crossContextResult.updated.length} updated, ${crossContextResult.skipped.length} skipped`,
       );
       logger.info(
+        `• SharedKernel : ${sharedKernelResult.created.length} created, ${sharedKernelResult.updated.length} updated, ${sharedKernelResult.skipped.length} skipped`,
+      );
+      logger.info(
         `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`,
       );
       logger.info(
