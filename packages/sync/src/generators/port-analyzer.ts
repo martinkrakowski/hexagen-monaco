@@ -262,35 +262,64 @@ ${methodImpls}
 }
 
 /**
+ * A single out-port dependency injected into a use-case's constructor. The
+ * caller pre-resolves these from the manifest + naming conventions because the
+ * out-port stub files may not exist yet when the use-case is emitted (use_cases
+ * are emitted before ports.out) — so they can't be analyzed from disk here.
+ */
+export interface UseCaseOutPort {
+  /** The out-port interface type, e.g. `OrderRepoPort`. */
+  interfaceName: string;
+  /** The constructor parameter name, e.g. `orderRepo`. */
+  paramName: string;
+  /** ESM relative specifier to the out-port, e.g. `../ports/out/OrderRepo.out-port.js`. */
+  importSpecifier: string;
+}
+
+/**
  * Generate a use case implementation scaffold from port analysis
  *
- * @param analysis - Port analysis result
+ * @param analysis - Port analysis result (the in-port the use-case fulfils)
  * @param useCaseName - Name of the use case class
- * @param outPorts - Array of out-port names this use case depends on
+ * @param outPorts - Resolved out-port dependencies (interface + import + param name)
+ * @param portImportSpecifier - Module specifier for the in-port interface, as seen
+ *   from the use-case file (so `implements <interfaceName>` resolves)
  * @returns TypeScript code for the use case implementation
  */
 export function generateUseCaseFromPort(
   analysis: PortAnalysisResult,
   useCaseName: string,
-  outPorts: string[],
+  outPorts: UseCaseOutPort[],
+  portImportSpecifier?: string,
 ): string {
   const { interfaceName, methods, imports } = analysis;
 
-  // Generate import statements
-  const importStatements = imports
-    .map((imp) => {
+  // The use-case `implements ${interfaceName}` (its in-port), so that interface
+  // must be imported — the caller passes its specifier (this function doesn't
+  // know where the use-case will be written). Each out-port is imported by its
+  // RESOLVED interface name, never the raw manifest name (which may be
+  // kebab/extensioned — not a valid identifier or type). Without both, the
+  // use-case fails to typecheck (#248).
+  const importLines = [
+    portImportSpecifier
+      ? `import type { ${interfaceName} } from '${portImportSpecifier}';`
+      : "",
+    ...outPorts.map(
+      (p) => `import type { ${p.interfaceName} } from '${p.importSpecifier}';`,
+    ),
+    ...imports.map((imp) => {
       const typeOnly = imp.isTypeOnly ? "type " : "";
       const names = imp.namedImports.join(", ");
       return `import ${typeOnly}{ ${names} } from '${imp.moduleSpecifier}';`;
-    })
-    .join("\n");
+    }),
+  ].filter(Boolean);
+  // De-dupe identical import lines (e.g. an out-port interface that also appears
+  // among the in-port's own type imports).
+  const importStatements = [...new Set(importLines)].join("\n");
 
-  // Generate constructor parameters for out-ports
+  // Generate constructor parameters: inject each out-port by its interface type.
   const constructorParams = outPorts
-    .map(
-      (port) =>
-        `private readonly ${port.charAt(0).toLowerCase() + port.slice(1)}: ${port}`,
-    )
+    .map((p) => `private readonly ${p.paramName}: ${p.interfaceName}`)
     .join(",\n    ");
 
   // Generate method implementations

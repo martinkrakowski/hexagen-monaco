@@ -15,6 +15,7 @@ import { generateApps } from "./generators/apps.js";
 import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
 import { generateCrossContext } from "./generators/cross-context.js";
+import { generateSharedKernel } from "./generators/shared-kernel.js";
 import { createEmptyResult, type GeneratorResult } from "./results.js";
 import type { Manifest } from "./types/manifest.js";
 import { ensureDependenciesBuilt } from "./preflight.js";
@@ -302,6 +303,12 @@ export class SyncEngine {
         this.fullConfig,
         this.report,
       );
+      // Shared Result kernel (#246): ensure `@{scope}/shared` exports `Result`
+      // for the generic use-case stub. Before pass-2 barrels so they re-export it.
+      const sharedKernelResult = await generateSharedKernel(
+        this.fullConfig,
+        this.report,
+      );
 
       const secondPassBarrels = createEmptyResult();
       const modules = this.fullConfig.manifest.bounded_contexts ?? [];
@@ -335,7 +342,8 @@ export class SyncEngine {
         eslint.totalOps +
         stubs.totalOps +
         appsResult.totalOps +
-        crossContextResult.totalOps;
+        crossContextResult.totalOps +
+        sharedKernelResult.totalOps;
 
       if (mode === "self-regen") {
         await runArchLinter(this.fullConfig);
