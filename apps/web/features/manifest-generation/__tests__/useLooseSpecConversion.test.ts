@@ -101,6 +101,52 @@ describe("useLooseSpecConversion", () => {
     assert.strictEqual(convertResult?.error, null);
   });
 
+  it("Cloud path surfaces server progress heartbeats", async () => {
+    const frames = [
+      '{"type":"progress","message":"Working on it"}\n',
+      '{"type":"done","configJson":"{\\"cloud\\": true}"}\n',
+    ];
+    let i = 0;
+    const mockFetch = mock.fn(async () => {
+      return {
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (i >= frames.length) return { done: true, value: undefined };
+              const value = new TextEncoder().encode(frames[i]);
+              i++;
+              return { done: false, value };
+            },
+            cancel: mock.fn(),
+          }),
+        },
+      };
+    });
+
+    const deps = {
+      getClientUseCase: () => {
+        throw new Error("Should not be called");
+      },
+      isLocalLLMReady: () => false,
+      hasServerLLMAccessKey: () => true,
+      fetchClient: mockFetch as unknown as typeof fetch,
+    };
+
+    const { result } = renderHook(() => useLooseSpecConversion(deps));
+
+    let convertResult;
+    await act(async () => {
+      convertResult = await result.current.convert("cloud spec");
+    });
+
+    // The progress heartbeat must not settle the conversion…
+    assert.strictEqual(convertResult?.convertedConfig, '{"cloud": true}');
+    assert.strictEqual(convertResult?.error, null);
+    // …but it must be surfaced as a liveness message for the UI.
+    assert.strictEqual(result.current.progressMessage, "Working on it");
+  });
+
   it("Local failure with cloud fallback", async () => {
     const mockUseCase = {
       execute: mock.fn(async () => {

@@ -22,6 +22,8 @@ export interface UseLooseSpecConversionReturn {
   convertedConfig: string | null;
   isConverting: boolean;
   error: string | null;
+  /** Latest server-side liveness message from the conversion stream, if any. */
+  progressMessage: string | null;
   reset: () => void;
   convert: (
     looseSpec: string,
@@ -43,6 +45,7 @@ export function useLooseSpecConversion(
   const [convertedConfig, setConvertedConfig] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
   const abortRef = useRef(false);
   const convertingLockRef = useRef(false);
@@ -58,6 +61,7 @@ export function useLooseSpecConversion(
     setConvertedConfig(null);
     setIsConverting(false);
     setError(null);
+    setProgressMessage(null);
   };
 
   const executeCloudConversion = async (
@@ -96,6 +100,12 @@ export function useLooseSpecConversion(
         if (!trimmed) return null;
         try {
           const event = JSON.parse(trimmed);
+          if (event.type === "progress") {
+            if (typeof event.message === "string") {
+              setProgressMessage(event.message);
+            }
+            return null;
+          }
           if (event.type === "done") {
             return { convertedConfig: event.configJson, error: null };
           }
@@ -157,6 +167,7 @@ export function useLooseSpecConversion(
 
     setError(null);
     setConvertedConfig(null);
+    setProgressMessage(null);
     setIsConverting(true);
 
     const controller = new AbortController();
@@ -274,6 +285,7 @@ export function useLooseSpecConversion(
     convertedConfig,
     isConverting,
     error,
+    progressMessage,
     reset,
     convert,
   };
