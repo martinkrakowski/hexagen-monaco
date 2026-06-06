@@ -14,6 +14,7 @@ import { generateArchitectureFiles } from "./generators/architecture-files.js";
 import { generateApps } from "./generators/apps.js";
 import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
+import { generateCrossContext } from "./generators/cross-context.js";
 import { createEmptyResult, type GeneratorResult } from "./results.js";
 import type { Manifest } from "./types/manifest.js";
 import { ensureDependenciesBuilt } from "./preflight.js";
@@ -293,6 +294,14 @@ export class SyncEngine {
       const { pkgs, tsconfigs, eslint, stubs } = coreResults;
       const firstPassBarrels = coreResults.barrels;
       const appsResult = await generateApps(this.fullConfig, this.report);
+      // Cross-context transport (Phase 3a): bespoke event-bus ports + adapters +
+      // shared contracts. Runs after apps and before the pass-2 barrels (disk-based,
+      // so they re-export the emitted files). Sole writer of these files — they are
+      // not declared in the manifest layers, so generateStubs cannot clobber them.
+      const crossContextResult = await generateCrossContext(
+        this.fullConfig,
+        this.report,
+      );
 
       const secondPassBarrels = createEmptyResult();
       const modules = this.fullConfig.manifest.bounded_contexts ?? [];
@@ -325,7 +334,8 @@ export class SyncEngine {
         tsconfigs.totalOps +
         eslint.totalOps +
         stubs.totalOps +
-        appsResult.totalOps;
+        appsResult.totalOps +
+        crossContextResult.totalOps;
 
       if (mode === "self-regen") {
         await runArchLinter(this.fullConfig);
@@ -352,6 +362,9 @@ export class SyncEngine {
       );
       logger.info(
         `• Barrels : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`,
+      );
+      logger.info(
+        `• CrossContext : ${crossContextResult.created.length} created, ${crossContextResult.updated.length} updated, ${crossContextResult.skipped.length} skipped`,
       );
       logger.info(
         `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`,

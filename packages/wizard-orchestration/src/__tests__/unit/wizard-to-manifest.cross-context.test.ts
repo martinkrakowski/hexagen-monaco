@@ -71,7 +71,7 @@ const wizard = (
   });
 
 describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
-  it("provider publishes its domainEvents; consumer subscribes", () => {
+  it("emits a cross_context edge carrying the provider's events (no ports in layers)", () => {
     const m = wizardToManifest(
       wizard(
         "strict-enterprise",
@@ -96,20 +96,18 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
         integrationPattern: "open-host",
       },
     ]);
-    // provider = publisher
+    // Directionality (provider publishes) is captured in the edge: the provider
+    // carries the event contracts. Transport ports/adapters are NOT injected into
+    // the manifest layers — the dedicated generateCrossContext emitter is their
+    // sole writer (it would otherwise be clobbered by generateStubs under the web
+    // flow's forceRoot; see packages/sync cross-context.test.ts).
     assert.ok(
-      outPorts(bc(m, "billing")).includes("message-publisher.out-port.ts"),
+      !outPorts(bc(m, "billing")).includes("message-publisher.out-port.ts"),
     );
     assert.ok(
-      adapters(bc(m, "billing")).includes("message-publisher.adapter.ts"),
+      !adapters(bc(m, "billing")).includes("message-publisher.adapter.ts"),
     );
-    // consumer = subscriber
-    assert.ok(inPorts(bc(m, "orders")).includes("event-listener.in-port.ts"));
-    assert.ok(adapters(bc(m, "orders")).includes("event-listener.adapter.ts"));
-    // directionality: the consumer is NOT a publisher
-    assert.ok(
-      !outPorts(bc(m, "orders")).includes("message-publisher.out-port.ts"),
-    );
+    assert.ok(!inPorts(bc(m, "orders")).includes("event-listener.in-port.ts"));
   });
 
   it("falls back to <Provider>Event when the provider declares no domainEvents", () => {
@@ -146,7 +144,7 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
     assert.equal(edges(m)[0].integrationPattern, "acl");
   });
 
-  it("dedupes the publisher port when one provider serves multiple consumers", () => {
+  it("emits an edge per consumer for a shared provider (emitter dedupes the publisher file)", () => {
     const m = wizardToManifest(
       wizard(
         "strict-enterprise",
@@ -161,15 +159,13 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
         ],
       ),
     );
-    const pub = outPorts(bc(m, "billing")).filter(
-      (p) => p === "message-publisher.out-port.ts",
-    );
-    assert.equal(
-      pub.length,
-      1,
-      "one publisher port on the provider across edges",
-    );
+    // Both edges present at the manifest level (the emitter dedupes the
+    // provider's single publisher file from them).
     assert.equal(edges(m).length, 2);
+    assert.ok(edges(m).every((e) => e.provider === "billing"));
+    assert.ok(
+      !outPorts(bc(m, "billing")).includes("message-publisher.out-port.ts"),
+    );
   });
 
   it("modular-monolith (in-process) emits no cross_context and no transport ports", () => {
