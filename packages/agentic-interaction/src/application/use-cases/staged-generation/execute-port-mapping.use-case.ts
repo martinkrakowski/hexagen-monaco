@@ -28,6 +28,7 @@ import {
   STAGE3_ESCALATION_CONFIG,
 } from "./retry-with-escalation";
 import type { EscalationConfig } from "./retry-with-escalation";
+import { STAGE_STREAMING_TIMEOUT_MS } from "./stage-timeout";
 
 const STAGE_NUMBER = 3;
 
@@ -397,7 +398,7 @@ export class ExecutePortMappingUseCase {
           `Attempt ${attempt} timed out — using partial output if available`,
         );
         abortController.abort();
-      }, 120000);
+      }, STAGE_STREAMING_TIMEOUT_MS);
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,

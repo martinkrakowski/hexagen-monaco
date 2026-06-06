@@ -1,5 +1,8 @@
 import { ok, err } from "@hexagen/shared";
-import { STAGE_ATTEMPT_TIMEOUT_MS } from "./stage-timeout";
+import {
+  LARGE_OUTPUT_STAGE_TIMEOUT_MS,
+  stageTimeoutError,
+} from "./stage-timeout";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
@@ -107,11 +110,14 @@ export class ExecuteAdapterAssignmentUseCase {
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
+      // Large-output stage (4096 maxTokens): generous ceiling, but fail fast on
+      // the deadline so the budget is a one-shot wait, not retried ×N.
+      let isTimedOut = false;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(
-        () => abortController.abort(),
-        STAGE_ATTEMPT_TIMEOUT_MS,
-      );
+      const timeoutHandle = setTimeout(() => {
+        isTimedOut = true;
+        abortController.abort();
+      }, LARGE_OUTPUT_STAGE_TIMEOUT_MS);
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
@@ -142,6 +148,14 @@ export class ExecuteAdapterAssignmentUseCase {
           }
         }
       } catch (thrownError) {
+        if (isTimedOut) {
+          return err(
+            stageTimeoutError(
+              "Adapter assignment",
+              LARGE_OUTPUT_STAGE_TIMEOUT_MS,
+            ),
+          );
+        }
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
             thrownError instanceof Error
@@ -156,6 +170,14 @@ export class ExecuteAdapterAssignmentUseCase {
       }
 
       if (streamError) {
+        if (isTimedOut) {
+          return err(
+            stageTimeoutError(
+              "Adapter assignment",
+              LARGE_OUTPUT_STAGE_TIMEOUT_MS,
+            ),
+          );
+        }
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(streamError);
         }

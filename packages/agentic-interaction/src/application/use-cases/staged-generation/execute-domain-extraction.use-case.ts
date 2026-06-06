@@ -1,5 +1,5 @@
 import { ok, err } from "@hexagen/shared";
-import { STAGE_ATTEMPT_TIMEOUT_MS } from "./stage-timeout";
+import { STAGE_ATTEMPT_TIMEOUT_MS, stageTimeoutError } from "./stage-timeout";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
@@ -50,11 +50,14 @@ export class ExecuteDomainExtractionUseCase {
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
+      // Fail fast on the deadline (do not retry a timeout); transient errors
+      // below still retry.
+      let isTimedOut = false;
       const abortController = new AbortController();
-      const timeoutHandle = setTimeout(
-        () => abortController.abort(),
-        STAGE_ATTEMPT_TIMEOUT_MS,
-      );
+      const timeoutHandle = setTimeout(() => {
+        isTimedOut = true;
+        abortController.abort();
+      }, STAGE_ATTEMPT_TIMEOUT_MS);
 
       const request = createLLMRequest(
         DomainModelId.QWEN_CODER_3B,
@@ -71,6 +74,11 @@ export class ExecuteDomainExtractionUseCase {
       try {
         responseResult = await this.llmPort.sendRequest(request);
       } catch (thrownError) {
+        if (isTimedOut) {
+          return err(
+            stageTimeoutError("Domain extraction", STAGE_ATTEMPT_TIMEOUT_MS),
+          );
+        }
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(
             thrownError instanceof Error
@@ -96,6 +104,11 @@ export class ExecuteDomainExtractionUseCase {
       }
 
       if (streamError) {
+        if (isTimedOut) {
+          return err(
+            stageTimeoutError("Domain extraction", STAGE_ATTEMPT_TIMEOUT_MS),
+          );
+        }
         if (attempt === MAX_RETRY_ATTEMPTS) {
           return err(streamError);
         }
