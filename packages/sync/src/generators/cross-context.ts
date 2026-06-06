@@ -8,16 +8,23 @@ import { analyzePortFile, generateAdapterFromPort } from "./port-analyzer.js";
 import type { ReportRecorder } from "../domain/types.js";
 
 /**
- * Dedicated cross-context transport emitter (Phase 3a — event-bus).
+ * Dedicated cross-context transport emitter (Phase 3 — event-bus + network).
  *
  * Reads `manifest.cross_context` (edges produced by the wizard's
  * `deriveCrossContextEdges`) and writes **bespoke** transport with real
- * interfaces — recognizably an event bus, not a generic stub:
- *   - a shared event contract per event name, in the `shared` kernel;
- *   - a publisher port (`message-publisher.out-port.ts`, `publish(event)`) on each
- *     provider, plus its adapter derived via `generateAdapterFromPort`;
- *   - a subscriber port (`event-listener.in-port.ts`, `handle(event)`) on each
- *     consumer, plus its adapter.
+ * interfaces — recognizably an event bus or an HTTP boundary, not a generic stub.
+ * It dispatches on each edge's `transport`:
+ *
+ * - **`event-bus`** (Phase 3a): a shared event contract per event name; a
+ *   publisher port (`message-publisher.out-port.ts`, `publish(event)`) on each
+ *   provider; a subscriber port (`event-listener.in-port.ts`, `handle(event)`) on
+ *   each consumer.
+ * - **`network`** (Phase 3b): a shared `<Op>Request`/`<Op>Response` DTO pair per
+ *   operation; a controller port (`rest-controller.in-port.ts`) on each provider;
+ *   a client port (`external-service-client.out-port.ts`) on each consumer — both
+ *   with one `<op>(request): Promise<response>` method per operation.
+ *
+ * Adapters are derived from the bespoke ports via `generateAdapterFromPort`.
  *
  * This generator is the SOLE writer of these files: they are deliberately NOT
  * declared in the manifest layers, because `generateStubs` would overwrite the
@@ -32,6 +39,7 @@ interface CrossContextEdge {
   provider?: string;
   transport?: string;
   events?: string[];
+  operations?: string[];
 }
 
 function recordStatus(
@@ -69,6 +77,16 @@ function toPascalCase(stem: string): string {
     .join("");
 }
 
+/**
+ * camelCase a PascalCase operation base into a method name (`GetInvoice` →
+ * `getInvoice`; single-segment `Billing` → `billing`).
+ */
+function toCamelCase(pascal: string): string {
+  return pascal.length > 0
+    ? pascal.charAt(0).toLowerCase() + pascal.slice(1)
+    : pascal;
+}
+
 function eventContractContent(name: string): string {
   return `// @generated cross-context event contract — edit freely
 /**
@@ -82,24 +100,62 @@ export interface ${name} {
 `;
 }
 
+function dtoContent(op: string): string {
+  return `// @generated cross-context DTO — edit freely
+/**
+ * Request/response payloads for the ${op} operation, exchanged across the
+ * network boundary. Both the calling (client) and serving (controller) contexts
+ * depend on these shared contracts.
+ */
+export interface ${op}Request {
+  // TODO: define the request fields
+  readonly _placeholder?: never;
+}
+
+export interface ${op}Response {
+  // TODO: define the response fields
+  readonly _placeholder?: never;
+}
+`;
+}
+
+/** One method signature on a bespoke transport port. */
+interface PortMethod {
+  name: string;
+  paramName: string;
+  paramType: string;
+  returnType: string;
+}
+
+/**
+ * Render a bespoke port interface with one or more real method signatures and a
+ * single shared-kernel type import. Event-bus ports have one method
+ * (`publish`/`handle`); network ports have one per operation.
+ */
 function portContent(
   scope: string,
   interfaceName: string,
-  method: string,
-  events: string[],
+  methods: PortMethod[],
+  importedTypes: string[],
   doc: string,
 ): string {
-  const hasEvents = events.length > 0;
-  const importLine = hasEvents
-    ? `import type { ${events.join(", ")} } from "@${scope}/shared";\n\n`
-    : "";
-  const union = hasEvents ? events.join(" | ") : "unknown";
+  const uniqueImports = [...new Set(importedTypes)].sort();
+  const importLine =
+    uniqueImports.length > 0
+      ? `import type { ${uniqueImports.join(", ")} } from "@${scope}/shared";\n\n`
+      : "";
+  const methodLines = methods
+    .map(
+      (m) =>
+        `  ${m.name}(${m.paramName}: ${m.paramType}): Promise<${m.returnType}>;`,
+    )
+    .join("\n");
   return `// @generated cross-context port — edit freely
 ${importLine}/**
  * ${doc}
  */
 export interface ${interfaceName} {
-  ${method}(event: ${union}): Promise<void>;
+${methodLines}
 }
 `;
 }
@@ -109,8 +165,8 @@ interface PortSpec {
   portKind: "in" | "out";
   portBase: string;
   interfaceName: string;
-  method: string;
-  events: string[];
+  methods: PortMethod[];
+  importedTypes: string[];
   doc: string;
 }
 
@@ -148,8 +204,8 @@ async function emitPortAndAdapter(
       portContent(
         scope,
         spec.interfaceName,
-        spec.method,
-        spec.events,
+        spec.methods,
+        spec.importedTypes,
         spec.doc,
       ),
       config,
@@ -187,6 +243,44 @@ async function emitPortAndAdapter(
   );
 }
 
+/** Network controller/client methods for a set of operation bases (Decision E1). */
+function operationMethods(ops: string[]): PortMethod[] {
+  return ops.map((op) => ({
+    name: toCamelCase(op),
+    paramName: "request",
+    paramType: `${op}Request`,
+    returnType: `${op}Response`,
+  }));
+}
+
+/** The DTO type names a set of operations imports from the shared kernel. */
+function operationImports(ops: string[]): string[] {
+  return ops.flatMap((op) => [`${op}Request`, `${op}Response`]);
+}
+
+/** Write a shared-kernel contract under `packages/shared/src/<segments>`. */
+async function writeSharedContract(
+  result: GeneratorResult,
+  config: SyncConfig,
+  report: ReportRecorder | undefined,
+  relSegments: string[],
+  content: string,
+): Promise<void> {
+  const contractPath = path.join(
+    config.workspaceRoot,
+    "packages",
+    "shared",
+    "src",
+    ...relSegments,
+  );
+  await fs.mkdir(path.dirname(contractPath), { recursive: true });
+  recordStatus(
+    result,
+    contractPath,
+    await safeWriteFileAtomic(contractPath, content, config, report),
+  );
+}
+
 export async function generateCrossContext(
   config: SyncConfig,
   report?: ReportRecorder,
@@ -198,68 +292,127 @@ export async function generateCrossContext(
 
   const scope = resolveScope(config.manifest);
 
-  // Aggregate by context. A provider publishes all of its events (one publisher
-  // port); a consumer subscribes to the union of events across its edges.
+  // Aggregate by context and transport. event-bus: a provider publishes all of
+  // its events (one publisher port), a consumer subscribes to the union across
+  // its edges. network: a provider serves all of its operations (one controller
+  // port), a consumer calls the union of operations across its edges.
   const allEvents = new Set<string>();
   const publisherEvents = new Map<string, Set<string>>();
   const subscriberEvents = new Map<string, Set<string>>();
+  const allOperations = new Set<string>();
+  const controllerOps = new Map<string, Set<string>>();
+  const clientOps = new Map<string, Set<string>>();
+
   for (const edge of edges) {
-    if (edge.transport && edge.transport !== "event-bus") continue; // 3a: event-bus only
-    const events = (edge.events ?? []).filter(
-      (e): e is string => typeof e === "string" && e.length > 0,
-    );
-    events.forEach((e) => allEvents.add(e));
-    if (edge.provider) addAll(publisherEvents, edge.provider, events);
-    if (edge.consumer) addAll(subscriberEvents, edge.consumer, events);
+    if (edge.transport === "network") {
+      const operations = (edge.operations ?? []).filter(
+        (o): o is string => typeof o === "string" && o.length > 0,
+      );
+      operations.forEach((o) => allOperations.add(o));
+      if (edge.provider) addAll(controllerOps, edge.provider, operations);
+      if (edge.consumer) addAll(clientOps, edge.consumer, operations);
+    } else {
+      // Unspecified / "event-bus" transport is treated as event-bus.
+      const events = (edge.events ?? []).filter(
+        (e): e is string => typeof e === "string" && e.length > 0,
+      );
+      events.forEach((e) => allEvents.add(e));
+      if (edge.provider) addAll(publisherEvents, edge.provider, events);
+      if (edge.consumer) addAll(subscriberEvents, edge.consumer, events);
+    }
   }
 
+  // ── event-bus transport ───────────────────────────────────────────────────
   // 1. Shared event contracts.
   for (const event of [...allEvents].sort()) {
-    const contractPath = path.join(
-      config.workspaceRoot,
-      "packages",
-      "shared",
-      "src",
-      "domain",
-      "events",
-      `${event}.event.ts`,
-    );
-    await fs.mkdir(path.dirname(contractPath), { recursive: true });
-    recordStatus(
+    await writeSharedContract(
       result,
-      contractPath,
-      await safeWriteFileAtomic(
-        contractPath,
-        eventContractContent(event),
-        config,
-        report,
-      ),
+      config,
+      report,
+      ["domain", "events", `${event}.event.ts`],
+      eventContractContent(event),
     );
   }
 
   // 2. Publisher port + adapter per provider.
   for (const provider of [...publisherEvents.keys()].sort()) {
+    const events = [...(publisherEvents.get(provider) ?? [])].sort();
     await emitPortAndAdapter(result, config, report, scope, {
       contextName: provider,
       portKind: "out",
       portBase: "message-publisher",
       interfaceName: "MessagePublisherPort",
-      method: "publish",
-      events: [...(publisherEvents.get(provider) ?? [])].sort(),
+      methods: [
+        {
+          name: "publish",
+          paramName: "event",
+          paramType: events.join(" | ") || "unknown",
+          returnType: "void",
+        },
+      ],
+      importedTypes: events,
       doc: "Publishes this context's domain events across the event-bus boundary.",
     });
   }
 
   // 3. Subscriber port + adapter per consumer.
   for (const consumer of [...subscriberEvents.keys()].sort()) {
+    const events = [...(subscriberEvents.get(consumer) ?? [])].sort();
     await emitPortAndAdapter(result, config, report, scope, {
       contextName: consumer,
       portKind: "in",
       portBase: "event-listener",
       interfaceName: "EventListenerPort",
-      method: "handle",
-      events: [...(subscriberEvents.get(consumer) ?? [])].sort(),
+      methods: [
+        {
+          name: "handle",
+          paramName: "event",
+          paramType: events.join(" | ") || "unknown",
+          returnType: "void",
+        },
+      ],
+      importedTypes: events,
       doc: "Handles cross-context events this context subscribes to.",
+    });
+  }
+
+  // ── network transport ─────────────────────────────────────────────────────
+  // 4. Shared request/response DTOs per operation.
+  for (const op of [...allOperations].sort()) {
+    await writeSharedContract(
+      result,
+      config,
+      report,
+      ["domain", "dtos", `${op}.dto.ts`],
+      dtoContent(op),
+    );
+  }
+
+  // 5. Provider controller port + adapter (serves its operations).
+  for (const provider of [...controllerOps.keys()].sort()) {
+    const ops = [...(controllerOps.get(provider) ?? [])].sort();
+    await emitPortAndAdapter(result, config, report, scope, {
+      contextName: provider,
+      portKind: "in",
+      portBase: "rest-controller",
+      interfaceName: "RestControllerPort",
+      methods: operationMethods(ops),
+      importedTypes: operationImports(ops),
+      doc: "Serves this context's operations over the network boundary.",
+    });
+  }
+
+  // 6. Consumer client port + adapter (calls its providers' operations).
+  for (const consumer of [...clientOps.keys()].sort()) {
+    const ops = [...(clientOps.get(consumer) ?? [])].sort();
+    await emitPortAndAdapter(result, config, report, scope, {
+      contextName: consumer,
+      portKind: "out",
+      portBase: "external-service-client",
+      interfaceName: "ExternalServiceClientPort",
+      methods: operationMethods(ops),
+      importedTypes: operationImports(ops),
+      doc: "Calls operations on the contexts this context depends on over the network.",
     });
   }
 

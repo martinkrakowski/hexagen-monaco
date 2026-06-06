@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 
 import { wizardToManifest } from "../../application/wizard-to-manifest";
 
-// Phase 3a: for an event-bus template, wizardToManifest derives cross-context
-// transport from the peer mappings. Each edge (consumer → provider) makes the
-// PROVIDER a publisher of its domain events (message-publisher out-port +
-// adapter) and the CONSUMER a subscriber (event-listener in-port + adapter) —
-// the contract is the provider's events (Decision D1), so the provider publishes.
-// In-process (modular-monolith) emits no transport. Network is Phase 3b.
+// Phase 3: for a strict template, wizardToManifest derives cross-context
+// transport from the peer mappings. event-bus (strict-enterprise): each edge
+// (consumer → provider) makes the PROVIDER a publisher of its domain events and
+// the CONSUMER a subscriber — the contract is the provider's events (Decision D1).
+// network (micro-frontend): each edge carries the provider's `operations` (its
+// use-cases, Decision E1) for the controller/client transport. In-process
+// (modular-monolith) emits no transport. The dedicated generateCrossContext
+// emitter is the sole writer of the files; these edges only describe them.
 
 const asWizard = (x: unknown) =>
   x as unknown as Parameters<typeof wizardToManifest>[0];
@@ -24,7 +26,8 @@ interface Edge {
   consumer: string;
   provider: string;
   transport: string;
-  events: string[];
+  events?: string[];
+  operations?: string[];
   integrationPattern: string;
 }
 
@@ -43,7 +46,12 @@ const adapters = (b: BC): string[] => b.layers?.infrastructure?.adapters ?? [];
 
 const wizard = (
   template: string,
-  contexts: Array<{ id: string; name: string; domainEvents?: string[] }>,
+  contexts: Array<{
+    id: string;
+    name: string;
+    domainEvents?: string[];
+    useCases?: string[];
+  }>,
   peer: Array<{
     consumerContext: string;
     providerContext: string;
@@ -61,6 +69,7 @@ const wizard = (
       id: c.id,
       name: c.name,
       domainEvents: c.domainEvents ?? [],
+      useCases: c.useCases ?? [],
     })),
     peerMappings: peer.map((p) => ({
       consumerContext: p.consumerContext,
@@ -190,7 +199,39 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
     assert.ok(!inPorts(bc(m, "orders")).includes("event-listener.in-port.ts"));
   });
 
-  it("micro-frontend (network) emits no event-bus transport (deferred to 3b)", () => {
+  it("micro-frontend (network) emits a network edge carrying the provider's use-cases (Decision E1)", () => {
+    const m = wizardToManifest(
+      wizard(
+        "micro-frontend",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", useCases: ["GetInvoice", "IssueRefund"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.deepEqual(edges(m), [
+      {
+        consumer: "orders",
+        provider: "billing",
+        transport: "network",
+        operations: ["GetInvoice", "IssueRefund"],
+        integrationPattern: "open-host",
+      },
+    ]);
+    // As with event-bus, the transport ports/adapters are NOT injected into the
+    // layers — the dedicated emitter is their sole writer.
+    assert.ok(
+      !inPorts(bc(m, "billing")).includes("rest-controller.in-port.ts"),
+    );
+    assert.ok(
+      !outPorts(bc(m, "orders")).includes(
+        "external-service-client.out-port.ts",
+      ),
+    );
+  });
+
+  it("network falls back to the provider context name when no useCases are declared", () => {
     const m = wizardToManifest(
       wizard(
         "micro-frontend",
@@ -201,6 +242,52 @@ describe("wizardToManifest — Phase 3a cross-context (event-bus)", () => {
         [{ consumerContext: "o", providerContext: "b" }],
       ),
     );
-    assert.equal(m.cross_context, undefined);
+    assert.equal(edges(m)[0].transport, "network");
+    assert.deepEqual(edges(m)[0].operations, ["Billing"]);
+  });
+
+  it("network PascalCases and dedupes the provider's useCases", () => {
+    const m = wizardToManifest(
+      wizard(
+        "micro-frontend",
+        [
+          { id: "o", name: "orders" },
+          {
+            id: "b",
+            name: "billing",
+            useCases: ["get invoice", "get-invoice", "issue refund"],
+          },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    // "get invoice" and "get-invoice" both PascalCase to GetInvoice → deduped,
+    // declared order preserved.
+    assert.deepEqual(edges(m)[0].operations, ["GetInvoice", "IssueRefund"]);
+  });
+
+  it("the same contexts diverge by template: event-bus vs network (Decision A1)", () => {
+    const contexts = [
+      { id: "o", name: "orders" },
+      {
+        id: "b",
+        name: "billing",
+        domainEvents: ["InvoiceIssued"],
+        useCases: ["GetInvoice"],
+      },
+    ];
+    const peer = [{ consumerContext: "o", providerContext: "b" }];
+    const strict = wizardToManifest(
+      wizard("strict-enterprise", contexts, peer),
+    );
+    const micro = wizardToManifest(wizard("micro-frontend", contexts, peer));
+
+    assert.equal(edges(strict)[0].transport, "event-bus");
+    assert.deepEqual(edges(strict)[0].events, ["InvoiceIssued"]);
+    assert.equal(edges(strict)[0].operations, undefined);
+
+    assert.equal(edges(micro)[0].transport, "network");
+    assert.deepEqual(edges(micro)[0].operations, ["GetInvoice"]);
+    assert.equal(edges(micro)[0].events, undefined);
   });
 });
