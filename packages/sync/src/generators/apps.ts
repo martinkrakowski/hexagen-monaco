@@ -26,6 +26,7 @@ function resolveFrameworkConfig(
     packageJson: manifestConfig.packageJson ?? builtin.packageJson,
     tsConfig: manifestConfig.tsConfig ?? builtin.tsConfig,
     entryPoint: manifestConfig.entryPoint ?? builtin.entryPoint,
+    extraFiles: manifestConfig.extraFiles ?? builtin.extraFiles,
   };
 }
 
@@ -61,6 +62,69 @@ function recordStatus(
   } else {
     result.skipped.push(filePath);
   }
+}
+
+/**
+ * Interpolate a template and write it to `relPath` under `appDir`, with the same
+ * path containment as the entry point. `relPath` is manifest-overridable (via
+ * `generator.sync.apps.frameworks.<fw>.{entryPoint,extraFiles}`), so it must
+ * resolve to a location inside `apps/<name>/`. Resolve against `appDir` with
+ * `path.resolve` (not `path.join` — `resolve` treats an absolute `relPath` as a
+ * new root, so absolute paths are rejected here rather than silently nested) and
+ * reject anything that escapes: a ".." segment, the appDir itself, an absolute
+ * path, or (on Windows) a different drive/UNC root.
+ */
+async function emitAppFile(
+  appDir: string,
+  relPath: string,
+  template: string,
+  vars: Record<string, unknown>,
+  config: SyncConfig,
+  report: ReportRecorder | undefined,
+  result: GeneratorResult,
+  appName: string,
+): Promise<"ok" | "unsafe" | "error"> {
+  const content = interpolateWithLogging(
+    template,
+    vars,
+    `apps/${appName}/${relPath}`,
+    config,
+  );
+  const target = path.resolve(appDir, relPath);
+  const relative = path.relative(appDir, target);
+  if (
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    config.logger.warn(
+      `[apps] skipping file with unsafe path (escapes apps/${appName}): ${relPath}`,
+    );
+    if (report) {
+      report.record(
+        "blocked",
+        appName,
+        `Unsafe file path (potential path traversal): ${relPath}`,
+      );
+    }
+    return "unsafe";
+  }
+  try {
+    await fs.mkdir(path.dirname(target), { recursive: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    config.logger.error(
+      `[apps] failed to create dir for "${appName}" file ${relPath}: ${message}`,
+    );
+    if (report) report.record("blocked", appName, message);
+    return "error";
+  }
+  recordStatus(
+    result,
+    target,
+    await safeWriteFileAtomic(target, content, config, report),
+  );
+  return "ok";
 }
 
 export async function generateApps(
@@ -221,58 +285,38 @@ export async function generateApps(
 
       const entry = frameworkConfig.entryPoint;
       if (entry?.path && entry.template !== undefined) {
-        const entryContent = interpolateWithLogging(
+        const status = await emitAppFile(
+          appDir,
+          entry.path,
           entry.template,
           vars,
-          `apps/${app.name}/${entry.path}`,
-          config,
-        );
-        // Containment: entryPoint.path is manifest-overridable (via
-        // generator.sync.apps.frameworks.<fw>.entryPoint), so it must resolve to a
-        // location inside apps/<name>/. Resolve against appDir with `path.resolve`
-        // (not `path.join` — `resolve` treats an absolute entry.path as a new root,
-        // so absolute paths are rejected here rather than silently nested) and skip
-        // anything that escapes: a ".." segment, an absolute path, or (on Windows) a
-        // different drive/UNC root (which makes `path.relative` return an absolute).
-        const entryPath = path.resolve(appDir, entry.path);
-        const relativeEntry = path.relative(appDir, entryPath);
-        if (
-          relativeEntry === "" ||
-          relativeEntry.startsWith("..") ||
-          path.isAbsolute(relativeEntry)
-        ) {
-          config.logger.warn(
-            `[apps] skipping entry file with unsafe path (escapes apps/${app.name}): ${entry.path}`,
-          );
-          if (report) {
-            report.record(
-              "blocked",
-              app.name,
-              `Unsafe entryPoint path (potential path traversal): ${entry.path}`,
-            );
-          }
-          continue;
-        }
-        try {
-          await fs.mkdir(path.dirname(entryPath), { recursive: true });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          config.logger.error(
-            `[apps] failed to create entry-point dir for "${app.name}": ${message}`,
-          );
-          if (report) report.record("blocked", app.name, message);
-          continue;
-        }
-        const status = await safeWriteFileAtomic(
-          entryPath,
-          entryContent,
           config,
           report,
+          result,
+          app.name,
         );
-        recordStatus(result, entryPath, status);
+        // An unsafe/failed entry path skips the rest of this app (prior behavior).
+        if (status !== "ok") continue;
       } else {
         config.logger.warn(
           `[apps] framework "${framework}" has no entryPoint template — skipping entry file for "${app.name}"`,
+        );
+      }
+
+      // Additional root files beyond the single entry point (e.g. Nitro's
+      // nitro.config.ts). An unsafe/failed extra file is logged inside emitAppFile
+      // and skipped individually — it does not abort the whole app.
+      for (const extra of frameworkConfig.extraFiles ?? []) {
+        if (!extra?.path || extra.template === undefined) continue;
+        await emitAppFile(
+          appDir,
+          extra.path,
+          extra.template,
+          vars,
+          config,
+          report,
+          result,
+          app.name,
         );
       }
     }

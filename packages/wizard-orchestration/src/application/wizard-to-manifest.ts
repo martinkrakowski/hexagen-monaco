@@ -13,15 +13,11 @@ const getOutboundPortName = (type: string) => `${type}.out-port.ts`;
 const getAdapterName = (type: string) => `${type}.adapter.ts`;
 
 // Framework derivation for the manifest `apps[]` section.
-// Reused by `wizardToManifest` to satisfy Wave 4 of the unified-scaffolding
-// plan (`docs/sync-engine-unified-scaffolding-plan.md` §Sub-agent 4b).
 //
-// Only `"next.js"`, `"fastify"`, and `"plain-ts"` have built-in generator
-// fallbacks (`packages/sync/src/generators/apps.ts`
-// `BUILTIN_FRAMEWORK_TEMPLATES`); `"express"` entries with no manifest
-// template are skipped by the generator. Wizard choices not covered by those
-// three are therefore mapped to `"plain-ts"` so the generator always emits a
-// buildable scaffold for every app it sees.
+// Only `"next.js"`, `"fastify"`, `"nitro"`, and `"plain-ts"` have built-in
+// generator templates (`packages/sync/src/generators/apps.ts`
+// `BUILTIN_FRAMEWORK_TEMPLATES`); other choices have none, so they map to
+// `"plain-ts"` and the generator still emits a buildable scaffold.
 type AppEntryFramework = NonNullable<
   NonNullable<Manifest["apps"]>[number]["framework"]
 >;
@@ -30,12 +26,27 @@ function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
   return ui === "Next.js" ? "next.js" : "plain-ts";
 }
 
-function mapApiFramework(
-  api: BoundedContext["apiFramework"],
-): AppEntryFramework {
-  if (api === "Fastify") return "fastify";
-  // Express and NestJS have no built-in template in the generator; fall
-  // through to plain-ts so the app is scaffolded rather than skipped.
+/**
+ * The API app framework for a bounded context. The step-1 `infrastructureTarget`
+ * selector wins — `"nitro"` is the first value with a real generator template, so
+ * choosing Nitro now materializes a Nitro app (Phase 2). The other
+ * `infrastructureTarget` values (nestjs/express/serverless/plain-ts) have no
+ * template yet → `"plain-ts"`. For legacy/imported manifests that only set the
+ * older `apiFramework` field, `"Fastify"` still maps to the fastify template.
+ *
+ * Before this, `deriveApps` read only the legacy `apiFramework` and never
+ * `infrastructureTarget`, so the main selector was inert. This is the seam that
+ * lets it drive generation for every backend — Nitro is simply the first to land
+ * a real template behind it.
+ */
+function frameworkForContext(bc: BoundedContext): AppEntryFramework {
+  if (bc.infrastructureTarget === "nitro") return "nitro";
+  // infrastructureTarget wins when set: a non-nitro value has no template yet →
+  // plain-ts (it must NOT be silently overridden by a legacy apiFramework).
+  if (bc.infrastructureTarget) return "plain-ts";
+  // Fallback for legacy/imported manifests that predate infrastructureTarget
+  // (it's absent there) and only carry the older apiFramework field.
+  if (bc.apiFramework === "Fastify") return "fastify";
   return "plain-ts";
 }
 
@@ -490,12 +501,18 @@ function deriveApps(
   if (nonShared.length === 0) return [];
 
   const dependsOn = [...new Set(nonShared.map((bc) => bc.name))].sort();
-  const apiFrameworks = nonShared.map((bc) => mapApiFramework(bc.apiFramework));
+  const apiFrameworks = nonShared.map(frameworkForContext);
   // A single aggregated `api` app is emitted under both rules — Phase 2 isolates
-  // only the UI surface, not the API.
+  // only the UI surface, not the API. Preference order is most-specific-first, so
+  // if any context picks Nitro the aggregated app is Nitro (then fastify, then the
+  // plain-ts fallback).
   const apiApp = {
     name: "api",
-    framework: pickPreferredFramework(apiFrameworks, ["fastify", "plain-ts"]),
+    framework: pickPreferredFramework(apiFrameworks, [
+      "nitro",
+      "fastify",
+      "plain-ts",
+    ]),
     depends_on: dependsOn,
   };
 

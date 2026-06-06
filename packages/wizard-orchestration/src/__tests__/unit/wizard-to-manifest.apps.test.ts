@@ -170,3 +170,100 @@ describe("wizardToManifest — allowSharedUi shapes apps[]", () => {
     assert.deepEqual(webNames, ["web-app"]);
   });
 });
+
+// Track D Phase 2: the step-1 `infrastructureTarget` selector now drives the
+// aggregated `api` app's framework (previously it was inert — deriveApps read
+// only the legacy `apiFramework`). `nitro` is the first value with a real
+// generator template.
+describe("wizardToManifest — api framework from infrastructureTarget", () => {
+  const wizardWith = (
+    contexts: Array<{
+      name: string;
+      infrastructureTarget?: string;
+      apiFramework?: string;
+    }>,
+  ) =>
+    asWizard({
+      governance: {
+        workspaceName: "demo",
+        namespacePrefix: "@demo",
+        packageManager: "yarn",
+        workspaceTemplate: "modular-monolith",
+      },
+      // Headless contexts (no UI) so only the `api` app is in play.
+      boundedContexts: contexts.map((c, i) => ({
+        id: `ctx-${i}`,
+        name: c.name,
+        uiFramework: "",
+        infrastructureTarget: c.infrastructureTarget,
+        apiFramework: c.apiFramework,
+      })),
+    });
+
+  const apiFrameworkOf = (m: Record<string, unknown>) =>
+    appsOf(m).find((a) => a.name === "api")?.framework;
+
+  it("infrastructureTarget 'nitro' makes the api app a Nitro app", () => {
+    const m = wizardToManifest(
+      wizardWith([{ name: "orders", infrastructureTarget: "nitro" }]),
+    );
+    assert.equal(apiFrameworkOf(m), "nitro");
+  });
+
+  it("prefers nitro when any context picks it (aggregated api app)", () => {
+    const m = wizardToManifest(
+      wizardWith([
+        { name: "orders", infrastructureTarget: "nestjs" },
+        { name: "billing", infrastructureTarget: "nitro" },
+      ]),
+    );
+    assert.equal(apiFrameworkOf(m), "nitro");
+  });
+
+  it("non-nitro infrastructureTargets fall back to plain-ts (unchanged)", () => {
+    for (const target of ["nestjs", "express", "serverless", "plain-ts"]) {
+      const m = wizardToManifest(
+        wizardWith([{ name: "orders", infrastructureTarget: target }]),
+      );
+      assert.equal(
+        apiFrameworkOf(m),
+        "plain-ts",
+        `infrastructureTarget=${target}`,
+      );
+    }
+  });
+
+  it("honors legacy apiFramework=Fastify only when infrastructureTarget is absent", () => {
+    const m = wizardToManifest(
+      wizardWith([{ name: "orders", apiFramework: "Fastify" }]),
+    );
+    assert.equal(apiFrameworkOf(m), "fastify");
+  });
+
+  it("infrastructureTarget=nitro wins over a legacy apiFramework=Fastify", () => {
+    const m = wizardToManifest(
+      wizardWith([
+        {
+          name: "orders",
+          infrastructureTarget: "nitro",
+          apiFramework: "Fastify",
+        },
+      ]),
+    );
+    assert.equal(apiFrameworkOf(m), "nitro");
+  });
+
+  it("a non-nitro infrastructureTarget shadows a legacy apiFramework=Fastify", () => {
+    // infra is set (nestjs) → it wins; the legacy Fastify must NOT leak through.
+    const m = wizardToManifest(
+      wizardWith([
+        {
+          name: "orders",
+          infrastructureTarget: "nestjs",
+          apiFramework: "Fastify",
+        },
+      ]),
+    );
+    assert.equal(apiFrameworkOf(m), "plain-ts");
+  });
+});
