@@ -57,6 +57,116 @@ function pickPreferredFramework(
   return "plain-ts";
 }
 
+interface CrossContextEdge {
+  consumer: string;
+  provider: string;
+  transport: "event-bus" | "network";
+  events: string[];
+  integrationPattern: "open-host" | "acl";
+}
+
+interface CrossContextPorts {
+  in: string[];
+  out: string[];
+  adapters: string[];
+}
+
+/** PascalCase a string into a valid TS identifier (split on non-alphanumerics). */
+function toPascalCase(value: string): string {
+  return value
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}
+
+/**
+ * Event-contract names a provider publishes (Decision D1): its declared
+ * `domainEvents` (PascalCased verbatim, deduped), or a single `${Provider}Event`
+ * fallback derived from the provider context name only when none are declared.
+ */
+function eventContractsFor(provider: BoundedContext): string[] {
+  const declared = [
+    ...new Set(
+      (provider.domainEvents || [])
+        .map(toPascalCase)
+        .filter((e) => e.length > 0),
+    ),
+  ];
+  if (declared.length > 0) return declared;
+  return [`${toPascalCase(provider.name) || "Context"}Event`];
+}
+
+/**
+ * Phase 3a — for an `event-bus` template, materialize cross-context transport
+ * from the wizard's peer mappings. Each edge (consumer → provider) makes the
+ * PROVIDER a publisher of its domain events (`message-publisher` out-port +
+ * adapter) and the CONSUMER a subscriber (`event-listener` in-port + adapter) —
+ * the contract is the provider's events (Decision D1), so the provider is the
+ * publisher. `edges` feeds the dedicated transport emitter; `portsByContextId` is
+ * merged into each context's manifest layers so `generateAdapterFromPort` derives
+ * the adapters from the (bespoke-emitted) ports. Empty for non-event-bus
+ * templates, so in-process output is unchanged. Network is Phase 3b.
+ */
+function deriveCrossContextEdges(
+  boundedContexts: readonly BoundedContext[],
+  peerMappings: ReadonlyArray<{
+    consumerContext?: string;
+    providerContext?: string;
+    integrationPattern?: string;
+  }>,
+  crossContextCalls: string,
+): {
+  edges: CrossContextEdge[];
+  portsByContextId: Map<string, CrossContextPorts>;
+} {
+  const edges: CrossContextEdge[] = [];
+  const portsByContextId = new Map<string, CrossContextPorts>();
+  if (crossContextCalls !== "event-bus") return { edges, portsByContextId };
+
+  const byId = new Map(boundedContexts.map((bc) => [bc.id, bc] as const));
+  const ensure = (id: string): CrossContextPorts => {
+    const existing = portsByContextId.get(id);
+    if (existing) return existing;
+    const created: CrossContextPorts = { in: [], out: [], adapters: [] };
+    portsByContextId.set(id, created);
+    return created;
+  };
+  const addUnique = (arr: string[], value: string): void => {
+    if (!arr.includes(value)) arr.push(value);
+  };
+
+  for (const m of peerMappings) {
+    const consumer = m.consumerContext
+      ? byId.get(m.consumerContext)
+      : undefined;
+    const provider = m.providerContext
+      ? byId.get(m.providerContext)
+      : undefined;
+    if (!consumer || !provider || consumer.id === provider.id) continue;
+
+    edges.push({
+      consumer: consumer.name,
+      provider: provider.name,
+      transport: "event-bus",
+      events: eventContractsFor(provider),
+      integrationPattern: m.integrationPattern === "acl" ? "acl" : "open-host",
+    });
+
+    // Provider publishes its domain events.
+    const pub = ensure(provider.id);
+    addUnique(pub.out, getOutboundPortName("message-publisher"));
+    addUnique(pub.adapters, getAdapterName("message-publisher"));
+
+    // Consumer subscribes to them.
+    const sub = ensure(consumer.id);
+    addUnique(sub.in, getInboundPortName("event-listener"));
+    addUnique(sub.adapters, getAdapterName("event-listener"));
+  }
+
+  return { edges, portsByContextId };
+}
+
 export function wizardToManifest(
   wizardData: WizardData,
 ): Record<string, unknown> {
@@ -150,11 +260,23 @@ export function wizardToManifest(
       : never);
   }
 
+  const crossContext = deriveCrossContextEdges(
+    boundedContexts,
+    peerMappings,
+    templateRules.crossContextCalls,
+  );
+
   return {
     system: systemName,
     scope: namespace,
     architecture: template,
     workspaceTemplate: template,
+    // Cross-context transport edges (Phase 3a: event-bus only) for the dedicated
+    // transport emitter. Omitted when empty so in-process (modular-monolith)
+    // output stays byte-identical.
+    ...(crossContext.edges.length > 0
+      ? { cross_context: crossContext.edges }
+      : {}),
     monorepo: {
       packageManager,
       linker: "node-modules",
@@ -246,17 +368,24 @@ export function wizardToManifest(
     bounded_contexts: boundedContexts.map((bc) => {
       const isShared = bc.name.toLowerCase().includes("shared");
 
-      const inPorts = (bc.portConfiguration?.inboundPorts || []).map(
-        getInboundPortName,
-      );
-      const outPorts = (bc.portConfiguration?.outboundPorts || []).map(
-        getOutboundPortName,
-      );
+      // Phase 3a: cross-context transport ports/adapters derived from the
+      // template's event-bus edges (publisher on the provider, subscriber on the
+      // consumer). Empty for in-process templates, so output is unchanged.
+      const cc = crossContext.portsByContextId.get(bc.id);
+      const inPorts = [
+        ...(bc.portConfiguration?.inboundPorts || []).map(getInboundPortName),
+        ...(cc?.in ?? []),
+      ];
+      const outPorts = [
+        ...(bc.portConfiguration?.outboundPorts || []).map(getOutboundPortName),
+        ...(cc?.out ?? []),
+      ];
       const adapters = [
         ...(bc.persistenceAdapter
           ? [getAdapterName(bc.persistenceAdapter)]
           : []),
         ...(bc.messagingAdapter ? [getAdapterName(bc.messagingAdapter)] : []),
+        ...(cc?.adapters ?? []),
       ];
 
       const dependsOn = new Set<string>();
