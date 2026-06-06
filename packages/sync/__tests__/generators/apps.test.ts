@@ -230,6 +230,92 @@ describe("apps", () => {
     });
   });
 
+  it("should create a Nitro app (package.json, tsconfig, server route, nitro.config.ts)", async () => {
+    // Asserts the shape the Phase-2 de-risk proved buildable (nitro prepare → tsc
+    // → nitro build all green). The extra root file (nitro.config.ts) exercises
+    // AppFrameworkConfig.extraFiles.
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const logger = createSpyLogger();
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "api", framework: "nitro" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger,
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on nitro app");
+      assert.strictEqual(
+        result.created.length,
+        4,
+        "nitro app produces 4 files (package.json, tsconfig, entry, nitro.config.ts)",
+      );
+
+      const appDir = path.join(workspaceRoot, "apps", "api");
+      const pkgPath = path.join(appDir, "package.json");
+      const tsPath = path.join(appDir, "tsconfig.json");
+      const entryPath = path.join(appDir, "server", "routes", "index.ts");
+      const nitroConfigPath = path.join(appDir, "nitro.config.ts");
+
+      assert.ok(await pathExists(pkgPath), "package.json written");
+      assert.ok(await pathExists(tsPath), "tsconfig.json written");
+      assert.ok(
+        await pathExists(entryPath),
+        "server/routes/index.ts (entry) written",
+      );
+      assert.ok(
+        await pathExists(nitroConfigPath),
+        "nitro.config.ts (extra file) written",
+      );
+      assert.strictEqual(
+        await pathExists(path.join(appDir, "src", "index.ts")),
+        false,
+        "nitro uses server/, not the src/ entry of the other frameworks",
+      );
+
+      const pkg = await readJson(pkgPath);
+      const deps = pkg.dependencies as Record<string, string>;
+      assert.ok(deps.nitropack, "nitropack dependency present");
+      const scripts = pkg.scripts as Record<string, string>;
+      assert.strictEqual(
+        scripts.prepare,
+        "nitro prepare",
+        "prepare script generates .nitro types post-install so tsc works",
+      );
+
+      // Standalone, Nitro-managed tsconfig — extends the generated config, not base.
+      const ts = await readJson(tsPath);
+      assert.strictEqual(ts.extends, "./.nitro/types/tsconfig.json");
+      assert.strictEqual(
+        ts.compilerOptions,
+        undefined,
+        "no local compilerOptions — the generated config provides them",
+      );
+
+      const nitroConfig = await readText(nitroConfigPath);
+      assert.ok(
+        nitroConfig.includes("defineNitroConfig"),
+        "nitro.config.ts uses defineNitroConfig",
+      );
+      assert.ok(
+        /compatibilityDate/.test(nitroConfig),
+        "nitro.config.ts pins a compatibilityDate",
+      );
+
+      const entry = await readText(entryPath);
+      assert.ok(
+        entry.includes("defineEventHandler"),
+        "route uses Nitro's auto-imported defineEventHandler",
+      );
+      assert.ok(
+        entry.includes('app: "api"'),
+        "{appName} interpolated into the route body",
+      );
+    });
+  });
+
   it("should log error and skip unknown framework while continuing for siblings", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const logger = createSpyLogger();

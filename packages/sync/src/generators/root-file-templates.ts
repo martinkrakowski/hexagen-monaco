@@ -89,6 +89,8 @@ dist/
 .turbo/
 .next/
 out/
+.nitro/
+.output/
 
 # Test / coverage
 coverage/
