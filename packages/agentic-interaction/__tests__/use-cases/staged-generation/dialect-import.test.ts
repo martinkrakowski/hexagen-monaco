@@ -187,6 +187,27 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
   });
 
+  it("preserves an object-form canonical use_cases entry over the dialect", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    primary_use_cases:",
+        "      - name: DialectPlaceOrder",
+        "use_cases:",
+        "  Orders:", // object-form (a single use case, not a list) — still canonical
+        "    name: CanonicalCharge",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      analysis.useCases.map((u) => u.name),
+      ["CanonicalCharge"],
+      "object-form canonical entry wins; the dialect entry must not overwrite it",
+    );
+  });
+
   it("dedupes out-ports when a name is in both driven and secondary_references", () => {
     const config = parseStructuredConfig(
       [

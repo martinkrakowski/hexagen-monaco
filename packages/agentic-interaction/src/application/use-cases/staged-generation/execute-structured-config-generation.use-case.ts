@@ -308,6 +308,20 @@ function hasItems(v: unknown): v is unknown[] {
 }
 
 /**
+ * Whether a canonical `use_cases` map entry carries real content. Mirrors what
+ * `buildDomainAnalysisFromConfig` accepts (`Array.isArray(ucs) ? ucs : [ucs]`):
+ * a non-empty array OR a single use-case object. An explicit `[]` (or a
+ * null/primitive) is treated as "absent" so it neither blocks nor overwrites
+ * dialect-derived use cases — but an object-form entry like
+ * `use_cases: { Orders: { name: "Charge" } }` still wins, as it did before the
+ * empty-array fix (#256 review).
+ */
+function hasUseCaseContent(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length > 0;
+  return typeof v === "object" && v !== null;
+}
+
+/**
  * Keep only dialect entries that are objects with a non-empty string `name`.
  * Drops primitives / nameless objects so normalization never yields
  * `name: undefined` — which would derive broken downstream names like
@@ -338,12 +352,15 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
   // Canonical top-level `use_cases` win over the dialect even when keyed by a
   // context alias (`name` vs `short`) — `lookupUseCases` resolves both — so compare
-  // on the normalized form, not exact keys, before taking dialect use cases. An
-  // empty canonical array counts as ABSENT (`hasItems`): a placeholder like
-  // `use_cases: { Orders: [] }` must neither block (here) nor — at merge time —
-  // clobber the dialect's primary_use_cases for that context (#256 review).
+  // on the normalized form, not exact keys, before taking dialect use cases. Only
+  // an entry with real content counts (`hasUseCaseContent`: non-empty array or a
+  // single object): an empty `use_cases: { Orders: [] }` placeholder must neither
+  // block (here) nor — at merge time — clobber the dialect's primary_use_cases,
+  // while an object-form `{ Orders: { name: "Charge" } }` still wins (#256 review).
   const canonicalUseCases = Object.fromEntries(
-    Object.entries(config.use_cases ?? {}).filter(([, arr]) => hasItems(arr)),
+    Object.entries(config.use_cases ?? {}).filter(([, ucs]) =>
+      hasUseCaseContent(ucs),
+    ),
   );
   const canonicalUseCaseKeys = new Set(
     Object.keys(canonicalUseCases).map((k) => normalizeContextName(k)),
