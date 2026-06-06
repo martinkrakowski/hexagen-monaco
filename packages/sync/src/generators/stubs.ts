@@ -119,10 +119,18 @@ async function tryAnalyzeRelatedPort(
  * than `interface rest-controller.in-port.tsPort`. A no-op for names that are
  * already clean PascalCase. Mirrors what `architecture-files.ts` already does.
  */
-function normalizeStubName(rawName: string, namingTemplate: string): string {
-  const ext = namingTemplate.includes("{name}")
-    ? namingTemplate.replace("{name}", "")
-    : "";
+export function normalizeStubName(
+  rawName: string,
+  namingTemplate: string,
+): string {
+  // The extension is the part of the template AFTER the last `{name}` — not the
+  // whole template minus the token. Naming templates may carry a prefix/path or
+  // other placeholders before `{name}` (e.g. `ports/in/{name}.in-port.ts`,
+  // `{scope}-{name}.in-port.ts`); using `replace("{name}","")` there would yield a
+  // bogus suffix, `endsWith` would miss, and the doubled-extension would survive.
+  const placeholder = "{name}";
+  const idx = namingTemplate.lastIndexOf(placeholder);
+  const ext = idx >= 0 ? namingTemplate.slice(idx + placeholder.length) : "";
   const base =
     ext && rawName.endsWith(ext) ? rawName.slice(0, -ext.length) : rawName;
   const pascal = base
