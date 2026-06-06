@@ -73,8 +73,10 @@ export async function generateSharedKernel(
     await fs.stat(kernelPath);
     result.skipped.push(kernelPath);
     return result;
-  } catch {
-    // ENOENT → create below.
+  } catch (err) {
+    // Only ENOENT (absent → create below) is expected; surface anything else
+    // (EACCES, EISDIR, …) instead of masking it with a confusing write error.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 
   await fs.mkdir(path.dirname(kernelPath), { recursive: true });

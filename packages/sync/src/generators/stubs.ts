@@ -237,16 +237,17 @@ export async function generateStubs(
               portAnalysis,
               name,
               relativeImportSpecifier(filePath, portAnalysis.filePath),
+              filePath,
             );
           } else {
-            // Resolve each out-port to its interface name + import path from the
-            // manifest and the out-port naming convention. The out-port stub
-            // files may not exist yet (use_cases emit before ports.out), so we
-            // derive rather than analyze: the generic out-port stub is
-            // `${base}Port`, so `${normalizeStubName(raw, outNaming)}Port` matches
-            // the interface the same sync run will write. The in-port interface
-            // is taken from the analysis and imported (its file DOES exist — it's
-            // what tryAnalyzeRelatedPort just resolved).
+            // Resolve each out-port to its interface name + import path. Prefer
+            // the ACTUAL interface from the out-port file when it already exists
+            // (re-sync / hand-authored / a custom `stubs.templates.outPort` that
+            // doesn't follow `{name}Port`); otherwise derive `${base}Port`, which
+            // matches the generic out-port stub the same run will write (use_cases
+            // emit before ports.out, so on a fresh pass the file isn't there yet).
+            // The in-port interface comes from the analysis tryAnalyzeRelatedPort
+            // just resolved.
             const outPortNaming = resolveNaming(
               "outPort",
               contextNaming,
@@ -269,13 +270,12 @@ export async function generateStubs(
                 "stubs.naming.outPort",
                 config,
               );
+              const outPortPath = path.join(outPortDir, outFile);
+              const analyzed = analyzePortFile(outPortPath);
               return {
-                interfaceName: `${base}Port`,
+                interfaceName: analyzed?.interfaceName ?? `${base}Port`,
                 paramName: base.charAt(0).toLowerCase() + base.slice(1),
-                importSpecifier: relativeImportSpecifier(
-                  filePath,
-                  path.join(outPortDir, outFile),
-                ),
+                importSpecifier: relativeImportSpecifier(filePath, outPortPath),
               };
             });
             content = generateUseCaseFromPort(
@@ -283,6 +283,7 @@ export async function generateStubs(
               name,
               outPorts,
               relativeImportSpecifier(filePath, portAnalysis.filePath),
+              filePath,
             );
           }
           config.logger.debug(`Generated ${kind} '${name}' from port analysis`);

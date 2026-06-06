@@ -310,4 +310,90 @@ describe("use-case resolves to its in-port and compiles (#248)", () => {
       },
     );
   });
+
+  it("uses the out-port's ACTUAL interface name when its file already exists (custom template, #251)", async () => {
+    await withTempWorkspace(
+      async ({ workspaceRoot }: { workspaceRoot: string }) => {
+        const moduleDir = path.join(workspaceRoot, "packages", "demo");
+        const inDir = path.join(moduleDir, "src", "application", "ports", "in");
+        const outDir = path.join(
+          moduleDir,
+          "src",
+          "application",
+          "ports",
+          "out",
+        );
+        await fs.mkdir(inDir, { recursive: true });
+        await fs.mkdir(outDir, { recursive: true });
+        await fs.writeFile(
+          path.join(inDir, "PlaceOrder.in-port.ts"),
+          "export interface PlaceOrderPort {\n  execute(): Promise<void>;\n}\n",
+        );
+        // A pre-existing out-port whose interface does NOT follow `${name}Port`
+        // (as a custom stubs.templates.outPort would produce). The use-case must
+        // inject the REAL name, not the derived `AccountRepoPort`.
+        await fs.writeFile(
+          path.join(outDir, "AccountRepo.out-port.ts"),
+          "export interface IAccountRepository {\n  save(): Promise<void>;\n}\n",
+        );
+
+        const manifest2 = {
+          system: "acme",
+          scope: "acme",
+          architecture: "modular-monolith",
+          generator: {
+            sync: {
+              layers: {
+                application: {
+                  folder: "src/application",
+                  subfolders: ["ports/in", "ports/out", "use-cases"],
+                },
+              },
+              stubs: { enabled: true },
+            },
+          },
+          bounded_contexts: [
+            {
+              name: "demo",
+              type: "core",
+              layers: {
+                application: {
+                  use_cases: ["place-order.use-case.ts"],
+                  ports: {
+                    in: ["place-order.in-port.ts"],
+                    out: ["account-repo.out-port.ts"],
+                  },
+                },
+              },
+            },
+          ],
+        } as unknown as Manifest;
+
+        await generateStubs(
+          moduleDir,
+          "demo",
+          makeConfig(workspaceRoot, manifest2, { logger: createSpyLogger() }),
+        );
+
+        const uc = await fs.readFile(
+          path.join(
+            moduleDir,
+            "src/application/use-cases/PlaceOrder.use-case.ts",
+          ),
+          "utf8",
+        );
+        assert.match(
+          uc,
+          /import type \{ IAccountRepository \} from '\.\.\/ports\/out\/AccountRepo\.out-port\.js'/,
+          "imports the out-port's actual interface name (analyzed), not the derived one",
+        );
+        assert.match(uc, /private readonly accountRepo: IAccountRepository/);
+        assert.doesNotMatch(
+          uc,
+          /AccountRepoPort/,
+          "does not fall back to the derived ${name}Port when the file exists",
+        );
+      },
+    );
+  });
 });

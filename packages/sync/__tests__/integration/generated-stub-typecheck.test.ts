@@ -261,4 +261,58 @@ describe("generated stubs typecheck (CI-gap guard, #242)", () => {
       );
     }
   });
+
+  it("re-exports Result even when the shared context declares no domain layer (#246/#251)", async () => {
+    target = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-246h-"));
+    const noDomainShared = {
+      ...manifest,
+      bounded_contexts: [
+        manifest.bounded_contexts![0], // billing (carries the use-case)
+        { name: "shared", type: "supporting" }, // NO layers declared
+      ],
+    } as unknown as Manifest;
+    await new SyncEngine(makeExternalFlags(), {
+      targetRoot: target,
+      manifest: noDomainShared,
+    }).run();
+
+    // The recursive barrel walks domain/ regardless of declared layers, so the
+    // kernel under domain/result.ts is still picked up and re-exported — Result
+    // resolves even without an explicit domain layer on the shared context.
+    const kernel = await fs.readFile(
+      path.join(target, "packages/shared/src/domain/result.ts"),
+      "utf8",
+    );
+    assert.match(kernel, /export type Result<T, E = unknown>/);
+    const sharedRoot = await fs.readFile(
+      path.join(target, "packages/shared/src/index.ts"),
+      "utf8",
+    );
+    assert.match(sharedRoot, /export \* from "\.\/domain\/index\.js"/);
+  });
+
+  it("preserves a generic use-case stub byte-for-byte on re-sync (no clobber)", async () => {
+    target = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-246r-"));
+    const run = () =>
+      new SyncEngine(makeExternalFlags(), {
+        targetRoot: target!,
+        manifest,
+      }).run();
+    await run();
+    const ucPath = path.join(
+      target,
+      "packages/billing/src/application/use-cases/ChargeCard.use-case.ts",
+    );
+    const first = await fs.readFile(ucPath, "utf8");
+    await run(); // re-sync
+    const second = await fs.readFile(ucPath, "utf8");
+    assert.strictEqual(
+      second,
+      first,
+      "re-sync must preserve the existing use-case stub",
+    );
+    // Emission order keeps a fresh use-case generic, and re-sync preserves existing
+    // files — so it never silently flips to (or from) the port-derived form.
+    assert.match(second, /import type \{ Result \} from '@acme\/shared'/);
+  });
 });

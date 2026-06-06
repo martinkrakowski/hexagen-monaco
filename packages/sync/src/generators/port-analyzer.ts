@@ -36,6 +36,88 @@ export function relativeImportSpecifier(
 }
 
 /**
+ * Rewrite a module specifier copied from `fromFile` so it still resolves from
+ * `toFile`. Bare/package specifiers (not starting with `.`) pass through; only
+ * RELATIVE ones are recomputed — a port's own `./dto.js` import is correct from
+ * the port's directory but breaks once copied verbatim into a generated
+ * adapter/use-case that lives in a different directory (#251 review).
+ */
+export function rewriteRelativeSpecifier(
+  specifier: string,
+  fromFile: string,
+  toFile: string,
+): string {
+  if (!specifier.startsWith(".")) return specifier;
+  const absolute = path.resolve(path.dirname(fromFile), specifier);
+  let rel = path
+    .relative(path.dirname(toFile), absolute)
+    .split(path.sep)
+    .join("/");
+  if (!rel.startsWith(".")) rel = `./${rel}`;
+  return rel;
+}
+
+/**
+ * Reserved words that cannot be used as a bare parameter identifier. A manifest
+ * port normalizing to e.g. `Class`/`New`/`Interface` would otherwise yield
+ * `private readonly class: ...` (TS1212). Used by safeParamName.
+ */
+const RESERVED_IDENTIFIERS = new Set([
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "in",
+  "instanceof",
+  "new",
+  "null",
+  "return",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+  "let",
+  "static",
+  "implements",
+  "interface",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "await",
+]);
+
+/** Make a derived constructor parameter name a valid, non-reserved identifier. */
+function safeParamName(name: string): string {
+  const candidate = name.length === 0 ? "dep" : name;
+  return RESERVED_IDENTIFIERS.has(candidate) ? `${candidate}_` : candidate;
+}
+
+/**
  * Represents a method signature extracted from a port interface
  */
 export interface PortMethodSignature {
@@ -203,6 +285,7 @@ export function generateAdapterFromPort(
   analysis: PortAnalysisResult,
   adapterName: string,
   portImportSpecifier?: string,
+  outputFilePath?: string,
 ): string {
   const { interfaceName, methods, imports } = analysis;
 
@@ -214,13 +297,21 @@ export function generateAdapterFromPort(
     ? `import type { ${interfaceName} } from '${portImportSpecifier}';`
     : "";
 
-  // Generate import statements (port interface first, then the port's own type imports)
+  // Generate import statements (port interface first, then the port's own type
+  // imports — relative specifiers rewritten to the adapter's location, see #251).
   const importStatements = [
     portImport,
     ...imports.map((imp) => {
+      const specifier = outputFilePath
+        ? rewriteRelativeSpecifier(
+            imp.moduleSpecifier,
+            analysis.filePath,
+            outputFilePath,
+          )
+        : imp.moduleSpecifier;
       const typeOnly = imp.isTypeOnly ? "type " : "";
       const names = imp.namedImports.join(", ");
-      return `import ${typeOnly}{ ${names} } from '${imp.moduleSpecifier}';`;
+      return `import ${typeOnly}{ ${names} } from '${specifier}';`;
     }),
   ]
     .filter(Boolean)
@@ -284,6 +375,8 @@ export interface UseCaseOutPort {
  * @param outPorts - Resolved out-port dependencies (interface + import + param name)
  * @param portImportSpecifier - Module specifier for the in-port interface, as seen
  *   from the use-case file (so `implements <interfaceName>` resolves)
+ * @param outputFilePath - Absolute path the use-case will be written to (used to
+ *   rewrite the in-port's own relative imports so they resolve from here)
  * @returns TypeScript code for the use case implementation
  */
 export function generateUseCaseFromPort(
@@ -291,36 +384,75 @@ export function generateUseCaseFromPort(
   useCaseName: string,
   outPorts: UseCaseOutPort[],
   portImportSpecifier?: string,
+  outputFilePath?: string,
 ): string {
   const { interfaceName, methods, imports } = analysis;
 
-  // The use-case `implements ${interfaceName}` (its in-port), so that interface
-  // must be imported — the caller passes its specifier (this function doesn't
-  // know where the use-case will be written). Each out-port is imported by its
-  // RESOLVED interface name, never the raw manifest name (which may be
-  // kebab/extensioned — not a valid identifier or type). Without both, the
-  // use-case fails to typecheck (#248).
-  const importLines = [
-    portImportSpecifier
-      ? `import type { ${interfaceName} } from '${portImportSpecifier}';`
-      : "",
-    ...outPorts.map(
-      (p) => `import type { ${p.interfaceName} } from '${p.importSpecifier}';`,
-    ),
-    ...imports.map((imp) => {
-      const typeOnly = imp.isTypeOnly ? "type " : "";
-      const names = imp.namedImports.join(", ");
-      return `import ${typeOnly}{ ${names} } from '${imp.moduleSpecifier}';`;
-    }),
-  ].filter(Boolean);
-  // De-dupe identical import lines (e.g. an out-port interface that also appears
-  // among the in-port's own type imports).
-  const importStatements = [...new Set(importLines)].join("\n");
+  // Build imports + constructor params with collision-safe local names (#248,
+  // #251 review). The use-case `implements ${interfaceName}` (its in-port) and
+  // injects out-ports by their resolved interface — but an out-port interface can
+  // share a name with the in-port (or another out-port) while coming from a
+  // different module, two manifest out-ports can resolve to the same dependency,
+  // and derived param names can collide or hit a reserved word.
+  const importLines: string[] = [];
+  const taken = new Set<string>(); // local names already bound in this file
 
-  // Generate constructor parameters: inject each out-port by its interface type.
-  const constructorParams = outPorts
-    .map((p) => `private readonly ${p.paramName}: ${p.interfaceName}`)
-    .join(",\n    ");
+  // Import `name` from `specifier`, aliasing only on a genuine cross-module clash;
+  // returns the local name to USE in type position.
+  const importType = (name: string, specifier: string): string => {
+    let local = name;
+    let n = 2;
+    while (taken.has(local)) local = `${name}_${n++}`;
+    taken.add(local);
+    importLines.push(
+      local === name
+        ? `import type { ${name} } from '${specifier}';`
+        : `import type { ${name} as ${local} } from '${specifier}';`,
+    );
+    return local;
+  };
+
+  // 1. The in-port interface the use-case implements (registered first, so any
+  //    out-port that shares its name is aliased against it).
+  const implementsName = portImportSpecifier
+    ? importType(interfaceName, portImportSpecifier)
+    : interfaceName;
+
+  // 2. Out-port deps: collapse exact-duplicate deps (same interface + module) to
+  //    one import + one param, alias name clashes, keep params unique + valid.
+  const seenDeps = new Map<string, string>(); // `${interface}|${specifier}` -> local type
+  const usedParams = new Set<string>();
+  const constructorEntries: string[] = [];
+  for (const p of outPorts) {
+    const depKey = `${p.interfaceName}|${p.importSpecifier}`;
+    if (seenDeps.has(depKey)) continue; // duplicate dependency — one param suffices
+    const localType = importType(p.interfaceName, p.importSpecifier);
+    seenDeps.set(depKey, localType);
+
+    let param = safeParamName(p.paramName);
+    const paramBase = param;
+    let n = 2;
+    while (usedParams.has(param)) param = `${paramBase}${n++}`;
+    usedParams.add(param);
+    constructorEntries.push(`private readonly ${param}: ${localType}`);
+  }
+
+  // 3. The in-port's own type imports (relative specifiers rewritten to here).
+  for (const imp of imports) {
+    const specifier = outputFilePath
+      ? rewriteRelativeSpecifier(
+          imp.moduleSpecifier,
+          analysis.filePath,
+          outputFilePath,
+        )
+      : imp.moduleSpecifier;
+    const typeOnly = imp.isTypeOnly ? "type " : "";
+    const line = `import ${typeOnly}{ ${imp.namedImports.join(", ")} } from '${specifier}';`;
+    if (!importLines.includes(line)) importLines.push(line);
+  }
+
+  const importStatements = importLines.join("\n");
+  const constructorParams = constructorEntries.join(",\n    ");
 
   // Generate method implementations
   const methodImpls = methods
@@ -342,7 +474,7 @@ export function generateUseCaseFromPort(
     .join("\n\n");
 
   const constructorBlock =
-    outPorts.length > 0
+    constructorEntries.length > 0
       ? `  constructor(
     ${constructorParams}
   ) {}`
@@ -350,7 +482,7 @@ export function generateUseCaseFromPort(
 
   return `// @generated use-case stub — edit freely
 /**
- * ${useCaseName} implements ${interfaceName}
+ * ${useCaseName} implements ${implementsName}
  *
  * This use case was generated from the port interface.
  * Replace TODO implementations with actual business logic.
@@ -358,7 +490,7 @@ export function generateUseCaseFromPort(
 
 ${importStatements}
 
-export class ${useCaseName} implements ${interfaceName} {
+export class ${useCaseName} implements ${implementsName} {
 ${constructorBlock}
 
 ${methodImpls}
