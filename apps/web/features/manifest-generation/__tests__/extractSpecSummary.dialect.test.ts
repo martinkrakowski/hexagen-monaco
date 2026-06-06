@@ -60,4 +60,53 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
     assert.equal(s.valueObjectCount, 1);
     assert.equal(s.useCaseCount, 1);
   });
+
+  it("treats empty canonical arrays as absent (counts the dialect)", () => {
+    const parsed = yaml.load(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    aggregates: []",
+        "    value_objects: []",
+        "    domain_models:",
+        "      entities:",
+        "        - name: Order",
+        "      value_objects:",
+        "        - name: Money",
+        "    primary_use_cases:",
+        "      - name: PlaceOrder",
+        "",
+      ].join("\n"),
+    ) as Record<string, unknown>;
+    const s = extractSpecSummary(parsed);
+    assert.equal(
+      s.aggregateCount,
+      1,
+      "empty aggregates:[] does not mask dialect",
+    );
+    assert.equal(s.valueObjectCount, 1);
+    assert.equal(s.useCaseCount, 1);
+  });
+
+  it("does not double-count a context carrying both use_cases and primary_use_cases", () => {
+    const parsed = yaml.load(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    primary_use_cases:",
+        "      - name: PlaceOrder",
+        "      - name: CancelOrder",
+        "use_cases:",
+        "  Orders:",
+        "    - name: PlaceOrder",
+        "",
+      ].join("\n"),
+    ) as Record<string, unknown>;
+    const s = extractSpecSummary(parsed);
+    assert.equal(
+      s.useCaseCount,
+      1,
+      "canonical use_cases[Orders] wins over dialect (matches normalizeDialect), not summed",
+    );
+  });
 });

@@ -97,6 +97,54 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
   });
 
+  it("treats empty canonical arrays as absent and drops nameless dialect entries", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    aggregates: []", // empty canonical placeholder must not block dialect
+        "    value_objects: []",
+        "    events_published: []",
+        "    domain_models:",
+        "      entities:",
+        "        - name: Order",
+        "        - notname: bad", // nameless → dropped (no undefined-named aggregate)
+        "      value_objects:",
+        "        - name: Money",
+        "    domain_events:",
+        "      - name: OrderPlaced",
+        "    primary_use_cases:",
+        "      - name: PlaceOrder",
+        "      - foo: bar", // nameless → dropped
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+
+    assert.deepEqual(
+      analysis.aggregateRoots.map((a) => a.name),
+      ["Order"],
+      "empty aggregates:[] did not block dialect entities; nameless entry dropped",
+    );
+    assert.deepEqual(
+      analysis.valueObjects.map((v) => v.name),
+      ["Money"],
+    );
+    assert.deepEqual(
+      analysis.domainEvents.map((e) => e.name),
+      ["OrderPlaced"],
+    );
+    assert.deepEqual(
+      analysis.useCases.map((u) => u.name),
+      ["PlaceOrder"],
+      "nameless use case dropped",
+    );
+    assert.ok(
+      analysis.aggregateRoots.every((a) => typeof a.name === "string"),
+      "no undefined-named aggregates propagate",
+    );
+  });
+
   it("leaves a canonical-shape config untouched (idempotent)", () => {
     const config = parseStructuredConfig(
       [

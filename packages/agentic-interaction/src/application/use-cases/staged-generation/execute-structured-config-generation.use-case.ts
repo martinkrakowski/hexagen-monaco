@@ -301,11 +301,32 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
   );
 }
 
+/** A non-empty array. An explicit `[]` counts as "absent" so a canonical empty
+ * placeholder doesn't block dialect mapping (#256 review). */
+function hasItems(v: unknown): v is unknown[] {
+  return Array.isArray(v) && v.length > 0;
+}
+
+/**
+ * Keep only dialect entries that are objects with a non-empty string `name`.
+ * Drops primitives / nameless objects so normalization never yields
+ * `name: undefined` — which would derive broken downstream names like
+ * `undefinedRepositoryPort` (#256 review).
+ */
+function withName<T>(arr: T[] | undefined): Array<T & { name: string }> {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((x): x is T & { name: string } => {
+    if (typeof x !== "object" || x === null) return false;
+    const name = (x as { name?: unknown }).name;
+    return typeof name === "string" && name.trim().length > 0;
+  });
+}
+
 /**
  * Map the rich "hexagonal" import dialect onto the canonical StructuredConfig
  * fields the pipeline actually reads — `aggregates`, `value_objects`,
  * `events_published`, `layers.application.ports`, and the top-level `use_cases`
- * map. Only fills a canonical field when it is absent, so a spec already in
+ * map. Only fills a canonical field when it is empty/absent, so a spec already in
  * canonical form is untouched. Without this, a spec authored with `domain_models`
  * / `primary_use_cases` / `domain_events` / `ports.{primary,driven}` silently
  * loses all of its domain content (buildDomainAnalysisFromConfig reads none of
@@ -320,49 +341,65 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
     const dm = ctx.domain_models;
 
     // domain_models.entities → aggregates (each declared entity becomes an
-    // aggregate root; identity is the `id` attribute when present).
-    if (!ctx.aggregates && dm && Array.isArray(dm.entities)) {
-      ctx.aggregates = dm.entities.map((e) => ({
-        name: e.name,
-        root: true,
-        fields: e.attributes
-          ? Object.entries(e.attributes).map(([name, type]) => ({
-              name,
-              type: String(type),
-              key: name === "id",
-            }))
-          : undefined,
-      }));
+    // aggregate root; identity is the `id` attribute when present). An explicit
+    // empty `aggregates: []` is treated as absent; nameless entries are dropped.
+    if (!hasItems(ctx.aggregates)) {
+      const entities = withName(dm?.entities);
+      if (entities.length > 0) {
+        ctx.aggregates = entities.map((e) => ({
+          name: e.name,
+          root: true,
+          fields: e.attributes
+            ? Object.entries(e.attributes).map(([name, type]) => ({
+                name,
+                type: String(type),
+                key: name === "id",
+              }))
+            : undefined,
+        }));
+      }
     }
 
     // domain_models.value_objects → value_objects (dialect uses `type` for the
     // underlying kind, e.g. `type: enum`).
-    if (!ctx.value_objects && dm && Array.isArray(dm.value_objects)) {
-      ctx.value_objects = dm.value_objects.map((vo) => ({
-        name: vo.name,
-        underlying: vo.type,
-        values: vo.values,
-      }));
+    if (!hasItems(ctx.value_objects)) {
+      const vos = withName(dm?.value_objects);
+      if (vos.length > 0) {
+        ctx.value_objects = vos.map((vo) => ({
+          name: vo.name,
+          underlying: vo.type,
+          values: vo.values,
+        }));
+      }
     }
 
     // domain_events (objects) → events_published (names).
-    if (!ctx.events_published && Array.isArray(ctx.domain_events)) {
-      ctx.events_published = ctx.domain_events
-        .map((e) => e.name)
-        .filter((n): n is string => typeof n === "string" && n.length > 0);
+    if (!hasItems(ctx.events_published) && Array.isArray(ctx.domain_events)) {
+      const names = ctx.domain_events
+        .map((e) => (e as { name?: unknown })?.name)
+        .filter(
+          (n): n is string => typeof n === "string" && n.trim().length > 0,
+        );
+      if (names.length > 0) ctx.events_published = names;
     }
 
     // ports.{primary → in; driven + secondary_references → out} →
     // layers.application.ports, so the pre-defined-port path honours the contracts
-    // the author already declared instead of re-inventing them in Stage 3.
-    if (ctx.ports && !ctx.layers?.application?.ports) {
-      const inPorts = (ctx.ports.primary ?? [])
-        .map((p) => p.name)
-        .filter((n): n is string => typeof n === "string" && n.length > 0);
+    // the author declared. Empty declared ports count as absent.
+    const declaredPorts = ctx.layers?.application?.ports;
+    const declaredPortCount =
+      (declaredPorts?.in?.length ?? 0) + (declaredPorts?.out?.length ?? 0);
+    if (ctx.ports && declaredPortCount === 0) {
+      const inPorts = withName(ctx.ports.primary).map((p) => p.name);
       const outPorts = [
-        ...(ctx.ports.driven ?? []).map((p) => p.name),
-        ...(ctx.ports.secondary_references ?? []),
-      ].filter((n): n is string => typeof n === "string" && n.length > 0);
+        ...withName(ctx.ports.driven).map((p) => p.name),
+        ...(Array.isArray(ctx.ports.secondary_references)
+          ? ctx.ports.secondary_references
+          : []
+        ).filter(
+          (n): n is string => typeof n === "string" && n.trim().length > 0,
+        ),
+      ];
       if (inPorts.length > 0 || outPorts.length > 0) {
         ctx.layers = {
           ...ctx.layers,
@@ -375,14 +412,11 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
     }
 
     // primary_use_cases → top-level use_cases map (per-context `use_cases` is
-    // forbidden in the canonical shape — `use_cases?: never`).
-    if (
-      Array.isArray(ctx.primary_use_cases) &&
-      ctx.primary_use_cases.length > 0
-    ) {
-      useCasesFromDialect[ctx.name] = ctx.primary_use_cases.map((uc) => ({
-        name: uc.name,
-      }));
+    // forbidden in the canonical shape — `use_cases?: never`). Nameless use cases
+    // are dropped; skip when the context name itself isn't usable as a key.
+    const ucs = withName(ctx.primary_use_cases);
+    if (ucs.length > 0 && ctx.name) {
+      useCasesFromDialect[ctx.name] = ucs.map((uc) => ({ name: uc.name }));
     }
   }
 

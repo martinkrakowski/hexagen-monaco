@@ -24,40 +24,51 @@ export function extractSpecSummary(
   // Counts accept both the canonical shape and the rich "hexagonal" dialect
   // (domain_models.{entities,value_objects}, per-context primary_use_cases),
   // mirroring normalizeDialect in the structured-config pipeline so the review
-  // reflects what will actually be imported rather than silently reading 0.
+  // reflects what will actually be imported. An explicit empty canonical array
+  // (e.g. `aggregates: []`) counts as absent so it doesn't mask dialect content.
+  const hasItems = (v: unknown): v is unknown[] =>
+    Array.isArray(v) && v.length > 0;
+
   const aggregateCount = contexts.reduce((sum, ctx) => {
-    if (Array.isArray(ctx.aggregates)) {
-      const aggregatesList = ctx.aggregates as Array<{ root?: boolean }>;
-      return sum + aggregatesList.filter((a) => a.root !== false).length;
+    if (hasItems(ctx.aggregates)) {
+      return (
+        sum +
+        (ctx.aggregates as Array<{ root?: boolean }>).filter(
+          (a) => a.root !== false,
+        ).length
+      );
     }
-    const dm = ctx.domain_models as { entities?: unknown[] } | undefined;
-    return sum + (dm && Array.isArray(dm.entities) ? dm.entities.length : 0);
+    const entities = (ctx.domain_models as { entities?: unknown } | undefined)
+      ?.entities;
+    return sum + (hasItems(entities) ? entities.length : 0);
   }, 0);
 
   const valueObjectCount = contexts.reduce((sum, ctx) => {
-    if (Array.isArray(ctx.value_objects)) {
-      return sum + (ctx.value_objects as Array<unknown>).length;
+    if (hasItems(ctx.value_objects)) {
+      return sum + (ctx.value_objects as unknown[]).length;
     }
-    const dm = ctx.domain_models as { value_objects?: unknown[] } | undefined;
-    return (
-      sum +
-      (dm && Array.isArray(dm.value_objects) ? dm.value_objects.length : 0)
-    );
+    const vos = (ctx.domain_models as { value_objects?: unknown } | undefined)
+      ?.value_objects;
+    return sum + (hasItems(vos) ? vos.length : 0);
   }, 0);
 
-  const useCaseCount =
-    Object.values(useCasesMap).reduce(
-      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-      0,
-    ) +
-    contexts.reduce(
-      (sum, ctx) =>
-        sum +
-        (Array.isArray(ctx.primary_use_cases)
-          ? (ctx.primary_use_cases as unknown[]).length
-          : 0),
-      0,
-    );
+  // Mirror normalizeDialect's merge so the review matches what imports: per
+  // context, a canonical top-level `use_cases[context]` wins over the dialect's
+  // `primary_use_cases` (a spec carrying both is not double-counted).
+  const effectiveUseCases: Record<string, unknown[]> = {};
+  for (const ctx of contexts) {
+    const name = typeof ctx.name === "string" ? ctx.name : undefined;
+    if (name && Array.isArray(ctx.primary_use_cases)) {
+      effectiveUseCases[name] = ctx.primary_use_cases as unknown[];
+    }
+  }
+  for (const [key, arr] of Object.entries(useCasesMap)) {
+    effectiveUseCases[key] = Array.isArray(arr) ? arr : [];
+  }
+  const useCaseCount = Object.values(effectiveUseCases).reduce(
+    (sum, arr) => sum + arr.length,
+    0,
+  );
 
   const mappingCount = Array.isArray(parsed.context_mappings)
     ? parsed.context_mappings.length
