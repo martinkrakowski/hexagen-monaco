@@ -38,22 +38,31 @@ export function SpecConvertingStep({
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Converting...</h2>
-      <div className="p-4 bg-muted rounded flex items-center gap-3">
-        <div className="animate-spin-border w-5 h-5 rounded-full border-2 border-primary border-t-transparent"></div>
-        <div className="flex flex-col">
-          <p>
-            {progressMessage ??
-              "Converting loose specification into structured architecture..."}
-          </p>
-          {/* Not an aria-live region: a per-second update would make screen
-              readers announce the clock every tick. The static reassurance
-              copy below conveys "still working" to assistive tech instead. */}
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="conversion-elapsed"
-          >
-            Working with the model — {formatElapsed(elapsedSeconds)} elapsed
-          </p>
+      {/* Revolving conic-gradient border (app's cinematic-border primitive): a
+          continuously-animated outer ring so the card reads as alive even at a
+          glance. `animate-spin-border` drives `--border-angle`; the inner solid
+          panel masks the centre, leaving only the rotating gradient edge. The
+          reduced-motion guard in globals.css freezes it. */}
+      <div className="bg-cinematic-border-vivid animate-spin-border rounded-sm">
+        <div className="bg-muted rounded-sm p-4 flex items-center gap-3">
+          {/* animate-spin (transform) — the previous animate-spin-border only
+              moved a custom angle property the ring didn't use, so it sat still. */}
+          <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+          <div className="flex flex-col">
+            <p>
+              {progressMessage ??
+                "Converting loose specification into structured architecture..."}
+            </p>
+            {/* Not an aria-live region: a per-second update would make screen
+                readers announce the clock every tick. The static reassurance
+                copy below conveys "still working" to assistive tech instead. */}
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="conversion-elapsed"
+            >
+              Working with the model — {formatElapsed(elapsedSeconds)} elapsed
+            </p>
+          </div>
         </div>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">
