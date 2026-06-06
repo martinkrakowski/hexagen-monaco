@@ -91,6 +91,12 @@ interface StructuredConfigContextMapping {
   shared?: string[];
   events?: string[];
   coupling?: string;
+  // Rich "hexagonal" dialect aliases: `relationship` → pattern, `via` → mechanism.
+  // Without these, two mappings between the same pair that differ only by `via`
+  // (e.g. CampaignOrchestration→CreativeGeneration via two ports) collapse into
+  // byte-identical `{ upstream, downstream }` duplicates in the manifest.
+  relationship?: string;
+  via?: string;
 }
 
 interface StructuredConfigEventBusSubscription {
@@ -470,6 +476,17 @@ function dialectToAggregate(
  */
 export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   if (!Array.isArray(config.bounded_contexts)) return config;
+
+  // Dialect: `project` may be an object ({ name, description, version, ... }), but
+  // the pipeline expects the project NAME as a string. Coerce to `.name` so a
+  // downstream `${config.project}` / projectName never becomes "[object Object]"
+  // — which otherwise kebab-cases into a garbage `system`/`scope` in the manifest.
+  const projectValue: unknown = config.project;
+  if (projectValue && typeof projectValue === "object") {
+    const name = (projectValue as { name?: unknown }).name;
+    config.project =
+      typeof name === "string" && name.trim().length > 0 ? name : undefined;
+  }
 
   const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
   // Canonical top-level `use_cases` win over the dialect even when keyed by a
@@ -882,8 +899,10 @@ export function buildContextMappingsFromConfig(
   return (config.context_mappings ?? []).map((cm) => ({
     upstream: cm.upstream,
     downstream: cm.downstream,
-    pattern: cm.pattern,
-    mechanism: cm.mechanism,
+    // Accept the dialect aliases so relationship/port detail survives (and keeps
+    // same-pair mappings distinct instead of collapsing to duplicates).
+    pattern: cm.pattern ?? cm.relationship,
+    mechanism: cm.mechanism ?? cm.via,
     notes: cm.notes,
     events: cm.events,
   }));

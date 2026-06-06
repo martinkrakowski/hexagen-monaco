@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   parseStructuredConfig,
   buildDomainAnalysisFromConfig,
+  buildContextMappingsFromConfig,
+  buildNormalizedPromptFromConfig,
 } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
 
 /**
@@ -264,6 +266,57 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     assert.deepEqual(
       (analysis.aggregateRoots ?? []).map((a) => a.name),
       ["CampaignBrief", "Product"],
+    );
+  });
+
+  it("coerces an object-form `project` to its name (avoids [object Object])", () => {
+    const config = parseStructuredConfig(
+      [
+        "project:",
+        "  name: CampaignForge",
+        "  description: An orchestrator",
+        '  version: "0.1.0"',
+        "bounded_contexts:",
+        "  - name: Orders",
+        "",
+      ].join("\n"),
+    );
+    assert.equal(config.project, "CampaignForge");
+    assert.equal(
+      buildNormalizedPromptFromConfig(config).projectName,
+      "CampaignForge",
+      "projectName must be the name string, not the stringified object",
+    );
+  });
+
+  it("maps context-mapping dialect aliases (relationship→pattern, via→mechanism) so same-pair entries stay distinct", () => {
+    const config = parseStructuredConfig(
+      [
+        "context_mappings:",
+        "  - upstream: CampaignOrchestration",
+        "    downstream: CreativeGeneration",
+        "    relationship: conformist",
+        "    via: ImageGeneratorPort",
+        "  - upstream: CampaignOrchestration",
+        "    downstream: CreativeGeneration",
+        "    relationship: conformist",
+        "    via: CompositorPort",
+        "bounded_contexts:",
+        "  - name: CampaignOrchestration",
+        "  - name: CreativeGeneration",
+        "",
+      ].join("\n"),
+    );
+    const mappings = buildContextMappingsFromConfig(config);
+    assert.deepEqual(
+      mappings.map(
+        (m) => `${m.upstream}->${m.downstream}:${m.pattern}/${m.mechanism}`,
+      ),
+      [
+        "CampaignOrchestration->CreativeGeneration:conformist/ImageGeneratorPort",
+        "CampaignOrchestration->CreativeGeneration:conformist/CompositorPort",
+      ],
+      "the two same-pair mappings are distinct (different mechanism), not duplicates",
     );
   });
 
