@@ -87,7 +87,10 @@ async function exists(root: string, relpath: string): Promise<boolean> {
  * `manifest` is a required field on SyncConfig but unused by the walker itself,
  * so an empty stub suffices.
  */
-function makeConfig(workspaceRoot: string): SyncConfig {
+function makeConfig(
+  workspaceRoot: string,
+  mode: SyncConfig["mode"] = "external",
+): SyncConfig {
   const manifest: Manifest = { bounded_contexts: [] };
   return {
     dryRun: false,
@@ -95,7 +98,9 @@ function makeConfig(workspaceRoot: string): SyncConfig {
     forceRoot: false,
     allowDirty: true,
     strict: false,
-    mode: "external",
+    // The package-root `src/index.ts` is emitted in "external" (API-driven
+    // generation) only — see the regression suite below and recursive.ts.
+    mode,
     logger: silentLogger,
     manifest,
     workspaceRoot,
@@ -154,8 +159,13 @@ describe("generateRecursiveBarrels", () => {
       barrel.indexOf("bar") < barrel.indexOf("foo"),
       "exports should be alphabetically sorted",
     );
-    assert.strictEqual(result.totalOps, 1);
-    assert.strictEqual(result.created.length, 1);
+    // domain/index.ts + the package-root src/index.ts (#249).
+    assert.strictEqual(result.totalOps, 2);
+    assert.strictEqual(result.created.length, 2);
+    assert.ok(
+      await exists(moduleDir, "src/index.ts"),
+      "package-root barrel created alongside the layer barrel",
+    );
   });
 
   it("2. recurses into subdirectories; parent re-exports child", async () => {
@@ -421,8 +431,9 @@ describe("generateRecursiveBarrels", () => {
     assert.match(barrel, /export \* from "\.\/bar\.js";/);
     assert.match(barrel, /export \* from "\.\/foo\.js";/);
     assert.strictEqual(result.updated.length, 1);
-    assert.strictEqual(result.created.length, 0);
-    assert.strictEqual(result.totalOps, 1);
+    // The package-root src/index.ts is newly created (#249).
+    assert.strictEqual(result.created.length, 1);
+    assert.strictEqual(result.totalOps, 2);
   });
 
   // -------------------------------------------------------------------------
@@ -486,11 +497,18 @@ describe("generateRecursiveBarrels", () => {
     const after = await readFile(moduleDir, "src/domain/index.ts");
     assert.strictEqual(after, before, "content must be unchanged");
 
-    // recursive.ts returns early (line 292) BEFORE pushing to pendingWrites
-    // when the hash already matches, so no created/updated/skipped entry is
-    // recorded for this barrel.
-    assert.strictEqual(result.totalOps, 0);
-    assert.strictEqual(result.created.length, 0);
+    // recursive.ts returns early BEFORE pushing to pendingWrites when the hash
+    // already matches, so no entry is recorded for the DOMAIN barrel. The
+    // package-root src/index.ts didn't exist, so it's newly created (#249) — the
+    // only op here.
+    assert.strictEqual(result.totalOps, 1);
+    assert.strictEqual(result.created.length, 1);
+    assert.ok(
+      result.created.some((p) =>
+        p.endsWith(`${path.sep}src${path.sep}index.ts`),
+      ),
+      "the sole op is the new package-root barrel",
+    );
     assert.strictEqual(result.updated.length, 0);
     assert.strictEqual(result.skipped.length, 0);
   });
@@ -549,16 +567,17 @@ describe("generateRecursiveBarrels", () => {
       )}`,
     );
 
-    // totalOps counts created + updated writes (not preserved/skipped).
-    assert.strictEqual(result.totalOps, 2);
+    // app created + infra updated + the package-root src/index.ts created (#249);
+    // domain preserved (skipped) is not counted in totalOps.
+    assert.strictEqual(result.totalOps, 3);
 
-    // Sum of all lists must cover every barrel we touched.
+    // Sum of all lists must cover every barrel we touched (incl. src/index.ts).
     const allListed =
       result.created.length + result.updated.length + result.skipped.length;
     assert.strictEqual(
       allListed,
-      3,
-      `created(${result.created.length}) + updated(${result.updated.length}) + skipped(${result.skipped.length}) should total 3`,
+      4,
+      `created(${result.created.length}) + updated(${result.updated.length}) + skipped(${result.skipped.length}) should total 4`,
     );
   });
 
@@ -627,5 +646,203 @@ describe("generateRecursiveBarrels", () => {
         exportLines,
       )}`,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Package-root barrel (#249): `@{scope}/<pkg>` resolves to `<pkg>/src/index.ts`
+// (base tsconfig paths + package.json main), but it was never generated —
+// breaking every cross-package import in a generated project.
+// ---------------------------------------------------------------------------
+describe("generateRecursiveBarrels — package-root src/index.ts (#249)", () => {
+  let tmpDir: string;
+  let moduleDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-barrels-root-"));
+    moduleDir = path.join(tmpDir, "packages", "example");
+    await fs.mkdir(moduleDir, { recursive: true });
+  });
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("creates src/index.ts re-exporting only layers that have content", async () => {
+    await createFixture(moduleDir, {
+      src: { domain: { "foo.ts": "export const foo = 1;\n" } },
+    });
+    await generateRecursiveBarrels(moduleDir, makeConfig(tmpDir));
+
+    assert.ok(
+      await exists(moduleDir, "src/index.ts"),
+      "package-root barrel must be created so @scope/pkg resolves",
+    );
+    const root = await readFile(moduleDir, "src/index.ts");
+    assert.match(root, /export \* from "\.\/domain\/index\.js";/);
+    // application/infrastructure had no content → no dangling re-export.
+    assert.doesNotMatch(root, /application|infrastructure/);
+  });
+
+  it("re-exports every layer that has content", async () => {
+    await createFixture(moduleDir, {
+      src: {
+        domain: { "a.ts": "export const a = 1;\n" },
+        infrastructure: { "b.ts": "export const b = 2;\n" },
+      },
+    });
+    await generateRecursiveBarrels(moduleDir, makeConfig(tmpDir));
+
+    const root = await readFile(moduleDir, "src/index.ts");
+    assert.match(root, /export \* from "\.\/domain\/index\.js";/);
+    assert.match(root, /export \* from "\.\/infrastructure\/index\.js";/);
+  });
+
+  it("preserves a hand-written src/index.ts (self-regen safety)", async () => {
+    const handWritten = "export * from './sync-engine.js';\n";
+    await createFixture(moduleDir, {
+      src: {
+        "index.ts": handWritten,
+        domain: { "foo.ts": "export const foo = 1;\n" },
+      },
+    });
+    const result = await generateRecursiveBarrels(
+      moduleDir,
+      makeConfig(tmpDir),
+    );
+
+    assert.strictEqual(
+      await readFile(moduleDir, "src/index.ts"),
+      handWritten,
+      "hand-written package-root barrel must be preserved, not overwritten",
+    );
+    assert.ok(
+      result.skipped.some((p) =>
+        p.endsWith(`${path.sep}src${path.sep}index.ts`),
+      ),
+      "preserved barrel is reported as skipped",
+    );
+  });
+
+  it("does not create src/index.ts when no layer has content", async () => {
+    await createFixture(moduleDir, { src: { domain: null } }); // empty layer dir
+    await generateRecursiveBarrels(moduleDir, makeConfig(tmpDir));
+
+    assert.ok(
+      !(await exists(moduleDir, "src/index.ts")),
+      "no package-root barrel for an empty package",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Package-root barrel is EXTERNAL-only (#249 regression).
+//
+// In `self-regen` (this monorepo) the package-root `src/index.ts` files are
+// hand-maintained rich barrels — NAMED re-exports spanning non-layer dirs
+// (e.g. `errors/` → `Result`, `types/` → `Branded`) — carrying the @generated
+// marker. The #249 fix must NOT run there: a layer-only wildcard barrel would
+// see the marker as "safe to regenerate" and overwrite them, dropping every
+// non-layer export and breaking the build. This is exactly what sync-integrity
+// caught (`cli sync --force` then `turbo run build`: `@hexagen/shared` lost its
+// `Result`/`Branded` exports). The barrel is emitted in `external` mode only.
+// ---------------------------------------------------------------------------
+describe("generateRecursiveBarrels — package-root barrel is external-only (#249)", () => {
+  let tmpDir: string;
+  let moduleDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-barrels-mode-"));
+    moduleDir = path.join(tmpDir, "packages", "example");
+    await fs.mkdir(moduleDir, { recursive: true });
+  });
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("self-regen does NOT create a package-root src/index.ts", async () => {
+    await createFixture(moduleDir, {
+      src: { domain: { "foo.ts": "export const foo = 1;\n" } },
+    });
+    await generateRecursiveBarrels(moduleDir, makeConfig(tmpDir, "self-regen"));
+
+    assert.ok(
+      !(await exists(moduleDir, "src/index.ts")),
+      "self-regen must not emit a package-root barrel (internal packages own theirs)",
+    );
+    // The layer barrel is still generated as usual.
+    assert.ok(await exists(moduleDir, "src/domain/index.ts"));
+  });
+
+  it("self-regen does NOT clobber a hand-maintained @generated rich barrel that re-exports a non-layer dir", async () => {
+    // Reconstructs the CI failure: a real monorepo package (`@hexagen/shared`)
+    // whose package-root barrel re-exports `errors/` (Result) and `types/`
+    // (Branded) — directories that are NOT one of domain/application/infra. A
+    // layer-only wildcard barrel would drop them.
+    const richBarrel =
+      "// @generated by @hexagen/sync\n\n" +
+      'export type { Result } from "./errors/result.js";\n' +
+      'export type { Branded } from "./types/branded.types.js";\n' +
+      'export * from "./domain/index.js";\n';
+
+    await createFixture(moduleDir, {
+      src: {
+        "index.ts": richBarrel,
+        domain: { "entity.ts": "export const e = 1;\n" },
+        errors: { "result.ts": "export type Result<T> = T;\n" },
+        types: { "branded.types.ts": "export type Branded<T> = T;\n" },
+      },
+    });
+
+    const result = await generateRecursiveBarrels(
+      moduleDir,
+      makeConfig(tmpDir, "self-regen"),
+    );
+
+    assert.strictEqual(
+      await readFile(moduleDir, "src/index.ts"),
+      richBarrel,
+      "self-regen must preserve the hand-maintained package-root barrel byte-for-byte",
+    );
+    // The non-layer exports survive (the actual regression).
+    const root = await readFile(moduleDir, "src/index.ts");
+    assert.match(
+      root,
+      /export type \{ Result \} from "\.\/errors\/result\.js";/,
+    );
+    assert.match(
+      root,
+      /export type \{ Branded \} from "\.\/types\/branded\.types\.js";/,
+    );
+    // The package-root barrel was not among the writes.
+    assert.ok(
+      !result.created.some((p) =>
+        p.endsWith(`${path.sep}src${path.sep}index.ts`),
+      ),
+      "package-root barrel must not be (re)created in self-regen",
+    );
+    assert.ok(
+      !result.updated.some((p) =>
+        p.endsWith(`${path.sep}src${path.sep}index.ts`),
+      ),
+      "package-root barrel must not be updated in self-regen",
+    );
+  });
+
+  it("external DOES regenerate an @generated package-root barrel (contrast)", async () => {
+    // In external (API-driven) generation there is no hand-maintained rich
+    // barrel — only ours — so an @generated one regenerates idempotently to the
+    // layer shape. This pins the mode boundary.
+    await createFixture(moduleDir, {
+      src: {
+        "index.ts":
+          '// @generated by @hexagen/sync\n\nexport * from "./stale.js";\n',
+        domain: { "entity.ts": "export const e = 1;\n" },
+      },
+    });
+    await generateRecursiveBarrels(moduleDir, makeConfig(tmpDir, "external"));
+
+    const root = await readFile(moduleDir, "src/index.ts");
+    assert.match(root, /export \* from "\.\/domain\/index\.js";/);
+    assert.doesNotMatch(root, /stale/, "stale export regenerated away");
   });
 });
