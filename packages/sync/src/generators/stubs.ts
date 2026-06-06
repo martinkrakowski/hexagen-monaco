@@ -75,6 +75,7 @@ async function tryAnalyzeRelatedPort(
   name: string,
   kind: "adapter" | "useCase",
   context: BoundedContext,
+  relatedPortNamingTemplate: string,
 ): Promise<ReturnType<typeof analyzePortFile>> {
   const portType = kind === "adapter" ? "out" : "in";
   const portSubdir = `application/ports/${portType}`;
@@ -86,7 +87,27 @@ async function tryAnalyzeRelatedPort(
       ? context.layers?.application?.ports?.in || []
       : context.layers?.application?.ports?.out || [];
 
-  if (!declaredPorts.some((p) => portName(p) === derivedPortName)) {
+  // #245: ADAPTERS compare on the NORMALIZED port stem. Declared ports may be
+  // kebab/extensioned (`user-repo.out-port.ts`) while `derivedPortName` is derived
+  // from the already-normalized stub `name`, so a raw `===` would miss a port that
+  // genuinely correlates — leaving the adapter a generic stub instead of implementing
+  // its port. generateAdapterFromPort emits valid, self-importing output, so resolving
+  // is safe.
+  //
+  // USE-CASES keep the RAW comparison on purpose: generateUseCaseFromPort still emits
+  // an unimported interface + RAW out-port names as constructor param types, so a
+  // resolved use-case doesn't compile (#248). Normalizing here would only WIDEN that
+  // broken path from clean names to kebab/extensioned ones. Adapter-scoped until #248
+  // fixes the use-case emitter; then this branch can drop the `kind` check.
+  if (
+    !declaredPorts.some((p) => {
+      const declared =
+        kind === "adapter"
+          ? normalizeStubName(portName(p), relatedPortNamingTemplate)
+          : portName(p);
+      return declared === derivedPortName;
+    })
+  ) {
     return null;
   }
 
@@ -199,11 +220,20 @@ export async function generateStubs(
       let content: string;
 
       if (kind === "adapter" || kind === "useCase") {
+        // The related port is an out-port for adapters, an in-port for use-cases;
+        // resolve its naming template so its declared names can be normalized the
+        // same way its files are (see tryAnalyzeRelatedPort).
+        const relatedPortNaming = resolveNaming(
+          kind === "adapter" ? "outPort" : "inPort",
+          contextNaming,
+          manifestNaming,
+        );
         const portAnalysis = await tryAnalyzeRelatedPort(
           moduleDir,
           name,
           kind,
           context,
+          relatedPortNaming,
         );
 
         if (portAnalysis) {
