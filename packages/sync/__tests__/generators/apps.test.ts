@@ -426,6 +426,76 @@ describe("apps", () => {
     });
   });
 
+  it("should skip an entryPoint with an absolute path (rejected, not nested under the app dir)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const logger = createSpyLogger();
+      const report = makeReport();
+      // An absolute entryPoint.path must be rejected outright. `path.join` would
+      // silently nest it under appDir (apps/web/tmp/...); `path.resolve` treats it
+      // as a root, and the containment check rejects it.
+      const manifest: Manifest = {
+        system: "myorg",
+        generator: {
+          sync: {
+            apps: {
+              frameworks: {
+                "plain-ts": {
+                  packageJson: {
+                    template: '{\n  "name": "@{system}/{appName}"\n}\n',
+                  },
+                  entryPoint: {
+                    path: "/tmp/hexagen-escaped-abs.ts",
+                    template: "// escaped\n",
+                  },
+                },
+              },
+            },
+          },
+        },
+        apps: [{ name: "web", framework: "plain-ts" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger,
+        enableApps: true,
+      });
+
+      const result = await generateApps(config, report);
+      assert.strictEqual(result.error, undefined);
+
+      // Not silently nested under the app dir (the path.join behaviour this guards
+      // against) — and, being rejected, not written to its absolute target either.
+      assert.strictEqual(
+        await pathExists(
+          path.join(
+            workspaceRoot,
+            "apps",
+            "web",
+            "tmp",
+            "hexagen-escaped-abs.ts",
+          ),
+        ),
+        false,
+        "absolute entryPoint must not be nested under appDir",
+      );
+      assert.strictEqual(
+        await pathExists(
+          path.join(workspaceRoot, "apps", "web", "package.json"),
+        ),
+        true,
+        "package.json still written; only the unsafe entry is skipped",
+      );
+      const warns = messagesAt(logger, "warn");
+      assert.ok(
+        warns.some((m) => m.includes("escaped-abs.ts")),
+        `expected an unsafe-entryPoint warning — got: ${JSON.stringify(warns)}`,
+      );
+      assert.ok(
+        report.calls.find((c) => c.type === "blocked" && c.target === "web"),
+        "report recorder must record the absolute entryPoint as blocked",
+      );
+    });
+  });
+
   it("should apply first-wins dedup for duplicate app names", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const logger = createSpyLogger();

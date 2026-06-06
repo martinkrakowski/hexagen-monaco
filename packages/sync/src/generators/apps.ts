@@ -227,16 +227,19 @@ export async function generateApps(
           `apps/${app.name}/${entry.path}`,
           config,
         );
-        const entryPath = path.join(appDir, entry.path);
         // Containment: entryPoint.path is manifest-overridable (via
-        // generator.sync.apps.frameworks.<fw>.entryPoint), so a "/" or ".." in it
-        // could escape apps/<name>/ even though app.name is guarded above. Skip
-        // any entry whose resolved path leaves the app directory.
-        const resolvedAppDir = path.resolve(appDir);
-        const resolvedEntry = path.resolve(entryPath);
+        // generator.sync.apps.frameworks.<fw>.entryPoint), so it must resolve to a
+        // location inside apps/<name>/. Resolve against appDir with `path.resolve`
+        // (not `path.join` — `resolve` treats an absolute entry.path as a new root,
+        // so absolute paths are rejected here rather than silently nested) and skip
+        // anything that escapes: a ".." segment, an absolute path, or (on Windows) a
+        // different drive/UNC root (which makes `path.relative` return an absolute).
+        const entryPath = path.resolve(appDir, entry.path);
+        const relativeEntry = path.relative(appDir, entryPath);
         if (
-          resolvedEntry !== resolvedAppDir &&
-          !resolvedEntry.startsWith(resolvedAppDir + path.sep)
+          relativeEntry === "" ||
+          relativeEntry.startsWith("..") ||
+          path.isAbsolute(relativeEntry)
         ) {
           config.logger.warn(
             `[apps] skipping entry file with unsafe path (escapes apps/${app.name}): ${entry.path}`,
