@@ -1,6 +1,6 @@
 # Wire the Architectural Template Into Generation
 
-**Status:** Phase 1 shipped (PR #235). Decision B resolved → **B1**; Phase 2 implemented (per-context web apps for isolated templates). Phase 3 awaits Decision A.
+**Status:** Phases 1 (#235) + 2 (#236) shipped; `generateApps` traversal guard shipped (#237). Decision B → **B1**, Decision A → **A1**. Phase 3 scoped → [materialize-cross-context-communication.md](./materialize-cross-context-communication.md).
 **Date:** 2026-06-05
 **Parent:** Standalone. Originates from a verification of the step‑1 "Architectural Template" selector (`WorkspaceGovernanceStep` → `TemplateSelector`).
 
@@ -53,7 +53,7 @@ They are indistinguishable in everything that ships except ~2 words in `layer-ru
 | **A1 (recommended)** — keep all three; close the gap in phases | Ship Phase 1 (honesty + rules‑as‑source‑of‑truth) now; let the two strict modes genuinely diverge when Phase 3 lands | No catalog churn; preserves the intended product surface; honest copy in the interim | The two strict cards stay near‑identical until Phase 3                                       |
 | **A2** — collapse to two templates now                         | Drop `micro-frontend` until Phase 3 differentiates it                                                                | Removes a distinction that currently means nothing                                   | Schema enum change + saved‑project migration for the dropped id; reverses once Phase 3 ships |
 
-**Recommendation: A1.** The distinction is real _intent_; the fix is to make the generator honor it, not to delete the option. A2 trades a cosmetic problem for a migration.
+**Resolved: A1.** The distinction is real _intent_; the fix is to make the generator honor it, not to delete the option. A2 trades a cosmetic problem for a migration. Phase 3 (the differentiator) is scoped in [materialize-cross-context-communication.md](./materialize-cross-context-communication.md).
 
 ## Decision B — what `allowSharedUi: false` should generate
 
@@ -84,6 +84,8 @@ They are indistinguishable in everything that ships except ~2 words in `layer-ru
 3. **Tests:** `allowSharedUi: false` + two UI contexts → two `web-*` apps with isolated `depends_on`; `allowSharedUi: true` → one aggregated `web` (byte‑identical to today); no‑UI project → no web app under either rule. End‑to‑end: run the `SyncEngine` (external mode) on each and assert the `apps/` tree differs.
 
 ### Phase 3 — materialize `crossContextCalls` (`sync` generators + templates) — large; the real differentiator
+
+> **Scoped 2026-06-06** → [materialize-cross-context-communication.md](./materialize-cross-context-communication.md) (Decision A → A1; transport realism → C1). The high-level steps below are superseded by that detailed plan.
 
 1. **Event‑bus boundary (`event-bus`).** For each cross‑context edge in a project whose template requires `event-bus`, scaffold a message‑bus outbound port + adapter on the consumer and a subscriber on the provider (reuse the `messaging` package's BullMQ/Temporal/RabbitMQ adapter shapes already offered in the wizard). Wire `publishedEvents` / `subscribedEvents` so the edge is real code, not just a denied import.
 2. **Network boundary (`network`).** For `network` templates, scaffold an RPC/HTTP outbound client port + adapter on the consumer and a controller/handler on the provider, so cross‑context calls have a transport. This is what finally separates micro‑frontend from strict‑enterprise (Decision A1's payoff).
