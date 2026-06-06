@@ -1,0 +1,155 @@
+import { describe, it } from "node:test";
+import assert from "node:assert";
+import path from "node:path";
+import {
+  checkRequiredCommunication,
+  type CrossContextEdgeInput,
+} from "../src/required-communication-violation.js";
+
+const PKG = path.join("/ws", "packages");
+
+/** A fileExists predicate that returns true only for the given package-relative paths. */
+const exists =
+  (presentRelPaths: string[]) =>
+  (absPath: string): boolean =>
+    presentRelPaths.map((r) => path.join(PKG, r)).includes(absPath);
+
+const EVENT_BUS_PORTS = [
+  "billing/src/application/ports/out/message-publisher.out-port.ts", // provider publisher
+  "orders/src/application/ports/in/event-listener.in-port.ts", // consumer subscriber
+];
+const NETWORK_PORTS = [
+  "billing/src/application/ports/in/rest-controller.in-port.ts", // provider controller
+  "orders/src/application/ports/out/external-service-client.out-port.ts", // consumer client
+];
+
+const eventBusEdge: CrossContextEdgeInput = {
+  consumer: "orders",
+  provider: "billing",
+  transport: "event-bus",
+};
+const networkEdge: CrossContextEdgeInput = {
+  consumer: "orders",
+  provider: "billing",
+  transport: "network",
+};
+
+describe("checkRequiredCommunication — positive cross-context enforcement", () => {
+  it("event-bus: no violation when both transport ports exist", () => {
+    const v = checkRequiredCommunication(
+      [eventBusEdge],
+      PKG,
+      exists(EVENT_BUS_PORTS),
+    );
+    assert.deepEqual(v, []);
+  });
+
+  it("event-bus: flags the provider's missing publisher port", () => {
+    const v = checkRequiredCommunication(
+      [eventBusEdge],
+      PKG,
+      exists([EVENT_BUS_PORTS[1]]), // subscriber present, publisher missing
+    );
+    assert.equal(v.length, 1);
+    assert.equal(v[0].provider, "billing");
+    assert.equal(v[0].transport, "event-bus");
+    assert.match(v[0].missingPort, /message-publisher\.out-port\.ts$/);
+    assert.match(v[0].message, /publisher/);
+  });
+
+  it("event-bus: flags the consumer's missing subscriber port", () => {
+    const v = checkRequiredCommunication(
+      [eventBusEdge],
+      PKG,
+      exists([EVENT_BUS_PORTS[0]]), // publisher present, subscriber missing
+    );
+    assert.equal(v.length, 1);
+    assert.match(v[0].missingPort, /orders\/.*event-listener\.in-port\.ts$/);
+  });
+
+  it("event-bus: flags both ports when the transport is entirely absent (a transport-less strict project fails)", () => {
+    const v = checkRequiredCommunication([eventBusEdge], PKG, exists([]));
+    assert.equal(v.length, 2);
+    assert.ok(v.every((x) => x.enforcement === "error"));
+  });
+
+  it("network: no violation when controller + client exist", () => {
+    const v = checkRequiredCommunication(
+      [networkEdge],
+      PKG,
+      exists(NETWORK_PORTS),
+    );
+    assert.deepEqual(v, []);
+  });
+
+  it("network: flags the provider's missing controller port", () => {
+    const v = checkRequiredCommunication(
+      [networkEdge],
+      PKG,
+      exists([NETWORK_PORTS[1]]), // client present, controller missing
+    );
+    assert.equal(v.length, 1);
+    assert.match(v[0].missingPort, /rest-controller\.in-port\.ts$/);
+  });
+
+  it("network: flags the consumer's missing client port", () => {
+    const v = checkRequiredCommunication(
+      [networkEdge],
+      PKG,
+      exists([NETWORK_PORTS[0]]), // controller present, client missing
+    );
+    assert.equal(v.length, 1);
+    assert.match(v[0].missingPort, /external-service-client\.out-port\.ts$/);
+  });
+
+  it("returns nothing for an in-process project (no edges)", () => {
+    assert.deepEqual(
+      checkRequiredCommunication(undefined, PKG, exists([])),
+      [],
+    );
+    assert.deepEqual(checkRequiredCommunication([], PKG, exists([])), []);
+  });
+
+  it("skips malformed edges (missing consumer/provider/transport)", () => {
+    const v = checkRequiredCommunication(
+      [
+        { provider: "billing", transport: "event-bus" }, // no consumer
+        { consumer: "orders", transport: "event-bus" }, // no provider
+        { consumer: "orders", provider: "billing" }, // no transport
+      ],
+      PKG,
+      exists([]),
+    );
+    assert.deepEqual(v, []);
+  });
+
+  it("ignores unknown transports (nothing to enforce)", () => {
+    const v = checkRequiredCommunication(
+      [
+        {
+          consumer: "orders",
+          provider: "billing",
+          transport: "carrier-pigeon",
+        },
+      ],
+      PKG,
+      exists([]),
+    );
+    assert.deepEqual(v, []);
+  });
+
+  it("enforces per edge across multiple providers", () => {
+    const v = checkRequiredCommunication(
+      [
+        eventBusEdge, // orders -> billing, both present
+        { consumer: "orders", provider: "shipping", transport: "event-bus" }, // shipping missing
+      ],
+      PKG,
+      exists(EVENT_BUS_PORTS), // only billing/orders ports present
+    );
+    // shipping publisher missing + the (already-present) orders subscriber is
+    // shared, so only the shipping publisher is flagged.
+    assert.equal(v.length, 1);
+    assert.equal(v[0].provider, "shipping");
+  });
+});

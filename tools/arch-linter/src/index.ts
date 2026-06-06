@@ -19,6 +19,10 @@ import {
   checkUnexpectedMarker,
   checkMissingMarker,
 } from "./server-marker-violation.js";
+import {
+  checkRequiredCommunication,
+  type CrossContextEdgeInput,
+} from "./required-communication-violation.js";
 export type {
   SubpathConvention,
   SubpathConventionConfig,
@@ -31,6 +35,7 @@ export type {
   MissingMarkerViolation,
   BrokenServerExportViolation,
 } from "./server-marker-violation.js";
+export type { RequiredCommunicationViolation } from "./required-communication-violation.js";
 
 const logger = createConsoleLogger();
 
@@ -523,6 +528,24 @@ function checkArchitecturalIntegrity() {
       }
     }
   });
+
+  // ─── Required-communication check (positive cross-context enforcement) ────
+  // For every declared cross_context edge, the transport ports the emitter is
+  // contracted to produce must exist. This is the positive complement to the
+  // Boundary Violation check above: a strict project with no transport at all
+  // passes the negative check but fails here, so `required_communication` guards
+  // real code instead of being advisory.
+  const crossContextEdges = (
+    manifest as { cross_context?: CrossContextEdgeInput[] }
+  ).cross_context;
+  const commViolations = checkRequiredCommunication(
+    crossContextEdges,
+    PKG_ROOT_PATH,
+    (p) => fs.existsSync(p),
+  );
+  for (const v of commViolations) {
+    errors.push(`Required Communication Violation:\n ${v.message}`);
+  }
 
   if (warnings.length > 0) {
     logger.warn("Subpath convention warnings (enforcement: warn):");
