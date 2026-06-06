@@ -10,15 +10,15 @@ Make the architectural template produce **structurally different generated code*
 
 ## Grounding — most of the machinery already exists
 
-Like Phase 2 (which reused the apps generator), Phase 3 is **primarily manifest enrichment in `wizardToManifest`**, with `generateStubs` doing the file emission:
+Like Phase 2 (which reused the apps generator), Phase 3 is **manifest enrichment in `wizardToManifest`** plus a **dedicated transport emitter** (modeled on `architecture-files.ts`). The generic per-kind stub _templates_ can't model a recognizable event-bus vs network boundary — they'd emit identical `{name}Port` / `{name}Adapter` stubs — so the emitter writes **bespoke ports** with real interfaces, and `generateAdapterFromPort` derives the adapters from those (bespoke where the shape matters, reuse where it's mechanical):
 
-| Building block                                                                                                     | State today                                                                                                                       | Phase 3 use                                                                       |
-| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `peerMappings` `{ consumerContext, providerContext, integrationPattern: open-host \| acl, communicationBoundary }` | captured by the wizard; `wizardToManifest` uses them **only** for `depends_on`                                                    | the set of cross-context edges to scaffold transport for                          |
-| manifest port vocabulary                                                                                           | in: `event-listener`, `rest-controller`, …; out: `message-publisher`, `external-service-client`, … (a fixed enum — already valid) | declare the transport ports per edge — **no schema change**                       |
-| `generateStubs` / `generateAdapterFromPort` (`packages/sync`)                                                      | scaffolds a port file + an adapter that implements that port's interface                                                          | emit the publisher/subscriber/client/controller + adapter from the injected ports |
-| `template.rules.crossContextCalls`                                                                                 | drives Phase 1 `depends_on` gating + the `.architecture` YAML                                                                     | drives **which** transport to scaffold                                            |
-| `messaging` pkg `EventBusPort` (publish/subscribe) + `DomainEvent`                                                 | hexagen-monaco's own bus                                                                                                          | reference shape for the generated event-bus port                                  |
+| Building block                                                                                                     | State today                                                                                                                       | Phase 3 use                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `peerMappings` `{ consumerContext, providerContext, integrationPattern: open-host \| acl, communicationBoundary }` | captured by the wizard; `wizardToManifest` uses them **only** for `depends_on`                                                    | the set of cross-context edges to scaffold transport for                                                                                     |
+| manifest port vocabulary                                                                                           | in: `event-listener`, `rest-controller`, …; out: `message-publisher`, `external-service-client`, … (a fixed enum — already valid) | declare the transport ports per edge — **no schema change**                                                                                  |
+| `generateAdapterFromPort` (`packages/sync`)                                                                        | derives an adapter implementing a given port's interface                                                                          | reused to derive adapters from the emitter's bespoke ports (the generic stub templates are NOT reused — they can't differentiate transports) |
+| `template.rules.crossContextCalls`                                                                                 | drives Phase 1 `depends_on` gating + the `.architecture` YAML                                                                     | drives **which** transport to scaffold                                                                                                       |
+| `messaging` pkg `EventBusPort` (publish/subscribe) + `DomainEvent`                                                 | hexagen-monaco's own bus                                                                                                          | reference shape for the generated event-bus port                                                                                             |
 
 ## Design
 
@@ -26,8 +26,8 @@ For a strict template, for each `peerMapping` edge (consumer → provider):
 
 **`event-bus`** (strict-enterprise):
 
-- consumer (publisher): out-port `message-publisher` + adapter (`generateAdapterFromPort` implements the publish interface; body is a `// TODO: publish via your broker` per C1).
-- provider (subscriber): in-port `event-listener` + handler.
+- **provider (publisher):** out-port `message-publisher` + adapter — publishes the provider's own domain events. The contract is the provider's events (D1), so the **provider** is the publisher. Body is a `// TODO: publish via your broker` per C1.
+- **consumer (subscriber):** in-port `event-listener` + handler — subscribes to the provider's events.
 - shared event contract (DTO + bus port interface) lives in the **`shared` kernel** — both contexts already `depends_on` shared, so publisher/subscriber agree without a direct cross-context dep (preserving the strict no-sibling-import rule).
 
 **`network`** (micro-frontend):
@@ -60,12 +60,11 @@ Rationale for the context-name-only fallback: it's a deterministic _placeholder_
 
 ## Steps
 
-### 3a — manifest enrichment + event-bus (`wizard-orchestration`, reusing `generateStubs`)
+### 3a — manifest enrichment + event-bus (`wizard-orchestration` + dedicated emitter)
 
-1. Add a `deriveCrossContextPorts` step in `wizardToManifest`: when `templateRules.crossContextCalls === "event-bus"`, for each edge inject the publisher out-port + adapter (consumer) and the `event-listener` in-port + handler (provider) into the respective bounded contexts' `layers`.
-2. Emit the shared event contract (DTO + bus port interface) into the `shared` kernel context.
-3. (Decision D) map `domainEvents` into the manifest BC and name the contract(s) from them.
-4. Tests: a strict-enterprise project with one edge emits the publisher/subscriber port + adapter referencing the shared contract; modular-monolith output is byte-identical; an edge-free project emits no transport.
+1. **Manifest enrichment — done.** `deriveCrossContextEdges` in `wizardToManifest`: when `crossContextCalls === "event-bus"`, emit a top-level `cross_context` array of edges `{ consumer, provider, transport, events, integrationPattern }` (omitted when empty, so in-process output is byte-identical). Per D1, an edge's `events` are the provider's `domainEvents` (PascalCased) or the `${Provider}Event` fallback. The transport **ports/adapters are NOT injected into the manifest layers** — see step 2 for why.
+2. **Dedicated emitter — done.** `generateCrossContext` (`packages/sync`, modeled on `architecture-files.ts`) reads `cross_context` and is the **sole writer** of the transport: bespoke publisher (`publish(event)`) / subscriber (`handle(event)`) port interfaces + shared event contracts in `shared`; `generateAdapterFromPort` derives the adapters from those bespoke ports. **Sole writer because** `generateStubs` would clobber the bespoke content under the web flow's `forceRoot` if the ports were declared in the layers (`safeWriteFileAtomic` only preserves hand-written files when `!forceRoot`) — so they're emitted directly and re-exported by the disk-based pass-2 barrels. Runs after `generateApps`, before the pass-2 barrels.
+3. Tests: ✅ manifest enrichment (`cross_context` edges; D1 events + fallback; per-consumer edges; no ports in layers; in-process byte-identical) **+** ✅ emitter (`packages/sync` `cross-context.test.ts`: shared contracts, publisher port has a **real `publish` method — explicitly pinned as not the generic stub**, subscriber `handle`, derived adapters).
 
 ### 3b — network (micro-frontend)
 
