@@ -93,6 +93,32 @@ export async function generateApps(
         continue;
       }
 
+      // Path safety: app.name becomes a directory under apps/ via path.join
+      // below, so a name containing a path separator or a ".." segment could
+      // escape apps/ (or the workspace root entirely). Mirror the module-name
+      // guard in SyncEngine and skip such entries. Defense-in-depth: this
+      // protects every manifest source — a hand-written or API-supplied manifest
+      // may carry an unsafe name that never went through the wizard's slugified
+      // app-name derivation.
+      if (
+        app.name.includes("..") ||
+        app.name.includes("/") ||
+        app.name.includes("\\") ||
+        app.name.startsWith(".")
+      ) {
+        config.logger.warn(
+          `[apps] skipping app with unsafe name (potential path traversal): ${app.name}`,
+        );
+        if (report) {
+          report.record(
+            "blocked",
+            app.name,
+            "Unsafe app name (potential path traversal)",
+          );
+        }
+        continue;
+      }
+
       if (seen.has(app.name)) {
         config.logger.warn(
           `[apps] duplicate app name "${app.name}" — keeping first occurrence, skipping this duplicate`,
@@ -201,7 +227,32 @@ export async function generateApps(
           `apps/${app.name}/${entry.path}`,
           config,
         );
-        const entryPath = path.join(appDir, entry.path);
+        // Containment: entryPoint.path is manifest-overridable (via
+        // generator.sync.apps.frameworks.<fw>.entryPoint), so it must resolve to a
+        // location inside apps/<name>/. Resolve against appDir with `path.resolve`
+        // (not `path.join` — `resolve` treats an absolute entry.path as a new root,
+        // so absolute paths are rejected here rather than silently nested) and skip
+        // anything that escapes: a ".." segment, an absolute path, or (on Windows) a
+        // different drive/UNC root (which makes `path.relative` return an absolute).
+        const entryPath = path.resolve(appDir, entry.path);
+        const relativeEntry = path.relative(appDir, entryPath);
+        if (
+          relativeEntry === "" ||
+          relativeEntry.startsWith("..") ||
+          path.isAbsolute(relativeEntry)
+        ) {
+          config.logger.warn(
+            `[apps] skipping entry file with unsafe path (escapes apps/${app.name}): ${entry.path}`,
+          );
+          if (report) {
+            report.record(
+              "blocked",
+              app.name,
+              `Unsafe entryPoint path (potential path traversal): ${entry.path}`,
+            );
+          }
+          continue;
+        }
         try {
           await fs.mkdir(path.dirname(entryPath), { recursive: true });
         } catch (err) {
