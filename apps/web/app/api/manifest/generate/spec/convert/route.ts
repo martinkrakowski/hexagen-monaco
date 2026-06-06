@@ -14,7 +14,7 @@ interface ConvertRequestBody {
 
 type NDJSONEvent =
   | { type: "chunk"; data: string }
-  | { type: "progress"; message: string; elapsedMs: number }
+  | { type: "progress"; message: string }
   | { type: "done"; configJson: string; config: unknown }
   | { type: "error"; message: string };
 
@@ -97,6 +97,8 @@ export async function POST(request: NextRequest) {
       const heartbeat = setInterval(() => {
         try {
           const elapsedMs = Date.now() - startedAt;
+          // elapsedMs is for server-side telemetry only — the client renders its
+          // own per-second clock, so it is not sent on the wire.
           logger.info("Loose spec conversion in progress", {
             elapsedMs,
             elapsedSeconds: Math.round(elapsedMs / 1000),
@@ -104,7 +106,6 @@ export async function POST(request: NextRequest) {
           send({
             type: "progress",
             message: "Model is processing your specification…",
-            elapsedMs,
           });
         } catch {
           // Best-effort: if the client disconnected, the stream is already

@@ -103,7 +103,7 @@ describe("useLooseSpecConversion", () => {
 
   it("Cloud path surfaces server progress heartbeats", async () => {
     const frames = [
-      '{"type":"progress","message":"Working on it","elapsedMs":10000}\n',
+      '{"type":"progress","message":"Working on it"}\n',
       '{"type":"done","configJson":"{\\"cloud\\": true}"}\n',
     ];
     let i = 0;
