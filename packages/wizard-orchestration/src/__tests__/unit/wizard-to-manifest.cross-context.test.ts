@@ -347,3 +347,57 @@ describe("wizardToManifest — output is valid against the manifest schema", () 
     assert.ok(ManifestSchema.safeParse(m).success);
   });
 });
+
+// toPascalCase feeds generated contract/symbol names; bounded-context names and
+// domainEvents/useCases are unconstrained strings, so a digit-leading value would
+// otherwise become an invalid TS identifier (e.g. "123-billing" -> "123Billing").
+// The function prefixes such names so the emitted declarations compile.
+const isValidTsIdentifier = (s: string) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
+
+describe("wizardToManifest — contract names are valid TS identifiers", () => {
+  it("prefixes a digit-leading domainEvent so the event contract compiles", () => {
+    const m = wizardToManifest(
+      wizard(
+        "strict-enterprise",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", domainEvents: ["123-billing"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.deepEqual(edges(m)[0].events, ["Context123Billing"]);
+    assert.ok(edges(m)[0].events!.every(isValidTsIdentifier));
+  });
+
+  it("keeps the <Provider>Event fallback a valid identifier for a digit-leading context name", () => {
+    const m = wizardToManifest(
+      wizard(
+        "strict-enterprise",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "3pl" }, // digit-leading context, no domainEvents
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    // "3pl" -> "Context3pl" -> fallback "Context3plEvent" (valid), not "3plEvent".
+    assert.deepEqual(edges(m)[0].events, ["Context3plEvent"]);
+    assert.ok(edges(m)[0].events!.every(isValidTsIdentifier));
+  });
+
+  it("prefixes a digit-leading useCase so the network operation/DTO names compile", () => {
+    const m = wizardToManifest(
+      wizard(
+        "micro-frontend",
+        [
+          { id: "o", name: "orders" },
+          { id: "b", name: "billing", useCases: ["123-process"] },
+        ],
+        [{ consumerContext: "o", providerContext: "b" }],
+      ),
+    );
+    assert.deepEqual(edges(m)[0].operations, ["Context123Process"]);
+    assert.ok(edges(m)[0].operations!.every(isValidTsIdentifier));
+  });
+});
