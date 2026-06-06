@@ -21,33 +21,43 @@ export function extractSpecSummary(
       ? (parsed.use_cases as Record<string, Array<Record<string, unknown>>>)
       : {};
 
+  // Counts accept both the canonical shape and the rich "hexagonal" dialect
+  // (domain_models.{entities,value_objects}, per-context primary_use_cases),
+  // mirroring normalizeDialect in the structured-config pipeline so the review
+  // reflects what will actually be imported rather than silently reading 0.
   const aggregateCount = contexts.reduce((sum, ctx) => {
-    if (!Array.isArray(ctx.aggregates)) {
-      return sum;
+    if (Array.isArray(ctx.aggregates)) {
+      const aggregatesList = ctx.aggregates as Array<{ root?: boolean }>;
+      return sum + aggregatesList.filter((a) => a.root !== false).length;
     }
-    const aggregatesList = ctx.aggregates as Array<Record<string, unknown>>;
-    return (
-      sum +
-      aggregatesList.filter((a) => {
-        const agg = a as { root?: boolean };
-        return agg.root !== false;
-      }).length
-    );
+    const dm = ctx.domain_models as { entities?: unknown[] } | undefined;
+    return sum + (dm && Array.isArray(dm.entities) ? dm.entities.length : 0);
   }, 0);
 
   const valueObjectCount = contexts.reduce((sum, ctx) => {
+    if (Array.isArray(ctx.value_objects)) {
+      return sum + (ctx.value_objects as Array<unknown>).length;
+    }
+    const dm = ctx.domain_models as { value_objects?: unknown[] } | undefined;
     return (
       sum +
-      (Array.isArray(ctx.value_objects)
-        ? (ctx.value_objects as Array<unknown>).length
-        : 0)
+      (dm && Array.isArray(dm.value_objects) ? dm.value_objects.length : 0)
     );
   }, 0);
 
-  const useCaseCount = Object.values(useCasesMap).reduce(
-    (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-    0,
-  );
+  const useCaseCount =
+    Object.values(useCasesMap).reduce(
+      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+      0,
+    ) +
+    contexts.reduce(
+      (sum, ctx) =>
+        sum +
+        (Array.isArray(ctx.primary_use_cases)
+          ? (ctx.primary_use_cases as unknown[]).length
+          : 0),
+      0,
+    );
 
   const mappingCount = Array.isArray(parsed.context_mappings)
     ? parsed.context_mappings.length

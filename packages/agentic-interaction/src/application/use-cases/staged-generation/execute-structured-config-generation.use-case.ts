@@ -151,6 +151,29 @@ export interface StructuredConfigContext {
       adapters?: string[];
     };
   };
+
+  // ── Rich "hexagonal" import dialect ─────────────────────────────────────────
+  // An alternate authoring shape (domain models nested under `domain_models`,
+  // per-context `primary_use_cases`, object-form `domain_events`, and
+  // driving/driven `ports`). `normalizeDialect` maps these onto the canonical
+  // fields above, so the rest of the pipeline reads only the canonical shape.
+  domain_models?: {
+    entities?: Array<{ name: string; attributes?: Record<string, unknown> }>;
+    value_objects?: Array<{
+      name: string;
+      type?: string;
+      values?: string[];
+      attributes?: Record<string, unknown>;
+      description?: string;
+    }>;
+  };
+  primary_use_cases?: Array<{ name: string; implements?: string }>;
+  domain_events?: Array<{ name: string; payload?: Record<string, unknown> }>;
+  ports?: {
+    primary?: Array<{ name: string }>;
+    driven?: Array<{ name: string }>;
+    secondary_references?: string[];
+  };
 }
 
 export interface StructuredConfig {
@@ -225,7 +248,7 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
     try {
       const parsed = JSON.parse(rawConfig) as StructuredConfig;
       validateStructuredConfigShape(parsed);
-      return parsed;
+      return normalizeDialect(parsed);
     } catch (e) {
       if (e instanceof StructuredConfigShapeError) throw e;
       // JSON parse failed — fall through to YAML
@@ -237,7 +260,7 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
   try {
     const parsed = yaml.load(rawConfig) as StructuredConfig;
     validateStructuredConfigShape(parsed);
-    return parsed;
+    return normalizeDialect(parsed);
   } catch (e) {
     if (e instanceof StructuredConfigShapeError) {
       // Single-doc parse succeeded but shape was wrong — could still be
@@ -264,7 +287,7 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
   const merged = tryMergeMultiDocYaml(rawConfig);
   if (merged) {
     validateStructuredConfigShape(merged);
-    return merged as StructuredConfig;
+    return normalizeDialect(merged as StructuredConfig);
   }
 
   // Multi-doc fallback didn't apply — surface the single-doc error.
@@ -276,6 +299,99 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
       `Ensure the file is valid YAML or JSON with a "bounded_contexts" array. ` +
       `Parser error: ${String(singleDocError)}`,
   );
+}
+
+/**
+ * Map the rich "hexagonal" import dialect onto the canonical StructuredConfig
+ * fields the pipeline actually reads — `aggregates`, `value_objects`,
+ * `events_published`, `layers.application.ports`, and the top-level `use_cases`
+ * map. Only fills a canonical field when it is absent, so a spec already in
+ * canonical form is untouched. Without this, a spec authored with `domain_models`
+ * / `primary_use_cases` / `domain_events` / `ports.{primary,driven}` silently
+ * loses all of its domain content (buildDomainAnalysisFromConfig reads none of
+ * those keys), which surfaced as "0 use cases" in the import review.
+ */
+export function normalizeDialect(config: StructuredConfig): StructuredConfig {
+  if (!Array.isArray(config.bounded_contexts)) return config;
+
+  const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
+
+  for (const ctx of config.bounded_contexts) {
+    const dm = ctx.domain_models;
+
+    // domain_models.entities → aggregates (each declared entity becomes an
+    // aggregate root; identity is the `id` attribute when present).
+    if (!ctx.aggregates && dm && Array.isArray(dm.entities)) {
+      ctx.aggregates = dm.entities.map((e) => ({
+        name: e.name,
+        root: true,
+        fields: e.attributes
+          ? Object.entries(e.attributes).map(([name, type]) => ({
+              name,
+              type: String(type),
+              key: name === "id",
+            }))
+          : undefined,
+      }));
+    }
+
+    // domain_models.value_objects → value_objects (dialect uses `type` for the
+    // underlying kind, e.g. `type: enum`).
+    if (!ctx.value_objects && dm && Array.isArray(dm.value_objects)) {
+      ctx.value_objects = dm.value_objects.map((vo) => ({
+        name: vo.name,
+        underlying: vo.type,
+        values: vo.values,
+      }));
+    }
+
+    // domain_events (objects) → events_published (names).
+    if (!ctx.events_published && Array.isArray(ctx.domain_events)) {
+      ctx.events_published = ctx.domain_events
+        .map((e) => e.name)
+        .filter((n): n is string => typeof n === "string" && n.length > 0);
+    }
+
+    // ports.{primary → in; driven + secondary_references → out} →
+    // layers.application.ports, so the pre-defined-port path honours the contracts
+    // the author already declared instead of re-inventing them in Stage 3.
+    if (ctx.ports && !ctx.layers?.application?.ports) {
+      const inPorts = (ctx.ports.primary ?? [])
+        .map((p) => p.name)
+        .filter((n): n is string => typeof n === "string" && n.length > 0);
+      const outPorts = [
+        ...(ctx.ports.driven ?? []).map((p) => p.name),
+        ...(ctx.ports.secondary_references ?? []),
+      ].filter((n): n is string => typeof n === "string" && n.length > 0);
+      if (inPorts.length > 0 || outPorts.length > 0) {
+        ctx.layers = {
+          ...ctx.layers,
+          application: {
+            ...ctx.layers?.application,
+            ports: { in: inPorts, out: outPorts },
+          },
+        };
+      }
+    }
+
+    // primary_use_cases → top-level use_cases map (per-context `use_cases` is
+    // forbidden in the canonical shape — `use_cases?: never`).
+    if (
+      Array.isArray(ctx.primary_use_cases) &&
+      ctx.primary_use_cases.length > 0
+    ) {
+      useCasesFromDialect[ctx.name] = ctx.primary_use_cases.map((uc) => ({
+        name: uc.name,
+      }));
+    }
+  }
+
+  if (Object.keys(useCasesFromDialect).length > 0) {
+    // A canonical top-level `use_cases` entry for a context wins over the dialect.
+    config.use_cases = { ...useCasesFromDialect, ...(config.use_cases ?? {}) };
+  }
+
+  return config;
 }
 
 export class StructuredConfigShapeError extends Error {
