@@ -82,6 +82,7 @@ export async function generateRecursiveBarrels(
   const exportGraph = new Map<string, string[]>();
 
   // Process each layer
+  const layersWithContent: string[] = [];
   for (const layer of layers) {
     const layerDir = path.join(srcDir, layer);
 
@@ -93,13 +94,45 @@ export async function generateRecursiveBarrels(
     }
 
     // Recursively walk the layer directory
-    await walkDirectory(
+    const layerExports = await walkDirectory(
       layerDir,
       pendingWrites,
       preserved,
       exportGraph,
       config,
     );
+    if (layerExports.length > 0) layersWithContent.push(layer);
+  }
+
+  // Package-root barrel (`src/index.ts`). Without it, `@{scope}/<pkg>` — which the
+  // base tsconfig `paths` map to `<pkg>/src/index.ts` and which package.json's
+  // `main`/`exports` build from — does not resolve, so every cross-package import in
+  // a generated project fails (TS2307). Re-export only layers that produced
+  // exportable content (mirrors the dangling-export guard in walkDirectory). A
+  // hand-written `src/index.ts` is preserved via shouldGenerateBarrel (self-regen
+  // safety); a generated one regenerates idempotently.
+  if (layersWithContent.length > 0) {
+    const rootBarrelPath = path.join(srcDir, "index.ts");
+    if (await shouldGenerateBarrel(rootBarrelPath, preserved, config.logger)) {
+      const content = generateBarrelContent(
+        layersWithContent.map((name) => ({ name, isDirectory: true })),
+      );
+      const existing = await readFileIfExists(rootBarrelPath);
+      if (
+        content !== null &&
+        !(existing && contentHash(existing) === contentHash(content))
+      ) {
+        pendingWrites.push({
+          filePath: rootBarrelPath,
+          content,
+          isNew: !existing,
+        });
+        exportGraph.set(
+          rootBarrelPath,
+          layersWithContent.map((name) => path.join(srcDir, name, "index.ts")),
+        );
+      }
+    }
   }
 
   // Validate for circular exports before writing anything
