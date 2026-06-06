@@ -61,6 +61,28 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
     assert.equal(s.useCaseCount, 1);
   });
 
+  it("counts domain_models.aggregates as roots; entities are children (not roots)", () => {
+    const split = `
+bounded_contexts:
+  - name: Campaigns
+    domain_models:
+      aggregates:
+        - name: CampaignBrief
+        - name: GeneratedAsset
+      entities:
+        - name: Product
+      value_objects:
+        - name: AspectRatio
+`;
+    const s = extractSpecSummary(yaml.load(split) as Record<string, unknown>);
+    assert.equal(
+      s.aggregateCount,
+      2,
+      "two declared aggregate roots; Product is a child entity, not a root",
+    );
+    assert.equal(s.valueObjectCount, 1);
+  });
+
   it("treats empty canonical arrays as absent (counts the dialect)", () => {
     const parsed = yaml.load(
       [

@@ -53,9 +53,17 @@ export function extractSpecSummary(
         ).length
       );
     }
-    const entities = (ctx.domain_models as { entities?: unknown } | undefined)
-      ?.entities;
-    return sum + named(entities).length;
+    // Dialect: declared `domain_models.aggregates` are the roots; `entities` are
+    // child entities when an aggregates list is present, else the legacy
+    // entities-as-roots shape. Mirrors normalizeDialect so the review count
+    // matches what actually imports.
+    const dm = ctx.domain_models as
+      | { aggregates?: unknown; entities?: unknown }
+      | undefined;
+    const dialectAggregates = named(dm?.aggregates);
+    const roots =
+      dialectAggregates.length > 0 ? dialectAggregates : named(dm?.entities);
+    return sum + roots.length;
   }, 0);
 
   const valueObjectCount = contexts.reduce((sum, ctx) => {

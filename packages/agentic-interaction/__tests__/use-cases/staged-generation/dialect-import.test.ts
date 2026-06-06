@@ -208,6 +208,65 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
   });
 
+  it("maps domain_models.aggregates as roots and entities as child entities", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Campaigns",
+        "    domain_models:",
+        "      aggregates:",
+        "        - name: CampaignBrief",
+        "          attributes:", // array-form attributes
+        "            - name: id",
+        "              type: string",
+        "            - name: products",
+        '              type: "Product[]"',
+        "        - name: GeneratedAsset",
+        "      entities:",
+        "        - name: Product",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      (analysis.aggregateRoots ?? []).map((a) => a.name),
+      ["CampaignBrief", "GeneratedAsset"],
+      "declared aggregates are the roots",
+    );
+    assert.deepEqual(
+      (analysis.entities ?? []).map((e) => e.name),
+      ["Product"],
+      "entities are child entities, not roots, when an aggregates list exists",
+    );
+    // Array-form attributes mapped, with `id` flagged as the identity key.
+    const cb = config.bounded_contexts[0].aggregates?.find(
+      (a) => a.name === "CampaignBrief",
+    );
+    assert.deepEqual(
+      cb?.fields?.map((f) => `${f.name}:${f.type}${f.key ? "*" : ""}`),
+      ["id:string*", "products:Product[]"],
+    );
+  });
+
+  it("treats entities as roots when no explicit aggregates list is present (legacy)", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Campaigns",
+        "    domain_models:",
+        "      entities:",
+        "        - name: CampaignBrief",
+        "        - name: Product",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      (analysis.aggregateRoots ?? []).map((a) => a.name),
+      ["CampaignBrief", "Product"],
+    );
+  });
+
   it("dedupes out-ports when a name is in both driven and secondary_references", () => {
     const config = parseStructuredConfig(
       [

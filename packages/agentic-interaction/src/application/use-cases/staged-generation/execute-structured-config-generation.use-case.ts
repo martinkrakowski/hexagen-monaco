@@ -158,12 +158,17 @@ export interface StructuredConfigContext {
   // driving/driven `ports`). `normalizeDialect` maps these onto the canonical
   // fields above, so the rest of the pipeline reads only the canonical shape.
   domain_models?: {
-    entities?: Array<{ name: string; attributes?: Record<string, unknown> }>;
+    // Explicit aggregate roots. When present, `entities` are treated as child
+    // entities (root:false); when absent, each entity is treated as a root (the
+    // original entities-only dialect). `attributes` may be a `{ name: type }` map
+    // or a list of `{ name, type }` objects.
+    aggregates?: Array<{ name: string; attributes?: unknown }>;
+    entities?: Array<{ name: string; attributes?: unknown }>;
     value_objects?: Array<{
       name: string;
       type?: string;
       values?: string[];
-      attributes?: Record<string, unknown>;
+      attributes?: unknown;
       description?: string;
     }>;
   };
@@ -413,6 +418,47 @@ function withName<T>(arr: T[] | undefined): Array<T & { name: string }> {
 }
 
 /**
+ * Map a dialect domain object's `attributes` to canonical fields. Accepts both
+ * authoring shapes: a `{ name: type }` map and a list of `{ name, type }` objects.
+ * The `id` attribute is flagged as the identity key.
+ */
+function dialectAttributesToFields(
+  attrs: unknown,
+): StructuredConfigField[] | undefined {
+  let fields: StructuredConfigField[] = [];
+  if (Array.isArray(attrs)) {
+    fields = attrs
+      .filter(
+        (a): a is { name: string; type?: unknown } =>
+          typeof a === "object" &&
+          a !== null &&
+          typeof (a as { name?: unknown }).name === "string",
+      )
+      .map((a) => ({
+        name: a.name,
+        type: a.type != null ? String(a.type) : "unknown",
+        key: a.name === "id",
+      }));
+  } else if (attrs && typeof attrs === "object") {
+    fields = Object.entries(attrs as Record<string, unknown>).map(
+      ([name, type]) => ({ name, type: String(type), key: name === "id" }),
+    );
+  }
+  return fields.length > 0 ? fields : undefined;
+}
+
+function dialectToAggregate(
+  obj: { name: string; attributes?: unknown },
+  root: boolean,
+): StructuredConfigAggregate {
+  return {
+    name: obj.name,
+    root,
+    fields: dialectAttributesToFields(obj.attributes),
+  };
+}
+
+/**
  * Map the rich "hexagonal" import dialect onto the canonical StructuredConfig
  * fields the pipeline actually reads — `aggregates`, `value_objects`,
  * `events_published`, `layers.application.ports`, and the top-level `use_cases`
@@ -445,23 +491,21 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   for (const ctx of config.bounded_contexts) {
     const dm = ctx.domain_models;
 
-    // domain_models.entities → aggregates (each declared entity becomes an
-    // aggregate root; identity is the `id` attribute when present). An explicit
-    // empty `aggregates: []` is treated as absent; nameless entries are dropped.
+    // domain_models.{aggregates,entities} → ctx.aggregates. Declared `aggregates`
+    // are roots; `entities` are child entities (root:false) when an explicit
+    // `aggregates` list is present, otherwise the legacy entities-only shape
+    // treats each entity as a root. An explicit empty `aggregates: []` is treated
+    // as absent; nameless entries are dropped.
     if (!hasItems(ctx.aggregates)) {
-      const entities = withName(dm?.entities);
-      if (entities.length > 0) {
-        ctx.aggregates = entities.map((e) => ({
-          name: e.name,
-          root: true,
-          fields: e.attributes
-            ? Object.entries(e.attributes).map(([name, type]) => ({
-                name,
-                type: String(type),
-                key: name === "id",
-              }))
-            : undefined,
-        }));
+      const dialectAggregates = withName(dm?.aggregates);
+      const dialectEntities = withName(dm?.entities);
+      const entitiesAreRoots = dialectAggregates.length === 0;
+      const mapped: StructuredConfigAggregate[] = [
+        ...dialectAggregates.map((a) => dialectToAggregate(a, true)),
+        ...dialectEntities.map((e) => dialectToAggregate(e, entitiesAreRoots)),
+      ];
+      if (mapped.length > 0) {
+        ctx.aggregates = mapped;
       }
     }
 
