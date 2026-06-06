@@ -167,6 +167,27 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
   });
 
+  it("dedupes out-ports when a name is in both driven and secondary_references", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    ports:",
+        "      driven:",
+        "        - name: PaymentPort",
+        "      secondary_references:",
+        "        - PaymentPort",
+        "",
+      ].join("\n"),
+    );
+    const orders = config.bounded_contexts.find((c) => c.name === "Orders");
+    assert.deepEqual(
+      orders?.layers?.application?.ports?.out,
+      ["PaymentPort"],
+      "duplicate out-port name collapsed to one entry",
+    );
+  });
+
   it("leaves a canonical-shape config untouched (idempotent)", () => {
     const config = parseStructuredConfig(
       [

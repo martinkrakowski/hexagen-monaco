@@ -131,4 +131,52 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
       "alias-keyed canonical wins; dialect not added",
     );
   });
+
+  it("matches the pipeline when the canonical key only NORMALIZES-equal to the context (not exact)", () => {
+    // normalizeContextName("OrderManagement") === normalizeContextName("order-management")
+    // → the pipeline treats this context as covered by canonical (imports 1). The
+    // summary must agree (was an exact-key check → would have double-counted to 2).
+    const parsed = yaml.load(
+      [
+        "bounded_contexts:",
+        "  - name: OrderManagement",
+        "    primary_use_cases:",
+        "      - name: DialectPlaceOrder",
+        "use_cases:",
+        "  order-management:",
+        "    - name: CanonicalPlaceOrder",
+        "",
+      ].join("\n"),
+    ) as Record<string, unknown>;
+    const s = extractSpecSummary(parsed);
+    assert.equal(
+      s.useCaseCount,
+      1,
+      "normalized-equal canonical key wins; no double-count vs the pipeline",
+    );
+  });
+
+  it("does not count nameless dialect entries (mirrors the pipeline's withName)", () => {
+    const parsed = yaml.load(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    domain_models:",
+        "      entities:",
+        "        - name: Order",
+        "        - notname: bad",
+        "      value_objects:",
+        "        - name: Money",
+        "        - {}",
+        "    primary_use_cases:",
+        "      - name: PlaceOrder",
+        "      - foo: bar",
+        "",
+      ].join("\n"),
+    ) as Record<string, unknown>;
+    const s = extractSpecSummary(parsed);
+    assert.equal(s.aggregateCount, 1, "nameless entity not counted");
+    assert.equal(s.valueObjectCount, 1, "nameless value object not counted");
+    assert.equal(s.useCaseCount, 1, "nameless use case not counted");
+  });
 });

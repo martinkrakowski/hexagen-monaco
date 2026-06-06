@@ -166,6 +166,10 @@ export {
   detectWarnings,
 } from "./domain/index";
 
+// Context-name normalization — shared so the web Spec Review can mirror the
+// structured-config pipeline's canonical-use-case precedence exactly (#256).
+export { normalizeContextName } from "./domain/index";
+
 // Staged pipeline prompt exports (from domain)
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,

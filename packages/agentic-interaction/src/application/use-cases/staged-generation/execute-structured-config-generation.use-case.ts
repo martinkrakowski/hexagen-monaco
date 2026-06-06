@@ -396,15 +396,20 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
     const declaredPortCount =
       (declaredPorts?.in?.length ?? 0) + (declaredPorts?.out?.length ?? 0);
     if (ctx.ports && declaredPortCount === 0) {
-      const inPorts = withName(ctx.ports.primary).map((p) => p.name);
+      // Dedupe: a name can appear in both `driven` and `secondary_references`.
+      const inPorts = [
+        ...new Set(withName(ctx.ports.primary).map((p) => p.name)),
+      ];
       const outPorts = [
-        ...withName(ctx.ports.driven).map((p) => p.name),
-        ...(Array.isArray(ctx.ports.secondary_references)
-          ? ctx.ports.secondary_references
-          : []
-        ).filter(
-          (n): n is string => typeof n === "string" && n.trim().length > 0,
-        ),
+        ...new Set([
+          ...withName(ctx.ports.driven).map((p) => p.name),
+          ...(Array.isArray(ctx.ports.secondary_references)
+            ? ctx.ports.secondary_references
+            : []
+          ).filter(
+            (n): n is string => typeof n === "string" && n.trim().length > 0,
+          ),
+        ]),
       ];
       if (inPorts.length > 0 || outPorts.length > 0) {
         ctx.layers = {
