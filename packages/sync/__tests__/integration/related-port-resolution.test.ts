@@ -3,6 +3,8 @@ import { describe, it, afterEach } from "node:test";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { SyncEngine } from "../../src/sync-engine.js";
 import { generateStubs } from "../../src/generators/stubs.js";
 import type { SyncFlags, LoggerPort } from "../../src/config.js";
@@ -155,12 +157,13 @@ describe("related-port resolution (#245)", () => {
       "an adapter with no name-correlated port stays a generic stub",
     );
 
-    // 4. A shared-base use-case stays GENERIC despite the guard matching, because
-    //    use-cases are emitted before their application in-ports (so the in-port
-    //    file doesn't exist at probe time). This pins that ordering invariant: if a
-    //    future reorder makes use-cases resolve, generateUseCaseFromPort would emit
-    //    a non-compiling stub (unimported interface + raw out-port constructor
-    //    types — its own latent defect) and this assertion would flag it.
+    // 4. On a FRESH pass a shared-base use-case stays GENERIC even though the guard
+    //    now matches (normalized, #248): use_cases are emitted before their
+    //    application in-ports, so the in-port file doesn't exist at probe time and
+    //    resolution falls through to the generic stub. This pins that
+    //    emission-ordering behavior. (When the in-port DOES pre-exist, the use-case
+    //    resolves to a valid, self-importing port-derived stub — covered by the
+    //    port-derived suite below.)
     const placeOrder = await fs.readFile(
       path.join(
         target!,
@@ -176,18 +179,162 @@ describe("related-port resolution (#245)", () => {
   });
 });
 
-describe("use-case related-port resolution stays raw/adapter-only (#245 scope, #248)", () => {
-  it("a shared-base use-case stays generic even when its in-port file already exists (re-sync)", async () => {
+describe("use-case resolves to its in-port and compiles (#248)", () => {
+  it("emits a port-derived use-case (imports in-port + out-port interfaces) that typechecks", async () => {
     await withTempWorkspace(
       async ({ workspaceRoot }: { workspaceRoot: string }) => {
         const moduleDir = path.join(workspaceRoot, "packages", "demo");
-        // Pre-create the in-port file so it EXISTS at probe time — the re-sync /
-        // hand-authored-port case that emission ordering hides on a fresh pass.
+        // Pre-create the in-port so it EXISTS at the use-case's probe time — the
+        // realistic #248 trigger (an in-port authored before its use-case). On a
+        // fresh pass emission order emits use_cases first, so it stays generic
+        // (pinned in the suite above, test 4).
         const inDir = path.join(moduleDir, "src", "application", "ports", "in");
         await fs.mkdir(inDir, { recursive: true });
         await fs.writeFile(
           path.join(inDir, "PlaceOrder.in-port.ts"),
+          "export interface PlaceOrderPort {\n  execute(input: string): Promise<void>;\n}\n",
+        );
+
+        const manifest2 = {
+          system: "acme",
+          scope: "acme",
+          architecture: "modular-monolith",
+          generator: {
+            sync: {
+              layers: {
+                application: {
+                  folder: "src/application",
+                  subfolders: ["ports/in", "ports/out", "use-cases"],
+                },
+              },
+              stubs: { enabled: true },
+            },
+          },
+          bounded_contexts: [
+            {
+              name: "demo",
+              type: "core",
+              layers: {
+                application: {
+                  use_cases: ["place-order.use-case.ts"],
+                  ports: {
+                    in: ["place-order.in-port.ts"],
+                    // kebab/extensioned out-port: the use-case must inject it by
+                    // its RESOLVED interface (AccountRepoPort), not the raw string.
+                    out: ["account-repo.out-port.ts"],
+                  },
+                },
+              },
+            },
+          ],
+        } as unknown as Manifest;
+
+        // generateStubs also emits the out-port stub (AccountRepo.out-port.ts →
+        // `export interface AccountRepoPort`) in this same run, so the use-case's
+        // derived import resolves.
+        await generateStubs(
+          moduleDir,
+          "demo",
+          makeConfig(workspaceRoot, manifest2, { logger: createSpyLogger() }),
+        );
+
+        const uc = await fs.readFile(
+          path.join(
+            moduleDir,
+            "src/application/use-cases/PlaceOrder.use-case.ts",
+          ),
+          "utf8",
+        );
+        // #248: the resolved use-case implements its in-port (imported) and injects
+        // each out-port by its resolved interface name (imported) — no raw manifest
+        // strings as identifiers/types.
+        assert.match(
+          uc,
+          /export class \w+ implements PlaceOrderPort\b/,
+          "use-case implements its in-port interface",
+        );
+        assert.match(
+          uc,
+          /import type \{ PlaceOrderPort \} from '\.\.\/ports\/in\/PlaceOrder\.in-port\.js'/,
+          "imports the in-port interface it implements",
+        );
+        assert.match(
+          uc,
+          /import type \{ AccountRepoPort \} from '\.\.\/ports\/out\/AccountRepo\.out-port\.js'/,
+          "imports the out-port interface (resolved name, not raw)",
+        );
+        assert.match(
+          uc,
+          /private readonly accountRepo: AccountRepoPort/,
+          "injects the out-port by resolved interface type + camelCase param",
+        );
+
+        // The real guard: tsc the application surface. Pre-#248 this failed (raw
+        // kebab name as identifier/type → TS1005; unimported interface → TS2304).
+        const tscConfig = path.join(workspaceRoot, "tsconfig.uccheck.json");
+        await fs.writeFile(
+          tscConfig,
+          JSON.stringify({
+            compilerOptions: {
+              target: "ES2022",
+              module: "ESNext",
+              moduleResolution: "bundler",
+              strict: true,
+              noEmit: true,
+              skipLibCheck: true,
+            },
+            include: ["packages/demo/src/application/**/*.ts"],
+          }),
+        );
+        const tscPath = createRequire(import.meta.url).resolve(
+          "typescript/bin/tsc",
+        );
+        try {
+          execFileSync(process.execPath, [tscPath, "-p", tscConfig], {
+            cwd: workspaceRoot,
+            encoding: "utf8",
+            stdio: "pipe",
+          });
+        } catch (e) {
+          const err = e as {
+            stdout?: string;
+            stderr?: string;
+            message: string;
+          };
+          assert.fail(
+            `port-derived use-case failed to typecheck (#248 regression):\n${
+              err.stdout || err.stderr || err.message
+            }`,
+          );
+        }
+      },
+    );
+  });
+
+  it("uses the out-port's ACTUAL interface name when its file already exists (custom template, #251)", async () => {
+    await withTempWorkspace(
+      async ({ workspaceRoot }: { workspaceRoot: string }) => {
+        const moduleDir = path.join(workspaceRoot, "packages", "demo");
+        const inDir = path.join(moduleDir, "src", "application", "ports", "in");
+        const outDir = path.join(
+          moduleDir,
+          "src",
+          "application",
+          "ports",
+          "out",
+        );
+        await fs.mkdir(inDir, { recursive: true });
+        await fs.mkdir(outDir, { recursive: true });
+        await fs.writeFile(
+          path.join(inDir, "PlaceOrder.in-port.ts"),
           "export interface PlaceOrderPort {\n  execute(): Promise<void>;\n}\n",
+        );
+        // A pre-existing out-port whose interface does NOT follow `${name}Port`
+        // (as a custom stubs.templates.outPort would produce). The use-case must
+        // inject the REAL name, not the derived `AccountRepoPort`.
+        await fs.writeFile(
+          path.join(outDir, "AccountRepo.out-port.ts"),
+          "export interface IAccountRepository {\n  save(): Promise<void>;\n}\n",
         );
 
         const manifest2 = {
@@ -235,16 +382,16 @@ describe("use-case related-port resolution stays raw/adapter-only (#245 scope, #
           ),
           "utf8",
         );
-        // Use-cases are NOT normalized in the guard (#245 is adapter-only until #248).
-        // So even with the in-port present, a kebab use-case+in-port doesn't match →
-        // generic stub (which compiles). If a future change normalizes the use-case
-        // guard without first fixing generateUseCaseFromPort (#248), this resolves into
-        // the broken output (`implements <Port>` + raw out-port constructor types) and
-        // this assertion fails — exactly the regression we want flagged.
+        assert.match(
+          uc,
+          /import type \{ IAccountRepository \} from '\.\.\/ports\/out\/AccountRepo\.out-port\.js'/,
+          "imports the out-port's actual interface name (analyzed), not the derived one",
+        );
+        assert.match(uc, /private readonly accountRepo: IAccountRepository/);
         assert.doesNotMatch(
           uc,
-          /export class \w+ implements /,
-          "use-case stays generic even when the in-port exists (raw guard, adapter-only normalization)",
+          /AccountRepoPort/,
+          "does not fall back to the derived ${name}Port when the file exists",
         );
       },
     );

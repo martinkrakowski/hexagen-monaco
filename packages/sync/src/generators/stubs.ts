@@ -15,6 +15,7 @@ import {
   generateAdapterFromPort,
   generateUseCaseFromPort,
   relativeImportSpecifier,
+  type UseCaseOutPort,
 } from "./port-analyzer.js";
 import { DEFAULT_TEMPLATES, DEFAULT_NAMING } from "./stubs/stub-templates.js";
 import type { StubKind } from "./stubs/stub-templates.js";
@@ -87,26 +88,20 @@ async function tryAnalyzeRelatedPort(
       ? context.layers?.application?.ports?.in || []
       : context.layers?.application?.ports?.out || [];
 
-  // #245: ADAPTERS compare on the NORMALIZED port stem. Declared ports may be
-  // kebab/extensioned (`user-repo.out-port.ts`) while `derivedPortName` is derived
-  // from the already-normalized stub `name`, so a raw `===` would miss a port that
-  // genuinely correlates — leaving the adapter a generic stub instead of implementing
-  // its port. generateAdapterFromPort emits valid, self-importing output, so resolving
-  // is safe.
-  //
-  // USE-CASES keep the RAW comparison on purpose: generateUseCaseFromPort still emits
-  // an unimported interface + RAW out-port names as constructor param types, so a
-  // resolved use-case doesn't compile (#248). Normalizing here would only WIDEN that
-  // broken path from clean names to kebab/extensioned ones. Adapter-scoped until #248
-  // fixes the use-case emitter; then this branch can drop the `kind` check.
+  // Compare on the NORMALIZED port stem for BOTH adapters and use-cases (#245,
+  // #248). Declared ports may be kebab/extensioned (`user-repo.out-port.ts`,
+  // `place-order.in-port.ts`) while `derivedPortName` comes from the
+  // already-normalized stub `name`, so a raw `===` would miss a genuinely
+  // correlated port — leaving the stub generic instead of implementing its port.
+  // Both `generateAdapterFromPort` and `generateUseCaseFromPort` now emit valid,
+  // self-importing output (the use-case imports its in-port interface and injects
+  // out-ports by resolved interface name — #248), so resolving is safe for both.
   if (
-    !declaredPorts.some((p) => {
-      const declared =
-        kind === "adapter"
-          ? normalizeStubName(portName(p), relatedPortNamingTemplate)
-          : portName(p);
-      return declared === derivedPortName;
-    })
+    !declaredPorts.some(
+      (p) =>
+        normalizeStubName(portName(p), relatedPortNamingTemplate) ===
+        derivedPortName,
+    )
   ) {
     return null;
   }
@@ -242,11 +237,54 @@ export async function generateStubs(
               portAnalysis,
               name,
               relativeImportSpecifier(filePath, portAnalysis.filePath),
+              filePath,
             );
           } else {
-            const outPorts =
-              context.layers?.application?.ports?.out?.map(portName) || [];
-            content = generateUseCaseFromPort(portAnalysis, name, outPorts);
+            // Resolve each out-port to its interface name + import path. Prefer
+            // the ACTUAL interface from the out-port file when it already exists
+            // (re-sync / hand-authored / a custom `stubs.templates.outPort` that
+            // doesn't follow `{name}Port`); otherwise derive `${base}Port`, which
+            // matches the generic out-port stub the same run will write (use_cases
+            // emit before ports.out, so on a fresh pass the file isn't there yet).
+            // The in-port interface comes from the analysis tryAnalyzeRelatedPort
+            // just resolved.
+            const outPortNaming = resolveNaming(
+              "outPort",
+              contextNaming,
+              manifestNaming,
+            );
+            const outPortDir = path.join(
+              moduleDir,
+              "src",
+              "application",
+              "ports",
+              "out",
+            );
+            const outPorts: UseCaseOutPort[] = (
+              context.layers?.application?.ports?.out ?? []
+            ).map((p) => {
+              const base = normalizeStubName(portName(p), outPortNaming);
+              const outFile = interpolateWithLog(
+                outPortNaming,
+                base,
+                "stubs.naming.outPort",
+                config,
+              );
+              const outPortPath = path.join(outPortDir, outFile);
+              const analyzed = analyzePortFile(outPortPath);
+              return {
+                interfaceName: analyzed?.interfaceName ?? `${base}Port`,
+                paramName: base.charAt(0).toLowerCase() + base.slice(1),
+                importSpecifier: relativeImportSpecifier(filePath, outPortPath),
+              };
+            });
+            content = generateUseCaseFromPort(
+              portAnalysis,
+              name,
+              outPorts,
+              relativeImportSpecifier(filePath, portAnalysis.filePath),
+              filePath,
+            );
           }
           config.logger.debug(`Generated ${kind} '${name}' from port analysis`);
         } else {

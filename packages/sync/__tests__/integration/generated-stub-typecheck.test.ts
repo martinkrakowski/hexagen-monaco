@@ -19,9 +19,10 @@ import type { Manifest } from "../../src/types/manifest.js";
  * and runs the real `tsc` over the generated port/adapter stubs, asserting they
  * compile. Pre-#242-fix this fails (TS1005); post-fix it passes.
  *
- * Scoped to the port/adapter surface (the #242 defect), which is self-contained;
- * the generated use-case stub's `import { Result } from '@scope/shared'` is a
- * separate, pre-existing issue and is deliberately not in scope here.
+ * Extended to the use-case surface (#246/#248): the generic use-case stub imports
+ * `Result` from `@{scope}/shared` (now provided by the shared Result kernel,
+ * #246), and the port-derived use-case must import its interfaces (#248). Both
+ * are now exercised by real `tsc`.
  */
 
 const silentLogger: LoggerPort = {
@@ -78,6 +79,7 @@ const manifest: Manifest = {
       type: "core",
       layers: {
         application: {
+          use_cases: ["charge-card.use-case.ts"],
           ports: {
             in: ["rest-controller.in-port.ts"],
             out: ["relational-db.out-port.ts"],
@@ -88,6 +90,9 @@ const manifest: Manifest = {
         },
       },
     },
+    // The generic use-case stub imports `Result` from `@{scope}/shared`; a shared
+    // context must exist for the Result kernel (#246) to be written into it.
+    { name: "shared", type: "supporting", layers: { domain: {} } },
   ],
 } as unknown as Manifest;
 
@@ -180,5 +185,134 @@ describe("generated stubs typecheck (CI-gap guard, #242)", () => {
         }`,
       );
     }
+  });
+
+  it("emits a generic use-case stub that compiles against the shared Result kernel (#246)", async () => {
+    target = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-246-"));
+    await new SyncEngine(makeExternalFlags(), {
+      targetRoot: target,
+      manifest,
+    }).run();
+
+    // Fresh pass: the use-case is emitted before its in-port, so it's the GENERIC
+    // stub — which imports `Result` from `@{scope}/shared`.
+    const uc = await fs.readFile(
+      path.join(
+        target,
+        "packages/billing/src/application/use-cases/ChargeCard.use-case.ts",
+      ),
+      "utf8",
+    );
+    assert.match(
+      uc,
+      /import type \{ Result \} from '@acme\/shared'/,
+      "generic use-case imports Result from the shared kernel",
+    );
+
+    // #246 — the shared Result kernel exists and is re-exported by the
+    // package-root barrel (so `@acme/shared` exports `Result`).
+    const sharedRoot = await fs.readFile(
+      path.join(target, "packages/shared/src/index.ts"),
+      "utf8",
+    );
+    assert.match(sharedRoot, /export \* from "\.\/domain\/index\.js"/);
+    const kernel = await fs.readFile(
+      path.join(target, "packages/shared/src/domain/result.ts"),
+      "utf8",
+    );
+    assert.match(kernel, /export type Result<T, E = unknown>/);
+
+    // The real guard: tsc the use-case surface + the shared package together.
+    const tscConfig = path.join(target, "tsconfig.uccheck.json");
+    await fs.writeFile(
+      tscConfig,
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          baseUrl: ".",
+          paths: { "@acme/*": ["packages/*/src/index.ts"] },
+        },
+        include: [
+          "packages/billing/src/application/use-cases/**/*.ts",
+          "packages/shared/src/**/*.ts",
+        ],
+      }),
+    );
+    const tscPath = createRequire(import.meta.url).resolve(
+      "typescript/bin/tsc",
+    );
+    try {
+      execFileSync(process.execPath, [tscPath, "-p", tscConfig], {
+        cwd: target,
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+    } catch (e) {
+      const err = e as { stdout?: string; stderr?: string; message: string };
+      assert.fail(
+        `generated use-case + shared kernel failed to typecheck (#246 regression):\n${
+          err.stdout || err.stderr || err.message
+        }`,
+      );
+    }
+  });
+
+  it("re-exports Result even when the shared context declares no domain layer (#246/#251)", async () => {
+    target = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-246h-"));
+    const noDomainShared = {
+      ...manifest,
+      bounded_contexts: [
+        manifest.bounded_contexts![0], // billing (carries the use-case)
+        { name: "shared", type: "supporting" }, // NO layers declared
+      ],
+    } as unknown as Manifest;
+    await new SyncEngine(makeExternalFlags(), {
+      targetRoot: target,
+      manifest: noDomainShared,
+    }).run();
+
+    // The recursive barrel walks domain/ regardless of declared layers, so the
+    // kernel under domain/result.ts is still picked up and re-exported — Result
+    // resolves even without an explicit domain layer on the shared context.
+    const kernel = await fs.readFile(
+      path.join(target, "packages/shared/src/domain/result.ts"),
+      "utf8",
+    );
+    assert.match(kernel, /export type Result<T, E = unknown>/);
+    const sharedRoot = await fs.readFile(
+      path.join(target, "packages/shared/src/index.ts"),
+      "utf8",
+    );
+    assert.match(sharedRoot, /export \* from "\.\/domain\/index\.js"/);
+  });
+
+  it("preserves a generic use-case stub byte-for-byte on re-sync (no clobber)", async () => {
+    target = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-246r-"));
+    const run = () =>
+      new SyncEngine(makeExternalFlags(), {
+        targetRoot: target!,
+        manifest,
+      }).run();
+    await run();
+    const ucPath = path.join(
+      target,
+      "packages/billing/src/application/use-cases/ChargeCard.use-case.ts",
+    );
+    const first = await fs.readFile(ucPath, "utf8");
+    await run(); // re-sync
+    const second = await fs.readFile(ucPath, "utf8");
+    assert.strictEqual(
+      second,
+      first,
+      "re-sync must preserve the existing use-case stub",
+    );
+    // Emission order keeps a fresh use-case generic, and re-sync preserves existing
+    // files — so it never silently flips to (or from) the port-derived form.
+    assert.match(second, /import type \{ Result \} from '@acme\/shared'/);
   });
 });
