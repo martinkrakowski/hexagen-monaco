@@ -282,7 +282,12 @@ describe("apps", () => {
       assert.strictEqual(
         scripts.prepare,
         "nitro prepare",
-        "prepare script generates .nitro types post-install so tsc works",
+        "prepare script generates .nitro types on install (where honoured)",
+      );
+      assert.match(
+        scripts.typecheck,
+        /nitro prepare && tsc/,
+        "typecheck runs nitro prepare first so tsc never fails on missing .nitro types",
       );
 
       // Standalone, Nitro-managed tsconfig — extends the generated config, not base.
@@ -303,6 +308,10 @@ describe("apps", () => {
         /compatibilityDate/.test(nitroConfig),
         "nitro.config.ts pins a compatibilityDate",
       );
+      assert.ok(
+        nitroConfig.includes('srcDir: "server"'),
+        "nitro.config.ts pins srcDir to server (must match the server/routes/ entry)",
+      );
 
       const entry = await readText(entryPath);
       assert.ok(
@@ -312,6 +321,84 @@ describe("apps", () => {
       assert.ok(
         entry.includes('app: "api"'),
         "{appName} interpolated into the route body",
+      );
+    });
+  });
+
+  it("should skip an extraFile whose path escapes the app dir, keeping entry + package.json", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const logger = createSpyLogger();
+      const report = makeReport();
+      // extraFiles share emitAppFile's containment guard with entryPoint, but an
+      // unsafe extraFile is skipped INDIVIDUALLY (the app's other files are still
+      // written) — unlike an unsafe entryPoint, which aborts the whole app.
+      const manifest: Manifest = {
+        system: "myorg",
+        generator: {
+          sync: {
+            apps: {
+              frameworks: {
+                "plain-ts": {
+                  packageJson: {
+                    template: '{\n  "name": "@{system}/{appName}"\n}\n',
+                  },
+                  entryPoint: {
+                    path: "src/index.ts",
+                    template: "export {};\n",
+                  },
+                  extraFiles: [
+                    { path: "../../escaped-extra.ts", template: "// escape\n" },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        apps: [{ name: "web", framework: "plain-ts" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger,
+        enableApps: true,
+      });
+
+      const result = await generateApps(config, report);
+      assert.strictEqual(
+        result.error,
+        undefined,
+        "unsafe extraFile must be skipped, not abort sync",
+      );
+
+      assert.strictEqual(
+        await pathExists(path.join(workspaceRoot, "escaped-extra.ts")),
+        false,
+        "extraFile path with '..' must not write outside apps/",
+      );
+      // The app's other files ARE still written (individual skip, not app-abort).
+      assert.strictEqual(
+        await pathExists(
+          path.join(workspaceRoot, "apps", "web", "package.json"),
+        ),
+        true,
+        "package.json still written",
+      );
+      assert.strictEqual(
+        await pathExists(
+          path.join(workspaceRoot, "apps", "web", "src", "index.ts"),
+        ),
+        true,
+        "entryPoint still written; only the unsafe extra file is skipped",
+      );
+
+      const warns = messagesAt(logger, "warn");
+      assert.ok(
+        warns.some(
+          (m) => m.includes("unsafe") && m.includes("escaped-extra.ts"),
+        ),
+        `expected an unsafe-file warning naming the extra — got: ${JSON.stringify(warns)}`,
+      );
+      assert.ok(
+        report.calls.find((c) => c.type === "blocked" && c.target === "web"),
+        "report records the unsafe extraFile as blocked",
       );
     });
   });
@@ -498,7 +585,7 @@ describe("apps", () => {
       const warns = messagesAt(logger, "warn");
       assert.ok(
         warns.some(
-          (m) => m.includes("entry") && m.includes("escaped-entry.ts"),
+          (m) => m.includes("unsafe") && m.includes("escaped-entry.ts"),
         ),
         `expected an unsafe-entryPoint warning — got: ${JSON.stringify(warns)}`,
       );

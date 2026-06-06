@@ -141,8 +141,11 @@ export function main(): void {
 // Nitro (https://nitro.build). Shape verified end-to-end by the Phase-2 de-risk
 // (nitro prepare → tsc → nitro build, all green): the app's tsconfig extends the
 // Nitro-generated `./.nitro/types/tsconfig.json` (NOT the workspace base — Nitro
-// owns resolution + auto-imports), and a `prepare: nitro prepare` script makes
-// those types exist after install so `tsc` works without a manual step.
+// owns resolution + auto-imports). Those types come from `nitro prepare`, so the
+// `typecheck` script runs it first — `tsc` never fails on missing `.nitro/types`
+// even if the package manager skips the `prepare` lifecycle for workspace members
+// (yarn classic/berry, pnpm, `--ignore-scripts`). `dev`/`build` run prepare
+// internally; `prepare` covers IDEs/installs that do honour the lifecycle.
 const NITRO_PACKAGE_JSON_TEMPLATE = `{
   "name": "@{scope}/{appName}",
   "version": "0.0.0",
@@ -154,7 +157,7 @@ const NITRO_PACKAGE_JSON_TEMPLATE = `{
     "preview": "node .output/server/index.mjs",
     "prepare": "nitro prepare",
     "lint": "eslint server --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "nitro prepare && tsc --noEmit"
   },
   "dependencies": {
     "nitropack": "^2.13.0"

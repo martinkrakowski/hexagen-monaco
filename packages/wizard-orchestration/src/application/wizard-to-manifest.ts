@@ -41,6 +41,11 @@ function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
  */
 function frameworkForContext(bc: BoundedContext): AppEntryFramework {
   if (bc.infrastructureTarget === "nitro") return "nitro";
+  // infrastructureTarget wins when set: a non-nitro value has no template yet →
+  // plain-ts (it must NOT be silently overridden by a legacy apiFramework).
+  if (bc.infrastructureTarget) return "plain-ts";
+  // Fallback for legacy/imported manifests that predate infrastructureTarget
+  // (it's absent there) and only carry the older apiFramework field.
   if (bc.apiFramework === "Fastify") return "fastify";
   return "plain-ts";
 }

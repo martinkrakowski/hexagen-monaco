@@ -233,10 +233,37 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     }
   });
 
-  it("honors legacy apiFramework=Fastify when infrastructureTarget is not nitro", () => {
+  it("honors legacy apiFramework=Fastify only when infrastructureTarget is absent", () => {
     const m = wizardToManifest(
       wizardWith([{ name: "orders", apiFramework: "Fastify" }]),
     );
     assert.equal(apiFrameworkOf(m), "fastify");
+  });
+
+  it("infrastructureTarget=nitro wins over a legacy apiFramework=Fastify", () => {
+    const m = wizardToManifest(
+      wizardWith([
+        {
+          name: "orders",
+          infrastructureTarget: "nitro",
+          apiFramework: "Fastify",
+        },
+      ]),
+    );
+    assert.equal(apiFrameworkOf(m), "nitro");
+  });
+
+  it("a non-nitro infrastructureTarget shadows a legacy apiFramework=Fastify", () => {
+    // infra is set (nestjs) → it wins; the legacy Fastify must NOT leak through.
+    const m = wizardToManifest(
+      wizardWith([
+        {
+          name: "orders",
+          infrastructureTarget: "nestjs",
+          apiFramework: "Fastify",
+        },
+      ]),
+    );
+    assert.equal(apiFrameworkOf(m), "plain-ts");
   });
 });
