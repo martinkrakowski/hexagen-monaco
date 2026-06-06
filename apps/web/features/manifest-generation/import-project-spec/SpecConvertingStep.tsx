@@ -45,9 +45,11 @@ export function SpecConvertingStep({
             {progressMessage ??
               "Converting loose specification into structured architecture..."}
           </p>
+          {/* Not an aria-live region: a per-second update would make screen
+              readers announce the clock every tick. The static reassurance
+              copy below conveys "still working" to assistive tech instead. */}
           <p
             className="text-sm text-muted-foreground"
-            aria-live="polite"
             data-testid="conversion-elapsed"
           >
             Working with the model — {formatElapsed(elapsedSeconds)} elapsed
