@@ -151,6 +151,29 @@ export interface StructuredConfigContext {
       adapters?: string[];
     };
   };
+
+  // ── Rich "hexagonal" import dialect ─────────────────────────────────────────
+  // An alternate authoring shape (domain models nested under `domain_models`,
+  // per-context `primary_use_cases`, object-form `domain_events`, and
+  // driving/driven `ports`). `normalizeDialect` maps these onto the canonical
+  // fields above, so the rest of the pipeline reads only the canonical shape.
+  domain_models?: {
+    entities?: Array<{ name: string; attributes?: Record<string, unknown> }>;
+    value_objects?: Array<{
+      name: string;
+      type?: string;
+      values?: string[];
+      attributes?: Record<string, unknown>;
+      description?: string;
+    }>;
+  };
+  primary_use_cases?: Array<{ name: string; implements?: string }>;
+  domain_events?: Array<{ name: string; payload?: Record<string, unknown> }>;
+  ports?: {
+    primary?: Array<{ name: string }>;
+    driven?: Array<{ name: string }>;
+    secondary_references?: string[];
+  };
 }
 
 export interface StructuredConfig {
@@ -225,7 +248,7 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
     try {
       const parsed = JSON.parse(rawConfig) as StructuredConfig;
       validateStructuredConfigShape(parsed);
-      return parsed;
+      return normalizeDialect(parsed);
     } catch (e) {
       if (e instanceof StructuredConfigShapeError) throw e;
       // JSON parse failed — fall through to YAML
@@ -237,7 +260,7 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
   try {
     const parsed = yaml.load(rawConfig) as StructuredConfig;
     validateStructuredConfigShape(parsed);
-    return parsed;
+    return normalizeDialect(parsed);
   } catch (e) {
     if (e instanceof StructuredConfigShapeError) {
       // Single-doc parse succeeded but shape was wrong — could still be
@@ -264,7 +287,7 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
   const merged = tryMergeMultiDocYaml(rawConfig);
   if (merged) {
     validateStructuredConfigShape(merged);
-    return merged as StructuredConfig;
+    return normalizeDialect(merged as StructuredConfig);
   }
 
   // Multi-doc fallback didn't apply — surface the single-doc error.
@@ -276,6 +299,176 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
       `Ensure the file is valid YAML or JSON with a "bounded_contexts" array. ` +
       `Parser error: ${String(singleDocError)}`,
   );
+}
+
+/** A non-empty array. An explicit `[]` counts as "absent" so a canonical empty
+ * placeholder doesn't block dialect mapping (#256 review). */
+function hasItems(v: unknown): v is unknown[] {
+  return Array.isArray(v) && v.length > 0;
+}
+
+/**
+ * Whether a canonical `use_cases` map entry carries real content. Mirrors what
+ * `buildDomainAnalysisFromConfig` accepts (`Array.isArray(ucs) ? ucs : [ucs]`):
+ * a non-empty array OR a single use-case object. An explicit `[]` (or a
+ * null/primitive) is treated as "absent" so it neither blocks nor overwrites
+ * dialect-derived use cases — but an object-form entry like
+ * `use_cases: { Orders: { name: "Charge" } }` still wins, as it did before the
+ * empty-array fix (#256 review).
+ */
+function hasUseCaseContent(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length > 0;
+  return typeof v === "object" && v !== null;
+}
+
+/**
+ * Keep only dialect entries that are objects with a non-empty string `name`.
+ * Drops primitives / nameless objects so normalization never yields
+ * `name: undefined` — which would derive broken downstream names like
+ * `undefinedRepositoryPort` (#256 review).
+ */
+function withName<T>(arr: T[] | undefined): Array<T & { name: string }> {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((x): x is T & { name: string } => {
+    if (typeof x !== "object" || x === null) return false;
+    const name = (x as { name?: unknown }).name;
+    return typeof name === "string" && name.trim().length > 0;
+  });
+}
+
+/**
+ * Map the rich "hexagonal" import dialect onto the canonical StructuredConfig
+ * fields the pipeline actually reads — `aggregates`, `value_objects`,
+ * `events_published`, `layers.application.ports`, and the top-level `use_cases`
+ * map. Only fills a canonical field when it is empty/absent, so a spec already in
+ * canonical form is untouched. Without this, a spec authored with `domain_models`
+ * / `primary_use_cases` / `domain_events` / `ports.{primary,driven}` silently
+ * loses all of its domain content (buildDomainAnalysisFromConfig reads none of
+ * those keys), which surfaced as "0 use cases" in the import review.
+ */
+export function normalizeDialect(config: StructuredConfig): StructuredConfig {
+  if (!Array.isArray(config.bounded_contexts)) return config;
+
+  const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
+  // Canonical top-level `use_cases` win over the dialect even when keyed by a
+  // context alias (`name` vs `short`) — `lookupUseCases` resolves both — so compare
+  // on the normalized form, not exact keys, before taking dialect use cases. Only
+  // an entry with real content counts (`hasUseCaseContent`: non-empty array or a
+  // single object): an empty `use_cases: { Orders: [] }` placeholder must neither
+  // block (here) nor — at merge time — clobber the dialect's primary_use_cases,
+  // while an object-form `{ Orders: { name: "Charge" } }` still wins (#256 review).
+  const canonicalUseCases = Object.fromEntries(
+    Object.entries(config.use_cases ?? {}).filter(([, ucs]) =>
+      hasUseCaseContent(ucs),
+    ),
+  );
+  const canonicalUseCaseKeys = new Set(
+    Object.keys(canonicalUseCases).map((k) => normalizeContextName(k)),
+  );
+
+  for (const ctx of config.bounded_contexts) {
+    const dm = ctx.domain_models;
+
+    // domain_models.entities → aggregates (each declared entity becomes an
+    // aggregate root; identity is the `id` attribute when present). An explicit
+    // empty `aggregates: []` is treated as absent; nameless entries are dropped.
+    if (!hasItems(ctx.aggregates)) {
+      const entities = withName(dm?.entities);
+      if (entities.length > 0) {
+        ctx.aggregates = entities.map((e) => ({
+          name: e.name,
+          root: true,
+          fields: e.attributes
+            ? Object.entries(e.attributes).map(([name, type]) => ({
+                name,
+                type: String(type),
+                key: name === "id",
+              }))
+            : undefined,
+        }));
+      }
+    }
+
+    // domain_models.value_objects → value_objects (dialect uses `type` for the
+    // underlying kind, e.g. `type: enum`).
+    if (!hasItems(ctx.value_objects)) {
+      const vos = withName(dm?.value_objects);
+      if (vos.length > 0) {
+        ctx.value_objects = vos.map((vo) => ({
+          name: vo.name,
+          underlying: vo.type,
+          values: vo.values,
+        }));
+      }
+    }
+
+    // domain_events (objects) → events_published (names).
+    if (!hasItems(ctx.events_published) && Array.isArray(ctx.domain_events)) {
+      const names = ctx.domain_events
+        .map((e) => (e as { name?: unknown })?.name)
+        .filter(
+          (n): n is string => typeof n === "string" && n.trim().length > 0,
+        );
+      if (names.length > 0) ctx.events_published = names;
+    }
+
+    // ports.{primary → in; driven + secondary_references → out} →
+    // layers.application.ports, so the pre-defined-port path honours the contracts
+    // the author declared. Empty declared ports count as absent.
+    const declaredPorts = ctx.layers?.application?.ports;
+    const declaredPortCount =
+      (declaredPorts?.in?.length ?? 0) + (declaredPorts?.out?.length ?? 0);
+    if (ctx.ports && declaredPortCount === 0) {
+      // Dedupe: a name can appear in both `driven` and `secondary_references`.
+      const inPorts = [
+        ...new Set(withName(ctx.ports.primary).map((p) => p.name)),
+      ];
+      const outPorts = [
+        ...new Set([
+          ...withName(ctx.ports.driven).map((p) => p.name),
+          ...(Array.isArray(ctx.ports.secondary_references)
+            ? ctx.ports.secondary_references
+            : []
+          ).filter(
+            (n): n is string => typeof n === "string" && n.trim().length > 0,
+          ),
+        ]),
+      ];
+      if (inPorts.length > 0 || outPorts.length > 0) {
+        ctx.layers = {
+          ...ctx.layers,
+          application: {
+            ...ctx.layers?.application,
+            ports: { in: inPorts, out: outPorts },
+          },
+        };
+      }
+    }
+
+    // primary_use_cases → top-level use_cases map (per-context `use_cases` is
+    // forbidden in the canonical shape — `use_cases?: never`). Nameless use cases
+    // are dropped; skip when the context name itself isn't usable as a key.
+    const ucs = withName(ctx.primary_use_cases);
+    if (ucs.length > 0 && ctx.name) {
+      // Skip when canonical use_cases already cover this context under any of its
+      // aliases — canonical wins, and we must not leave a duplicate dialect entry
+      // keyed by a different alias that downstream analysis would also pick up.
+      const coveredByCanonical = [ctx.name, ctx.short]
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .some((v) => canonicalUseCaseKeys.has(normalizeContextName(v)));
+      if (!coveredByCanonical) {
+        useCasesFromDialect[ctx.name] = ucs.map((uc) => ({ name: uc.name }));
+      }
+    }
+  }
+
+  if (Object.keys(useCasesFromDialect).length > 0) {
+    // A non-empty canonical `use_cases` entry wins over the dialect; empty
+    // placeholders were dropped above, so they neither block nor overwrite it.
+    config.use_cases = { ...useCasesFromDialect, ...canonicalUseCases };
+  }
+
+  return config;
 }
 
 export class StructuredConfigShapeError extends Error {
