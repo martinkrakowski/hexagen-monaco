@@ -338,9 +338,15 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
   // Canonical top-level `use_cases` win over the dialect even when keyed by a
   // context alias (`name` vs `short`) — `lookupUseCases` resolves both — so compare
-  // on the normalized form, not exact keys, before taking dialect use cases.
+  // on the normalized form, not exact keys, before taking dialect use cases. An
+  // empty canonical array counts as ABSENT (`hasItems`): a placeholder like
+  // `use_cases: { Orders: [] }` must neither block (here) nor — at merge time —
+  // clobber the dialect's primary_use_cases for that context (#256 review).
+  const canonicalUseCases = Object.fromEntries(
+    Object.entries(config.use_cases ?? {}).filter(([, arr]) => hasItems(arr)),
+  );
   const canonicalUseCaseKeys = new Set(
-    Object.keys(config.use_cases ?? {}).map((k) => normalizeContextName(k)),
+    Object.keys(canonicalUseCases).map((k) => normalizeContextName(k)),
   );
 
   for (const ctx of config.bounded_contexts) {
@@ -440,8 +446,9 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   }
 
   if (Object.keys(useCasesFromDialect).length > 0) {
-    // A canonical top-level `use_cases` entry for a context wins over the dialect.
-    config.use_cases = { ...useCasesFromDialect, ...(config.use_cases ?? {}) };
+    // A non-empty canonical `use_cases` entry wins over the dialect; empty
+    // placeholders were dropped above, so they neither block nor overwrite it.
+    config.use_cases = { ...useCasesFromDialect, ...canonicalUseCases };
   }
 
   return config;

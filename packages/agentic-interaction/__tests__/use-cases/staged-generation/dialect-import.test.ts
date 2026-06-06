@@ -167,6 +167,26 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
   });
 
+  it("treats an empty canonical use_cases array as absent (placeholder must not drop dialect use cases)", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "    primary_use_cases:",
+        "      - name: PlaceOrder",
+        "use_cases:",
+        "  Orders: []", // empty canonical placeholder — must not block the dialect
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      analysis.useCases.map((u) => u.name),
+      ["PlaceOrder"],
+      "empty canonical placeholder is absent; the dialect primary_use_cases survive",
+    );
+  });
+
   it("dedupes out-ports when a name is in both driven and secondary_references", () => {
     const config = parseStructuredConfig(
       [
