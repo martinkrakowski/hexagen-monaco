@@ -53,7 +53,7 @@ const manifest: Manifest = {
         domain: { folder: "src/domain" },
         application: {
           folder: "src/application",
-          subfolders: ["ports/in", "ports/out"],
+          subfolders: ["ports/in", "ports/out", "use-cases"],
         },
         infrastructure: {
           folder: "src/infrastructure",
@@ -69,8 +69,14 @@ const manifest: Manifest = {
       type: "core",
       layers: {
         application: {
+          // A shared-base use-case + in-port: the guard now matches, but use-cases
+          // are emitted BEFORE application in-ports (emission-plan-builder), so the
+          // in-port file doesn't exist when the use-case is processed — it stays
+          // generic. This keeps the (currently broken) generateUseCaseFromPort path
+          // unreachable; see the assertion below.
+          use_cases: ["place-order.use-case.ts"],
           ports: {
-            in: [],
+            in: ["place-order.in-port.ts"],
             // clean shared-base, kebab/extensioned shared-base, and an out-port
             // that no adapter correlates to.
             out: [
@@ -142,6 +148,25 @@ describe("related-port resolution (#245)", () => {
       prisma,
       /export class \w+ implements /,
       "an adapter with no name-correlated port stays a generic stub",
+    );
+
+    // 4. A shared-base use-case stays GENERIC despite the guard matching, because
+    //    use-cases are emitted before their application in-ports (so the in-port
+    //    file doesn't exist at probe time). This pins that ordering invariant: if a
+    //    future reorder makes use-cases resolve, generateUseCaseFromPort would emit
+    //    a non-compiling stub (unimported interface + raw out-port constructor
+    //    types — its own latent defect) and this assertion would flag it.
+    const placeOrder = await fs.readFile(
+      path.join(
+        target!,
+        "packages/demo/src/application/use-cases/PlaceOrder.use-case.ts",
+      ),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      placeOrder,
+      /export class \w+ implements /,
+      "use-case stays a generic stub (in-port not yet emitted at probe time)",
     );
   });
 });
