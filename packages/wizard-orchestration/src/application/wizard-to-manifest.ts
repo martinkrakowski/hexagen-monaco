@@ -57,13 +57,20 @@ function pickPreferredFramework(
   return "plain-ts";
 }
 
-interface CrossContextEdge {
+interface CrossContextEdgeBase {
   consumer: string;
   provider: string;
-  transport: "event-bus" | "network";
-  events: string[];
   integrationPattern: "open-host" | "acl";
 }
+/**
+ * A cross-context transport edge, discriminated on `transport`:
+ * - `event-bus` (Phase 3a) carries the provider's `events` (Decision D1);
+ * - `network` (Phase 3b) carries the provider's `operations` (Decision E1).
+ * The dedicated `generateCrossContext` emitter dispatches on `transport`.
+ */
+type CrossContextEdge =
+  | (CrossContextEdgeBase & { transport: "event-bus"; events: string[] })
+  | (CrossContextEdgeBase & { transport: "network"; operations: string[] });
 
 /** PascalCase a string into a valid TS identifier (split on non-alphanumerics). */
 function toPascalCase(value: string): string {
@@ -92,16 +99,41 @@ function eventContractsFor(provider: BoundedContext): string[] {
 }
 
 /**
- * Phase 3a — for an `event-bus` template, materialize cross-context transport
- * from the wizard's peer mappings. Each edge (consumer → provider) makes the
- * PROVIDER a publisher of its domain events (`message-publisher` out-port +
- * adapter) and the CONSUMER a subscriber (`event-listener` in-port + adapter) —
- * the contract is the provider's events (Decision D1), so the provider is the
- * publisher. The transport ports/adapters/contracts are written by the dedicated
+ * Operation-contract base names a provider exposes over the network (Decision
+ * E1): its declared `useCases` (PascalCased verbatim, deduped) — each yielding a
+ * `<Op>Request`/`<Op>Response` DTO pair and an `<opCamel>` controller/client
+ * method — or a single fallback base derived from the provider context name only
+ * (`${Provider}` → `${Provider}Request`/`${Provider}Response`) when none are
+ * declared. The network analog of `eventContractsFor`; the emitter appends
+ * Request/Response and derives the method name from each base.
+ */
+function operationContractsFor(provider: BoundedContext): string[] {
+  const declared = [
+    ...new Set(
+      (provider.useCases || []).map(toPascalCase).filter((o) => o.length > 0),
+    ),
+  ];
+  if (declared.length > 0) return declared;
+  return [toPascalCase(provider.name) || "Context"];
+}
+
+/**
+ * Phase 3 — for a strict template, materialize cross-context transport from the
+ * wizard's peer mappings, one edge per mapping (consumer → provider). The
+ * transport ports/adapters/contracts are written by the dedicated
  * `generateCrossContext` emitter (the SOLE writer — declaring them in the manifest
  * layers would let `generateStubs` clobber the bespoke content under the web
- * flow's `forceRoot`). Empty for non-event-bus templates, so in-process output is
- * unchanged. Network is Phase 3b.
+ * flow's `forceRoot`); these edges only describe what to emit.
+ *
+ * - **`event-bus`** (Phase 3a): the PROVIDER publishes its domain events
+ *   (`message-publisher` out-port + adapter), the CONSUMER subscribes
+ *   (`event-listener` in-port + adapter). The contract is the provider's events
+ *   (Decision D1), so the provider is the publisher.
+ * - **`network`** (Phase 3b): the PROVIDER exposes a `rest-controller` in-port,
+ *   the CONSUMER calls it via an `external-service-client` out-port. The
+ *   operations are the provider's use-cases (Decision E1).
+ *
+ * Empty for `in-process` (modular-monolith), so that output stays unchanged.
  */
 function deriveCrossContextEdges(
   boundedContexts: readonly BoundedContext[],
@@ -112,7 +144,8 @@ function deriveCrossContextEdges(
   }>,
   crossContextCalls: string,
 ): CrossContextEdge[] {
-  if (crossContextCalls !== "event-bus") return [];
+  if (crossContextCalls !== "event-bus" && crossContextCalls !== "network")
+    return [];
 
   const byId = new Map(boundedContexts.map((bc) => [bc.id, bc] as const));
   const edges: CrossContextEdge[] = [];
@@ -124,13 +157,25 @@ function deriveCrossContextEdges(
       ? byId.get(m.providerContext)
       : undefined;
     if (!consumer || !provider || consumer.id === provider.id) continue;
-    edges.push({
-      consumer: consumer.name,
-      provider: provider.name,
-      transport: "event-bus",
-      events: eventContractsFor(provider),
-      integrationPattern: m.integrationPattern === "acl" ? "acl" : "open-host",
-    });
+    const integrationPattern =
+      m.integrationPattern === "acl" ? "acl" : "open-host";
+    if (crossContextCalls === "network") {
+      edges.push({
+        consumer: consumer.name,
+        provider: provider.name,
+        transport: "network",
+        operations: operationContractsFor(provider),
+        integrationPattern,
+      });
+    } else {
+      edges.push({
+        consumer: consumer.name,
+        provider: provider.name,
+        transport: "event-bus",
+        events: eventContractsFor(provider),
+        integrationPattern,
+      });
+    }
   }
   return edges;
 }
@@ -239,7 +284,7 @@ export function wizardToManifest(
     scope: namespace,
     architecture: template,
     workspaceTemplate: template,
-    // Cross-context transport edges (Phase 3a: event-bus only) for the dedicated
+    // Cross-context transport edges (event-bus or network) for the dedicated
     // transport emitter. Omitted when empty so in-process (modular-monolith)
     // output stays byte-identical.
     ...(crossContext.length > 0 ? { cross_context: crossContext } : {}),

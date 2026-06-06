@@ -1,6 +1,6 @@
 # Materialize Cross-Context Communication (Phase 3)
 
-**Status:** Proposed — Decision C → **C1** (interface-complete, body-stubbed); Decision D → **D1** (provider `domainEvents`; context-name-only fallback). Ready for 3a.
+**Status:** 3a (event-bus) shipped in #239. Decision C → **C1** (interface-complete, body-stubbed); Decision D → **D1** (provider `domainEvents`; context-name-only fallback); Decision E → **E1** (provider `useCases`; context-name-only fallback). Implementing 3b (network).
 **Date:** 2026-06-06
 **Parent:** [`wire-architectural-template-into-generation.md`](./wire-architectural-template-into-generation.md) (Phase 3). Phases 1 (#235) + 2 (#236) shipped; the `generateApps` traversal guard shipped (#237). Decision A resolved → **A1** (keep all three templates, differentiate now).
 
@@ -58,6 +58,19 @@ Rationale for the context-name-only fallback: it's a deterministic _placeholder_
 
 (D2 — generic-per-edge with no manifest change — rejected: it can't name real events even when the user declared them.)
 
+## Decision E — network request/response DTO source _(resolved: E1)_
+
+The network analog of Decision D: what names the request/response DTOs (and the controller/client methods) the consumer calls on the provider? **E1 (chosen):** the **provider's** declared `useCases` — already a wizard field, `z.array(z.string())`, the same shape as `domainEvents`, already mapped into the manifest as `use_cases`. A REST endpoint _is_ an operation, and `useCases` is the operation vocabulary the wizard already captures, so it is the network-appropriate D1 analog (events : facts :: use-cases : operations). One operation per use-case.
+
+**Contract naming — locked (so fixtures can't drift from code), mirroring D1:**
+
+- **Declared `useCases`:** one operation per use-case, base name `toPascalCase(useCase)` verbatim (deduped). Each operation `<Op>` yields a `<Op>Request` + `<Op>Response` DTO pair in `shared`, and a controller/client method `<opCamel>(request: <Op>Request): Promise<<Op>Response>`.
+- **Fallback (no `useCases` declared):** a single generic operation per provider, named from the **provider context name only** — base `${ProviderPascal}` → `${ProviderPascal}Request` + `${ProviderPascal}Response`, deduped per provider. The exact analog of D1's `${Provider}Event`.
+
+**Why this is not in tension with D1.** D1's rationale _rejected_ folding use-case names into the **event-bus fallback** — for event-bus the correct primary vocabulary is `domainEvents` (facts), and use-cases there would be a wrong-shaped _second_ fallback that multiplies event contracts. For network, use-cases are the correct **primary** vocabulary (operations ≈ endpoints), with context-name as the single coarse fallback. Both phases follow one principle: granularity comes from the provider's declared vocabulary; the fallback is one context-named contract. (E2 — generic-per-edge with no `useCases` derivation — rejected for D2's reason: it can't name real operations even when the user declared them.)
+
+**Verified before locking (the analyzer-fidelity risk below).** `generateAdapterFromPort` (ts-morph, single-file analysis) preserves a **single** unresolved cross-package import verbatim — so a network adapter's `request: <Op>Request` / `Promise<<Op>Response>` carry through _and are used_. (A **union** of unresolved imports collapses to `any`, which is why the event-bus publisher adapter's param is `any`; that asymmetry does not affect network's single-typed params.) The class-name argument must be a valid TS identifier — fixed in #239 (`a5f8fd10`): adapter class = `${toPascalCase(portBase)}Adapter`.
+
 ## Steps
 
 ### 3a — manifest enrichment + event-bus (`wizard-orchestration` + dedicated emitter)
@@ -66,10 +79,15 @@ Rationale for the context-name-only fallback: it's a deterministic _placeholder_
 2. **Dedicated emitter — done.** `generateCrossContext` (`packages/sync`, modeled on `architecture-files.ts`) reads `cross_context` and is the **sole writer** of the transport: bespoke publisher (`publish(event)`) / subscriber (`handle(event)`) port interfaces + shared event contracts in `shared`; `generateAdapterFromPort` derives the adapters from those bespoke ports. **Sole writer because** `generateStubs` would clobber the bespoke content under the web flow's `forceRoot` if the ports were declared in the layers (`safeWriteFileAtomic` only preserves hand-written files when `!forceRoot`) — so they're emitted directly and re-exported by the disk-based pass-2 barrels. Runs after `generateApps`, before the pass-2 barrels.
 3. Tests: ✅ manifest enrichment (`cross_context` edges; D1 events + fallback; per-consumer edges; no ports in layers; in-process byte-identical) **+** ✅ emitter (`packages/sync` `cross-context.test.ts`: shared contracts, publisher port has a **real `publish` method — explicitly pinned as not the generic stub**, subscriber `handle`, derived adapters).
 
-### 3b — network (micro-frontend)
+### 3b — network (micro-frontend) _(Decision E1)_
 
-5. Same derivation for `crossContextCalls === "network"`: consumer `external-service-client` out-port + adapter, provider `rest-controller` in-port + handler, DTOs in `shared`.
-6. Tests: a micro-frontend edge emits client/controller; a direct assertion that **strict-enterprise and micro-frontend now diverge** in generated transport (the Decision A1 payoff).
+4. **Manifest enrichment.** `deriveCrossContextEdges` also handles `crossContextCalls === "network"`: each edge carries `operations` (the provider's use-case bases per E1) instead of `events`, with `transport: "network"`. The edge type becomes a discriminated union on `transport` (`{…, events}` | `{…, operations}`).
+5. **Emitter.** `generateCrossContext` dispatches on `edge.transport`. For network edges it aggregates operations per provider/consumer and emits, as the sole writer:
+   - `<Op>Request` + `<Op>Response` DTOs in `shared/src/domain/dtos/<Op>.dto.ts`;
+   - provider in-port `RestControllerPort` (`rest-controller.in-port.ts`) — one `<opCamel>(request: <Op>Request): Promise<<Op>Response>` method per op — + `RestControllerAdapter`;
+   - consumer out-port `ExternalServiceClientPort` (`external-service-client.out-port.ts`) — the mirror methods — + `ExternalServiceClientAdapter`.
+     The port-content builder is generalized to multi-method / typed-return; 3a's single-method `publish`/`handle` becomes one case of it.
+6. Tests: (a) wizard enrichment — network edges carry `operations` (useCases-derived + the `${Provider}` fallback); micro-frontend is no longer empty. (b) emitter — DTOs + controller/client ports with real multi-method signatures + derived adapters (single-typed params preserved, per the analyzer finding). (c) **divergence** — the same bounded contexts under event-bus vs network emit structurally different transport (publisher/subscriber vs client/controller), with neither leaking into the other (the Decision A1 payoff).
 
 ### 3c — integrationPattern (ACL / OHS) + invariant honesty
 
@@ -80,7 +98,7 @@ Rationale for the context-name-only fallback: it's a deterministic _placeholder_
 
 - **Contract placement in `shared`.** Putting cross-context DTOs / the bus port in the shared kernel keeps the no-direct-dep rule intact but grows `shared`. Acceptable — it's the conventional shared-kernel role; a generated messaging package is heavier and deferred.
 - **Stub bodies vs the arch-linter.** C1 bodies are `TODO`/throw; confirm the arch-linter checks structure (ports, no sibling import), not behaviour, so stubs pass. (Phase 1's `layer-rules.yaml` is import/structure rules — they should.)
-- **`generateAdapterFromPort` fidelity.** It derives the adapter from the port interface; verify it handles the publisher/client port signatures cleanly, else fall back to a per-kind template.
+- **`generateAdapterFromPort` fidelity.** _Verified (see Decision E):_ it handles multi-method ports and preserves single imported types; only a union of unresolved cross-package types collapses to `any` (event-bus only). Its name argument is emitted verbatim as the class name, so it must be a valid identifier (`${toPascalCase(portBase)}Adapter`).
 - **Scope creep toward C2.** Keep the broker / HTTP runtime out — C1 is structure only.
 
 ## Out of scope
