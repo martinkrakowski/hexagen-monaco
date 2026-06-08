@@ -178,9 +178,18 @@ const NITRO_PACKAGE_JSON_TEMPLATE = `{
 // standard without relying on a file that only exists after `nitro prepare`
 // (qodo rule 798530). Re-verified: `nitro prepare` + `tsc` still pass with the
 // override merged onto the inherited config.
+// Extends Nitro's generated config (Nitro owns module resolution + auto-import
+// types) but re-asserts `strict` + `skipLibCheck`: the .nitro base is NOT strict,
+// so without this the API app loses strict checking and `Result<T,E>`
+// discriminated-union narrowing silently stops working. Do NOT switch `extends`
+// back to the workspace base — that drops the .nitro/types auto-import decls.
 const NITRO_TSCONFIG: TsConfigTemplate = {
   extends: "./.nitro/types/tsconfig.json",
-  compilerOptions: { moduleResolution: "bundler" },
+  compilerOptions: {
+    moduleResolution: "bundler",
+    strict: true,
+    skipLibCheck: true,
+  },
 };
 
 const NITRO_CONFIG_TEMPLATE = `import { defineNitroConfig } from "nitropack/config";
