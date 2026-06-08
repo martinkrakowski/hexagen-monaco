@@ -344,16 +344,25 @@ export async function generateApps(
       // `@generated` marker, so a hand-authored app config is still protected on
       // self-regen). The config's `ignores` cover dist/node_modules; each app's
       // `lint` script scopes the path (src/ or Nitro's server/).
+      // usePerContextOverride:false — an app name must never inherit a
+      // bounded-context eslint override (different namespace; collisions would
+      // apply a package-intended template to the app). Workspace default +
+      // fallback only.
       const eslintResult = await generateEslintConfig(
         appDir,
         app.name,
         config,
         report,
+        { usePerContextOverride: false },
       );
       mergeResult(result, eslintResult);
     }
 
-    result.summary = `apps: ${result.created.length} created, ${result.updated.length} updated, ${result.skipped.length} skipped`;
+    // Preserve a sub-generator's error summary (set by mergeResult) instead of
+    // clobbering it with the success line — result.error is set in that case.
+    if (!result.error) {
+      result.summary = `apps: ${result.created.length} created, ${result.updated.length} updated, ${result.skipped.length} skipped`;
+    }
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
