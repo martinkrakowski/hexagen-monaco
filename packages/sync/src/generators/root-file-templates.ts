@@ -88,9 +88,13 @@ node_modules/
 dist/
 .turbo/
 .next/
-out/
 .nitro/
 .output/
+
+# Next.js static export — anchored to apps so a bare \`out/\` can't shadow a
+# bounded context's hexagonal \`src/application/ports/out/\` source (which a
+# pattern without a leading path matches at any depth).
+apps/*/out/
 
 # Test / coverage
 coverage/
