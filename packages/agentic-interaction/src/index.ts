@@ -127,7 +127,12 @@ export {
   buildClassificationFromConfig,
   buildNormalizedPromptFromConfig,
   inferContextTypeWithConfidence,
+  parseStructuredConfig,
 } from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case";
+// Re-exported from a dependency-free module (not the staged-generation use-case)
+// so client bundles can pull the sanitizer in without the pipeline. Clients
+// should prefer the `@hexagen/agentic-interaction/sanitize-pseudo-yaml` subpath.
+export { sanitizePseudoYaml } from "./domain/utils/sanitize-pseudo-yaml";
 export {
   serializeProjectContext,
   buildContextForLLM,

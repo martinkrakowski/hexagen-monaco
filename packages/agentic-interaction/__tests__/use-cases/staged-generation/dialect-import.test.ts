@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   parseStructuredConfig,
   buildDomainAnalysisFromConfig,
+  buildContextMappingsFromConfig,
+  buildNormalizedPromptFromConfig,
 } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
 
 /**
@@ -205,6 +207,116 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
       analysis.useCases.map((u) => u.name),
       ["CanonicalCharge"],
       "object-form canonical entry wins; the dialect entry must not overwrite it",
+    );
+  });
+
+  it("maps domain_models.aggregates as roots and entities as child entities", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Campaigns",
+        "    domain_models:",
+        "      aggregates:",
+        "        - name: CampaignBrief",
+        "          attributes:", // array-form attributes
+        "            - name: id",
+        "              type: string",
+        "            - name: products",
+        '              type: "Product[]"',
+        "        - name: GeneratedAsset",
+        "      entities:",
+        "        - name: Product",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      (analysis.aggregateRoots ?? []).map((a) => a.name),
+      ["CampaignBrief", "GeneratedAsset"],
+      "declared aggregates are the roots",
+    );
+    assert.deepEqual(
+      (analysis.entities ?? []).map((e) => e.name),
+      ["Product"],
+      "entities are child entities, not roots, when an aggregates list exists",
+    );
+    // Array-form attributes mapped, with `id` flagged as the identity key.
+    const cb = config.bounded_contexts[0].aggregates?.find(
+      (a) => a.name === "CampaignBrief",
+    );
+    assert.deepEqual(
+      cb?.fields?.map((f) => `${f.name}:${f.type}${f.key ? "*" : ""}`),
+      ["id:string*", "products:Product[]"],
+    );
+  });
+
+  it("treats entities as roots when no explicit aggregates list is present (legacy)", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: Campaigns",
+        "    domain_models:",
+        "      entities:",
+        "        - name: CampaignBrief",
+        "        - name: Product",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    assert.deepEqual(
+      (analysis.aggregateRoots ?? []).map((a) => a.name),
+      ["CampaignBrief", "Product"],
+    );
+  });
+
+  it("coerces an object-form `project` to its name (avoids [object Object])", () => {
+    const config = parseStructuredConfig(
+      [
+        "project:",
+        "  name: CampaignForge",
+        "  description: An orchestrator",
+        '  version: "0.1.0"',
+        "bounded_contexts:",
+        "  - name: Orders",
+        "",
+      ].join("\n"),
+    );
+    assert.equal(config.project, "CampaignForge");
+    assert.equal(
+      buildNormalizedPromptFromConfig(config).projectName,
+      "CampaignForge",
+      "projectName must be the name string, not the stringified object",
+    );
+  });
+
+  it("maps context-mapping dialect aliases (relationship→pattern, via→mechanism) so same-pair entries stay distinct", () => {
+    const config = parseStructuredConfig(
+      [
+        "context_mappings:",
+        "  - upstream: CampaignOrchestration",
+        "    downstream: CreativeGeneration",
+        "    relationship: conformist",
+        "    via: ImageGeneratorPort",
+        "  - upstream: CampaignOrchestration",
+        "    downstream: CreativeGeneration",
+        "    relationship: conformist",
+        "    via: CompositorPort",
+        "bounded_contexts:",
+        "  - name: CampaignOrchestration",
+        "  - name: CreativeGeneration",
+        "",
+      ].join("\n"),
+    );
+    const mappings = buildContextMappingsFromConfig(config);
+    assert.deepEqual(
+      mappings.map(
+        (m) => `${m.upstream}->${m.downstream}:${m.pattern}/${m.mechanism}`,
+      ),
+      [
+        "CampaignOrchestration->CreativeGeneration:conformist/ImageGeneratorPort",
+        "CampaignOrchestration->CreativeGeneration:conformist/CompositorPort",
+      ],
+      "the two same-pair mappings are distinct (different mechanism), not duplicates",
     );
   });
 

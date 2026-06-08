@@ -28,6 +28,7 @@ import type { StageTelemetry } from "../../../domain/value-objects/stage-telemet
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { ClassifyContextTypeUseCase } from "./classify-context-type.use-case";
 import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
+import { sanitizePseudoYaml } from "../../../domain/utils/sanitize-pseudo-yaml";
 import * as yaml from "js-yaml";
 
 export interface StructuredConfigGenerationCallbacks {
@@ -91,6 +92,12 @@ interface StructuredConfigContextMapping {
   shared?: string[];
   events?: string[];
   coupling?: string;
+  // Rich "hexagonal" dialect aliases: `relationship` → pattern, `via` → mechanism.
+  // Without these, two mappings between the same pair that differ only by `via`
+  // (e.g. CampaignOrchestration→CreativeGeneration via two ports) collapse into
+  // byte-identical `{ upstream, downstream }` duplicates in the manifest.
+  relationship?: string;
+  via?: string;
 }
 
 interface StructuredConfigEventBusSubscription {
@@ -158,12 +165,17 @@ export interface StructuredConfigContext {
   // driving/driven `ports`). `normalizeDialect` maps these onto the canonical
   // fields above, so the rest of the pipeline reads only the canonical shape.
   domain_models?: {
-    entities?: Array<{ name: string; attributes?: Record<string, unknown> }>;
+    // Explicit aggregate roots. When present, `entities` are treated as child
+    // entities (root:false); when absent, each entity is treated as a root (the
+    // original entities-only dialect). `attributes` may be a `{ name: type }` map
+    // or a list of `{ name, type }` objects.
+    aggregates?: Array<{ name: string; attributes?: unknown }>;
+    entities?: Array<{ name: string; attributes?: unknown }>;
     value_objects?: Array<{
       name: string;
       type?: string;
       values?: string[];
-      attributes?: Record<string, unknown>;
+      attributes?: unknown;
       description?: string;
     }>;
   };
@@ -234,13 +246,35 @@ function tryMergeMultiDocYaml(
 }
 
 /**
+ * Parse a raw config string as YAML or JSON, with a best-effort recovery pass.
+ * Tries a strict parse first; if that fails, retries once on a
+ * `sanitizePseudoYaml`-cleaned copy (TypeScript-in-YAML specs). If recovery also
+ * fails — or changes nothing — the original strict error is surfaced.
+ */
+export function parseStructuredConfig(rawConfig: string): StructuredConfig {
+  try {
+    return parseStructuredConfigStrict(rawConfig);
+  } catch (strictError) {
+    const sanitized = sanitizePseudoYaml(rawConfig);
+    if (sanitized !== rawConfig) {
+      try {
+        return parseStructuredConfigStrict(sanitized);
+      } catch {
+        // Recovery didn't help — fall through and surface the original error.
+      }
+    }
+    throw strictError;
+  }
+}
+
+/**
  * Parse a raw config string as YAML or JSON.
  * Attempts JSON first (fastest path for .json files).
  * Falls back to single-document YAML, then to multi-document YAML
  * (visual `---` separators between disjoint top-level sections).
  * Throws a descriptive error if no parse succeeds.
  */
-export function parseStructuredConfig(rawConfig: string): StructuredConfig {
+function parseStructuredConfigStrict(rawConfig: string): StructuredConfig {
   const trimmed = rawConfig.trimStart();
 
   // JSON fast path
@@ -337,6 +371,47 @@ function withName<T>(arr: T[] | undefined): Array<T & { name: string }> {
 }
 
 /**
+ * Map a dialect domain object's `attributes` to canonical fields. Accepts both
+ * authoring shapes: a `{ name: type }` map and a list of `{ name, type }` objects.
+ * The `id` attribute is flagged as the identity key.
+ */
+function dialectAttributesToFields(
+  attrs: unknown,
+): StructuredConfigField[] | undefined {
+  let fields: StructuredConfigField[] = [];
+  if (Array.isArray(attrs)) {
+    fields = attrs
+      .filter(
+        (a): a is { name: string; type?: unknown } =>
+          typeof a === "object" &&
+          a !== null &&
+          typeof (a as { name?: unknown }).name === "string",
+      )
+      .map((a) => ({
+        name: a.name,
+        type: a.type != null ? String(a.type) : "unknown",
+        key: a.name === "id",
+      }));
+  } else if (attrs && typeof attrs === "object") {
+    fields = Object.entries(attrs as Record<string, unknown>).map(
+      ([name, type]) => ({ name, type: String(type), key: name === "id" }),
+    );
+  }
+  return fields.length > 0 ? fields : undefined;
+}
+
+function dialectToAggregate(
+  obj: { name: string; attributes?: unknown },
+  root: boolean,
+): StructuredConfigAggregate {
+  return {
+    name: obj.name,
+    root,
+    fields: dialectAttributesToFields(obj.attributes),
+  };
+}
+
+/**
  * Map the rich "hexagonal" import dialect onto the canonical StructuredConfig
  * fields the pipeline actually reads — `aggregates`, `value_objects`,
  * `events_published`, `layers.application.ports`, and the top-level `use_cases`
@@ -348,6 +423,17 @@ function withName<T>(arr: T[] | undefined): Array<T & { name: string }> {
  */
 export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   if (!Array.isArray(config.bounded_contexts)) return config;
+
+  // Dialect: `project` may be an object ({ name, description, version, ... }), but
+  // the pipeline expects the project NAME as a string. Coerce to `.name` so a
+  // downstream `${config.project}` / projectName never becomes "[object Object]"
+  // — which otherwise kebab-cases into a garbage `system`/`scope` in the manifest.
+  const projectValue: unknown = config.project;
+  if (projectValue && typeof projectValue === "object") {
+    const name = (projectValue as { name?: unknown }).name;
+    config.project =
+      typeof name === "string" && name.trim().length > 0 ? name : undefined;
+  }
 
   const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
   // Canonical top-level `use_cases` win over the dialect even when keyed by a
@@ -369,23 +455,21 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   for (const ctx of config.bounded_contexts) {
     const dm = ctx.domain_models;
 
-    // domain_models.entities → aggregates (each declared entity becomes an
-    // aggregate root; identity is the `id` attribute when present). An explicit
-    // empty `aggregates: []` is treated as absent; nameless entries are dropped.
+    // domain_models.{aggregates,entities} → ctx.aggregates. Declared `aggregates`
+    // are roots; `entities` are child entities (root:false) when an explicit
+    // `aggregates` list is present, otherwise the legacy entities-only shape
+    // treats each entity as a root. An explicit empty `aggregates: []` is treated
+    // as absent; nameless entries are dropped.
     if (!hasItems(ctx.aggregates)) {
-      const entities = withName(dm?.entities);
-      if (entities.length > 0) {
-        ctx.aggregates = entities.map((e) => ({
-          name: e.name,
-          root: true,
-          fields: e.attributes
-            ? Object.entries(e.attributes).map(([name, type]) => ({
-                name,
-                type: String(type),
-                key: name === "id",
-              }))
-            : undefined,
-        }));
+      const dialectAggregates = withName(dm?.aggregates);
+      const dialectEntities = withName(dm?.entities);
+      const entitiesAreRoots = dialectAggregates.length === 0;
+      const mapped: StructuredConfigAggregate[] = [
+        ...dialectAggregates.map((a) => dialectToAggregate(a, true)),
+        ...dialectEntities.map((e) => dialectToAggregate(e, entitiesAreRoots)),
+      ];
+      if (mapped.length > 0) {
+        ctx.aggregates = mapped;
       }
     }
 
@@ -762,8 +846,10 @@ export function buildContextMappingsFromConfig(
   return (config.context_mappings ?? []).map((cm) => ({
     upstream: cm.upstream,
     downstream: cm.downstream,
-    pattern: cm.pattern,
-    mechanism: cm.mechanism,
+    // Accept the dialect aliases so relationship/port detail survives (and keeps
+    // same-pair mappings distinct instead of collapsing to duplicates).
+    pattern: cm.pattern ?? cm.relationship,
+    mechanism: cm.mechanism ?? cm.via,
     notes: cm.notes,
     events: cm.events,
   }));

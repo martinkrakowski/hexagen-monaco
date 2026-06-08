@@ -1,4 +1,8 @@
 import yaml from "js-yaml";
+// Import from the dedicated lightweight subpath (not the package barrel) so this
+// client-reachable util doesn't pull the staged-generation pipeline into the
+// browser bundle.
+import { sanitizePseudoYaml } from "@hexagen/agentic-interaction/sanitize-pseudo-yaml";
 
 export type InputMode = "description" | "structured-config" | "semi-structured";
 
@@ -6,10 +10,20 @@ export function detectInputMode(content: string): InputMode {
   if (!content.trim()) return "description";
 
   try {
-    const parsed =
+    let parsed =
       maybeParseJson(content) ??
       parseLeanYaml(content) ??
       parseMultiDocYaml(content);
+    if (!parsed) {
+      // Recovery: "pseudo-YAML" specs (TypeScript method signatures, quoted
+      // union types) fail a strict parse. Quote those scalars and retry so a
+      // well-structured spec still routes to the deterministic structured-config
+      // path instead of the lossy LLM conversion fallback.
+      const sanitized = sanitizePseudoYaml(content);
+      if (sanitized !== content) {
+        parsed = parseLeanYaml(sanitized) ?? parseMultiDocYaml(sanitized);
+      }
+    }
     if (parsed && typeof parsed === "object") {
       const obj = parsed as Record<string, unknown>;
       const hasContexts =

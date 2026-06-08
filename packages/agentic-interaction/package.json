@@ -3,6 +3,7 @@
   "version": "0.5.2",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "main": "dist/index.js",
   "source": "./src/index.ts",
   "types": "dist/index.d.ts",
@@ -11,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./sanitize-pseudo-yaml": {
+      "types": "./dist/domain/utils/sanitize-pseudo-yaml.d.ts",
+      "source": "./src/domain/utils/sanitize-pseudo-yaml.ts",
+      "default": "./dist/domain/utils/sanitize-pseudo-yaml.js"
     }
   },
   "scripts": {
