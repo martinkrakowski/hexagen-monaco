@@ -537,3 +537,71 @@ describe("architecture files", () => {
     });
   });
 });
+
+describe("architecture files — --only scope", () => {
+  it("does NOT materialise the external manifest when it is out of scope", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "demo",
+        scope: "demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [{ name: "shared" }],
+      };
+      // External + fresh target would normally write .architecture/manifest.yaml
+      // via a direct fs.writeFile. With --only pointing elsewhere it must be
+      // skipped — the write bypasses safeWriteFileAtomic, so the guard lives in
+      // writeManifestIfFreshExternal itself.
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+        only: ["packages/something-else"],
+      });
+
+      const result = await generateArchitectureFiles(config);
+
+      const manifestPath = path.join(
+        workspaceRoot,
+        ".architecture",
+        "manifest.yaml",
+      );
+      assert.strictEqual(
+        await pathExists(manifestPath),
+        false,
+        "out-of-scope external manifest must NOT be written",
+      );
+      assert.ok(
+        result.skipped.some((p) => p.endsWith("manifest.yaml")),
+        "the skipped manifest should be recorded in result.skipped",
+      );
+    });
+  });
+
+  it("materialises the external manifest when .architecture is in scope", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "demo",
+        scope: "demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [{ name: "shared" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+        only: [".architecture"],
+      });
+
+      await generateArchitectureFiles(config);
+
+      const manifestPath = path.join(
+        workspaceRoot,
+        ".architecture",
+        "manifest.yaml",
+      );
+      assert.strictEqual(
+        await pathExists(manifestPath),
+        true,
+        "in-scope external manifest must be written",
+      );
+    });
+  });
+});

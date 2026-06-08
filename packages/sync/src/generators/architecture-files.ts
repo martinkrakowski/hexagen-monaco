@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
 import type { SyncConfig } from "../config.js";
-import { safeWriteFileAtomic } from "../fs-utils.js";
+import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { interpolate } from "../template-engine.js";
 import type {
@@ -145,6 +145,15 @@ async function writeManifestIfFreshExternal(
   const archDir = path.join(config.workspaceRoot, ".architecture");
   const manifestPath = path.join(archDir, "manifest.yaml");
   const relative = path.relative(config.workspaceRoot, manifestPath);
+
+  // This is a direct fs.writeFile (not via safeWriteFileAtomic), so it must
+  // consult the --only scope itself — otherwise a scoped run could materialize
+  // the bootstrap manifest outside the requested set.
+  if (!isInScope(manifestPath, config)) {
+    config.logger.debug(`skipped (outside --only) ${relative}`);
+    result.skipped.push(manifestPath);
+    return;
+  }
 
   let exists = false;
   try {

@@ -8,6 +8,7 @@ import {
   safeWriteFile,
   isGeneratedFile,
   isProtectedRoot,
+  isInScope,
   protectedFiles,
 } from "../src/fs-utils.js";
 import type { SyncConfig } from "../src/config.js";
@@ -105,6 +106,55 @@ describe("isProtectedRoot", () => {
     assert.ok(protectedFiles.has(".gitignore"));
     assert.ok(protectedFiles.has("turbo.json"));
     assert.ok(protectedFiles.has("yarn.lock"));
+  });
+});
+
+describe("isInScope", () => {
+  let workspaceRoot: string;
+
+  beforeEach(async () => {
+    workspaceRoot = await makeTmpWorkspace();
+  });
+
+  afterEach(async () => {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("returns true for everything when no --only scope is set", () => {
+    const config = makeConfig(workspaceRoot);
+    assert.equal(
+      isInScope(
+        path.join(workspaceRoot, "packages", "anything", "x.ts"),
+        config,
+      ),
+      true,
+    );
+  });
+
+  it("returns true for an empty scope list (fail-open is the no-filter case)", () => {
+    const config = makeConfig(workspaceRoot, { only: [] });
+    assert.equal(
+      isInScope(path.join(workspaceRoot, "packages", "a", "x.ts"), config),
+      true,
+    );
+  });
+
+  it("matches an absolute path against the workspace-relative scope", () => {
+    const config = makeConfig(workspaceRoot, { only: ["packages/a"] });
+    assert.equal(
+      isInScope(
+        path.join(workspaceRoot, "packages", "a", "src", "x.ts"),
+        config,
+      ),
+      true,
+    );
+    assert.equal(
+      isInScope(
+        path.join(workspaceRoot, "packages", "b", "src", "x.ts"),
+        config,
+      ),
+      false,
+    );
   });
 });
 
@@ -215,6 +265,43 @@ describe("safeWriteFileAtomic", () => {
         "export const handWritten = true;\n",
         "dry-run MUST NOT modify a hand-written file",
       );
+    });
+  });
+
+  describe("--only scope filter", () => {
+    it("skips a file outside the scope without writing it", async () => {
+      const target = path.join(workspaceRoot, "packages", "b", "src", "x.ts");
+      const config = makeConfig(workspaceRoot, {
+        only: ["packages/a"],
+      });
+
+      const status = await safeWriteFileAtomic(
+        target,
+        `${GENERATED_MARKER}\nexport const x = 1;\n`,
+        config,
+      );
+
+      assert.equal(
+        status,
+        "skipped",
+        "a file outside --only must be skipped, not written",
+      );
+      assert.equal(
+        await pathExists(target),
+        false,
+        "out-of-scope file must not be created on disk",
+      );
+    });
+
+    it("writes a file that is inside the scope", async () => {
+      const target = path.join(workspaceRoot, "packages", "a", "src", "x.ts");
+      const content = `${GENERATED_MARKER}\nexport const x = 1;\n`;
+      const config = makeConfig(workspaceRoot, { only: ["packages/a"] });
+
+      const status = await safeWriteFileAtomic(target, content, config);
+
+      assert.equal(status, "created", "in-scope file must be written");
+      assert.equal(await fs.readFile(target, "utf8"), content);
     });
   });
 

@@ -79,6 +79,10 @@ function buildProgram(): Command {
     )
     .option("--allow-dirty", "Skip git clean check (for development)")
     .option("--strict", "Fail on architecture linter warnings")
+    .option(
+      "--only <pattern...>",
+      "Limit writes to workspace-relative paths/globs (e.g. packages/shared, 'packages/*/tsconfig.json'). Direct targets only — no dependency fan-out; run a full sync for cross-package changes.",
+    )
     .action(async (options) => {
       const flags = {
         dryRun: options.dryRun ?? false,
@@ -86,6 +90,7 @@ function buildProgram(): Command {
         forceRoot: options.forceRoot ?? false,
         allowDirty: options.allowDirty ?? false,
         strict: options.strict ?? false,
+        only: options.only as string[] | undefined,
         mode: "self-regen" as const,
         logger,
       };

@@ -73,6 +73,13 @@ export interface SyncFlags {
   strict: boolean;
   /** Mode is set programmatically (not via CLI). Use 'self-regen' for CLI, 'external' for API-driven generation */
   mode: "self-regen" | "external";
+  /**
+   * Optional `--only` scope patterns. When non-empty, the engine writes only
+   * files whose workspace-relative path matches one of these (see
+   * {@link matchesScope}); all others are skipped. Conservative direct-targets
+   * semantics — no dependency fan-out. Undefined/empty means "no filter".
+   */
+  only?: string[];
   logger: LoggerPort;
 }
 
@@ -120,6 +127,17 @@ export function parseArgs(rawArgs: string[]): SyncFlags {
       case "--allow-dirty":
         flags.allowDirty = true;
         break;
+
+      case "--only": {
+        // Collect following non-flag tokens as scope patterns (supports both
+        // `--only a b` and repeated `--only a --only b`).
+        const patterns: string[] = [];
+        while (i + 1 < args.length && !args[i + 1].startsWith("-")) {
+          patterns.push(args[++i]);
+        }
+        flags.only = [...(flags.only ?? []), ...patterns];
+        break;
+      }
 
       default:
         if (arg.startsWith("-")) {

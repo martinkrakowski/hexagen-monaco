@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
-import { safeWriteFileAtomic } from "../fs-utils.js";
+import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import {
   resolveScope,
@@ -126,15 +126,19 @@ async function emitAppFile(
     }
     return "unsafe";
   }
-  try {
-    await fs.mkdir(path.dirname(target), { recursive: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    config.logger.error(
-      `[apps] failed to create dir for "${appName}" file ${relPath}: ${message}`,
-    );
-    if (report) report.record("blocked", appName, message);
-    return "error";
+  // Skip the parent-dir mkdir for out-of-scope targets so no empty directory is
+  // left behind (the write below self-skips out-of-scope via safeWriteFileAtomic).
+  if (isInScope(target, config)) {
+    try {
+      await fs.mkdir(path.dirname(target), { recursive: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      config.logger.error(
+        `[apps] failed to create dir for "${appName}" file ${relPath}: ${message}`,
+      );
+      if (report) report.record("blocked", appName, message);
+      return "error";
+    }
   }
   recordStatus(
     result,
@@ -249,16 +253,21 @@ export async function generateApps(
       const appDir = path.join(config.workspaceRoot, "apps", app.name);
       const srcDir = path.join(appDir, "src");
 
-      try {
-        await fs.mkdir(appDir, { recursive: true });
-        await fs.mkdir(srcDir, { recursive: true });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        config.logger.error(
-          `[apps] failed to create directory for "${app.name}": ${message}`,
-        );
-        if (report) report.record("blocked", app.name, message);
-        continue;
+      // Skip the (redundant) app-dir mkdir when the app is outside --only — the
+      // per-file writes below self-skip and create their own parents, so a
+      // scoped run leaves no empty apps/<name> directory behind.
+      if (isInScope(appDir, config)) {
+        try {
+          await fs.mkdir(appDir, { recursive: true });
+          await fs.mkdir(srcDir, { recursive: true });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          config.logger.error(
+            `[apps] failed to create directory for "${app.name}": ${message}`,
+          );
+          if (report) report.record("blocked", app.name, message);
+          continue;
+        }
       }
 
       const pkgTemplate = frameworkConfig.packageJson?.template;

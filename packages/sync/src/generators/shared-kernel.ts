@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
-import { safeWriteFileAtomic } from "../fs-utils.js";
+import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import type { ReportRecorder } from "../domain/types.js";
 
 /**
@@ -65,6 +65,13 @@ export async function generateSharedKernel(
     "domain",
     "result.ts",
   );
+
+  // Out-of-scope under --only: skip before the stat/mkdir so no directory is
+  // created (safeWriteFileAtomic enforces the same check for the write).
+  if (!isInScope(kernelPath, config)) {
+    result.skipped.push(kernelPath);
+    return result;
+  }
 
   // Write-if-absent — preserve any user customization across re-syncs. (External
   // mode uses forceRoot, which bypasses safeWriteFileAtomic's preserve branch, so
