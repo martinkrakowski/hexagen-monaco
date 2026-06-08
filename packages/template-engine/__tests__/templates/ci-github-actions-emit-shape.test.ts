@@ -128,9 +128,16 @@ describe("ci-github-actions template — emit shape", () => {
       const ci = await read(projectRoot, `${WORKFLOWS}/ci.yml`);
       // Quoted so the templated scalar is valid YAML before interpolation too.
       assert.ok(ci.includes('node-version: "22"'));
-      // First-run-green (Item 2): corepack present, install is NOT immutable
-      // (no committed lockfile yet), and no setup-node lockfile-cache.
-      assert.ok(ci.includes("corepack enable"));
+      // First-run-green (Item 2): Corepack must activate the pinned yarn@4 BEFORE
+      // any yarn invocation — assert ordering, not just presence.
+      const corepackAt = ci.indexOf("corepack enable");
+      const installAt = ci.indexOf('run: "yarn install"');
+      assert.ok(corepackAt >= 0, "ci.yml must enable Corepack");
+      assert.ok(installAt >= 0, "ci.yml must install dependencies");
+      assert.ok(
+        corepackAt < installAt,
+        "`corepack enable` must come before the `yarn install` step (else the pinned yarn@4 is not active yet)",
+      );
       // Version is read from package.json at runtime (no baked yarn@x.y.z that
       // could drift from the project's `packageManager`).
       assert.ok(
@@ -138,11 +145,18 @@ describe("ci-github-actions template — emit shape", () => {
           ci.includes("packageManager"),
       );
       assert.ok(!ci.includes("corepack prepare yarn@"));
-      assert.ok(ci.includes('run: "yarn install"'));
-      // Precise to the executable directive — explanatory comments may still
-      // mention these forms without tripping the negative assertions.
+      // install is NOT immutable (no committed lockfile yet). Precise to the
+      // executable directive — explanatory comments may still mention these forms.
       assert.ok(!ci.includes('run: "yarn install --immutable"'));
-      assert.ok(!ci.includes('cache: "yarn"'));
+      // No setup-node yarn cache in ANY YAML form (quoted or unquoted); ignore
+      // comment lines, which mention `cache: yarn` in prose to explain the hazard.
+      const ciNonCommentLines = ci
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("#"));
+      assert.ok(
+        !ciNonCommentLines.some((l) => /\bcache:\s*["']?yarn["']?/.test(l)),
+        "ci.yml must not use setup-node's yarn cache (it runs Yarn before Corepack — any quoting)",
+      );
       assert.ok(!ci.includes("{node_version}"));
       assert.ok(!ci.includes("{package_manager}"));
       // multiselect + select answers recorded in the config summary comment
