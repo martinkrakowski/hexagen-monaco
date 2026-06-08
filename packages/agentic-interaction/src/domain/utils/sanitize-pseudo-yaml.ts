@@ -53,8 +53,12 @@ export function sanitizePseudoYaml(raw: string): string {
         }
         return line;
       }
-      // Mapping value that is a quoted union: `key: "a" | "b" | "c"`.
-      const map = line.match(/^(\s*[\w-]+:\s+)("[^"]*"\s*\|.*\S)\s*$/);
+      // Mapping value that is a quoted union: `key: "a" | "b" | "c"` (or the
+      // single-quoted form `key: 'a' | 'b' | 'c'`). Either breaks js-yaml the same
+      // way — content trails a closing quote on the line — so both are recovered.
+      const map = line.match(
+        /^(\s*[\w-]+:\s+)((?:"[^"]*"|'[^']*')\s*\|.*\S)\s*$/,
+      );
       if (map) {
         return `${map[1]}${singleQuoteScalar(map[2])}`;
       }

@@ -31,6 +31,14 @@ describe("sanitizePseudoYaml", () => {
     );
   });
 
+  it("quotes a SINGLE-quoted union mapping value (#260 CodeRabbit)", () => {
+    const out = sanitizePseudoYaml("status: 'open' | 'closed'");
+    // Wrapped in YAML single quotes (inner `'` doubled) so the union survives.
+    assert.equal(out, `status: '''open'' | ''closed'''`);
+    // Round-trips to the literal string instead of throwing on the bare pipe.
+    assert.deepEqual(yaml.load(out), { status: "'open' | 'closed'" });
+  });
+
   it("does not collapse a valid mapping item whose key ends in () (#260)", () => {
     // `- validate(input): true` is a legitimate mapping item (key
     // "validate(input)" → true): the colon is OUTSIDE the parens, so it isn't the
