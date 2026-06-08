@@ -448,6 +448,31 @@ describe("root files", () => {
       });
     });
 
+    it("anchors the Next.js export dir so a bare out/ can't shadow ports/out/ source (#1)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "ports-app", scope: "ports" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const gitignore = await readFile(
+          path.join(workspaceRoot, ".gitignore"),
+        );
+        const lines = gitignore.split("\n").map((l) => l.trim());
+
+        // A bare `out/` matches a dir named `out` at ANY depth, silently ignoring
+        // every bounded context's src/application/ports/out/ outbound-port source.
+        assert.ok(
+          !lines.includes("out/"),
+          ".gitignore must not contain a bare `out/` pattern (it shadows hexagonal ports/out/ source)",
+        );
+        assert.ok(
+          lines.includes("apps/*/out/"),
+          ".gitignore must anchor the Next.js static export to apps/*/out/",
+        );
+      });
+    });
+
     it("honors a manifest rootFiles override for the new files", async () => {
       await withTempWorkspace(async ({ workspaceRoot }) => {
         const manifest: Manifest = {

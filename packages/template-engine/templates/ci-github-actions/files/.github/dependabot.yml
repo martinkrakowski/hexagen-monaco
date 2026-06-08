@@ -1,20 +1,32 @@
 version: 2
 updates:
   # Keep GitHub Actions versions current — stale, unpinned actions are a real
-  # supply-chain risk.
+  # supply-chain risk. Grouped so a sweep of action bumps is ONE PR, not one per
+  # action (a fresh repo is "behind latest" on every action at first push).
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
 
-  # Group dev-dependency bumps into a single weekly PR to cut noise.
+  # npm: batch NON-BREAKING bumps (minor + patch) into one PR per dependency
+  # type, so a freshly published repo doesn't open a wave of PRs (every dep is
+  # "behind latest" at once on first push — previously production deps were
+  # ungrouped, so each one opened its own PR). MAJOR bumps still arrive
+  # individually so each potentially-breaking change is reviewed on its own.
+  # To go quieter still, switch npm to security-only updates — see README.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    groups:
-      dev-dependencies:
-        patterns: ["*"]
-        dependency-type: development
     open-pull-requests-limit: 5
+    groups:
+      production-dependencies:
+        dependency-type: production
+        update-types: ["minor", "patch"]
+      dev-dependencies:
+        dependency-type: development
+        update-types: ["minor", "patch"]
