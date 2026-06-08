@@ -158,6 +158,64 @@ describe("safeWriteFileAtomic", () => {
         "dry-run MUST NOT create a file on disk",
       );
     });
+
+    it("reports a protected root file as 'protected', not 'updated' (honest preview)", async () => {
+      // A real run skips protected roots without --force-root, so the dry-run
+      // preview must report the same outcome — otherwise the change set is
+      // inflated with files that would never actually be written.
+      const target = path.join(workspaceRoot, "turbo.json");
+      await fs.writeFile(target, `{"old":true}\n`, "utf8");
+
+      const config = makeConfig(workspaceRoot, { dryRun: true });
+      const status = await safeWriteFileAtomic(
+        target,
+        `{"new":true}\n`,
+        config,
+      );
+
+      assert.equal(
+        status,
+        "protected",
+        "dry-run must report a protected root as 'protected', not 'updated'",
+      );
+      assert.equal(
+        await fs.readFile(target, "utf8"),
+        `{"old":true}\n`,
+        "dry-run MUST NOT modify a protected root",
+      );
+    });
+
+    it("reports an existing hand-written (unmarked) file as 'skipped', not 'updated'", async () => {
+      // No @generated marker → a real run preserves it (returns 'skipped').
+      // The preview must match, not claim it 'would update'.
+      const target = path.join(
+        workspaceRoot,
+        "packages",
+        "a",
+        "src",
+        "hand.ts",
+      );
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, "export const handWritten = true;\n", "utf8");
+
+      const config = makeConfig(workspaceRoot, { dryRun: true });
+      const status = await safeWriteFileAtomic(
+        target,
+        `${GENERATED_MARKER}\nexport const handWritten = false;\n`,
+        config,
+      );
+
+      assert.equal(
+        status,
+        "skipped",
+        "dry-run must report an existing hand-written file as 'skipped', not 'updated'",
+      );
+      assert.equal(
+        await fs.readFile(target, "utf8"),
+        "export const handWritten = true;\n",
+        "dry-run MUST NOT modify a hand-written file",
+      );
+    });
   });
 
   describe("new-file creation", () => {
