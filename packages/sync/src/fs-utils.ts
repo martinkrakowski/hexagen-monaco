@@ -65,6 +65,24 @@ export function isProtectedRoot(filePath: string, config: SyncConfig): boolean {
 }
 
 /**
+ * Whether `filePath` is permitted by the active `--only` scope (or there is no
+ * scope filter). `safeWriteFileAtomic` enforces this for the write itself, but
+ * several generators create parent directories (and, in external mode, the
+ * bootstrap manifest) on their own BEFORE calling it — they must consult this
+ * first so an out-of-scope target produces no filesystem side effects at all,
+ * honouring the "skipped without being read or written" contract.
+ *
+ * Note: guarding a *redundant* pre-mkdir can never break an in-scope write —
+ * `safeWriteFileAtomic` recreates the parent directory (after its own scope
+ * check) anyway — so callers may guard liberally.
+ */
+export function isInScope(filePath: string, config: SyncConfig): boolean {
+  if (!config.only || config.only.length === 0) return true;
+  const relativePath = path.relative(config.workspaceRoot, filePath);
+  return matchesScope(relativePath, config.only);
+}
+
+/**
  * Atomic, idempotent file writer.
  * Returns one of: created, updated, unchanged, skipped, protected.
  *
@@ -81,14 +99,14 @@ export async function safeWriteFileAtomic(
   report?: { record: (type: string, target: string, message: string) => void },
   skipGeneratedCheck: boolean = false,
 ): Promise<"created" | "updated" | "unchanged" | "skipped" | "protected"> {
-  const { dryRun, forceRoot, logger, workspaceRoot, only } = config;
+  const { dryRun, forceRoot, logger, workspaceRoot } = config;
   const relativePath = path.relative(workspaceRoot, filePath);
 
   // `--only` scope filter (checked first, before any disk read): when scope
   // patterns are set, a file outside all of them is skipped without being read
   // or written, in dry-run and real runs alike. Conservative direct-targets
   // semantics — no dependency fan-out (see scope-filter.ts).
-  if (only && only.length > 0 && !matchesScope(relativePath, only)) {
+  if (!isInScope(filePath, config)) {
     logger.debug(`skipped (outside --only) ${relativePath}`);
     return "skipped";
   }

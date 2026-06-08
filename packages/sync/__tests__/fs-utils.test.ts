@@ -8,6 +8,7 @@ import {
   safeWriteFile,
   isGeneratedFile,
   isProtectedRoot,
+  isInScope,
   protectedFiles,
 } from "../src/fs-utils.js";
 import type { SyncConfig } from "../src/config.js";
@@ -105,6 +106,55 @@ describe("isProtectedRoot", () => {
     assert.ok(protectedFiles.has(".gitignore"));
     assert.ok(protectedFiles.has("turbo.json"));
     assert.ok(protectedFiles.has("yarn.lock"));
+  });
+});
+
+describe("isInScope", () => {
+  let workspaceRoot: string;
+
+  beforeEach(async () => {
+    workspaceRoot = await makeTmpWorkspace();
+  });
+
+  afterEach(async () => {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  it("returns true for everything when no --only scope is set", () => {
+    const config = makeConfig(workspaceRoot);
+    assert.equal(
+      isInScope(
+        path.join(workspaceRoot, "packages", "anything", "x.ts"),
+        config,
+      ),
+      true,
+    );
+  });
+
+  it("returns true for an empty scope list (fail-open is the no-filter case)", () => {
+    const config = makeConfig(workspaceRoot, { only: [] });
+    assert.equal(
+      isInScope(path.join(workspaceRoot, "packages", "a", "x.ts"), config),
+      true,
+    );
+  });
+
+  it("matches an absolute path against the workspace-relative scope", () => {
+    const config = makeConfig(workspaceRoot, { only: ["packages/a"] });
+    assert.equal(
+      isInScope(
+        path.join(workspaceRoot, "packages", "a", "src", "x.ts"),
+        config,
+      ),
+      true,
+    );
+    assert.equal(
+      isInScope(
+        path.join(workspaceRoot, "packages", "b", "src", "x.ts"),
+        config,
+      ),
+      false,
+    );
   });
 });
 

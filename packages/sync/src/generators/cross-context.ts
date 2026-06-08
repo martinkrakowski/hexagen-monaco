@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
-import { safeWriteFileAtomic } from "../fs-utils.js";
+import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import { resolveScope } from "../types/manifest.js";
 import {
   analyzePortFile,
@@ -236,11 +236,17 @@ async function emitPortAndAdapter(
     "ports",
     spec.portKind,
   );
-  await fs.mkdir(portDir, { recursive: true });
   const portPath = path.join(
     portDir,
     `${spec.portBase}.${spec.portKind}-port.ts`,
   );
+  // Under --only, an out-of-scope port skips the whole spec: the adapter is
+  // derived from the port file, so without it there is nothing to generate.
+  // Guarded before mkdir so no empty `ports/<kind>` directory is left behind.
+  if (!isInScope(portPath, config)) {
+    return;
+  }
+  await fs.mkdir(portDir, { recursive: true });
   recordStatus(
     result,
     portPath,
@@ -267,8 +273,13 @@ async function emitPortAndAdapter(
     return;
   }
   const adapterDir = path.join(moduleRoot, "src", "infrastructure", "adapters");
-  await fs.mkdir(adapterDir, { recursive: true });
   const adapterPath = path.join(adapterDir, `${spec.portBase}.adapter.ts`);
+  // Adapter lives in a different directory than the port, so re-check scope
+  // before its mkdir (a glob could include the port but not the adapter).
+  if (!isInScope(adapterPath, config)) {
+    return;
+  }
+  await fs.mkdir(adapterDir, { recursive: true });
   // The adapter CLASS name must be a valid TS identifier — `generateAdapterFromPort`
   // emits it verbatim as `export class <name>`. The file base stays kebab
   // (`message-publisher.adapter.ts`) but the class is PascalCased with the `Adapter`

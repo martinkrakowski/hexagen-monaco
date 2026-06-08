@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
-import { safeWriteFileAtomic } from "../fs-utils.js";
+import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import type {
   BoundedContext,
@@ -46,6 +46,15 @@ async function writeStubFile(
   config: SyncConfig,
   report: ReportRecorder | undefined,
 ): Promise<"created" | "updated" | "unchanged" | "skipped" | "protected"> {
+  // Out-of-scope under --only: skip before the stat/mkdir so no directory is
+  // created (safeWriteFileAtomic enforces the same check for the write).
+  if (!isInScope(filePath, config)) {
+    config.logger.debug(
+      `skipped (outside --only) ${path.relative(config.workspaceRoot, filePath)}`,
+    );
+    return "skipped";
+  }
+
   try {
     await fs.stat(filePath);
     const relative = path.relative(config.workspaceRoot, filePath);
