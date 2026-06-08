@@ -219,6 +219,22 @@ bounded_contexts:
     assert.equal(extractSpecSummary(parsed).useCaseCount, 1);
   });
 
+  it("treats an empty object canonical entry as content-bearing → 1 (#260)", () => {
+    // `use_cases: { Orders: {} }` — a non-array object, even empty, is content per
+    // the engine's `Array.isArray(ucs) ? ucs : [ucs]` (→ `[{}]`, one nameless use
+    // case). The web must agree (counts 1), not coerce it to 0.
+    const parsed = yaml.load(
+      [
+        "bounded_contexts:",
+        "  - name: Orders",
+        "use_cases:",
+        "  Orders: {}",
+        "",
+      ].join("\n"),
+    ) as Record<string, unknown>;
+    assert.equal(extractSpecSummary(parsed).useCaseCount, 1);
+  });
+
   it("does not count nameless dialect entries (mirrors the pipeline's withName)", () => {
     const parsed = yaml.load(
       [
@@ -272,6 +288,12 @@ describe("extractSpecSummary ⇄ pipeline count parity", () => {
       "use_cases:",
       "  Orders:",
       "    name: Charge",
+    ].join("\n"),
+    "empty-object canonical entry": [
+      "bounded_contexts:",
+      "  - name: Orders",
+      "use_cases:",
+      "  Orders: {}",
     ].join("\n"),
     "canonical wins over dialect for same context": [
       "bounded_contexts:",
