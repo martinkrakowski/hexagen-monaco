@@ -36,9 +36,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "{node_version}"
-          # No package-manager cache here — actions/setup-node's cache requires a
-          # committed lockfile and fails without one. The Turbo cache below covers
-          # task outputs; re-enable the setup-node cache once you commit yarn.lock.
+          # No `cache: yarn` here. setup-node's yarn cache runs the runner's
+          # global Yarn (Classic 1.22) to locate the store — BEFORE the Corepack
+          # steps below activate the pinned yarn@4 — so it fails on a
+          # packageManager-pinned project. Committing yarn.lock does NOT make it
+          # safe: the hazard is ordering, not the lockfile. To cache, add a
+          # separate actions/cache step AFTER Corepack instead. The Turbo cache
+          # below already covers task outputs.
 
       # Corepack activates the package manager pinned in package.json
       # (`packageManager`). Without it, the runner's default Yarn (Classic)

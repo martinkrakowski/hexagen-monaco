@@ -34,9 +34,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "{node_version}"
-          cache: "yarn"
+          # No `cache: yarn` here. setup-node's yarn cache runs the runner's
+          # global Yarn (Classic 1.22) to locate the store — BEFORE the Corepack
+          # steps below activate the pinned yarn@4 — so it fails on a
+          # packageManager-pinned project. Committing yarn.lock does NOT make it
+          # safe: the hazard is ordering, not the lockfile. To cache, add a
+          # separate actions/cache step AFTER Corepack instead. Mirrors ci.yml.
 
-      - run: "yarn install --immutable"
+      # Corepack activates the package manager pinned in package.json
+      # (`packageManager`); without it the runner's default Yarn (Classic) can't
+      # honor a Yarn-4 project. Mirrors ci.yml. See SETUP.md.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Prepare package manager
+        run: |
+          corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+
+      # First run has no committed lockfile, so install is NOT immutable. Switch
+      # to `yarn install --immutable` after you commit yarn.lock. See SETUP.md.
+      - name: Install dependencies
+        run: "yarn install"
 
       - name: Deploy preview
         id: deploy
