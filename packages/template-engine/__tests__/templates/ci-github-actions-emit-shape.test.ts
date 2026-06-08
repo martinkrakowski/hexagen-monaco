@@ -171,7 +171,10 @@ describe("ci-github-actions template — emit shape", () => {
       // First-run-green (Item 2): Corepack must activate the pinned yarn@4 BEFORE
       // any yarn invocation — assert ordering, not just presence.
       const corepackAt = ci.indexOf("corepack enable");
-      const installAt = ci.indexOf('run: "yarn install"');
+      // Quote-agnostic: match `run: yarn install` or `run: "yarn install"`,
+      // anchored to end-of-line so it never matches the `--immutable` form.
+      const installAt =
+        ci.match(/^\s*run:\s*["']?yarn install["']?\s*$/m)?.index ?? -1;
       assert.ok(corepackAt >= 0, "ci.yml must enable Corepack");
       assert.ok(installAt >= 0, "ci.yml must install dependencies");
       assert.ok(
@@ -367,7 +370,10 @@ describe("ci-github-actions template — emit shape", () => {
       // assert ordering, not just presence, so a regression that moves Corepack
       // after install is caught.
       const corepackAt = preview.indexOf("corepack enable");
-      const installAt = preview.indexOf('run: "yarn install"');
+      // Quote-agnostic: match `run: yarn install` or `run: "yarn install"`,
+      // anchored to end-of-line so it never matches the `--immutable` form.
+      const installAt =
+        preview.match(/^\s*run:\s*["']?yarn install["']?\s*$/m)?.index ?? -1;
       assert.ok(corepackAt >= 0, "preview.yml must enable Corepack");
       assert.ok(installAt >= 0, "preview.yml must install dependencies");
       assert.ok(
