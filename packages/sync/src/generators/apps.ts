@@ -10,6 +10,7 @@ import {
   type AppFrameworkConfig,
 } from "../types/manifest.js";
 import { BUILTIN_FRAMEWORK_TEMPLATES } from "./apps-framework-templates.js";
+import { generateEslintConfig } from "./eslint.js";
 import type { ReportRecorder } from "../domain/types.js";
 
 type WriteStatus = Awaited<ReturnType<typeof safeWriteFileAtomic>>;
@@ -61,6 +62,22 @@ function recordStatus(
     result.totalOps += 1;
   } else {
     result.skipped.push(filePath);
+  }
+}
+
+/**
+ * Fold a sub-generator's result (e.g. the shared eslint emitter) into the apps
+ * result: concatenate the path buckets, sum totalOps, and surface the first
+ * error so a failed eslint write isn't silently dropped.
+ */
+function mergeResult(result: GeneratorResult, sub: GeneratorResult): void {
+  result.created.push(...sub.created);
+  result.updated.push(...sub.updated);
+  result.skipped.push(...sub.skipped);
+  result.totalOps += sub.totalOps;
+  if (sub.error && !result.error) {
+    result.error = sub.error;
+    result.summary = sub.summary;
   }
 }
 
@@ -319,6 +336,21 @@ export async function generateApps(
           app.name,
         );
       }
+
+      // Every app declares a `lint` script + eslint devDeps but shipped no
+      // eslint.config.js — ESLint 9's flat config is mandatory, so `yarn lint`
+      // aborted with "couldn't find an eslint.config file" and CI failed.
+      // Reuse the package generator's eslint emitter (same flat-config cascade +
+      // `@generated` marker, so a hand-authored app config is still protected on
+      // self-regen). The config's `ignores` cover dist/node_modules; each app's
+      // `lint` script scopes the path (src/ or Nitro's server/).
+      const eslintResult = await generateEslintConfig(
+        appDir,
+        app.name,
+        config,
+        report,
+      );
+      mergeResult(result, eslintResult);
     }
 
     result.summary = `apps: ${result.created.length} created, ${result.updated.length} updated, ${result.skipped.length} skipped`;
