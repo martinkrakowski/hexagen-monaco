@@ -187,11 +187,29 @@ describe("root files", () => {
         tsconfig.includes(`"moduleResolution": "bundler"`),
         "built-in tsconfig.base.json must declare moduleResolution=bundler",
       );
+      // #2: forward-looking dependency `.d.ts` (e.g. a lib type newer than the
+      // configured `lib`) must not fail the consumer's typecheck. Matches the
+      // skipLibCheck the hexagen-monaco repo itself sets in its base config.
+      assert.ok(
+        JSON.parse(tsconfig).compilerOptions?.skipLibCheck === true,
+        "built-in tsconfig.base.json must set skipLibCheck:true (#2 — forward-looking dependency .d.ts)",
+      );
 
       const turbo = await readFile(path.join(workspaceRoot, "turbo.json"));
       assert.ok(
         turbo.includes(`"$schema": "https://turbo.build/schema.json"`),
         "built-in turbo.json must include the turbo schema pointer",
+      );
+      // #2 (the TS6305 fix): packages resolve each other via project references
+      // to built `dist/*.d.ts` (paths:{} per ADR-0004), so `typecheck`
+      // (`tsc --noEmit`) must build referenced composite outputs first — exactly
+      // as the hexagen-monaco repo's own turbo.json does. Without `^build` a
+      // fresh clone's `yarn typecheck` raises TS6305 ("output file has not been
+      // built from source file").
+      assert.deepStrictEqual(
+        JSON.parse(turbo).tasks?.typecheck?.dependsOn,
+        ["^build"],
+        "built-in turbo.json `typecheck` task must dependOn ^build (#2 — TS6305 on fresh clone)",
       );
     });
   });

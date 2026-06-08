@@ -35,6 +35,7 @@ const BUILTIN_TSCONFIG_BASE_TEMPLATE = `{
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "skipLibCheck": true,
     "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
@@ -67,6 +68,9 @@ const BUILTIN_TURBO_TEMPLATE = `{
       ]
     },
     "typecheck": {
+      "dependsOn": [
+        "^build"
+      ],
       "outputs": [],
       "cache": true
     },
