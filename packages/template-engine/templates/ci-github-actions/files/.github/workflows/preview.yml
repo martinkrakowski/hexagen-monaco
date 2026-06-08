@@ -34,10 +34,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "{node_version}"
-          # No package-manager cache here — actions/setup-node's `cache: yarn`
-          # invokes the runner's global Yarn (Classic 1.22) BEFORE Corepack
-          # activates the pinned yarn@4, producing a packageManager mismatch at
-          # setup. Mirrors ci.yml; re-enable once you commit yarn.lock.
+          # No `cache: yarn` here. setup-node's yarn cache runs the runner's
+          # global Yarn (Classic 1.22) to locate the store — BEFORE the Corepack
+          # steps below activate the pinned yarn@4 — so it fails on a
+          # packageManager-pinned project. Committing yarn.lock does NOT make it
+          # safe: the hazard is ordering, not the lockfile. To cache, add a
+          # separate actions/cache step AFTER Corepack instead. Mirrors ci.yml.
 
       # Corepack activates the package manager pinned in package.json
       # (`packageManager`); without it the runner's default Yarn (Classic) can't

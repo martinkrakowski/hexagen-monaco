@@ -309,19 +309,29 @@ describe("ci-github-actions template — emit shape", () => {
 
     it("activates Corepack before install and is not prematurely immutable (#5)", async () => {
       const preview = await read(projectRoot, `${WORKFLOWS}/preview.yml`);
-      // Mirrors ci.yml: Corepack must activate the pinned yarn@4 before any yarn
-      // invocation, and a first-push project has no lockfile so install is plain.
+      // Corepack must activate the pinned yarn@4 BEFORE any yarn invocation —
+      // assert ordering, not just presence, so a regression that moves Corepack
+      // after install is caught.
+      const corepackAt = preview.indexOf("corepack enable");
+      const installAt = preview.indexOf('run: "yarn install"');
+      assert.ok(corepackAt >= 0, "preview.yml must enable Corepack");
+      assert.ok(installAt >= 0, "preview.yml must install dependencies");
       assert.ok(
-        preview.includes("corepack enable"),
-        "preview.yml must enable Corepack before installing",
+        corepackAt < installAt,
+        "`corepack enable` must come before the `yarn install` step (else the pinned yarn@4 is not active yet)",
       );
       assert.ok(
         preview.includes('corepack prepare "$(node -p'),
         "preview.yml must prepare the package manager pinned in package.json",
       );
+      // No setup-node yarn cache in ANY YAML form (quoted or unquoted). Ignore
+      // comment lines, which mention `cache: yarn` in prose to explain the hazard.
+      const nonCommentLines = preview
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("#"));
       assert.ok(
-        !preview.includes('cache: "yarn"'),
-        "preview.yml must not use setup-node's yarn cache before Corepack (causes a packageManager mismatch)",
+        !nonCommentLines.some((l) => /\bcache:\s*["']?yarn["']?/.test(l)),
+        "preview.yml must not use setup-node's yarn cache (it runs Yarn before Corepack — any quoting)",
       );
       assert.ok(
         !preview.includes('run: "yarn install --immutable"'),
