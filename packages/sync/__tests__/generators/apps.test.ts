@@ -294,11 +294,23 @@ describe("apps", () => {
       // but pins bundler resolution explicitly for repo compliance (qodo rule 798530).
       const ts = await readJson(tsPath);
       assert.strictEqual(ts.extends, "./.nitro/types/tsconfig.json");
+      const tsCo = ts.compilerOptions as Record<string, unknown> | undefined;
       assert.strictEqual(
-        (ts.compilerOptions as Record<string, unknown> | undefined)
-          ?.moduleResolution,
+        tsCo?.moduleResolution,
         "bundler",
         "pins bundler resolution explicitly, beyond the inherited Nitro config",
+      );
+      // The .nitro base is NOT strict; re-assert it so Result<T,E> discriminated
+      // -union narrowing works in apps/api (#3). skipLibCheck mirrors the base.
+      assert.strictEqual(
+        tsCo?.strict,
+        true,
+        "re-asserts strict (the inherited Nitro config is not strict)",
+      );
+      assert.strictEqual(
+        tsCo?.skipLibCheck,
+        true,
+        "re-asserts skipLibCheck alongside the Nitro resolution override",
       );
 
       const nitroConfig = await readText(nitroConfigPath);
