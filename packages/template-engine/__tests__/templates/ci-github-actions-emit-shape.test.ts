@@ -306,5 +306,27 @@ describe("ci-github-actions template — emit shape", () => {
         "commenting on the PR requires pull-requests: write under a read-only default token",
       );
     });
+
+    it("activates Corepack before install and is not prematurely immutable (#5)", async () => {
+      const preview = await read(projectRoot, `${WORKFLOWS}/preview.yml`);
+      // Mirrors ci.yml: Corepack must activate the pinned yarn@4 before any yarn
+      // invocation, and a first-push project has no lockfile so install is plain.
+      assert.ok(
+        preview.includes("corepack enable"),
+        "preview.yml must enable Corepack before installing",
+      );
+      assert.ok(
+        preview.includes('corepack prepare "$(node -p'),
+        "preview.yml must prepare the package manager pinned in package.json",
+      );
+      assert.ok(
+        !preview.includes('cache: "yarn"'),
+        "preview.yml must not use setup-node's yarn cache before Corepack (causes a packageManager mismatch)",
+      );
+      assert.ok(
+        !preview.includes('run: "yarn install --immutable"'),
+        "preview.yml first run has no committed lockfile — the install step must not be --immutable (the SETUP.md comment may still mention it)",
+      );
+    });
   });
 });
