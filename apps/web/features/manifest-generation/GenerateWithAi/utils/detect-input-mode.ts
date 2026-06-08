@@ -1,5 +1,8 @@
 import yaml from "js-yaml";
-import { sanitizePseudoYaml } from "@hexagen/agentic-interaction";
+// Import from the dedicated lightweight subpath (not the package barrel) so this
+// client-reachable util doesn't pull the staged-generation pipeline into the
+// browser bundle.
+import { sanitizePseudoYaml } from "@hexagen/agentic-interaction/sanitize-pseudo-yaml";
 
 export type InputMode = "description" | "structured-config" | "semi-structured";
 

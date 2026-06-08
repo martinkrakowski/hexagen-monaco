@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import yaml from "js-yaml";
 import {
   parseStructuredConfig,
-  sanitizePseudoYaml,
   buildDomainAnalysisFromConfig,
 } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
+import { sanitizePseudoYaml } from "../../../src/domain/utils/sanitize-pseudo-yaml.ts";
 
 /**
  * Specs are frequently authored as "pseudo-YAML" that embeds TypeScript syntax
