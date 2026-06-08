@@ -69,10 +69,16 @@ export default tseslint.config(
 function resolveTemplate(
   manifest: Manifest,
   moduleName: string,
+  usePerContextOverride: boolean,
 ): { template: string; source: "per-context" | "workspace" | "fallback" } {
-  const contextOverride: EslintConfig | undefined =
-    manifest.bounded_contexts?.find((c) => c.name === moduleName)?.generator
-      ?.eslint;
+  // Per-context overrides are keyed by bounded-context name. Apps live in a
+  // different namespace, so an app whose name happens to collide with a bounded
+  // context must NOT inherit that context's package-intended eslint template —
+  // callers pass usePerContextOverride: false for apps (workspace + fallback only).
+  const contextOverride: EslintConfig | undefined = usePerContextOverride
+    ? manifest.bounded_contexts?.find((c) => c.name === moduleName)?.generator
+        ?.eslint
+    : undefined;
   if (contextOverride?.template !== undefined) {
     return { template: contextOverride.template, source: "per-context" };
   }
@@ -157,12 +163,17 @@ export async function generateEslintConfig(
   moduleName: string,
   config: SyncConfig,
   report?: ReportRecorder,
+  options: { usePerContextOverride?: boolean } = {},
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
   const filePath = path.join(moduleDir, "eslint.config.js");
 
   try {
-    const { template, source } = resolveTemplate(config.manifest, moduleName);
+    const { template, source } = resolveTemplate(
+      config.manifest,
+      moduleName,
+      options.usePerContextOverride ?? true,
+    );
 
     // Defensive check: the built-in fallback is a static non-empty string, so
     // this branch is not reachable under normal use. It exists to honour the
