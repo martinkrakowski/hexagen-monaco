@@ -107,15 +107,17 @@ export async function safeWriteFileAtomic(
     return "unchanged";
   }
 
-  if (dryRun) {
-    const action = exists ? "update" : "create";
-    logger.info(`[DRY-RUN] would ${action} ${relativePath}`);
-    return exists ? "updated" : "created";
-  }
+  // Protection checks run BEFORE the dry-run preview below. A protected file
+  // is skipped in a real run, so `--dry-run` must report it as a skip too —
+  // not as "would update". (Previously the dry-run branch returned first, so a
+  // preview inflated its change set with every protected root and hand-written
+  // file that a real run would leave untouched.) The protection logic itself is
+  // dry-run-agnostic: `dryRun` only changes the log verb, never the outcome.
 
   // Root files require --force-root specifically — --force alone is not enough
   if (isProtectedRoot(filePath, config) && !forceRoot) {
-    logger.warn(`skipped (root protected, use --force-root) ${relativePath}`);
+    const verb = dryRun ? "[DRY-RUN] would skip" : "skipped";
+    logger.warn(`${verb} (root protected, use --force-root) ${relativePath}`);
     if (report) report.record("blocked", filePath, "Root file protected");
     return "protected";
   }
@@ -132,10 +134,17 @@ export async function safeWriteFileAtomic(
     // and app configs during self-regen in CI. Only --force-root can now
     // overwrite hand-written content (reserved for protected root files
     // and deliberate mass-migrations).
+    const verb = dryRun ? "[DRY-RUN] would skip" : "skipped";
     logger.warn(
-      `skipped (hand-written, use --force-root to overwrite) ${relativePath}`,
+      `${verb} (hand-written, use --force-root to overwrite) ${relativePath}`,
     );
     return "skipped";
+  }
+
+  if (dryRun) {
+    const action = exists ? "update" : "create";
+    logger.info(`[DRY-RUN] would ${action} ${relativePath}`);
+    return exists ? "updated" : "created";
   }
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
