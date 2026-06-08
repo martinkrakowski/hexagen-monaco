@@ -102,6 +102,27 @@ describe("ci-github-actions template — emit shape", () => {
       }
     });
 
+    it("tames Dependabot so a fresh publish doesn't flood PRs (#6)", async () => {
+      const db = await read(projectRoot, ".github/dependabot.yml");
+      // Production deps must be grouped (previously ungrouped → one PR each).
+      assert.ok(
+        db.includes("production-dependencies:"),
+        "npm production deps must be grouped, not one PR per dep",
+      );
+      assert.ok(db.includes("dev-dependencies:"), "npm dev deps stay grouped");
+      // Only non-breaking bumps batch; majors still arrive individually.
+      assert.ok(
+        db.includes('update-types: ["minor", "patch"]'),
+        "groups must restrict to minor+patch so majors come individually",
+      );
+      // Action bumps grouped into one PR too.
+      assert.ok(
+        db.includes("github-actions:") &&
+          /groups:[\s\S]*github-actions:/.test(db),
+        "github-actions bumps must be grouped",
+      );
+    });
+
     it("does NOT emit the other deploy targets", async () => {
       for (const rel of [
         `${WORKFLOWS}/deploy-railway.yml`,
