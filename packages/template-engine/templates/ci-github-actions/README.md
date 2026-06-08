@@ -54,10 +54,10 @@ the secrets each needs.
 - **Dependabot is tuned to avoid a first-publish PR flood.** Action bumps are
   grouped into one PR; npm minor+patch bumps are batched into one PR per
   dependency type (`production-dependencies`, `dev-dependencies`), while **major**
-  bumps still arrive individually for careful review. To go quieter, switch the
-  npm ecosystem to security-only by adding
-  `open-pull-requests-limit: 0` (version updates off; security updates still
-  open) — trades freshness for near-zero noise on a freshly scaffolded repo.
+  bumps still arrive individually for careful review. To go quieter, make the npm
+  ecosystem security-only: change the npm entry's existing
+  `open-pull-requests-limit: 5` to `0` (version updates off; security updates
+  still open) — trades freshness for near-zero noise on a freshly scaffolded repo.
 
 ## Checklist (post-install)
 

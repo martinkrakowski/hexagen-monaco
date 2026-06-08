@@ -104,21 +104,40 @@ describe("ci-github-actions template — emit shape", () => {
 
     it("tames Dependabot so a fresh publish doesn't flood PRs (#6)", async () => {
       const db = await read(projectRoot, ".github/dependabot.yml");
-      // Production deps must be grouped (previously ungrouped → one PR each).
+      // Assert SEMANTICS, not an exact YAML rendering — block-style lists, quoting,
+      // or spacing changes must not break this. Strip comment lines first so the
+      // explanatory prose (which mentions "minor + patch", "MAJOR", etc.) can't
+      // satisfy the value checks below.
+      const cfg = db
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("#"))
+        .join("\n");
+
+      // Production deps must be grouped (previously ungrouped → one PR each); dev
+      // deps stay grouped. Group keys are structural identifiers.
       assert.ok(
-        db.includes("production-dependencies:"),
+        /production-dependencies\s*:/.test(cfg),
         "npm production deps must be grouped, not one PR per dep",
       );
-      assert.ok(db.includes("dev-dependencies:"), "npm dev deps stay grouped");
-      // Only non-breaking bumps batch; majors still arrive individually.
+      assert.ok(/dev-dependencies\s*:/.test(cfg), "npm dev deps stay grouped");
+      // update-types restricted to minor+patch so non-breaking bumps batch and
+      // MAJORs arrive individually — regardless of list style/quoting/order.
       assert.ok(
-        db.includes('update-types: ["minor", "patch"]'),
-        "groups must restrict to minor+patch so majors come individually",
+        /update-types\s*:/.test(cfg),
+        "groups must declare update-types",
       );
-      // Action bumps grouped into one PR too.
       assert.ok(
-        db.includes("github-actions:") &&
-          /groups:[\s\S]*github-actions:/.test(db),
+        /\bminor\b/.test(cfg) && /\bpatch\b/.test(cfg),
+        "update-types must batch minor + patch",
+      );
+      assert.ok(
+        !/\bmajor\b/i.test(cfg),
+        "major must NOT be an update-type — major bumps arrive individually",
+      );
+      // Action bumps grouped into one PR too (the github-actions ecosystem
+      // declares a groups: block).
+      assert.ok(
+        /groups\s*:[\s\S]*github-actions\s*:/.test(cfg),
         "github-actions bumps must be grouped",
       );
     });
