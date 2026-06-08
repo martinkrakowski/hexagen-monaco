@@ -19,7 +19,7 @@ export function extractSpecSummary(
 
   const useCasesMap =
     parsed.use_cases && typeof parsed.use_cases === "object"
-      ? (parsed.use_cases as Record<string, Array<Record<string, unknown>>>)
+      ? (parsed.use_cases as Record<string, unknown>)
       : {};
 
   // Counts accept both the canonical shape and the rich "hexagonal" dialect
@@ -80,8 +80,18 @@ export function extractSpecSummary(
   // context identity (name or short) — not exact keys — so the review count
   // agrees with what actually imports even when the canonical key is an alias /
   // differently-cased form (#256 review).
+  // Only content-bearing canonical entries win over the dialect — mirroring the
+  // engine's `hasUseCaseContent` (a non-empty array OR a single object). An empty
+  // `use_cases: { Orders: [] }` placeholder is treated as absent so it neither
+  // blocks the dialect's `primary_use_cases` (the coverage check below) nor counts
+  // as zero (the merge below); an object-form `{ Orders: { name: "Charge" } }`
+  // still wins and counts as one, matching `buildDomainAnalysisFromConfig`'s
+  // `Array.isArray(ucs) ? ucs : [ucs]` (#260 review).
+  const canonicalEntries = Object.entries(useCasesMap).filter(([, u]) =>
+    Array.isArray(u) ? u.length > 0 : typeof u === "object" && u !== null,
+  );
   const canonicalKeys = new Set(
-    Object.keys(useCasesMap).map((k) => normalizeContextName(k)),
+    canonicalEntries.map(([k]) => normalizeContextName(k)),
   );
   const effectiveUseCases: Record<string, unknown[]> = {};
   for (const ctx of contexts) {
@@ -94,8 +104,8 @@ export function extractSpecSummary(
       effectiveUseCases[name] = named(ctx.primary_use_cases);
     }
   }
-  for (const [key, arr] of Object.entries(useCasesMap)) {
-    effectiveUseCases[key] = Array.isArray(arr) ? arr : [];
+  for (const [key, u] of canonicalEntries) {
+    effectiveUseCases[key] = Array.isArray(u) ? u : [u];
   }
   const useCaseCount = Object.values(effectiveUseCases).reduce(
     (sum, arr) => sum + arr.length,

@@ -38,16 +38,17 @@ export function sanitizePseudoYaml(raw: string): string {
     .split("\n")
     .map((line) => {
       // Block-sequence item that looks like a method signature:
-      // `- name(args): ReturnType` → quote the whole item.
+      // `- name(args): ReturnType` → quote the whole item. The token that breaks
+      // YAML is the colon INSIDE the argument list (`name(arg: Type): Ret`), so
+      // quote only when the parenthesised args themselves contain a colon. That
+      // leaves a legitimate mapping item whose key merely ends in `()`
+      // (`- validate(input): true`) untouched instead of collapsing it to a
+      // scalar (#260 review).
       const seq = line.match(/^(\s*-\s+)(.+)$/);
       if (seq) {
         const value = seq[2].trimEnd();
-        if (
-          !/^["']/.test(value) &&
-          value.includes("(") &&
-          value.includes(")") &&
-          value.includes(":")
-        ) {
+        const args = value.match(/\(([^)]*)\)/);
+        if (!/^["']/.test(value) && args !== null && args[1].includes(":")) {
           return `${seq[1]}${doubleQuoteScalar(value)}`;
         }
         return line;

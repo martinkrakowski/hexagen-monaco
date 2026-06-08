@@ -31,6 +31,15 @@ describe("sanitizePseudoYaml", () => {
     );
   });
 
+  it("does not collapse a valid mapping item whose key ends in () (#260)", () => {
+    // `- validate(input): true` is a legitimate mapping item (key
+    // "validate(input)" → true): the colon is OUTSIDE the parens, so it isn't the
+    // method-signature breaker. It must survive untouched even when another line
+    // triggers whole-document recovery.
+    const input = "  - validate(input): true";
+    assert.equal(sanitizePseudoYaml(input), input);
+  });
+
   it("leaves ordinary YAML lines untouched", () => {
     const input = [
       "  - name: Orders", // mapping item, no parens
