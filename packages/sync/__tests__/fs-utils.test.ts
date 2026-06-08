@@ -218,6 +218,43 @@ describe("safeWriteFileAtomic", () => {
     });
   });
 
+  describe("--only scope filter", () => {
+    it("skips a file outside the scope without writing it", async () => {
+      const target = path.join(workspaceRoot, "packages", "b", "src", "x.ts");
+      const config = makeConfig(workspaceRoot, {
+        only: ["packages/a"],
+      });
+
+      const status = await safeWriteFileAtomic(
+        target,
+        `${GENERATED_MARKER}\nexport const x = 1;\n`,
+        config,
+      );
+
+      assert.equal(
+        status,
+        "skipped",
+        "a file outside --only must be skipped, not written",
+      );
+      assert.equal(
+        await pathExists(target),
+        false,
+        "out-of-scope file must not be created on disk",
+      );
+    });
+
+    it("writes a file that is inside the scope", async () => {
+      const target = path.join(workspaceRoot, "packages", "a", "src", "x.ts");
+      const content = `${GENERATED_MARKER}\nexport const x = 1;\n`;
+      const config = makeConfig(workspaceRoot, { only: ["packages/a"] });
+
+      const status = await safeWriteFileAtomic(target, content, config);
+
+      assert.equal(status, "created", "in-scope file must be written");
+      assert.equal(await fs.readFile(target, "utf8"), content);
+    });
+  });
+
   describe("new-file creation", () => {
     it("writes a new file and returns 'created'", async () => {
       const target = path.join(workspaceRoot, "packages", "a", "src", "a.ts");

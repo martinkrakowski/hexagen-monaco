@@ -70,6 +70,7 @@ export interface GeneratorConfigOverrides {
   dryRun?: boolean;
   force?: boolean;
   forceRoot?: boolean;
+  only?: string[];
   logger?: LoggerPort;
   manifest?: Manifest;
   enableApps?: boolean;
@@ -126,6 +127,7 @@ export function makeConfig(
     dryRun: opts.dryRun ?? false,
     force: opts.force ?? false,
     forceRoot: opts.forceRoot ?? false,
+    only: opts.only,
     allowDirty: false,
     strict: false,
     mode,
