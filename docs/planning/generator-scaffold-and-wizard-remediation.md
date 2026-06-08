@@ -273,6 +273,27 @@ boundary_, not a deployable app. Consequences:
    framework/target by default) rather than emitting an app per context.
 4. Make per-context UI/API an explicit **advanced opt-in** for the genuine
    micro-frontend / multi-service case.
+5. **Migration / back-compat (do this first, not as an afterthought).** Existing
+   saved projects and manifests carry per-context `uiFramework` /
+   `infrastructureTarget`. On load, collapse them into the new project-level
+   Applications model: aggregate all bounded contexts into a **single Application**
+   (name `apps/web`, framework/target taken from the contexts — first non-empty
+   wins, conflicts logged) so a legacy project opens as one app, not N. This is the
+   same collapse `deriveApps` must perform, so implement it once at the
+   load/normalize perimeter and let both the wizard and `deriveApps` read the
+   normalized shape.
+   - **Reconcile `templateRules.allowSharedUi`** (today's aggregated-vs-per-context
+     switch in `@hexagen/project-configuration` `workspace-templates.ts`, consumed
+     by `deriveApps(bcs, allowSharedUi)`): the single-app preset becomes the default
+     (≡ `allowSharedUi: true`). Strict-enterprise templates (`allowSharedUi: false`)
+     don't keep a per-context flag — they map to an **Applications-level** choice
+     (per-app isolation), so the rule survives the move instead of being silently
+     dropped.
+   - **Out of scope (confirmed):** driven infra (persistence/messaging) stays
+     **per-context**, sourced from `bc.portConfiguration` in `wizard-to-manifest.ts`
+     — only UI/API hosting moves to Applications. `deriveCrossContextEdges` is
+     untouched: it emits cross-context **edges** only and never injects
+     ports/adapters into `bounded_contexts`, so this change is orthogonal to it.
 
 **Files.** `apps/web/features/project-wizard/steps/bounded-context-step/ContextFormInfrastructure.tsx`;
 `apps/web/features/project-wizard/config.ts` (the `*Options` lists);
@@ -287,10 +308,10 @@ per-context infra no longer yields N apps; the single-app preset yields exactly 
 `apps/web` + one API. Manifest mapping round-trips the new shape.
 
 **Risk.** High — touches wizard UX, the `ProjectConfig` schema (needs a migration /
-back-compat read), manifest mapping, and app derivation. Sequence it: **(a)** schema
-
-- `deriveApps` (back-compat: collapse per-context infra to a single app), **(b)** the
-  wizard UX. Record the project-model change as an **ADR** in `.architecture/decisions/`.
+back-compat read), manifest mapping, and app derivation. Sequence it:
+**(a)** schema + `deriveApps` with the back-compat collapse from step 5 (legacy
+projects keep working, headless); **(b)** the wizard UX on top. Record the
+project-model change as an **ADR** in `.architecture/decisions/`.
 
 **Acceptance.** A user scaffolds a single Next.js app spanning all bounded contexts
 without per-context UI/API toggles; per-context infra no longer over-generates apps.
