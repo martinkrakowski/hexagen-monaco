@@ -124,7 +124,7 @@ function translateContext(raw: RawContext): BoundedContext {
     id: crypto.randomUUID(),
     name,
     description,
-    infrastructureTarget: "nestjs",
+    infrastructureTarget: "nitro",
     coreDomainEntities: [],
     valueObjects: [],
     domainEvents: [],

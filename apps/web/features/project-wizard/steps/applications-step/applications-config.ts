@@ -27,11 +27,12 @@ export interface ApplicationsCollapse extends ApplicationsSelection {
 
 /**
  * Fallback infra target when no context declares one (e.g. a legacy manifest
- * predating `infrastructureTarget`). An app must host on something, so unlike
- * `uiFramework` (where `""` is the legitimate "headless" choice) infra defaults
- * to the established `nestjs`.
+ * predating `infrastructureTarget`). Distinct from the deliberate `"none"`
+ * (no API backend) choice: this is the default for an *unset* field, so it picks
+ * the single-app preset's `nitro`. (`uiFramework` has the parallel `""` =
+ * headless choice, but its unset default is also a real framework.)
  */
-const DEFAULT_INFRA_TARGET: InfrastructureTarget = "nestjs";
+const DEFAULT_INFRA_TARGET: InfrastructureTarget = "nitro";
 
 /**
  * Compute the Applications step's initial selection from the per-context fields

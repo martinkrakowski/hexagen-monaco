@@ -6,7 +6,7 @@ import type { BoundedContext } from "@hexagen/project-configuration";
  * UI/API are project-wide, not per-context: the Bounded Contexts step reads the
  * current selection (collapsed from existing contexts) and passes it here so a
  * context created after the Applications step carries the project's choice. The
- * defaults match the single-app preset (Next.js + nestjs) when none is supplied.
+ * defaults match the single-app preset (Next.js + Nitro) when none is supplied.
  */
 export interface ContextDefaults {
   uiFramework?: BoundedContext["uiFramework"];
@@ -26,7 +26,7 @@ export function createEmptyContext(
     id: uuidv4(),
     name: "",
     description: "",
-    infrastructureTarget: defaults.infrastructureTarget ?? "nestjs",
+    infrastructureTarget: defaults.infrastructureTarget ?? "nitro",
     coreDomainEntities: [],
     valueObjects: [],
     domainEvents: [],

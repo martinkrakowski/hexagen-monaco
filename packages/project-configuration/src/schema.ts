@@ -80,8 +80,11 @@ export const BoundedContextSchema = z.object({
   // fans a single selection out to every context. They persist per-context (the
   // source of truth `deriveApps` reads), but are NOT direct per-context input —
   // do not re-add per-context UI/API editing without revisiting ADR-0041.
+  // `"none"` = the project opts out of a separate API backend (UI-only, e.g. a
+  // Next.js app with built-in routes); `deriveApps` then emits no `api` app.
+  // Distinct from `undefined` (legacy/unset → defaults to the preset).
   infrastructureTarget: z
-    .enum(["nestjs", "express", "serverless", "plain-ts", "nitro"])
+    .enum(["nestjs", "express", "serverless", "plain-ts", "nitro", "none"])
     .optional(),
   coreDomainEntities: z.array(z.string()).default([]),
   valueObjects: z.array(z.string()).default([]),

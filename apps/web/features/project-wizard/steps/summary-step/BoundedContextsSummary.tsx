@@ -42,7 +42,7 @@ export function BoundedContextsSummary({
               </span>
               <span className="font-medium">{ctx.name || "Unnamed"}</span>
               <span className="text-muted-foreground text-xs">
-                ({ctx.infrastructureTarget || "nestjs"})
+                ({ctx.infrastructureTarget || "nitro"})
               </span>
               {inboundPorts && (
                 <PortBadge count={inboundPorts.length} direction="in" />

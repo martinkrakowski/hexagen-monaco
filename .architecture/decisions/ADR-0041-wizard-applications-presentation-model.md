@@ -7,6 +7,26 @@
 
 ---
 
+## Amendment (2026-06-08, post-implementation)
+
+Two refinements to the Applications step made during implementation:
+
+1. **Default preset is `Next.js` + `Nitro`** (the API/infra default changed from
+   `nestjs` to `nitro`, matching the example copy used throughout this ADR). All
+   new-project entry points (`emptyFormValues`, `createEmptyContext`, the blank
+   landing flow, the import default, and the collapse's unset-fallback) seed
+   `nitro`.
+2. **A `"none"` (no API backend) option** was added to the API select for
+   UI-only projects (e.g. a Next.js app with built-in routes). This is the one
+   place the implementation **does** change `deriveApps` (the body otherwise
+   claims it is untouched): when every non-shared context has
+   `infrastructureTarget: "none"`, `deriveApps` emits **no `api` app**. The
+   `"none"` sentinel was added to the `infrastructureTarget` schema enum;
+   contexts that opt out do not influence the aggregated api framework. This is
+   an additive option, not a change to the per-context-vs-project-level model.
+
+---
+
 ## Context
 
 A bounded context is a **domain boundary**, not a deployable application. Yet the

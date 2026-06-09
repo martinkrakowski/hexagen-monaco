@@ -25,7 +25,7 @@ function createBlankProjectConfig(): ProjectConfig {
         id: crypto.randomUUID(),
         name: "core",
         description: "",
-        infrastructureTarget: "nestjs",
+        infrastructureTarget: "nitro",
         coreDomainEntities: [],
         valueObjects: [],
         domainEvents: [],

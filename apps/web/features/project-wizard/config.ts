@@ -23,11 +23,13 @@ export const telemetryProviderOptions = [
   "Winston",
 ] as const;
 export const apiFrameworkOptions = [
+  { value: "nitro", label: "Nitro" },
   { value: "nestjs", label: "NestJS" },
   { value: "express", label: "Express" },
   { value: "serverless", label: "Serverless" },
-  { value: "nitro", label: "Nitro" },
   { value: "plain-ts", label: "Plain TypeScript" },
+  // No separate API backend (UI-only). deriveApps emits no `api` app.
+  { value: "none", label: "None (No API backend)" },
 ] as const;
 
 export const uiFrameworkOptions = [
@@ -73,7 +75,7 @@ export const emptyFormValues: ProjectConfig = {
       id: crypto.randomUUID(),
       name: "core",
       description: "",
-      infrastructureTarget: "nestjs",
+      infrastructureTarget: "nitro",
       coreDomainEntities: [],
       valueObjects: [],
       domainEvents: [],

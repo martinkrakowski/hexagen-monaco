@@ -35,9 +35,16 @@ describe("collapseApplications", () => {
     assert.equal(result.uiFramework, "");
   });
 
-  it("defaults infra target to nestjs when none is declared", () => {
+  it("defaults infra target to the preset (nitro) when none is declared", () => {
     const result = collapseApplications([ctx({ uiFramework: "Next.js" })]);
-    assert.equal(result.infrastructureTarget, "nestjs");
+    assert.equal(result.infrastructureTarget, "nitro");
+  });
+
+  it("preserves a deliberate 'none' (no API backend) selection", () => {
+    const result = collapseApplications([
+      ctx({ uiFramework: "Next.js", infrastructureTarget: "none" }),
+    ]);
+    assert.equal(result.infrastructureTarget, "none");
   });
 
   it("flags divergence when ≥2 contexts carry different non-empty values", () => {
@@ -108,10 +115,10 @@ describe("createEmptyContext inherits the Applications selection", () => {
     assert.equal(created.infrastructureTarget, "nitro");
   });
 
-  it("falls back to the single-app preset (Next.js + nestjs) with no selection", () => {
+  it("falls back to the single-app preset (Next.js + Nitro) with no selection", () => {
     const created = createEmptyContext();
     assert.equal(created.uiFramework, "Next.js");
-    assert.equal(created.infrastructureTarget, "nestjs");
+    assert.equal(created.infrastructureTarget, "nitro");
   });
 });
 
@@ -147,7 +154,7 @@ describe("normalization (ADR-0041 D4 convergence)", () => {
     );
   });
 
-  it("normalizes a missing infrastructureTarget to the collapse default (nestjs)", () => {
+  it("normalizes a missing infrastructureTarget to the collapse default (nitro)", () => {
     const contexts = [
       ctx({ uiFramework: "Next.js", infrastructureTarget: undefined }),
     ];
@@ -156,6 +163,6 @@ describe("normalization (ADR-0041 D4 convergence)", () => {
       uiFramework: collapsed.uiFramework,
       infrastructureTarget: collapsed.infrastructureTarget,
     });
-    assert.equal(unified.infrastructureTarget, "nestjs");
+    assert.equal(unified.infrastructureTarget, "nitro");
   });
 });

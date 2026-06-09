@@ -266,4 +266,30 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     );
     assert.equal(apiFrameworkOf(m), "plain-ts");
   });
+
+  it("infrastructureTarget 'none' emits NO api app (UI-only project)", () => {
+    const m = wizardToManifest(
+      wizardWith([
+        { name: "orders", infrastructureTarget: "none" },
+        { name: "billing", infrastructureTarget: "none" },
+      ]),
+    );
+    assert.equal(
+      appsOf(m).some((a) => a.name === "api"),
+      false,
+      "no context wants an API backend, so the api app must be omitted",
+    );
+  });
+
+  it("still emits the api app when only SOME contexts opt out of the API", () => {
+    const m = wizardToManifest(
+      wizardWith([
+        { name: "orders", infrastructureTarget: "none" },
+        { name: "billing", infrastructureTarget: "nitro" },
+      ]),
+    );
+    // The opted-out context does not suppress the api app, nor influence its
+    // framework (nitro wins from the api-bearing context).
+    assert.equal(apiFrameworkOf(m), "nitro");
+  });
 });
