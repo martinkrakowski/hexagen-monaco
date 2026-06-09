@@ -71,11 +71,23 @@ export function ProjectsTable({
               />
             </th>
             <SortableColumnHeader
-              label="Name"
+              label="Project name"
               field="name"
               currentSort={sort}
               onToggleSort={onToggleSort}
             />
+            <th className="px-3 py-2 text-sm font-medium text-muted-foreground text-left hidden lg:table-cell">
+              Namespace
+            </th>
+            <th className="px-3 py-2 text-sm font-medium text-muted-foreground text-left hidden sm:table-cell">
+              Bounded Contexts
+            </th>
+            <th className="px-3 py-2 text-sm font-medium text-muted-foreground text-left hidden xl:table-cell">
+              API
+            </th>
+            <th className="px-3 py-2 text-sm font-medium text-muted-foreground text-left hidden xl:table-cell">
+              UI
+            </th>
             <SortableColumnHeader
               label="Updated"
               field="updated"

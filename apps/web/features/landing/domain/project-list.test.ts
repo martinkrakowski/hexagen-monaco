@@ -11,7 +11,7 @@ interface MockSavedProject {
   readonly createdAt: number;
   readonly updatedAt: number;
   readonly formState: {
-    governance?: { workspaceDescription?: string };
+    governance?: { workspaceDescription?: string; namespacePrefix?: string };
     [key: string]: unknown;
   };
   readonly manifestYaml: string;
@@ -74,6 +74,53 @@ describe("toProjectListItem", () => {
     const result = toProjectListItem(project as unknown as SavedProject);
     assert.strictEqual(result.sortName, "camelcasename");
   });
+
+  it("derives namespace, context names/count, and API/UI labels", () => {
+    const project = makeProject({
+      formState: {
+        governance: { namespacePrefix: "@client-portal" },
+        boundedContexts: [
+          {
+            name: "orders",
+            uiFramework: "Next.js",
+            infrastructureTarget: "nitro",
+          },
+          { name: "billing" },
+        ],
+      },
+    });
+    const result = toProjectListItem(project as unknown as SavedProject);
+    assert.strictEqual(result.namespace, "@client-portal");
+    assert.deepStrictEqual(result.boundedContextNames, ["orders", "billing"]);
+    assert.strictEqual(result.boundedContextCount, 2);
+    assert.strictEqual(result.apiLabel, "Nitro");
+    assert.strictEqual(result.uiLabel, "Next.js");
+  });
+
+  it("labels a headless project's UI and defaults the namespace", () => {
+    const project = makeProject({
+      formState: {
+        boundedContexts: [
+          { name: "core", uiFramework: "", infrastructureTarget: "none" },
+        ],
+      },
+    });
+    const result = toProjectListItem(project as unknown as SavedProject);
+    assert.strictEqual(result.namespace, "@hexagen");
+    assert.strictEqual(result.uiLabel, "Headless");
+    assert.strictEqual(result.apiLabel, "None");
+  });
+
+  it("survives drifted boundedContexts without throwing", () => {
+    const project = makeProject({
+      formState: {
+        boundedContexts: [null, "bad", { name: 42 }, { name: "ok" }],
+      },
+    });
+    const result = toProjectListItem(project as unknown as SavedProject);
+    assert.deepStrictEqual(result.boundedContextNames, ["ok"]);
+    assert.strictEqual(result.boundedContextCount, 1);
+  });
 });
 
 describe("sortItems", () => {
@@ -82,6 +129,11 @@ describe("sortItems", () => {
       id: "a",
       name: "Beta",
       description: "",
+      namespace: "@x",
+      boundedContextNames: [],
+      boundedContextCount: 0,
+      apiLabel: "Nitro",
+      uiLabel: "Headless",
       createdAt: 3000,
       updatedAt: 2000,
       sortName: "beta",
@@ -92,6 +144,11 @@ describe("sortItems", () => {
       id: "b",
       name: "Alpha",
       description: "",
+      namespace: "@x",
+      boundedContextNames: [],
+      boundedContextCount: 0,
+      apiLabel: "Nitro",
+      uiLabel: "Headless",
       createdAt: 1000,
       updatedAt: 4000,
       sortName: "alpha",
@@ -102,6 +159,11 @@ describe("sortItems", () => {
       id: "c",
       name: "Gamma",
       description: "",
+      namespace: "@x",
+      boundedContextNames: [],
+      boundedContextCount: 0,
+      apiLabel: "Nitro",
+      uiLabel: "Headless",
       createdAt: 2000,
       updatedAt: 3000,
       sortName: "gamma",
