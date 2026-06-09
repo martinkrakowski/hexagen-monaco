@@ -28,9 +28,14 @@ export function compileAdapterUserPrompt(
   variables: AdapterPromptVariables,
 ): string {
   // contextName originates from the user's spec and validationErrors can echo
-  // raw LLM output — escape both. Port names are schema-validated upstream,
-  // but escaping the joined list is uniform and costs nothing for clean input.
-  const portList = escapeXml(variables.validatedPortInventory.join(", "));
+  // raw LLM output — escape both. The port list is deliberately NOT escaped:
+  // it carries an exact-copy contract ("must be one of these exactly") and
+  // both consumers validate `implements` against the RAW names
+  // (mcp manifest-generation.adapter `portNames.includes`, client path
+  // validate-draft `validPortNames.has`). Escaping a string the model is
+  // instructed to reproduce byte-for-byte guarantees a mismatch whenever a
+  // name contains &<>"' — normalizePortName does not strip those characters.
+  const portList = variables.validatedPortInventory.join(", ");
 
   let prompt = `Context: "${escapeXml(variables.contextName)}"\n\nValid port names are: [${portList}]. The "implements" field must be one of these exactly.\n\nReturn ONLY a JSON array of adapter objects. No markdown fences, no explanations.`;
 
