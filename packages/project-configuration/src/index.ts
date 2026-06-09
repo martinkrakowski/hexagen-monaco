@@ -31,6 +31,7 @@ export {
   BoundedContextTypeSchema,
   LayerTypeSchema,
   ManifestSchema,
+  PLANE_NAMES,
   PlaneTypeSchema,
   StatusTypeSchema,
   RelationshipPatternSchema,

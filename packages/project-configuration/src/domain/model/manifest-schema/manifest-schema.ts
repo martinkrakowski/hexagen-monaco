@@ -33,16 +33,18 @@ function caseInsensitiveEnum<T extends z.ZodTypeAny>(
 // other enums below): normalization for this type is owned by @hexagen/shared.
 export const BoundedContextTypeSchema = boundedContextTypeSchema;
 
-export const PlaneTypeSchema = caseInsensitiveEnum(
-  z.enum([
-    "projection",
-    "probabilistic",
-    "infrastructure",
-    "shared-kernel",
-    "core",
-    "supporting",
-  ]),
-);
+/** Canonical plane-name vocabulary. The schema below derives from this single
+ * literal so the name list and the validator cannot drift apart. */
+export const PLANE_NAMES = [
+  "projection",
+  "probabilistic",
+  "infrastructure",
+  "shared-kernel",
+  "core",
+  "supporting",
+] as const;
+
+export const PlaneTypeSchema = caseInsensitiveEnum(z.enum(PLANE_NAMES));
 
 export const StatusTypeSchema = caseInsensitiveEnum(
   z.enum(["active", "frozen", "deprecated", "experimental"]),

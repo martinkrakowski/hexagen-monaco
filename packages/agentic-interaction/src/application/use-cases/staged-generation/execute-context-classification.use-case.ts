@@ -7,6 +7,7 @@ import {
   STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
   compileStage2Prompt,
 } from "../../../domain/index";
+import { CONTEXT_NAME_DETERMINISTIC_BLOCKLIST } from "../../../domain/prompts/architecture-contract";
 import type {
   PipelineState,
   ClassificationResult,
@@ -131,25 +132,7 @@ export class ExecuteContextClassificationUseCase {
       const uncertain: UncertainContext[] = [];
       let hasValidLine = false;
 
-      const infrastructureBlocklist = [
-        "adapter",
-        "repository",
-        "cache",
-        "queue",
-        "database",
-        "db",
-        "api",
-        "gateway",
-        "postgres",
-        "redis",
-        "mongo",
-        "rabbit",
-        "kafka",
-        "mqtt",
-        "s3",
-        "rest",
-        "graphql",
-      ];
+      const infrastructureBlocklist = CONTEXT_NAME_DETERMINISTIC_BLOCKLIST;
 
       for (const line of lines) {
         try {
