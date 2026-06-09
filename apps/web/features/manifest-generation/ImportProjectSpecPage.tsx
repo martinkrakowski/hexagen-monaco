@@ -16,6 +16,7 @@ import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
+import { setManifestSystemName } from "./manifestSystemName";
 
 import { SpecUploadStep } from "./import-project-spec/SpecUploadStep";
 import { SpecReviewStep } from "./import-project-spec/SpecReviewStep";
@@ -217,11 +218,17 @@ export default function ImportProjectSpecPage() {
         carriedName ||
         wizardData.governance?.workspaceName ||
         `Imported Project ${new Date().toLocaleTimeString()}`;
+      // Keep the previewed/saved manifest string in sync with the carried name:
+      // seed the form's workspaceName AND rewrite the manifest's top-level
+      // `system` so the Approve screen and saved manifestYaml agree with
+      // formState (see manifestSystemName).
+      let manifestYaml = generatedManifest;
       if (carriedName && wizardData.governance) {
-        wizardData.governance.workspaceName =
-          deriveWorkspaceName(carriedName).name;
+        const slug = deriveWorkspaceName(carriedName).name;
+        wizardData.governance.workspaceName = slug;
+        manifestYaml = setManifestSystemName(generatedManifest, slug);
       }
-      pendingManifest.set(generatedManifest, wizardData, projectName);
+      pendingManifest.set(manifestYaml, wizardData, projectName);
       router.push("/projects/new/ai/accept");
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {

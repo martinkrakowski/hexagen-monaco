@@ -10,6 +10,7 @@ import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { logger } from "../../lib/structured-logger";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
+import { setManifestSystemName } from "./manifestSystemName";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 interface ImportManifestPageProps {
@@ -74,18 +75,26 @@ export function ImportManifestPage({
       // mutating it in place would violate React's immutability contract (the
       // mutated object would leak into later renders if the save fails).
       const baseConfig = parsedData as ProjectConfig;
+      const slug = carriedName ? deriveWorkspaceName(carriedName).name : null;
       const config: ProjectConfig =
-        carriedName && baseConfig.governance
+        slug && baseConfig.governance
           ? {
               ...baseConfig,
-              governance: {
-                ...baseConfig.governance,
-                workspaceName: deriveWorkspaceName(carriedName).name,
-              },
+              governance: { ...baseConfig.governance, workspaceName: slug },
             }
           : baseConfig;
+      // Keep the saved manifest string in sync with the carried name so
+      // formState and manifestYaml agree on the system name (governance refresh
+      // reads manifestYaml). See manifestSystemName.
+      const savedManifestYaml = slug
+        ? setManifestSystemName(manifestYaml, slug)
+        : manifestYaml;
 
-      const projectId = await saveProject(projectName, config, manifestYaml);
+      const projectId = await saveProject(
+        projectName,
+        config,
+        savedManifestYaml,
+      );
 
       if (!projectId) {
         logger.error("Failed to save imported project: persistence failed");

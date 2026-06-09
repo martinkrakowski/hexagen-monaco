@@ -70,21 +70,31 @@ export function NameStepClient() {
 
       if (path === "blank") {
         setBusy(true);
-        const projectId = await saveProject(
-          name,
-          createBlankProjectConfig(name),
-          "",
-        );
-        if (projectId) {
-          router.push(`/wizard/1?project=${projectId}`);
-          return;
+        try {
+          const projectId = await saveProject(
+            name,
+            createBlankProjectConfig(name),
+            "",
+          );
+          if (projectId) {
+            // Keep `busy` set while navigating away on success.
+            router.push(`/wizard/1?project=${projectId}`);
+            return;
+          }
+          // Persistence reported failure (returned null) — surface it instead
+          // of silently doing nothing, mirroring the previous flow.
+          logger.error("Failed to create blank project: persistence failed");
+          setError(
+            "Couldn't create the project — check your browser storage permissions or available space and try again.",
+          );
+        } catch (err) {
+          // saveProject doesn't catch port rejections; guard so a throw can't
+          // leave the UI stuck on a disabled, busy screen.
+          logger.error("Failed to create blank project", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          setError("Unexpected error creating the project. Please try again.");
         }
-        // Persistence failed (saveProject returned null) — surface it instead of
-        // silently doing nothing, mirroring the previous usePathNavigation flow.
-        logger.error("Failed to create blank project: persistence failed");
-        setError(
-          "Couldn't create the project — check your browser storage permissions or available space and try again.",
-        );
         setBusy(false);
         return;
       }
