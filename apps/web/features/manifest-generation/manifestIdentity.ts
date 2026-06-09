@@ -18,9 +18,11 @@ export interface ManifestIdentity {
  * (`manifestYaml`, later read by governance refresh) is the original. Without
  * this, `formState` and `manifestYaml` disagree until the wizard regenerates.
  *
- * Surgical on purpose: only these top-level fields change, so the AI/imported
- * manifest the user is approving is otherwise preserved verbatim. Returns the
- * input unchanged if it can't be parsed as a YAML object.
+ * Implementation: the YAML is parsed and re-serialized via `js-yaml`, so only
+ * `system`/`scope` change *semantically* — but the round-trip normalizes
+ * formatting and does NOT preserve comments or anchors from the original. This
+ * is acceptable here (the previewed/saved manifest is data, not authored text).
+ * Returns the input unchanged if it can't be parsed as a YAML object.
  */
 export function setManifestIdentity(
   manifestYaml: string,
