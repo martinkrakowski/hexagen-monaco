@@ -221,7 +221,7 @@ other path.
 ## Verification
 
 - Scaffolding a project with the single-app preset yields exactly one `apps/web`
-  - one `api`, with no per-context UI/API toggles in the wizard.
+  plus one `api`, with no per-context UI/API toggles in the wizard.
 - A legacy project with divergent per-context UI loads as a single Application
   (first-non-empty), logs the divergence, and converges on save.
 - `deriveApps` unit tests are unchanged and green (no model change).
