@@ -106,8 +106,11 @@ export const ProjectRow = memo(function ProjectRow({
             ariaLabel={`${item.boundedContextCount} bounded contexts`}
             content={
               <ul className="space-y-0.5">
-                {item.boundedContextNames.map((name) => (
-                  <li key={name}>{name}</li>
+                {item.boundedContextNames.map((name, i) => (
+                  // Names aren't unique (schema only enforces non-empty), so the
+                  // index disambiguates duplicates. Safe here: a static,
+                  // display-only list that never reorders.
+                  <li key={`${name}-${i}`}>{name}</li>
                 ))}
               </ul>
             }
