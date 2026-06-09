@@ -1,6 +1,6 @@
 # ADR-0041: Wizard Applications Model — Project-Level Presentation Over Per-Context Fields
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-06-08
 **Authors:** Architecture Co-pilot, Human Architect
 **Related to:** ADR-0004 (ci-build-typescript-monorepo-resolution)
@@ -95,9 +95,12 @@ existing project whose contexts may carry divergent per-context UI/API values:
 
 - **First non-empty wins**, evaluated in context order, for each of
   `uiFramework` and `infrastructureTarget`.
-- A divergence (two contexts with different non-empty values) is **logged** (dev
-  console / wizard warning) and the panel shows the winning value; saving
-  re-fans-out the single value, converging the contexts on next save.
+- A divergence (two contexts with different non-empty values) shows the winning
+  value AND surfaces a **dismissible inline notice in the Applications step** —
+  not merely a dev-console log, which is invisible to the non-developer loading a
+  legacy project. Copy, e.g.: _"Your bounded contexts had different UI/API
+  settings — we've unified them to «Next.js + Nitro». Change the selection below
+  if needed."_ Saving re-fans the single value, converging the contexts.
 - This mirrors the aggregation `deriveApps` already performs
   (`pickPreferredFramework`), so the wizard preview and the generated manifest
   agree.
@@ -150,33 +153,70 @@ the step still converge on the single value.
   `allowSharedUi` distinguishes shared vs isolated). Acceptable: that was the
   source of the confusion, and the strict case is rare and still reachable.
 - The per-context fields remain in the schema as an internal representation that
-  the UI no longer edits directly — a mild model/representation gap, documented
-  here so it is intentional rather than surprising.
+  the UI no longer edits directly — a model/representation gap with a concrete
+  risk: a future developer sees `uiFramework` / `infrastructureTarget` on the
+  per-context schema and re-adds per-context UI editing elsewhere, unaware of this
+  ADR. **Mitigation (required, see implementation):** a code-level comment on
+  those fields in `schema.ts` points at ADR-0041 and states they are
+  **wizard-managed via Applications-step fan-out, not direct per-context input** —
+  making the gap self-documenting at the site of future confusion.
 
 ### Neutral
 
 - A future "advanced / per-app" mode can layer a real `applications[]` field on
   top if multi-app / micro-frontend projects become common; this ADR does not
   preclude it, it defers it.
+- The "new contexts inherit the choice, no back-fill" property (D5) assumes
+  **linear forward navigation** through the wizard. If the wizard permits
+  backward navigation or step-skipping such that contexts can be created _before_
+  the Applications step is visited, the implementation must run a **back-fill
+  sweep on Applications-step entry** (fan-out to any pre-existing contexts) — the
+  same fan-out, applied on enter rather than only on change.
 
 ## Implementation sketch (for the follow-up PR, not this ADR)
 
+**State plumbing (the wiring point — explicit).** The wizard holds `ProjectConfig`
+in a single **react-hook-form** store; steps read/write it via
+`useFormContext<ProjectConfig>()` (`control` / `getValues` / `setValue` /
+`useWatch`), and bounded contexts are an array mutated with
+`setValue("boundedContexts", …)` (see `BoundedContextStep.tsx`). There is no
+separate undo/redo stack — RHF is the single source of truth — so **every fan-out
+goes through `setValue` on that same store**; nothing writes context state by any
+other path.
+
 1. **Applications step** (new, dedicated; D5): registered in `config.ts`
-   `wizardSteps` after `workspace_governance` and before `bounded_contexts`. One
-   `uiFramework` select + one `infrastructureTarget` select, defaulting to the
-   single-app preset (Next.js + the project's API target). On change, re-fan the
-   value to every bounded context's per-context field.
-2. **`createEmptyContext`**: seed new contexts' `uiFramework` /
-   `infrastructureTarget` from the chosen Applications value (so contexts created
-   after the step inherit it without a back-fill).
+   `wizardSteps` after `workspace_governance` and before `bounded_contexts`. Uses
+   `useFormContext<ProjectConfig>()` like every other step. One `uiFramework`
+   select + one `infrastructureTarget` select, defaulting to the single-app preset
+   (Next.js + the project's API target). **Fan-out trigger:** on select change,
+   `setValue("boundedContexts", contexts.map(c => ({ ...c, uiFramework, infrastructureTarget })), { shouldDirty: true })`
+   — the same RHF path the other steps use, so dirty-tracking and persistence stay
+   consistent.
+2. **`createEmptyContext`**: change its signature to accept the current Applications
+   values — `createEmptyContext({ uiFramework, infrastructureTarget })` — and seed
+   the new context's fields from them (replacing today's hardcoded
+   `infrastructureTarget: "nestjs"` / `uiFramework: ""`). `BoundedContextStep`'s
+   add handler reads the values via `getValues()` and passes them in, so a context
+   created after the Applications step inherits the choice without a back-fill.
 3. **`ContextFormInfrastructure.tsx`**: remove the API Backend + UI Frontend
    selects (keep persistence / messaging / telemetry).
-4. **Initial-value collapse** helper (D4): first-non-empty-wins across contexts,
-   with a logged divergence warning; used to seed the step on project load.
-5. **Tests**: step fan-out + new-context default write all contexts;
-   load-collapse picks first non-empty + logs divergence; `deriveApps` still
-   yields one `web` + one `api` for the single-app preset (regression guard,
-   unchanged behavior).
+4. **Initial-value collapse** helper (D4): first-non-empty-wins across contexts;
+   used to seed the step on project load and to drive the **dismissible inline
+   divergence notice** in the Applications step (not a console-only log).
+5. **Schema self-documentation** (mitigates the model/representation gap):
+   add a comment on `schema.ts`'s per-context `uiFramework` /
+   `infrastructureTarget` fields pointing at ADR-0041 and stating they are
+   wizard-managed via Applications-step fan-out, **not** direct per-context input.
+6. **Tests**:
+   - **Fan-out**: changing the Applications selection writes the value to every
+     existing context (via `setValue`).
+   - **New-context default (gap-closer)**: a context created _after_ the
+     Applications step is set carries the project's selected `uiFramework` +
+     `infrastructureTarget` (guards the silent-inheritance-break scenario).
+   - **Load-collapse**: divergent per-context values seed first-non-empty and
+     raise the inline notice.
+   - **`deriveApps` regression guard**: still yields one `web` + one `api` for the
+     single-app preset (unchanged behavior).
 
 ## Verification
 
@@ -192,5 +232,7 @@ the step still converge on the single value.
   (`docs/planning/generator-scaffold-and-wizard-remediation.md`)
 - `apps/web/features/project-wizard/steps/bounded-context-step/ContextFormInfrastructure.tsx`
 - `packages/wizard-orchestration/src/application/wizard-to-manifest.ts` (`deriveApps`)
-- `packages/project-configuration/src/domain/model/workspace-templates/workspace-templates.ts` (`allowSharedUi`)
-- `packages/project-configuration/src/schema.ts` (per-context fields)
+- `packages/project-configuration/src/domain/model/workspace-templates/workspace-templates.ts` (`templateRules.allowSharedUi` — preserved by D3)
+- `packages/project-configuration/src/schema.ts` (per-context `uiFramework` / `infrastructureTarget` fields — D5 schema comment lands here)
+- `apps/web/features/project-wizard/config.ts` (`wizardSteps` order — Applications step inserted per D5)
+- `apps/web/features/project-wizard/steps/BoundedContextStep.tsx` + `steps/bounded-context-step/createEmptyContext.ts` (RHF `setValue` fan-out + new-context default)
