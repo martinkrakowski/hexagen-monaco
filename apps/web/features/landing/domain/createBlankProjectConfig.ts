@@ -4,11 +4,11 @@ import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 /**
  * Build a fresh blank-project config for the "Start Blank" stream.
  *
- * The user-entered project name seeds `governance.workspaceName` (slugified via
- * the shared `deriveWorkspaceName`), so the name is factored into generated
- * output — `wizardToManifest` maps `workspaceName` to the manifest `system.name`.
- * `namespacePrefix` keeps its `@hexagen` default and stays editable in the
- * wizard's Workspace Governance step.
+ * The user-entered project name seeds both `governance.workspaceName` (the
+ * slug, via the shared `deriveWorkspaceName`) and `governance.namespacePrefix`
+ * (`@<slug>`), so the name is factored into generated output — `wizardToManifest`
+ * maps `workspaceName`/`namespacePrefix` to the manifest `system`/`scope`. Both
+ * stay editable in the wizard's Workspace Governance step.
  *
  * Mirrors `emptyFormValues` in `features/project-wizard/config.ts` (the single
  * Next.js app ADR-0041 preset); keep the two in sync.
@@ -23,7 +23,7 @@ export function createBlankProjectConfig(projectName: string): ProjectConfig {
       workspaceDescription: undefined,
       packageManager: "yarn",
       topologyStrictness: "flexible",
-      namespacePrefix: "@hexagen",
+      namespacePrefix: `@${workspaceName}`,
       namingConventions: {
         contextDirectoryPattern: "packages/",
         adapterSuffix: ".adapter.ts",
