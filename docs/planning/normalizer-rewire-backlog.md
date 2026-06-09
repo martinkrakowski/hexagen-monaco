@@ -33,7 +33,7 @@ _Full reasoning chain behind this backlog — including the self-corrections tha
 
 > **Step zero (do this first):** grep construction/call sites to confirm the path is live before treating any item here as a production concern. This arc's central error was skipping that check.
 
-- **P4 — remediation hardening** (`holistic-manifest-repair`, `fix-manifest-violation`: hardcoded `"gpt-4"`, no governance gate).
+- **P4 — remediation hardening** (`holistic-manifest-repair`, `fix-manifest-violation`: hardcoded `"gpt-4"`, no governance gate). **RESOLVED: step zero proved the premise stale — both use-cases were dead (UI went deterministic in `53b8e90d`) and the only construction site, `/api/manifest/fix`, was an unauthenticated zero-caller LLM proxy. Deleted rather than hardened; verdict recorded in the development plan.**
 - **P5 — MCP governance parity** (`manifest-generation.adapter.ts` uses `validateDraft`, not R01–R18; writes with no lint:arch/HITL gate).
 - **P6 — dead `escalationConfig`** in 6 use-cases — several _are_ the dead per-stage classes, so likely "dead param in dead code."
 

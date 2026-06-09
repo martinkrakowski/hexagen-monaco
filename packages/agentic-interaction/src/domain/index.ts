@@ -52,11 +52,7 @@ export {
   resolveFallbackChain,
   createDefaultFallbackChain,
 } from "./provider-config";
-export {
-  extractYamlFromResponse as extractManifestYaml,
-  generateSuggestions,
-  detectWarnings,
-} from "./manifest-yaml-extractor";
+export { generateSuggestions, detectWarnings } from "./manifest-yaml-extractor";
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
@@ -149,7 +145,6 @@ export {
   coerceRawPorts,
   coerceContextName,
   coercePortName,
-  extractYamlFromResponse,
 } from "./manifest/index";
 
 export type { PortQualityIssue } from "./services/index";

@@ -100,12 +100,6 @@ export {
   ManifestWarningCategory,
   type ManifestWarning,
   type GenerationDiagnostics,
-  FixManifestViolationUseCase,
-  type FixManifestViolationRequest,
-  type FixManifestViolationResponse,
-  HolisticManifestRepairUseCase,
-  type HolisticManifestRepairRequest,
-  type HolisticManifestRepairResponse,
 } from "./application/use-cases/index";
 export { ExecutePromptNormalizationUseCase } from "./application/use-cases/staged-generation/execute-prompt-normalization.use-case";
 export { ExecuteDomainExtractionUseCase } from "./application/use-cases/staged-generation/execute-domain-extraction.use-case";
@@ -164,12 +158,8 @@ export {
 } from "./infrastructure/adapters/llm-provider-selector.adapter";
 export { EnvironmentSecretVaultAdapter } from "./infrastructure/adapters/environment-secret-vault.adapter";
 
-// Manifest YAML extractor exports (from domain)
-export {
-  extractManifestYaml,
-  generateSuggestions,
-  detectWarnings,
-} from "./domain/index";
+// Manifest inspection helpers (from domain)
+export { generateSuggestions, detectWarnings } from "./domain/index";
 
 // Context-name normalization — shared so the web Spec Review can mirror the
 // structured-config pipeline's canonical-use-case precedence exactly (#256).
@@ -260,7 +250,6 @@ export {
   extractArrayFromWrapper,
   extractObjectFromWrapper,
   coerceRawPorts,
-  extractYamlFromResponse,
 } from "./domain/index";
 export {
   ExecuteLooseSpecConversionUseCase,
