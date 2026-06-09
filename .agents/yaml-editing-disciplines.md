@@ -21,10 +21,10 @@ indentation exactly. YAML is whitespace-sensitive — a single missing space cas
 
 ## Canonical Indentation Contract
 
-| File                 | Top-level key               | List item           | Nested map key                 | Nested list                         |
-| -------------------- | --------------------------- | ------------------- | ------------------------------ | ----------------------------------- |
-| `manifest.yaml`      | `bounded_contexts:` (col 0) | `  - name:` (col 2) | `    layers:` (col 4)          | `      - NodeKind` (col 6)          |
-| `linter-config.yaml` | `package_rules:` (col 0)    | `  - name:` (col 2) | `    allowed_imports:` (col 4) | `      - "@hexagen/shared"` (col 6) |
+| File                 | Top-level key               | List item           | Nested map key                     | Nested list                                |
+| -------------------- | --------------------------- | ------------------- | ---------------------------------- | ------------------------------------------ |
+| `manifest.yaml`      | `bounded_contexts:` (col 0) | `  - name:` (col 2) | `    plane:` / `    file:` (col 4) | — (entries are flat maps; no nested lists) |
+| `linter-config.yaml` | `package_rules:` (col 0)    | `  - name:` (col 2) | `    allowed_imports:` (col 4)     | `      - '@hexagen/shared'` (col 6)        |
 
 ---
 

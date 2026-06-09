@@ -136,7 +136,7 @@ No domain code references a provider by name. Switching providers, swapping in a
 | **R17** | The port's `forAggregate` reference does not match any known aggregate root.                                                  |
 | **R18** | Port name leaks infrastructure or platform metadata (Vercel, FlyIO, AWS, GCP, `*Client`, `*Adapter`, `*Host`, `*Platform` …). |
 
-**Retry with model escalation.** Stage-3 structured config generation uses `STAGE3_ESCALATION_CONFIG` (3 default retries, then 3 escalated retries with `escalationModel: "gpt-4o"`). The generic `DEFAULT_ESCALATION_CONFIG` provides the same 3 + 3 pattern for use cases that need to fall back to a stronger model on persistent failure. Both live in `packages/agentic-interaction/src/application/use-cases/staged-generation/retry-with-escalation.ts`.
+**Retry with model escalation.** Stage-3 structured config generation uses `STAGE3_ESCALATION_CONFIG` (3 default retries, then up to 3 escalated retries on a stronger model). The escalation model is **opt-in**: it ships as `escalationModel: undefined` and is injected at the wiring layer from the `LLM_ESCALATION_MODEL` env var — hardcoding a model name (e.g. `gpt-4o`) would 404 on non-OpenAI providers (NVIDIA, vLLM, Ollama, Anthropic). When unset, the escalated retries are skipped. The generic `DEFAULT_ESCALATION_CONFIG` provides the same 3 + 3 pattern for use cases that need to fall back to a stronger model on persistent failure. Both live in `packages/agentic-interaction/src/application/use-cases/staged-generation/retry-with-escalation.ts`.
 
 **Confidence-gated type review.** `ClassifyContextTypeUseCase` emits a confidence score on every inferred context type; results below the threshold are flagged `needsTypeReview` and surfaced to the human reviewer, never auto-applied.
 
@@ -312,7 +312,11 @@ bounded_contexts:
       - R18 # infrastructure / platform name leak
     escalation:
       default: { retries: 3, escalated: 3 }
-      stage3: { retries: 3, escalated: 3, escalationModel: gpt-4o }
+      stage3: {
+          retries: 3,
+          escalated: 3,
+          escalationModel: $LLM_ESCALATION_MODEL,
+        } # opt-in env var; escalation skipped when unset
 ```
 
 ## Testing & CI
