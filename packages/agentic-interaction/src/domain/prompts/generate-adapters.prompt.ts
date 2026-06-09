@@ -1,3 +1,5 @@
+import { escapeXml } from "./escape-xml";
+
 export interface AdapterPromptVariables {
   validatedPortInventory: string[];
   contextName: string;
@@ -25,12 +27,15 @@ Rules:
 export function compileAdapterUserPrompt(
   variables: AdapterPromptVariables,
 ): string {
-  const portList = variables.validatedPortInventory.join(", ");
+  // contextName originates from the user's spec and validationErrors can echo
+  // raw LLM output — escape both. Port names are schema-validated upstream,
+  // but escaping the joined list is uniform and costs nothing for clean input.
+  const portList = escapeXml(variables.validatedPortInventory.join(", "));
 
-  let prompt = `Context: "${variables.contextName}"\n\nValid port names are: [${portList}]. The "implements" field must be one of these exactly.\n\nReturn ONLY a JSON array of adapter objects. No markdown fences, no explanations.`;
+  let prompt = `Context: "${escapeXml(variables.contextName)}"\n\nValid port names are: [${portList}]. The "implements" field must be one of these exactly.\n\nReturn ONLY a JSON array of adapter objects. No markdown fences, no explanations.`;
 
   if (variables.validationErrors) {
-    prompt += `\n\nPrevious output had these validation errors:\n${variables.validationErrors}\n\nFix these errors and return valid JSON.`;
+    prompt += `\n\nPrevious output had these validation errors:\n${escapeXml(variables.validationErrors)}\n\nFix these errors and return valid JSON.`;
   }
 
   return prompt;

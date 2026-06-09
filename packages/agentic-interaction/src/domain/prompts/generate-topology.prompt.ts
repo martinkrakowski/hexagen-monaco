@@ -33,6 +33,8 @@
  * When adding a new compile function, all four rules are mandatory.
  */
 
+import { escapeXml } from "./escape-xml";
+
 export interface TopologyPromptVariables {
   userDescription: string;
   maxContexts?: number;
@@ -45,20 +47,6 @@ const XML_TAG = {
   VALIDATION_ERRORS_OPEN: "<validation_errors>",
   VALIDATION_ERRORS_CLOSE: "</validation_errors>",
 } as const;
-
-function escapeXml(unsafe: string): string {
-  return unsafe.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&apos;",
-      })[c] as string,
-  );
-}
 
 export const TOPOLOGY_SYSTEM_PROMPT = `You are a JSON generator. You output ONLY valid JSON, nothing else.
 No explanations. No markdown. No code blocks. Raw JSON only.

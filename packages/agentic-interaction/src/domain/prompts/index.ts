@@ -3,6 +3,7 @@
 export * from "./architecture-contract.js";
 export * from "./classify-context-type.prompt.js";
 export * from "./convert-loose-spec.prompt.js";
+export * from "./escape-xml.js";
 export * from "./few-shot-examples.js";
 export * from "./generate-adapters.prompt.js";
 export * from "./generate-manifest.prompt.js";
