@@ -283,7 +283,11 @@ yarn workspace @hexagen/tui dev
 ## Example Manifest
 
 ```yaml
-# .architecture/manifest.yaml (excerpt)
+# .architecture/manifest.yaml (illustrative excerpt — simplified for reading.
+# Real bounded_contexts entries are flat maps; ports and layer detail live in
+# per-context context.yaml files. Runtime LLM settings (retries, escalation)
+# are code/env-level config, not manifest fields — see "Retry with model
+# escalation" above.)
 
 system: hexagen-monaco
 architecture: modular-monolith
@@ -310,13 +314,6 @@ bounded_contexts:
       - R16 # trivial description / degenerate justification
       - R17 # invalid forAggregate reference
       - R18 # infrastructure / platform name leak
-    escalation:
-      default: { retries: 3, escalated: 3 }
-      stage3: {
-          retries: 3,
-          escalated: 3,
-          escalationModel: $LLM_ESCALATION_MODEL,
-        } # opt-in env var; escalation skipped when unset
 ```
 
 ## Testing & CI
