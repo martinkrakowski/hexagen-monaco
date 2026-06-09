@@ -23,11 +23,13 @@ export const telemetryProviderOptions = [
   "Winston",
 ] as const;
 export const apiFrameworkOptions = [
+  { value: "nitro", label: "Nitro" },
   { value: "nestjs", label: "NestJS" },
   { value: "express", label: "Express" },
   { value: "serverless", label: "Serverless" },
-  { value: "nitro", label: "Nitro" },
   { value: "plain-ts", label: "Plain TypeScript" },
+  // No separate API backend (UI-only). deriveApps emits no `api` app.
+  { value: "none", label: "None (No API backend)" },
 ] as const;
 
 export const uiFrameworkOptions = [
@@ -73,7 +75,7 @@ export const emptyFormValues: ProjectConfig = {
       id: crypto.randomUUID(),
       name: "core",
       description: "",
-      infrastructureTarget: "nestjs",
+      infrastructureTarget: "nitro",
       coreDomainEntities: [],
       valueObjects: [],
       domainEvents: [],
@@ -83,7 +85,10 @@ export const emptyFormValues: ProjectConfig = {
         inboundPorts: [],
         outboundPorts: [],
       },
-      uiFramework: "",
+      // ADR-0041 single-app preset: a fresh project defaults to one Next.js web
+      // app. The Applications step fans this out across contexts; a loaded
+      // headless project (all uiFramework "") is preserved, not flipped.
+      uiFramework: "Next.js",
       persistenceAdapter: "",
       messagingAdapter: "",
       telemetryProvider: "",
@@ -100,6 +105,15 @@ export const wizardSteps = [
     title: "Workspace Governance",
     description: "Define workspace name, package manager, and topology.",
     fields: ["governance"],
+  },
+  {
+    // ADR-0041: project-level Applications (UI framework + API backend), placed
+    // before Bounded Contexts so the choice frames domain modelling and new
+    // contexts inherit it at creation. Writes the per-context fields via fan-out.
+    id: "applications",
+    title: "Applications",
+    description: "Choose the UI framework and API backend for your project.",
+    fields: ["boundedContexts"],
   },
   {
     id: "bounded_contexts",
@@ -139,3 +153,21 @@ export const wizardSteps = [
     fields: [],
   },
 ];
+
+/**
+ * Resolve a wizard step's index by its stable `id`. Step-index-dependent logic
+ * (validation gates, navigation side effects, the router) looks steps up by id
+ * rather than hardcoding numeric positions, so inserting/reordering a step (e.g.
+ * the ADR-0041 Applications step) can't silently shift those checks.
+ */
+export function stepIndexById(id: string): number {
+  const index = wizardSteps.findIndex((step) => step.id === id);
+  if (index === -1) {
+    // Fail fast: callers gate/reset on this index, so a drifted id must surface
+    // immediately rather than silently returning -1 (which disables the gate).
+    throw new Error(
+      `stepIndexById: unknown wizard step id "${id}" — check wizardSteps.`,
+    );
+  }
+  return index;
+}

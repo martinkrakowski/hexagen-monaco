@@ -5,8 +5,6 @@ import type { FieldPath } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 import {
-  apiFrameworkOptions,
-  uiFrameworkOptions,
   persistenceAdapterOptions,
   messagingAdapterOptions,
   telemetryProviderOptions,
@@ -28,41 +26,18 @@ export function ContextFormInfrastructure({
 
   return (
     <div className="space-y-3">
-      <label className="block">
-        <span className={FIELD_LABEL_CLASSES}>API Backend</span>
-        <select
-          {...register(`${fieldPrefix}.infrastructureTarget` as FieldPath<ProjectConfig>)}
-          className={SELECT_CLASSES}
-        >
-          <option value="" disabled>
-            Select Backend
-          </option>
-          {apiFrameworkOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block">
-        <span className={FIELD_LABEL_CLASSES}>UI Frontend</span>
-        <select
-          {...register(`${fieldPrefix}.uiFramework` as FieldPath<ProjectConfig>)}
-          className={SELECT_CLASSES}
-        >
-          {uiFrameworkOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
+      {/*
+        UI Frontend + API Backend are NOT per-context — they are a single
+        project-level choice on the Applications step (ADR-0041). Only the
+        domain-owned driven infra (persistence / messaging / telemetry) lives
+        here.
+      */}
       <label className="block">
         <span className={FIELD_LABEL_CLASSES}>Persistence</span>
         <select
-          {...register(`${fieldPrefix}.persistenceAdapter` as FieldPath<ProjectConfig>)}
+          {...register(
+            `${fieldPrefix}.persistenceAdapter` as FieldPath<ProjectConfig>,
+          )}
           className={SELECT_CLASSES}
         >
           <option value="">None</option>
@@ -77,7 +52,9 @@ export function ContextFormInfrastructure({
       <label className="block">
         <span className={FIELD_LABEL_CLASSES}>Messaging</span>
         <select
-          {...register(`${fieldPrefix}.messagingAdapter` as FieldPath<ProjectConfig>)}
+          {...register(
+            `${fieldPrefix}.messagingAdapter` as FieldPath<ProjectConfig>,
+          )}
           className={SELECT_CLASSES}
         >
           <option value="">None</option>
@@ -92,7 +69,9 @@ export function ContextFormInfrastructure({
       <label className="block">
         <span className={FIELD_LABEL_CLASSES}>Telemetry</span>
         <select
-          {...register(`${fieldPrefix}.telemetryProvider` as FieldPath<ProjectConfig>)}
+          {...register(
+            `${fieldPrefix}.telemetryProvider` as FieldPath<ProjectConfig>,
+          )}
           className={SELECT_CLASSES}
         >
           {telemetryProviderOptions.map((opt) => (

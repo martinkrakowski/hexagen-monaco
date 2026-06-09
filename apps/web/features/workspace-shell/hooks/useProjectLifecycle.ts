@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-import { emptyFormValues } from "../../project-wizard/config";
+import { emptyFormValues, stepIndexById } from "../../project-wizard/config";
 
 import { useSavedProjects, type SavedProject } from "@/hooks/useSavedProjects";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
@@ -120,10 +120,12 @@ export function useProjectLifecycle(
   const handleNext = useCallback(async () => {
     const f = formRef.current;
     const isValid =
-      ui.currentStepIndex !== 1 || (await f.trigger("boundedContexts"));
+      ui.currentStepIndex !== stepIndexById("bounded_contexts") ||
+      (await f.trigger("boundedContexts"));
     if (!isValid) return;
 
-    if (ui.currentStepIndex === 2) ui.setMappingId("");
+    if (ui.currentStepIndex === stepIndexById("peer_mappings"))
+      ui.setMappingId("");
     const nextStep = Math.min(ui.currentStepIndex + 1, totalSteps - 1);
 
     if (uiState.kind === "edit") {
@@ -142,7 +144,8 @@ export function useProjectLifecycle(
   }, [ui, totalSteps, onGoToStep, uiState, updateProject]);
 
   const handleBack = useCallback(() => {
-    if (ui.currentStepIndex === 2) ui.setMappingId("");
+    if (ui.currentStepIndex === stepIndexById("peer_mappings"))
+      ui.setMappingId("");
     onGoToStep(Math.max(ui.currentStepIndex - 1, 0));
   }, [ui, onGoToStep]);
 

@@ -501,20 +501,33 @@ function deriveApps(
   if (nonShared.length === 0) return [];
 
   const dependsOn = [...new Set(nonShared.map((bc) => bc.name))].sort();
-  const apiFrameworks = nonShared.map(frameworkForContext);
-  // A single aggregated `api` app is emitted under both rules — Phase 2 isolates
-  // only the UI surface, not the API. Preference order is most-specific-first, so
-  // if any context picks Nitro the aggregated app is Nitro (then fastify, then the
-  // plain-ts fallback).
-  const apiApp = {
-    name: "api",
-    framework: pickPreferredFramework(apiFrameworks, [
-      "nitro",
-      "fastify",
-      "plain-ts",
-    ]),
-    depends_on: dependsOn,
-  };
+  // A single aggregated `api` app is emitted under both UI rules — Phase 2
+  // isolates only the UI surface, not the API — UNLESS the project opted out of
+  // an API backend (every non-shared context has `infrastructureTarget: "none"`,
+  // a UI-only project), in which case no `api` app is emitted. Opted-out contexts
+  // don't influence the chosen api framework. Preference order is
+  // most-specific-first, so if any remaining context picks Nitro the aggregated
+  // app is Nitro (then fastify, then the plain-ts fallback).
+  //
+  // `depends_on` intentionally stays the FULL `dependsOn` (every non-shared
+  // context, including `"none"` opt-outs): the single aggregated api serves the
+  // whole domain, so a context opting out of its own api hosting does not drop
+  // its domain from the backend's dependency graph — only whether/which api app
+  // is emitted depends on the opt-out.
+  const apiBearing = nonShared.filter(
+    (bc) => bc.infrastructureTarget !== "none",
+  );
+  const apiApp =
+    apiBearing.length > 0
+      ? {
+          name: "api",
+          framework: pickPreferredFramework(
+            apiBearing.map(frameworkForContext),
+            ["nitro", "fastify", "plain-ts"],
+          ),
+          depends_on: dependsOn,
+        }
+      : null;
 
   if (!allowSharedUi) {
     // Isolated: one web app per UI-bearing context, each depending only on its
@@ -543,7 +556,7 @@ function deriveApps(
       // ordering deterministic across environments, matching the default `.sort()`
       // used for `depends_on`.
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    return [...webApps, apiApp];
+    return apiApp ? [...webApps, apiApp] : webApps;
   }
 
   // Shared: a single `web` app aggregating every non-shared context. Preference
@@ -551,12 +564,10 @@ function deriveApps(
   // `plain-ts`, so a project mixing Next.js and Remix contexts still emits a
   // Next.js web app rather than degrading to plain-ts.
   const uiFrameworks = nonShared.map((bc) => mapUiFramework(bc.uiFramework));
-  return [
-    {
-      name: "web",
-      framework: pickPreferredFramework(uiFrameworks, ["next.js", "plain-ts"]),
-      depends_on: dependsOn,
-    },
-    apiApp,
-  ];
+  const webApp = {
+    name: "web",
+    framework: pickPreferredFramework(uiFrameworks, ["next.js", "plain-ts"]),
+    depends_on: dependsOn,
+  };
+  return apiApp ? [webApp, apiApp] : [webApp];
 }

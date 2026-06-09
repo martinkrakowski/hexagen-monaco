@@ -14,7 +14,7 @@ import {
   type WizardData,
 } from "@hexagen/project-configuration";
 
-import { emptyFormValues } from "../../project-wizard/config";
+import { emptyFormValues, stepIndexById } from "../../project-wizard/config";
 import { buildWizardData } from "@hexagen/wizard-orchestration";
 
 export interface UseWizardFormReturn {
@@ -97,10 +97,14 @@ export function useWizardForm(): UseWizardFormReturn {
   const wizardData = wizardDataRef.current!;
 
   // Returns a validation predicate by step index; closures over the
-  // reactive boundedContexts slice so it updates as the user edits.
+  // reactive boundedContexts slice so it updates as the user edits. The gated
+  // step is resolved by id (not a hardcoded index) so step insertion/reorder
+  // (e.g. the ADR-0041 Applications step) can't shift the gate onto the wrong
+  // step.
   const canProceed = useMemo(() => {
+    const boundedContextsStep = stepIndexById("bounded_contexts");
     return (stepIndex: number): boolean => {
-      if (stepIndex !== 1) return true;
+      if (stepIndex !== boundedContextsStep) return true;
       return (
         boundedContexts.length > 0 &&
         boundedContexts.every((c) => c.name?.trim() !== "")

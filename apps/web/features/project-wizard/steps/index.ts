@@ -1,4 +1,5 @@
 export { WorkspaceGovernanceStep } from "./WorkspaceGovernanceStep";
+export { ApplicationsStep } from "./applications-step";
 export { BoundedContextStep } from "./BoundedContextStep";
 export { PeerContextMappingStep } from "./PeerContextMappingStep";
 export { PortConfigurationStep } from "./PortConfigurationStep";

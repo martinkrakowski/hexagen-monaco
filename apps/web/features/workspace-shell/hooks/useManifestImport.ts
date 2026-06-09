@@ -124,7 +124,7 @@ function translateContext(raw: RawContext): BoundedContext {
     id: crypto.randomUUID(),
     name,
     description,
-    infrastructureTarget: "nestjs",
+    infrastructureTarget: "nitro",
     coreDomainEntities: [],
     valueObjects: [],
     domainEvents: [],
@@ -134,6 +134,10 @@ function translateContext(raw: RawContext): BoundedContext {
       inboundPorts: [...new Set(inboundPorts)],
       outboundPorts: [...new Set(outboundPorts)],
     },
+    // Imported (not new) project: the manifest is silent on UI here, so default
+    // to headless rather than the new-project Next.js preset (ADR-0041) — we
+    // don't invent a UI the manifest didn't declare. The Applications step lets
+    // the user choose one; an all-headless import is preserved by its collapse.
     uiFramework: "",
     persistenceAdapter: "",
     messagingAdapter: "",
