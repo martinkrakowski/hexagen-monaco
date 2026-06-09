@@ -37,6 +37,10 @@ import type {
   PipelineState,
 } from "../value-objects/pipeline-state.ts";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema";
+import {
+  CONTEXT_NAME_GENERATION_BANS,
+  CONTEXT_NAME_VALIDATION_BANS,
+} from "./architecture-contract";
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 import type { BoundedContextType } from "@hexagen/shared";
 export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
@@ -196,7 +200,7 @@ CRITICAL RULES FOR BOUNDED CONTEXTS:
 5. If a subdomain could reasonably fit in MULTIPLE bounded contexts, mark it as "uncertain" and explain the ambiguity in reasoning. It is better to leave ambiguous domains as uncertain than to misclassify them.
 6. NEVER force-classify an ambiguous subdomain. Preserving uncertainty is safer than guessing.
 
-NEVER create a bounded context whose name contains: adapter, repository, cache, queue, database, postgres, redis, mongo, rabbit, kafka, mqtt, s3.
+NEVER create a bounded context whose name contains: ${CONTEXT_NAME_GENERATION_BANS.join(", ")}.
 Split contexts ONLY if they have distinct ubiquitous languages and communicate via defined ports. Use ambiguities provided as hints to flag uncertain contexts.
 Do NOT accept more than ${DEFAULT_MAX_BOUNDED_CONTEXTS} bounded contexts. If you find more candidates, promote the strongest and mark the rest as uncertain.
 
@@ -543,7 +547,7 @@ VALIDATION RULES — check every rule explicitly. Do not skip any.
 
 STRUCTURAL RULES (emit "error" if violated):
 R01: No context name in the manifest contains a technology noun.
-      Banned technology words: postgres, redis, mongo, rabbit, kafka, mqtt, s3, stripe, supabase, firebase, sendgrid, mysql, elasticsearch, dynamo, sqs, sns.
+      Banned technology words: ${CONTEXT_NAME_VALIDATION_BANS.join(", ")}.
       Check: every context name in boundedContexts[*].name must not contain any banned word (case-insensitive).
 
 R02: Every non-shared-kernel context has at least one inbound port.
