@@ -1,24 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Button, FileDropZone } from "@hexagen/ui";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button, FileDropZone, Textarea } from "@hexagen/ui";
 import { ArrowLeft, Check } from "lucide-react";
 import { ManifestPreview } from "./ManifestPreview";
 import { useManifestParser } from "./useManifestParser";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { logger } from "../../lib/structured-logger";
+import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 interface ImportManifestPageProps {
   readonly router?: { push: (url: string) => void };
+  /**
+   * Project name from the shared Project Name step. Injectable for tests; in the
+   * app it is read from the `?name=` query when not provided.
+   */
+  readonly projectName?: string;
 }
 
 export function ImportManifestPage({
   router: injectedRouter,
+  projectName: injectedName,
 }: ImportManifestPageProps) {
   const defaultRouter = useRouter();
   const router = injectedRouter ?? defaultRouter;
+  const searchParams = useSearchParams();
+  const carriedName =
+    injectedName ?? searchParams.get("name")?.trim() ?? undefined;
   const { saveProject } = useSavedProjects();
   const {
     parseManifest,
@@ -28,6 +39,7 @@ export function ImportManifestPage({
 
   const [manifestYaml, setManifestYaml] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleFileLoaded = (content: string) => {
     setManifestYaml(content);
@@ -47,26 +59,49 @@ export function ImportManifestPage({
     if (!manifestYaml || !parsedData) return;
 
     setIsSaving(true);
+    setSaveError(null);
     try {
+      // The user-entered name (from the Project Name step) wins: it becomes the
+      // saved-project name and seeds `governance.workspaceName` so the name is
+      // factored into generated output. Fall back to the manifest's own name
+      // only if the step was bypassed (e.g. a direct visit to this page).
       const projectName =
+        carriedName ||
         parsedData.governance?.workspaceName ||
         `Imported Project ${new Date().toLocaleTimeString()}`;
 
-      const projectId = await saveProject(
-        projectName,
-        parsedData as ProjectConfig,
-        manifestYaml,
-      );
+      // Clone before overriding: `parsedData` is `useManifestParser` state, so
+      // mutating it in place would violate React's immutability contract (the
+      // mutated object would leak into later renders if the save fails).
+      const baseConfig = parsedData as ProjectConfig;
+      const config: ProjectConfig =
+        carriedName && baseConfig.governance
+          ? {
+              ...baseConfig,
+              governance: {
+                ...baseConfig.governance,
+                workspaceName: deriveWorkspaceName(carriedName).name,
+              },
+            }
+          : baseConfig;
+
+      const projectId = await saveProject(projectName, config, manifestYaml);
 
       if (!projectId) {
-        console.error("Failed to save imported project");
+        logger.error("Failed to save imported project: persistence failed");
+        setSaveError(
+          "Couldn't save the project — check your browser storage permissions or available space and try again.",
+        );
         setIsSaving(false);
         return;
       }
 
       router.push(`/wizard/1?project=${projectId}`);
     } catch (error) {
-      console.error("Failed to save imported project:", error);
+      logger.error("Failed to save imported project", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      setSaveError("Unexpected error saving the project. Please try again.");
       setIsSaving(false);
     }
   };
@@ -116,10 +151,10 @@ export function ImportManifestPage({
             <label className="text-sm font-medium text-foreground">
               Paste Manifest YAML
             </label>
-            <textarea
+            <Textarea
               placeholder="Paste your manifest.yaml content here..."
               onChange={(e) => handleTextPaste(e.target.value)}
-              className="w-full h-48 sm:h-64 p-4 bg-background border border-border rounded-md font-mono text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 resize-none"
+              className="h-48 sm:h-64 font-mono resize-none"
             />
           </div>
         </div>
@@ -168,7 +203,7 @@ export function ImportManifestPage({
                 onClick={handleCancel}
                 disabled={isSaving}
               >
-                <ArrowLeft className="w-4 w-4 mr-2" />
+                <ArrowLeft className="w-4 h-4 mr-2" />
                 Cancel
               </Button>
               <span />
@@ -204,6 +239,14 @@ export function ImportManifestPage({
         </>
       }
     >
+      {saveError && (
+        <div
+          role="alert"
+          className="m-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          {saveError}
+        </div>
+      )}
       {renderContent()}
     </ProjectsShellWithFreeTier>
   );

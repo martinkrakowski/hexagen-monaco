@@ -44,16 +44,16 @@ test("each option has non-empty label, description, iconName, and href", () => {
   }
 });
 
-test("manifest href is '/projects/new/import/manifest'", () => {
+test("manifest href routes through the Project Name step", () => {
   const manifest = IMPORT_SUB_OPTIONS.find((o) => o.id === "manifest");
   assert.ok(manifest);
-  assert.equal(manifest.href, "/projects/new/import/manifest");
+  assert.equal(manifest.href, "/projects/new/name?path=manifest");
 });
 
-test("spec href is '/projects/new/import/spec'", () => {
+test("spec href routes through the Project Name step", () => {
   const spec = IMPORT_SUB_OPTIONS.find((o) => o.id === "spec");
   assert.ok(spec);
-  assert.equal(spec.href, "/projects/new/import/spec");
+  assert.equal(spec.href, "/projects/new/name?path=spec");
 });
 
 test("github href is '/projects/new/import/github'", () => {

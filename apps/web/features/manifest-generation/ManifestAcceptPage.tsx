@@ -119,15 +119,32 @@ export function ManifestAcceptPage() {
     [executeSave],
   );
 
+  // Re-attach the project name to the URL so it survives the round-trip back to
+  // the generation screen (the Project Name step ran before this page).
+  // Computed during render and captured in the handler closures *before* they
+  // call `pendingManifest.clear()` — so the cleared store can't blank it out.
+  // Don't move this computation inside the callbacks (it would read the
+  // already-cleared name).
+  const nameQuery = pendingManifest.projectName
+    ? `name=${encodeURIComponent(pendingManifest.projectName)}`
+    : "";
+
   const handleBack = useCallback(() => {
+    // Block the auto-redirect effect: clearing the store nulls `yaml`, which
+    // would otherwise fire the parameterless `router.replace("/projects/new/ai")`
+    // above and race away our `?name=` push.
+    isNavigatingAway.current = true;
     pendingManifest.clear();
-    router.push("/projects/new/ai");
-  }, [pendingManifest, router]);
+    router.push(`/projects/new/ai${nameQuery ? `?${nameQuery}` : ""}`);
+  }, [pendingManifest, router, nameQuery]);
 
   const handleRegenerate = useCallback(() => {
+    isNavigatingAway.current = true;
     pendingManifest.clear();
-    router.push("/projects/new/ai?generate=1");
-  }, [pendingManifest, router]);
+    router.push(
+      `/projects/new/ai?generate=1${nameQuery ? `&${nameQuery}` : ""}`,
+    );
+  }, [pendingManifest, router, nameQuery]);
 
   const renderHeaderContent = () => {
     if (!viewData) {

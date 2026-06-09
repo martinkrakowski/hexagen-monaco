@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { GenerateWithAi } from "./GenerateWithAi";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
+import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { Button } from "@hexagen/ui";
 import {
@@ -34,7 +35,13 @@ const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
 
 export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { set: setPendingManifest } = usePendingManifest();
+
+  // The project name comes from the shared Project Name step (`?name=`). It is
+  // also re-attached to the URL on Back/Regenerate from the accept screen so it
+  // survives a round-trip through generation.
+  const carriedName = searchParams.get("name")?.trim() || null;
 
   const [parseError, setParseError] = useState<string | null>(null);
   const [previewActions, setPreviewActions] =
@@ -47,9 +54,18 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       try {
         setParseError(null);
         const wizardData = parseManifestToWizardData(yaml);
+        // The user-entered name (from the Project Name step) wins: it becomes the
+        // saved-project name and seeds `governance.workspaceName` so the name is
+        // factored into generated output. Fall back to the AI-derived name only
+        // if the step was bypassed (e.g. a direct visit to /projects/new/ai).
         const projectName =
+          carriedName ||
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
+        if (carriedName && wizardData.governance) {
+          wizardData.governance.workspaceName =
+            deriveWorkspaceName(carriedName).name;
+        }
         setPendingManifest(yaml, wizardData, projectName);
         router.push("/projects/new/ai/accept");
       } catch (error) {
@@ -60,7 +76,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
         setParseError(message);
       }
     },
-    [setPendingManifest, router],
+    [setPendingManifest, router, carriedName],
   );
 
   const renderHeaderContent = () => {

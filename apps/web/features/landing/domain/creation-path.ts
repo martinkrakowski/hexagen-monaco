@@ -34,7 +34,9 @@ export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
     description:
       "Resume or adapt a previously generated hexagen manifest.yaml.",
     detail: "No AI involved — direct schema parse and load.",
-    href: "/projects/new/import/manifest",
+    // Route through the shared Project Name step first; it forwards the entered
+    // name to the manifest importer via `?name=`.
+    href: "/projects/new/name?path=manifest",
     iconName: "FileCode",
     status: "available",
   },
@@ -45,7 +47,9 @@ export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
       "Upload a structured YAML or JSON domain spec you have already authored.",
     detail:
       "AI maps your bounded contexts to hexagonal ports and adapters. Domain derivation is skipped.",
-    href: "/projects/new/import/spec",
+    // Route through the shared Project Name step first; it forwards the entered
+    // name to the spec importer via `?name=`.
+    href: "/projects/new/name?path=spec",
     iconName: "Braces",
     status: "available",
   },

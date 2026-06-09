@@ -1,5 +1,11 @@
+import { Suspense } from "react";
+
 import { ImportManifestPage } from "@/manifest-generation/ImportManifestPage";
 
 export default function Page() {
-  return <ImportManifestPage />;
+  return (
+    <Suspense>
+      <ImportManifestPage />
+    </Suspense>
+  );
 }
