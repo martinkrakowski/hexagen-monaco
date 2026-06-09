@@ -42,6 +42,7 @@ import {
   CONTEXT_NAME_VALIDATION_BANS,
 } from "./architecture-contract";
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
+import { escapeXml } from "./escape-xml";
 import type { BoundedContextType } from "@hexagen/shared";
 export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 
@@ -50,20 +51,6 @@ export interface PromptVariables {
   platform?: string;
   deployment?: string;
   additionalContext?: string;
-}
-
-function escapeXml(unsafe: string): string {
-  return unsafe.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&apos;",
-      })[c] as string,
-  );
 }
 
 function buildTechnologyContext(variables: PromptVariables): string {

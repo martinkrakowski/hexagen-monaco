@@ -1,3 +1,5 @@
+import { escapeXml } from "./escape-xml";
+
 export const CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT = `You are a DDD context-type classifier. Given a bounded context's name, responsibility, aggregates, and value_objects, classify it as one of: "core", "supporting", "generic", "shared-kernel", "driver".
 
 Definitions:
@@ -19,20 +21,26 @@ export function compileClassifyContextTypePrompt(
   },
   projectContext?: string,
 ): string {
+  // All fields are spec/user-supplied — escape them so they cannot break out
+  // of their XML delimiters (this path is live via the import spec route).
   const parts: string[] = [];
   if (projectContext) {
-    parts.push(`<project>${projectContext}</project>`);
+    parts.push(`<project>${escapeXml(projectContext)}</project>`);
   }
-  parts.push(`<context_name>${context.name}</context_name>`);
+  parts.push(`<context_name>${escapeXml(context.name)}</context_name>`);
   if (context.responsibility) {
-    parts.push(`<responsibility>${context.responsibility}</responsibility>`);
+    parts.push(
+      `<responsibility>${escapeXml(context.responsibility)}</responsibility>`,
+    );
   }
   if (context.aggregates && context.aggregates.length > 0) {
-    parts.push(`<aggregates>${context.aggregates.join(", ")}</aggregates>`);
+    parts.push(
+      `<aggregates>${escapeXml(context.aggregates.join(", "))}</aggregates>`,
+    );
   }
   if (context.value_objects && context.value_objects.length > 0) {
     parts.push(
-      `<value_objects>${context.value_objects.join(", ")}</value_objects>`,
+      `<value_objects>${escapeXml(context.value_objects.join(", "))}</value_objects>`,
     );
   }
   return parts.join("\n");

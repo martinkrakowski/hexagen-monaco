@@ -1,4 +1,5 @@
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
+import { escapeXml } from "./escape-xml";
 
 export const LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT = `You are a requirements architect. Your job is to convert a loose, semi-structured project specification into a strict JSON configuration matching the StructuredConfig schema.
 
@@ -115,20 +116,6 @@ EXTRACTION GUIDANCE:
 - App-level info (framework, deployment, auth) belongs in the apps[] array.
 
 Output ONLY the JSON object. Begin with "{" and end with "}".`;
-
-export function escapeXml(unsafe: string): string {
-  return unsafe.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&apos;",
-      })[c] as string,
-  );
-}
 
 export function compileLooseSpecConversionPrompt(
   userDescription: string,
