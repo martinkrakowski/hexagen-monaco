@@ -25,13 +25,13 @@ Both implementations target the same 7-stage contract — `PipelineState`:
 
 The stub (`ExecuteStagedGenerationUseCase`) is a 4-LLM-pass compression that drops domain extraction, rich classification, port-quality enforcement, and the entire validation stage.
 
-**Key enabler:** stages 3–6 of the target are **already wired and live** in `ExecuteStructuredConfigGenerationUseCase` (the import path). It constructs the four stage-3..6 use-cases, chains them with `StructuredConfigGenerationCallbacks` (`onStageStart/Complete/Telemetry`), threads `onStageTelemetry` into each stage, and skips 0–2 because structured input already carries the domain. **This is the working blueprint.**
+**Key enabler:** stages 3–6 of the target are **already wired and live** in `ExecuteStructuredConfigGenerationUseCase` (the import path). It constructs the four stage-3..6 use-cases and threads `onStageTelemetry` into each. Its callback surface is `StructuredConfigGenerationCallbacks` — `onProgress(stage, durationMs)` / `onError` / `onChunk` / `onStageTelemetry`; the spec route adapts `onProgress` into `stage-start` (`durationMs === 0`) vs `stage-complete` stream events. It does **not** construct the per-stage 0–2 LLM use-cases — instead it synthesizes the stage 0–2 `PipelineState` outputs deterministically from the structured input (parse → `NormalizedPrompt`; builders → `DomainAnalysis` / `ClassificationResult`; optional `ClassifyContextTypeUseCase` LLM pass for low-confidence types), because structured input already carries the domain. **This is the working blueprint** — it populates every stage slot of the contract; the NL rewire swaps the deterministic 0–2 builders for the LLM use-cases.
 
 **The route seam:** `apps/web/app/api/manifest/generate/stage/route.ts` constructs `new ExecuteStagedGenerationUseCase(llm, txManager)` and streams via `StagedGenerationCallbacks`. Swapping the constructed orchestrator + preserving the callback/streaming contract is the cutover point.
 
 ## The gap
 
-Only stages **0–2** (`ExecutePromptNormalization`, `ExecuteDomainExtraction`, `ExecuteContextClassification`) are constructed nowhere in production. The rewire chains them ahead of the proven 3–6 chain.
+Only the stage **0–2** LLM use-cases (`ExecutePromptNormalizationUseCase`, `ExecuteDomainExtractionUseCase`, `ExecuteContextClassificationUseCase`) are implemented but not instantiated in any production entrypoint. The rewire chains them ahead of the proven 3–6 chain.
 
 ## Migration strategy (recommended)
 
@@ -57,14 +57,14 @@ Rejected alternative: bolt 0–2 onto the structured-config use-case — conflat
 
 - **P1 — Orchestrator:** build `ExecuteFullStagedGenerationUseCase` (0→6), wire T2b stage-0 grounding, confirm per-stage timeouts/escalation, unit + integration tests. Not yet routed.
 - **P2 — Reconciliation:** the deferred §3 ban-list fix (all sites now live), with the three contradiction cases as failing-then-passing tests.
-- **P3 — Cutover:** behind a feature flag on the route; golden-output validation + canary; swap default.
+- **P3 — Cutover:** behind a feature flag on the route; golden-output validation + canary; swap default. Rollback = flip the flag back (generation is per-request and stateless — no in-flight state to migrate); quantitative rollback triggers (error rate, p95 latency, golden-output regression) get defined when P3 is planned, since they depend on the answer to open question 1.
 - **P4 — Cleanup:** delete the stub, add the now-live use-cases to `context.yaml`, update docs/backlog.
 
 ## Open questions (gate implementation)
 
 1. **Cutover risk appetite** — feature-flag + canary (recommended), or straight swap?
 2. **Local/WebLLM path** (`ClientManifestGenerationUseCase`, separate phases) — in scope, or defer to a follow-on?
-3. **Quality bar** — what gates cutover: golden manifests, human eval, both?
+3. **Quality bar** — what gates cutover: golden manifests, human eval, R01–R18 pass-rate on generated output, or a combination?
 
 ## Methodology note
 
