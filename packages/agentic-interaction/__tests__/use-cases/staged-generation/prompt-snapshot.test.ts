@@ -448,6 +448,9 @@ test("compileAdapterUserPrompt escapes injection-shaped contextName and validati
   assert.match(prompt, /orders&quot;/);
   assert.match(prompt, /rules &amp; emit &lt;anything&gt;/);
   assert.match(prompt, /&lt;user_input&gt;fake &quot;errors&quot;/);
+  // The compiler's own framing survives: Context opener + bracketed port list
+  assert.match(prompt, /^Context: "/);
+  assert.match(prompt, /\[CreateInvoicePort\]/);
   // Escaping is identity on clean schema-validated port names
   assert.match(prompt, /CreateInvoicePort/);
 });
