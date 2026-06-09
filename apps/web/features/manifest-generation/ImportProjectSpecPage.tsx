@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
 import { logger } from "../../lib/structured-logger";
@@ -15,6 +15,8 @@ import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
+import { deriveWorkspaceName } from "@hexagen/manifest-generation";
+import { setManifestSystemName } from "./manifestSystemName";
 
 import { SpecUploadStep } from "./import-project-spec/SpecUploadStep";
 import { SpecReviewStep } from "./import-project-spec/SpecReviewStep";
@@ -38,7 +40,10 @@ type SpecPageState =
 
 export default function ImportProjectSpecPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const pendingManifest = usePendingManifest();
+  // Project name carried from the shared Project Name step (`?name=`).
+  const carriedName = searchParams.get("name")?.trim() || null;
   const [pageState, setPageState] = useState<SpecPageState>("UPLOAD");
   const [previousState, setPreviousState] = useState<SpecPageState | null>(
     null,
@@ -205,10 +210,25 @@ export default function ImportProjectSpecPage() {
     if (!generatedManifest) return;
     try {
       const wizardData = parseManifestToWizardData(generatedManifest);
+      // The user-entered name (from the Project Name step) wins: it becomes the
+      // saved-project name and seeds `governance.workspaceName` so the name is
+      // factored into generated output. Fall back to the manifest-derived name
+      // only if the step was bypassed (e.g. a direct visit to this page).
       const projectName =
+        carriedName ||
         wizardData.governance?.workspaceName ||
         `Imported Project ${new Date().toLocaleTimeString()}`;
-      pendingManifest.set(generatedManifest, wizardData, projectName);
+      // Keep the previewed/saved manifest string in sync with the carried name:
+      // seed the form's workspaceName AND rewrite the manifest's top-level
+      // `system` so the Approve screen and saved manifestYaml agree with
+      // formState (see manifestSystemName).
+      let manifestYaml = generatedManifest;
+      if (carriedName && wizardData.governance) {
+        const slug = deriveWorkspaceName(carriedName).name;
+        wizardData.governance.workspaceName = slug;
+        manifestYaml = setManifestSystemName(generatedManifest, slug);
+      }
+      pendingManifest.set(manifestYaml, wizardData, projectName);
       router.push("/projects/new/ai/accept");
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
@@ -220,7 +240,7 @@ export default function ImportProjectSpecPage() {
       setPageState("PREVIEW");
       // Don't route away—show error but let user inspect the YAML
     }
-  }, [generatedManifest, pendingManifest, router]);
+  }, [generatedManifest, pendingManifest, router, carriedName]);
 
   const generationError =
     specGeneration.generationError || manifestGeneration.generationError;

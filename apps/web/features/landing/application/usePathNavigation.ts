@@ -1,87 +1,25 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { CreationPathId } from "../domain/creation-path";
-import { useSavedProjects } from "@/hooks/useSavedProjects";
-import type { ProjectConfig } from "@hexagen/project-configuration";
-
-function createBlankProjectConfig(): ProjectConfig {
-  return {
-    governance: {
-      workspaceName: "@hexagen",
-      workspaceTemplate: "modular-monolith",
-      workspaceDescription: undefined,
-      packageManager: "yarn",
-      topologyStrictness: "flexible",
-      namespacePrefix: "@hexagen",
-      namingConventions: {
-        contextDirectoryPattern: "packages/",
-        adapterSuffix: ".adapter.ts",
-      },
-    },
-    boundedContexts: [
-      {
-        id: crypto.randomUUID(),
-        name: "core",
-        description: "",
-        infrastructureTarget: "nitro",
-        coreDomainEntities: [],
-        valueObjects: [],
-        domainEvents: [],
-        entities: [],
-        useCases: [],
-        portConfiguration: {
-          inboundPorts: [],
-          outboundPorts: [],
-        },
-        // ADR-0041 single-app preset — mirror `emptyFormValues` so the "blank"
-        // landing entry path seeds the same Next.js default as the wizard
-        // default (the Applications step would otherwise collapse to headless).
-        uiFramework: "Next.js",
-        persistenceAdapter: "",
-        messagingAdapter: "",
-        telemetryProvider: "",
-      },
-    ],
-    externalContexts: [],
-    peerMappings: [],
-    addOnsAnswers: {},
-  };
-}
 
 export function usePathNavigation() {
   const router = useRouter();
-  const { saveProject } = useSavedProjects();
-  const [navigationError, setNavigationError] = useState<string | null>(null);
 
   const navigate = useCallback(
-    async (pathId: CreationPathId) => {
-      setNavigationError(null);
+    (pathId: CreationPathId) => {
       switch (pathId) {
-        case "blank": {
-          const projectId = await saveProject(
-            "Untitled Project",
-            createBlankProjectConfig(),
-            "",
-          );
-          if (projectId) {
-            router.push(`/wizard/1?project=${projectId}`);
-          } else {
-            // Persistence failed (saveProject returned null) — surface it
-            // instead of silently doing nothing.
-            console.error("Failed to create blank project: persistence failed");
-            setNavigationError(
-              "Couldn't create the project — check your browser storage permissions or available space and try again.",
-            );
-          }
+        case "blank":
+          // The blank project is named, built, and persisted by the shared
+          // Project Name step (NameStepClient) before the wizard opens.
+          router.push("/projects/new/name?path=blank");
           break;
-        }
         case "import":
           router.push("/projects/new/import");
           break;
         case "ai":
-          router.push("/projects/new/ai");
+          router.push("/projects/new/name?path=ai");
           break;
         default: {
           const _exhaustive: never = pathId;
@@ -89,8 +27,8 @@ export function usePathNavigation() {
         }
       }
     },
-    [router, saveProject],
+    [router],
   );
 
-  return { navigate, navigationError };
+  return { navigate };
 }
