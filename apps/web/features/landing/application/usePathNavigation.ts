@@ -35,7 +35,10 @@ function createBlankProjectConfig(): ProjectConfig {
           inboundPorts: [],
           outboundPorts: [],
         },
-        uiFramework: "",
+        // ADR-0041 single-app preset — mirror `emptyFormValues` so the "blank"
+        // landing entry path seeds the same Next.js default as the wizard
+        // default (the Applications step would otherwise collapse to headless).
+        uiFramework: "Next.js",
         persistenceAdapter: "",
         messagingAdapter: "",
         telemetryProvider: "",

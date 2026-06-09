@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import type {
   ProjectConfig,
@@ -62,12 +62,47 @@ export function ApplicationsStep({
     [boundedContexts],
   );
 
+  // Snapshot whether the project ARRIVED with divergent per-context values,
+  // before the normalize effect below makes the live collapse consistent —
+  // otherwise the notice would vanish the instant we unify.
+  const arrivedDivergedRef = useRef<boolean | null>(null);
+  if (arrivedDivergedRef.current === null) {
+    arrivedDivergedRef.current = collapse.uiDiverged || collapse.infraDiverged;
+  }
+
   // The divergence notice is informational; once dismissed it stays hidden for
-  // the session (the contexts converge on the shown value as soon as the user
-  // changes a select, anyway).
+  // the session.
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   const showDivergence =
-    (collapse.uiDiverged || collapse.infraDiverged) && !noticeDismissed;
+    Boolean(arrivedDivergedRef.current) && !noticeDismissed;
+
+  // Persist the collapsed selection to every context so the displayed selection
+  // is exactly what gets generated — regardless of how the user leaves the step
+  // (Next, Back, or jumping via the step nav) and even if they never touch a
+  // select. This is the ADR-0041 D4 convergence: a loaded/legacy project with
+  // divergent OR missing per-context values is normalized to the shown value on
+  // entry. Already-consistent projects are skipped (no render loop, no spurious
+  // dirty); headless ("") is preserved because the collapse yields "" for an
+  // all-headless project. Skipped while read-only (AI-generated preview).
+  useEffect(() => {
+    if (readOnly) return;
+    const current = (getValues("boundedContexts") ?? []) as BoundedContext[];
+    if (current.length === 0) return;
+    const consistent = current.every(
+      (c) =>
+        c.uiFramework === collapse.uiFramework &&
+        c.infrastructureTarget === collapse.infrastructureTarget,
+    );
+    if (consistent) return;
+    setValue(
+      "boundedContexts",
+      fanOutApplications(current, {
+        uiFramework: collapse.uiFramework,
+        infrastructureTarget: collapse.infrastructureTarget,
+      }),
+      { shouldDirty: true },
+    );
+  }, [collapse, readOnly, getValues, setValue]);
 
   const fanOut = (selection: {
     uiFramework: UiFramework;

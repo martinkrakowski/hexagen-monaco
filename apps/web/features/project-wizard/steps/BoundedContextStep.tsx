@@ -83,9 +83,18 @@ export function BoundedContextStep({
     const current = getValues("boundedContexts") || [];
     // ADR-0041: a context created after the Applications step inherits the
     // project's UI/API selection (collapsed from existing contexts) so it
-    // converges with them instead of defaulting independently.
-    const { uiFramework, infrastructureTarget } = collapseApplications(current);
-    const next = createEmptyContext({ uiFramework, infrastructureTarget });
+    // converges with them. With NO existing context to inherit from, fall back
+    // to createEmptyContext's single-app preset (Next.js + nestjs) — collapsing
+    // an empty array yields uiFramework "" (headless), which is not the intended
+    // default for a brand-new context.
+    let next;
+    if (current.length === 0) {
+      next = createEmptyContext();
+    } else {
+      const { uiFramework, infrastructureTarget } =
+        collapseApplications(current);
+      next = createEmptyContext({ uiFramework, infrastructureTarget });
+    }
     setValue("boundedContexts", [...current, next], {
       shouldDirty: true,
       shouldValidate: true,

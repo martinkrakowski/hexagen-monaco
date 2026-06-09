@@ -114,3 +114,48 @@ describe("createEmptyContext inherits the Applications selection", () => {
     assert.equal(created.infrastructureTarget, "nestjs");
   });
 });
+
+describe("normalization (ADR-0041 D4 convergence)", () => {
+  it("collapsing an empty context list yields headless UI (root of the add-after-delete case)", () => {
+    // Why BoundedContextStep must NOT pass this collapse into createEmptyContext
+    // when the list is empty: it would seed `""` (headless) instead of the preset.
+    const result = collapseApplications([]);
+    assert.equal(result.uiFramework, "");
+  });
+
+  it("fanning out the collapsed selection eliminates divergence (round-trip)", () => {
+    // Models the ApplicationsStep entry-normalize effect: applying the collapse
+    // back to the contexts converges them, so what the step shows is persisted.
+    const divergent = [
+      ctx({ uiFramework: "Next.js", infrastructureTarget: "nestjs" }),
+      ctx({ uiFramework: "Remix", infrastructureTarget: "nitro" }),
+    ];
+    const collapsed = collapseApplications(divergent);
+    const unified = fanOutApplications(divergent, {
+      uiFramework: collapsed.uiFramework,
+      infrastructureTarget: collapsed.infrastructureTarget,
+    });
+
+    const after = collapseApplications(unified);
+    assert.equal(after.uiDiverged, false);
+    assert.equal(after.infraDiverged, false);
+    assert.ok(unified.every((c) => c.uiFramework === collapsed.uiFramework));
+    assert.ok(
+      unified.every(
+        (c) => c.infrastructureTarget === collapsed.infrastructureTarget,
+      ),
+    );
+  });
+
+  it("normalizes a missing infrastructureTarget to the collapse default (nestjs)", () => {
+    const contexts = [
+      ctx({ uiFramework: "Next.js", infrastructureTarget: undefined }),
+    ];
+    const collapsed = collapseApplications(contexts);
+    const [unified] = fanOutApplications(contexts, {
+      uiFramework: collapsed.uiFramework,
+      infrastructureTarget: collapsed.infrastructureTarget,
+    });
+    assert.equal(unified.infrastructureTarget, "nestjs");
+  });
+});
