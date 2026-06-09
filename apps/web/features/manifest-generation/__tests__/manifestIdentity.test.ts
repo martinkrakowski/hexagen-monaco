@@ -45,6 +45,16 @@ test("adds system when the manifest has none", () => {
   assert.strictEqual(parsed.system, "acme-shop");
 });
 
+test("adds scope when the manifest has none", () => {
+  const parsed = yaml.load(
+    setManifestIdentity("system: old-name\n", {
+      system: "acme-shop",
+      scope: "@acme-shop",
+    }),
+  ) as Record<string, unknown>;
+  assert.strictEqual(parsed.scope, "@acme-shop");
+});
+
 test("returns the input unchanged when it is not a YAML object", () => {
   // A YAML scalar/array has no identity fields to set — leave it untouched
   // rather than coercing it into an object.
