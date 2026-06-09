@@ -228,6 +228,24 @@ export class OpenAIManifestGenerationAdapter implements ManifestGenerationPort {
       };
     }
 
+    // GOVERNANCE GATE — validation must gate the write, not just annotate it.
+    // With diagnostics present the generated draft failed structural
+    // validation; registering its contexts anyway would put an invalid
+    // architecture into the manifest with the diagnostics as a footnote.
+    // The YAML + diagnostics are still returned so the caller can repair
+    // the draft and re-run (or use dryRun to iterate).
+    if (diagnostics.length > 0) {
+      return {
+        dryRun: false,
+        yaml,
+        contextCount: normalized.boundedContexts.length,
+        totalPorts,
+        totalAdapters,
+        diagnostics,
+        registeredInManifest: false,
+      };
+    }
+
     let allRegistered = false;
     if (this.manifestWritePort) {
       const registerResults = await Promise.all(
