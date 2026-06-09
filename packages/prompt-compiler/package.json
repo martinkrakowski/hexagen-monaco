@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/prompt-compiler",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Prompt compilation from DomainAST, governance, and user intent for LLM consumption",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
