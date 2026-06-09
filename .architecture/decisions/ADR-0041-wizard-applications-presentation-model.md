@@ -48,18 +48,18 @@ Remediation Plan`) from "separate the application layer in the schema + rewrite
 ## Decision
 
 Introduce a **project-level "Applications" presentation layer** over the
-**existing** per-context fields, rather than a new persisted schema entity. Four
+**existing** per-context fields, rather than a new persisted schema entity. Five
 sub-decisions:
 
 ### D1 — Applications is a presentation reshape, not a new persisted field
 
 `ProjectConfig`'s per-context `uiFramework` / `infrastructureTarget` fields
 **remain the persisted source of truth** (no schema change, no data migration).
-The wizard gains a **project-level "Applications" panel** that collects a single
-UI framework + a single API/infrastructure target and **fans that value out to
-every bounded context's per-context field**. Because every context then carries
-the same `uiFramework` / `infrastructureTarget`, the existing `deriveApps`
-collapse produces one `web` + one `api` with no derivation change.
+The wizard gains a **dedicated project-level "Applications" step** (see D5) that
+collects a single UI framework + a single API/infrastructure target and **fans
+that value out to every bounded context's per-context field**. Because every
+context then carries the same `uiFramework` / `infrastructureTarget`, the existing
+`deriveApps` collapse produces one `web` + one `api` with no derivation change.
 
 _Rejected: a new project-level `applications: Application[]` schema field + a
 `deriveApps` rewrite + a data migration. `deriveApps` already yields the desired
@@ -102,6 +102,34 @@ existing project whose contexts may carry divergent per-context UI/API values:
   (`pickPreferredFramework`), so the wizard preview and the generated manifest
   agree.
 
+### D5 — Applications is its own wizard step, placed before Bounded Contexts
+
+The Applications config gets a **dedicated wizard step**, not a section bolted
+onto an existing one, inserted **after `workspace_governance` and before
+`bounded_contexts`** in `config.ts` (`wizardSteps`):
+
+> Workspace Governance → **Applications** → Bounded Contexts → Peer Mappings →
+> Ports → Add-Ons → Template Questions → Summary
+
+Rationale:
+
+- UI/API hosting is a **project-level** concern (like Workspace Governance); it
+  does not belong inside the repeated per-context form. Nesting a single
+  project-wide choice inside a per-context loop is what produced the original
+  confusion.
+- Placing it **before** Bounded Contexts frames the project ("one Next.js app +
+  one API") before the user begins domain modelling, pre-empting the
+  "one-app-per-context" misread at the point it would otherwise form.
+- It makes the D1 fan-out **structurally cleaner**: because the choice is made
+  before contexts exist, new contexts simply **inherit it as their default at
+  creation** (`createEmptyContext`), rather than requiring a back-fill into
+  already-created contexts.
+
+**Consequence for the fan-out:** the Applications value is applied as the
+**default for newly created contexts** AND **re-fanned to all contexts when the
+Applications choice changes** — not a one-shot write — so contexts added after
+the step still converge on the single value.
+
 ## Consequences
 
 ### Positive
@@ -133,17 +161,22 @@ existing project whose contexts may carry divergent per-context UI/API values:
 
 ## Implementation sketch (for the follow-up PR, not this ADR)
 
-1. **Applications panel** (new, project-level step/section): one `uiFramework`
-   select + one `infrastructureTarget` select, defaulting to the single-app
-   preset (Next.js + the project's API target). On change, write the value to
-   every bounded context's per-context field (fan-out).
-2. **`ContextFormInfrastructure.tsx`**: remove the API Backend + UI Frontend
+1. **Applications step** (new, dedicated; D5): registered in `config.ts`
+   `wizardSteps` after `workspace_governance` and before `bounded_contexts`. One
+   `uiFramework` select + one `infrastructureTarget` select, defaulting to the
+   single-app preset (Next.js + the project's API target). On change, re-fan the
+   value to every bounded context's per-context field.
+2. **`createEmptyContext`**: seed new contexts' `uiFramework` /
+   `infrastructureTarget` from the chosen Applications value (so contexts created
+   after the step inherit it without a back-fill).
+3. **`ContextFormInfrastructure.tsx`**: remove the API Backend + UI Frontend
    selects (keep persistence / messaging / telemetry).
-3. **Initial-value collapse** helper (D4): first-non-empty-wins across contexts,
-   with a logged divergence warning; used to seed the panel on project load.
-4. **Tests**: panel fan-out writes all contexts; load-collapse picks first
-   non-empty + logs divergence; `deriveApps` still yields one `web` + one `api`
-   for the single-app preset (regression guard, unchanged behavior).
+4. **Initial-value collapse** helper (D4): first-non-empty-wins across contexts,
+   with a logged divergence warning; used to seed the step on project load.
+5. **Tests**: step fan-out + new-context default write all contexts;
+   load-collapse picks first non-empty + logs divergence; `deriveApps` still
+   yields one `web` + one `api` for the single-app preset (regression guard,
+   unchanged behavior).
 
 ## Verification
 
