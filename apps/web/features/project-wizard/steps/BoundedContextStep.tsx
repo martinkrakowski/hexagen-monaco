@@ -84,7 +84,7 @@ export function BoundedContextStep({
     // ADR-0041: a context created after the Applications step inherits the
     // project's UI/API selection (collapsed from existing contexts) so it
     // converges with them. With NO existing context to inherit from, fall back
-    // to createEmptyContext's single-app preset (Next.js + nestjs) — collapsing
+    // to createEmptyContext's single-app preset (Next.js + Nitro) — collapsing
     // an empty array yields uiFramework "" (headless), which is not the intended
     // default for a brand-new context.
     let next;

@@ -161,5 +161,13 @@ export const wizardSteps = [
  * the ADR-0041 Applications step) can't silently shift those checks.
  */
 export function stepIndexById(id: string): number {
-  return wizardSteps.findIndex((step) => step.id === id);
+  const index = wizardSteps.findIndex((step) => step.id === id);
+  if (index === -1) {
+    // Fail fast: callers gate/reset on this index, so a drifted id must surface
+    // immediately rather than silently returning -1 (which disables the gate).
+    throw new Error(
+      `stepIndexById: unknown wizard step id "${id}" — check wizardSteps.`,
+    );
+  }
+  return index;
 }

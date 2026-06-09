@@ -508,6 +508,12 @@ function deriveApps(
   // don't influence the chosen api framework. Preference order is
   // most-specific-first, so if any remaining context picks Nitro the aggregated
   // app is Nitro (then fastify, then the plain-ts fallback).
+  //
+  // `depends_on` intentionally stays the FULL `dependsOn` (every non-shared
+  // context, including `"none"` opt-outs): the single aggregated api serves the
+  // whole domain, so a context opting out of its own api hosting does not drop
+  // its domain from the backend's dependency graph — only whether/which api app
+  // is emitted depends on the opt-out.
   const apiBearing = nonShared.filter(
     (bc) => bc.infrastructureTarget !== "none",
   );

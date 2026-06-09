@@ -43,7 +43,7 @@ const DEFAULT_INFRA_TARGET: InfrastructureTarget = "nitro";
  *    declares one — so a deliberately headless project is not silently flipped
  *    to a UI framework on load/save. New projects opt into a UI by seeding their
  *    first context with one (see `emptyFormValues` / `createEmptyContext`).
- *  - `infrastructureTarget` defaults to `nestjs` when none is declared.
+ *  - `infrastructureTarget` defaults to `nitro` when none is declared.
  *  - Divergence (≥2 distinct non-empty values) is reported so the step can show
  *    an inline notice; it is never an error.
  */

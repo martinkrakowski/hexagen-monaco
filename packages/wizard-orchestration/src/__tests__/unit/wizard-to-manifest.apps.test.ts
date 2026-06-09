@@ -291,5 +291,10 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     // The opted-out context does not suppress the api app, nor influence its
     // framework (nitro wins from the api-bearing context).
     assert.equal(apiFrameworkOf(m), "nitro");
+    // ...but it DOES stay in the aggregated api's dependency graph: the single
+    // api serves the whole domain, so depends_on keeps every non-shared context
+    // (including the "none" opt-out), sorted.
+    const apiApp = appsOf(m).find((a) => a.name === "api");
+    assert.deepEqual(apiApp?.depends_on, ["billing", "orders"]);
   });
 });
