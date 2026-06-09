@@ -10,7 +10,7 @@ import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { logger } from "../../lib/structured-logger";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
-import { setManifestSystemName } from "./manifestSystemName";
+import { setManifestIdentity } from "./manifestIdentity";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
 interface ImportManifestPageProps {
@@ -76,19 +76,25 @@ export function ImportManifestPage({
       // mutated object would leak into later renders if the save fails).
       const baseConfig = parsedData as ProjectConfig;
       const slug = carriedName ? deriveWorkspaceName(carriedName).name : null;
+      const scope = slug ? `@${slug}` : null;
       const config: ProjectConfig =
-        slug && baseConfig.governance
+        slug && scope && baseConfig.governance
           ? {
               ...baseConfig,
-              governance: { ...baseConfig.governance, workspaceName: slug },
+              governance: {
+                ...baseConfig.governance,
+                workspaceName: slug,
+                namespacePrefix: scope,
+              },
             }
           : baseConfig;
       // Keep the saved manifest string in sync with the carried name so
-      // formState and manifestYaml agree on the system name (governance refresh
-      // reads manifestYaml). See manifestSystemName.
-      const savedManifestYaml = slug
-        ? setManifestSystemName(manifestYaml, slug)
-        : manifestYaml;
+      // formState and manifestYaml agree on system/scope (governance refresh
+      // reads manifestYaml). See manifestIdentity.
+      const savedManifestYaml =
+        slug && scope
+          ? setManifestIdentity(manifestYaml, { system: slug, scope })
+          : manifestYaml;
 
       const projectId = await saveProject(
         projectName,

@@ -20,9 +20,14 @@ test("falls back to deriveWorkspaceName's default for an empty name", () => {
   assert.strictEqual(config.governance.workspaceName, "generated-project");
 });
 
-test("keeps the @hexagen namespace prefix independent of the name", () => {
+test("derives the namespace prefix from the project name", () => {
   const config = createBlankProjectConfig("Acme Shop");
-  assert.strictEqual(config.governance.namespacePrefix, "@hexagen");
+  assert.strictEqual(config.governance.namespacePrefix, "@acme-shop");
+});
+
+test("namespace prefix falls back with the slug for an empty name", () => {
+  const config = createBlankProjectConfig("   ");
+  assert.strictEqual(config.governance.namespacePrefix, "@generated-project");
 });
 
 test("produces the ADR-0041 single Next.js app preset", () => {

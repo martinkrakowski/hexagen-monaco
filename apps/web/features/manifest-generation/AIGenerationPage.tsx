@@ -6,7 +6,7 @@ import { GenerateWithAi } from "./GenerateWithAi";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
-import { setManifestSystemName } from "./manifestSystemName";
+import { setManifestIdentity } from "./manifestIdentity";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { Button } from "@hexagen/ui";
 import {
@@ -64,14 +64,16 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
         // Keep the previewed/saved manifest string in sync with the carried
-        // name: seed the form's workspaceName AND rewrite the manifest's
-        // top-level `system` so the Approve screen and saved manifestYaml agree
-        // with formState (see manifestSystemName).
+        // name: seed the form's workspaceName/namespacePrefix AND rewrite the
+        // manifest's top-level system/scope so the Approve screen and saved
+        // manifestYaml agree with formState (see manifestIdentity).
         let manifestYaml = yaml;
         if (carriedName && wizardData.governance) {
           const slug = deriveWorkspaceName(carriedName).name;
+          const scope = `@${slug}`;
           wizardData.governance.workspaceName = slug;
-          manifestYaml = setManifestSystemName(yaml, slug);
+          wizardData.governance.namespacePrefix = scope;
+          manifestYaml = setManifestIdentity(yaml, { system: slug, scope });
         }
         setPendingManifest(manifestYaml, wizardData, projectName);
         router.push("/projects/new/ai/accept");
