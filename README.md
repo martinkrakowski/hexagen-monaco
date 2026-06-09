@@ -69,7 +69,7 @@ Manifest  ──►  Linter (hexagen-lint)  ──►  HITL Surface (Web / TUI)
 Transaction  ◄──────────  Agent / Operator (via MCP server)
 ```
 
-The manifest is the source of truth. The linter compiles invariants into a verdict. Humans review violations in either control plane. Agents propose remediations through the MCP server's tool surface. Every proposed change is captured as a transaction and only merges into the manifest after explicit approval — making the audit trail symmetric between human and agentic contributors.
+The manifest is the source of truth. The linter compiles invariants into a verdict. Humans review violations in either control plane. Agents propose remediations through the MCP server's tool surface. Changes proposed through the web control plane are captured as transactions and merge only after explicit approval. The MCP server's mutation tools currently write to the manifest directly — gated by deterministic structural and referential validation (split-manifest protection, dependency-cycle refusal, port/context referential checks) rather than by human approval; routing those writes through the same transaction-approval path is planned follow-up work.
 
 ## Human Control Planes (HITL)
 
@@ -99,7 +99,7 @@ The terminal control plane (`apps/tui`) built with [Ink](https://github.com/vadi
   <img src="https://hexagen-monaco.cloud/images/tui-violation-inspector.png" alt="TUI violation inspector — three-pane layout showing navigation tree, rule engine, and boundary violation details" width="720" />
 </p>
 
-When the linter detects a boundary violation, pressing `r` routes the violation context through a local MCP client to an agent, which proposes a remediation grounded in the manifest. The proposal is captured for review; no mutation reaches the manifest without operator sign-off. Key bindings: `j/k` to navigate, `Tab` to switch panes, `r` to request an agent remediation, `u` to refresh, `q` to quit.
+When the linter detects a boundary violation, pressing `r` routes the violation context through a local MCP client to an agent, which selects a remediation from an allow-listed set of MCP tools (audit, add-dependency, create-port, create-adapter, scaffold-module) and applies it immediately — pressing `r` is the operator's sign-off, and the structural/referential write gates described in The Governance Loop above are what stand between the agent's suggestion and the manifest. A review-before-apply step is planned follow-up work. Key bindings: `j/k` to navigate, `Tab` to switch panes, `r` to request an agent remediation, `u` to refresh, `q` to quit.
 
 ```bash
 yarn workspace @hexagen/tui dev       # development

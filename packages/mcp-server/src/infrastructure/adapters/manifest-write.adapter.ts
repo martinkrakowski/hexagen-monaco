@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
 import type { Result } from "@hexagen/shared";
+import { isIndexManifest } from "@hexagen/project-configuration";
 import type {
   AddDependencyCommand,
   ManifestWritePort,
@@ -11,7 +12,37 @@ import type {
   RemovePortCommand,
   RemoveContextCommand,
 } from "../../application/ports/out/manifest-write.port.js";
-import { readManifestDocument } from "./manifest-io.js";
+import { readManifestDocument, type ManifestDocument } from "./manifest-io.js";
+
+type ManifestContexts = NonNullable<ManifestDocument["bounded_contexts"]>;
+
+/**
+ * Returns a dependency path from `from` to `to` following `depends_on`
+ * edges (BFS), or null when `to` is unreachable. Used to refuse
+ * dependency additions that would close a cycle.
+ */
+function findDependencyPath(
+  contexts: ManifestContexts,
+  from: string,
+  to: string,
+): string[] | null {
+  const byName = new Map(contexts.map((ctx) => [ctx.name, ctx]));
+  const queue: string[][] = [[from]];
+  const visited = new Set<string>([from]);
+
+  while (queue.length > 0) {
+    const pathSoFar = queue.shift()!;
+    const current = byName.get(pathSoFar[pathSoFar.length - 1]);
+    for (const dep of current?.depends_on ?? []) {
+      if (dep === to) return [...pathSoFar, dep];
+      if (!visited.has(dep)) {
+        visited.add(dep);
+        queue.push([...pathSoFar, dep]);
+      }
+    }
+  }
+  return null;
+}
 
 export class ManifestWriteAdapter implements ManifestWritePort {
   constructor(private readonly workspaceRoot: string) {}
@@ -22,6 +53,27 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       ".architecture",
       "manifest.yaml",
     );
+
+    // GOVERNANCE GATE — split-manifest guard. readManifestDocument MERGES a
+    // v2.0 split manifest (index entries with `file:` pointers) into a single
+    // document; dumping that merged document back over the index file would
+    // destroy the split layout and inline every context file. The same guard
+    // exists in writeManifestDocument (manifest-io.ts) — this adapter has its
+    // own write path, so it needs its own check against the ON-DISK file.
+    try {
+      const raw = await fs.readFile(manifestPath, "utf-8");
+      if (isIndexManifest(yaml.load(raw))) {
+        throw new Error(
+          "Cannot write to a split (v2.0 index) manifest via MCP write tools: " +
+            "the write would overwrite the index file with the merged document. " +
+            "Edit the per-context files under .architecture/contexts/ instead.",
+        );
+      }
+    } catch (error) {
+      // A missing file cannot be an index manifest — allow the write to create it.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
     const tempPath = `${manifestPath}.tmp`;
     const content = yaml.dump(manifest, {
       indent: 2,
@@ -49,6 +101,21 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       }
       if (command.sourceModule === command.targetModule) {
         errors.push("Source and target modules cannot be the same");
+      }
+
+      // GOVERNANCE GATE — cycle check. Refuse a dependency whose target
+      // already reaches the source through existing depends_on edges.
+      if (errors.length === 0) {
+        const cyclePath = findDependencyPath(
+          contexts,
+          command.targetModule,
+          command.sourceModule,
+        );
+        if (cyclePath) {
+          errors.push(
+            `Dependency would create a cycle: ${command.sourceModule} → ${cyclePath.join(" → ")}`,
+          );
+        }
       }
 
       return {
@@ -80,6 +147,30 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         return {
           success: false,
           error: new Error(`Source module not found: ${command.sourceModule}`),
+        };
+      }
+
+      if (!contexts.some((context) => context.name === command.targetModule)) {
+        return {
+          success: false,
+          error: new Error(`Target module not found: ${command.targetModule}`),
+        };
+      }
+
+      // GOVERNANCE GATE — cycle check (same rule as validateDependency, but
+      // enforced here too: the write path must not trust callers to have
+      // validated first).
+      const cyclePath = findDependencyPath(
+        contexts,
+        command.targetModule,
+        command.sourceModule,
+      );
+      if (cyclePath) {
+        return {
+          success: false,
+          error: new Error(
+            `Dependency would create a cycle: ${command.sourceModule} → ${cyclePath.join(" → ")}`,
+          ),
         };
       }
 
@@ -217,6 +308,27 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       }
 
       const layer = (ctx.layers ?? {}) as Record<string, unknown>;
+
+      // GOVERNANCE GATE — referential check. An adapter implements a port;
+      // refuse to register one against a port the context does not declare
+      // (previously command.portName was accepted but silently ignored).
+      const appLayer = (layer.application ?? {}) as Record<string, unknown>;
+      const ports = (appLayer.ports ?? { in: [], out: [] }) as Record<
+        string,
+        string[]
+      >;
+      const knownPorts = [...(ports.in ?? []), ...(ports.out ?? [])];
+      if (!knownPorts.includes(command.portName)) {
+        return {
+          success: false,
+          error: new Error(
+            `Port not found in context ${command.contextName}: ${command.portName}. ` +
+              `Declared ports: ${knownPorts.length > 0 ? knownPorts.join(", ") : "(none)"}. ` +
+              "Register the port first (register_port).",
+          ),
+        };
+      }
+
       const infraLayer = (layer.infrastructure ?? {}) as Record<
         string,
         unknown
@@ -328,12 +440,20 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         };
       }
 
-      for (const ctx of filtered) {
-        if (ctx.depends_on) {
-          ctx.depends_on = ctx.depends_on.filter(
-            (dep) => dep !== command.contextName,
-          );
-        }
+      // GOVERNANCE GATE — referential check. Refuse to remove a context other
+      // contexts still depend on (previously their depends_on edges were
+      // silently stripped, hiding the breakage from the operator).
+      const dependents = filtered
+        .filter((ctx) => ctx.depends_on?.includes(command.contextName))
+        .map((ctx) => ctx.name);
+      if (dependents.length > 0) {
+        return {
+          success: false,
+          error: new Error(
+            `Cannot remove context ${command.contextName}: still depended on by ` +
+              `${dependents.join(", ")}. Remove those dependencies first.`,
+          ),
+        };
       }
 
       manifest.bounded_contexts = filtered;
