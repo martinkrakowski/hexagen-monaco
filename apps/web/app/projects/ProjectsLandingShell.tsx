@@ -18,6 +18,10 @@ function LoadingSkeleton() {
         <div key={i} className="flex items-center gap-4 px-4 py-3">
           <div className="h-5 w-5 rounded bg-muted animate-shimmer" />
           <div className="h-4 w-48 rounded bg-muted animate-shimmer" />
+          <div className="h-4 w-24 rounded bg-muted animate-shimmer hidden lg:block" />
+          <div className="h-4 w-12 rounded bg-muted animate-shimmer hidden sm:block" />
+          <div className="h-4 w-16 rounded bg-muted animate-shimmer hidden xl:block" />
+          <div className="h-4 w-16 rounded bg-muted animate-shimmer hidden xl:block" />
           <div className="h-4 w-24 rounded bg-muted animate-shimmer hidden md:block" />
           <div className="h-4 w-24 rounded bg-muted animate-shimmer hidden lg:block" />
         </div>

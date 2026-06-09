@@ -2,8 +2,7 @@
 
 import React, { memo, useRef, useEffect } from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import { Checkbox } from "@hexagen/ui";
-import { Button } from "@hexagen/ui";
+import { Checkbox, Button, Tooltip } from "@hexagen/ui";
 import type { ProjectListItem } from "../domain/project-list";
 
 interface ProjectRowProps {
@@ -97,6 +96,38 @@ export const ProjectRow = memo(function ProjectRow({
             {item.description}
           </p>
         </div>
+      </td>
+      <td className="px-3 py-2 text-sm text-muted-foreground hidden lg:table-cell">
+        <span className="font-mono text-xs">{item.namespace}</span>
+      </td>
+      <td className="px-3 py-2 text-sm text-muted-foreground hidden sm:table-cell">
+        {item.boundedContextCount > 0 ? (
+          <Tooltip
+            ariaLabel={`${item.boundedContextCount} bounded contexts`}
+            content={
+              <ul className="space-y-0.5">
+                {item.boundedContextNames.map((name, i) => (
+                  // Names aren't unique (schema only enforces non-empty), so the
+                  // index disambiguates duplicates. Safe here: a static,
+                  // display-only list that never reorders.
+                  <li key={`${name}-${i}`}>{name}</li>
+                ))}
+              </ul>
+            }
+          >
+            <span className="tabular-nums underline decoration-dotted underline-offset-2">
+              {item.boundedContextCount}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="tabular-nums">0</span>
+        )}
+      </td>
+      <td className="px-3 py-2 text-sm text-muted-foreground hidden xl:table-cell">
+        {item.apiLabel}
+      </td>
+      <td className="px-3 py-2 text-sm text-muted-foreground hidden xl:table-cell">
+        {item.uiLabel}
       </td>
       <td className="w-32 px-3 py-2 text-sm text-muted-foreground hidden md:table-cell">
         {relativeTime(item.updatedAt)}
