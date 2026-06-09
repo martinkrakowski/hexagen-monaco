@@ -56,19 +56,23 @@ If any assumption flips, only Workstream A's slices A3+ change shape; A1–A2, B
 
 ## Workstream B — independents (parallel anytime; small PRs, can batch as one docs/hygiene PR)
 
-| Item | Status (verified 2026-06-09)                                                                                                                   | Action                                                           |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| P7   | Confirmed: root `README.md` claims Stage-3 escalates to `gpt-4o`; config ships `escalationModel: undefined`                                    | One-line README fix (describe opt-in env var, not a default)     |
-| P9   | **Upgraded from "verify first" to live:** `classify-context-type` constructed at `spec/route.ts:108`; `generate-adapters` used by live stage 4 | Add `escapeXml` to both prompts + injection-shaped test cases    |
-| P12  | Doc drift only                                                                                                                                 | Fix the `yaml-editing-disciplines.md` example (`plane:`/`file:`) |
+| Item | Status (verified 2026-06-09)                                                                                                                                                                        | Action                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| P7   | Confirmed: root `README.md` claims Stage-3 escalates to `gpt-4o`; config ships `escalationModel: undefined`                                                                                         | One-line README fix (describe opt-in env var, not a default)     |
+| P9   | **Upgraded from "verify first" to live:** `classify-context-type` constructed at `spec/route.ts:108`; `generate-adapters` consumed by the client/WebLLM + MCP paths (see liveness correction below) | Add `escapeXml` to both prompts + injection-shaped test cases    |
+| P12  | Doc drift only                                                                                                                                                                                      | Fix the `yaml-editing-disciplines.md` example (`plane:`/`file:`) |
 
-P9 is the only one with production behavior impact — do it first, as its own PR.
+P9 is the only one with production behavior impact — do it first, as its own PR. _Shipped as PR #279._
+
+- **P9b (new — surfaced by #279's review validation):** the retry builders `buildLooseSpecRetryPrompt` (convert-loose-spec) and `buildStageRetryPrompt` (generate-manifest) interpolate `errorDetail` / `failedOutput` / `originalPrompt` into XML tags **unescaped**. Pre-existing, live retry paths. Deliberately excluded from #279: escaping `failedOutput` (prior LLM JSON, dense with quotes) rewrites retry-prompt bytes and may degrade the model's self-correction — needs its own evaluation, likely alongside the A2 rebaseline window.
+- **Liveness correction (for the record):** `compileAdapterUserPrompt` is consumed by the client/WebLLM path (`client-manifest-generation.use-case.ts`, wired at `wire.client.ts:320`) and the MCP server adapter — **not** stage 4, which uses `compileStage4Prompt`. Mechanism-level attributions must be traced to the import, not inferred from proximity.
 
 ## Workstream C — suspects (no investment before step-zero)
 
 Both route through `mcp-server`; the step-zero question is the same: **is the MCP server actually served/deployed, and by whom?**
 
 1. **C0 (shared gate):** trace `mcp-server` entrypoints to a deployment or client config. If nothing serves it, both items downgrade to "fix when MCP goes live" and exit this plan. If it **is** deployed but consumed externally rather than by this repo, P5 becomes an **API contract issue** — different owner, different urgency — not just an internal fix; record which case C0 found.
+   **C0 VERDICT (2026-06-09): served internally.** `apps/tui` spawns `packages/mcp-server/dist/cli.js` over stdio (`mcp-client.service.ts`, `StdioClientTransport`). No external consumer found (no `.mcp.json`, no deploy workflow). The `hexagen-mcp` bin is a latent external surface — registrable by any MCP client — but nothing registers it today. → P4/P5 proceed as internal fixes at normal urgency, P5 first.
 2. **P4** (remediation hardening: hardcoded `"gpt-4"`, no governance gate) — only if C0 passes.
 3. **P5** (MCP governance parity: `validateDraft` vs R01–R18, no lint:arch/HITL gate) — only if C0 passes; this one is a governance-bypass risk, so it outranks P4.
 
